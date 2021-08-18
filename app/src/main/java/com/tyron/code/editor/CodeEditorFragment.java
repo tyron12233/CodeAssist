@@ -31,6 +31,7 @@ import java.lang.reflect.Method;
 import android.content.Context;
 import android.view.inputmethod.EditorInfo;
 import androidx.activity.OnBackPressedCallback;
+import java.lang.reflect.InvocationTargetException;
 
 public class CodeEditorFragment extends Fragment {
 
@@ -183,6 +184,9 @@ public class CodeEditorFragment extends Fragment {
                     Method method = test.getMethod("main", Context.class);
                     method.invoke(test.newInstance(), requireContext());
                     
+                } catch (InvocationTargetException e) {
+                    logViewModel.d(LogViewModel.BUILD_LOG, "Exception thrown in main: " + e.getCause().getMessage());
+                    mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
                 } catch (Throwable e) {
                     logViewModel.d(LogViewModel.BUILD_LOG, "[D8] FAILED:" + e.getMessage());
                 }
