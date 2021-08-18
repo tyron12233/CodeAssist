@@ -1,37 +1,33 @@
 package com.tyron.code.editor;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.res.ResourcesCompat;
+import androidx.activity.OnBackPressedCallback;
+import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
+import com.android.tools.r8.D8;
+import com.google.android.material.appbar.AppBarLayout;
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.code.R;
 import com.tyron.code.editor.language.java.JavaLanguage;
+import com.tyron.code.editor.log.LogViewModel;
+import dalvik.system.DexClassLoader;
+
 import io.github.rosemoe.editor.widget.CodeEditor;
 import io.github.rosemoe.editor.widget.schemes.SchemeDarcula;
-import android.view.MenuInflater;
-import android.view.Menu;
-import android.view.MenuItem;
-import androidx.appcompat.widget.Toolbar;
-import androidx.fragment.app.Fragment;
-import androidx.coordinatorlayout.widget.CoordinatorLayout;
-import androidx.core.content.res.ResourcesCompat;
-import com.google.android.material.bottomsheet.BottomSheetBehavior;
-import com.google.android.material.appbar.AppBarLayout;
-import android.view.ViewGroup.MarginLayoutParams;
-import com.tyron.code.editor.log.LogViewModel;
-import androidx.lifecycle.ViewModelProvider;
-import androidx.lifecycle.ViewModelStoreOwner;
-import com.tyron.code.compiler.JavaCompiler;
-import com.android.tools.r8.D8;
-import java.util.List;
-import dalvik.system.DexClassLoader;
-import java.lang.reflect.Method;
-import android.content.Context;
-import android.view.inputmethod.EditorInfo;
-import androidx.activity.OnBackPressedCallback;
+
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import javax.tools.JavaCompiler;
 
 public class CodeEditorFragment extends Fragment {
 
