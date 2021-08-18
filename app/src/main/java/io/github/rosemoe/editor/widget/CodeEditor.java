@@ -81,6 +81,8 @@ import io.github.rosemoe.editor.text.TextAnalyzeResult;
 import io.github.rosemoe.editor.text.TextAnalyzer;
 import io.github.rosemoe.editor.util.IntPair;
 import io.github.rosemoe.editor.util.LongArrayList;
+import android.os.Handler;
+import android.os.Looper;
 
 /**
  * CodeEditor is a editor that can highlight text regions by doing basic syntax analyzing
@@ -235,6 +237,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     private SymbolPairMatch mOverrideSymbolPairs;
     private LongArrayList mPostDrawLineNumbers = new LongArrayList();
     private CharPosition mLockedSelection;
+    private boolean mKeyboardDisabled;
     KeyMetaStates mKeyMetaStates = new KeyMetaStates(this);
 
     public CodeEditor(Context context) {
@@ -783,6 +786,14 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         setTextSizePxDirect(size);
         createLayout();
         invalidate();
+    }
+    
+    public void setKeyboardDisabled(boolean disabled) {
+        mKeyboardDisabled = disabled;
+    }
+    
+    public boolean isKeyboardDisabled() {
+        return mKeyboardDisabled;
     }
 
     /**
@@ -4001,6 +4012,22 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             mListener.beforeReplace(this, content);
         }
     }
+    
+    private Handler completionHandler = new Handler(Looper.getMainLooper());
+    private class CompletionRunnable implements Runnable {
+        
+        private String prefix;
+        
+        public CompletionRunnable(String prefix) {
+            this.prefix = prefix;
+        }
+        
+        @Override
+        public void run() {
+            mCompletionWindow.setPrefix(prefix);
+            mCompletionWindow.show();
+        }   
+   }
 
     @Override
     public void afterInsert(Content content, int startLine, int startColumn, int endLine, int endColumn, CharSequence insertedContent) {
@@ -4027,7 +4054,8 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             if ((mConnection.mComposingLine == -1 || mCompletionOnComposing) && endColumn != 0 && startLine == endLine) {
                 int end = endColumn;
                 while (endColumn > 0) {
-                    if (mLanguage.isAutoCompleteChar(content.charAt(endLine, endColumn - 1))) {
+                    char c = content.charAt(endLine, endColumn - 1);
+                    if (mLanguage.isAutoCompleteChar(c)) {
                         endColumn--;
                     } else {
                         break;
@@ -4036,8 +4064,8 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
                 if (end > endColumn) {
                     String line = content.getLineString(endLine);
                     String prefix = line.substring(endColumn, end);
-                    mCompletionWindow.setPrefix(prefix);
-                    mCompletionWindow.show();
+                    completionHandler.removeCallbacksAndMessages(null);
+                    completionHandler.postDelayed(new CompletionRunnable(prefix), 100);
                 } else {
                     postHideCompletionWindow();
                 }

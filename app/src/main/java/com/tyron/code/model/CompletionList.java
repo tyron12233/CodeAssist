@@ -4,7 +4,7 @@ import java.util.ArrayList;
 
 public class CompletionList {
     
-    public boolean isIncomplete;
+    public boolean isIncomplete = false;
     
     public List<CompletionItem> items = new ArrayList<>();
 }

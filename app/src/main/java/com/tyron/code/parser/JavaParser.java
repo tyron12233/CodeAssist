@@ -27,6 +27,7 @@ import java.util.HashSet;
 import java.util.ArrayList;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.completion.CompletionProvider;
+import java.util.Collection;
 
 public class JavaParser {
 
@@ -37,26 +38,25 @@ public class JavaParser {
     private Context context;
     private ParserFactory parserFactory;
     private JavacFileManager fileManager;
+    private FileManager internalFileManager = new FileManager();
     private DiagnosticCollector<JavaFileObject> diagnostics;
     private boolean canParse = true;
     
     private JavacTask task;
-    
-    static {
-        System.setProperty("BOOTCLASSPATH", System.getProperty("BOOTCLASSPATH") + ":/data/data/com.tyron.code/files/rt.jar");
-    }
-
+   
     public JavaParser() {
         context = new Context();
         diagnostics = new DiagnosticCollector<>();
         context.put(DiagnosticListener.class, diagnostics);
+        
         Options.instance(context).put("allowStringFolding", "false");
-        Options.instance(context).put("bootclasspath", "/data/data/com.tyron.code/files/rt.jar");
+        Options.instance(context).put("bootclasspath", internalFileManager.getAndroidJar().getAbsolutePath());
         
         fileManager = new JavacFileManager(context, true, Charset.defaultCharset());
         try {
-            fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, List.of(new File("/data/data/com.tyron.code/files/rt.jar")));
-          //  fileManager.setLocation(StandardLocation.SOURCE_PATH, List.of(new File("/sdcard/android.jar")));
+            File file = new File(internalFileManager.getAndroidJar().getAbsolutePath());
+            fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, List.of(file));
+            internalFileManager.putJar(file);
         } catch (IOException e) {
             ApplicationLoader.showToast(e.getMessage());
             // impossible
@@ -71,7 +71,7 @@ public class JavaParser {
         
         final StringBuilder fix = new StringBuilder(src);
         
-        // We add an extra ';' to the end of the line so parsing will continue
+        // We add an extra ';' to the end of the line so parsing will produce the right tokens
         if (pos != -1) {
             int end = CompletionProvider.endOfLine(src, pos);
             fix.insert(end, ';');
@@ -87,11 +87,12 @@ public class JavaParser {
         Log.instance(context).useSource(source);
         
         task = JavacTool.create().getTask(null, fileManager,
-                                          diagnostics, getOptions(), null, List.of(source));                                  
+                                          diagnostics, null, null, List.of(source));                                  
         CompilationUnitTree unit = null;
         try {
             unit = task.parse().iterator().next();
             task.analyze();
+           
         } catch (IOException e) {}
         return unit;
     }
@@ -107,12 +108,14 @@ public class JavaParser {
     public Context getContext() {
         return context;
     }
-   
-    private List<String> getOptions() {
-        List<String> options = new ArrayList<>();
-        
-        //Collections.addAll(options, "-bootclasspath", "/sdcard/android.jar");
-        
-        return options;
+    
+    public List<String> packagePrivateTopLevelTypes(String packageName) {
+        return Collections.emptyList();
+    }
+    
+    public List<String> publicTopLevelTypes() {
+        List<String> all = new ArrayList<>();
+        all.addAll(internalFileManager.all());
+        return all;
     }
 }

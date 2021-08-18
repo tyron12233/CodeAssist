@@ -1,0 +1,30 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:orientation="vertical">
+    
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tablayout"
+        app:theme="@style/CodeEditorActionBar"
+        android:background="#212121"
+        app:tabSelectedTextColor="#FFCC7832"
+        app:tabTextColor="@android:color/white"
+        app:tabIndicatorColor="#FFCC7832"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        >
+        
+        <com.google.android.material.tabs.TabItem
+            android:text="Build output"/>
+
+        <com.google.android.material.tabs.TabItem
+            android:text="LogCat"/>
+        
+    </com.google.android.material.tabs.TabLayout>
+    
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewpager"
+        android:layout_height="match_parent"
+        android:layout_width="match_parent"/>
+</LinearLayout>

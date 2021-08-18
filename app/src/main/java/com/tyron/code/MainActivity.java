@@ -26,18 +26,17 @@ import com.tyron.code.model.CompletionItem;
 import android.text.Layout;
 import com.tyron.code.model.CompletionList;
 import com.tyron.code.editor.CodeEditorFragment;
+import androidx.appcompat.app.AppCompatActivity;
+import com.tyron.code.util.NoExitSecurityManager;
 
-public class MainActivity extends Activity 
-{
+public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
-        
-        requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 2);
-        
-        getFragmentManager().beginTransaction()
+            
+        getSupportFragmentManager().beginTransaction()
                 .replace(R.id.fragment_container, CodeEditorFragment.newInstance())
                 .commit();
     }

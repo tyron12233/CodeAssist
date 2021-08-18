@@ -98,9 +98,9 @@ public class SymbolPairMatch {
 
         public DefaultSymbolPairs() {
             super.putPair('{', new Replacement("{}", 1));
-            super.putPair('(', new Replacement("()", 1));
+          //  super.putPair('(', new Replacement("()", 1));
             super.putPair('[', new Replacement("[]", 1));
-            super.putPair('"', new Replacement("\"\"", 1));
+           // super.putPair('"', new Replacement("\"\"", 1));
             super.putPair('\'', new Replacement("''", 1));
         }
 

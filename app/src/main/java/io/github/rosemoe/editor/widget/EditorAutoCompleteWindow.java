@@ -228,7 +228,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      *
      * @param prefix The user's input code's prefix
      */
-    public void setPrefix(String prefix) {
+    public void setPrefix(final String prefix) {
         if (mCancelShowUp) {
             return;
         }

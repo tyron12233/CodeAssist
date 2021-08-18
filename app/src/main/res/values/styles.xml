@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="Theme.MaterialComponents.DayNight">
+    <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorAccent">#FFCC7832</item>
+        <item name="android:statusBarColor">#212121</item>
 	</style>
-	
 	    <style name="HorizontalDivider">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">1dp</item>

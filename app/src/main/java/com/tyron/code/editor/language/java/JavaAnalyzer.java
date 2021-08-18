@@ -23,8 +23,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     private static JavaAnalyzer INSTANCE = null;
     private final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
 
-    private Object OBJECT = new Object();
-    
     public static JavaAnalyzer getInstance() {
         if (INSTANCE == null) {
             INSTANCE = new JavaAnalyzer();

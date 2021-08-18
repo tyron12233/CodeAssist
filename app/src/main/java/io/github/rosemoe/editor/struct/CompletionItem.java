@@ -77,6 +77,10 @@ public class CompletionItem {
     public CompletionItem shiftCount(int shiftCount) {
         return cursorOffset(commit.length() - shiftCount);
     }
+    
+    public void setCommitText(String text) {
+        this.commit = text;
+    }
 
     public CompletionItem cursorOffset(int offset) {
         if (offset < 0 || offset > commit.length()) {

@@ -95,7 +95,8 @@ public class JavaCompilerService implements CompilerProvider {
 
     @Override
     public ParseTask parse(JavaFileObject file) {
-        return null;
+       // Parser parser = new Parser
+       return null;
     }
 
     @Override

@@ -11,13 +11,19 @@ import com.sun.source.util.JavacTask;
 import com.tyron.code.completion.CompletionProvider;
 import com.tyron.code.model.CompletionList;
 import java.util.ArrayList;
+import com.tyron.code.editor.log.LogViewModel;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.lifecycle.ViewModelStoreOwner;
+import androidx.appcompat.app.AppCompatActivity;
 
 public class JavaAutoCompleteProvider implements AutoCompleteProvider {
     
     private CodeEditor mEditor;
+    private LogViewModel viewModel;
     
     public JavaAutoCompleteProvider(CodeEditor editor) {
         mEditor = editor;
+        viewModel = new ViewModelProvider((AppCompatActivity) editor.getContext()).get(LogViewModel.class);
     }
     
     //TODO: Add return types / variable types
@@ -28,13 +34,16 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
         CompilationUnitTree tree = parser.parse(mEditor.getText().toString(), cursor.getLeft());
         JavacTask task = parser.getTask();
         JavaAnalyzer.getInstance().setDiagnostics(parser.getDiagnostics());
-        CompletionProvider provider = new CompletionProvider(task);
+        CompletionProvider provider = new CompletionProvider(parser);
         
         CompletionList list = provider.complete(tree, cursor.getLeft());
         List<CompletionItem> result = new ArrayList<>();
         
         for (com.tyron.code.model.CompletionItem item : list.items) {
-            CompletionItem newItem = new CompletionItem(item.label, "");
+            CompletionItem newItem = new CompletionItem(item.label, item.detail);
+            if (item.commitText != null) {
+                newItem.setCommitText(item.commitText);
+            }
             result.add(newItem);
         }
         

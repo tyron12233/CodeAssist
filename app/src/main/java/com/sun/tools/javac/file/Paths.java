@@ -55,6 +55,7 @@ import static javax.tools.StandardLocation.ANNOTATION_PROCESSOR_PATH;
 import static javax.tools.StandardLocation.CLASS_PATH;
 import static javax.tools.StandardLocation.PLATFORM_CLASS_PATH;
 import static javax.tools.StandardLocation.SOURCE_PATH;
+import com.tyron.code.ApplicationLoader;
 
 /**
  * This class converts command line arguments, environment variables
@@ -322,7 +323,7 @@ public class Paths {
      //   path.addFiles(bootclasspath);
 //        String defaultClasspath = "/data/user/0/com.duy.compiler.javanide/files/system/classes/android.jar";
         //if (bootclasspath == null || !bootclasspath.equals("/sdcard/android.jar")) {
-             path.addFiles("/data/data/com.tyron.code/files/android.jar");
+             path.addFiles(ApplicationLoader.applicationContext.getFilesDir() + "/rt.jar");
       //  }
 
         /*path.addFiles(options.get(XBOOTCLASSPATH_PREPEND));

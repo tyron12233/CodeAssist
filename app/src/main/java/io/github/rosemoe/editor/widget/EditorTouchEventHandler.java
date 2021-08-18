@@ -501,6 +501,11 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
 
     @Override
     public boolean onSingleTapUp(MotionEvent e) {
+        
+        if (mEditor.isKeyboardDisabled()) {
+            return false;
+        }
+        
         mEditor.showSoftInput();
         mScroller.forceFinished(true);
         long res = mEditor.getPointPositionOnScreen(e.getX(), e.getY());
@@ -533,6 +538,9 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
 
     @Override
     public void onLongPress(MotionEvent e) {
+        if (mEditor.isKeyboardDisabled()) {
+            return;
+        }
         if (mEditor.mTextActionPresenter instanceof TextActionPopupWindow) {
             handleLongPressForModifiedTextAction(e);
             return;

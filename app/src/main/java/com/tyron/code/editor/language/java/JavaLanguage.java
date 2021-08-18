@@ -34,7 +34,7 @@ public class JavaLanguage implements EditorLanguage {
 
     @Override
     public boolean isAutoCompleteChar(char p1) {
-        return MyCharacter.isJavaIdentifierPart(p1) || p1 == '.';
+        return MyCharacter.isJavaIdentifierPart(p1);
     }
 
     @Override
