@@ -41,6 +41,9 @@ import com.tyron.code.parser.JavaParser;
 import java.util.Set;
 import android.util.Log;
 
+/**
+ * Main entry point for getting completions
+ */
 public class CompletionProvider {
     
     private static final String[] TOP_LEVEL_KEYWORDS = {
