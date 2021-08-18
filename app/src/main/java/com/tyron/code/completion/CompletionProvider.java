@@ -99,7 +99,6 @@ public class CompletionProvider {
         "if",
         "else",
         "instanceof",
-        "var",
         "final",
         "class",
         "void",
