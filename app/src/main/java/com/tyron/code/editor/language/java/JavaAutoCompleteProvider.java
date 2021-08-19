@@ -30,21 +30,17 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
     @Override
     public List<CompletionItem> getAutoCompleteItems(String partial, boolean endsWithParen, TextAnalyzeResult prev, int line) {
         Cursor cursor = mEditor.getCursor();
-        JavaParser parser = new JavaParser();
+        JavaParser parser = new JavaParser(viewModel);
         CompilationUnitTree tree = parser.parse(mEditor.getText().toString(), cursor.getLeft());
         JavacTask task = parser.getTask();
-        JavaAnalyzer.getInstance().setDiagnostics(parser.getDiagnostics());
+        //JavaAnalyzer.getInstance().setDiagnostics(parser.getDiagnostics());
         CompletionProvider provider = new CompletionProvider(parser);
         
         CompletionList list = provider.complete(tree, cursor.getLeft());
         List<CompletionItem> result = new ArrayList<>();
         
         for (com.tyron.code.model.CompletionItem item : list.items) {
-            CompletionItem newItem = new CompletionItem(item.label, item.detail);
-            if (item.commitText != null) {
-                newItem.setCommitText(item.commitText);
-            }
-            result.add(newItem);
+            result.add(new CompletionItem(item));
         }
         
         return result;

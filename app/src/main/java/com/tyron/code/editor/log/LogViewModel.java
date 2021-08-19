@@ -12,6 +12,7 @@ public class LogViewModel extends ViewModel {
     private static int totalCount;
     public static final int APP_LOG = totalCount++;
     public static final int BUILD_LOG = totalCount++;
+    public static final int DEBUG = totalCount++;
     
     private List<MutableLiveData<String>> log;
     

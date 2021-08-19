@@ -33,6 +33,19 @@ import io.github.rosemoe.editor.struct.CompletionItem;
 import io.github.rosemoe.editor.text.CharPosition;
 import io.github.rosemoe.editor.text.Cursor;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
+import com.tyron.code.model.TextEdit;
+import com.tyron.code.completion.CompletionProvider;
+import com.tyron.code.ParseTask;
+import com.tyron.code.parser.JavaParser;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.lifecycle.ViewModelStoreOwner;
+import com.sun.source.tree.CompilationUnitTree;
+import com.tyron.code.rewrite.AddImport;
+import java.util.Map;
+import java.io.File;
+import com.tyron.code.completion.FindCompletionsAt;
+import com.tyron.code.editor.log.LogViewModel;
+import android.util.Log;
 
 /**
  * Auto complete window for editing code quicker
@@ -85,7 +98,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             try {
                 select(position);
             } catch (Exception e) {
-                Toast.makeText(mEditor.getContext(), e.toString(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(mEditor.getContext(), Log.getStackTraceString(e), Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -207,6 +220,21 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                     int newSel = Math.max(mEditor.getCursor().getLeft() - delta, 0);
                     CharPosition charPosition = mEditor.getCursor().getIndexer().getCharPosition(newSel);
                     mEditor.setSelection(charPosition.line, charPosition.column);
+                }
+            }
+            if (item.item.kind == com.tyron.code.model.CompletionItem.Kind.IMPORT) {
+                LogViewModel mode = new ViewModelProvider((ViewModelStoreOwner) mEditor.getContext()).get(LogViewModel.class);
+                JavaParser parser = new JavaParser(mode);
+                CompilationUnitTree root = parser.parse(mEditor.getText().toString(), cursor.getLeft());
+                ParseTask task = new ParseTask(parser.getTask(), root);
+                if (!CompletionProvider.hasImport(root, item.item.detail)) {
+                    AddImport imp = new AddImport(new File(""), item.item.detail);
+                    Map<File, TextEdit> edits = imp.getText(task);
+                    TextEdit edit = edits.values().iterator().next();
+                    
+                    if (edit.start.equals(edit.end)) {
+                        mEditor.getText().insert(edit.start.line, edit.start.column, edit.edit);
+                    }
                 }
             }
             mCancelShowUp = false;

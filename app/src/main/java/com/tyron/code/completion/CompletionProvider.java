@@ -40,6 +40,11 @@ import javax.lang.model.type.TypeMirror;
 import com.tyron.code.parser.JavaParser;
 import java.util.Set;
 import android.util.Log;
+import com.tyron.code.model.TextEdit;
+import com.tyron.code.rewrite.AddImport;
+import com.tyron.code.ParseTask;
+import java.io.File;
+import java.util.Collections;
 
 /**
  * Main entry point for getting completions
@@ -437,12 +442,17 @@ public class CompletionProvider {
         CompletionItem item = new CompletionItem();
         item.label = name;
         item.detail = "";
+        item.commitText = name;
+        item.cursorOffset = name.length();
         return item;
     }
     private CompletionItem classItem(String className) {
         CompletionItem item = new CompletionItem();
         item.label = simpleName(className).toString();
         item.detail = className;
+        item.commitText = item.label;
+        item.cursorOffset = item.label.length();
+        item.kind = CompletionItem.Kind.IMPORT;
         return item;
     }
     
@@ -450,12 +460,16 @@ public class CompletionProvider {
         CompletionItem item = new CompletionItem();
         item.label = element.getSimpleName().toString();
         item.detail = element.toString();
+        item.commitText = element.getSimpleName().toString();
+        item.cursorOffset =  item.commitText.length();
         return item;
     }
     
     private CompletionItem keyword(String keyword) {
         CompletionItem item = new CompletionItem();
         item.label = keyword;
+        item.commitText = keyword;
+        item.cursorOffset = keyword.length();
         item.detail = "keyword";
         return item;
     }
@@ -464,8 +478,12 @@ public class CompletionProvider {
         ExecutableElement first = overloads.get(0);
         CompletionItem item = new CompletionItem();
         item.label = first.toString();
-        item.commitText = first.getSimpleName().toString();
+        item.commitText = first.getSimpleName().toString() + "()";
         item.detail = first.getReturnType().toString();
+        item.cursorOffset = item.commitText.length();
+        if (first.getParameters() != null && !first.getParameters().isEmpty()) {
+            item.cursorOffset = item.commitText.length() - 1;
+        }
         return item;
     }
     
@@ -473,5 +491,30 @@ public class CompletionProvider {
         int dot = className.lastIndexOf('.');
         if (dot == -1) return className;
         return className.subSequence(dot + 1, className.length());
+    }
+    
+    public static boolean hasImport(CompilationUnitTree root, String className) {
+        
+        String packageName = className.substring(0, className.lastIndexOf("."));
+
+        if (packageName.equals("java.lang")) {
+            return true;
+        }
+        
+        for (ImportTree imp : root.getImports()) {
+            String name = imp.getQualifiedIdentifier().toString();
+            if (name.equals(className)) {
+                return true;
+            }          
+            
+            if (name.endsWith("*")) {
+                String first = name.substring(0, name.lastIndexOf("."));
+                String end = className.substring(0, name.lastIndexOf("."));
+                if (first.equals(end)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

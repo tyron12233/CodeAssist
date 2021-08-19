@@ -17,17 +17,26 @@ import androidx.lifecycle.ViewModelProvider;
 import com.android.tools.r8.D8;
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.sun.source.tree.CompilationUnitTree;
+import com.tyron.code.ParseTask;
 import com.tyron.code.R;
+import com.tyron.code.compiler.JavaCompiler;
 import com.tyron.code.editor.language.java.JavaLanguage;
 import com.tyron.code.editor.log.LogViewModel;
+import com.tyron.code.model.TextEdit;
+import com.tyron.code.parser.JavaParser;
+import com.tyron.code.rewrite.AddImport;
 import dalvik.system.DexClassLoader;
-
 import io.github.rosemoe.editor.widget.CodeEditor;
 import io.github.rosemoe.editor.widget.schemes.SchemeDarcula;
-
+import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import javax.tools.JavaCompiler;
+import java.util.Map;
+import com.tyron.code.parser.FileManager;
+import com.tyron.code.ApplicationLoader;
+import java.util.ArrayList;
+import java.util.List;
 
 public class CodeEditorFragment extends Fragment {
 
@@ -67,6 +76,8 @@ public class CodeEditorFragment extends Fragment {
     
     private Toolbar mToolbar;
     private CodeEditor mEditor;
+    
+    private File mCurrentFile = new File(ApplicationLoader.applicationContext.getFilesDir() + "/Test.java");
 
     public static CodeEditorFragment newInstance() {
         CodeEditorFragment fragment = new CodeEditorFragment();
@@ -137,15 +148,26 @@ public class CodeEditorFragment extends Fragment {
             });
         
         //TODO: adjust to file name
-        mToolbar.setTitle("Test.java");
+        mToolbar.setTitle(mCurrentFile.getName());
         mToolbar.setOnMenuItemClickListener(new Toolbar.OnMenuItemClickListener() {
                 @Override
                 public boolean onMenuItemClick(MenuItem p1) {
                     if (p1.getItemId() == R.id.action_run) {
+                         FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
                         logViewModel.clear(LogViewModel.BUILD_LOG);
                         mEditor.hideAutoCompleteWindow();
                         mEditor.hideSoftInput();
                         compile();
+                        
+                     //   JavaParser parser = new JavaParser(logViewModel);
+                    //    CompilationUnitTree unit = parser.parse(mEditor.getText().toString(), mEditor.getCursor().getLeft());
+                    //    ParseTask task = new ParseTask(parser.getTask(), unit);
+                    //    Map<File, TextEdit> edit = new AddImport(mCurrentFile, "com.tyron.code.Test").getText(task);
+                        
+                     //   TextEdit textEdit = edit.values().iterator().next();
+                      //  mEditor.getText().insert(textEdit.start.line, textEdit.start.column, textEdit.edit);
+                        
+                       // parser.readImports(mCurrentFile).toString();
                     }
                     return true;
                 }         
@@ -171,10 +193,19 @@ public class CodeEditorFragment extends Fragment {
                 
                 logViewModel.d(LogViewModel.BUILD_LOG, "[D8] Running");           
                 try {                  
-                    D8.main(new String[]{"--output", requireContext().getCacheDir().getAbsolutePath(), "--lib", requireContext().getFilesDir() + "/rt.jar", requireContext().getCacheDir() + "/Test.class"});
-                    
+                    List<String> args = new ArrayList<>();
+                    args.add("--lib");
+                    args.add(FileManager.getInstance().getAndroidJar().getAbsolutePath());
+                    args.add("--output");
+                    args.add(ApplicationLoader.applicationContext.getCacheDir().getAbsolutePath());
+                    for (File file : ApplicationLoader.applicationContext.getCacheDir().listFiles()) {
+                        if (file.getName().endsWith(".class")) {
+                            args.add(file.getAbsolutePath());
+                        }
+                    }
+                    D8.main(args.toArray(new String[0]));
                     DexClassLoader loader = new DexClassLoader(requireContext().getCacheDir() + "/classes.dex",
-                    requireContext().getCacheDir().getAbsolutePath(), null, ClassLoader.getSystemClassLoader());
+                    requireContext().getCacheDir().getAbsolutePath(), requireContext().getCacheDir().getAbsolutePath(), ClassLoader.getSystemClassLoader());
                     
                     Class<?> test = loader.loadClass("Test");
                     Method method = test.getMethod("main", Context.class);

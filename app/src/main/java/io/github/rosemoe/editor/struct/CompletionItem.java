@@ -18,6 +18,8 @@ package io.github.rosemoe.editor.struct;
 import android.graphics.drawable.Drawable;
 
 import java.util.Comparator;
+import com.tyron.code.model.TextEdit;
+import java.util.List;
 
 /**
  * The class used to save auto complete result items
@@ -53,7 +55,17 @@ public class CompletionItem {
      * Cursor offset in {@link CompletionItem#commit}
      */
     public int cursorOffset;
-
+    
+    public com.tyron.code.model.CompletionItem item;
+    
+    public CompletionItem(com.tyron.code.model.CompletionItem item) {
+        this.item = item;
+        this.label = item.label;
+        this.commit = item.commitText;
+        this.desc = item.detail;
+        this.cursorOffset = item.cursorOffset;
+    }
+    
     public CompletionItem(String str, String desc) {
         this(str, desc, (Drawable) null);
     }

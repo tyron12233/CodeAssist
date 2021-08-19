@@ -29,22 +29,33 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.completion.CompletionProvider;
 import java.util.Collection;
 
+
+
+import java.util.regex.Pattern;
+import java.io.BufferedReader;
+import java.util.regex.Matcher;
+import java.io.IOException;
+import com.tyron.code.editor.log.LogViewModel;
+
 public class JavaParser {
 
     private static final String TAG = "JavaParser";
     private static final String DOT = ".";
     private static final String CONSTRUCTOR_NAME = "<init>";
 
-    private Context context;
-    private ParserFactory parserFactory;
-    private JavacFileManager fileManager;
-    private FileManager internalFileManager = new FileManager();
-    private DiagnosticCollector<JavaFileObject> diagnostics;
+    private final Context context;
+    private final ParserFactory parserFactory;
+    private final JavacFileManager fileManager;
+    private final FileManager internalFileManager = new FileManager();
+    private final DiagnosticCollector<JavaFileObject> diagnostics;
     private boolean canParse = true;
     
     private JavacTask task;
+    
+    private final LogViewModel log;
    
-    public JavaParser() {
+    public JavaParser(LogViewModel log) {
+        this.log = log;
         context = new Context();
         diagnostics = new DiagnosticCollector<>();
         context.put(DiagnosticListener.class, diagnostics);

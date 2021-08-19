@@ -62,6 +62,9 @@ public class BottomEditorFragment extends Fragment {
                             break;
                         case 1:
                             tab.setText("App logs");
+                            break;
+                        case 2:
+                            tab.setText("DEBUG");
                     }
                 }           
         }).attach();
@@ -89,12 +92,14 @@ public class BottomEditorFragment extends Fragment {
                 default:
                 case 1:
                     return AppLogFragment.newInstance(LogViewModel.APP_LOG);
+                case 2:
+                    return AppLogFragment.newInstance(LogViewModel.DEBUG);
             }
         }
         
         @Override
         public int getItemCount() {
-            return 2;
+            return 3;
         }
 
         
