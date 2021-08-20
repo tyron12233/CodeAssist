@@ -144,7 +144,7 @@ public class CompletionProvider {
                 return completeMemberSelect(path, partial, endsWithParen);
             case MEMBER_REFERENCE:
                 return completeMemberReference(path, partial);
-            case SWITCH:
+            case CASE:
                 return completeSwitchConstant(path, partial);
             case IMPORT:
                 return completeImport(qualifiedPartialIdentifier(contents.toString(), (int) cursor));
@@ -370,6 +370,9 @@ public class CompletionProvider {
                 Log.d("FINAL STEP", "enclosed methods: " + classElement.getEnclosedElements().size());
                 for (Element enc : classElement.getEnclosedElements()) {
                     if (enc.getKind() == ElementKind.METHOD) {
+                        if (enc.getModifiers().contains(Modifier.STATIC)) {
+                            continue;
+                        }
                         putMethod((ExecutableElement) enc, methods);
                     }
                 }
@@ -640,7 +643,7 @@ public class CompletionProvider {
     private CompletionItem item(Element element) {
         CompletionItem item = new CompletionItem();
         item.label = element.getSimpleName().toString();
-        item.detail = element.toString();
+        item.detail = element.asType().toString();
         item.commitText = element.getSimpleName().toString();
         item.cursorOffset =  item.commitText.length();
         return item;
@@ -660,7 +663,7 @@ public class CompletionProvider {
         CompletionItem item = new CompletionItem();
         item.label = getMethodLabel(first);
         item.commitText = first.getSimpleName().toString() + "()";
-        item.detail = simpleName(first.getReturnType().toString()).toString();
+        item.detail = first.getReturnType().toString();
         item.cursorOffset = item.commitText.length();
         if (first.getParameters() != null && !first.getParameters().isEmpty()) {
             item.cursorOffset = item.commitText.length() - 1;
@@ -692,6 +695,7 @@ public class CompletionProvider {
         if (dot == -1) return className;
         return className.subSequence(dot + 1, className.length());
     }
+    
     
     public static boolean hasImport(CompilationUnitTree root, String className) {
         
