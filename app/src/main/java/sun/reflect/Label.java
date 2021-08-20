@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,6 @@
 
 package sun.reflect;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -53,7 +52,7 @@ class Label {
         short patchBCI;
         int   stackDepth;
     }
-    private List/*<PatchInfo>*/ patches = new ArrayList();
+    private List<PatchInfo> patches = new ArrayList<>();
 
     public Label() {
     }
@@ -67,8 +66,7 @@ class Label {
     }
 
     public void bind() {
-        for (Iterator iter = patches.iterator(); iter.hasNext(); ) {
-            PatchInfo patch = (PatchInfo) iter.next();
+        for (PatchInfo patch : patches){
             short curBCI = patch.asm.getLength();
             short offset = (short) (curBCI - patch.instrBCI);
             patch.asm.emitShort(patch.patchBCI, offset);

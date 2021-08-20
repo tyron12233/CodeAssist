@@ -1,81 +1,55 @@
 /*
- * Copyright (c) 1999, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 1999, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.comp;
 
-import com.sun.tools.javac.code.Lint;
-import com.sun.tools.javac.code.Scope;
-import com.sun.tools.javac.code.Scope.ImportScope;
-import com.sun.tools.javac.code.Scope.StarImportScope;
-import com.sun.tools.javac.code.Symbol;
-import com.sun.tools.javac.code.Symbol.ClassSymbol;
-import com.sun.tools.javac.code.Symbol.CompletionFailure;
-import com.sun.tools.javac.code.Symbol.PackageSymbol;
-import com.sun.tools.javac.code.Symbol.TypeSymbol;
-import com.sun.tools.javac.code.Symtab;
-import com.sun.tools.javac.code.Type;
-import com.sun.tools.javac.code.Type.ClassType;
-import com.sun.tools.javac.code.Type.TypeVar;
-import com.sun.tools.javac.code.Types;
-import com.sun.tools.javac.jvm.ClassReader;
-import com.sun.tools.javac.main.RecognizedOptions.PkgInfo;
-import com.sun.tools.javac.tree.JCTree;
-import com.sun.tools.javac.tree.JCTree.JCClassDecl;
-import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
-import com.sun.tools.javac.tree.JCTree.JCTypeParameter;
-import com.sun.tools.javac.tree.TreeInfo;
-import com.sun.tools.javac.tree.TreeMaker;
-import com.sun.tools.javac.util.Context;
+import java.util.*;
+import javax.tools.JavaFileObject;
+import javax.tools.JavaFileManager;
+
+import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.code.Scope.*;
+import com.sun.tools.javac.code.Symbol.*;
+import com.sun.tools.javac.code.Type.*;
+import com.sun.tools.javac.jvm.*;
+import com.sun.tools.javac.main.Option.PkgInfo;
+import com.sun.tools.javac.tree.*;
+import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.JCDiagnostic.DiagnosticPosition;
 import com.sun.tools.javac.util.List;
-import com.sun.tools.javac.util.ListBuffer;
-import com.sun.tools.javac.util.Log;
-import com.sun.tools.javac.util.Name;
-import com.sun.tools.javac.util.Names;
-import com.sun.tools.javac.util.Options;
 
-import java.util.HashMap;
-import java.util.Map;
 
-import javax.tools.JavaFileManager;
-import javax.tools.JavaFileObject;
-
-import static com.sun.tools.javac.code.Flags.EXISTS;
-import static com.sun.tools.javac.code.Flags.INTERFACE;
-import static com.sun.tools.javac.code.Flags.PUBLIC;
-import static com.sun.tools.javac.code.Flags.STATIC;
-import static com.sun.tools.javac.code.Kinds.MTH;
-import static com.sun.tools.javac.code.Kinds.PCK;
-import static com.sun.tools.javac.code.Kinds.TYP;
-import static com.sun.tools.javac.code.Kinds.VAR;
+import static com.sun.tools.javac.code.Flags.*;
+import static com.sun.tools.javac.code.Kinds.*;
 
 /** This class enters symbols for all encountered definitions into
  *  the symbol table. The pass consists of two phases, organized as
  *  follows:
  *
- *  <p>In the first phase, all class symbols are intered into their
+ *  <p>In the first phase, all class symbols are entered into their
  *  enclosing scope, descending recursively down the tree for classes
  *  which are members of other classes. The class symbols are given a
  *  MemberEnter object as completer.
@@ -103,12 +77,12 @@ import static com.sun.tools.javac.code.Kinds.VAR;
  *
  *  <p>Classes migrate from one phase to the next via queues:
  *
- *  <pre>
+ *  <pre>{@literal
  *  class enter -> (Enter.uncompleted)         --> member enter (1)
  *              -> (MemberEnter.halfcompleted) --> member enter (2)
  *              -> (Todo)                      --> attribute
  *                                              (only for toplevel classes)
- *  </pre>
+ *  }</pre>
  *
  *  <p><b>This is NOT part of any supported API.
  *  If you write code that depends on this, you do so at your own risk.
@@ -131,6 +105,7 @@ public class Enter extends JCTree.Visitor {
     Names names;
     JavaFileManager fileManager;
     PkgInfo pkginfoOpt;
+    TypeEnvs typeEnvs;
 
     private final Todo todo;
 
@@ -157,20 +132,19 @@ public class Enter extends JCTree.Visitor {
 
         predefClassDef = make.ClassDef(
             make.Modifiers(PUBLIC),
-            syms.predefClass.name, null, null, null, null);
+            syms.predefClass.name,
+            List.<JCTypeParameter>nil(),
+            null,
+            List.<JCExpression>nil(),
+            List.<JCTree>nil());
         predefClassDef.sym = syms.predefClass;
         todo = Todo.instance(context);
         fileManager = context.get(JavaFileManager.class);
 
         Options options = Options.instance(context);
         pkginfoOpt = PkgInfo.get(options);
+        typeEnvs = TypeEnvs.instance(context);
     }
-
-    /** A hashtable mapping classes and packages to the environments current
-     *  at the points of their definitions.
-     */
-    Map<TypeSymbol,Env<AttrContext>> typeEnvs =
-            new HashMap<TypeSymbol,Env<AttrContext>>();
 
     /** Accessor for typeEnvs
      */
@@ -183,7 +157,7 @@ public class Enter extends JCTree.Visitor {
         Env<AttrContext> lintEnv = localEnv;
         while (lintEnv.info.lint == null)
             lintEnv = lintEnv.next;
-        localEnv.info.lint = lintEnv.info.lint.augment(sym.attributes_field, sym.flags());
+        localEnv.info.lint = lintEnv.info.lint.augment(sym);
         return localEnv;
     }
 
@@ -254,7 +228,7 @@ public class Enter extends JCTree.Visitor {
      *  only, and members go into the class member scope.
      */
     Scope enterScope(Env<AttrContext> env) {
-        return (env.tree.getTag() == JCTree.CLASSDEF)
+        return (env.tree.hasTag(JCTree.Tag.CLASSDEF))
             ? ((JCClassDecl) env.tree).sym.members_field
             : env.info.scope;
     }
@@ -310,10 +284,12 @@ public class Enter extends JCTree.Visitor {
                                                              JavaFileObject.Kind.SOURCE);
         if (tree.pid != null) {
             tree.packge = reader.enterPackage(TreeInfo.fullName(tree.pid));
-            if (tree.packageAnnotations.nonEmpty() || pkginfoOpt == PkgInfo.ALWAYS) {
+            if (tree.packageAnnotations.nonEmpty()
+                    || pkginfoOpt == PkgInfo.ALWAYS
+                    || tree.docComments != null) {
                 if (isPkgInfo) {
                     addEnv = true;
-                } else {
+                } else if (tree.packageAnnotations.nonEmpty()){
                     log.error(tree.packageAnnotations.head.pos(),
                               "pkg.annotations.sb.in.package-info.java");
                 }
@@ -338,7 +314,7 @@ public class Enter extends JCTree.Visitor {
                                 tree.packge);
                     if (addEnv || (tree0.packageAnnotations.isEmpty() &&
                                    tree.docComments != null &&
-                                   tree.docComments.get(tree) != null)) {
+                                   tree.docComments.hasComment(tree))) {
                         typeEnvs.put(tree.packge, topEnv);
                     }
                 }

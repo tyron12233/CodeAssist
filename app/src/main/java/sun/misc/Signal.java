@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2007, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -72,8 +72,8 @@ import java.util.Hashtable;
  * @since    1.2
  */
 public final class Signal {
-    private static Hashtable handlers = new Hashtable(4);
-    private static Hashtable signals = new Hashtable(4);
+    private static Hashtable<Signal,SignalHandler> handlers = new Hashtable<>(4);
+    private static Hashtable<Integer,Signal> signals = new Hashtable<>(4);
 
     private int number;
     private String name;
@@ -87,7 +87,7 @@ public final class Signal {
      * Returns the signal name.
      *
      * @return the name of the signal.
-     * @see Signal#Signal(String name)
+     * @see sun.misc.Signal#Signal(String name)
      */
     public String getName() {
         return name;
@@ -134,7 +134,7 @@ public final class Signal {
      *
      * @param name the name of the signal.
      * @exception IllegalArgumentException unknown signal
-     * @see Signal#getName()
+     * @see sun.misc.Signal#getName()
      */
     public Signal(String name) {
         number = findSignal(name);
@@ -151,7 +151,7 @@ public final class Signal {
      * @param handler the handler to be registered with the given signal.
      * @result the old handler
      * @exception IllegalArgumentException the signal is in use by the VM
-     * @see Signal#raise(Signal sig)
+     * @see sun.misc.Signal#raise(Signal sig)
      * @see sun.misc.SignalHandler
      * @see sun.misc.SignalHandler#SIG_DFL
      * @see sun.misc.SignalHandler#SIG_IGN
@@ -166,9 +166,9 @@ public final class Signal {
             throw new IllegalArgumentException
                 ("Signal already used by VM or OS: " + sig);
         }
-        signals.put(new Integer(sig.number), sig);
+        signals.put(sig.number, sig);
         synchronized (handlers) {
-            SignalHandler oldHandler = (SignalHandler)handlers.get(sig);
+            SignalHandler oldHandler = handlers.get(sig);
             handlers.remove(sig);
             if (newH == 2) {
                 handlers.put(sig, handler);
@@ -189,7 +189,7 @@ public final class Signal {
      * Raises a signal in the current process.
      *
      * @param sig a signal
-     * @see Signal#handle(Signal sig, SignalHandler handler)
+     * @see sun.misc.Signal#handle(Signal sig, SignalHandler handler)
      */
     public static void raise(Signal sig) throws IllegalArgumentException {
         if (handlers.get(sig) == null) {
@@ -200,8 +200,8 @@ public final class Signal {
 
     /* Called by the VM to execute Java signal handlers. */
     private static void dispatch(final int number) {
-        final Signal sig = (Signal)signals.get(new Integer(number));
-        final SignalHandler handler = (SignalHandler)handlers.get(sig);
+        final Signal sig = signals.get(number);
+        final SignalHandler handler = handlers.get(sig);
 
         Runnable runnable = new Runnable () {
             public void run() {

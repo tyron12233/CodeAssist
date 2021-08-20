@@ -1,26 +1,26 @@
 /*
- * Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.source.tree;
@@ -56,7 +56,9 @@ package com.sun.source.tree;
  *
  * @since 1.6
  */
+@jdk.Exported
 public interface TreeVisitor<R,P> {
+    R visitAnnotatedType(AnnotatedTypeTree node, P p);
     R visitAnnotation(AnnotationTree node, P p);
     R visitMethodInvocation(MethodInvocationTree node, P p);
     R visitAssert(AssertTree node, P p);
@@ -85,9 +87,11 @@ public interface TreeVisitor<R,P> {
     R visitModifiers(ModifiersTree node, P p);
     R visitNewArray(NewArrayTree node, P p);
     R visitNewClass(NewClassTree node, P p);
+    R visitLambdaExpression(LambdaExpressionTree node, P p);
     R visitParenthesized(ParenthesizedTree node, P p);
     R visitReturn(ReturnTree node, P p);
     R visitMemberSelect(MemberSelectTree node, P p);
+    R visitMemberReference(MemberReferenceTree node, P p);
     R visitEmptyStatement(EmptyStatementTree node, P p);
     R visitSwitch(SwitchTree node, P p);
     R visitSynchronized(SynchronizedTree node, P p);
@@ -96,6 +100,7 @@ public interface TreeVisitor<R,P> {
     R visitTry(TryTree node, P p);
     R visitParameterizedType(ParameterizedTypeTree node, P p);
     R visitUnionType(UnionTypeTree node, P p);
+    R visitIntersectionType(IntersectionTypeTree node, P p);
     R visitArrayType(ArrayTypeTree node, P p);
     R visitTypeCast(TypeCastTree node, P p);
     R visitPrimitiveType(PrimitiveTypeTree node, P p);

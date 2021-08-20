@@ -1,26 +1,26 @@
 /*
- * Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.api;
@@ -44,6 +44,7 @@ import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.file.JavacFileManager;
 import com.sun.tools.javac.main.*;
+import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.model.*;
 import com.sun.tools.javac.parser.Parser;
 import com.sun.tools.javac.parser.ParserFactory;
@@ -51,7 +52,6 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
-import com.sun.tools.javac.main.JavaCompiler;
 
 /**
  * Provides access to functionality specific to the JDK Java Compiler, javac.
@@ -64,29 +64,26 @@ import com.sun.tools.javac.main.JavaCompiler;
  * @author Peter von der Ah&eacute;
  * @author Jonathan Gibbons
  */
-public class JavacTaskImpl extends JavacTask {
-    private ClientCodeWrapper ccw;
+public class JavacTaskImpl extends BasicJavacTask {
     private Main compilerMain;
     private JavaCompiler compiler;
     private Locale locale;
     private String[] args;
     private String[] classNames;
-    private Context context;
     private List<JavaFileObject> fileObjects;
     private Map<JavaFileObject, JCCompilationUnit> notYetEntered;
     private ListBuffer<Env<AttrContext>> genList;
-    private TaskListener taskListener;
-    private AtomicBoolean used = new AtomicBoolean();
+    private final AtomicBoolean used = new AtomicBoolean();
     private Iterable<? extends Processor> processors;
 
-    private Integer result = null;
+    private Main.Result result = null;
 
     JavacTaskImpl(Main compilerMain,
                 String[] args,
                 String[] classNames,
                 Context context,
                 List<JavaFileObject> fileObjects) {
-        this.ccw = ClientCodeWrapper.instance(context);
+        super(null, false);
         this.compilerMain = compilerMain;
         this.args = args;
         this.classNames = classNames;
@@ -100,11 +97,11 @@ public class JavacTaskImpl extends JavacTask {
     }
 
     JavacTaskImpl(Main compilerMain,
-                Iterable<String> flags,
+                Iterable<String> args,
                 Context context,
                 Iterable<String> classes,
                 Iterable<? extends JavaFileObject> fileObjects) {
-        this(compilerMain, toArray(flags), toArray(classes), context, toList(fileObjects));
+        this(compilerMain, toArray(args), toArray(classes), context, toList(fileObjects));
     }
 
     static private String[] toArray(Iterable<String> iter) {
@@ -124,17 +121,21 @@ public class JavacTaskImpl extends JavacTask {
         return result.toList();
     }
 
-    public Boolean call() {
+    public Main.Result doCall() {
         if (!used.getAndSet(true)) {
             initContext();
             notYetEntered = new HashMap<JavaFileObject, JCCompilationUnit>();
             compilerMain.setAPIMode(true);
             result = compilerMain.compile(args, classNames, context, fileObjects, processors);
             cleanup();
-            return result == 0;
+            return result;
         } else {
             throw new IllegalStateException("multiple calls to method 'call'");
         }
+    }
+
+    public Boolean call() {
+        return doCall().isOK();
     }
 
     public void setProcessors(Iterable<? extends Processor> processors) {
@@ -157,10 +158,11 @@ public class JavacTaskImpl extends JavacTask {
                 throw new IllegalStateException();
         } else {
             initContext();
+            compilerMain.log = Log.instance(context);
             compilerMain.setOptions(Options.instance(context));
             compilerMain.filenames = new LinkedHashSet<File>();
             Collection<File> filenames = compilerMain.processArgs(CommandLine.parse(args), classNames);
-            if (!filenames.isEmpty())
+            if (filenames != null && !filenames.isEmpty())
                 throw new IllegalArgumentException("Malformed arguments " + toString(filenames, " "));
             compiler = JavaCompiler.instance(context);
             compiler.keepComments = true;
@@ -190,11 +192,7 @@ public class JavacTaskImpl extends JavacTask {
     }
 
     private void initContext() {
-        context.put(JavacTaskImpl.class, this);
-        if (context.get(TaskListener.class) != null)
-            context.put(TaskListener.class, (TaskListener)null);
-        if (taskListener != null)
-            context.put(TaskListener.class, ccw.wrap(taskListener));
+        context.put(JavacTask.class, this);
         //initialize compiler's default locale
         context.put(Locale.class, locale);
     }
@@ -224,14 +222,10 @@ public class JavacTaskImpl extends JavacTask {
         return fm.getRegularFile(file);
     }
 
-    public void setTaskListener(TaskListener taskListener) {
-        this.taskListener = taskListener;
-    }
-
     /**
      * Parse the specified files returning a list of abstract syntax trees.
      *
-     * @throws IOException TODO
+     * @throws java.io.IOException TODO
      * @return a list of abstract syntax trees
      */
     public Iterable<? extends CompilationUnitTree> parse() throws IOException {
@@ -269,13 +263,16 @@ public class JavacTaskImpl extends JavacTask {
      * Translate the given abstract syntax trees to elements.
      *
      * @param trees a list of abstract syntax trees.
-     * @throws IOException TODO
+     * @throws java.io.IOException TODO
      * @return a list of elements corresponding to the top level
      * classes in the abstract syntax trees
      */
     public Iterable<? extends TypeElement> enter(Iterable<? extends CompilationUnitTree> trees)
         throws IOException
     {
+        if (trees == null && notYetEntered != null && notYetEntered.isEmpty())
+            return List.nil();
+
         prepareCompiler();
 
         ListBuffer<JCCompilationUnit> roots = null;
@@ -324,7 +321,7 @@ public class JavacTaskImpl extends JavacTask {
             ListBuffer<TypeElement> elements = new ListBuffer<TypeElement>();
             for (JCCompilationUnit unit : units) {
                 for (JCTree node : unit.defs) {
-                    if (node.getTag() == JCTree.CLASSDEF) {
+                    if (node.hasTag(JCTree.Tag.CLASSDEF)) {
                         JCClassDecl cdef = (JCClassDecl) node;
                         if (cdef.sym != null) // maybe null if errors in anno processing
                             elements.append(cdef.sym);
@@ -382,12 +379,12 @@ public class JavacTaskImpl extends JavacTask {
         private void handleFlowResults(Queue<Env<AttrContext>> queue, ListBuffer<Element> elems) {
             for (Env<AttrContext> env: queue) {
                 switch (env.tree.getTag()) {
-                    case JCTree.CLASSDEF:
+                    case CLASSDEF:
                         JCClassDecl cdef = (JCClassDecl) env.tree;
                         if (cdef.sym != null)
                             elems.append(cdef.sym);
                         break;
-                    case JCTree.TOPLEVEL:
+                    case TOPLEVEL:
                         JCCompilationUnit unit = (JCCompilationUnit) env.tree;
                         if (unit.packge != null)
                             elems.append(unit.packge);
@@ -466,7 +463,7 @@ public class JavacTaskImpl extends JavacTask {
     }
 
     public Iterable<? extends Tree> pathFor(CompilationUnitTree unit, Tree node) {
-        return TreeInfo.pathFor((JCTree) node, (JCCompilationUnit) unit).reverse();
+        return TreeInfo.pathFor((JCTree) node, (JCTree.JCCompilationUnit) unit).reverse();
     }
 
     abstract class Filter {
@@ -475,7 +472,7 @@ public class JavacTaskImpl extends JavacTask {
             for (TypeElement item: classes)
                 set.add(item);
 
-            ListBuffer<Env<AttrContext>> defer = ListBuffer.<Env<AttrContext>>lb();
+            ListBuffer<Env<AttrContext>> defer = new ListBuffer<>();
             while (list.peek() != null) {
                 Env<AttrContext> env = list.remove();
                 ClassSymbol csym = env.enclClass.sym;
@@ -495,22 +492,6 @@ public class JavacTaskImpl extends JavacTask {
      * For internal use only.  This method will be
      * removed without warning.
      */
-    public Context getContext() {
-        return context;
-    }
-
-    /**
-     * For internal use only.  This method will be
-     * removed without warning.
-     */
-    public void updateContext(Context newContext) {
-        context = newContext;
-    }
-
-    /**
-     * For internal use only.  This method will be
-     * removed without warning.
-     */
     public Type parseType(String expr, TypeElement scope) {
         if (expr == null || expr.equals(""))
             throw new IllegalArgumentException();
@@ -522,7 +503,7 @@ public class JavacTaskImpl extends JavacTask {
             CharBuffer buf = CharBuffer.wrap((expr+"\u0000").toCharArray(), 0, expr.length());
             Parser parser = parserFactory.newParser(buf, false, false, false);
             JCTree tree = parser.parseType();
-            return attr.attribType(tree, (TypeSymbol)scope);
+            return attr.attribType(tree, (Symbol.TypeSymbol)scope);
         } finally {
             compiler.log.useSource(prev);
         }

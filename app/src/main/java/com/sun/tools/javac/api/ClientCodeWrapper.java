@@ -1,26 +1,26 @@
 /*
- * Copyright (c) 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 2011, 2012, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 
@@ -31,8 +31,13 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.io.Writer;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -41,25 +46,21 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import javax.lang.model.element.Modifier;
 import javax.lang.model.element.NestingKind;
 import javax.tools.Diagnostic;
+import javax.tools.DiagnosticListener;
 import javax.tools.FileObject;
 import javax.tools.JavaFileManager;
 import javax.tools.JavaFileManager.Location;
 import javax.tools.JavaFileObject;
+import javax.tools.JavaFileObject.Kind;
 
 import com.sun.source.util.TaskEvent;
 import com.sun.source.util.TaskListener;
 import com.sun.tools.javac.util.ClientCodeException;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.JCDiagnostic;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
-import javax.lang.model.element.Modifier;
-import javax.tools.DiagnosticListener;
-import javax.tools.JavaFileObject.Kind;
 
 /**
  *  Wrap objects to enable unchecked exceptions to be caught and handled.
@@ -148,7 +149,7 @@ public class ClientCodeWrapper {
             return fo;
     }
 
-    <T /*super JavaFileOject*/> DiagnosticListener<T> wrap(DiagnosticListener<T> dl) {
+    public <T /*super JavaFileOject*/> DiagnosticListener<T> wrap(DiagnosticListener<T> dl) {
         if (isTrusted(dl))
             return dl;
         return new WrappedDiagnosticListener<T>(dl);
@@ -158,6 +159,20 @@ public class ClientCodeWrapper {
         if (isTrusted(tl))
             return tl;
         return new WrappedTaskListener(tl);
+    }
+
+    TaskListener unwrap(TaskListener l) {
+        if (l instanceof WrappedTaskListener)
+            return ((WrappedTaskListener) l).clientTaskListener;
+        else
+            return l;
+    }
+
+    Collection<TaskListener> unwrap(Collection<? extends TaskListener> listeners) {
+        Collection<TaskListener> c = new ArrayList<TaskListener>(listeners.size());
+        for (TaskListener l: listeners)
+            c.add(unwrap(l));
+        return c;
     }
 
     @SuppressWarnings("unchecked")
@@ -179,6 +194,10 @@ public class ClientCodeWrapper {
             trustedClasses.put(c, trusted);
         }
         return trusted;
+    }
+
+    private String wrappedToString(Class<?> wrapperClass, Object wrapped) {
+        return wrapperClass.getSimpleName() + "[" + wrapped + "]";
     }
 
     // <editor-fold defaultstate="collapsed" desc="Wrapper classes">
@@ -361,6 +380,11 @@ public class ClientCodeWrapper {
                 throw new ClientCodeException(e);
             }
         }
+
+        @Override
+        public String toString() {
+            return wrappedToString(getClass(), clientJavaFileManager);
+        }
     }
 
     protected class WrappedFileObject implements FileObject {
@@ -486,6 +510,11 @@ public class ClientCodeWrapper {
                 throw new ClientCodeException(e);
             }
         }
+
+        @Override
+        public String toString() {
+            return wrappedToString(getClass(), clientFileObject);
+        }
     }
 
     protected class WrappedJavaFileObject extends WrappedFileObject implements JavaFileObject {
@@ -544,6 +573,11 @@ public class ClientCodeWrapper {
                 throw new ClientCodeException(e);
             }
         }
+
+        @Override
+        public String toString() {
+            return wrappedToString(getClass(), clientFileObject);
+        }
     }
 
     protected class WrappedDiagnosticListener<T /*super JavaFileObject*/> implements DiagnosticListener<T> {
@@ -565,6 +599,11 @@ public class ClientCodeWrapper {
                 throw new ClientCodeException(e);
             }
         }
+
+        @Override
+        public String toString() {
+            return wrappedToString(getClass(), clientDiagnosticListener);
+        }
     }
 
     public class DiagnosticSourceUnwrapper implements Diagnostic<JavaFileObject> {
@@ -574,7 +613,7 @@ public class ClientCodeWrapper {
             this.d = d;
         }
 
-        public Kind getKind() {
+        public Diagnostic.Kind getKind() {
             return d.getKind();
         }
 
@@ -610,6 +649,7 @@ public class ClientCodeWrapper {
             return d.getMessage(locale);
         }
 
+        @Override
         public String toString() {
             return d.toString();
         }
@@ -646,6 +686,11 @@ public class ClientCodeWrapper {
             } catch (Error e) {
                 throw new ClientCodeException(e);
             }
+        }
+
+        @Override
+        public String toString() {
+            return wrappedToString(getClass(), clientTaskListener);
         }
     }
 

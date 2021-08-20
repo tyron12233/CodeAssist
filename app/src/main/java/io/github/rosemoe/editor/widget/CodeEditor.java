@@ -83,6 +83,7 @@ import io.github.rosemoe.editor.util.IntPair;
 import io.github.rosemoe.editor.util.LongArrayList;
 import android.os.Handler;
 import android.os.Looper;
+import java.io.File;
 
 /**
  * CodeEditor is a editor that can highlight text regions by doing basic syntax analyzing
@@ -238,6 +239,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     private LongArrayList mPostDrawLineNumbers = new LongArrayList();
     private CharPosition mLockedSelection;
     private boolean mKeyboardDisabled;
+    private File mCurrentFile;
     KeyMetaStates mKeyMetaStates = new KeyMetaStates(this);
 
     public CodeEditor(Context context) {
@@ -287,6 +289,14 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
      */
     public void setEventListener(@Nullable EditorEventListener eventListener) {
         this.mListener = eventListener;
+    }
+    
+    public void setCurrentFile(File file) {
+        mCurrentFile = file;
+    }
+    
+    public File getCurrentFile() {
+        return mCurrentFile;
     }
 
     /**

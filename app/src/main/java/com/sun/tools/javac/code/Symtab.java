@@ -1,134 +1,42 @@
 /*
- * Copyright (c) 1999, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 1999, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.code;
 
-import com.sun.tools.javac.code.Symbol.ClassSymbol;
-import com.sun.tools.javac.code.Symbol.Completer;
-import com.sun.tools.javac.code.Symbol.CompletionFailure;
-import com.sun.tools.javac.code.Symbol.MethodSymbol;
-import com.sun.tools.javac.code.Symbol.OperatorSymbol;
-import com.sun.tools.javac.code.Symbol.PackageSymbol;
-import com.sun.tools.javac.code.Symbol.TypeSymbol;
-import com.sun.tools.javac.code.Symbol.VarSymbol;
-import com.sun.tools.javac.code.Type.BottomType;
-import com.sun.tools.javac.code.Type.ClassType;
-import com.sun.tools.javac.code.Type.ErrorType;
-import com.sun.tools.javac.code.Type.JCNoType;
-import com.sun.tools.javac.code.Type.MethodType;
-import com.sun.tools.javac.jvm.ByteCodes;
-import com.sun.tools.javac.jvm.ClassReader;
-import com.sun.tools.javac.jvm.Target;
-import com.sun.tools.javac.util.Context;
-import com.sun.tools.javac.util.JavacMessages;
-import com.sun.tools.javac.util.List;
-import com.sun.tools.javac.util.Name;
-import com.sun.tools.javac.util.Names;
-
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import javax.lang.model.element.ElementVisitor;
-import javax.lang.model.type.TypeVisitor;
 
-import static com.sun.tools.javac.code.Flags.ACYCLIC;
-import static com.sun.tools.javac.code.Flags.ANNOTATION;
-import static com.sun.tools.javac.code.Flags.FINAL;
-import static com.sun.tools.javac.code.Flags.HYPOTHETICAL;
-import static com.sun.tools.javac.code.Flags.INTERFACE;
-import static com.sun.tools.javac.code.Flags.PROTECTED;
-import static com.sun.tools.javac.code.Flags.PUBLIC;
-import static com.sun.tools.javac.code.Flags.STATIC;
-import static com.sun.tools.javac.jvm.ByteCodes.bool_and;
-import static com.sun.tools.javac.jvm.ByteCodes.bool_not;
-import static com.sun.tools.javac.jvm.ByteCodes.bool_or;
-import static com.sun.tools.javac.jvm.ByteCodes.dadd;
-import static com.sun.tools.javac.jvm.ByteCodes.dcmpg;
-import static com.sun.tools.javac.jvm.ByteCodes.dcmpl;
-import static com.sun.tools.javac.jvm.ByteCodes.ddiv;
-import static com.sun.tools.javac.jvm.ByteCodes.dmod;
-import static com.sun.tools.javac.jvm.ByteCodes.dmul;
-import static com.sun.tools.javac.jvm.ByteCodes.dneg;
-import static com.sun.tools.javac.jvm.ByteCodes.dsub;
-import static com.sun.tools.javac.jvm.ByteCodes.error;
-import static com.sun.tools.javac.jvm.ByteCodes.fadd;
-import static com.sun.tools.javac.jvm.ByteCodes.fcmpg;
-import static com.sun.tools.javac.jvm.ByteCodes.fcmpl;
-import static com.sun.tools.javac.jvm.ByteCodes.fdiv;
-import static com.sun.tools.javac.jvm.ByteCodes.fmod;
-import static com.sun.tools.javac.jvm.ByteCodes.fmul;
-import static com.sun.tools.javac.jvm.ByteCodes.fneg;
-import static com.sun.tools.javac.jvm.ByteCodes.fsub;
-import static com.sun.tools.javac.jvm.ByteCodes.iadd;
-import static com.sun.tools.javac.jvm.ByteCodes.iand;
-import static com.sun.tools.javac.jvm.ByteCodes.idiv;
-import static com.sun.tools.javac.jvm.ByteCodes.if_acmpeq;
-import static com.sun.tools.javac.jvm.ByteCodes.if_acmpne;
-import static com.sun.tools.javac.jvm.ByteCodes.if_icmpeq;
-import static com.sun.tools.javac.jvm.ByteCodes.if_icmpge;
-import static com.sun.tools.javac.jvm.ByteCodes.if_icmpgt;
-import static com.sun.tools.javac.jvm.ByteCodes.if_icmple;
-import static com.sun.tools.javac.jvm.ByteCodes.if_icmplt;
-import static com.sun.tools.javac.jvm.ByteCodes.if_icmpne;
-import static com.sun.tools.javac.jvm.ByteCodes.ifeq;
-import static com.sun.tools.javac.jvm.ByteCodes.ifge;
-import static com.sun.tools.javac.jvm.ByteCodes.ifgt;
-import static com.sun.tools.javac.jvm.ByteCodes.ifle;
-import static com.sun.tools.javac.jvm.ByteCodes.iflt;
-import static com.sun.tools.javac.jvm.ByteCodes.ifne;
-import static com.sun.tools.javac.jvm.ByteCodes.imod;
-import static com.sun.tools.javac.jvm.ByteCodes.imul;
-import static com.sun.tools.javac.jvm.ByteCodes.ineg;
-import static com.sun.tools.javac.jvm.ByteCodes.ior;
-import static com.sun.tools.javac.jvm.ByteCodes.ishl;
-import static com.sun.tools.javac.jvm.ByteCodes.ishll;
-import static com.sun.tools.javac.jvm.ByteCodes.ishr;
-import static com.sun.tools.javac.jvm.ByteCodes.ishrl;
-import static com.sun.tools.javac.jvm.ByteCodes.isub;
-import static com.sun.tools.javac.jvm.ByteCodes.iushr;
-import static com.sun.tools.javac.jvm.ByteCodes.iushrl;
-import static com.sun.tools.javac.jvm.ByteCodes.ixor;
-import static com.sun.tools.javac.jvm.ByteCodes.ladd;
-import static com.sun.tools.javac.jvm.ByteCodes.land;
-import static com.sun.tools.javac.jvm.ByteCodes.lcmp;
-import static com.sun.tools.javac.jvm.ByteCodes.ldiv;
-import static com.sun.tools.javac.jvm.ByteCodes.lmod;
-import static com.sun.tools.javac.jvm.ByteCodes.lmul;
-import static com.sun.tools.javac.jvm.ByteCodes.lneg;
-import static com.sun.tools.javac.jvm.ByteCodes.lor;
-import static com.sun.tools.javac.jvm.ByteCodes.lshl;
-import static com.sun.tools.javac.jvm.ByteCodes.lshll;
-import static com.sun.tools.javac.jvm.ByteCodes.lshr;
-import static com.sun.tools.javac.jvm.ByteCodes.lshrl;
-import static com.sun.tools.javac.jvm.ByteCodes.lsub;
-import static com.sun.tools.javac.jvm.ByteCodes.lushr;
-import static com.sun.tools.javac.jvm.ByteCodes.lushrl;
-import static com.sun.tools.javac.jvm.ByteCodes.lxor;
-import static com.sun.tools.javac.jvm.ByteCodes.nop;
-import static com.sun.tools.javac.jvm.ByteCodes.nullchk;
-import static com.sun.tools.javac.jvm.ByteCodes.string_add;
+import com.sun.tools.javac.code.Symbol.*;
+import com.sun.tools.javac.code.Type.*;
+import com.sun.tools.javac.jvm.*;
+import com.sun.tools.javac.util.*;
+import com.sun.tools.javac.util.List;
+import static com.sun.tools.javac.code.Flags.*;
+import static com.sun.tools.javac.jvm.ByteCodes.*;
+import static com.sun.tools.javac.code.TypeTag.*;
 
 /** A class that defines all predefined constants and operators
  *  as well as special classes such as java.lang.Object, which need
@@ -156,16 +64,16 @@ public class Symtab {
 
     /** Builtin types.
      */
-    public final Type byteType = new Type(TypeTags.BYTE, null);
-    public final Type charType = new Type(TypeTags.CHAR, null);
-    public final Type shortType = new Type(TypeTags.SHORT, null);
-    public final Type intType = new Type(TypeTags.INT, null);
-    public final Type longType = new Type(TypeTags.LONG, null);
-    public final Type floatType = new Type(TypeTags.FLOAT, null);
-    public final Type doubleType = new Type(TypeTags.DOUBLE, null);
-    public final Type booleanType = new Type(TypeTags.BOOLEAN, null);
+    public final JCPrimitiveType byteType = new JCPrimitiveType(BYTE, null);
+    public final JCPrimitiveType charType = new JCPrimitiveType(CHAR, null);
+    public final JCPrimitiveType shortType = new JCPrimitiveType(SHORT, null);
+    public final JCPrimitiveType intType = new JCPrimitiveType(INT, null);
+    public final JCPrimitiveType longType = new JCPrimitiveType(LONG, null);
+    public final JCPrimitiveType floatType = new JCPrimitiveType(FLOAT, null);
+    public final JCPrimitiveType doubleType = new JCPrimitiveType(DOUBLE, null);
+    public final JCPrimitiveType booleanType = new JCPrimitiveType(BOOLEAN, null);
     public final Type botType = new BottomType();
-    public final JCNoType voidType = new JCNoType(TypeTags.VOID);
+    public final JCVoidType voidType = new JCVoidType();
 
     private final Names names;
     private final ClassReader reader;
@@ -217,8 +125,11 @@ public class Symtab {
     public final Type stringBuilderType;
     public final Type cloneableType;
     public final Type serializableType;
+    public final Type serializedLambdaType;
     public final Type methodHandleType;
-    public final Type polymorphicSignatureType;
+    public final Type methodHandleLookupType;
+    public final Type methodTypeType;
+    public final Type nativeHeaderType;
     public final Type throwableType;
     public final Type errorType;
     public final Type interruptedExceptionType;
@@ -235,6 +146,7 @@ public class Symtab {
     public final Type listType;
     public final Type collectionsType;
     public final Type comparableType;
+    public final Type comparatorType;
     public final Type arraysType;
     public final Type iterableType;
     public final Type iteratorType;
@@ -244,10 +156,16 @@ public class Symtab {
     public final Type deprecatedType;
     public final Type suppressWarningsType;
     public final Type inheritedType;
+    public final Type profileType;
     public final Type proprietaryType;
     public final Type systemType;
     public final Type autoCloseableType;
     public final Type trustMeType;
+    public final Type lambdaMetafactory;
+    public final Type repeatableType;
+    public final Type documentedType;
+    public final Type elementTypeType;
+    public final Type functionalInterfaceType;
 
     /** The symbol representing the length field of an array.
      */
@@ -264,11 +182,15 @@ public class Symtab {
 
     /** The predefined type that belongs to a tag.
      */
-    public final Type[] typeOfTag = new Type[TypeTags.TypeTagCount];
+    public final Type[] typeOfTag = new Type[TypeTag.getTypeTagCount()];
 
     /** The name of the class that belongs to a basix type tag.
      */
-    public final Name[] boxedName = new Name[TypeTags.TypeTagCount];
+    public final Name[] boxedName = new Name[TypeTag.getTypeTagCount()];
+
+    /** A set containing all operator names.
+     */
+    public final Set<Name> operatorNames = new HashSet<Name>();
 
     /** A hashtable containing the encountered top-level and member classes,
      *  indexed by flat names. The table does not contain local classes.
@@ -285,7 +207,7 @@ public class Symtab {
 
     public void initType(Type type, ClassSymbol c) {
         type.tsym = c;
-        typeOfTag[type.tag] = type;
+        typeOfTag[type.getTag().ordinal()] = type;
     }
 
     public void initType(Type type, String name) {
@@ -297,7 +219,7 @@ public class Symtab {
 
     public void initType(Type type, String name, String bname) {
         initType(type, name);
-            boxedName[type.tag] = names.fromString("java.lang." + bname);
+            boxedName[type.getTag().ordinal()] = names.fromString("java.lang." + bname);
     }
 
     /** The class symbol that owns all predefined symbols.
@@ -331,7 +253,7 @@ public class Symtab {
                             int opcode) {
         predefClass.members().enter(
             new OperatorSymbol(
-                names.fromString(name),
+                makeOperatorName(name),
                 new MethodType(List.of(left, right), res,
                                List.<Type>nil(), methodClass),
                 opcode,
@@ -339,7 +261,8 @@ public class Symtab {
     }
 
     /** Enter a binary operation, as above but with two opcodes,
-     *  which get encoded as (opcode1 << ByteCodeTags.preShift) + opcode2.
+     *  which get encoded as
+     *  {@code (opcode1 << ByteCodeTags.preShift) + opcode2 }.
      *  @param opcode1     First opcode.
      *  @param opcode2     Second opcode.
      */
@@ -361,7 +284,7 @@ public class Symtab {
                                      Type res,
                                      int opcode) {
         OperatorSymbol sym =
-            new OperatorSymbol(names.fromString(name),
+            new OperatorSymbol(makeOperatorName(name),
                                new MethodType(List.of(arg),
                                               res,
                                               List.<Type>nil(),
@@ -372,8 +295,18 @@ public class Symtab {
         return sym;
     }
 
+    /**
+     * Create a new operator name from corresponding String representation
+     * and add the name to the set of known operator names.
+     */
+    private Name makeOperatorName(String name) {
+        Name opName = names.fromString(name);
+        operatorNames.add(opName);
+        return opName;
+    }
+
     /** Enter a class into symbol table.
-     *  @param    The name of the class.
+     *  @param s The name of the class.
      */
     private Type enterClass(String s) {
         return reader.enterClass(names.fromString(s)).type;
@@ -396,7 +329,7 @@ public class Symtab {
     }
 
     public void synthesizeBoxTypeIfMissing(final Type type) {
-        ClassSymbol sym = reader.enterClass(boxedName[type.tag]);
+        ClassSymbol sym = reader.enterClass(boxedName[type.getTag().ordinal()]);
         final Completer completer = sym.completer;
         if (completer != null) {
             sym.completer = new Completer() {
@@ -428,6 +361,22 @@ public class Symtab {
 
     }
 
+    // Enter a synthetic class that is used to mark classes in ct.sym.
+    // This class does not have a class file.
+    private Type enterSyntheticAnnotation(String name) {
+        ClassType type = (ClassType)enterClass(name);
+        ClassSymbol sym = (ClassSymbol)type.tsym;
+        sym.completer = null;
+        sym.flags_field = PUBLIC|ACYCLIC|ANNOTATION|INTERFACE;
+        sym.erasure_field = type;
+        sym.members_field = new Scope(sym);
+        type.typarams_field = List.nil();
+        type.allparams_field = List.nil();
+        type.supertype_field = annotationType;
+        type.interfaces_field = List.nil();
+        return type;
+    }
+
     /** Constructor; enters all predefined identifiers and operators
      *  into symbol table.
      */
@@ -438,12 +387,7 @@ public class Symtab {
         target = Target.instance(context);
 
         // Create the unknown type
-        unknownType = new Type(TypeTags.UNKNOWN, null) {
-            @Override
-            public <R, P> R accept(TypeVisitor<R, P> v, P p) {
-                return v.visitUnknown(this, p);
-            }
-        };
+        unknownType = new UnknownType();
 
         // create the basic builtin symbols
         rootPackage = new PackageSymbol(names.empty, null);
@@ -453,12 +397,11 @@ public class Symtab {
                     return messages.getLocalizedString("compiler.misc.unnamed.package");
                 }
             };
-        noSymbol = new TypeSymbol(0, names.empty, Type.noType, rootPackage) {
+        noSymbol = new TypeSymbol(Kinds.NIL, 0, names.empty, Type.noType, rootPackage) {
             public <R, P> R accept(ElementVisitor<R, P> v, P p) {
                 return v.visitUnknown(this, p);
             }
         };
-        noSymbol.kind = Kinds.NIL;
 
         // create the error symbols
         errSymbol = new ClassSymbol(PUBLIC|STATIC|ACYCLIC, names.any, null, rootPackage);
@@ -526,8 +469,10 @@ public class Symtab {
         cloneableType = enterClass("java.lang.Cloneable");
         throwableType = enterClass("java.lang.Throwable");
         serializableType = enterClass("java.io.Serializable");
+        serializedLambdaType = enterClass("java.lang.invoke.SerializedLambda");
         methodHandleType = enterClass("java.lang.invoke.MethodHandle");
-        polymorphicSignatureType = enterClass("java.lang.invoke.MethodHandle$PolymorphicSignature");
+        methodHandleLookupType = enterClass("java.lang.invoke.MethodHandles$Lookup");
+        methodTypeType = enterClass("java.lang.invoke.MethodType");
         errorType = enterClass("java.lang.Error");
         illegalArgumentExceptionType = enterClass("java.lang.IllegalArgumentException");
         interruptedExceptionType = enterClass("java.lang.InterruptedException");
@@ -550,6 +495,7 @@ public class Symtab {
         listType = enterClass("java.util.List");
         collectionsType = enterClass("java.util.Collections");
         comparableType = enterClass("java.lang.Comparable");
+        comparatorType = enterClass("java.util.Comparator");
         arraysType = enterClass("java.util.Arrays");
         iterableType = target.hasIterable()
             ? enterClass("java.lang.Iterable")
@@ -561,6 +507,9 @@ public class Symtab {
         deprecatedType = enterClass("java.lang.Deprecated");
         suppressWarningsType = enterClass("java.lang.SuppressWarnings");
         inheritedType = enterClass("java.lang.annotation.Inherited");
+        repeatableType = enterClass("java.lang.annotation.Repeatable");
+        documentedType = enterClass("java.lang.annotation.Documented");
+        elementTypeType = enterClass("java.lang.annotation.ElementType");
         systemType = enterClass("java.lang.System");
         autoCloseableType = enterClass("java.lang.AutoCloseable");
         autoCloseableClose = new MethodSymbol(PUBLIC,
@@ -569,11 +518,15 @@ public class Symtab {
                                             List.of(exceptionType), methodClass),
                              autoCloseableType.tsym);
         trustMeType = enterClass("java.lang.SafeVarargs");
+        nativeHeaderType = enterClass("java.lang.annotation.Native");
+        lambdaMetafactory = enterClass("java.lang.invoke.LambdaMetafactory");
+        functionalInterfaceType = enterClass("java.lang.FunctionalInterface");
 
         synthesizeEmptyInterfaceIfMissing(autoCloseableType);
         synthesizeEmptyInterfaceIfMissing(cloneableType);
         synthesizeEmptyInterfaceIfMissing(serializableType);
-        synthesizeEmptyInterfaceIfMissing(polymorphicSignatureType);
+        synthesizeEmptyInterfaceIfMissing(lambdaMetafactory);
+        synthesizeEmptyInterfaceIfMissing(serializedLambdaType);
         synthesizeBoxTypeIfMissing(doubleType);
         synthesizeBoxTypeIfMissing(floatType);
         synthesizeBoxTypeIfMissing(voidType);
@@ -581,17 +534,13 @@ public class Symtab {
         // Enter a synthetic class that is used to mark internal
         // proprietary classes in ct.sym.  This class does not have a
         // class file.
-        ClassType proprietaryType = (ClassType)enterClass("sun.Proprietary+Annotation");
-        this.proprietaryType = proprietaryType;
-        ClassSymbol proprietarySymbol = (ClassSymbol)proprietaryType.tsym;
-        proprietarySymbol.completer = null;
-        proprietarySymbol.flags_field = PUBLIC|ACYCLIC|ANNOTATION|INTERFACE;
-        proprietarySymbol.erasure_field = proprietaryType;
-        proprietarySymbol.members_field = new Scope(proprietarySymbol);
-        proprietaryType.typarams_field = List.nil();
-        proprietaryType.allparams_field = List.nil();
-        proprietaryType.supertype_field = annotationType;
-        proprietaryType.interfaces_field = List.nil();
+        proprietaryType = enterSyntheticAnnotation("sun.Proprietary+Annotation");
+
+        // Enter a synthetic class that is used to provide profile info for
+        // classes in ct.sym.  This class does not have a class file.
+        profileType = enterSyntheticAnnotation("jdk.Profile+Annotation");
+        MethodSymbol m = new MethodSymbol(PUBLIC | ABSTRACT, names.value, intType, profileType.tsym);
+        profileType.tsym.members().enter(m);
 
         // Enter a class for arrays.
         // The class implements java.lang.Cloneable and java.io.Serializable.
@@ -615,15 +564,18 @@ public class Symtab {
         arrayClass.members().enter(arrayCloneMethod);
 
         // Enter operators.
-        enterUnop("+", doubleType, doubleType, nop);
-        enterUnop("+", floatType, floatType, nop);
-        enterUnop("+", longType, longType, nop);
-        enterUnop("+", intType, intType, nop);
+        /*  Internally we use +++, --- for unary +, - to reduce +, - operators
+         *  overloading
+         */
+        enterUnop("+++", doubleType, doubleType, nop);
+        enterUnop("+++", floatType, floatType, nop);
+        enterUnop("+++", longType, longType, nop);
+        enterUnop("+++", intType, intType, nop);
 
-        enterUnop("-", doubleType, doubleType, dneg);
-        enterUnop("-", floatType, floatType, fneg);
-        enterUnop("-", longType, longType, lneg);
-        enterUnop("-", intType, intType, ineg);
+        enterUnop("---", doubleType, doubleType, dneg);
+        enterUnop("---", floatType, floatType, fneg);
+        enterUnop("---", longType, longType, lneg);
+        enterUnop("---", intType, intType, ineg);
 
         enterUnop("~", longType, longType, lxor);
         enterUnop("~", intType, intType, ixor);

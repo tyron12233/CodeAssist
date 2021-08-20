@@ -59,7 +59,7 @@ class ConditionLock extends Lock {
      * Acquires the lock when the state variable equals the desired state.
      *
      * @param desiredState the desired state
-     * @exception  InterruptedException if any thread has
+     * @exception  java.lang.InterruptedException if any thread has
      *               interrupted this thread.
      */
     public synchronized void lockWhen(int desiredState)

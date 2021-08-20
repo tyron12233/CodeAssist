@@ -1,26 +1,26 @@
 /*
- * Copyright (c) 1999, 2008, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 1999, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.util;
@@ -40,10 +40,6 @@ import java.util.NoSuchElementException;
  */
 public class ListBuffer<A> extends AbstractQueue<A> {
 
-    public static <T> ListBuffer<T> lb() {
-        return new ListBuffer<T>();
-    }
-
     public static <T> ListBuffer<T> of(T x) {
         ListBuffer<T> lb = new ListBuffer<T>();
         lb.add(x);
@@ -52,19 +48,20 @@ public class ListBuffer<A> extends AbstractQueue<A> {
 
     /** The list of elements of this buffer.
      */
-    public List<A> elems;
+    private List<A> elems;
 
-    /** A pointer pointing to the last, sentinel element of `elems'.
+    /** A pointer pointing to the last element of 'elems' containing data,
+     *  or null if the list is empty.
      */
-    public List<A> last;
+    private List<A> last;
 
     /** The number of element in this buffer.
      */
-    public int count;
+    private int count;
 
     /** Has a list been created from this buffer yet?
      */
-    public boolean shared;
+    private boolean shared;
 
     /** Create a new initially empty list buffer.
      */
@@ -73,8 +70,8 @@ public class ListBuffer<A> extends AbstractQueue<A> {
     }
 
     public final void clear() {
-        this.elems = new List<A>(null,null);
-        this.last = this.elems;
+        this.elems = List.nil();
+        this.last = null;
         count = 0;
         shared = false;
     }
@@ -103,22 +100,23 @@ public class ListBuffer<A> extends AbstractQueue<A> {
     /** Copy list and sets last.
      */
     private void copy() {
-        List<A> p = elems = new List<A>(elems.head, elems.tail);
-        while (true) {
-            List<A> tail = p.tail;
-            if (tail == null) break;
-            tail = new List<A>(tail.head, tail.tail);
-            p.setTail(tail);
-            p = tail;
+        if (elems.nonEmpty()) {
+            List<A> orig = elems;
+
+            elems = last = List.<A>of(orig.head);
+
+            while ((orig = orig.tail).nonEmpty()) {
+                last.tail = List.<A>of(orig.head);
+                last = last.tail;
+            }
         }
-        last = p;
-        shared = false;
     }
 
     /** Prepend an element to buffer.
      */
     public ListBuffer<A> prepend(A x) {
         elems = elems.prepend(x);
+        if (last == null) last = elems;
         count++;
         return this;
     }
@@ -128,9 +126,13 @@ public class ListBuffer<A> extends AbstractQueue<A> {
     public ListBuffer<A> append(A x) {
         x.getClass(); // null check
         if (shared) copy();
-        last.head = x;
-        last.setTail(new List<A>(null,null));
-        last = last.tail;
+        List<A> newLast = List.<A>of(x);
+        if (last != null) {
+            last.tail = newLast;
+            last = newLast;
+        } else {
+            elems = last = newLast;
+        }
         count++;
         return this;
     }
@@ -192,8 +194,9 @@ public class ListBuffer<A> extends AbstractQueue<A> {
      */
     public A next() {
         A x = elems.head;
-        if (elems != last) {
+        if (!elems.isEmpty()) {
             elems = elems.tail;
+            if (elems.isEmpty()) last = null;
             count--;
         }
         return x;
@@ -205,10 +208,10 @@ public class ListBuffer<A> extends AbstractQueue<A> {
         return new Iterator<A>() {
             List<A> elems = ListBuffer.this.elems;
             public boolean hasNext() {
-                return elems != last;
+                return !elems.isEmpty();
             }
             public A next() {
-                if (elems == last)
+                if (elems.isEmpty())
                     throw new NoSuchElementException();
                 A elem = elems.head;
                 elems = elems.tail;
@@ -262,5 +265,9 @@ public class ListBuffer<A> extends AbstractQueue<A> {
 
     public A peek() {
         return first();
+    }
+
+    public A last() {
+        return last != null ? last.head : null;
     }
 }

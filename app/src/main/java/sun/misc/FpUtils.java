@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,9 +29,9 @@ import sun.misc.FloatConsts;
 import sun.misc.DoubleConsts;
 
 /**
- * The class <code>FpUtils</code> contains static utility methods for
- * manipulating and inspecting <code>float</code> and
- * <code>double</code> floating-point numbers.  These methods include
+ * The class {@code FpUtils} contains static utility methods for
+ * manipulating and inspecting {@code float} and
+ * {@code double} floating-point numbers.  These methods include
  * functionality recommended or required by the IEEE 754
  * floating-point standard.
  *
@@ -125,10 +125,6 @@ public class FpUtils {
      */
     private FpUtils() {}
 
-    // Constants used in scalb
-    static double twoToTheDoubleScaleUp = powerOfTwoD(512);
-    static double twoToTheDoubleScaleDown = powerOfTwoD(-512);
-
     // Helper Methods
 
     // The following helper methods are used in the implementation of
@@ -136,223 +132,196 @@ public class FpUtils {
     // tests for exception cases.
 
     /**
-     * Returns unbiased exponent of a <code>double</code>.
+     * Returns unbiased exponent of a {@code double}.
+     * @deprecated Use Math.getExponent.
      */
+    @Deprecated
     public static int getExponent(double d){
-        /*
-         * Bitwise convert d to long, mask out exponent bits, shift
-         * to the right and then subtract out double's bias adjust to
-         * get true exponent value.
-         */
-        return (int)(((Double.doubleToRawLongBits(d) & DoubleConsts.EXP_BIT_MASK) >>
-                      (DoubleConsts.SIGNIFICAND_WIDTH - 1)) - DoubleConsts.EXP_BIAS);
+        return Math.getExponent(d);
     }
 
     /**
-     * Returns unbiased exponent of a <code>float</code>.
+     * Returns unbiased exponent of a {@code float}.
+     * @deprecated Use Math.getExponent.
      */
+    @Deprecated
     public static int getExponent(float f){
-        /*
-         * Bitwise convert f to integer, mask out exponent bits, shift
-         * to the right and then subtract out float's bias adjust to
-         * get true exponent value
-         */
-        return ((Float.floatToRawIntBits(f) & FloatConsts.EXP_BIT_MASK) >>
-                (FloatConsts.SIGNIFICAND_WIDTH - 1)) - FloatConsts.EXP_BIAS;
+        return Math.getExponent(f);
     }
 
-    /**
-     * Returns a floating-point power of two in the normal range.
-     */
-    static double powerOfTwoD(int n) {
-        assert(n >= DoubleConsts.MIN_EXPONENT && n <= DoubleConsts.MAX_EXPONENT);
-        return Double.longBitsToDouble((((long)n + (long)DoubleConsts.EXP_BIAS) <<
-                                        (DoubleConsts.SIGNIFICAND_WIDTH-1))
-                                       & DoubleConsts.EXP_BIT_MASK);
-    }
-
-    /**
-     * Returns a floating-point power of two in the normal range.
-     */
-    static float powerOfTwoF(int n) {
-        assert(n >= FloatConsts.MIN_EXPONENT && n <= FloatConsts.MAX_EXPONENT);
-        return Float.intBitsToFloat(((n + FloatConsts.EXP_BIAS) <<
-                                     (FloatConsts.SIGNIFICAND_WIDTH-1))
-                                    & FloatConsts.EXP_BIT_MASK);
-    }
 
     /**
      * Returns the first floating-point argument with the sign of the
      * second floating-point argument.  Note that unlike the {@link
      * FpUtils#copySign(double, double) copySign} method, this method
-     * does not require NaN <code>sign</code> arguments to be treated
+     * does not require NaN {@code sign} arguments to be treated
      * as positive values; implementations are permitted to treat some
      * NaN arguments as positive and other NaN arguments as negative
      * to allow greater performance.
      *
      * @param magnitude  the parameter providing the magnitude of the result
      * @param sign   the parameter providing the sign of the result
-     * @return a value with the magnitude of <code>magnitude</code>
-     * and the sign of <code>sign</code>.
+     * @return a value with the magnitude of {@code magnitude}
+     * and the sign of {@code sign}.
      * @author Joseph D. Darcy
+     * @deprecated Use Math.copySign.
      */
+    @Deprecated
     public static double rawCopySign(double magnitude, double sign) {
-        return Double.longBitsToDouble((Double.doubleToRawLongBits(sign) &
-                                        (DoubleConsts.SIGN_BIT_MASK)) |
-                                       (Double.doubleToRawLongBits(magnitude) &
-                                        (DoubleConsts.EXP_BIT_MASK |
-                                         DoubleConsts.SIGNIF_BIT_MASK)));
+        return Math.copySign(magnitude, sign);
     }
 
     /**
      * Returns the first floating-point argument with the sign of the
      * second floating-point argument.  Note that unlike the {@link
      * FpUtils#copySign(float, float) copySign} method, this method
-     * does not require NaN <code>sign</code> arguments to be treated
+     * does not require NaN {@code sign} arguments to be treated
      * as positive values; implementations are permitted to treat some
      * NaN arguments as positive and other NaN arguments as negative
      * to allow greater performance.
      *
      * @param magnitude  the parameter providing the magnitude of the result
      * @param sign   the parameter providing the sign of the result
-     * @return a value with the magnitude of <code>magnitude</code>
-     * and the sign of <code>sign</code>.
+     * @return a value with the magnitude of {@code magnitude}
+     * and the sign of {@code sign}.
      * @author Joseph D. Darcy
+     * @deprecated Use Math.copySign.
      */
+    @Deprecated
     public static float rawCopySign(float magnitude, float sign) {
-        return Float.intBitsToFloat((Float.floatToRawIntBits(sign) &
-                                     (FloatConsts.SIGN_BIT_MASK)) |
-                                    (Float.floatToRawIntBits(magnitude) &
-                                     (FloatConsts.EXP_BIT_MASK |
-                                      FloatConsts.SIGNIF_BIT_MASK)));
+        return Math.copySign(magnitude, sign);
     }
 
     /* ***************************************************************** */
 
     /**
-     * Returns <code>true</code> if the argument is a finite
-     * floating-point value; returns <code>false</code> otherwise (for
+     * Returns {@code true} if the argument is a finite
+     * floating-point value; returns {@code false} otherwise (for
      * NaN and infinity arguments).
      *
-     * @param d the <code>double</code> value to be tested
-     * @return <code>true</code> if the argument is a finite
-     * floating-point value, <code>false</code> otherwise.
+     * @param d the {@code double} value to be tested
+     * @return {@code true} if the argument is a finite
+     * floating-point value, {@code false} otherwise.
+     * @deprecated Use Double.isFinite.
      */
+    @Deprecated
     public static boolean isFinite(double d) {
-        return Math.abs(d) <= DoubleConsts.MAX_VALUE;
+        return Double.isFinite(d);
     }
 
     /**
-     * Returns <code>true</code> if the argument is a finite
-     * floating-point value; returns <code>false</code> otherwise (for
+     * Returns {@code true} if the argument is a finite
+     * floating-point value; returns {@code false} otherwise (for
      * NaN and infinity arguments).
      *
-     * @param f the <code>float</code> value to be tested
-     * @return <code>true</code> if the argument is a finite
-     * floating-point value, <code>false</code> otherwise.
+     * @param f the {@code float} value to be tested
+     * @return {@code true} if the argument is a finite
+     * floating-point value, {@code false} otherwise.
+     * @deprecated Use Float.isFinite.
      */
+     @Deprecated
      public static boolean isFinite(float f) {
-        return Math.abs(f) <= FloatConsts.MAX_VALUE;
+         return Float.isFinite(f);
     }
 
     /**
-     * Returns <code>true</code> if the specified number is infinitely
-     * large in magnitude, <code>false</code> otherwise.
+     * Returns {@code true} if the specified number is infinitely
+     * large in magnitude, {@code false} otherwise.
      *
      * <p>Note that this method is equivalent to the {@link
      * Double#isInfinite(double) Double.isInfinite} method; the
      * functionality is included in this class for convenience.
      *
      * @param   d   the value to be tested.
-     * @return  <code>true</code> if the value of the argument is positive
-     *          infinity or negative infinity; <code>false</code> otherwise.
+     * @return  {@code true} if the value of the argument is positive
+     *          infinity or negative infinity; {@code false} otherwise.
      */
     public static boolean isInfinite(double d) {
         return Double.isInfinite(d);
     }
 
     /**
-     * Returns <code>true</code> if the specified number is infinitely
-     * large in magnitude, <code>false</code> otherwise.
+     * Returns {@code true} if the specified number is infinitely
+     * large in magnitude, {@code false} otherwise.
      *
      * <p>Note that this method is equivalent to the {@link
      * Float#isInfinite(float) Float.isInfinite} method; the
      * functionality is included in this class for convenience.
      *
      * @param   f   the value to be tested.
-     * @return  <code>true</code> if the argument is positive infinity or
-     *          negative infinity; <code>false</code> otherwise.
+     * @return  {@code true} if the argument is positive infinity or
+     *          negative infinity; {@code false} otherwise.
      */
      public static boolean isInfinite(float f) {
          return Float.isInfinite(f);
     }
 
     /**
-     * Returns <code>true</code> if the specified number is a
-     * Not-a-Number (NaN) value, <code>false</code> otherwise.
+     * Returns {@code true} if the specified number is a
+     * Not-a-Number (NaN) value, {@code false} otherwise.
      *
      * <p>Note that this method is equivalent to the {@link
      * Double#isNaN(double) Double.isNaN} method; the functionality is
      * included in this class for convenience.
      *
      * @param   d   the value to be tested.
-     * @return  <code>true</code> if the value of the argument is NaN;
-     *          <code>false</code> otherwise.
+     * @return  {@code true} if the value of the argument is NaN;
+     *          {@code false} otherwise.
      */
     public static boolean isNaN(double d) {
         return Double.isNaN(d);
     }
 
     /**
-     * Returns <code>true</code> if the specified number is a
-     * Not-a-Number (NaN) value, <code>false</code> otherwise.
+     * Returns {@code true} if the specified number is a
+     * Not-a-Number (NaN) value, {@code false} otherwise.
      *
      * <p>Note that this method is equivalent to the {@link
      * Float#isNaN(float) Float.isNaN} method; the functionality is
      * included in this class for convenience.
      *
      * @param   f   the value to be tested.
-     * @return  <code>true</code> if the argument is NaN;
-     *          <code>false</code> otherwise.
+     * @return  {@code true} if the argument is NaN;
+     *          {@code false} otherwise.
      */
      public static boolean isNaN(float f) {
         return Float.isNaN(f);
     }
 
     /**
-     * Returns <code>true</code> if the unordered relation holds
+     * Returns {@code true} if the unordered relation holds
      * between the two arguments.  When two floating-point values are
      * unordered, one value is neither less than, equal to, nor
      * greater than the other.  For the unordered relation to be true,
-     * at least one argument must be a <code>NaN</code>.
+     * at least one argument must be a {@code NaN}.
      *
      * @param arg1      the first argument
      * @param arg2      the second argument
-     * @return <code>true</code> if at least one argument is a NaN,
-     * <code>false</code> otherwise.
+     * @return {@code true} if at least one argument is a NaN,
+     * {@code false} otherwise.
      */
     public static boolean isUnordered(double arg1, double arg2) {
         return isNaN(arg1) || isNaN(arg2);
     }
 
     /**
-     * Returns <code>true</code> if the unordered relation holds
+     * Returns {@code true} if the unordered relation holds
      * between the two arguments.  When two floating-point values are
      * unordered, one value is neither less than, equal to, nor
      * greater than the other.  For the unordered relation to be true,
-     * at least one argument must be a <code>NaN</code>.
+     * at least one argument must be a {@code NaN}.
      *
      * @param arg1      the first argument
      * @param arg2      the second argument
-     * @return <code>true</code> if at least one argument is a NaN,
-     * <code>false</code> otherwise.
+     * @return {@code true} if at least one argument is a NaN,
+     * {@code false} otherwise.
      */
      public static boolean isUnordered(float arg1, float arg2) {
         return isNaN(arg1) || isNaN(arg2);
     }
 
     /**
-     * Returns unbiased exponent of a <code>double</code>; for
+     * Returns unbiased exponent of a {@code double}; for
      * subnormal values, the number is treated as if it were
      * normalized.  That is for all finite, non-zero, positive numbers
      * <i>x</i>, <code>scalb(<i>x</i>, -ilogb(<i>x</i>))</code> is
@@ -378,7 +347,6 @@ public class FpUtils {
                 return (1<<30);         // 2^30
             else // infinite value
                 return (1<<28);         // 2^28
-        // break;
 
         case DoubleConsts.MIN_EXPONENT-1:       // zero or subnormal
             if(d == 0.0) {
@@ -414,18 +382,16 @@ public class FpUtils {
                         exponent < DoubleConsts.MIN_EXPONENT);
                 return exponent;
             }
-        // break;
 
         default:
             assert( exponent >= DoubleConsts.MIN_EXPONENT &&
                     exponent <= DoubleConsts.MAX_EXPONENT);
             return exponent;
-        // break;
         }
     }
 
     /**
-     * Returns unbiased exponent of a <code>float</code>; for
+     * Returns unbiased exponent of a {@code float}; for
      * subnormal values, the number is treated as if it were
      * normalized.  That is for all finite, non-zero, positive numbers
      * <i>x</i>, <code>scalb(<i>x</i>, -ilogb(<i>x</i>))</code> is
@@ -451,7 +417,6 @@ public class FpUtils {
                 return (1<<30);         // 2^30
             else // infinite value
                 return (1<<28);         // 2^28
-        // break;
 
         case FloatConsts.MIN_EXPONENT-1:        // zero or subnormal
             if(f == 0.0f) {
@@ -487,13 +452,11 @@ public class FpUtils {
                         exponent < FloatConsts.MIN_EXPONENT);
                 return exponent;
             }
-        // break;
 
         default:
             assert( exponent >= FloatConsts.MIN_EXPONENT &&
                     exponent <= FloatConsts.MAX_EXPONENT);
             return exponent;
-        // break;
         }
     }
 
@@ -534,22 +497,21 @@ public class FpUtils {
      */
 
     /**
-     * Return <code>d</code> &times;
-     * 2<sup><code>scale_factor</code></sup> rounded as if performed
+     * Return {@code d} &times;
+     * 2<sup>{@code scale_factor}</sup> rounded as if performed
      * by a single correctly rounded floating-point multiply to a
-     * member of the double value set.  See <a
-     * href="http://java.sun.com/docs/books/jls/second_edition/html/typesValues.doc.html#9208">&sect;4.2.3</a>
-     * of the <a href="http://java.sun.com/docs/books/jls/html/">Java
-     * Language Specification</a> for a discussion of floating-point
+     * member of the double value set.  See section 4.2.3 of
+     * <cite>The Java&trade; Language Specification</cite>
+     * for a discussion of floating-point
      * value sets.  If the exponent of the result is between the
-     * <code>double</code>'s minimum exponent and maximum exponent,
+     * {@code double}'s minimum exponent and maximum exponent,
      * the answer is calculated exactly.  If the exponent of the
-     * result would be larger than <code>doubles</code>'s maximum
+     * result would be larger than {@code doubles}'s maximum
      * exponent, an infinity is returned.  Note that if the result is
-     * subnormal, precision may be lost; that is, when <code>scalb(x,
-     * n)</code> is subnormal, <code>scalb(scalb(x, n), -n)</code> may
+     * subnormal, precision may be lost; that is, when {@code scalb(x,
+     * n)} is subnormal, {@code scalb(scalb(x, n), -n)} may
      * not equal <i>x</i>.  When the result is non-NaN, the result has
-     * the same sign as <code>d</code>.
+     * the same sign as {@code d}.
      *
      *<p>
      * Special cases:
@@ -562,104 +524,32 @@ public class FpUtils {
      * </ul>
      *
      * @param d number to be scaled by a power of two.
-     * @param scale_factor power of 2 used to scale <code>d</code>
-     * @return <code>d * </code>2<sup><code>scale_factor</code></sup>
+     * @param scale_factor power of 2 used to scale {@code d}
+     * @return {@code d * }2<sup>{@code scale_factor}</sup>
      * @author Joseph D. Darcy
+     * @deprecated Use Math.scalb.
      */
+    @Deprecated
     public static double scalb(double d, int scale_factor) {
-        /*
-         * This method does not need to be declared strictfp to
-         * compute the same correct result on all platforms.  When
-         * scaling up, it does not matter what order the
-         * multiply-store operations are done; the result will be
-         * finite or overflow regardless of the operation ordering.
-         * However, to get the correct result when scaling down, a
-         * particular ordering must be used.
-         *
-         * When scaling down, the multiply-store operations are
-         * sequenced so that it is not possible for two consecutive
-         * multiply-stores to return subnormal results.  If one
-         * multiply-store result is subnormal, the next multiply will
-         * round it away to zero.  This is done by first multiplying
-         * by 2 ^ (scale_factor % n) and then multiplying several
-         * times by by 2^n as needed where n is the exponent of number
-         * that is a covenient power of two.  In this way, at most one
-         * real rounding error occurs.  If the double value set is
-         * being used exclusively, the rounding will occur on a
-         * multiply.  If the double-extended-exponent value set is
-         * being used, the products will (perhaps) be exact but the
-         * stores to d are guaranteed to round to the double value
-         * set.
-         *
-         * It is _not_ a valid implementation to first multiply d by
-         * 2^MIN_EXPONENT and then by 2 ^ (scale_factor %
-         * MIN_EXPONENT) since even in a strictfp program double
-         * rounding on underflow could occur; e.g. if the scale_factor
-         * argument was (MIN_EXPONENT - n) and the exponent of d was a
-         * little less than -(MIN_EXPONENT - n), meaning the final
-         * result would be subnormal.
-         *
-         * Since exact reproducibility of this method can be achieved
-         * without any undue performance burden, there is no
-         * compelling reason to allow double rounding on underflow in
-         * scalb.
-         */
-
-        // magnitude of a power of two so large that scaling a finite
-        // nonzero value by it would be guaranteed to over or
-        // underflow; due to rounding, scaling down takes takes an
-        // additional power of two which is reflected here
-        final int MAX_SCALE = DoubleConsts.MAX_EXPONENT + -DoubleConsts.MIN_EXPONENT +
-                              DoubleConsts.SIGNIFICAND_WIDTH + 1;
-        int exp_adjust = 0;
-        int scale_increment = 0;
-        double exp_delta = Double.NaN;
-
-        // Make sure scaling factor is in a reasonable range
-
-        if(scale_factor < 0) {
-            scale_factor = Math.max(scale_factor, -MAX_SCALE);
-            scale_increment = -512;
-            exp_delta = twoToTheDoubleScaleDown;
-        }
-        else {
-            scale_factor = Math.min(scale_factor, MAX_SCALE);
-            scale_increment = 512;
-            exp_delta = twoToTheDoubleScaleUp;
-        }
-
-        // Calculate (scale_factor % +/-512), 512 = 2^9, using
-        // technique from "Hacker's Delight" section 10-2.
-        int t = (scale_factor >> 9-1) >>> 32 - 9;
-        exp_adjust = ((scale_factor + t) & (512 -1)) - t;
-
-        d *= powerOfTwoD(exp_adjust);
-        scale_factor -= exp_adjust;
-
-        while(scale_factor != 0) {
-            d *= exp_delta;
-            scale_factor -= scale_increment;
-        }
-        return d;
+        return Math.scalb(d, scale_factor);
     }
 
     /**
-     * Return <code>f </code>&times;
-     * 2<sup><code>scale_factor</code></sup> rounded as if performed
+     * Return {@code f} &times;
+     * 2<sup>{@code scale_factor}</sup> rounded as if performed
      * by a single correctly rounded floating-point multiply to a
-     * member of the float value set.  See <a
-     * href="http://java.sun.com/docs/books/jls/second_edition/html/typesValues.doc.html#9208">&sect;4.2.3</a>
-     * of the <a href="http://java.sun.com/docs/books/jls/html/">Java
-     * Language Specification</a> for a discussion of floating-point
-     * value set. If the exponent of the result is between the
-     * <code>float</code>'s minimum exponent and maximum exponent, the
+     * member of the float value set.  See section 4.2.3 of
+     * <cite>The Java&trade; Language Specification</cite>
+     * for a discussion of floating-point
+     * value sets. If the exponent of the result is between the
+     * {@code float}'s minimum exponent and maximum exponent, the
      * answer is calculated exactly.  If the exponent of the result
-     * would be larger than <code>float</code>'s maximum exponent, an
+     * would be larger than {@code float}'s maximum exponent, an
      * infinity is returned.  Note that if the result is subnormal,
-     * precision may be lost; that is, when <code>scalb(x, n)</code>
-     * is subnormal, <code>scalb(scalb(x, n), -n)</code> may not equal
+     * precision may be lost; that is, when {@code scalb(x, n)}
+     * is subnormal, {@code scalb(scalb(x, n), -n)} may not equal
      * <i>x</i>.  When the result is non-NaN, the result has the same
-     * sign as <code>f</code>.
+     * sign as {@code f}.
      *
      *<p>
      * Special cases:
@@ -672,31 +562,14 @@ public class FpUtils {
      * </ul>
      *
      * @param f number to be scaled by a power of two.
-     * @param scale_factor power of 2 used to scale <code>f</code>
-     * @return <code>f * </code>2<sup><code>scale_factor</code></sup>
+     * @param scale_factor power of 2 used to scale {@code f}
+     * @return {@code f * }2<sup>{@code scale_factor}</sup>
      * @author Joseph D. Darcy
+     * @deprecated Use Math.scalb.
      */
-     public static float scalb(float f, int scale_factor) {
-        // magnitude of a power of two so large that scaling a finite
-        // nonzero value by it would be guaranteed to over or
-        // underflow; due to rounding, scaling down takes takes an
-        // additional power of two which is reflected here
-        final int MAX_SCALE = FloatConsts.MAX_EXPONENT + -FloatConsts.MIN_EXPONENT +
-                              FloatConsts.SIGNIFICAND_WIDTH + 1;
-
-        // Make sure scaling factor is in a reasonable range
-        scale_factor = Math.max(Math.min(scale_factor, MAX_SCALE), -MAX_SCALE);
-
-        /*
-         * Since + MAX_SCALE for float fits well within the double
-         * exponent range and + float -> double conversion is exact
-         * the multiplication below will be exact. Therefore, the
-         * rounding that occurs when the double product is cast to
-         * float will be the correctly rounded float result.  Since
-         * all operations other than the final multiply will be exact,
-         * it is not necessary to declare this method strictfp.
-         */
-        return (float)((double)f*powerOfTwoD(scale_factor));
+    @Deprecated
+    public static float scalb(float f, int scale_factor) {
+        return Math.scalb(f, scale_factor);
     }
 
     /**
@@ -709,94 +582,40 @@ public class FpUtils {
      * <ul>
      * <li> If either argument is a NaN, then NaN is returned.
      *
-     * <li> If both arguments are signed zeros, <code>direction</code>
+     * <li> If both arguments are signed zeros, {@code direction}
      * is returned unchanged (as implied by the requirement of
      * returning the second argument if the arguments compare as
      * equal).
      *
-     * <li> If <code>start</code> is
-     * &plusmn;<code>Double.MIN_VALUE</code> and <code>direction</code>
+     * <li> If {@code start} is
+     * &plusmn;{@code Double.MIN_VALUE} and {@code direction}
      * has a value such that the result should have a smaller
-     * magnitude, then a zero with the same sign as <code>start</code>
+     * magnitude, then a zero with the same sign as {@code start}
      * is returned.
      *
-     * <li> If <code>start</code> is infinite and
-     * <code>direction</code> has a value such that the result should
-     * have a smaller magnitude, <code>Double.MAX_VALUE</code> with the
-     * same sign as <code>start</code> is returned.
+     * <li> If {@code start} is infinite and
+     * {@code direction} has a value such that the result should
+     * have a smaller magnitude, {@code Double.MAX_VALUE} with the
+     * same sign as {@code start} is returned.
      *
-     * <li> If <code>start</code> is equal to &plusmn;
-     * <code>Double.MAX_VALUE</code> and <code>direction</code> has a
+     * <li> If {@code start} is equal to &plusmn;
+     * {@code Double.MAX_VALUE} and {@code direction} has a
      * value such that the result should have a larger magnitude, an
-     * infinity with same sign as <code>start</code> is returned.
+     * infinity with same sign as {@code start} is returned.
      * </ul>
      *
      * @param start     starting floating-point value
      * @param direction value indicating which of
-     * <code>start</code>'s neighbors or <code>start</code> should
+     * {@code start}'s neighbors or {@code start} should
      * be returned
-     * @return The floating-point number adjacent to <code>start</code> in the
-     * direction of <code>direction</code>.
+     * @return The floating-point number adjacent to {@code start} in the
+     * direction of {@code direction}.
      * @author Joseph D. Darcy
+     * @deprecated Use Math.nextAfter
      */
+    @Deprecated
     public static double nextAfter(double start, double direction) {
-        /*
-         * The cases:
-         *
-         * nextAfter(+infinity, 0)  == MAX_VALUE
-         * nextAfter(+infinity, +infinity)  == +infinity
-         * nextAfter(-infinity, 0)  == -MAX_VALUE
-         * nextAfter(-infinity, -infinity)  == -infinity
-         *
-         * are naturally handled without any additional testing
-         */
-
-        // First check for NaN values
-        if (isNaN(start) || isNaN(direction)) {
-            // return a NaN derived from the input NaN(s)
-            return start + direction;
-        } else if (start == direction) {
-            return direction;
-        } else {        // start > direction or start < direction
-            // Add +0.0 to get rid of a -0.0 (+0.0 + -0.0 => +0.0)
-            // then bitwise convert start to integer.
-            long transducer = Double.doubleToRawLongBits(start + 0.0d);
-
-            /*
-             * IEEE 754 floating-point numbers are lexicographically
-             * ordered if treated as signed- magnitude integers .
-             * Since Java's integers are two's complement,
-             * incrementing" the two's complement representation of a
-             * logically negative floating-point value *decrements*
-             * the signed-magnitude representation. Therefore, when
-             * the integer representation of a floating-point values
-             * is less than zero, the adjustment to the representation
-             * is in the opposite direction than would be expected at
-             * first .
-             */
-            if (direction > start) { // Calculate next greater value
-                transducer = transducer + (transducer >= 0L ? 1L:-1L);
-            } else  { // Calculate next lesser value
-                assert direction < start;
-                if (transducer > 0L)
-                    --transducer;
-                else
-                    if (transducer < 0L )
-                        ++transducer;
-                    /*
-                     * transducer==0, the result is -MIN_VALUE
-                     *
-                     * The transition from zero (implicitly
-                     * positive) to the smallest negative
-                     * signed magnitude value must be done
-                     * explicitly.
-                     */
-                    else
-                        transducer = DoubleConsts.SIGN_BIT_MASK | 1L;
-            }
-
-            return Double.longBitsToDouble(transducer);
-        }
+        return Math.nextAfter(start, direction);
     }
 
     /**
@@ -809,103 +628,49 @@ public class FpUtils {
      * <ul>
      * <li> If either argument is a NaN, then NaN is returned.
      *
-     * <li> If both arguments are signed zeros, a <code>float</code>
-     * zero with the same sign as <code>direction</code> is returned
+     * <li> If both arguments are signed zeros, a {@code float}
+     * zero with the same sign as {@code direction} is returned
      * (as implied by the requirement of returning the second argument
      * if the arguments compare as equal).
      *
-     * <li> If <code>start</code> is
-     * &plusmn;<code>Float.MIN_VALUE</code> and <code>direction</code>
+     * <li> If {@code start} is
+     * &plusmn;{@code Float.MIN_VALUE} and {@code direction}
      * has a value such that the result should have a smaller
-     * magnitude, then a zero with the same sign as <code>start</code>
+     * magnitude, then a zero with the same sign as {@code start}
      * is returned.
      *
-     * <li> If <code>start</code> is infinite and
-     * <code>direction</code> has a value such that the result should
-     * have a smaller magnitude, <code>Float.MAX_VALUE</code> with the
-     * same sign as <code>start</code> is returned.
+     * <li> If {@code start} is infinite and
+     * {@code direction} has a value such that the result should
+     * have a smaller magnitude, {@code Float.MAX_VALUE} with the
+     * same sign as {@code start} is returned.
      *
-     * <li> If <code>start</code> is equal to &plusmn;
-     * <code>Float.MAX_VALUE</code> and <code>direction</code> has a
+     * <li> If {@code start} is equal to &plusmn;
+     * {@code Float.MAX_VALUE} and {@code direction} has a
      * value such that the result should have a larger magnitude, an
-     * infinity with same sign as <code>start</code> is returned.
+     * infinity with same sign as {@code start} is returned.
      * </ul>
      *
      * @param start     starting floating-point value
      * @param direction value indicating which of
-     * <code>start</code>'s neighbors or <code>start</code> should
+     * {@code start}'s neighbors or {@code start} should
      * be returned
-     * @return The floating-point number adjacent to <code>start</code> in the
-     * direction of <code>direction</code>.
+     * @return The floating-point number adjacent to {@code start} in the
+     * direction of {@code direction}.
      * @author Joseph D. Darcy
+     * @deprecated Use Math.nextAfter.
      */
-     public static float nextAfter(float start, double direction) {
-        /*
-         * The cases:
-         *
-         * nextAfter(+infinity, 0)  == MAX_VALUE
-         * nextAfter(+infinity, +infinity)  == +infinity
-         * nextAfter(-infinity, 0)  == -MAX_VALUE
-         * nextAfter(-infinity, -infinity)  == -infinity
-         *
-         * are naturally handled without any additional testing
-         */
-
-        // First check for NaN values
-        if (isNaN(start) || isNaN(direction)) {
-            // return a NaN derived from the input NaN(s)
-            return start + (float)direction;
-        } else if (start == direction) {
-            return (float)direction;
-        } else {        // start > direction or start < direction
-            // Add +0.0 to get rid of a -0.0 (+0.0 + -0.0 => +0.0)
-            // then bitwise convert start to integer.
-            int transducer = Float.floatToRawIntBits(start + 0.0f);
-
-            /*
-             * IEEE 754 floating-point numbers are lexicographically
-             * ordered if treated as signed- magnitude integers .
-             * Since Java's integers are two's complement,
-             * incrementing" the two's complement representation of a
-             * logically negative floating-point value *decrements*
-             * the signed-magnitude representation. Therefore, when
-             * the integer representation of a floating-point values
-             * is less than zero, the adjustment to the representation
-             * is in the opposite direction than would be expected at
-             * first.
-             */
-            if (direction > start) {// Calculate next greater value
-                transducer = transducer + (transducer >= 0 ? 1:-1);
-            } else  { // Calculate next lesser value
-                assert direction < start;
-                if (transducer > 0)
-                    --transducer;
-                else
-                    if (transducer < 0 )
-                        ++transducer;
-                    /*
-                     * transducer==0, the result is -MIN_VALUE
-                     *
-                     * The transition from zero (implicitly
-                     * positive) to the smallest negative
-                     * signed magnitude value must be done
-                     * explicitly.
-                     */
-                    else
-                        transducer = FloatConsts.SIGN_BIT_MASK | 1;
-            }
-
-            return Float.intBitsToFloat(transducer);
-        }
+    @Deprecated
+    public static float nextAfter(float start, double direction) {
+        return Math.nextAfter(start, direction);
     }
 
     /**
-     * Returns the floating-point value adjacent to <code>d</code> in
+     * Returns the floating-point value adjacent to {@code d} in
      * the direction of positive infinity.  This method is
-     * semantically equivalent to <code>nextAfter(d,
-     * Double.POSITIVE_INFINITY)</code>; however, a <code>nextUp</code>
+     * semantically equivalent to {@code nextAfter(d,
+     * Double.POSITIVE_INFINITY)}; however, a {@code nextUp}
      * implementation may run faster than its equivalent
-     * <code>nextAfter</code> call.
+     * {@code nextAfter} call.
      *
      * <p>Special Cases:
      * <ul>
@@ -915,7 +680,7 @@ public class FpUtils {
      * positive infinity.
      *
      * <li> If the argument is zero, the result is
-     * <code>Double.MIN_VALUE</code>
+     * {@code Double.MIN_VALUE}
      *
      * </ul>
      *
@@ -923,24 +688,20 @@ public class FpUtils {
      * @return The adjacent floating-point value closer to positive
      * infinity.
      * @author Joseph D. Darcy
+     * @deprecated use Math.nextUp.
      */
+    @Deprecated
     public static double nextUp(double d) {
-        if( isNaN(d) || d == Double.POSITIVE_INFINITY)
-            return d;
-        else {
-            d += 0.0d;
-            return Double.longBitsToDouble(Double.doubleToRawLongBits(d) +
-                                           ((d >= 0.0d)?+1L:-1L));
-        }
+        return Math.nextUp(d);
     }
 
     /**
-     * Returns the floating-point value adjacent to <code>f</code> in
+     * Returns the floating-point value adjacent to {@code f} in
      * the direction of positive infinity.  This method is
-     * semantically equivalent to <code>nextAfter(f,
-     * Double.POSITIVE_INFINITY)</code>; however, a <code>nextUp</code>
+     * semantically equivalent to {@code nextAfter(f,
+     * Double.POSITIVE_INFINITY)}; however, a {@code nextUp}
      * implementation may run faster than its equivalent
-     * <code>nextAfter</code> call.
+     * {@code nextAfter} call.
      *
      * <p>Special Cases:
      * <ul>
@@ -950,7 +711,7 @@ public class FpUtils {
      * positive infinity.
      *
      * <li> If the argument is zero, the result is
-     * <code>Float.MIN_VALUE</code>
+     * {@code Float.MIN_VALUE}
      *
      * </ul>
      *
@@ -958,24 +719,20 @@ public class FpUtils {
      * @return The adjacent floating-point value closer to positive
      * infinity.
      * @author Joseph D. Darcy
+     * @deprecated Use Math.nextUp.
      */
-     public static float nextUp(float f) {
-        if( isNaN(f) || f == FloatConsts.POSITIVE_INFINITY)
-            return f;
-        else {
-            f += 0.0f;
-            return Float.intBitsToFloat(Float.floatToRawIntBits(f) +
-                                        ((f >= 0.0f)?+1:-1));
-        }
+    @Deprecated
+    public static float nextUp(float f) {
+        return Math.nextUp(f);
     }
 
     /**
-     * Returns the floating-point value adjacent to <code>d</code> in
+     * Returns the floating-point value adjacent to {@code d} in
      * the direction of negative infinity.  This method is
-     * semantically equivalent to <code>nextAfter(d,
-     * Double.NEGATIVE_INFINITY)</code>; however, a
-     * <code>nextDown</code> implementation may run faster than its
-     * equivalent <code>nextAfter</code> call.
+     * semantically equivalent to {@code nextAfter(d,
+     * Double.NEGATIVE_INFINITY)}; however, a
+     * {@code nextDown} implementation may run faster than its
+     * equivalent {@code nextAfter} call.
      *
      * <p>Special Cases:
      * <ul>
@@ -985,7 +742,7 @@ public class FpUtils {
      * negative infinity.
      *
      * <li> If the argument is zero, the result is
-     * <code>-Double.MIN_VALUE</code>
+     * {@code -Double.MIN_VALUE}
      *
      * </ul>
      *
@@ -993,26 +750,20 @@ public class FpUtils {
      * @return The adjacent floating-point value closer to negative
      * infinity.
      * @author Joseph D. Darcy
+     * @deprecated Use Math.nextDown.
      */
+    @Deprecated
     public static double nextDown(double d) {
-        if( isNaN(d) || d == Double.NEGATIVE_INFINITY)
-            return d;
-        else {
-            if (d == 0.0)
-                return -Double.MIN_VALUE;
-            else
-                return Double.longBitsToDouble(Double.doubleToRawLongBits(d) +
-                                               ((d > 0.0d)?-1L:+1L));
-        }
+        return Math.nextDown(d);
     }
 
     /**
-     * Returns the floating-point value adjacent to <code>f</code> in
+     * Returns the floating-point value adjacent to {@code f} in
      * the direction of negative infinity.  This method is
-     * semantically equivalent to <code>nextAfter(f,
-     * Float.NEGATIVE_INFINITY)</code>; however, a
-     * <code>nextDown</code> implementation may run faster than its
-     * equivalent <code>nextAfter</code> call.
+     * semantically equivalent to {@code nextAfter(f,
+     * Float.NEGATIVE_INFINITY)}; however, a
+     * {@code nextDown} implementation may run faster than its
+     * equivalent {@code nextAfter} call.
      *
      * <p>Special Cases:
      * <ul>
@@ -1022,7 +773,7 @@ public class FpUtils {
      * negative infinity.
      *
      * <li> If the argument is zero, the result is
-     * <code>-Float.MIN_VALUE</code>
+     * {@code -Float.MIN_VALUE}
      *
      * </ul>
      *
@@ -1030,56 +781,54 @@ public class FpUtils {
      * @return The adjacent floating-point value closer to negative
      * infinity.
      * @author Joseph D. Darcy
+     * @deprecated Use Math.nextDown.
      */
+    @Deprecated
     public static double nextDown(float f) {
-        if( isNaN(f) || f == Float.NEGATIVE_INFINITY)
-            return f;
-        else {
-            if (f == 0.0f)
-                return -Float.MIN_VALUE;
-            else
-                return Float.intBitsToFloat(Float.floatToRawIntBits(f) +
-                                            ((f > 0.0f)?-1:+1));
-        }
+        return Math.nextDown(f);
     }
 
     /**
      * Returns the first floating-point argument with the sign of the
      * second floating-point argument.  For this method, a NaN
-     * <code>sign</code> argument is always treated as if it were
+     * {@code sign} argument is always treated as if it were
      * positive.
      *
      * @param magnitude  the parameter providing the magnitude of the result
      * @param sign   the parameter providing the sign of the result
-     * @return a value with the magnitude of <code>magnitude</code>
-     * and the sign of <code>sign</code>.
+     * @return a value with the magnitude of {@code magnitude}
+     * and the sign of {@code sign}.
      * @author Joseph D. Darcy
      * @since 1.5
+     * @deprecated Use StrictMath.copySign.
      */
+    @Deprecated
     public static double copySign(double magnitude, double sign) {
-        return rawCopySign(magnitude, (isNaN(sign)?1.0d:sign));
+        return StrictMath.copySign(magnitude, sign);
     }
 
     /**
      * Returns the first floating-point argument with the sign of the
      * second floating-point argument.  For this method, a NaN
-     * <code>sign</code> argument is always treated as if it were
+     * {@code sign} argument is always treated as if it were
      * positive.
      *
      * @param magnitude  the parameter providing the magnitude of the result
      * @param sign   the parameter providing the sign of the result
-     * @return a value with the magnitude of <code>magnitude</code>
-     * and the sign of <code>sign</code>.
+     * @return a value with the magnitude of {@code magnitude}
+     * and the sign of {@code sign}.
      * @author Joseph D. Darcy
+     * @deprecated Use StrictMath.copySign.
      */
-     public static float copySign(float magnitude, float sign) {
-        return rawCopySign(magnitude, (isNaN(sign)?1.0f:sign));
+    @Deprecated
+    public static float copySign(float magnitude, float sign) {
+        return StrictMath.copySign(magnitude, sign);
     }
 
     /**
      * Returns the size of an ulp of the argument.  An ulp of a
-     * <code>double</code> value is the positive distance between this
-     * floating-point value and the <code>double</code> value next
+     * {@code double} value is the positive distance between this
+     * floating-point value and the {@code double} value next
      * larger in magnitude.  Note that for non-NaN <i>x</i>,
      * <code>ulp(-<i>x</i>) == ulp(<i>x</i>)</code>.
      *
@@ -1089,8 +838,8 @@ public class FpUtils {
      * <li> If the argument is positive or negative infinity, then the
      * result is positive infinity.
      * <li> If the argument is positive or negative zero, then the result is
-     * <code>Double.MIN_VALUE</code>.
-     * <li> If the argument is &plusmn;<code>Double.MAX_VALUE</code>, then
+     * {@code Double.MIN_VALUE}.
+     * <li> If the argument is &plusmn;{@code Double.MAX_VALUE}, then
      * the result is equal to 2<sup>971</sup>.
      * </ul>
      *
@@ -1098,42 +847,17 @@ public class FpUtils {
      * @return the size of an ulp of the argument
      * @author Joseph D. Darcy
      * @since 1.5
+     * @deprecated Use Math.ulp.
      */
+    @Deprecated
     public static double ulp(double d) {
-        int exp = getExponent(d);
-
-        switch(exp) {
-        case DoubleConsts.MAX_EXPONENT+1:       // NaN or infinity
-            return Math.abs(d);
-            // break;
-
-        case DoubleConsts.MIN_EXPONENT-1:       // zero or subnormal
-            return Double.MIN_VALUE;
-            // break
-
-        default:
-            assert exp <= DoubleConsts.MAX_EXPONENT && exp >= DoubleConsts.MIN_EXPONENT;
-
-            // ulp(x) is usually 2^(SIGNIFICAND_WIDTH-1)*(2^ilogb(x))
-            exp = exp - (DoubleConsts.SIGNIFICAND_WIDTH-1);
-            if (exp >= DoubleConsts.MIN_EXPONENT) {
-                return powerOfTwoD(exp);
-            }
-            else {
-                // return a subnormal result; left shift integer
-                // representation of Double.MIN_VALUE appropriate
-                // number of positions
-                return Double.longBitsToDouble(1L <<
-                (exp - (DoubleConsts.MIN_EXPONENT - (DoubleConsts.SIGNIFICAND_WIDTH-1)) ));
-            }
-            // break
-        }
+        return Math.ulp(d);
     }
 
     /**
      * Returns the size of an ulp of the argument.  An ulp of a
-     * <code>float</code> value is the positive distance between this
-     * floating-point value and the <code>float</code> value next
+     * {@code float} value is the positive distance between this
+     * floating-point value and the {@code float} value next
      * larger in magnitude.  Note that for non-NaN <i>x</i>,
      * <code>ulp(-<i>x</i>) == ulp(<i>x</i>)</code>.
      *
@@ -1143,8 +867,8 @@ public class FpUtils {
      * <li> If the argument is positive or negative infinity, then the
      * result is positive infinity.
      * <li> If the argument is positive or negative zero, then the result is
-     * <code>Float.MIN_VALUE</code>.
-     * <li> If the argument is &plusmn;<code>Float.MAX_VALUE</code>, then
+     * {@code Float.MIN_VALUE}.
+     * <li> If the argument is &plusmn;{@code Float.MAX_VALUE}, then
      * the result is equal to 2<sup>104</sup>.
      * </ul>
      *
@@ -1152,36 +876,11 @@ public class FpUtils {
      * @return the size of an ulp of the argument
      * @author Joseph D. Darcy
      * @since 1.5
+     * @deprecated Use Math.ulp.
      */
+     @Deprecated
      public static float ulp(float f) {
-        int exp = getExponent(f);
-
-        switch(exp) {
-        case FloatConsts.MAX_EXPONENT+1:        // NaN or infinity
-            return Math.abs(f);
-            // break;
-
-        case FloatConsts.MIN_EXPONENT-1:        // zero or subnormal
-            return FloatConsts.MIN_VALUE;
-            // break
-
-        default:
-            assert exp <= FloatConsts.MAX_EXPONENT && exp >= FloatConsts.MIN_EXPONENT;
-
-            // ulp(x) is usually 2^(SIGNIFICAND_WIDTH-1)*(2^ilogb(x))
-            exp = exp - (FloatConsts.SIGNIFICAND_WIDTH-1);
-            if (exp >= FloatConsts.MIN_EXPONENT) {
-                return powerOfTwoF(exp);
-            }
-            else {
-                // return a subnormal result; left shift integer
-                // representation of FloatConsts.MIN_VALUE appropriate
-                // number of positions
-                return Float.intBitsToFloat(1 <<
-                (exp - (FloatConsts.MIN_EXPONENT - (FloatConsts.SIGNIFICAND_WIDTH-1)) ));
-            }
-            // break
-        }
+        return Math.ulp(f);
      }
 
     /**
@@ -1200,9 +899,11 @@ public class FpUtils {
      * @return the signum function of the argument
      * @author Joseph D. Darcy
      * @since 1.5
+     * @deprecated Use Math.signum.
      */
+    @Deprecated
     public static double signum(double d) {
-        return (d == 0.0 || isNaN(d))?d:copySign(1.0, d);
+        return Math.signum(d);
     }
 
     /**
@@ -1221,9 +922,10 @@ public class FpUtils {
      * @return the signum function of the argument
      * @author Joseph D. Darcy
      * @since 1.5
+     * @deprecated Use Math.signum.
      */
+    @Deprecated
     public static float signum(float f) {
-        return (f == 0.0f || isNaN(f))?f:copySign(1.0f, f);
+        return Math.signum(f);
     }
-
 }

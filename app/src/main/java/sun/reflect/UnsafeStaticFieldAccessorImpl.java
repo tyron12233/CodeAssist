@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2004, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2012, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -43,7 +43,7 @@ abstract class UnsafeStaticFieldAccessorImpl extends UnsafeFieldAccessorImpl {
                                           new String[] { "base" });
     }
 
-    protected Object base; // base
+    protected final Object base; // base
 
     UnsafeStaticFieldAccessorImpl(Field field) {
         super(field);

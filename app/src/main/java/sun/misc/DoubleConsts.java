@@ -38,11 +38,11 @@ public class DoubleConsts {
      */
     private DoubleConsts() {}
 
-    public static final double POSITIVE_INFINITY = Double.POSITIVE_INFINITY;
-    public static final double NEGATIVE_INFINITY = Double.NEGATIVE_INFINITY;
-    public static final double NaN = Double.NaN;
-    public static final double MAX_VALUE = Double.MAX_VALUE;
-    public static final double MIN_VALUE = Double.MIN_VALUE;
+    public static final double POSITIVE_INFINITY = java.lang.Double.POSITIVE_INFINITY;
+    public static final double NEGATIVE_INFINITY = java.lang.Double.NEGATIVE_INFINITY;
+    public static final double NaN = java.lang.Double.NaN;
+    public static final double MAX_VALUE = java.lang.Double.MAX_VALUE;
+    public static final double MIN_VALUE = java.lang.Double.MIN_VALUE;
 
     /**
      * A constant holding the smallest positive normal value of type

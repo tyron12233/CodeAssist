@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -83,8 +83,8 @@ public abstract class AbstractScope<D extends GenericDeclaration>
      * @return the requested type variable, if found
      */
     public TypeVariable<?> lookup(String name) {
-        TypeVariable[] tas = getRecvr().getTypeParameters();
-        for (TypeVariable/*<?>*/ tv : tas) {
+        TypeVariable<?>[] tas = getRecvr().getTypeParameters();
+        for (TypeVariable<?> tv : tas) {
             if (tv.getName().equals(name)) {return tv;}
         }
         return getEnclosingScope().lookup(name);

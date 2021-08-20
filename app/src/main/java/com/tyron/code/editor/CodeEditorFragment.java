@@ -79,8 +79,11 @@ public class CodeEditorFragment extends Fragment {
     
     private File mCurrentFile = new File(ApplicationLoader.applicationContext.getFilesDir() + "/Test.java");
 
-    public static CodeEditorFragment newInstance() {
+    public static CodeEditorFragment newInstance(File file) {
         CodeEditorFragment fragment = new CodeEditorFragment();
+        Bundle args = new Bundle();
+        args.putString("path", file.getAbsolutePath());
+        fragment.setArguments(args);
         return fragment;
     }
     
@@ -92,6 +95,13 @@ public class CodeEditorFragment extends Fragment {
              }
         }
     };
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        
+        mCurrentFile = new File(getArguments().getString("path"));
+    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -109,6 +119,7 @@ public class CodeEditorFragment extends Fragment {
         mEditor.setColorScheme(new SchemeDarcula());
         mEditor.setOverScrollEnabled(false);
         mEditor.setTextSize(12);
+        mEditor.setCurrentFile(mCurrentFile);
         mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         mEditor.setTypefaceText(ResourcesCompat.getFont(getContext(), R.font.JetBrainsMonoRegular));
@@ -122,9 +133,13 @@ public class CodeEditorFragment extends Fragment {
     @Override
     public void onViewCreated(View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-
-        mEditor.setText(README);
         
+        if (mCurrentFile.exists()) {
+           mEditor.setText(FileManager.readFile(mCurrentFile));
+        } else {
+            FileManager.getInstance().save(mCurrentFile, README);
+            mEditor.setText(README);
+        }
         final BottomEditorFragment bottomEditorFragment = BottomEditorFragment.newInstance();
         mBehavior = BottomSheetBehavior.from(mBottomContainer);
         mBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
@@ -146,28 +161,19 @@ public class CodeEditorFragment extends Fragment {
                     bottomEditorFragment.setOffset(slideOffset);
                 }              
             });
-        
-        //TODO: adjust to file name
+              
         mToolbar.setTitle(mCurrentFile.getName());
         mToolbar.setOnMenuItemClickListener(new Toolbar.OnMenuItemClickListener() {
                 @Override
                 public boolean onMenuItemClick(MenuItem p1) {
                     if (p1.getItemId() == R.id.action_run) {
-                         FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
+                         
+                        FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
                         logViewModel.clear(LogViewModel.BUILD_LOG);
                         mEditor.hideAutoCompleteWindow();
                         mEditor.hideSoftInput();
                         compile();
                         
-                     //   JavaParser parser = new JavaParser(logViewModel);
-                    //    CompilationUnitTree unit = parser.parse(mEditor.getText().toString(), mEditor.getCursor().getLeft());
-                    //    ParseTask task = new ParseTask(parser.getTask(), unit);
-                    //    Map<File, TextEdit> edit = new AddImport(mCurrentFile, "com.tyron.code.Test").getText(task);
-                        
-                     //   TextEdit textEdit = edit.values().iterator().next();
-                      //  mEditor.getText().insert(textEdit.start.line, textEdit.start.column, textEdit.edit);
-                        
-                       // parser.readImports(mCurrentFile).toString();
                     }
                     return true;
                 }         
@@ -212,8 +218,8 @@ public class CodeEditorFragment extends Fragment {
                     method.invoke(test.newInstance(), requireContext());
                     
                 } catch (InvocationTargetException e) {
-                    logViewModel.d(LogViewModel.BUILD_LOG, "Exception thrown in main: " + e.getCause().getMessage());
-                    mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+                    logViewModel.d(LogViewModel.BUILD_LOG, "Exception thrown in main: " + e.getMessage());
+                    mBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
                 } catch (Throwable e) {
                     logViewModel.d(LogViewModel.BUILD_LOG, "[D8] FAILED:" + e.getMessage());
                 }

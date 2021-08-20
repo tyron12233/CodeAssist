@@ -26,15 +26,14 @@
 package sun.misc;
 
 import java.io.EOFException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InterruptedIOException;
 import java.net.URL;
-import java.nio.ByteBuffer;
+import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.io.InputStream;
 import java.security.CodeSigner;
-import java.util.Arrays;
 import java.util.jar.Manifest;
-
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 import sun.nio.ByteBuffered;
 
 /**

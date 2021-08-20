@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2004, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -40,17 +40,18 @@ import java.security.PrivilegedAction;
  * @since   1.5
  */
 class AnnotationInvocationHandler implements InvocationHandler, Serializable {
-    private final Class type;
+    private static final long serialVersionUID = 6182022883658399397L;
+    private final Class<? extends Annotation> type;
     private final Map<String, Object> memberValues;
 
-    AnnotationInvocationHandler(Class type, Map<String, Object> memberValues) {
+    AnnotationInvocationHandler(Class<? extends Annotation> type, Map<String, Object> memberValues) {
         this.type = type;
         this.memberValues = memberValues;
     }
 
     public Object invoke(Object proxy, Method method, Object[] args) {
         String member = method.getName();
-        Class[] paramTypes = method.getParameterTypes();
+        Class<?>[] paramTypes = method.getParameterTypes();
 
         // Handle Object and Annotation methods
         if (member.equals("equals") && paramTypes.length == 1 &&
@@ -84,7 +85,7 @@ class AnnotationInvocationHandler implements InvocationHandler, Serializable {
      * if Cloneable had a public clone method.
      */
     private Object cloneArray(Object array) {
-        Class type = array.getClass();
+        Class<?> type = array.getClass();
 
         if (type == byte[].class) {
             byte[] byteArray = (byte[])array;
@@ -151,7 +152,7 @@ class AnnotationInvocationHandler implements InvocationHandler, Serializable {
      * Translates a member value (in "dynamic proxy return form") into a string
      */
     private static String memberValueToString(Object value) {
-        Class type = value.getClass();
+        Class<?> type = value.getClass();
         if (!type.isArray())    // primitive, string, class, enum const,
                                 // or annotation
             return value.toString();
@@ -229,7 +230,7 @@ class AnnotationInvocationHandler implements InvocationHandler, Serializable {
      * two members are identical object references.
      */
     private static boolean memberValueEquals(Object v1, Object v2) {
-        Class type = v1.getClass();
+        Class<?> type = v1.getClass();
 
         // Check for primitive, string, class, enum const, annotation,
         // or ExceptionProxy
@@ -301,7 +302,7 @@ class AnnotationInvocationHandler implements InvocationHandler, Serializable {
      * Computes hashCode of a member value (in "dynamic proxy return form")
      */
     private static int memberValueHashCode(Object value) {
-        Class type = value.getClass();
+        Class<?> type = value.getClass();
         if (!type.isArray())    // primitive, string, class, enum const,
                                 // or annotation
             return value.hashCode();
@@ -336,15 +337,18 @@ class AnnotationInvocationHandler implements InvocationHandler, Serializable {
         try {
             annotationType = AnnotationType.getInstance(type);
         } catch(IllegalArgumentException e) {
-            // Class is no longer an annotation type; all bets are off
-            return;
+            // Class is no longer an annotation type; time to punch out
+            throw new java.io.InvalidObjectException("Non-annotation type in annotation serial stream");
         }
 
-        Map<String, Class> memberTypes = annotationType.memberTypes();
+        Map<String, Class<?>> memberTypes = annotationType.memberTypes();
 
+
+        // If there are annotation members without values, that
+        // situation is handled by the invoke method.
         for (Map.Entry<String, Object> memberValue : memberValues.entrySet()) {
             String name = memberValue.getKey();
-            Class memberType = memberTypes.get(name);
+            Class<?> memberType = memberTypes.get(name);
             if (memberType != null) {  // i.e. member still exists
                 Object value = memberValue.getValue();
                 if (!(memberType.isInstance(value) ||

@@ -1,41 +1,41 @@
 /*
- * Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.model;
 
-import java.lang.annotation.Annotation;
-import java.lang.annotation.Inherited;
 import java.util.Map;
+
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.util.Elements;
 import javax.tools.JavaFileObject;
+import static javax.lang.model.util.ElementFilter.methodsIn;
+
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
-import com.sun.tools.javac.code.TypeTags;
 import com.sun.tools.javac.comp.AttrContext;
 import com.sun.tools.javac.comp.Enter;
 import com.sun.tools.javac.comp.Env;
@@ -47,8 +47,8 @@ import com.sun.tools.javac.tree.TreeInfo;
 import com.sun.tools.javac.tree.TreeScanner;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Name;
-
-import static javax.lang.model.util.ElementFilter.methodsIn;
+import static com.sun.tools.javac.code.TypeTag.CLASS;
+import static com.sun.tools.javac.tree.JCTree.Tag.*;
 
 /**
  * Utility methods for operating on program elements.
@@ -92,43 +92,6 @@ public class JavacElements implements Elements {
         types = Types.instance(context);
         enter = Enter.instance(context);
     }
-
-
-    /**
-     * An internal-use utility that creates a reified annotation.
-     */
-    public static <A extends Annotation> A getAnnotation(Symbol annotated,
-                                                         Class<A> annoType) {
-        if (!annoType.isAnnotation())
-            throw new IllegalArgumentException("Not an annotation type: "
-                                               + annoType);
-        String name = annoType.getName();
-        for (Attribute.Compound anno : annotated.getAnnotationMirrors())
-            if (name.equals(anno.type.tsym.flatName().toString()))
-                return AnnotationProxyMaker.generateAnnotation(anno, annoType);
-        return null;
-    }
-
-    /**
-     * An internal-use utility that creates a reified annotation.
-     * This overloaded version take annotation inheritance into account.
-     */
-    public static <A extends Annotation> A getAnnotation(ClassSymbol annotated,
-                                                         Class<A> annoType) {
-        boolean inherited = annoType.isAnnotationPresent(Inherited.class);
-        A result = null;
-        while (annotated.name != annotated.name.table.names.java_lang_Object) {
-            result = getAnnotation((Symbol)annotated, annoType);
-            if (result != null || !inherited)
-                break;
-            Type sup = annotated.getSuperclass();
-            if (sup.tag != TypeTags.CLASS || sup.isErroneous())
-                break;
-            annotated = (ClassSymbol) sup.tsym;
-        }
-        return result;
-    }
-
 
     public PackageSymbol getPackageElement(CharSequence name) {
         String strName = name.toString();
@@ -235,8 +198,10 @@ public class JavacElements implements Elements {
         tree.accept(vis);
         if (vis.result == null)
             return null;
+
+        List<Attribute.Compound> annos = sym.getRawAttributes();
         return matchAnnoToTree(cast(Attribute.Compound.class, findme),
-                               sym.getAnnotationMirrors(),
+                               annos,
                                vis.result);
     }
 
@@ -288,7 +253,7 @@ public class JavacElements implements Elements {
                 }
             }
             public void visitArray(Attribute.Array array) {
-                if (tree.getTag() == JCTree.NEWARRAY &&
+                if (tree.hasTag(NEWARRAY) &&
                         types.elemtype(array.type).tsym == findme.type.tsym) {
                     List<JCExpression> elems = ((JCNewArray) tree).elems;
                     for (Attribute value : array.values) {
@@ -327,7 +292,7 @@ public class JavacElements implements Elements {
                     scan(t.args);
             }
             public void visitAssign(JCAssign t) {
-                if (t.lhs.getTag() == JCTree.IDENT) {
+                if (t.lhs.hasTag(IDENT)) {
                     JCIdent ident = (JCIdent) t.lhs;
                     if (ident.sym == sym)
                         result = t.rhs;
@@ -360,7 +325,7 @@ public class JavacElements implements Elements {
         JCCompilationUnit toplevel = treeTop.snd;
         if (toplevel.docComments == null)
             return null;
-        return toplevel.docComments.get(tree);
+        return toplevel.docComments.getCommentText(tree);
     }
 
     public PackageElement getPackageOf(Element e) {
@@ -437,18 +402,20 @@ public class JavacElements implements Elements {
      * @param e  the element being examined
      * @return all annotations of the element
      */
+    @Override
     public List<Attribute.Compound> getAllAnnotationMirrors(Element e) {
         Symbol sym = cast(Symbol.class, e);
         List<Attribute.Compound> annos = sym.getAnnotationMirrors();
         while (sym.getKind() == ElementKind.CLASS) {
             Type sup = ((ClassSymbol) sym).getSuperclass();
-            if (sup.tag != TypeTags.CLASS || sup.isErroneous() ||
+            if (!sup.hasTag(CLASS) || sup.isErroneous() ||
                     sup.tsym == syms.objectType.tsym) {
                 break;
             }
             sym = sup.tsym;
             List<Attribute.Compound> oldAnnos = annos;
-            for (Attribute.Compound anno : sym.getAnnotationMirrors()) {
+            List<Attribute.Compound> newAnnos = sym.getAnnotationMirrors();
+            for (Attribute.Compound anno : newAnnos) {
                 if (isInherited(anno.type) &&
                         !containsAnnoOfType(oldAnnos, anno.type)) {
                     annos = annos.prepend(anno);
@@ -462,11 +429,7 @@ public class JavacElements implements Elements {
      * Tests whether an annotation type is @Inherited.
      */
     private boolean isInherited(Type annotype) {
-        for (Attribute.Compound anno : annotype.tsym.getAnnotationMirrors()) {
-            if (anno.type.tsym == syms.inheritedType.tsym)
-                return true;
-        }
-        return false;
+        return annotype.tsym.attribute(syms.inheritedType.tsym) != null;
     }
 
     /**
@@ -560,6 +523,16 @@ public class JavacElements implements Elements {
 
     public Name getName(CharSequence cs) {
         return names.fromString(cs.toString());
+    }
+
+    @Override
+    public boolean isFunctionalInterface(TypeElement element) {
+        if (element.getKind() != ElementKind.INTERFACE)
+            return false;
+        else {
+            TypeSymbol tsym = cast(TypeSymbol.class, element);
+            return types.isFunctionalInterface(tsym);
+        }
     }
 
     /**

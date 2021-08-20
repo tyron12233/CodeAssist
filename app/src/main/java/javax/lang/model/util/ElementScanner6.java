@@ -1,26 +1,26 @@
 /*
- * Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package javax.lang.model.util;
@@ -58,7 +58,7 @@ import static javax.lang.model.SourceVersion.*;
  *
  * <p> Methods in this class may be overridden subject to their
  * general contract.  Note that annotating methods in concrete
- * subclasses with {@link Override @Override} will help
+ * subclasses with {@link java.lang.Override @Override} will help
  * ensure that methods are overridden as intended.
  *
  * <p> <b>WARNING:</b> The {@code ElementVisitor} interface
@@ -89,6 +89,7 @@ import static javax.lang.model.SourceVersion.*;
  * @author Peter von der Ah&eacute;
  *
  * @see ElementScanner7
+ * @see ElementScanner8
  * @since 1.6
  */
 @SupportedSourceVersion(RELEASE_6)
@@ -109,6 +110,8 @@ public class ElementScanner6<R, P> extends AbstractElementVisitor6<R, P> {
     /**
      * Constructor for concrete subclasses; uses the argument for the
      * default value.
+     *
+     * @param defaultValue the default value
      */
     protected ElementScanner6(R defaultValue){
         DEFAULT_VALUE = defaultValue;
@@ -134,6 +137,9 @@ public class ElementScanner6<R, P> extends AbstractElementVisitor6<R, P> {
     /**
      * Processes an element by calling {@code e.accept(this, p)};
      * this method may be overridden by subclasses.
+     *
+     * @param e the element to scan
+     * @param p a scanner-specified parameter
      * @return the result of visiting {@code e}.
      */
     public R scan(Element e, P p) {
@@ -142,6 +148,8 @@ public class ElementScanner6<R, P> extends AbstractElementVisitor6<R, P> {
 
     /**
      * Convenience method equivalent to {@code v.scan(e, null)}.
+     *
+     * @param e the element to scan
      * @return the result of scanning {@code e}.
      */
     public final R scan(Element e) {

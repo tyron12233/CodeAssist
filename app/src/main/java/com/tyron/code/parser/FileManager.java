@@ -26,6 +26,10 @@ import java.io.FileWriter;
 import java.io.FileReader;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import com.tyron.code.model.Project;
+import java.util.HashSet;
+import android.util.Log;
+import java.util.ArrayList;
 
 /**
  * Class responsible for caching java files for fast
@@ -44,30 +48,58 @@ public class FileManager {
     }
 
     FileManager() {
-
+        try {
+            putJar(getAndroidJar());
+        } catch (IOException e) {}
     }
-
+    
+    private Project mCurrentProject;
+    
     // Map of compiled (.class) files with their fully qualified name as key
-    private final Map<String, File> files = new HashMap<>();
-
-    /** javaSources[file] is the javaSources time of a .java source file. */
-    private final TreeMap<File, Info> javaSources = new TreeMap<>();
-
-    private static class Info {
-        final Instant modified;
-        final String packageName;
-
-        Info(Instant modified, String packageName) {
-            this.modified = modified;
-            this.packageName = packageName;
+    private final Map<String, File> classFiles = new HashMap<>();
+    private final Map<String, File> javaFiles = new HashMap<>();
+    
+    public void openProject(Project project) {
+        if (!project.isValidProject()) {
+            //TODO: throw exception
+            return;
+        }
+        
+        mCurrentProject = project;
+        classFiles.clear();
+        javaFiles.clear();
+        
+        try {
+            putJar(getAndroidJar());
+        } catch (IOException e) {}
+        
+        javaFiles.putAll(project.javaFiles);
+        
+        for (String file : project.getLibraries()) {
+            try {
+                putJar(new File(file));
+            } catch (IOException e) {}
         }
     }
-
-    public Set<String> all() {
-        return files.keySet();
+    
+    public List<String> getLibraries() {
+        return mCurrentProject.getLibraries();
+    }
+    
+    public Set<String> classpath() {
+        Set<String> classpaths = new HashSet<>();
+        classpaths.addAll(javaFiles.keySet());
+        return classpaths;
+    }
+    
+    public List<String> all() {
+        List<String> files = new ArrayList<>();
+        files.addAll(javaFiles.keySet());
+        files.addAll(classFiles.keySet());
+        return files;
     }
 
-    void putJar(File file) throws IOException {
+    private void putJar(File file) throws IOException {
         JarFile jar = new JarFile(file);
         Enumeration<JarEntry> entries = jar.entries();
         while (entries.hasMoreElements()) {
@@ -87,7 +119,7 @@ public class FileManager {
                 .substring(0, entry.getName().length() - ".class".length());                   
 
 
-            files.put(packageName, file);
+            classFiles.put(packageName, file);
         }
     }
     
@@ -104,18 +136,16 @@ public class FileManager {
         createNewFile(file);
 
         StringBuilder sb = new StringBuilder();
-        FileReader fr = null;
+        BufferedReader fr = null;
         try {
-            fr = new FileReader(file);
-
-            char[] buff = new char[1024];
-            int length = 0;
-
-            while ((length = fr.read(buff)) > 0) {
-                sb.append(new String(buff, 0, length));
+            fr = bufferedReader(file);
+            
+            String str;
+            while ((str = fr.readLine()) != null) {
+                sb.append(str).append("\n");
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            Log.e("FileManager", e.getMessage());
         } finally {
             if (fr != null) {
                 try {
@@ -130,6 +160,11 @@ public class FileManager {
     }
     
     private static void createNewFile(File file) {
+        
+        if (file.exists()) {
+            return;
+        }
+        
         String path = file.getAbsolutePath();
         int lastSep = path.lastIndexOf(File.separator);
         if (lastSep > 0) {
@@ -194,5 +229,14 @@ public class FileManager {
                                        jarFile.getParentFile().getAbsolutePath());          
             return jarFile;
         }
+    }
+    
+    public File getLambdaStubs() {
+        File lambdaStubs = new File(ApplicationLoader.applicationContext.getFilesDir(), "core-lambda-stubs.jar");
+        
+        if (!lambdaStubs.exists()) {
+            Decompress.unzipFromAssets(ApplicationLoader.applicationContext, "lambda-stubs.zip", lambdaStubs.getParentFile().getAbsolutePath());          
+        }
+        return lambdaStubs;
     }
 }

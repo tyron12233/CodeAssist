@@ -28,22 +28,19 @@ package com.sun.tools.javac.file;
 import java.io.File;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-
 import javax.tools.JavaFileObject;
 
 /**
  * Used to represent a platform-neutral path within a platform-specific
  * container, such as a directory or zip file.
  * Internally, the file separator is always '/'.
- * <p>
+ *
  * <p><b>This is NOT part of any supported API.
  * If you write code that depends on this, you do so at your own risk.
  * This code and its internal interfaces are subject to change or
  * deletion without notice.</b>
  */
 public abstract class RelativePath implements Comparable<RelativePath> {
-    protected final String path;
-
     /**
      * @param p must use '/' as an internal separator
      */
@@ -69,7 +66,7 @@ public abstract class RelativePath implements Comparable<RelativePath> {
     public boolean equals(Object other) {
         if (!(other instanceof RelativePath))
             return false;
-        return path.equals(((RelativePath) other).path);
+         return path.equals(((RelativePath) other).path);
     }
 
     @Override
@@ -86,6 +83,8 @@ public abstract class RelativePath implements Comparable<RelativePath> {
         return path;
     }
 
+    protected final String path;
+
     /**
      * Used to represent a platform-neutral subdirectory within a platform-specific
      * container, such as a directory or zip file.
@@ -93,6 +92,10 @@ public abstract class RelativePath implements Comparable<RelativePath> {
      * it always ends in a '/' as well.
      */
     public static class RelativeDirectory extends RelativePath {
+
+        static RelativeDirectory forPackage(CharSequence packageName) {
+            return new RelativeDirectory(packageName.toString().replace('.', '/'));
+        }
 
         /**
          * @param p must use '/' as an internal separator
@@ -106,10 +109,6 @@ public abstract class RelativePath implements Comparable<RelativePath> {
          */
         public RelativeDirectory(RelativeDirectory d, String p) {
             this(d.path + p);
-        }
-
-        static RelativeDirectory forPackage(CharSequence packageName) {
-            return new RelativeDirectory(packageName.toString().replace('.', '/'));
         }
 
         @Override
@@ -150,6 +149,10 @@ public abstract class RelativePath implements Comparable<RelativePath> {
      * Internally, the file separator is always '/'. It never ends in '/'.
      */
     public static class RelativeFile extends RelativePath {
+        static RelativeFile forClass(CharSequence className, JavaFileObject.Kind kind) {
+            return new RelativeFile(className.toString().replace('.', '/') + kind.extension);
+        }
+
         public RelativeFile(String p) {
             super(p);
             if (p.endsWith("/"))
@@ -165,10 +168,6 @@ public abstract class RelativePath implements Comparable<RelativePath> {
 
         RelativeFile(RelativeDirectory d, RelativePath p) {
             this(d, p.path);
-        }
-
-        static RelativeFile forClass(CharSequence className, JavaFileObject.Kind kind) {
-            return new RelativeFile(className.toString().replace('.', '/') + kind.extension);
         }
 
         @Override

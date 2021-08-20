@@ -1,26 +1,26 @@
 /*
- * Copyright (c) 1999, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 1999, 2015, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 //todo: one might eliminate uninits.andSets when monotonic
@@ -28,8 +28,6 @@
 package com.sun.tools.javac.comp;
 
 import java.util.HashMap;
-import java.util.Map;
-import java.util.LinkedHashMap;
 
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.tree.*;
@@ -40,16 +38,21 @@ import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.tree.JCTree.*;
 
 import static com.sun.tools.javac.code.Flags.*;
+import static com.sun.tools.javac.code.Flags.BLOCK;
 import static com.sun.tools.javac.code.Kinds.*;
-import static com.sun.tools.javac.code.TypeTags.*;
+import static com.sun.tools.javac.code.TypeTag.BOOLEAN;
+import static com.sun.tools.javac.code.TypeTag.VOID;
+import static com.sun.tools.javac.tree.JCTree.Tag.*;
 
-/** This pass implements dataflow analysis for Java programs.
- *  Liveness analysis checks that every statement is reachable.
- *  Exception analysis ensures that every checked exception that is
- *  thrown is declared or caught.  Definite assignment analysis
- *  ensures that each variable is assigned when used.  Definite
- *  unassignment analysis ensures that no final variable is assigned
- *  more than once.
+/** This pass implements dataflow analysis for Java programs though
+ *  different AST visitor steps. Liveness analysis (see AliveAnalyzer) checks that
+ *  every statement is reachable. Exception analysis (see FlowAnalyzer) ensures that
+ *  every checked exception that is thrown is declared or caught.  Definite assignment analysis
+ *  (see AssignAnalyzer) ensures that each variable is assigned when used.  Definite
+ *  unassignment analysis (see AssignAnalyzer) in ensures that no final variable
+ *  is assigned more than once. Finally, local variable capture analysis (see CaptureAnalyzer)
+ *  determines that local variables accessed within the scope of an inner class/lambda
+ *  are either final or effectively-final.
  *
  *  <p>The JLS has a number of problems in the
  *  specification of these flow analysis problems. This implementation
@@ -146,7 +149,7 @@ import static com.sun.tools.javac.code.TypeTags.*;
  *  exception to this [no pun intended] is that checked exceptions that
  *  are known to be caught or declared to be caught in the enclosing
  *  method are not recorded in the queue, but instead are recorded in a
- *  global variable "Set<Type> thrown" that records the type of all
+ *  global variable "{@code Set<Type> thrown}" that records the type of all
  *  exceptions that can be thrown.
  *
  *  <p>Other minor issues the treatment of members of other classes
@@ -177,7 +180,7 @@ import static com.sun.tools.javac.code.TypeTags.*;
  *  This code and its internal interfaces are subject to change or
  *  deletion without notice.</b>
  */
-public class Flow extends TreeScanner {
+public class Flow {
     protected static final Context.Key<Flow> flowKey =
         new Context.Key<Flow>();
 
@@ -188,16 +191,102 @@ public class Flow extends TreeScanner {
     private final Check chk;
     private       TreeMaker make;
     private final Resolve rs;
+    private final JCDiagnostic.Factory diags;
     private Env<AttrContext> attrEnv;
     private       Lint lint;
     private final boolean allowImprovedRethrowAnalysis;
     private final boolean allowImprovedCatchAnalysis;
+    private final boolean allowEffectivelyFinalInInnerClasses;
+    private final boolean enforceThisDotInit;
 
     public static Flow instance(Context context) {
         Flow instance = context.get(flowKey);
         if (instance == null)
             instance = new Flow(context);
         return instance;
+    }
+
+    public void analyzeTree(Env<AttrContext> env, TreeMaker make) {
+        new AliveAnalyzer().analyzeTree(env, make);
+        new AssignAnalyzer().analyzeTree(env);
+        new FlowAnalyzer().analyzeTree(env, make);
+        new CaptureAnalyzer().analyzeTree(env, make);
+    }
+
+    public void analyzeLambda(Env<AttrContext> env, JCLambda that, TreeMaker make, boolean speculative) {
+        Log.DiagnosticHandler diagHandler = null;
+        //we need to disable diagnostics temporarily; the problem is that if
+        //a lambda expression contains e.g. an unreachable statement, an error
+        //message will be reported and will cause compilation to skip the flow analyis
+        //step - if we suppress diagnostics, we won't stop at Attr for flow-analysis
+        //related errors, which will allow for more errors to be detected
+        if (!speculative) {
+            diagHandler = new Log.DiscardDiagnosticHandler(log);
+        }
+        try {
+            new AliveAnalyzer().analyzeTree(env, that, make);
+        } finally {
+            if (!speculative) {
+                log.popDiagnosticHandler(diagHandler);
+            }
+        }
+    }
+
+    public List<Type> analyzeLambdaThrownTypes(final Env<AttrContext> env,
+            JCLambda that, TreeMaker make) {
+        //we need to disable diagnostics temporarily; the problem is that if
+        //a lambda expression contains e.g. an unreachable statement, an error
+        //message will be reported and will cause compilation to skip the flow analyis
+        //step - if we suppress diagnostics, we won't stop at Attr for flow-analysis
+        //related errors, which will allow for more errors to be detected
+        Log.DiagnosticHandler diagHandler = new Log.DiscardDiagnosticHandler(log);
+        try {
+            new AssignAnalyzer() {
+                Scope enclosedSymbols = new Scope(env.enclClass.sym);
+                @Override
+                public void visitVarDef(JCVariableDecl tree) {
+                    enclosedSymbols.enter(tree.sym);
+                    super.visitVarDef(tree);
+                }
+                @Override
+                protected boolean trackable(VarSymbol sym) {
+                    return enclosedSymbols.includes(sym) &&
+                           sym.owner.kind == MTH;
+                }
+            }.analyzeTree(env, that);
+            LambdaFlowAnalyzer flowAnalyzer = new LambdaFlowAnalyzer();
+            flowAnalyzer.analyzeTree(env, that, make);
+            return flowAnalyzer.inferredThrownTypes;
+        } finally {
+            log.popDiagnosticHandler(diagHandler);
+        }
+    }
+
+    /**
+     * Definite assignment scan mode
+     */
+    enum FlowKind {
+        /**
+         * This is the normal DA/DU analysis mode
+         */
+        NORMAL("var.might.already.be.assigned", false),
+        /**
+         * This is the speculative DA/DU analysis mode used to speculatively
+         * derive assertions within loop bodies
+         */
+        SPECULATIVE_LOOP("var.might.be.assigned.in.loop", true);
+
+        final String errKey;
+        final boolean isFinal;
+
+        FlowKind(String errKey, boolean isFinal) {
+            this.errKey = errKey;
+            this.isFinal = isFinal;
+        }
+
+        boolean isFinal() {
+            return isFinal;
+        }
     }
 
     protected Flow(Context context) {
@@ -209,193 +298,1266 @@ public class Flow extends TreeScanner {
         chk = Check.instance(context);
         lint = Lint.instance(context);
         rs = Resolve.instance(context);
+        diags = JCDiagnostic.Factory.instance(context);
         Source source = Source.instance(context);
         allowImprovedRethrowAnalysis = source.allowImprovedRethrowAnalysis();
         allowImprovedCatchAnalysis = source.allowImprovedCatchAnalysis();
+        allowEffectivelyFinalInInnerClasses = source.allowEffectivelyFinalInInnerClasses();
+        enforceThisDotInit = source.enforceThisDotInit();
     }
 
-    /** A flag that indicates whether the last statement could
-     *  complete normally.
+    /**
+     * Base visitor class for all visitors implementing dataflow analysis logic.
+     * This class define the shared logic for handling jumps (break/continue statements).
      */
-    private boolean alive;
+    static abstract class BaseAnalyzer<P extends BaseAnalyzer.PendingExit> extends TreeScanner {
 
-    /** The set of definitely assigned variables.
-     */
-    Bits inits;
+        enum JumpKind {
+            BREAK(JCTree.Tag.BREAK) {
+                @Override
+                JCTree getTarget(JCTree tree) {
+                    return ((JCBreak)tree).target;
+                }
+            },
+            CONTINUE(JCTree.Tag.CONTINUE) {
+                @Override
+                JCTree getTarget(JCTree tree) {
+                    return ((JCContinue)tree).target;
+                }
+            };
 
-    /** The set of definitely unassigned variables.
-     */
-    Bits uninits;
+            final JCTree.Tag treeTag;
 
-    HashMap<Symbol, List<Type>> preciseRethrowTypes;
+            private JumpKind(Tag treeTag) {
+                this.treeTag = treeTag;
+            }
 
-    /** The set of variables that are definitely unassigned everywhere
-     *  in current try block. This variable is maintained lazily; it is
-     *  updated only when something gets removed from uninits,
-     *  typically by being assigned in reachable code.  To obtain the
-     *  correct set of variables which are definitely unassigned
-     *  anywhere in current try block, intersect uninitsTry and
-     *  uninits.
-     */
-    Bits uninitsTry;
-
-    /** When analyzing a condition, inits and uninits are null.
-     *  Instead we have:
-     */
-    Bits initsWhenTrue;
-    Bits initsWhenFalse;
-    Bits uninitsWhenTrue;
-    Bits uninitsWhenFalse;
-
-    /** A mapping from addresses to variable symbols.
-     */
-    VarSymbol[] vars;
-
-    /** The current class being defined.
-     */
-    JCClassDecl classDef;
-
-    /** The first variable sequence number in this class definition.
-     */
-    int firstadr;
-
-    /** The next available variable sequence number.
-     */
-    int nextadr;
-
-    /** The list of possibly thrown declarable exceptions.
-     */
-    List<Type> thrown;
-
-    /** The list of exceptions that are either caught or declared to be
-     *  thrown.
-     */
-    List<Type> caught;
-
-    /** The list of unreferenced automatic resources.
-     */
-    Scope unrefdResources;
-
-    /** Set when processing a loop body the second time for DU analysis. */
-    boolean loopPassTwo = false;
-
-    /*-------------------- Environments ----------------------*/
-
-    /** A pending exit.  These are the statements return, break, and
-     *  continue.  In addition, exception-throwing expressions or
-     *  statements are put here when not known to be caught.  This
-     *  will typically result in an error unless it is within a
-     *  try-finally whose finally block cannot complete normally.
-     */
-    static class PendingExit {
-        JCTree tree;
-        Bits inits;
-        Bits uninits;
-        Type thrown;
-        PendingExit(JCTree tree, Bits inits, Bits uninits) {
-            this.tree = tree;
-            this.inits = inits.dup();
-            this.uninits = uninits.dup();
+            abstract JCTree getTarget(JCTree tree);
         }
-        PendingExit(JCTree tree, Type thrown) {
-            this.tree = tree;
-            this.thrown = thrown;
+
+        /** The currently pending exits that go from current inner blocks
+         *  to an enclosing block, in source order.
+         */
+        ListBuffer<P> pendingExits;
+
+        /** A pending exit.  These are the statements return, break, and
+         *  continue.  In addition, exception-throwing expressions or
+         *  statements are put here when not known to be caught.  This
+         *  will typically result in an error unless it is within a
+         *  try-finally whose finally block cannot complete normally.
+         */
+        static class PendingExit {
+            JCTree tree;
+
+            PendingExit(JCTree tree) {
+                this.tree = tree;
+            }
+
+            void resolveJump() {
+                //do nothing
+            }
         }
-    }
 
-    /** The currently pending exits that go from current inner blocks
-     *  to an enclosing block, in source order.
-     */
-    ListBuffer<PendingExit> pendingExits;
+        abstract void markDead();
 
-    /*-------------------- Exceptions ----------------------*/
+        /** Record an outward transfer of control. */
+        void recordExit(P pe) {
+            pendingExits.append(pe);
+            markDead();
+        }
 
-    /** Complain that pending exceptions are not caught.
-     */
-    void errorUncaught() {
-        for (PendingExit exit = pendingExits.next();
-             exit != null;
-             exit = pendingExits.next()) {
-            if (classDef != null &&
-                classDef.pos == exit.tree.pos) {
-                log.error(exit.tree.pos(),
-                        "unreported.exception.default.constructor",
-                        exit.thrown);
-            } else if (exit.tree.getTag() == JCTree.VARDEF &&
-                    ((JCVariableDecl)exit.tree).sym.isResourceVariable()) {
-                log.error(exit.tree.pos(),
-                        "unreported.exception.implicit.close",
-                        exit.thrown,
-                        ((JCVariableDecl)exit.tree).sym.name);
-            } else {
-                log.error(exit.tree.pos(),
-                        "unreported.exception.need.to.catch.or.throw",
-                        exit.thrown);
+        /** Resolve all jumps of this statement. */
+        private boolean resolveJump(JCTree tree,
+                        ListBuffer<P> oldPendingExits,
+                        JumpKind jk) {
+            boolean resolved = false;
+            List<P> exits = pendingExits.toList();
+            pendingExits = oldPendingExits;
+            for (; exits.nonEmpty(); exits = exits.tail) {
+                P exit = exits.head;
+                if (exit.tree.hasTag(jk.treeTag) &&
+                        jk.getTarget(exit.tree) == tree) {
+                    exit.resolveJump();
+                    resolved = true;
+                } else {
+                    pendingExits.append(exit);
+                }
+            }
+            return resolved;
+        }
+
+        /** Resolve all continues of this statement. */
+        boolean resolveContinues(JCTree tree) {
+            return resolveJump(tree, new ListBuffer<P>(), JumpKind.CONTINUE);
+        }
+
+        /** Resolve all breaks of this statement. */
+        boolean resolveBreaks(JCTree tree, ListBuffer<P> oldPendingExits) {
+            return resolveJump(tree, oldPendingExits, JumpKind.BREAK);
+        }
+
+        @Override
+        public void scan(JCTree tree) {
+            if (tree != null && (
+                    tree.type == null ||
+                    tree.type != Type.stuckType)) {
+                super.scan(tree);
             }
         }
     }
 
-    /** Record that exception is potentially thrown and check that it
-     *  is caught.
+    /**
+     * This pass implements the first step of the dataflow analysis, namely
+     * the liveness analysis check. This checks that every statement is reachable.
+     * The output of this analysis pass are used by other analyzers. This analyzer
+     * sets the 'finallyCanCompleteNormally' field in the JCTry class.
      */
-    void markThrown(JCTree tree, Type exc) {
-        if (!chk.isUnchecked(tree.pos(), exc)) {
-            if (!chk.isHandled(exc, caught))
-                pendingExits.append(new PendingExit(tree, exc));
+    class AliveAnalyzer extends BaseAnalyzer<BaseAnalyzer.PendingExit> {
+
+        /** A flag that indicates whether the last statement could
+         *  complete normally.
+         */
+        private boolean alive;
+
+        @Override
+        void markDead() {
+            alive = false;
+        }
+
+    /*************************************************************************
+     * Visitor methods for statements and definitions
+     *************************************************************************/
+
+        /** Analyze a definition.
+         */
+        void scanDef(JCTree tree) {
+            scanStat(tree);
+            if (tree != null && tree.hasTag(JCTree.Tag.BLOCK) && !alive) {
+                log.error(tree.pos(),
+                          "initializer.must.be.able.to.complete.normally");
+            }
+        }
+
+        /** Analyze a statement. Check that statement is reachable.
+         */
+        void scanStat(JCTree tree) {
+            if (!alive && tree != null) {
+                log.error(tree.pos(), "unreachable.stmt");
+                if (!tree.hasTag(SKIP)) alive = true;
+            }
+            scan(tree);
+        }
+
+        /** Analyze list of statements.
+         */
+        void scanStats(List<? extends JCStatement> trees) {
+            if (trees != null)
+                for (List<? extends JCStatement> l = trees; l.nonEmpty(); l = l.tail)
+                    scanStat(l.head);
+        }
+
+        /* ------------ Visitor methods for various sorts of trees -------------*/
+
+        public void visitClassDef(JCClassDecl tree) {
+            if (tree.sym == null) return;
+            boolean alivePrev = alive;
+            ListBuffer<PendingExit> pendingExitsPrev = pendingExits;
+            Lint lintPrev = lint;
+
+            pendingExits = new ListBuffer<>();
+            lint = lint.augment(tree.sym);
+
+            try {
+                // process all the static initializers
+                for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                    if (!l.head.hasTag(METHODDEF) &&
+                        (TreeInfo.flags(l.head) & STATIC) != 0) {
+                        scanDef(l.head);
+                    }
+                }
+
+                // process all the instance initializers
+                for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                    if (!l.head.hasTag(METHODDEF) &&
+                        (TreeInfo.flags(l.head) & STATIC) == 0) {
+                        scanDef(l.head);
+                    }
+                }
+
+                // process all the methods
+                for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                    if (l.head.hasTag(METHODDEF)) {
+                        scan(l.head);
+                    }
+                }
+            } finally {
+                pendingExits = pendingExitsPrev;
+                alive = alivePrev;
+                lint = lintPrev;
+            }
+        }
+
+        public void visitMethodDef(JCMethodDecl tree) {
+            if (tree.body == null) return;
+            Lint lintPrev = lint;
+
+            lint = lint.augment(tree.sym);
+
+            Assert.check(pendingExits.isEmpty());
+
+            try {
+                alive = true;
+                scanStat(tree.body);
+
+                if (alive && !tree.sym.type.getReturnType().hasTag(VOID))
+                    log.error(TreeInfo.diagEndPos(tree.body), "missing.ret.stmt");
+
+                List<PendingExit> exits = pendingExits.toList();
+                pendingExits = new ListBuffer<>();
+                while (exits.nonEmpty()) {
+                    PendingExit exit = exits.head;
+                    exits = exits.tail;
+                    Assert.check(exit.tree.hasTag(RETURN));
+                }
+            } finally {
+                lint = lintPrev;
+            }
+        }
+
+        public void visitVarDef(JCVariableDecl tree) {
+            if (tree.init != null) {
+                Lint lintPrev = lint;
+                lint = lint.augment(tree.sym);
+                try{
+                    scan(tree.init);
+                } finally {
+                    lint = lintPrev;
+                }
+            }
+        }
+
+        public void visitBlock(JCBlock tree) {
+            scanStats(tree.stats);
+        }
+
+        public void visitDoLoop(JCDoWhileLoop tree) {
+            ListBuffer<PendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<>();
+            scanStat(tree.body);
+            alive |= resolveContinues(tree);
+            scan(tree.cond);
+            alive = alive && !tree.cond.type.isTrue();
+            alive |= resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitWhileLoop(JCWhileLoop tree) {
+            ListBuffer<PendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<>();
+            scan(tree.cond);
+            alive = !tree.cond.type.isFalse();
+            scanStat(tree.body);
+            alive |= resolveContinues(tree);
+            alive = resolveBreaks(tree, prevPendingExits) ||
+                !tree.cond.type.isTrue();
+        }
+
+        public void visitForLoop(JCForLoop tree) {
+            ListBuffer<PendingExit> prevPendingExits = pendingExits;
+            scanStats(tree.init);
+            pendingExits = new ListBuffer<>();
+            if (tree.cond != null) {
+                scan(tree.cond);
+                alive = !tree.cond.type.isFalse();
+            } else {
+                alive = true;
+            }
+            scanStat(tree.body);
+            alive |= resolveContinues(tree);
+            scan(tree.step);
+            alive = resolveBreaks(tree, prevPendingExits) ||
+                tree.cond != null && !tree.cond.type.isTrue();
+        }
+
+        public void visitForeachLoop(JCEnhancedForLoop tree) {
+            visitVarDef(tree.var);
+            ListBuffer<PendingExit> prevPendingExits = pendingExits;
+            scan(tree.expr);
+            pendingExits = new ListBuffer<>();
+            scanStat(tree.body);
+            alive |= resolveContinues(tree);
+            resolveBreaks(tree, prevPendingExits);
+            alive = true;
+        }
+
+        public void visitLabelled(JCLabeledStatement tree) {
+            ListBuffer<PendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<>();
+            scanStat(tree.body);
+            alive |= resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitSwitch(JCSwitch tree) {
+            ListBuffer<PendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<>();
+            scan(tree.selector);
+            boolean hasDefault = false;
+            for (List<JCCase> l = tree.cases; l.nonEmpty(); l = l.tail) {
+                alive = true;
+                JCCase c = l.head;
+                if (c.pat == null)
+                    hasDefault = true;
+                else
+                    scan(c.pat);
+                scanStats(c.stats);
+                // Warn about fall-through if lint switch fallthrough enabled.
+                if (alive &&
+                    lint.isEnabled(Lint.LintCategory.FALLTHROUGH) &&
+                    c.stats.nonEmpty() && l.tail.nonEmpty())
+                    log.warning(Lint.LintCategory.FALLTHROUGH,
+                                l.tail.head.pos(),
+                                "possible.fall-through.into.case");
+            }
+            if (!hasDefault) {
+                alive = true;
+            }
+            alive |= resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitTry(JCTry tree) {
+            ListBuffer<PendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<>();
+            for (JCTree resource : tree.resources) {
+                if (resource instanceof JCVariableDecl) {
+                    JCVariableDecl vdecl = (JCVariableDecl) resource;
+                    visitVarDef(vdecl);
+                } else if (resource instanceof JCExpression) {
+                    scan((JCExpression) resource);
+                } else {
+                    throw new AssertionError(tree);  // parser error
+                }
+            }
+
+            scanStat(tree.body);
+            boolean aliveEnd = alive;
+
+            for (List<JCCatch> l = tree.catchers; l.nonEmpty(); l = l.tail) {
+                alive = true;
+                JCVariableDecl param = l.head.param;
+                scan(param);
+                scanStat(l.head.body);
+                aliveEnd |= alive;
+            }
+            if (tree.finalizer != null) {
+                ListBuffer<PendingExit> exits = pendingExits;
+                pendingExits = prevPendingExits;
+                alive = true;
+                scanStat(tree.finalizer);
+                tree.finallyCanCompleteNormally = alive;
+                if (!alive) {
+                    if (lint.isEnabled(Lint.LintCategory.FINALLY)) {
+                        log.warning(Lint.LintCategory.FINALLY,
+                                TreeInfo.diagEndPos(tree.finalizer),
+                                "finally.cannot.complete");
+                    }
+                } else {
+                    while (exits.nonEmpty()) {
+                        pendingExits.append(exits.next());
+                    }
+                    alive = aliveEnd;
+                }
+            } else {
+                alive = aliveEnd;
+                ListBuffer<PendingExit> exits = pendingExits;
+                pendingExits = prevPendingExits;
+                while (exits.nonEmpty()) pendingExits.append(exits.next());
+            }
+        }
+
+        @Override
+        public void visitIf(JCIf tree) {
+            scan(tree.cond);
+            scanStat(tree.thenpart);
+            if (tree.elsepart != null) {
+                boolean aliveAfterThen = alive;
+                alive = true;
+                scanStat(tree.elsepart);
+                alive = alive | aliveAfterThen;
+            } else {
+                alive = true;
+            }
+        }
+
+        public void visitBreak(JCBreak tree) {
+            recordExit(new PendingExit(tree));
+        }
+
+        public void visitContinue(JCContinue tree) {
+            recordExit(new PendingExit(tree));
+        }
+
+        public void visitReturn(JCReturn tree) {
+            scan(tree.expr);
+            recordExit(new PendingExit(tree));
+        }
+
+        public void visitThrow(JCThrow tree) {
+            scan(tree.expr);
+            markDead();
+        }
+
+        public void visitApply(JCMethodInvocation tree) {
+            scan(tree.meth);
+            scan(tree.args);
+        }
+
+        public void visitNewClass(JCNewClass tree) {
+            scan(tree.encl);
+            scan(tree.args);
+            if (tree.def != null) {
+                scan(tree.def);
+            }
+        }
+
+        @Override
+        public void visitLambda(JCLambda tree) {
+            if (tree.type != null &&
+                    tree.type.isErroneous()) {
+                return;
+            }
+
+            ListBuffer<PendingExit> prevPending = pendingExits;
+            boolean prevAlive = alive;
+            try {
+                pendingExits = new ListBuffer<>();
+                alive = true;
+                scanStat(tree.body);
+                tree.canCompleteNormally = alive;
+            }
+            finally {
+                pendingExits = prevPending;
+                alive = prevAlive;
+            }
+        }
+
+        public void visitTopLevel(JCCompilationUnit tree) {
+            // Do nothing for TopLevel since each class is visited individually
+        }
+
+    /**************************************************************************
+     * main method
+     *************************************************************************/
+
+        /** Perform definite assignment/unassignment analysis on a tree.
+         */
+        public void analyzeTree(Env<AttrContext> env, TreeMaker make) {
+            analyzeTree(env, env.tree, make);
+        }
+        public void analyzeTree(Env<AttrContext> env, JCTree tree, TreeMaker make) {
+            try {
+                attrEnv = env;
+                Flow.this.make = make;
+                pendingExits = new ListBuffer<>();
+                alive = true;
+                scan(tree);
+            } finally {
+                pendingExits = null;
+                Flow.this.make = null;
+            }
+        }
+    }
+
+    /**
+     * This pass implements the second step of the dataflow analysis, namely
+     * the exception analysis. This is to ensure that every checked exception that is
+     * thrown is declared or caught. The analyzer uses some info that has been set by
+     * the liveliness analyzer.
+     */
+    class FlowAnalyzer extends BaseAnalyzer<FlowAnalyzer.FlowPendingExit> {
+
+        /** A flag that indicates whether the last statement could
+         *  complete normally.
+         */
+        HashMap<Symbol, List<Type>> preciseRethrowTypes;
+
+        /** The current class being defined.
+         */
+        JCClassDecl classDef;
+
+        /** The list of possibly thrown declarable exceptions.
+         */
+        List<Type> thrown;
+
+        /** The list of exceptions that are either caught or declared to be
+         *  thrown.
+         */
+        List<Type> caught;
+
+        class FlowPendingExit extends BaseAnalyzer.PendingExit {
+
+            Type thrown;
+
+            FlowPendingExit(JCTree tree, Type thrown) {
+                super(tree);
+                this.thrown = thrown;
+            }
+        }
+
+        @Override
+        void markDead() {
+            //do nothing
+        }
+
+        /*-------------------- Exceptions ----------------------*/
+
+        /** Complain that pending exceptions are not caught.
+         */
+        void errorUncaught() {
+            for (FlowPendingExit exit = pendingExits.next();
+                 exit != null;
+                 exit = pendingExits.next()) {
+                if (classDef != null &&
+                    classDef.pos == exit.tree.pos) {
+                    log.error(exit.tree.pos(),
+                            "unreported.exception.default.constructor",
+                            exit.thrown);
+                } else if (exit.tree.hasTag(VARDEF) &&
+                        ((JCVariableDecl)exit.tree).sym.isResourceVariable()) {
+                    log.error(exit.tree.pos(),
+                            "unreported.exception.implicit.close",
+                            exit.thrown,
+                            ((JCVariableDecl)exit.tree).sym.name);
+                } else {
+                    log.error(exit.tree.pos(),
+                            "unreported.exception.need.to.catch.or.throw",
+                            exit.thrown);
+                }
+            }
+        }
+
+        /** Record that exception is potentially thrown and check that it
+         *  is caught.
+         */
+        void markThrown(JCTree tree, Type exc) {
+            if (!chk.isUnchecked(tree.pos(), exc)) {
+                if (!chk.isHandled(exc, caught)) {
+                    pendingExits.append(new FlowPendingExit(tree, exc));
+                }
                 thrown = chk.incl(exc, thrown);
+            }
+        }
+
+    /*************************************************************************
+     * Visitor methods for statements and definitions
+     *************************************************************************/
+
+        /* ------------ Visitor methods for various sorts of trees -------------*/
+
+        public void visitClassDef(JCClassDecl tree) {
+            if (tree.sym == null) return;
+
+            JCClassDecl classDefPrev = classDef;
+            List<Type> thrownPrev = thrown;
+            List<Type> caughtPrev = caught;
+            ListBuffer<FlowPendingExit> pendingExitsPrev = pendingExits;
+            Lint lintPrev = lint;
+
+            pendingExits = new ListBuffer<FlowPendingExit>();
+            if (tree.name != names.empty) {
+                caught = List.nil();
+            }
+            classDef = tree;
+            thrown = List.nil();
+            lint = lint.augment(tree.sym);
+
+            try {
+                // process all the static initializers
+                for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                    if (!l.head.hasTag(METHODDEF) &&
+                        (TreeInfo.flags(l.head) & STATIC) != 0) {
+                        scan(l.head);
+                        errorUncaught();
+                    }
+                }
+
+                // add intersection of all thrown clauses of initial constructors
+                // to set of caught exceptions, unless class is anonymous.
+                if (tree.name != names.empty) {
+                    boolean firstConstructor = true;
+                    for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                        if (TreeInfo.isInitialConstructor(l.head)) {
+                            List<Type> mthrown =
+                                ((JCMethodDecl) l.head).sym.type.getThrownTypes();
+                            if (firstConstructor) {
+                                caught = mthrown;
+                                firstConstructor = false;
+                            } else {
+                                caught = chk.intersect(mthrown, caught);
+                            }
+                        }
+                    }
+                }
+
+                // process all the instance initializers
+                for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                    if (!l.head.hasTag(METHODDEF) &&
+                        (TreeInfo.flags(l.head) & STATIC) == 0) {
+                        scan(l.head);
+                        errorUncaught();
+                    }
+                }
+
+                // in an anonymous class, add the set of thrown exceptions to
+                // the throws clause of the synthetic constructor and propagate
+                // outwards.
+                // Changing the throws clause on the fly is okay here because
+                // the anonymous constructor can't be invoked anywhere else,
+                // and its type hasn't been cached.
+                if (tree.name == names.empty) {
+                    for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                        if (TreeInfo.isInitialConstructor(l.head)) {
+                            JCMethodDecl mdef = (JCMethodDecl)l.head;
+                            mdef.thrown = make.Types(thrown);
+                            mdef.sym.type = types.createMethodTypeWithThrown(mdef.sym.type, thrown);
+                        }
+                    }
+                    thrownPrev = chk.union(thrown, thrownPrev);
+                }
+
+                // process all the methods
+                for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                    if (l.head.hasTag(METHODDEF)) {
+                        scan(l.head);
+                        errorUncaught();
+                    }
+                }
+
+                thrown = thrownPrev;
+            } finally {
+                pendingExits = pendingExitsPrev;
+                caught = caughtPrev;
+                classDef = classDefPrev;
+                lint = lintPrev;
+            }
+        }
+
+        public void visitMethodDef(JCMethodDecl tree) {
+            if (tree.body == null) return;
+
+            List<Type> caughtPrev = caught;
+            List<Type> mthrown = tree.sym.type.getThrownTypes();
+            Lint lintPrev = lint;
+
+            lint = lint.augment(tree.sym);
+
+            Assert.check(pendingExits.isEmpty());
+
+            try {
+                for (List<JCVariableDecl> l = tree.params; l.nonEmpty(); l = l.tail) {
+                    JCVariableDecl def = l.head;
+                    scan(def);
+                }
+                if (TreeInfo.isInitialConstructor(tree))
+                    caught = chk.union(caught, mthrown);
+                else if ((tree.sym.flags() & (BLOCK | STATIC)) != BLOCK)
+                    caught = mthrown;
+                // else we are in an instance initializer block;
+                // leave caught unchanged.
+
+                scan(tree.body);
+
+                List<FlowPendingExit> exits = pendingExits.toList();
+                pendingExits = new ListBuffer<FlowPendingExit>();
+                while (exits.nonEmpty()) {
+                    FlowPendingExit exit = exits.head;
+                    exits = exits.tail;
+                    if (exit.thrown == null) {
+                        Assert.check(exit.tree.hasTag(RETURN));
+                    } else {
+                        // uncaught throws will be reported later
+                        pendingExits.append(exit);
+                    }
+                }
+            } finally {
+                caught = caughtPrev;
+                lint = lintPrev;
+            }
+        }
+
+        public void visitVarDef(JCVariableDecl tree) {
+            if (tree.init != null) {
+                Lint lintPrev = lint;
+                lint = lint.augment(tree.sym);
+                try{
+                    scan(tree.init);
+                } finally {
+                    lint = lintPrev;
+                }
+            }
+        }
+
+        public void visitBlock(JCBlock tree) {
+            scan(tree.stats);
+        }
+
+        public void visitDoLoop(JCDoWhileLoop tree) {
+            ListBuffer<FlowPendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<FlowPendingExit>();
+            scan(tree.body);
+            resolveContinues(tree);
+            scan(tree.cond);
+            resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitWhileLoop(JCWhileLoop tree) {
+            ListBuffer<FlowPendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<FlowPendingExit>();
+            scan(tree.cond);
+            scan(tree.body);
+            resolveContinues(tree);
+            resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitForLoop(JCForLoop tree) {
+            ListBuffer<FlowPendingExit> prevPendingExits = pendingExits;
+            scan(tree.init);
+            pendingExits = new ListBuffer<FlowPendingExit>();
+            if (tree.cond != null) {
+                scan(tree.cond);
+            }
+            scan(tree.body);
+            resolveContinues(tree);
+            scan(tree.step);
+            resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitForeachLoop(JCEnhancedForLoop tree) {
+            visitVarDef(tree.var);
+            ListBuffer<FlowPendingExit> prevPendingExits = pendingExits;
+            scan(tree.expr);
+            pendingExits = new ListBuffer<FlowPendingExit>();
+            scan(tree.body);
+            resolveContinues(tree);
+            resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitLabelled(JCLabeledStatement tree) {
+            ListBuffer<FlowPendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<FlowPendingExit>();
+            scan(tree.body);
+            resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitSwitch(JCSwitch tree) {
+            ListBuffer<FlowPendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<FlowPendingExit>();
+            scan(tree.selector);
+            for (List<JCCase> l = tree.cases; l.nonEmpty(); l = l.tail) {
+                JCCase c = l.head;
+                if (c.pat != null) {
+                    scan(c.pat);
+                }
+                scan(c.stats);
+            }
+            resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitTry(JCTry tree) {
+            List<Type> caughtPrev = caught;
+            List<Type> thrownPrev = thrown;
+            thrown = List.nil();
+            for (List<JCCatch> l = tree.catchers; l.nonEmpty(); l = l.tail) {
+                List<JCExpression> subClauses = TreeInfo.isMultiCatch(l.head) ?
+                        ((JCTypeUnion)l.head.param.vartype).alternatives :
+                        List.of(l.head.param.vartype);
+                for (JCExpression ct : subClauses) {
+                    caught = chk.incl(ct.type, caught);
+                }
+            }
+
+            ListBuffer<FlowPendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<FlowPendingExit>();
+            for (JCTree resource : tree.resources) {
+                if (resource instanceof JCVariableDecl) {
+                    JCVariableDecl vdecl = (JCVariableDecl) resource;
+                    visitVarDef(vdecl);
+                } else if (resource instanceof JCExpression) {
+                    scan((JCExpression) resource);
+                } else {
+                    throw new AssertionError(tree);  // parser error
+                }
+            }
+            for (JCTree resource : tree.resources) {
+                List<Type> closeableSupertypes = resource.type.isCompound() ?
+                    types.interfaces(resource.type).prepend(types.supertype(resource.type)) :
+                    List.of(resource.type);
+                for (Type sup : closeableSupertypes) {
+                    if (types.asSuper(sup, syms.autoCloseableType.tsym) != null) {
+                        Symbol closeMethod = rs.resolveQualifiedMethod(tree,
+                                attrEnv,
+                                sup,
+                                names.close,
+                                List.<Type>nil(),
+                                List.<Type>nil());
+                        Type mt = types.memberType(resource.type, closeMethod);
+                        if (closeMethod.kind == MTH) {
+                            for (Type t : mt.getThrownTypes()) {
+                                markThrown(resource, t);
+                            }
+                        }
+                    }
+                }
+            }
+            scan(tree.body);
+            List<Type> thrownInTry = allowImprovedCatchAnalysis ?
+                chk.union(thrown, List.of(syms.runtimeExceptionType, syms.errorType)) :
+                thrown;
+            thrown = thrownPrev;
+            caught = caughtPrev;
+
+            List<Type> caughtInTry = List.nil();
+            for (List<JCCatch> l = tree.catchers; l.nonEmpty(); l = l.tail) {
+                JCVariableDecl param = l.head.param;
+                List<JCExpression> subClauses = TreeInfo.isMultiCatch(l.head) ?
+                        ((JCTypeUnion)l.head.param.vartype).alternatives :
+                        List.of(l.head.param.vartype);
+                List<Type> ctypes = List.nil();
+                List<Type> rethrownTypes = chk.diff(thrownInTry, caughtInTry);
+                for (JCExpression ct : subClauses) {
+                    Type exc = ct.type;
+                    if (exc != syms.unknownType) {
+                        ctypes = ctypes.append(exc);
+                        if (types.isSameType(exc, syms.objectType))
+                            continue;
+                        checkCaughtType(l.head.pos(), exc, thrownInTry, caughtInTry);
+                        caughtInTry = chk.incl(exc, caughtInTry);
+                    }
+                }
+                scan(param);
+                preciseRethrowTypes.put(param.sym, chk.intersect(ctypes, rethrownTypes));
+                scan(l.head.body);
+                preciseRethrowTypes.remove(param.sym);
+            }
+            if (tree.finalizer != null) {
+                List<Type> savedThrown = thrown;
+                thrown = List.nil();
+                ListBuffer<FlowPendingExit> exits = pendingExits;
+                pendingExits = prevPendingExits;
+                scan(tree.finalizer);
+                if (!tree.finallyCanCompleteNormally) {
+                    // discard exits and exceptions from try and finally
+                    thrown = chk.union(thrown, thrownPrev);
+                } else {
+                    thrown = chk.union(thrown, chk.diff(thrownInTry, caughtInTry));
+                    thrown = chk.union(thrown, savedThrown);
+                    // FIX: this doesn't preserve source order of exits in catch
+                    // versus finally!
+                    while (exits.nonEmpty()) {
+                        pendingExits.append(exits.next());
+                    }
+                }
+            } else {
+                thrown = chk.union(thrown, chk.diff(thrownInTry, caughtInTry));
+                ListBuffer<FlowPendingExit> exits = pendingExits;
+                pendingExits = prevPendingExits;
+                while (exits.nonEmpty()) pendingExits.append(exits.next());
+            }
+        }
+
+        @Override
+        public void visitIf(JCIf tree) {
+            scan(tree.cond);
+            scan(tree.thenpart);
+            if (tree.elsepart != null) {
+                scan(tree.elsepart);
+            }
+        }
+
+        void checkCaughtType(DiagnosticPosition pos, Type exc, List<Type> thrownInTry, List<Type> caughtInTry) {
+            if (chk.subset(exc, caughtInTry)) {
+                log.error(pos, "except.already.caught", exc);
+            } else if (!chk.isUnchecked(pos, exc) &&
+                    !isExceptionOrThrowable(exc) &&
+                    !chk.intersects(exc, thrownInTry)) {
+                log.error(pos, "except.never.thrown.in.try", exc);
+            } else if (allowImprovedCatchAnalysis) {
+                List<Type> catchableThrownTypes = chk.intersect(List.of(exc), thrownInTry);
+                // 'catchableThrownTypes' cannnot possibly be empty - if 'exc' was an
+                // unchecked exception, the result list would not be empty, as the augmented
+                // thrown set includes { RuntimeException, Error }; if 'exc' was a checked
+                // exception, that would have been covered in the branch above
+                if (chk.diff(catchableThrownTypes, caughtInTry).isEmpty() &&
+                        !isExceptionOrThrowable(exc)) {
+                    String key = catchableThrownTypes.length() == 1 ?
+                            "unreachable.catch" :
+                            "unreachable.catch.1";
+                    log.warning(pos, key, catchableThrownTypes);
+                }
+            }
+        }
+        //where
+            private boolean isExceptionOrThrowable(Type exc) {
+                return exc.tsym == syms.throwableType.tsym ||
+                    exc.tsym == syms.exceptionType.tsym;
+            }
+
+        public void visitBreak(JCBreak tree) {
+            recordExit(new FlowPendingExit(tree, null));
+        }
+
+        public void visitContinue(JCContinue tree) {
+            recordExit(new FlowPendingExit(tree, null));
+        }
+
+        public void visitReturn(JCReturn tree) {
+            scan(tree.expr);
+            recordExit(new FlowPendingExit(tree, null));
+        }
+
+        public void visitThrow(JCThrow tree) {
+            scan(tree.expr);
+            Symbol sym = TreeInfo.symbol(tree.expr);
+            if (sym != null &&
+                sym.kind == VAR &&
+                (sym.flags() & (FINAL | EFFECTIVELY_FINAL)) != 0 &&
+                preciseRethrowTypes.get(sym) != null &&
+                allowImprovedRethrowAnalysis) {
+                for (Type t : preciseRethrowTypes.get(sym)) {
+                    markThrown(tree, t);
+                }
+            }
+            else {
+                markThrown(tree, tree.expr.type);
+            }
+            markDead();
+        }
+
+        public void visitApply(JCMethodInvocation tree) {
+            scan(tree.meth);
+            scan(tree.args);
+            for (List<Type> l = tree.meth.type.getThrownTypes(); l.nonEmpty(); l = l.tail)
+                markThrown(tree, l.head);
+        }
+
+        public void visitNewClass(JCNewClass tree) {
+            scan(tree.encl);
+            scan(tree.args);
+           // scan(tree.def);
+            for (List<Type> l = tree.constructorType.getThrownTypes();
+                 l.nonEmpty();
+                 l = l.tail) {
+                markThrown(tree, l.head);
+            }
+            List<Type> caughtPrev = caught;
+            try {
+                // If the new class expression defines an anonymous class,
+                // analysis of the anonymous constructor may encounter thrown
+                // types which are unsubstituted type variables.
+                // However, since the constructor's actual thrown types have
+                // already been marked as thrown, it is safe to simply include
+                // each of the constructor's formal thrown types in the set of
+                // 'caught/declared to be thrown' types, for the duration of
+                // the class def analysis.
+                if (tree.def != null)
+                    for (List<Type> l = tree.constructor.type.getThrownTypes();
+                         l.nonEmpty();
+                         l = l.tail) {
+                        caught = chk.incl(l.head, caught);
+                    }
+                scan(tree.def);
+            }
+            finally {
+                caught = caughtPrev;
+            }
+        }
+
+        @Override
+        public void visitLambda(JCLambda tree) {
+            if (tree.type != null &&
+                    tree.type.isErroneous()) {
+                return;
+            }
+            List<Type> prevCaught = caught;
+            List<Type> prevThrown = thrown;
+            ListBuffer<FlowPendingExit> prevPending = pendingExits;
+            try {
+                pendingExits = new ListBuffer<>();
+                caught = tree.getDescriptorType(types).getThrownTypes();
+                thrown = List.nil();
+                scan(tree.body);
+                List<FlowPendingExit> exits = pendingExits.toList();
+                pendingExits = new ListBuffer<FlowPendingExit>();
+                while (exits.nonEmpty()) {
+                    FlowPendingExit exit = exits.head;
+                    exits = exits.tail;
+                    if (exit.thrown == null) {
+                        Assert.check(exit.tree.hasTag(RETURN));
+                    } else {
+                        // uncaught throws will be reported later
+                        pendingExits.append(exit);
+                    }
+                }
+
+                errorUncaught();
+            } finally {
+                pendingExits = prevPending;
+                caught = prevCaught;
+                thrown = prevThrown;
+            }
+        }
+
+        public void visitTopLevel(JCCompilationUnit tree) {
+            // Do nothing for TopLevel since each class is visited individually
+        }
+
+    /**************************************************************************
+     * main method
+     *************************************************************************/
+
+        /** Perform definite assignment/unassignment analysis on a tree.
+         */
+        public void analyzeTree(Env<AttrContext> env, TreeMaker make) {
+            analyzeTree(env, env.tree, make);
+        }
+        public void analyzeTree(Env<AttrContext> env, JCTree tree, TreeMaker make) {
+            try {
+                attrEnv = env;
+                Flow.this.make = make;
+                pendingExits = new ListBuffer<FlowPendingExit>();
+                preciseRethrowTypes = new HashMap<Symbol, List<Type>>();
+                this.thrown = this.caught = null;
+                this.classDef = null;
+                scan(tree);
+            } finally {
+                pendingExits = null;
+                Flow.this.make = null;
+                this.thrown = this.caught = null;
+                this.classDef = null;
+            }
         }
     }
 
-    /*-------------- Processing variables ----------------------*/
-
-    /** Do we need to track init/uninit state of this symbol?
-     *  I.e. is symbol either a local or a blank final variable?
+    /**
+     * Specialized pass that performs inference of thrown types for lambdas.
      */
-    boolean trackable(VarSymbol sym) {
-        return
-            (sym.owner.kind == MTH ||
-             ((sym.flags() & (FINAL | HASINIT | PARAMETER)) == FINAL &&
-              classDef.sym.isEnclosedBy((ClassSymbol)sym.owner)));
-    }
-
-    /** Initialize new trackable variable by setting its address field
-     *  to the next available sequence number and entering it under that
-     *  index into the vars array.
-     */
-    void newVar(VarSymbol sym) {
-        if (nextadr == vars.length) {
-            VarSymbol[] newvars = new VarSymbol[nextadr * 2];
-            System.arraycopy(vars, 0, newvars, 0, nextadr);
-            vars = newvars;
+    class LambdaFlowAnalyzer extends FlowAnalyzer {
+        List<Type> inferredThrownTypes;
+        boolean inLambda;
+        @Override
+        public void visitLambda(JCLambda tree) {
+            if ((tree.type != null &&
+                    tree.type.isErroneous()) || inLambda) {
+                return;
+            }
+            List<Type> prevCaught = caught;
+            List<Type> prevThrown = thrown;
+            ListBuffer<FlowPendingExit> prevPending = pendingExits;
+            inLambda = true;
+            try {
+                pendingExits = new ListBuffer<>();
+                caught = List.of(syms.throwableType);
+                thrown = List.nil();
+                scan(tree.body);
+                inferredThrownTypes = thrown;
+            } finally {
+                pendingExits = prevPending;
+                caught = prevCaught;
+                thrown = prevThrown;
+                inLambda = false;
+            }
         }
-        sym.adr = nextadr;
-        vars[nextadr] = sym;
-        inits.excl(nextadr);
-        uninits.incl(nextadr);
-        nextadr++;
+        @Override
+        public void visitClassDef(JCClassDecl tree) {
+            //skip
+        }
     }
 
-    /** Record an initialization of a trackable variable.
+    /**
+     * This pass implements (i) definite assignment analysis, which ensures that
+     * each variable is assigned when used and (ii) definite unassignment analysis,
+     * which ensures that no final variable is assigned more than once. This visitor
+     * depends on the results of the liveliness analyzer. This pass is also used to mark
+     * effectively-final local variables/parameters.
      */
-    void letInit(DiagnosticPosition pos, VarSymbol sym) {
-        if (sym.adr >= firstadr && trackable(sym)) {
-            if ((sym.flags() & FINAL) != 0) {
-                if ((sym.flags() & PARAMETER) != 0) {
-                    if ((sym.flags() & UNION) != 0) { //multi-catch parameter
-                        log.error(pos, "multicatch.parameter.may.not.be.assigned",
+
+    public class AssignAnalyzer extends BaseAnalyzer<AssignAnalyzer.AssignPendingExit> {
+        /** The set of definitely assigned variables.
+         */
+        final Bits inits;
+
+        /** The set of definitely unassigned variables.
+         */
+        final Bits uninits;
+
+        /** The set of variables that are definitely unassigned everywhere
+         *  in current try block. This variable is maintained lazily; it is
+         *  updated only when something gets removed from uninits,
+         *  typically by being assigned in reachable code.  To obtain the
+         *  correct set of variables which are definitely unassigned
+         *  anywhere in current try block, intersect uninitsTry and
+         *  uninits.
+         */
+        final Bits uninitsTry;
+
+        /** When analyzing a condition, inits and uninits are null.
+         *  Instead we have:
+         */
+        final Bits initsWhenTrue;
+        final Bits initsWhenFalse;
+        final Bits uninitsWhenTrue;
+        final Bits uninitsWhenFalse;
+
+        /** A mapping from addresses to variable symbols.
+         */
+        protected JCVariableDecl[] vardecls;
+
+        /** The current class being defined.
+         */
+        JCClassDecl classDef;
+
+        /** The first variable sequence number in this class definition.
+         */
+        int firstadr;
+
+        /** The next available variable sequence number.
+         */
+        protected int nextadr;
+
+        /** The first variable sequence number in a block that can return.
+         */
+        protected int returnadr;
+
+        /** The list of unreferenced automatic resources.
+         */
+        Scope unrefdResources;
+
+        /** Modified when processing a loop body the second time for DU analysis. */
+        FlowKind flowKind = FlowKind.NORMAL;
+
+        /** The starting position of the analyzed tree */
+        int startPos;
+
+        public class AssignPendingExit extends BaseAnalyzer.PendingExit {
+
+            final Bits inits;
+            final Bits uninits;
+            final Bits exit_inits = new Bits(true);
+            final Bits exit_uninits = new Bits(true);
+
+            public AssignPendingExit(JCTree tree, final Bits inits, final Bits uninits) {
+                super(tree);
+                this.inits = inits;
+                this.uninits = uninits;
+                this.exit_inits.assign(inits);
+                this.exit_uninits.assign(uninits);
+            }
+
+            @Override
+            void resolveJump() {
+                inits.andSet(exit_inits);
+                uninits.andSet(exit_uninits);
+            }
+        }
+
+        public AssignAnalyzer() {
+            this.inits = new Bits();
+            uninits = new Bits();
+            uninitsTry = new Bits();
+            initsWhenTrue = new Bits(true);
+            initsWhenFalse = new Bits(true);
+            uninitsWhenTrue = new Bits(true);
+            uninitsWhenFalse = new Bits(true);
+        }
+
+        private boolean isInitialConstructor = false;
+
+        @Override
+         void markDead() {
+            if (!isInitialConstructor) {
+                inits.inclRange(returnadr, nextadr);
+            } else {
+                for (int address = returnadr; address < nextadr; address++) {
+                    if (!(isFinalUninitializedStaticField(vardecls[address].sym))) {
+                        inits.incl(address);
+                    }
+                }
+            }
+            uninits.inclRange(returnadr, nextadr);
+        }
+
+        /*-------------- Processing variables ----------------------*/
+
+        /** Do we need to track init/uninit state of this symbol?
+         *  I.e. is symbol either a local or a blank final variable?
+         */
+        protected boolean trackable(VarSymbol sym) {
+            return
+                sym.pos >= startPos &&
+                ((sym.owner.kind == MTH ||
+                isFinalUninitializedField(sym)));
+        }
+
+        boolean isFinalUninitializedField(VarSymbol sym) {
+            return sym.owner.kind == TYP &&
+                   ((sym.flags() & (FINAL | HASINIT | PARAMETER)) == FINAL &&
+                   classDef.sym.isEnclosedBy((ClassSymbol)sym.owner));
+        }
+
+        boolean isFinalUninitializedStaticField(VarSymbol sym) {
+            return isFinalUninitializedField(sym) && sym.isStatic();
+        }
+
+        /** Initialize new trackable variable by setting its address field
+         *  to the next available sequence number and entering it under that
+         *  index into the vars array.
+         */
+        void newVar(JCVariableDecl varDecl) {
+            VarSymbol sym = varDecl.sym;
+            vardecls = ArrayUtils.ensureCapacity(vardecls, nextadr);
+            if ((sym.flags() & FINAL) == 0) {
+                sym.flags_field |= EFFECTIVELY_FINAL;
+            }
+            sym.adr = nextadr;
+            vardecls[nextadr] = varDecl;
+            inits.excl(nextadr);
+            uninits.incl(nextadr);
+            nextadr++;
+        }
+
+        /** Record an initialization of a trackable variable.
+         */
+        void letInit(DiagnosticPosition pos, VarSymbol sym) {
+            if (sym.adr >= firstadr && trackable(sym)) {
+                if ((sym.flags() & EFFECTIVELY_FINAL) != 0) {
+                    if (!uninits.isMember(sym.adr)) {
+                        //assignment targeting an effectively final variable
+                        //makes the variable lose its status of effectively final
+                        //if the variable is _not_ definitively unassigned
+                        sym.flags_field &= ~EFFECTIVELY_FINAL;
+                    } else {
+                        uninit(sym);
+                    }
+                } else if ((sym.flags() & FINAL) != 0) {
+                    if ((sym.flags() & PARAMETER) != 0) {
+                        if ((sym.flags() & UNION) != 0) { //multi-catch parameter
+                            log.error(pos, "multicatch.parameter.may.not.be.assigned", sym);
+                        } else {
+                            log.error(pos, "final.parameter.may.not.be.assigned",
                                   sym);
+                        }
+                    } else if (!uninits.isMember(sym.adr)) {
+                        log.error(pos, flowKind.errKey, sym);
+                    } else {
+                        uninit(sym);
                     }
-                    else {
-                        log.error(pos, "final.parameter.may.not.be.assigned",
-                              sym);
-                    }
-                } else if (!uninits.isMember(sym.adr)) {
-                    log.error(pos,
-                              loopPassTwo
-                              ? "var.might.be.assigned.in.loop"
-                              : "var.might.already.be.assigned",
-                              sym);
-                } else if (!inits.isMember(sym.adr)) {
+                }
+                inits.incl(sym.adr);
+            } else if ((sym.flags() & FINAL) != 0) {
+                log.error(pos, "var.might.already.be.assigned", sym);
+            }
+        }
+        //where
+            void uninit(VarSymbol sym) {
+                if (!inits.isMember(sym.adr)) {
                     // reachable assignment
                     uninits.excl(sym.adr);
                     uninitsTry.excl(sym.adr);
@@ -404,1078 +1566,1057 @@ public class Flow extends TreeScanner {
                     uninits.excl(sym.adr);
                 }
             }
-            inits.incl(sym.adr);
-        } else if ((sym.flags() & FINAL) != 0) {
-            log.error(pos, "var.might.already.be.assigned", sym);
-        }
-    }
 
-    /** If tree is either a simple name or of the form this.name or
-     *  C.this.name, and tree represents a trackable variable,
-     *  record an initialization of the variable.
-     */
-    void letInit(JCTree tree) {
-        tree = TreeInfo.skipParens(tree);
-        if (tree.getTag() == JCTree.IDENT || tree.getTag() == JCTree.SELECT) {
-            Symbol sym = TreeInfo.symbol(tree);
-            if (sym.kind == VAR) {
-                letInit(tree.pos(), (VarSymbol)sym);
-            }
-        }
-    }
-
-    /** Check that trackable variable is initialized.
-     */
-    void checkInit(DiagnosticPosition pos, VarSymbol sym) {
-        if ((sym.adr >= firstadr || sym.owner.kind != TYP) &&
-            trackable(sym) &&
-            !inits.isMember(sym.adr)) {
-            log.error(pos, "var.might.not.have.been.initialized",
-                      sym);
-            inits.incl(sym.adr);
-        }
-    }
-
-    /*-------------------- Handling jumps ----------------------*/
-
-    /** Record an outward transfer of control. */
-    void recordExit(JCTree tree) {
-        pendingExits.append(new PendingExit(tree, inits, uninits));
-        markDead();
-    }
-
-    /** Resolve all breaks of this statement. */
-    boolean resolveBreaks(JCTree tree,
-                          ListBuffer<PendingExit> oldPendingExits) {
-        boolean result = false;
-        List<PendingExit> exits = pendingExits.toList();
-        pendingExits = oldPendingExits;
-        for (; exits.nonEmpty(); exits = exits.tail) {
-            PendingExit exit = exits.head;
-            if (exit.tree.getTag() == JCTree.BREAK &&
-                ((JCBreak) exit.tree).target == tree) {
-                inits.andSet(exit.inits);
-                uninits.andSet(exit.uninits);
-                result = true;
-            } else {
-                pendingExits.append(exit);
-            }
-        }
-        return result;
-    }
-
-    /** Resolve all continues of this statement. */
-    boolean resolveContinues(JCTree tree) {
-        boolean result = false;
-        List<PendingExit> exits = pendingExits.toList();
-        pendingExits = new ListBuffer<PendingExit>();
-        for (; exits.nonEmpty(); exits = exits.tail) {
-            PendingExit exit = exits.head;
-            if (exit.tree.getTag() == JCTree.CONTINUE &&
-                ((JCContinue) exit.tree).target == tree) {
-                inits.andSet(exit.inits);
-                uninits.andSet(exit.uninits);
-                result = true;
-            } else {
-                pendingExits.append(exit);
-            }
-        }
-        return result;
-    }
-
-    /** Record that statement is unreachable.
-     */
-    void markDead() {
-        inits.inclRange(firstadr, nextadr);
-        uninits.inclRange(firstadr, nextadr);
-        alive = false;
-    }
-
-    /** Split (duplicate) inits/uninits into WhenTrue/WhenFalse sets
-     */
-    void split(boolean setToNull) {
-        initsWhenFalse = inits.dup();
-        uninitsWhenFalse = uninits.dup();
-        initsWhenTrue = inits;
-        uninitsWhenTrue = uninits;
-        if (setToNull)
-            inits = uninits = null;
-    }
-
-    /** Merge (intersect) inits/uninits from WhenTrue/WhenFalse sets.
-     */
-    void merge() {
-        inits = initsWhenFalse.andSet(initsWhenTrue);
-        uninits = uninitsWhenFalse.andSet(uninitsWhenTrue);
-    }
-
-/* ************************************************************************
- * Visitor methods for statements and definitions
- *************************************************************************/
-
-    /** Analyze a definition.
-     */
-    void scanDef(JCTree tree) {
-        scanStat(tree);
-        if (tree != null && tree.getTag() == JCTree.BLOCK && !alive) {
-            log.error(tree.pos(),
-                      "initializer.must.be.able.to.complete.normally");
-        }
-    }
-
-    /** Analyze a statement. Check that statement is reachable.
-     */
-    void scanStat(JCTree tree) {
-        if (!alive && tree != null) {
-            log.error(tree.pos(), "unreachable.stmt");
-            if (tree.getTag() != JCTree.SKIP) alive = true;
-        }
-        scan(tree);
-    }
-
-    /** Analyze list of statements.
-     */
-    void scanStats(List<? extends JCStatement> trees) {
-        if (trees != null)
-            for (List<? extends JCStatement> l = trees; l.nonEmpty(); l = l.tail)
-                scanStat(l.head);
-    }
-
-    /** Analyze an expression. Make sure to set (un)inits rather than
-     *  (un)initsWhenTrue(WhenFalse) on exit.
-     */
-    void scanExpr(JCTree tree) {
-        if (tree != null) {
-            scan(tree);
-            if (inits == null) merge();
-        }
-    }
-
-    /** Analyze a list of expressions.
-     */
-    void scanExprs(List<? extends JCExpression> trees) {
-        if (trees != null)
-            for (List<? extends JCExpression> l = trees; l.nonEmpty(); l = l.tail)
-                scanExpr(l.head);
-    }
-
-    /** Analyze a condition. Make sure to set (un)initsWhenTrue(WhenFalse)
-     *  rather than (un)inits on exit.
-     */
-    void scanCond(JCTree tree) {
-        if (tree.type.isFalse()) {
-            if (inits == null) merge();
-            initsWhenTrue = inits.dup();
-            initsWhenTrue.inclRange(firstadr, nextadr);
-            uninitsWhenTrue = uninits.dup();
-            uninitsWhenTrue.inclRange(firstadr, nextadr);
-            initsWhenFalse = inits;
-            uninitsWhenFalse = uninits;
-        } else if (tree.type.isTrue()) {
-            if (inits == null) merge();
-            initsWhenFalse = inits.dup();
-            initsWhenFalse.inclRange(firstadr, nextadr);
-            uninitsWhenFalse = uninits.dup();
-            uninitsWhenFalse.inclRange(firstadr, nextadr);
-            initsWhenTrue = inits;
-            uninitsWhenTrue = uninits;
-        } else {
-            scan(tree);
-            if (inits != null)
-                split(tree.type != syms.unknownType);
-        }
-        if (tree.type != syms.unknownType)
-            inits = uninits = null;
-    }
-
-    /* ------------ Visitor methods for various sorts of trees -------------*/
-
-    public void visitClassDef(JCClassDecl tree) {
-        if (tree.sym == null) return;
-
-        JCClassDecl classDefPrev = classDef;
-        List<Type> thrownPrev = thrown;
-        List<Type> caughtPrev = caught;
-        boolean alivePrev = alive;
-        int firstadrPrev = firstadr;
-        int nextadrPrev = nextadr;
-        ListBuffer<PendingExit> pendingExitsPrev = pendingExits;
-        Lint lintPrev = lint;
-
-        pendingExits = new ListBuffer<PendingExit>();
-        if (tree.name != names.empty) {
-            caught = List.nil();
-            firstadr = nextadr;
-        }
-        classDef = tree;
-        thrown = List.nil();
-        lint = lint.augment(tree.sym.attributes_field);
-
-        try {
-            // define all the static fields
-            for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
-                if (l.head.getTag() == JCTree.VARDEF) {
-                    JCVariableDecl def = (JCVariableDecl)l.head;
-                    if ((def.mods.flags & STATIC) != 0) {
-                        VarSymbol sym = def.sym;
-                        if (trackable(sym))
-                            newVar(sym);
-                    }
+        /** If tree is either a simple name or of the form this.name or
+         *  C.this.name, and tree represents a trackable variable,
+         *  record an initialization of the variable.
+         */
+        void letInit(JCTree tree) {
+            tree = TreeInfo.skipParens(tree);
+            if (tree.hasTag(IDENT) || tree.hasTag(SELECT)) {
+                Symbol sym = TreeInfo.symbol(tree);
+                if (sym.kind == VAR) {
+                    letInit(tree.pos(), (VarSymbol)sym);
                 }
             }
+        }
 
-            // process all the static initializers
-            for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
-                if (l.head.getTag() != JCTree.METHODDEF &&
-                    (TreeInfo.flags(l.head) & STATIC) != 0) {
-                    scanDef(l.head);
-                    errorUncaught();
+        /** Check that trackable variable is initialized.
+         */
+        void checkInit(DiagnosticPosition pos, VarSymbol sym) {
+            checkInit(pos, sym, "var.might.not.have.been.initialized");
+        }
+
+        void checkInit(DiagnosticPosition pos, VarSymbol sym, String errkey) {
+            if ((sym.adr >= firstadr || sym.owner.kind != TYP) &&
+                trackable(sym) &&
+                !inits.isMember(sym.adr)) {
+                log.error(pos, errkey, sym);
+                inits.incl(sym.adr);
+            }
+        }
+
+        /** Utility method to reset several Bits instances.
+         */
+        private void resetBits(Bits... bits) {
+            for (Bits b : bits) {
+                b.reset();
+            }
+        }
+
+        /** Split (duplicate) inits/uninits into WhenTrue/WhenFalse sets
+         */
+        void split(boolean setToNull) {
+            initsWhenFalse.assign(inits);
+            uninitsWhenFalse.assign(uninits);
+            initsWhenTrue.assign(inits);
+            uninitsWhenTrue.assign(uninits);
+            if (setToNull) {
+                resetBits(inits, uninits);
+            }
+        }
+
+        /** Merge (intersect) inits/uninits from WhenTrue/WhenFalse sets.
+         */
+        protected void merge() {
+            inits.assign(initsWhenFalse.andSet(initsWhenTrue));
+            uninits.assign(uninitsWhenFalse.andSet(uninitsWhenTrue));
+        }
+
+    /* ************************************************************************
+     * Visitor methods for statements and definitions
+     *************************************************************************/
+
+        /** Analyze an expression. Make sure to set (un)inits rather than
+         *  (un)initsWhenTrue(WhenFalse) on exit.
+         */
+        void scanExpr(JCTree tree) {
+            if (tree != null) {
+                scan(tree);
+                if (inits.isReset()) {
+                    merge();
                 }
             }
+        }
 
-            // add intersection of all thrown clauses of initial constructors
-            // to set of caught exceptions, unless class is anonymous.
-            if (tree.name != names.empty) {
-                boolean firstConstructor = true;
-                for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
-                    if (TreeInfo.isInitialConstructor(l.head)) {
-                        List<Type> mthrown =
-                            ((JCMethodDecl) l.head).sym.type.getThrownTypes();
-                        if (firstConstructor) {
-                            caught = mthrown;
-                            firstConstructor = false;
-                        } else {
-                            caught = chk.intersect(mthrown, caught);
+        /** Analyze a list of expressions.
+         */
+        void scanExprs(List<? extends JCExpression> trees) {
+            if (trees != null)
+                for (List<? extends JCExpression> l = trees; l.nonEmpty(); l = l.tail)
+                    scanExpr(l.head);
+        }
+
+        /** Analyze a condition. Make sure to set (un)initsWhenTrue(WhenFalse)
+         *  rather than (un)inits on exit.
+         */
+        void scanCond(JCTree tree) {
+            if (tree.type.isFalse()) {
+                if (inits.isReset()) merge();
+                initsWhenTrue.assign(inits);
+                initsWhenTrue.inclRange(firstadr, nextadr);
+                uninitsWhenTrue.assign(uninits);
+                uninitsWhenTrue.inclRange(firstadr, nextadr);
+                initsWhenFalse.assign(inits);
+                uninitsWhenFalse.assign(uninits);
+            } else if (tree.type.isTrue()) {
+                if (inits.isReset()) merge();
+                initsWhenFalse.assign(inits);
+                initsWhenFalse.inclRange(firstadr, nextadr);
+                uninitsWhenFalse.assign(uninits);
+                uninitsWhenFalse.inclRange(firstadr, nextadr);
+                initsWhenTrue.assign(inits);
+                uninitsWhenTrue.assign(uninits);
+            } else {
+                scan(tree);
+                if (!inits.isReset())
+                    split(tree.type != syms.unknownType);
+            }
+            if (tree.type != syms.unknownType) {
+                resetBits(inits, uninits);
+            }
+        }
+
+        /* ------------ Visitor methods for various sorts of trees -------------*/
+
+        public void visitClassDef(JCClassDecl tree) {
+            if (tree.sym == null) {
+                return;
+            }
+
+            Lint lintPrev = lint;
+            lint = lint.augment(tree.sym);
+            try {
+                if (tree.sym == null) {
+                    return;
+                }
+
+                JCClassDecl classDefPrev = classDef;
+                int firstadrPrev = firstadr;
+                int nextadrPrev = nextadr;
+                ListBuffer<AssignPendingExit> pendingExitsPrev = pendingExits;
+
+                pendingExits = new ListBuffer<>();
+                if (tree.name != names.empty) {
+                    firstadr = nextadr;
+                }
+                classDef = tree;
+                try {
+                    // define all the static fields
+                    for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                        if (l.head.hasTag(VARDEF)) {
+                            JCVariableDecl def = (JCVariableDecl)l.head;
+                            if ((def.mods.flags & STATIC) != 0) {
+                                VarSymbol sym = def.sym;
+                                if (trackable(sym)) {
+                                    newVar(def);
+                                }
+                            }
                         }
                     }
-                }
-            }
 
-            // define all the instance fields
-            for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
-                if (l.head.getTag() == JCTree.VARDEF) {
-                    JCVariableDecl def = (JCVariableDecl)l.head;
-                    if ((def.mods.flags & STATIC) == 0) {
-                        VarSymbol sym = def.sym;
-                        if (trackable(sym))
-                            newVar(sym);
+                    // process all the static initializers
+                    for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                        if (!l.head.hasTag(METHODDEF) &&
+                            (TreeInfo.flags(l.head) & STATIC) != 0) {
+                            scan(l.head);
+                        }
                     }
-                }
-            }
 
-            // process all the instance initializers
-            for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
-                if (l.head.getTag() != JCTree.METHODDEF &&
-                    (TreeInfo.flags(l.head) & STATIC) == 0) {
-                    scanDef(l.head);
-                    errorUncaught();
-                }
-            }
-
-            // in an anonymous class, add the set of thrown exceptions to
-            // the throws clause of the synthetic constructor and propagate
-            // outwards.
-            // Changing the throws clause on the fly is okay here because
-            // the anonymous constructor can't be invoked anywhere else,
-            // and its type hasn't been cached.
-            if (tree.name == names.empty) {
-                for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
-                    if (TreeInfo.isInitialConstructor(l.head)) {
-                        JCMethodDecl mdef = (JCMethodDecl)l.head;
-                        mdef.thrown = make.Types(thrown);
-                        mdef.sym.type = types.createMethodTypeWithThrown(mdef.sym.type, thrown);
+                    // define all the instance fields
+                    for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                        if (l.head.hasTag(VARDEF)) {
+                            JCVariableDecl def = (JCVariableDecl)l.head;
+                            if ((def.mods.flags & STATIC) == 0) {
+                                VarSymbol sym = def.sym;
+                                if (trackable(sym)) {
+                                    newVar(def);
+                                }
+                            }
+                        }
                     }
-                }
-                thrownPrev = chk.union(thrown, thrownPrev);
-            }
-
-            // process all the methods
-            for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
-                if (l.head.getTag() == JCTree.METHODDEF) {
-                    scan(l.head);
-                    errorUncaught();
-                }
-            }
-
-            thrown = thrownPrev;
-        } finally {
-            pendingExits = pendingExitsPrev;
-            alive = alivePrev;
-            nextadr = nextadrPrev;
-            firstadr = firstadrPrev;
-            caught = caughtPrev;
-            classDef = classDefPrev;
-            lint = lintPrev;
-        }
-    }
-
-    public void visitMethodDef(JCMethodDecl tree) {
-        if (tree.body == null) return;
-
-        List<Type> caughtPrev = caught;
-        List<Type> mthrown = tree.sym.type.getThrownTypes();
-        Bits initsPrev = inits.dup();
-        Bits uninitsPrev = uninits.dup();
-        int nextadrPrev = nextadr;
-        int firstadrPrev = firstadr;
-        Lint lintPrev = lint;
-
-        lint = lint.augment(tree.sym.attributes_field);
-
-        Assert.check(pendingExits.isEmpty());
-
-        try {
-            boolean isInitialConstructor =
-                TreeInfo.isInitialConstructor(tree);
-
-            if (!isInitialConstructor)
-                firstadr = nextadr;
-            for (List<JCVariableDecl> l = tree.params; l.nonEmpty(); l = l.tail) {
-                JCVariableDecl def = l.head;
-                scan(def);
-                inits.incl(def.sym.adr);
-                uninits.excl(def.sym.adr);
-            }
-            if (isInitialConstructor)
-                caught = chk.union(caught, mthrown);
-            else if ((tree.sym.flags() & (BLOCK | STATIC)) != BLOCK)
-                caught = mthrown;
-            // else we are in an instance initializer block;
-            // leave caught unchanged.
-
-            alive = true;
-            scanStat(tree.body);
-
-            if (alive && tree.sym.type.getReturnType().tag != VOID)
-                log.error(TreeInfo.diagEndPos(tree.body), "missing.ret.stmt");
-
-            if (isInitialConstructor) {
-                for (int i = firstadr; i < nextadr; i++)
-                    if (vars[i].owner == classDef.sym)
-                        checkInit(TreeInfo.diagEndPos(tree.body), vars[i]);
-            }
-            List<PendingExit> exits = pendingExits.toList();
-            pendingExits = new ListBuffer<PendingExit>();
-            while (exits.nonEmpty()) {
-                PendingExit exit = exits.head;
-                exits = exits.tail;
-                if (exit.thrown == null) {
-                    Assert.check(exit.tree.getTag() == JCTree.RETURN);
-                    if (isInitialConstructor) {
-                        inits = exit.inits;
-                        for (int i = firstadr; i < nextadr; i++)
-                            checkInit(exit.tree.pos(), vars[i]);
+                    // process all the instance initializers
+                    for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                        if (!l.head.hasTag(METHODDEF) &&
+                            (TreeInfo.flags(l.head) & STATIC) == 0) {
+                            scan(l.head);
+                        }
                     }
-                } else {
-                    // uncaught throws will be reported later
-                    pendingExits.append(exit);
-                }
-            }
-        } finally {
-            inits = initsPrev;
-            uninits = uninitsPrev;
-            nextadr = nextadrPrev;
-            firstadr = firstadrPrev;
-            caught = caughtPrev;
-            lint = lintPrev;
-        }
-    }
 
-    public void visitVarDef(JCVariableDecl tree) {
-        boolean track = trackable(tree.sym);
-        if (track && tree.sym.owner.kind == MTH) newVar(tree.sym);
-        if (tree.init != null) {
-            Lint lintPrev = lint;
-            lint = lint.augment(tree.sym.attributes_field);
-            try{
-                scanExpr(tree.init);
-                if (track) letInit(tree.pos(), tree.sym);
+                    // process all the methods
+                    for (List<JCTree> l = tree.defs; l.nonEmpty(); l = l.tail) {
+                        if (l.head.hasTag(METHODDEF)) {
+                            scan(l.head);
+                        }
+                    }
+                } finally {
+                    pendingExits = pendingExitsPrev;
+                    nextadr = nextadrPrev;
+                    firstadr = firstadrPrev;
+                    classDef = classDefPrev;
+                }
             } finally {
                 lint = lintPrev;
             }
         }
-    }
 
-    public void visitBlock(JCBlock tree) {
-        int nextadrPrev = nextadr;
-        scanStats(tree.stats);
-        nextadr = nextadrPrev;
-    }
-
-    public void visitDoLoop(JCDoWhileLoop tree) {
-        ListBuffer<PendingExit> prevPendingExits = pendingExits;
-        boolean prevLoopPassTwo = loopPassTwo;
-        pendingExits = new ListBuffer<PendingExit>();
-        int prevErrors = log.nerrors;
-        do {
-            Bits uninitsEntry = uninits.dup();
-            uninitsEntry.excludeFrom(nextadr);
-            scanStat(tree.body);
-            alive |= resolveContinues(tree);
-            scanCond(tree.cond);
-            if (log.nerrors !=  prevErrors ||
-                loopPassTwo ||
-                uninitsEntry.dup().diffSet(uninitsWhenTrue).nextBit(firstadr)==-1)
-                break;
-            inits = initsWhenTrue;
-            uninits = uninitsEntry.andSet(uninitsWhenTrue);
-            loopPassTwo = true;
-            alive = true;
-        } while (true);
-        loopPassTwo = prevLoopPassTwo;
-        inits = initsWhenFalse;
-        uninits = uninitsWhenFalse;
-        alive = alive && !tree.cond.type.isTrue();
-        alive |= resolveBreaks(tree, prevPendingExits);
-    }
-
-    public void visitWhileLoop(JCWhileLoop tree) {
-        ListBuffer<PendingExit> prevPendingExits = pendingExits;
-        boolean prevLoopPassTwo = loopPassTwo;
-        Bits initsCond;
-        Bits uninitsCond;
-        pendingExits = new ListBuffer<PendingExit>();
-        int prevErrors = log.nerrors;
-        do {
-            Bits uninitsEntry = uninits.dup();
-            uninitsEntry.excludeFrom(nextadr);
-            scanCond(tree.cond);
-            initsCond = initsWhenFalse;
-            uninitsCond = uninitsWhenFalse;
-            inits = initsWhenTrue;
-            uninits = uninitsWhenTrue;
-            alive = !tree.cond.type.isFalse();
-            scanStat(tree.body);
-            alive |= resolveContinues(tree);
-            if (log.nerrors != prevErrors ||
-                loopPassTwo ||
-                uninitsEntry.dup().diffSet(uninits).nextBit(firstadr) == -1)
-                break;
-            uninits = uninitsEntry.andSet(uninits);
-            loopPassTwo = true;
-            alive = true;
-        } while (true);
-        loopPassTwo = prevLoopPassTwo;
-        inits = initsCond;
-        uninits = uninitsCond;
-        alive = resolveBreaks(tree, prevPendingExits) ||
-            !tree.cond.type.isTrue();
-    }
-
-    public void visitForLoop(JCForLoop tree) {
-        ListBuffer<PendingExit> prevPendingExits = pendingExits;
-        boolean prevLoopPassTwo = loopPassTwo;
-        int nextadrPrev = nextadr;
-        scanStats(tree.init);
-        Bits initsCond;
-        Bits uninitsCond;
-        pendingExits = new ListBuffer<PendingExit>();
-        int prevErrors = log.nerrors;
-        do {
-            Bits uninitsEntry = uninits.dup();
-            uninitsEntry.excludeFrom(nextadr);
-            if (tree.cond != null) {
-                scanCond(tree.cond);
-                initsCond = initsWhenFalse;
-                uninitsCond = uninitsWhenFalse;
-                inits = initsWhenTrue;
-                uninits = uninitsWhenTrue;
-                alive = !tree.cond.type.isFalse();
-            } else {
-                initsCond = inits.dup();
-                initsCond.inclRange(firstadr, nextadr);
-                uninitsCond = uninits.dup();
-                uninitsCond.inclRange(firstadr, nextadr);
-                alive = true;
+        public void visitMethodDef(JCMethodDecl tree) {
+            if (tree.body == null) {
+                return;
             }
-            scanStat(tree.body);
-            alive |= resolveContinues(tree);
-            scan(tree.step);
-            if (log.nerrors != prevErrors ||
-                loopPassTwo ||
-                uninitsEntry.dup().diffSet(uninits).nextBit(firstadr) == -1)
-                break;
-            uninits = uninitsEntry.andSet(uninits);
-            loopPassTwo = true;
-            alive = true;
-        } while (true);
-        loopPassTwo = prevLoopPassTwo;
-        inits = initsCond;
-        uninits = uninitsCond;
-        alive = resolveBreaks(tree, prevPendingExits) ||
-            tree.cond != null && !tree.cond.type.isTrue();
-        nextadr = nextadrPrev;
-    }
 
-    public void visitForeachLoop(JCEnhancedForLoop tree) {
-        visitVarDef(tree.var);
+            /*  MemberEnter can generate synthetic methods ignore them
+             */
+            if ((tree.sym.flags() & SYNTHETIC) != 0) {
+                return;
+            }
 
-        ListBuffer<PendingExit> prevPendingExits = pendingExits;
-        boolean prevLoopPassTwo = loopPassTwo;
-        int nextadrPrev = nextadr;
-        scan(tree.expr);
-        Bits initsStart = inits.dup();
-        Bits uninitsStart = uninits.dup();
-
-        letInit(tree.pos(), tree.var.sym);
-        pendingExits = new ListBuffer<PendingExit>();
-        int prevErrors = log.nerrors;
-        do {
-            Bits uninitsEntry = uninits.dup();
-            uninitsEntry.excludeFrom(nextadr);
-            scanStat(tree.body);
-            alive |= resolveContinues(tree);
-            if (log.nerrors != prevErrors ||
-                loopPassTwo ||
-                uninitsEntry.dup().diffSet(uninits).nextBit(firstadr) == -1)
-                break;
-            uninits = uninitsEntry.andSet(uninits);
-            loopPassTwo = true;
-            alive = true;
-        } while (true);
-        loopPassTwo = prevLoopPassTwo;
-        inits = initsStart;
-        uninits = uninitsStart.andSet(uninits);
-        resolveBreaks(tree, prevPendingExits);
-        alive = true;
-        nextadr = nextadrPrev;
-    }
-
-    public void visitLabelled(JCLabeledStatement tree) {
-        ListBuffer<PendingExit> prevPendingExits = pendingExits;
-        pendingExits = new ListBuffer<PendingExit>();
-        scanStat(tree.body);
-        alive |= resolveBreaks(tree, prevPendingExits);
-    }
-
-    public void visitSwitch(JCSwitch tree) {
-        ListBuffer<PendingExit> prevPendingExits = pendingExits;
-        pendingExits = new ListBuffer<PendingExit>();
-        int nextadrPrev = nextadr;
-        scanExpr(tree.selector);
-        Bits initsSwitch = inits;
-        Bits uninitsSwitch = uninits.dup();
-        boolean hasDefault = false;
-        for (List<JCCase> l = tree.cases; l.nonEmpty(); l = l.tail) {
-            alive = true;
-            inits = initsSwitch.dup();
-            uninits = uninits.andSet(uninitsSwitch);
-            JCCase c = l.head;
-            if (c.pat == null)
-                hasDefault = true;
-            else
-                scanExpr(c.pat);
-            scanStats(c.stats);
-            addVars(c.stats, initsSwitch, uninitsSwitch);
-            // Warn about fall-through if lint switch fallthrough enabled.
-            if (!loopPassTwo &&
-                alive &&
-                lint.isEnabled(Lint.LintCategory.FALLTHROUGH) &&
-                c.stats.nonEmpty() && l.tail.nonEmpty())
-                log.warning(Lint.LintCategory.FALLTHROUGH,
-                            l.tail.head.pos(),
-                            "possible.fall-through.into.case");
-        }
-        if (!hasDefault) {
-            inits.andSet(initsSwitch);
-            alive = true;
-        }
-        alive |= resolveBreaks(tree, prevPendingExits);
-        nextadr = nextadrPrev;
-    }
-    // where
-        /** Add any variables defined in stats to inits and uninits. */
-        private static void addVars(List<JCStatement> stats, Bits inits,
-                                    Bits uninits) {
-            for (;stats.nonEmpty(); stats = stats.tail) {
-                JCTree stat = stats.head;
-                if (stat.getTag() == JCTree.VARDEF) {
-                    int adr = ((JCVariableDecl) stat).sym.adr;
-                    inits.excl(adr);
-                    uninits.incl(adr);
+            Lint lintPrev = lint;
+            lint = lint.augment(tree.sym);
+            try {
+                if (tree.body == null) {
+                    return;
                 }
-            }
-        }
+                /*  Ignore synthetic methods, except for translated lambda methods.
+                 */
+                if ((tree.sym.flags() & (SYNTHETIC | LAMBDA_METHOD)) == SYNTHETIC) {
+                    return;
+                }
 
-    public void visitTry(JCTry tree) {
-        List<Type> caughtPrev = caught;
-        List<Type> thrownPrev = thrown;
-        thrown = List.nil();
-        for (List<JCCatch> l = tree.catchers; l.nonEmpty(); l = l.tail) {
-            List<JCExpression> subClauses = TreeInfo.isMultiCatch(l.head) ?
-                    ((JCTypeUnion)l.head.param.vartype).alternatives :
-                    List.of(l.head.param.vartype);
-            for (JCExpression ct : subClauses) {
-                caught = chk.incl(ct.type, caught);
-            }
-        }
-        ListBuffer<JCVariableDecl> resourceVarDecls = ListBuffer.lb();
-        Bits uninitsTryPrev = uninitsTry;
-        ListBuffer<PendingExit> prevPendingExits = pendingExits;
-        pendingExits = new ListBuffer<PendingExit>();
-        Bits initsTry = inits.dup();
-        uninitsTry = uninits.dup();
-        for (JCTree resource : tree.resources) {
-            if (resource instanceof JCVariableDecl) {
-                JCVariableDecl vdecl = (JCVariableDecl) resource;
-                visitVarDef(vdecl);
-                unrefdResources.enter(vdecl.sym);
-                resourceVarDecls.append(vdecl);
-            } else if (resource instanceof JCExpression) {
-                scanExpr((JCExpression) resource);
-            } else {
-                throw new AssertionError(tree);  // parser error
-            }
-        }
-        for (JCTree resource : tree.resources) {
-            List<Type> closeableSupertypes = resource.type.isCompound() ?
-                types.interfaces(resource.type).prepend(types.supertype(resource.type)) :
-                List.of(resource.type);
-            for (Type sup : closeableSupertypes) {
-                if (types.asSuper(sup, syms.autoCloseableType.tsym) != null) {
-                    Symbol closeMethod = rs.resolveQualifiedMethod(tree,
-                            attrEnv,
-                            sup,
-                            names.close,
-                            List.<Type>nil(),
-                            List.<Type>nil());
-                    if (closeMethod.kind == MTH) {
-                        for (Type t : ((MethodSymbol)closeMethod).getThrownTypes()) {
-                            markThrown(resource, t);
+                final Bits initsPrev = new Bits(inits);
+                final Bits uninitsPrev = new Bits(uninits);
+                int nextadrPrev = nextadr;
+                int firstadrPrev = firstadr;
+                int returnadrPrev = returnadr;
+
+                Assert.check(pendingExits.isEmpty());
+                boolean lastInitialConstructor = isInitialConstructor;
+                try {
+                    isInitialConstructor = TreeInfo.isInitialConstructor(tree);
+
+                    if (!isInitialConstructor) {
+                        firstadr = nextadr;
+                    }
+                    for (List<JCVariableDecl> l = tree.params; l.nonEmpty(); l = l.tail) {
+                        JCVariableDecl def = l.head;
+                        scan(def);
+                        Assert.check((def.sym.flags() & PARAMETER) != 0, "Method parameter without PARAMETER flag");
+                        /*  If we are executing the code from Gen, then there can be
+                         *  synthetic or mandated variables, ignore them.
+                         */
+                        initParam(def);
+                    }
+                    // else we are in an instance initializer block;
+                    // leave caught unchanged.
+                    scan(tree.body);
+
+                    if (isInitialConstructor) {
+                        boolean isSynthesized = (tree.sym.flags() &
+                                                 GENERATEDCONSTR) != 0;
+                        for (int i = firstadr; i < nextadr; i++) {
+                            JCVariableDecl vardecl = vardecls[i];
+                            VarSymbol var = vardecl.sym;
+                            if (var.owner == classDef.sym) {
+                                // choose the diagnostic position based on whether
+                                // the ctor is default(synthesized) or not
+                                if (isSynthesized) {
+                                    checkInit(TreeInfo.diagnosticPositionFor(var, vardecl),
+                                        var, "var.not.initialized.in.default.constructor");
+                                } else {
+                                    checkInit(TreeInfo.diagEndPos(tree.body), var);
+                                }
+                            }
                         }
                     }
+                    List<AssignPendingExit> exits = pendingExits.toList();
+                    pendingExits = new ListBuffer<>();
+                    while (exits.nonEmpty()) {
+                        AssignPendingExit exit = exits.head;
+                        exits = exits.tail;
+                        Assert.check(exit.tree.hasTag(RETURN), exit.tree);
+                        if (isInitialConstructor) {
+                            inits.assign(exit.exit_inits);
+                            for (int i = firstadr; i < nextadr; i++) {
+                                checkInit(exit.tree.pos(), vardecls[i].sym);
+                            }
+                        }
+                    }
+                } finally {
+                    inits.assign(initsPrev);
+                    uninits.assign(uninitsPrev);
+                    nextadr = nextadrPrev;
+                    firstadr = firstadrPrev;
+                    returnadr = returnadrPrev;
+                    isInitialConstructor = lastInitialConstructor;
                 }
+            } finally {
+                lint = lintPrev;
             }
         }
-        scanStat(tree.body);
-        List<Type> thrownInTry = allowImprovedCatchAnalysis ?
-            chk.union(thrown, List.of(syms.runtimeExceptionType, syms.errorType)) :
-            thrown;
-        thrown = thrownPrev;
-        caught = caughtPrev;
-        boolean aliveEnd = alive;
-        uninitsTry.andSet(uninits);
-        Bits initsEnd = inits;
-        Bits uninitsEnd = uninits;
-        int nextadrCatch = nextadr;
 
-        if (!resourceVarDecls.isEmpty() &&
-                lint.isEnabled(Lint.LintCategory.TRY)) {
-            for (JCVariableDecl resVar : resourceVarDecls) {
-                if (unrefdResources.includes(resVar.sym)) {
-                    log.warning(Lint.LintCategory.TRY, resVar.pos(),
-                                "try.resource.not.referenced", resVar.sym);
-                    unrefdResources.remove(resVar.sym);
+        protected void initParam(JCVariableDecl def) {
+            inits.incl(def.sym.adr);
+            uninits.excl(def.sym.adr);
+        }
+
+        public void visitVarDef(JCVariableDecl tree) {
+            Lint lintPrev = lint;
+            lint = lint.augment(tree.sym);
+            try{
+                boolean track = trackable(tree.sym);
+                if (track && tree.sym.owner.kind == MTH) {
+                    newVar(tree);
                 }
+                if (tree.init != null) {
+                    scanExpr(tree.init);
+                    if (track) {
+                        letInit(tree.pos(), tree.sym);
+                    }
+                }
+            } finally {
+                lint = lintPrev;
             }
         }
 
-        List<Type> caughtInTry = List.nil();
-        for (List<JCCatch> l = tree.catchers; l.nonEmpty(); l = l.tail) {
-            alive = true;
-            JCVariableDecl param = l.head.param;
-            List<JCExpression> subClauses = TreeInfo.isMultiCatch(l.head) ?
-                    ((JCTypeUnion)l.head.param.vartype).alternatives :
-                    List.of(l.head.param.vartype);
-            List<Type> ctypes = List.nil();
-            List<Type> rethrownTypes = chk.diff(thrownInTry, caughtInTry);
-            for (JCExpression ct : subClauses) {
-                Type exc = ct.type;
-                if (exc != syms.unknownType) {
-                    ctypes = ctypes.append(exc);
-                    if (types.isSameType(exc, syms.objectType))
-                        continue;
-                    checkCaughtType(l.head.pos(), exc, thrownInTry, caughtInTry);
-                    caughtInTry = chk.incl(exc, caughtInTry);
+        public void visitBlock(JCBlock tree) {
+            int nextadrPrev = nextadr;
+            scan(tree.stats);
+            nextadr = nextadrPrev;
+        }
+
+        public void visitDoLoop(JCDoWhileLoop tree) {
+            ListBuffer<AssignPendingExit> prevPendingExits = pendingExits;
+            FlowKind prevFlowKind = flowKind;
+            flowKind = FlowKind.NORMAL;
+            final Bits initsSkip = new Bits(true);
+            final Bits uninitsSkip = new Bits(true);
+            pendingExits = new ListBuffer<>();
+            int prevErrors = log.nerrors;
+            do {
+                final Bits uninitsEntry = new Bits(uninits);
+                uninitsEntry.excludeFrom(nextadr);
+                scan(tree.body);
+                resolveContinues(tree);
+                scanCond(tree.cond);
+                if (!flowKind.isFinal()) {
+                    initsSkip.assign(initsWhenFalse);
+                    uninitsSkip.assign(uninitsWhenFalse);
+                }
+                if (log.nerrors !=  prevErrors ||
+                    flowKind.isFinal() ||
+                    new Bits(uninitsEntry).diffSet(uninitsWhenTrue).nextBit(firstadr)==-1)
+                    break;
+                inits.assign(initsWhenTrue);
+                uninits.assign(uninitsEntry.andSet(uninitsWhenTrue));
+                flowKind = FlowKind.SPECULATIVE_LOOP;
+            } while (true);
+            flowKind = prevFlowKind;
+            inits.assign(initsSkip);
+            uninits.assign(uninitsSkip);
+            resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitWhileLoop(JCWhileLoop tree) {
+            ListBuffer<AssignPendingExit> prevPendingExits = pendingExits;
+            FlowKind prevFlowKind = flowKind;
+            flowKind = FlowKind.NORMAL;
+            final Bits initsSkip = new Bits(true);
+            final Bits uninitsSkip = new Bits(true);
+            pendingExits = new ListBuffer<>();
+            int prevErrors = log.nerrors;
+            final Bits uninitsEntry = new Bits(uninits);
+            uninitsEntry.excludeFrom(nextadr);
+            do {
+                scanCond(tree.cond);
+                if (!flowKind.isFinal()) {
+                    initsSkip.assign(initsWhenFalse) ;
+                    uninitsSkip.assign(uninitsWhenFalse);
+                }
+                inits.assign(initsWhenTrue);
+                uninits.assign(uninitsWhenTrue);
+                scan(tree.body);
+                resolveContinues(tree);
+                if (log.nerrors != prevErrors ||
+                    flowKind.isFinal() ||
+                    new Bits(uninitsEntry).diffSet(uninits).nextBit(firstadr) == -1) {
+                    break;
+                }
+                uninits.assign(uninitsEntry.andSet(uninits));
+                flowKind = FlowKind.SPECULATIVE_LOOP;
+            } while (true);
+            flowKind = prevFlowKind;
+            //a variable is DA/DU after the while statement, if it's DA/DU assuming the
+            //branch is not taken AND if it's DA/DU before any break statement
+            inits.assign(initsSkip);
+            uninits.assign(uninitsSkip);
+            resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitForLoop(JCForLoop tree) {
+            ListBuffer<AssignPendingExit> prevPendingExits = pendingExits;
+            FlowKind prevFlowKind = flowKind;
+            flowKind = FlowKind.NORMAL;
+            int nextadrPrev = nextadr;
+            scan(tree.init);
+            final Bits initsSkip = new Bits(true);
+            final Bits uninitsSkip = new Bits(true);
+            pendingExits = new ListBuffer<>();
+            int prevErrors = log.nerrors;
+            do {
+                final Bits uninitsEntry = new Bits(uninits);
+                uninitsEntry.excludeFrom(nextadr);
+                if (tree.cond != null) {
+                    scanCond(tree.cond);
+                    if (!flowKind.isFinal()) {
+                        initsSkip.assign(initsWhenFalse);
+                        uninitsSkip.assign(uninitsWhenFalse);
+                    }
+                    inits.assign(initsWhenTrue);
+                    uninits.assign(uninitsWhenTrue);
+                } else if (!flowKind.isFinal()) {
+                    initsSkip.assign(inits);
+                    initsSkip.inclRange(firstadr, nextadr);
+                    uninitsSkip.assign(uninits);
+                    uninitsSkip.inclRange(firstadr, nextadr);
+                }
+                scan(tree.body);
+                resolveContinues(tree);
+                scan(tree.step);
+                if (log.nerrors != prevErrors ||
+                    flowKind.isFinal() ||
+                    new Bits(uninitsEntry).diffSet(uninits).nextBit(firstadr) == -1)
+                    break;
+                uninits.assign(uninitsEntry.andSet(uninits));
+                flowKind = FlowKind.SPECULATIVE_LOOP;
+            } while (true);
+            flowKind = prevFlowKind;
+            //a variable is DA/DU after a for loop, if it's DA/DU assuming the
+            //branch is not taken AND if it's DA/DU before any break statement
+            inits.assign(initsSkip);
+            uninits.assign(uninitsSkip);
+            resolveBreaks(tree, prevPendingExits);
+            nextadr = nextadrPrev;
+        }
+
+        public void visitForeachLoop(JCEnhancedForLoop tree) {
+            visitVarDef(tree.var);
+
+            ListBuffer<AssignPendingExit> prevPendingExits = pendingExits;
+            FlowKind prevFlowKind = flowKind;
+            flowKind = FlowKind.NORMAL;
+            int nextadrPrev = nextadr;
+            scan(tree.expr);
+            final Bits initsStart = new Bits(inits);
+            final Bits uninitsStart = new Bits(uninits);
+
+            letInit(tree.pos(), tree.var.sym);
+            pendingExits = new ListBuffer<>();
+            int prevErrors = log.nerrors;
+            do {
+                final Bits uninitsEntry = new Bits(uninits);
+                uninitsEntry.excludeFrom(nextadr);
+                scan(tree.body);
+                resolveContinues(tree);
+                if (log.nerrors != prevErrors ||
+                    flowKind.isFinal() ||
+                    new Bits(uninitsEntry).diffSet(uninits).nextBit(firstadr) == -1)
+                    break;
+                uninits.assign(uninitsEntry.andSet(uninits));
+                flowKind = FlowKind.SPECULATIVE_LOOP;
+            } while (true);
+            flowKind = prevFlowKind;
+            inits.assign(initsStart);
+            uninits.assign(uninitsStart.andSet(uninits));
+            resolveBreaks(tree, prevPendingExits);
+            nextadr = nextadrPrev;
+        }
+
+        public void visitLabelled(JCLabeledStatement tree) {
+            ListBuffer<AssignPendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<>();
+            scan(tree.body);
+            resolveBreaks(tree, prevPendingExits);
+        }
+
+        public void visitSwitch(JCSwitch tree) {
+            ListBuffer<AssignPendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<>();
+            int nextadrPrev = nextadr;
+            scanExpr(tree.selector);
+            final Bits initsSwitch = new Bits(inits);
+            final Bits uninitsSwitch = new Bits(uninits);
+            boolean hasDefault = false;
+            for (List<JCCase> l = tree.cases; l.nonEmpty(); l = l.tail) {
+                inits.assign(initsSwitch);
+                uninits.assign(uninits.andSet(uninitsSwitch));
+                JCCase c = l.head;
+                if (c.pat == null) {
+                    hasDefault = true;
+                } else {
+                    scanExpr(c.pat);
+                }
+                if (hasDefault) {
+                    inits.assign(initsSwitch);
+                    uninits.assign(uninits.andSet(uninitsSwitch));
+                }
+                scan(c.stats);
+                addVars(c.stats, initsSwitch, uninitsSwitch);
+                if (!hasDefault) {
+                    inits.assign(initsSwitch);
+                    uninits.assign(uninits.andSet(uninitsSwitch));
+                }
+                // Warn about fall-through if lint switch fallthrough enabled.
+            }
+            if (!hasDefault) {
+                inits.andSet(initsSwitch);
+            }
+            resolveBreaks(tree, prevPendingExits);
+            nextadr = nextadrPrev;
+        }
+        // where
+            /** Add any variables defined in stats to inits and uninits. */
+            private void addVars(List<JCStatement> stats, final Bits inits,
+                                        final Bits uninits) {
+                for (;stats.nonEmpty(); stats = stats.tail) {
+                    JCTree stat = stats.head;
+                    if (stat.hasTag(VARDEF)) {
+                        int adr = ((JCVariableDecl) stat).sym.adr;
+                        inits.excl(adr);
+                        uninits.incl(adr);
+                    }
                 }
             }
-            inits = initsTry.dup();
-            uninits = uninitsTry.dup();
-            scan(param);
-            inits.incl(param.sym.adr);
-            uninits.excl(param.sym.adr);
-            preciseRethrowTypes.put(param.sym, chk.intersect(ctypes, rethrownTypes));
-            scanStat(l.head.body);
-            initsEnd.andSet(inits);
-            uninitsEnd.andSet(uninits);
-            nextadr = nextadrCatch;
-            preciseRethrowTypes.remove(param.sym);
-            aliveEnd |= alive;
-        }
-        if (tree.finalizer != null) {
-            List<Type> savedThrown = thrown;
-            thrown = List.nil();
-            inits = initsTry.dup();
-            uninits = uninitsTry.dup();
-            ListBuffer<PendingExit> exits = pendingExits;
-            pendingExits = prevPendingExits;
-            alive = true;
-            scanStat(tree.finalizer);
-            if (!alive) {
-                // discard exits and exceptions from try and finally
-                thrown = chk.union(thrown, thrownPrev);
-                if (!loopPassTwo &&
-                    lint.isEnabled(Lint.LintCategory.FINALLY)) {
-                    log.warning(Lint.LintCategory.FINALLY,
-                            TreeInfo.diagEndPos(tree.finalizer),
-                            "finally.cannot.complete");
+
+        public void visitTry(JCTry tree) {
+            ListBuffer<JCVariableDecl> resourceVarDecls = new ListBuffer<>();
+            final Bits uninitsTryPrev = new Bits(uninitsTry);
+            ListBuffer<AssignPendingExit> prevPendingExits = pendingExits;
+            pendingExits = new ListBuffer<>();
+            final Bits initsTry = new Bits(inits);
+            uninitsTry.assign(uninits);
+            for (JCTree resource : tree.resources) {
+                if (resource instanceof JCVariableDecl) {
+                    JCVariableDecl vdecl = (JCVariableDecl) resource;
+                    visitVarDef(vdecl);
+                    unrefdResources.enter(vdecl.sym);
+                    resourceVarDecls.append(vdecl);
+                } else if (resource instanceof JCExpression) {
+                    scanExpr((JCExpression) resource);
+                } else {
+                    throw new AssertionError(tree);  // parser error
+                }
+            }
+            scan(tree.body);
+            uninitsTry.andSet(uninits);
+            final Bits initsEnd = new Bits(inits);
+            final Bits uninitsEnd = new Bits(uninits);
+            int nextadrCatch = nextadr;
+
+            if (!resourceVarDecls.isEmpty() &&
+                    lint.isEnabled(Lint.LintCategory.TRY)) {
+                for (JCVariableDecl resVar : resourceVarDecls) {
+                    if (unrefdResources.includes(resVar.sym)) {
+                        log.warning(Lint.LintCategory.TRY, resVar.pos(),
+                                    "try.resource.not.referenced", resVar.sym);
+                        unrefdResources.remove(resVar.sym);
+                    }
+                }
+            }
+
+            /*  The analysis of each catch should be independent.
+             *  Each one should have the same initial values of inits and
+             *  uninits.
+             */
+            final Bits initsCatchPrev = new Bits(initsTry);
+            final Bits uninitsCatchPrev = new Bits(uninitsTry);
+
+            for (List<JCCatch> l = tree.catchers; l.nonEmpty(); l = l.tail) {
+                JCVariableDecl param = l.head.param;
+                inits.assign(initsCatchPrev);
+                uninits.assign(uninitsCatchPrev);
+                scan(param);
+                /* If this is a TWR and we are executing the code from Gen,
+                 * then there can be synthetic variables, ignore them.
+                 */
+                initParam(param);
+                scan(l.head.body);
+                initsEnd.andSet(inits);
+                uninitsEnd.andSet(uninits);
+                nextadr = nextadrCatch;
+            }
+            if (tree.finalizer != null) {
+                inits.assign(initsTry);
+                uninits.assign(uninitsTry);
+                ListBuffer<AssignPendingExit> exits = pendingExits;
+                pendingExits = prevPendingExits;
+                scan(tree.finalizer);
+                if (!tree.finallyCanCompleteNormally) {
+                    // discard exits and exceptions from try and finally
+                } else {
+                    uninits.andSet(uninitsEnd);
+                    // FIX: this doesn't preserve source order of exits in catch
+                    // versus finally!
+                    while (exits.nonEmpty()) {
+                        AssignPendingExit exit = exits.next();
+                        if (exit.exit_inits != null) {
+                            exit.exit_inits.orSet(inits);
+                            exit.exit_uninits.andSet(uninits);
+                        }
+                        pendingExits.append(exit);
+                    }
+                    inits.orSet(initsEnd);
                 }
             } else {
-                thrown = chk.union(thrown, chk.diff(thrownInTry, caughtInTry));
-                thrown = chk.union(thrown, savedThrown);
-                uninits.andSet(uninitsEnd);
-                // FIX: this doesn't preserve source order of exits in catch
-                // versus finally!
-                while (exits.nonEmpty()) {
-                    PendingExit exit = exits.next();
-                    if (exit.inits != null) {
-                        exit.inits.orSet(inits);
-                        exit.uninits.andSet(uninits);
-                    }
-                    pendingExits.append(exit);
-                }
-                inits.orSet(initsEnd);
-                alive = aliveEnd;
+                inits.assign(initsEnd);
+                uninits.assign(uninitsEnd);
+                ListBuffer<AssignPendingExit> exits = pendingExits;
+                pendingExits = prevPendingExits;
+                while (exits.nonEmpty()) pendingExits.append(exits.next());
             }
-        } else {
-            thrown = chk.union(thrown, chk.diff(thrownInTry, caughtInTry));
-            inits = initsEnd;
-            uninits = uninitsEnd;
-            alive = aliveEnd;
-            ListBuffer<PendingExit> exits = pendingExits;
-            pendingExits = prevPendingExits;
-            while (exits.nonEmpty()) pendingExits.append(exits.next());
+            uninitsTry.andSet(uninitsTryPrev).andSet(uninits);
         }
-        uninitsTry.andSet(uninitsTryPrev).andSet(uninits);
-    }
 
-    void checkCaughtType(DiagnosticPosition pos, Type exc, List<Type> thrownInTry, List<Type> caughtInTry) {
-        if (chk.subset(exc, caughtInTry)) {
-            log.error(pos, "except.already.caught", exc);
-        } else if (!chk.isUnchecked(pos, exc) &&
-                !isExceptionOrThrowable(exc) &&
-                !chk.intersects(exc, thrownInTry)) {
-            log.error(pos, "except.never.thrown.in.try", exc);
-        } else if (allowImprovedCatchAnalysis) {
-            List<Type> catchableThrownTypes = chk.intersect(List.of(exc), thrownInTry);
-            // 'catchableThrownTypes' cannnot possibly be empty - if 'exc' was an
-            // unchecked exception, the result list would not be empty, as the augmented
-            // thrown set includes { RuntimeException, Error }; if 'exc' was a checked
-            // exception, that would have been covered in the branch above
-            if (chk.diff(catchableThrownTypes, caughtInTry).isEmpty() &&
-                    !isExceptionOrThrowable(exc)) {
-                String key = catchableThrownTypes.length() == 1 ?
-                        "unreachable.catch" :
-                        "unreachable.catch.1";
-                log.warning(pos, key, catchableThrownTypes);
+        public void visitConditional(JCConditional tree) {
+            scanCond(tree.cond);
+            final Bits initsBeforeElse = new Bits(initsWhenFalse);
+            final Bits uninitsBeforeElse = new Bits(uninitsWhenFalse);
+            inits.assign(initsWhenTrue);
+            uninits.assign(uninitsWhenTrue);
+            if (tree.truepart.type.hasTag(BOOLEAN) &&
+                tree.falsepart.type.hasTag(BOOLEAN)) {
+                // if b and c are boolean valued, then
+                // v is (un)assigned after a?b:c when true iff
+                //    v is (un)assigned after b when true and
+                //    v is (un)assigned after c when true
+                scanCond(tree.truepart);
+                final Bits initsAfterThenWhenTrue = new Bits(initsWhenTrue);
+                final Bits initsAfterThenWhenFalse = new Bits(initsWhenFalse);
+                final Bits uninitsAfterThenWhenTrue = new Bits(uninitsWhenTrue);
+                final Bits uninitsAfterThenWhenFalse = new Bits(uninitsWhenFalse);
+                inits.assign(initsBeforeElse);
+                uninits.assign(uninitsBeforeElse);
+                scanCond(tree.falsepart);
+                initsWhenTrue.andSet(initsAfterThenWhenTrue);
+                initsWhenFalse.andSet(initsAfterThenWhenFalse);
+                uninitsWhenTrue.andSet(uninitsAfterThenWhenTrue);
+                uninitsWhenFalse.andSet(uninitsAfterThenWhenFalse);
+            } else {
+                scanExpr(tree.truepart);
+                final Bits initsAfterThen = new Bits(inits);
+                final Bits uninitsAfterThen = new Bits(uninits);
+                inits.assign(initsBeforeElse);
+                uninits.assign(uninitsBeforeElse);
+                scanExpr(tree.falsepart);
+                inits.andSet(initsAfterThen);
+                uninits.andSet(uninitsAfterThen);
             }
         }
-    }
-    //where
-        private boolean isExceptionOrThrowable(Type exc) {
-            return exc.tsym == syms.throwableType.tsym ||
-                exc.tsym == syms.exceptionType.tsym;
-        }
 
-
-    public void visitConditional(JCConditional tree) {
-        scanCond(tree.cond);
-        Bits initsBeforeElse = initsWhenFalse;
-        Bits uninitsBeforeElse = uninitsWhenFalse;
-        inits = initsWhenTrue;
-        uninits = uninitsWhenTrue;
-        if (tree.truepart.type.tag == BOOLEAN &&
-            tree.falsepart.type.tag == BOOLEAN) {
-            // if b and c are boolean valued, then
-            // v is (un)assigned after a?b:c when true iff
-            //    v is (un)assigned after b when true and
-            //    v is (un)assigned after c when true
-            scanCond(tree.truepart);
-            Bits initsAfterThenWhenTrue = initsWhenTrue.dup();
-            Bits initsAfterThenWhenFalse = initsWhenFalse.dup();
-            Bits uninitsAfterThenWhenTrue = uninitsWhenTrue.dup();
-            Bits uninitsAfterThenWhenFalse = uninitsWhenFalse.dup();
-            inits = initsBeforeElse;
-            uninits = uninitsBeforeElse;
-            scanCond(tree.falsepart);
-            initsWhenTrue.andSet(initsAfterThenWhenTrue);
-            initsWhenFalse.andSet(initsAfterThenWhenFalse);
-            uninitsWhenTrue.andSet(uninitsAfterThenWhenTrue);
-            uninitsWhenFalse.andSet(uninitsAfterThenWhenFalse);
-        } else {
-            scanExpr(tree.truepart);
-            Bits initsAfterThen = inits.dup();
-            Bits uninitsAfterThen = uninits.dup();
-            inits = initsBeforeElse;
-            uninits = uninitsBeforeElse;
-            scanExpr(tree.falsepart);
-            inits.andSet(initsAfterThen);
-            uninits.andSet(uninitsAfterThen);
-        }
-    }
-
-    public void visitIf(JCIf tree) {
-        scanCond(tree.cond);
-        Bits initsBeforeElse = initsWhenFalse;
-        Bits uninitsBeforeElse = uninitsWhenFalse;
-        inits = initsWhenTrue;
-        uninits = uninitsWhenTrue;
-        scanStat(tree.thenpart);
-        if (tree.elsepart != null) {
-            boolean aliveAfterThen = alive;
-            alive = true;
-            Bits initsAfterThen = inits.dup();
-            Bits uninitsAfterThen = uninits.dup();
-            inits = initsBeforeElse;
-            uninits = uninitsBeforeElse;
-            scanStat(tree.elsepart);
-            inits.andSet(initsAfterThen);
-            uninits.andSet(uninitsAfterThen);
-            alive = alive | aliveAfterThen;
-        } else {
-            inits.andSet(initsBeforeElse);
-            uninits.andSet(uninitsBeforeElse);
-            alive = true;
-        }
-    }
-
-
-
-    public void visitBreak(JCBreak tree) {
-        recordExit(tree);
-    }
-
-    public void visitContinue(JCContinue tree) {
-        recordExit(tree);
-    }
-
-    public void visitReturn(JCReturn tree) {
-        scanExpr(tree.expr);
-        // if not initial constructor, should markDead instead of recordExit
-        recordExit(tree);
-    }
-
-    public void visitThrow(JCThrow tree) {
-        scanExpr(tree.expr);
-        Symbol sym = TreeInfo.symbol(tree.expr);
-        if (sym != null &&
-            sym.kind == VAR &&
-            (sym.flags() & (FINAL | EFFECTIVELY_FINAL)) != 0 &&
-            preciseRethrowTypes.get(sym) != null &&
-            allowImprovedRethrowAnalysis) {
-            for (Type t : preciseRethrowTypes.get(sym)) {
-                markThrown(tree, t);
+        public void visitIf(JCIf tree) {
+            scanCond(tree.cond);
+            final Bits initsBeforeElse = new Bits(initsWhenFalse);
+            final Bits uninitsBeforeElse = new Bits(uninitsWhenFalse);
+            inits.assign(initsWhenTrue);
+            uninits.assign(uninitsWhenTrue);
+            scan(tree.thenpart);
+            if (tree.elsepart != null) {
+                final Bits initsAfterThen = new Bits(inits);
+                final Bits uninitsAfterThen = new Bits(uninits);
+                inits.assign(initsBeforeElse);
+                uninits.assign(uninitsBeforeElse);
+                scan(tree.elsepart);
+                inits.andSet(initsAfterThen);
+                uninits.andSet(uninitsAfterThen);
+            } else {
+                inits.andSet(initsBeforeElse);
+                uninits.andSet(uninitsBeforeElse);
             }
         }
-        else {
-            markThrown(tree, tree.expr.type);
-        }
-        markDead();
-    }
 
-    public void visitApply(JCMethodInvocation tree) {
-        scanExpr(tree.meth);
-        scanExprs(tree.args);
-        for (List<Type> l = tree.meth.type.getThrownTypes(); l.nonEmpty(); l = l.tail)
-            markThrown(tree, l.head);
-    }
-
-    public void visitNewClass(JCNewClass tree) {
-        scanExpr(tree.encl);
-        scanExprs(tree.args);
-       // scan(tree.def);
-        for (List<Type> l = tree.constructorType.getThrownTypes();
-             l.nonEmpty();
-             l = l.tail) {
-            markThrown(tree, l.head);
+        @Override
+        public void visitBreak(JCBreak tree) {
+            recordExit(new AssignPendingExit(tree, inits, uninits));
         }
-        List<Type> caughtPrev = caught;
-        try {
-            // If the new class expression defines an anonymous class,
-            // analysis of the anonymous constructor may encounter thrown
-            // types which are unsubstituted type variables.
-            // However, since the constructor's actual thrown types have
-            // already been marked as thrown, it is safe to simply include
-            // each of the constructor's formal thrown types in the set of
-            // 'caught/declared to be thrown' types, for the duration of
-            // the class def analysis.
-            if (tree.def != null)
-                for (List<Type> l = tree.constructor.type.getThrownTypes();
-                     l.nonEmpty();
-                     l = l.tail) {
-                    caught = chk.incl(l.head, caught);
-                }
+
+        @Override
+        public void visitContinue(JCContinue tree) {
+            recordExit(new AssignPendingExit(tree, inits, uninits));
+        }
+
+        @Override
+        public void visitReturn(JCReturn tree) {
+            scanExpr(tree.expr);
+            recordExit(new AssignPendingExit(tree, inits, uninits));
+        }
+
+        public void visitThrow(JCThrow tree) {
+            scanExpr(tree.expr);
+            markDead();
+        }
+
+        public void visitApply(JCMethodInvocation tree) {
+            scanExpr(tree.meth);
+            scanExprs(tree.args);
+        }
+
+        public void visitNewClass(JCNewClass tree) {
+            scanExpr(tree.encl);
+            scanExprs(tree.args);
             scan(tree.def);
         }
-        finally {
-            caught = caughtPrev;
+
+        @Override
+        public void visitLambda(JCLambda tree) {
+            final Bits prevUninits = new Bits(uninits);
+            final Bits prevInits = new Bits(inits);
+            int returnadrPrev = returnadr;
+            ListBuffer<AssignPendingExit> prevPending = pendingExits;
+            try {
+                returnadr = nextadr;
+                pendingExits = new ListBuffer<>();
+                for (List<JCVariableDecl> l = tree.params; l.nonEmpty(); l = l.tail) {
+                    JCVariableDecl def = l.head;
+                    scan(def);
+                    inits.incl(def.sym.adr);
+                    uninits.excl(def.sym.adr);
+                }
+                if (tree.getBodyKind() == JCLambda.BodyKind.EXPRESSION) {
+                    scanExpr(tree.body);
+                } else {
+                    scan(tree.body);
+                }
+            }
+            finally {
+                returnadr = returnadrPrev;
+                uninits.assign(prevUninits);
+                inits.assign(prevInits);
+                pendingExits = prevPending;
+            }
         }
-    }
 
-    public void visitNewArray(JCNewArray tree) {
-        scanExprs(tree.dims);
-        scanExprs(tree.elems);
-    }
-
-    public void visitAssert(JCAssert tree) {
-        Bits initsExit = inits.dup();
-        Bits uninitsExit = uninits.dup();
-        scanCond(tree.cond);
-        uninitsExit.andSet(uninitsWhenTrue);
-        if (tree.detail != null) {
-            inits = initsWhenFalse;
-            uninits = uninitsWhenFalse;
-            scanExpr(tree.detail);
+        public void visitNewArray(JCNewArray tree) {
+            scanExprs(tree.dims);
+            scanExprs(tree.elems);
         }
-        inits = initsExit;
-        uninits = uninitsExit;
-    }
 
-    public void visitAssign(JCAssign tree) {
-        JCTree lhs = TreeInfo.skipParens(tree.lhs);
-        if (!(lhs instanceof JCIdent)) scanExpr(lhs);
-        scanExpr(tree.rhs);
-        letInit(lhs);
-    }
-
-    public void visitAssignop(JCAssignOp tree) {
-        scanExpr(tree.lhs);
-        scanExpr(tree.rhs);
-        letInit(tree.lhs);
-    }
-
-    public void visitUnary(JCUnary tree) {
-        switch (tree.getTag()) {
-        case JCTree.NOT:
-            scanCond(tree.arg);
-            Bits t = initsWhenFalse;
-            initsWhenFalse = initsWhenTrue;
-            initsWhenTrue = t;
-            t = uninitsWhenFalse;
-            uninitsWhenFalse = uninitsWhenTrue;
-            uninitsWhenTrue = t;
-            break;
-        case JCTree.PREINC: case JCTree.POSTINC:
-        case JCTree.PREDEC: case JCTree.POSTDEC:
-            scanExpr(tree.arg);
-            letInit(tree.arg);
-            break;
-        default:
-            scanExpr(tree.arg);
+        public void visitAssert(JCAssert tree) {
+            final Bits initsExit = new Bits(inits);
+            final Bits uninitsExit = new Bits(uninits);
+            scanCond(tree.cond);
+            uninitsExit.andSet(uninitsWhenTrue);
+            if (tree.detail != null) {
+                inits.assign(initsWhenFalse);
+                uninits.assign(uninitsWhenFalse);
+                scanExpr(tree.detail);
+            }
+            inits.assign(initsExit);
+            uninits.assign(uninitsExit);
         }
-    }
 
-    public void visitBinary(JCBinary tree) {
-        switch (tree.getTag()) {
-        case JCTree.AND:
-            scanCond(tree.lhs);
-            Bits initsWhenFalseLeft = initsWhenFalse;
-            Bits uninitsWhenFalseLeft = uninitsWhenFalse;
-            inits = initsWhenTrue;
-            uninits = uninitsWhenTrue;
-            scanCond(tree.rhs);
-            initsWhenFalse.andSet(initsWhenFalseLeft);
-            uninitsWhenFalse.andSet(uninitsWhenFalseLeft);
-            break;
-        case JCTree.OR:
-            scanCond(tree.lhs);
-            Bits initsWhenTrueLeft = initsWhenTrue;
-            Bits uninitsWhenTrueLeft = uninitsWhenTrue;
-            inits = initsWhenFalse;
-            uninits = uninitsWhenFalse;
-            scanCond(tree.rhs);
-            initsWhenTrue.andSet(initsWhenTrueLeft);
-            uninitsWhenTrue.andSet(uninitsWhenTrueLeft);
-            break;
-        default:
+        public void visitAssign(JCAssign tree) {
+            JCTree lhs = TreeInfo.skipParens(tree.lhs);
+            if (!isIdentOrThisDotIdent(lhs))
+                scanExpr(lhs);
+            scanExpr(tree.rhs);
+            letInit(lhs);
+        }
+        private boolean isIdentOrThisDotIdent(JCTree lhs) {
+            if (lhs.hasTag(IDENT))
+                return true;
+            if (!lhs.hasTag(SELECT))
+                return false;
+
+            JCFieldAccess fa = (JCFieldAccess)lhs;
+            return fa.selected.hasTag(IDENT) &&
+                   ((JCIdent)fa.selected).name == names._this;
+        }
+
+        // check fields accessed through this.<field> are definitely
+        // assigned before reading their value
+        public void visitSelect(JCFieldAccess tree) {
+            super.visitSelect(tree);
+            if (enforceThisDotInit &&
+                tree.selected.hasTag(IDENT) &&
+                ((JCIdent)tree.selected).name == names._this &&
+                tree.sym.kind == VAR)
+            {
+                checkInit(tree.pos(), (VarSymbol)tree.sym);
+            }
+        }
+
+        public void visitAssignop(JCAssignOp tree) {
             scanExpr(tree.lhs);
             scanExpr(tree.rhs);
+            letInit(tree.lhs);
         }
-    }
 
-    public void visitIdent(JCIdent tree) {
-        if (tree.sym.kind == VAR) {
-            checkInit(tree.pos(), (VarSymbol)tree.sym);
-            referenced(tree.sym);
-        }
-    }
-
-    void referenced(Symbol sym) {
-        unrefdResources.remove(sym);
-    }
-
-    public void visitTypeCast(JCTypeCast tree) {
-        super.visitTypeCast(tree);
-        if (!tree.type.isErroneous()
-            && lint.isEnabled(Lint.LintCategory.CAST)
-            && types.isSameType(tree.expr.type, tree.clazz.type)
-            && !is292targetTypeCast(tree)) {
-            log.warning(Lint.LintCategory.CAST,
-                    tree.pos(), "redundant.cast", tree.expr.type);
-        }
-    }
-    //where
-        private boolean is292targetTypeCast(JCTypeCast tree) {
-            boolean is292targetTypeCast = false;
-            JCExpression expr = TreeInfo.skipParens(tree.expr);
-            if (expr.getTag() == JCTree.APPLY) {
-                JCMethodInvocation apply = (JCMethodInvocation)expr;
-                Symbol sym = TreeInfo.symbol(apply.meth);
-                is292targetTypeCast = sym != null &&
-                    sym.kind == MTH &&
-                    (sym.flags() & POLYMORPHIC_SIGNATURE) != 0;
+        public void visitUnary(JCUnary tree) {
+            switch (tree.getTag()) {
+            case NOT:
+                scanCond(tree.arg);
+                final Bits t = new Bits(initsWhenFalse);
+                initsWhenFalse.assign(initsWhenTrue);
+                initsWhenTrue.assign(t);
+                t.assign(uninitsWhenFalse);
+                uninitsWhenFalse.assign(uninitsWhenTrue);
+                uninitsWhenTrue.assign(t);
+                break;
+            case PREINC: case POSTINC:
+            case PREDEC: case POSTDEC:
+                scanExpr(tree.arg);
+                letInit(tree.arg);
+                break;
+            default:
+                scanExpr(tree.arg);
             }
-            return is292targetTypeCast;
         }
 
-    public void visitTopLevel(JCCompilationUnit tree) {
-        // Do nothing for TopLevel since each class is visited individually
+        public void visitBinary(JCBinary tree) {
+            switch (tree.getTag()) {
+            case AND:
+                scanCond(tree.lhs);
+                final Bits initsWhenFalseLeft = new Bits(initsWhenFalse);
+                final Bits uninitsWhenFalseLeft = new Bits(uninitsWhenFalse);
+                inits.assign(initsWhenTrue);
+                uninits.assign(uninitsWhenTrue);
+                scanCond(tree.rhs);
+                initsWhenFalse.andSet(initsWhenFalseLeft);
+                uninitsWhenFalse.andSet(uninitsWhenFalseLeft);
+                break;
+            case OR:
+                scanCond(tree.lhs);
+                final Bits initsWhenTrueLeft = new Bits(initsWhenTrue);
+                final Bits uninitsWhenTrueLeft = new Bits(uninitsWhenTrue);
+                inits.assign(initsWhenFalse);
+                uninits.assign(uninitsWhenFalse);
+                scanCond(tree.rhs);
+                initsWhenTrue.andSet(initsWhenTrueLeft);
+                uninitsWhenTrue.andSet(uninitsWhenTrueLeft);
+                break;
+            default:
+                scanExpr(tree.lhs);
+                scanExpr(tree.rhs);
+            }
+        }
+
+        public void visitIdent(JCIdent tree) {
+            if (tree.sym.kind == VAR) {
+                checkInit(tree.pos(), (VarSymbol)tree.sym);
+                referenced(tree.sym);
+            }
+        }
+
+        void referenced(Symbol sym) {
+            unrefdResources.remove(sym);
+        }
+
+        public void visitAnnotatedType(JCAnnotatedType tree) {
+            // annotations don't get scanned
+            tree.underlyingType.accept(this);
+        }
+
+        public void visitTopLevel(JCCompilationUnit tree) {
+            // Do nothing for TopLevel since each class is visited individually
+        }
+
+    /**************************************************************************
+     * main method
+     *************************************************************************/
+
+        /** Perform definite assignment/unassignment analysis on a tree.
+         */
+        public void analyzeTree(Env<?> env) {
+            analyzeTree(env, env.tree);
+         }
+
+        public void analyzeTree(Env<?> env, JCTree tree) {
+            try {
+                startPos = tree.pos().getStartPosition();
+
+                if (vardecls == null)
+                    vardecls = new JCVariableDecl[32];
+                else
+                    for (int i=0; i<vardecls.length; i++)
+                        vardecls[i] = null;
+                firstadr = 0;
+                nextadr = 0;
+                pendingExits = new ListBuffer<>();
+                this.classDef = null;
+                unrefdResources = new Scope(env.enclClass.sym);
+                scan(tree);
+            } finally {
+                // note that recursive invocations of this method fail hard
+                startPos = -1;
+                resetBits(inits, uninits, uninitsTry, initsWhenTrue,
+                        initsWhenFalse, uninitsWhenTrue, uninitsWhenFalse);
+                if (vardecls != null) {
+                    for (int i=0; i<vardecls.length; i++)
+                        vardecls[i] = null;
+                }
+                firstadr = 0;
+                nextadr = 0;
+                pendingExits = null;
+                this.classDef = null;
+                unrefdResources = null;
+            }
+        }
     }
 
-/**************************************************************************
- * main method
- *************************************************************************/
-
-    /** Perform definite assignment/unassignment analysis on a tree.
+    /**
+     * This pass implements the last step of the dataflow analysis, namely
+     * the effectively-final analysis check. This checks that every local variable
+     * reference from a lambda body/local inner class is either final or effectively final.
+     * As effectively final variables are marked as such during DA/DU, this pass must run after
+     * AssignAnalyzer.
      */
-    public void analyzeTree(Env<AttrContext> env, TreeMaker make) {
-        try {
-            attrEnv = env;
-            JCTree tree = env.tree;
-            this.make = make;
-            inits = new Bits();
-            uninits = new Bits();
-            uninitsTry = new Bits();
-            initsWhenTrue = initsWhenFalse =
-                uninitsWhenTrue = uninitsWhenFalse = null;
-            if (vars == null)
-                vars = new VarSymbol[32];
-            else
-                for (int i=0; i<vars.length; i++)
-                    vars[i] = null;
-            firstadr = 0;
-            nextadr = 0;
-            pendingExits = new ListBuffer<PendingExit>();
-            preciseRethrowTypes = new HashMap<Symbol, List<Type>>();
-            alive = true;
-            this.thrown = this.caught = null;
-            this.classDef = null;
-            unrefdResources = new Scope(env.enclClass.sym);
-            scan(tree);
-        } finally {
-            // note that recursive invocations of this method fail hard
-            inits = uninits = uninitsTry = null;
-            initsWhenTrue = initsWhenFalse =
-                uninitsWhenTrue = uninitsWhenFalse = null;
-            if (vars != null) for (int i=0; i<vars.length; i++)
-                vars[i] = null;
-            firstadr = 0;
-            nextadr = 0;
-            pendingExits = null;
-            this.make = null;
-            this.thrown = this.caught = null;
-            this.classDef = null;
-            unrefdResources = null;
+    class CaptureAnalyzer extends BaseAnalyzer<BaseAnalyzer.PendingExit> {
+
+        JCTree currentTree; //local class or lambda
+
+        @Override
+        void markDead() {
+            //do nothing
+        }
+
+        @SuppressWarnings("fallthrough")
+        void checkEffectivelyFinal(DiagnosticPosition pos, VarSymbol sym) {
+            if (currentTree != null &&
+                    sym.owner.kind == MTH &&
+                    sym.pos < currentTree.getStartPosition()) {
+                switch (currentTree.getTag()) {
+                    case CLASSDEF:
+                        if (!allowEffectivelyFinalInInnerClasses) {
+                            if ((sym.flags() & FINAL) == 0) {
+                                reportInnerClsNeedsFinalError(pos, sym);
+                            }
+                            break;
+                        }
+                    case LAMBDA:
+                        if ((sym.flags() & (EFFECTIVELY_FINAL | FINAL)) == 0) {
+                           reportEffectivelyFinalError(pos, sym);
+                        }
+                }
+            }
+        }
+
+        @SuppressWarnings("fallthrough")
+        void letInit(JCTree tree) {
+            tree = TreeInfo.skipParens(tree);
+            if (tree.hasTag(IDENT) || tree.hasTag(SELECT)) {
+                Symbol sym = TreeInfo.symbol(tree);
+                if (currentTree != null &&
+                        sym.kind == VAR &&
+                        sym.owner.kind == MTH &&
+                        ((VarSymbol)sym).pos < currentTree.getStartPosition()) {
+                    switch (currentTree.getTag()) {
+                        case CLASSDEF:
+                            if (!allowEffectivelyFinalInInnerClasses) {
+                                reportInnerClsNeedsFinalError(tree, sym);
+                                break;
+                            }
+                        case LAMBDA:
+                            reportEffectivelyFinalError(tree, sym);
+                    }
+                }
+            }
+        }
+
+        void reportEffectivelyFinalError(DiagnosticPosition pos, Symbol sym) {
+            String subKey = currentTree.hasTag(LAMBDA) ?
+                  "lambda"  : "inner.cls";
+            log.error(pos, "cant.ref.non.effectively.final.var", sym, diags.fragment(subKey));
+        }
+
+        void reportInnerClsNeedsFinalError(DiagnosticPosition pos, Symbol sym) {
+            log.error(pos,
+                    "local.var.accessed.from.icls.needs.final",
+                    sym);
+        }
+
+    /*************************************************************************
+     * Visitor methods for statements and definitions
+     *************************************************************************/
+
+        /* ------------ Visitor methods for various sorts of trees -------------*/
+
+        public void visitClassDef(JCClassDecl tree) {
+            JCTree prevTree = currentTree;
+            try {
+                currentTree = tree.sym.isLocal() ? tree : null;
+                super.visitClassDef(tree);
+            } finally {
+                currentTree = prevTree;
+            }
+        }
+
+        @Override
+        public void visitLambda(JCLambda tree) {
+            JCTree prevTree = currentTree;
+            try {
+                currentTree = tree;
+                super.visitLambda(tree);
+            } finally {
+                currentTree = prevTree;
+            }
+        }
+
+        @Override
+        public void visitIdent(JCIdent tree) {
+            if (tree.sym.kind == VAR) {
+                checkEffectivelyFinal(tree, (VarSymbol)tree.sym);
+            }
+        }
+
+        public void visitAssign(JCAssign tree) {
+            JCTree lhs = TreeInfo.skipParens(tree.lhs);
+            if (!(lhs instanceof JCIdent)) {
+                scan(lhs);
+            }
+            scan(tree.rhs);
+            letInit(lhs);
+        }
+
+        public void visitAssignop(JCAssignOp tree) {
+            scan(tree.lhs);
+            scan(tree.rhs);
+            letInit(tree.lhs);
+        }
+
+        public void visitUnary(JCUnary tree) {
+            switch (tree.getTag()) {
+                case PREINC: case POSTINC:
+                case PREDEC: case POSTDEC:
+                    scan(tree.arg);
+                    letInit(tree.arg);
+                    break;
+                default:
+                    scan(tree.arg);
+            }
+        }
+
+        public void visitTopLevel(JCCompilationUnit tree) {
+            // Do nothing for TopLevel since each class is visited individually
+        }
+
+    /**************************************************************************
+     * main method
+     *************************************************************************/
+
+        /** Perform definite assignment/unassignment analysis on a tree.
+         */
+        public void analyzeTree(Env<AttrContext> env, TreeMaker make) {
+            analyzeTree(env, env.tree, make);
+        }
+        public void analyzeTree(Env<AttrContext> env, JCTree tree, TreeMaker make) {
+            try {
+                attrEnv = env;
+                Flow.this.make = make;
+                pendingExits = new ListBuffer<>();
+                scan(tree);
+            } finally {
+                pendingExits = null;
+                Flow.this.make = null;
+            }
         }
     }
 }

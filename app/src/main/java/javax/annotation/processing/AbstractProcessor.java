@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2006, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,6 +28,7 @@ package javax.annotation.processing;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.Collections;
+import java.util.Objects;
 import javax.lang.model.element.*;
 import javax.lang.model.SourceVersion;
 import javax.tools.Diagnostic;
@@ -37,7 +38,7 @@ import javax.tools.Diagnostic;
  * superclass for most concrete annotation processors.  This class
  * examines annotation values to compute the {@linkplain
  * #getSupportedOptions options}, {@linkplain
- * #getSupportedAnnotationTypes annotations}, and {@linkplain
+ * #getSupportedAnnotationTypes annotation types}, and {@linkplain
  * #getSupportedSourceVersion source version} supported by its
  * subtypes.
  *
@@ -146,8 +147,7 @@ public abstract class AbstractProcessor implements Processor {
     public synchronized void init(ProcessingEnvironment processingEnv) {
         if (initialized)
             throw new IllegalStateException("Cannot call init more than once.");
-        if (processingEnv == null)
-            throw new NullPointerException("Tool provided null ProcessingEnvironment");
+        Objects.requireNonNull(processingEnv, "Tool provided null ProcessingEnvironment");
 
         this.processingEnv = processingEnv;
         initialized = true;

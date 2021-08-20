@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2004, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,12 +26,14 @@
 package sun.reflect;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Executable;
 import java.lang.reflect.Method;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import java.security.AccessController;
 import java.security.Permission;
 import java.security.PrivilegedAction;
+import sun.reflect.misc.ReflectUtil;
 
 /** <P> The master factory for all reflective objects, both those in
     java.lang.reflect (Fields, Methods, Constructors) as well as their
@@ -84,8 +86,8 @@ public class ReflectionFactory {
      * <code>AccessController.doPrivileged</code>.
      */
     public static final class GetReflectionFactoryAction
-        implements PrivilegedAction {
-        public Object run() {
+        implements PrivilegedAction<ReflectionFactory> {
+        public ReflectionFactory run() {
             return getReflectionFactory();
         }
     }
@@ -96,7 +98,7 @@ public class ReflectionFactory {
      *
      * <p> First, if there is a security manager, its
      * <code>checkPermission</code> method is called with a {@link
-     * RuntimePermission} with target
+     * java.lang.RuntimePermission} with target
      * <code>"reflectionFactoryAccess"</code>.  This may result in a
      * security exception.
      *
@@ -143,7 +145,7 @@ public class ReflectionFactory {
     public MethodAccessor newMethodAccessor(Method method) {
         checkInitted();
 
-        if (noInflation) {
+        if (noInflation && !ReflectUtil.isVMAnonymousClass(method.getDeclaringClass())) {
             return new MethodAccessorGenerator().
                 generateMethod(method.getDeclaringClass(),
                                method.getName(),
@@ -161,10 +163,10 @@ public class ReflectionFactory {
         }
     }
 
-    public ConstructorAccessor newConstructorAccessor(Constructor c) {
+    public ConstructorAccessor newConstructorAccessor(Constructor<?> c) {
         checkInitted();
 
-        Class declaringClass = c.getDeclaringClass();
+        Class<?> declaringClass = c.getDeclaringClass();
         if (Modifier.isAbstract(declaringClass.getModifiers())) {
             return new InstantiationExceptionConstructorAccessorImpl(null);
         }
@@ -180,7 +182,7 @@ public class ReflectionFactory {
             return new BootstrapConstructorAccessorImpl(c);
         }
 
-        if (noInflation) {
+        if (noInflation && !ReflectUtil.isVMAnonymousClass(c.getDeclaringClass())) {
             return new MethodAccessorGenerator().
                 generateConstructor(c.getDeclaringClass(),
                                     c.getParameterTypes(),
@@ -204,9 +206,9 @@ public class ReflectionFactory {
 
     /** Creates a new java.lang.reflect.Field. Access checks as per
         java.lang.reflect.AccessibleObject are not overridden. */
-    public Field newField(Class declaringClass,
+    public Field newField(Class<?> declaringClass,
                           String name,
-                          Class type,
+                          Class<?> type,
                           int modifiers,
                           int slot,
                           String signature,
@@ -223,11 +225,11 @@ public class ReflectionFactory {
 
     /** Creates a new java.lang.reflect.Method. Access checks as per
         java.lang.reflect.AccessibleObject are not overridden. */
-    public Method newMethod(Class declaringClass,
+    public Method newMethod(Class<?> declaringClass,
                             String name,
-                            Class[] parameterTypes,
-                            Class returnType,
-                            Class[] checkedExceptions,
+                            Class<?>[] parameterTypes,
+                            Class<?> returnType,
+                            Class<?>[] checkedExceptions,
                             int modifiers,
                             int slot,
                             String signature,
@@ -250,14 +252,14 @@ public class ReflectionFactory {
 
     /** Creates a new java.lang.reflect.Constructor. Access checks as
         per java.lang.reflect.AccessibleObject are not overridden. */
-    public Constructor newConstructor(Class declaringClass,
-                                      Class[] parameterTypes,
-                                      Class[] checkedExceptions,
-                                      int modifiers,
-                                      int slot,
-                                      String signature,
-                                      byte[] annotations,
-                                      byte[] parameterAnnotations)
+    public Constructor<?> newConstructor(Class<?> declaringClass,
+                                         Class<?>[] parameterTypes,
+                                         Class<?>[] checkedExceptions,
+                                         int modifiers,
+                                         int slot,
+                                         String signature,
+                                         byte[] annotations,
+                                         byte[] parameterAnnotations)
     {
         return langReflectAccess().newConstructor(declaringClass,
                                                   parameterTypes,
@@ -281,13 +283,13 @@ public class ReflectionFactory {
 
     /** Gets the ConstructorAccessor object for a
         java.lang.reflect.Constructor */
-    public ConstructorAccessor getConstructorAccessor(Constructor c) {
+    public ConstructorAccessor getConstructorAccessor(Constructor<?> c) {
         return langReflectAccess().getConstructorAccessor(c);
     }
 
     /** Sets the ConstructorAccessor object for a
         java.lang.reflect.Constructor */
-    public void setConstructorAccessor(Constructor c,
+    public void setConstructorAccessor(Constructor<?> c,
                                        ConstructorAccessor accessor)
     {
         langReflectAccess().setConstructorAccessor(c, accessor);
@@ -310,8 +312,14 @@ public class ReflectionFactory {
     /** Makes a copy of the passed constructor. The returned
         constructor is a "child" of the passed one; see the comments
         in Constructor.java for details. */
-    public Constructor copyConstructor(Constructor arg) {
+    public <T> Constructor<T> copyConstructor(Constructor<T> arg) {
         return langReflectAccess().copyConstructor(arg);
+    }
+
+    /** Gets the byte[] that encodes TypeAnnotations on an executable.
+     */
+    public byte[] getExecutableTypeAnnotationBytes(Executable ex) {
+        return langReflectAccess().getExecutableTypeAnnotationBytes(ex);
     }
 
     //--------------------------------------------------------------------------
@@ -320,8 +328,8 @@ public class ReflectionFactory {
     //
     //
 
-    public Constructor newConstructorForSerialization
-        (Class classToInstantiate, Constructor constructorToCall)
+    public Constructor<?> newConstructorForSerialization
+        (Class<?> classToInstantiate, Constructor<?> constructorToCall)
     {
         // Fast path
         if (constructorToCall.getDeclaringClass() == classToInstantiate) {
@@ -334,18 +342,18 @@ public class ReflectionFactory {
                                              constructorToCall.getExceptionTypes(),
                                              constructorToCall.getModifiers(),
                                              constructorToCall.getDeclaringClass());
-        Constructor c = newConstructor(constructorToCall.getDeclaringClass(),
-                                       constructorToCall.getParameterTypes(),
-                                       constructorToCall.getExceptionTypes(),
-                                       constructorToCall.getModifiers(),
-                                       langReflectAccess().
-                                       getConstructorSlot(constructorToCall),
-                                       langReflectAccess().
-                                       getConstructorSignature(constructorToCall),
-                                       langReflectAccess().
-                                       getConstructorAnnotations(constructorToCall),
-                                       langReflectAccess().
-                                       getConstructorParameterAnnotations(constructorToCall));
+        Constructor<?> c = newConstructor(constructorToCall.getDeclaringClass(),
+                                          constructorToCall.getParameterTypes(),
+                                          constructorToCall.getExceptionTypes(),
+                                          constructorToCall.getModifiers(),
+                                          langReflectAccess().
+                                          getConstructorSlot(constructorToCall),
+                                          langReflectAccess().
+                                          getConstructorSignature(constructorToCall),
+                                          langReflectAccess().
+                                          getConstructorAnnotations(constructorToCall),
+                                          langReflectAccess().
+                                          getConstructorParameterAnnotations(constructorToCall));
         setConstructorAccessor(c, acc);
         return c;
     }
@@ -366,8 +374,9 @@ public class ReflectionFactory {
         run, before the system properties are set up. */
     private static void checkInitted() {
         if (initted) return;
-        AccessController.doPrivileged(new PrivilegedAction() {
-                public Object run() {
+        AccessController.doPrivileged(
+            new PrivilegedAction<Void>() {
+                public Void run() {
                     // Tests to ensure the system properties table is fully
                     // initialized. This is needed because reflection code is
                     // called very early in the initialization process (before
@@ -392,9 +401,7 @@ public class ReflectionFactory {
                         try {
                             inflationThreshold = Integer.parseInt(val);
                         } catch (NumberFormatException e) {
-                            throw (RuntimeException)
-                                new RuntimeException("Unable to parse property sun.reflect.inflationThreshold").
-                                    initCause(e);
+                            throw new RuntimeException("Unable to parse property sun.reflect.inflationThreshold", e);
                         }
                     }
 

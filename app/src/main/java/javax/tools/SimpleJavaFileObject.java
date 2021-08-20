@@ -30,6 +30,7 @@ import java.net.URI;
 import java.nio.CharBuffer;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.NestingKind;
+import javax.tools.JavaFileObject.Kind;
 
 /**
  * Provides simple implementations for most methods in JavaFileObject.

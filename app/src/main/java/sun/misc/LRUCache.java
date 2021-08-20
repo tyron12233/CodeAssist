@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -52,7 +52,9 @@ public abstract class LRUCache<N,V> {
 
     public V forName(N name) {
         if (oa == null) {
-            oa = (V[])new Object[size];
+            @SuppressWarnings("unchecked")
+            V[] temp = (V[])new Object[size];
+            oa = temp;
         } else {
             for (int i = 0; i < oa.length; i++) {
                 V ob = oa[i];

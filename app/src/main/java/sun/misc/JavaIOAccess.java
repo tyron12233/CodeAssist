@@ -24,13 +24,10 @@
  */
 
 package sun.misc;
-//import java.io.Console;
+import java.io.Console;
 import java.nio.charset.Charset;
 
 public interface JavaIOAccess {
-    //HACK
-    //public Console console();
-
-    public Runnable consoleRestoreHook();
+    public Console console();
     public Charset charset();
 }

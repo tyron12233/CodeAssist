@@ -1,72 +1,42 @@
 /*
- * Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.processing;
 
+import javax.annotation.processing.*;
+import javax.lang.model.*;
+import javax.lang.model.element.*;
+import static javax.lang.model.element.ElementKind.*;
+import static javax.lang.model.element.NestingKind.*;
+import javax.lang.model.type.*;
+import javax.lang.model.util.*;
+
 import java.io.PrintWriter;
 import java.io.Writer;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.StringTokenizer;
-
-import javax.annotation.processing.AbstractProcessor;
-import javax.annotation.processing.RoundEnvironment;
-import javax.annotation.processing.SupportedAnnotationTypes;
-import javax.annotation.processing.SupportedSourceVersion;
-import javax.lang.model.SourceVersion;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.NestingKind;
-import javax.lang.model.element.PackageElement;
-import javax.lang.model.element.Parameterizable;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.TypeParameterElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.ArrayType;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.ElementFilter;
-import javax.lang.model.util.Elements;
-import javax.lang.model.util.SimpleElementVisitor7;
-
-import static javax.lang.model.element.ElementKind.ANNOTATION_TYPE;
-import static javax.lang.model.element.ElementKind.CLASS;
-import static javax.lang.model.element.ElementKind.CONSTRUCTOR;
-import static javax.lang.model.element.ElementKind.ENUM;
-import static javax.lang.model.element.ElementKind.ENUM_CONSTANT;
-import static javax.lang.model.element.ElementKind.INSTANCE_INIT;
-import static javax.lang.model.element.ElementKind.PARAMETER;
-import static javax.lang.model.element.ElementKind.STATIC_INIT;
-import static javax.lang.model.element.NestingKind.TOP_LEVEL;
+import java.util.*;
+import com.sun.tools.javac.util.StringUtils;
 
 /**
  * A processor which prints out elements.  Used to implement the
@@ -79,8 +49,7 @@ import static javax.lang.model.element.NestingKind.TOP_LEVEL;
  * deletion without notice.</b>
  */
 @SupportedAnnotationTypes("*")
-// TODO: Change to version 7 based visitors when available
-@SupportedSourceVersion(SourceVersion.RELEASE_7)
+@SupportedSourceVersion(SourceVersion.RELEASE_8)
 public class PrintingProcessor extends AbstractProcessor {
     PrintWriter writer;
 
@@ -114,7 +83,7 @@ public class PrintingProcessor extends AbstractProcessor {
      * Used for the -Xprint option and called by Elements.printElements
      */
     public static class PrintingElementVisitor
-        extends SimpleElementVisitor7<PrintingElementVisitor, Boolean> {
+        extends SimpleElementVisitor8<PrintingElementVisitor, Boolean> {
         int indentation; // Indentation level;
         final PrintWriter writer;
         final Elements elementUtils;
@@ -234,7 +203,7 @@ public class PrintingProcessor extends AbstractProcessor {
                     writer.print("@interface");
                     break;
                 default:
-                    writer.print(kind.toString().toLowerCase());
+                    writer.print(StringUtils.toLowerCase(kind.toString()));
                 }
                 writer.print(" ");
                 writer.print(e.getSimpleName());
@@ -336,7 +305,7 @@ public class PrintingProcessor extends AbstractProcessor {
 
             if (docComment != null) {
                 // Break comment into lines
-                StringTokenizer st = new StringTokenizer(docComment,
+                java.util.StringTokenizer st = new StringTokenizer(docComment,
                                                                   "\n\r");
                 indent();
                 writer.println("/**");

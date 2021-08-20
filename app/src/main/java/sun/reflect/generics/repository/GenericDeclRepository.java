@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2004, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -42,7 +42,7 @@ import sun.reflect.generics.visitor.Reifier;
 public abstract class GenericDeclRepository<S extends Signature>
     extends AbstractRepository<S> {
 
-    private TypeVariable[] typeParams; // caches the formal type parameters
+    private TypeVariable<?>[] typeParams; // caches the formal type parameters
 
     protected GenericDeclRepository(String rawSig, GenericsFactory f) {
         super(rawSig, f);
@@ -64,12 +64,12 @@ public abstract class GenericDeclRepository<S extends Signature>
      * Return the formal type parameters of this generic declaration.
      * @return the formal type parameters of this generic declaration
      */
-    public TypeVariable/*<?>*/[] getTypeParameters(){
+    public TypeVariable<?>[] getTypeParameters(){
         if (typeParams == null) { // lazily initialize type parameters
             // first, extract type parameter subtree(s) from AST
             FormalTypeParameter[] ftps = getTree().getFormalTypeParameters();
             // create array to store reified subtree(s)
-            TypeVariable[] tps = new TypeVariable[ftps.length];
+            TypeVariable<?>[] tps = new TypeVariable<?>[ftps.length];
             // reify all subtrees
             for (int i = 0; i < ftps.length; i++) {
                 Reifier r = getReifier(); // obtain visitor

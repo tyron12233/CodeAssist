@@ -1,33 +1,30 @@
 /*
  * Copyright (c) 2007, 2012, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.file;
 
-
-import com.sun.tools.javac.file.RelativePath.RelativeDirectory;
-import com.sun.tools.javac.file.RelativePath.RelativeFile;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -39,14 +36,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 import java.util.zip.ZipException;
+
+import com.sun.tools.javac.file.RelativePath.RelativeDirectory;
+import com.sun.tools.javac.file.RelativePath.RelativeFile;
 
 /**
  * This class implements the building of index of a zip archive and access to
@@ -59,7 +59,7 @@ import java.util.zip.ZipException;
  * the command line.)
  *
  * Location where to look for/generate optimized zip index files can be
- * provided using "-XDcachezipindexdir=<directory>". If this flag is not
+ * provided using "{@code -XDcachezipindexdir=<directory>}". If this flag is not
  * provided, the default location is the value of the "java.io.tmpdir" system
  * property.
  *
@@ -83,7 +83,7 @@ public class ZipFileIndex {
     public final static long NOT_MODIFIED = Long.MIN_VALUE;
 
 
-    private static boolean NON_BATCH_MODE = System.getProperty("nonBatchMode") != null;// TODO: Use -XD compiler switch for this.
+    private static final boolean NON_BATCH_MODE = System.getProperty("nonBatchMode") != null;// TODO: Use -XD compiler switch for this.
 
     private Map<RelativeDirectory, DirectoryEntry> directories =
             Collections.<RelativeDirectory, DirectoryEntry>emptyMap();
@@ -548,17 +548,15 @@ public class ZipFileIndex {
                 }
 
                 if (i >= 0) {
-                    zipDir = new byte[get4ByteLittleEndian(endbuf, i + 12) + 2];
-                    zipDir[0] = endbuf[i + 10];
-                    zipDir[1] = endbuf[i + 11];
+                    zipDir = new byte[get4ByteLittleEndian(endbuf, i + 12)];
                     int sz = get4ByteLittleEndian(endbuf, i + 16);
                     // a negative offset or the entries field indicates a
                     // potential zip64 archive
-                    if (sz < 0 || get2ByteLittleEndian(zipDir, 0) == 0xffff) {
+                    if (sz < 0 || get2ByteLittleEndian(endbuf, i + 10) == 0xffff) {
                         throw new ZipFormatException("detected a zip64 archive");
                     }
                     zipRandomFile.seek(start + sz);
-                    zipRandomFile.readFully(zipDir, 2, zipDir.length - 2);
+                    zipRandomFile.readFully(zipDir, 0, zipDir.length);
                     return;
                 } else {
                     endbufend = endbufpos + 21;
@@ -568,14 +566,13 @@ public class ZipFileIndex {
         }
 
         private void buildIndex() throws IOException {
-            int entryCount = get2ByteLittleEndian(zipDir, 0);
+            int len = zipDir.length;
 
             // Add each of the files
-            if (entryCount > 0) {
+            if (len > 0) {
                 directories = new LinkedHashMap<RelativeDirectory, DirectoryEntry>();
                 ArrayList<Entry> entryList = new ArrayList<Entry>();
-                int pos = 2;
-                for (int i = 0; i < entryCount; i++) {
+                for (int pos = 0; pos < len; ) {
                     pos = readEntry(pos, entryList, directories);
                 }
 

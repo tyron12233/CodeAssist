@@ -1,26 +1,26 @@
 /*
- * Copyright (c) 2001, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 2001, 2012, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.util;
@@ -44,7 +44,7 @@ import java.util.*;
  * instance method that is overridden in extended components.  A base
  * phase supporting extension would look something like this:
  *
- * <p><pre>
+ * <p><pre>{@code
  * public class Phase {
  *     protected static final Context.Key<Phase> phaseKey =
  *         new Context.Key<Phase>();
@@ -62,7 +62,7 @@ import java.util.*;
  *         // other intitialization follows...
  *     }
  * }
- * </pre>
+ * }</pre>
  *
  * <p>In the compiler, we simply use Phase.instance(context) to get
  * the reference to the phase.  But in extensions of the compiler, we
@@ -70,7 +70,7 @@ import java.util.*;
  * and this must be done before any reference to the phase is accessed
  * using Phase.instance().  An extended phase might be declared thus:
  *
- * <p><pre>
+ * <p><pre>{@code
  * public class NewPhase extends Phase {
  *     protected NewPhase(Context context) {
  *         super(context);
@@ -83,7 +83,7 @@ import java.util.*;
  *         });
  *     }
  * }
- * </pre>
+ * }</pre>
  *
  * <p>And is registered early in the extended compiler like this
  *
@@ -115,7 +115,10 @@ public class Context {
      * The underlying map storing the data.
      * We maintain the invariant that this table contains only
      * mappings of the form
-     * Key<T> -> T or Key<T> -> Factory<T> */
+     * {@literal Key<T> -> T }
+     * or
+     * {@literal Key<T> -> Factory<T> }
+     */
     private Map<Key<?>,Object> ht = new HashMap<Key<?>,Object>();
 
     /** Set the factory for the key in this context. */

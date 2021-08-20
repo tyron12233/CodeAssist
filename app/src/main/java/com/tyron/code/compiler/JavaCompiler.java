@@ -29,6 +29,8 @@ public class JavaCompiler {
         void onComplete(boolean successful);
     }
     
+    private final JavacTool mTool = JavacTool.create();
+    
     private FileManager internalFileManager;
     private LogViewModel log;
     
@@ -41,13 +43,12 @@ public class JavaCompiler {
     public void compile(final String content, OnCompleteListener listener) {
         Context context = new Context();
         
-        Options.instance(context).put("allowStringFolding", "false");
-        Options.instance(context).put("bootclasspath", internalFileManager.getAndroidJar().getAbsolutePath());
-        Options.instance(context).put("d", ApplicationLoader.applicationContext.getCacheDir().getAbsolutePath());
-        JavacFileManager fileManager = new JavacFileManager(context, true, Charset.defaultCharset());
+        DiagnosticCollector<JavaFileObject> diag = new DiagnosticCollector<>();
+        JavacFileManager fileManager = mTool.getStandardFileManager(diag, Locale.ENGLISH, Charset.defaultCharset());
         try {
             File file = new File(internalFileManager.getAndroidJar().getAbsolutePath());
             fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, List.of(file));
+            fileManager.setLocation(StandardLocation.CLASS_PATH, List.of(FileManager.getInstance().getLambdaStubs()));
             fileManager.setLocation(StandardLocation.CLASS_OUTPUT, List.of(ApplicationLoader.applicationContext.getCacheDir()));
         } catch (IOException e) {
             ApplicationLoader.showToast(e.getMessage());
@@ -60,8 +61,6 @@ public class JavaCompiler {
             }
         };
         
-        DiagnosticCollector<JavaFileObject> diag = new DiagnosticCollector<>();
-        context.put(DiagnosticCollector.class, diag);
         
         
         JavacTask task = JavacTool.create().getTask(null, fileManager, diag, null, null, List.of(source));

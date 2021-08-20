@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2009, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,11 +26,11 @@
 package sun.misc;
 
 import java.util.jar.JarFile;
-//HACK
-//import java.io.Console;
-import java.io.File;
+import java.io.Console;
 import java.io.FileDescriptor;
 import java.security.ProtectionDomain;
+
+import java.security.AccessController;
 
 /** A repository of "shared secrets", which are a mechanism for
     calling implementation-private methods in another package without
@@ -46,10 +46,14 @@ public class SharedSecrets {
     private static JavaUtilJarAccess javaUtilJarAccess;
     private static JavaLangAccess javaLangAccess;
     private static JavaIOAccess javaIOAccess;
-    private static JavaIODeleteOnExitAccess javaIODeleteOnExitAccess;
     private static JavaNetAccess javaNetAccess;
+    private static JavaNetHttpCookieAccess javaNetHttpCookieAccess;
+    private static JavaNioAccess javaNioAccess;
     private static JavaIOFileDescriptorAccess javaIOFileDescriptorAccess;
     private static JavaSecurityProtectionDomainAccess javaSecurityProtectionDomainAccess;
+    private static JavaSecurityAccess javaSecurityAccess;
+    private static JavaUtilZipFileAccess javaUtilZipFileAccess;
+    private static JavaAWTAccess javaAWTAccess;
 
     public static JavaUtilJarAccess javaUtilJarAccess() {
         if (javaUtilJarAccess == null) {
@@ -80,27 +84,39 @@ public class SharedSecrets {
         return javaNetAccess;
     }
 
+    public static void setJavaNetHttpCookieAccess(JavaNetHttpCookieAccess a) {
+        javaNetHttpCookieAccess = a;
+    }
+
+    public static JavaNetHttpCookieAccess getJavaNetHttpCookieAccess() {
+        if (javaNetHttpCookieAccess == null)
+            unsafe.ensureClassInitialized(java.net.HttpCookie.class);
+        return javaNetHttpCookieAccess;
+    }
+
+    public static void setJavaNioAccess(JavaNioAccess jna) {
+        javaNioAccess = jna;
+    }
+
+    public static JavaNioAccess getJavaNioAccess() {
+        if (javaNioAccess == null) {
+            // Ensure java.nio.ByteOrder is initialized; we know that
+            // this class initializes java.nio.Bits that provides the
+            // shared secret.
+            unsafe.ensureClassInitialized(java.nio.ByteOrder.class);
+        }
+        return javaNioAccess;
+    }
+
     public static void setJavaIOAccess(JavaIOAccess jia) {
         javaIOAccess = jia;
     }
 
     public static JavaIOAccess getJavaIOAccess() {
-        //HACK
         if (javaIOAccess == null) {
-            //unsafe.ensureClassInitialized(Console.class);
+            unsafe.ensureClassInitialized(Console.class);
         }
         return javaIOAccess;
-    }
-
-    public static void setJavaIODeleteOnExitAccess(JavaIODeleteOnExitAccess jida) {
-        javaIODeleteOnExitAccess = jida;
-    }
-
-    public static JavaIODeleteOnExitAccess getJavaIODeleteOnExitAccess() {
-        if (javaIODeleteOnExitAccess == null) {
-            unsafe.ensureClassInitialized(File.class);
-        }
-        return javaIODeleteOnExitAccess;
     }
 
     public static void setJavaIOFileDescriptorAccess(JavaIOFileDescriptorAccess jiofda) {
@@ -121,9 +137,42 @@ public class SharedSecrets {
 
     public static JavaSecurityProtectionDomainAccess
         getJavaSecurityProtectionDomainAccess() {
-        if (javaSecurityProtectionDomainAccess == null)
-            unsafe.ensureClassInitialized(ProtectionDomain.class);
+            if (javaSecurityProtectionDomainAccess == null)
+                unsafe.ensureClassInitialized(ProtectionDomain.class);
+            return javaSecurityProtectionDomainAccess;
+    }
 
-        return javaSecurityProtectionDomainAccess;
+    public static void setJavaSecurityAccess(JavaSecurityAccess jsa) {
+        javaSecurityAccess = jsa;
+    }
+
+    public static JavaSecurityAccess getJavaSecurityAccess() {
+        if (javaSecurityAccess == null) {
+            unsafe.ensureClassInitialized(AccessController.class);
+        }
+        return javaSecurityAccess;
+    }
+
+    public static JavaUtilZipFileAccess getJavaUtilZipFileAccess() {
+        if (javaUtilZipFileAccess == null)
+            unsafe.ensureClassInitialized(java.util.zip.ZipFile.class);
+        return javaUtilZipFileAccess;
+    }
+
+    public static void setJavaUtilZipFileAccess(JavaUtilZipFileAccess access) {
+        javaUtilZipFileAccess = access;
+    }
+
+    public static void setJavaAWTAccess(JavaAWTAccess jaa) {
+        javaAWTAccess = jaa;
+    }
+
+    public static JavaAWTAccess getJavaAWTAccess() {
+        // this may return null in which case calling code needs to
+        // provision for.
+        if (javaAWTAccess == null) {
+            return null;
+        }
+        return javaAWTAccess;
     }
 }

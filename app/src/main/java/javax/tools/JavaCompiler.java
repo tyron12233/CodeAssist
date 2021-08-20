@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2006, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,6 +25,7 @@
 
 package javax.tools;
 
+import java.io.File;
 import java.io.Writer;
 import java.nio.charset.Charset;
 import java.util.Locale;
@@ -55,9 +56,11 @@ import javax.annotation.processing.Processor;
  * standard file manager such as the one returned by {@linkplain
  * #getStandardFileManager getStandardFileManager}.
  *
- * <p>An instance implementing this interface must conform to the Java
- * Language Specification and generate class files conforming to the
- * Java Virtual Machine specification.  The versions of these
+ * <p>An instance implementing this interface must conform to
+ * <cite>The Java&trade; Language Specification</cite>
+ * and generate class files conforming to
+ * <cite>The Java&trade; Virtual Machine Specification</cite>.
+ * The versions of these
  * specifications are defined in the {@linkplain Tool} interface.
  *
  * Additionally, an instance of this interface supporting {@link
@@ -105,8 +108,8 @@ import javax.annotation.processing.Processor;
  *     example a recommended coding pattern:
  *
  *     <pre>
- *       Files[] files1 = ... ; // input for first compilation task
- *       Files[] files2 = ... ; // input for second compilation task
+ *       File[] files1 = ... ; // input for first compilation task
+ *       File[] files2 = ... ; // input for second compilation task
  *
  *       JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
  *       StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null);
@@ -134,9 +137,9 @@ import javax.annotation.processing.Processor;
  *       StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, null, null);
  *       compiler.getTask(null, fileManager, diagnostics, null, null, compilationUnits).call();
  *
- *       for (Diagnostic diagnostic : diagnostics.getDiagnostics())
- *           System.out.format("Error on line %d in %d%n",
- *                             diagnostic.getLineNumber()
+ *       for ({@code Diagnostic<? extends JavaFileObject>} diagnostic : diagnostics.getDiagnostics())
+ *           System.out.format("Error on line %d in %s%n",
+ *                             diagnostic.getLineNumber(),
  *                             diagnostic.getSource().toUri());
  *
  *       fileManager.close();</pre>
@@ -162,7 +165,7 @@ import javax.annotation.processing.Processor;
  *       JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
  *       StandardJavaFileManager stdFileManager = compiler.getStandardFileManager(null, null, null);
  *       JavaFileManager fileManager = new ForwardingJavaFileManager(stdFileManager) {
- *           public void flush() {
+ *           public void flush() throws IOException {
  *               logger.entering(StandardJavaFileManager.class.getName(), "flush");
  *               super.flush();
  *               logger.exiting(StandardJavaFileManager.class.getName(), "flush");
@@ -225,6 +228,12 @@ public interface JavaCompiler extends Tool, OptionChecker {
      * <p>If a file manager is provided, it must be able to handle all
      * locations defined in {@link StandardLocation}.
      *
+     * <p>Note that annotation processing can process both the
+     * compilation units of source code to be compiled, passed with
+     * the {@code compilationUnits} parameter, as well as class
+     * files, whose names are passed with the {@code classes}
+     * parameter.
+     *
      * @param out a Writer for additional output from the compiler;
      * use {@code System.err} if {@code null}
      * @param fileManager a file manager; if {@code null} use the
@@ -233,8 +242,8 @@ public interface JavaCompiler extends Tool, OptionChecker {
      * null} use the compiler's default method for reporting
      * diagnostics
      * @param options compiler options, {@code null} means no options
-     * @param classes class names (for annotation processing), {@code
-     * null} means no class names
+     * @param classes names of classes to be processed by annotation
+     * processing, {@code null} means no class names
      * @param compilationUnits the compilation units to compile, {@code
      * null} means no compilation units
      * @return an object representing the compilation
@@ -242,8 +251,8 @@ public interface JavaCompiler extends Tool, OptionChecker {
      * occurred in a user supplied component.  The
      * {@linkplain Throwable#getCause() cause} will be the error in
      * user code.
-     * @throws IllegalArgumentException if any of the given
-     * compilation units are of other kind than
+     * @throws IllegalArgumentException if any of the options are invalid,
+     * or if any of the given compilation units are of other kind than
      * {@linkplain JavaFileObject.Kind#SOURCE source}
      */
     CompilationTask getTask(Writer out,
@@ -257,7 +266,7 @@ public interface JavaCompiler extends Tool, OptionChecker {
      * Gets a new instance of the standard file manager implementation
      * for this tool.  The file manager will use the given diagnostic
      * listener for producing any non-fatal diagnostics.  Fatal errors
-     * will be signalled with the appropriate exceptions.
+     * will be signaled with the appropriate exceptions.
      *
      * <p>The standard file manager will be automatically reopened if
      * it is accessed after calls to {@code flush} or {@code close}.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2005, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2012, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -48,13 +48,13 @@ public class JarIndex {
      * The hash map that maintains mappings from
      * package/classe/resource to jar file list(s)
      */
-    private HashMap indexMap;
+    private HashMap<String,LinkedList<String>> indexMap;
 
     /**
      * The hash map that maintains mappings from
      * jar file to package/class/resource lists
      */
-    private HashMap jarMap;
+    private HashMap<String,LinkedList<String>> jarMap;
 
     /*
      * An ordered list of jar file names.
@@ -67,11 +67,19 @@ public class JarIndex {
     public static final String INDEX_NAME = "META-INF/INDEX.LIST";
 
     /**
+     * true if, and only if, sun.misc.JarIndex.metaInfFilenames is set to true.
+     * If true, the names of the files in META-INF, and its subdirectories, will
+     * be added to the index. Otherwise, just the directory names are added.
+     */
+    private static final boolean metaInfFilenames =
+        "true".equals(System.getProperty("sun.misc.JarIndex.metaInfFilenames"));
+
+    /**
      * Constructs a new, empty jar index.
      */
     public JarIndex() {
-        indexMap = new HashMap();
-        jarMap = new HashMap();
+        indexMap = new HashMap<>();
+        jarMap = new HashMap<>();
     }
 
     /**
@@ -93,6 +101,19 @@ public class JarIndex {
         this();
         this.jarFiles = files;
         parseJars(files);
+    }
+
+    /**
+     * Returns the jar index, or <code>null</code> if none.
+     *
+     * This single parameter version of the method is retained
+     * for binary compatibility with earlier releases.
+     *
+     * @param jar the JAR file to get the index from.
+     * @exception IOException if an I/O error has occurred.
+     */
+    public static JarIndex getJarIndex(JarFile jar) throws IOException {
+        return getJarIndex(jar, null);
     }
 
     /**
@@ -129,10 +150,11 @@ public class JarIndex {
      * Add the key, value pair to the hashmap, the value will
      * be put in a linked list which is created if necessary.
      */
-    private void addToList(String key, String value, HashMap t) {
-        LinkedList list = (LinkedList)t.get(key);
+    private void addToList(String key, String value,
+                           HashMap<String,LinkedList<String>> t) {
+        LinkedList<String> list = t.get(key);
         if (list == null) {
-            list = new LinkedList();
+            list = new LinkedList<>();
             list.add(value);
             t.put(key, list);
         } else if (!list.contains(value)) {
@@ -145,13 +167,13 @@ public class JarIndex {
      *
      * @param fileName the key of the mapping
      */
-    public LinkedList get(String fileName) {
-        LinkedList jarFiles = null;
-        if ((jarFiles = (LinkedList)indexMap.get(fileName)) == null) {
+    public LinkedList<String> get(String fileName) {
+        LinkedList<String> jarFiles = null;
+        if ((jarFiles = indexMap.get(fileName)) == null) {
             /* try the package name again */
             int pos;
             if((pos = fileName.lastIndexOf("/")) != -1) {
-                jarFiles = (LinkedList)indexMap.get(fileName.substring(0, pos));
+                jarFiles = indexMap.get(fileName.substring(0, pos));
             }
         }
         return jarFiles;
@@ -179,12 +201,21 @@ public class JarIndex {
             packageName = fileName;
         }
 
+        addMapping(packageName, jarName);
+    }
+
+    /**
+     * Same as add(String,String) except that it doesn't strip off from the
+     * last index of '/'. It just adds the jarItem (filename or package)
+     * as it is received.
+     */
+    private void addMapping(String jarItem, String jarName) {
         // add the mapping to indexMap
-        addToList(packageName, jarName, indexMap);
+        addToList(jarItem, jarName, indexMap);
 
         // add the mapping to jarMap
-        addToList(jarName, packageName, jarMap);
-    }
+        addToList(jarName, jarItem, jarMap);
+     }
 
     /**
      * Go through all the jar files and construct the
@@ -202,17 +233,29 @@ public class JarIndex {
             ZipFile zrf = new ZipFile(currentJar.replace
                                       ('/', File.separatorChar));
 
-            Enumeration entries = zrf.entries();
+            Enumeration<? extends ZipEntry> entries = zrf.entries();
             while(entries.hasMoreElements()) {
-                String fileName = ((ZipEntry)(entries.nextElement())).getName();
-                // Index the META-INF directory, but not the index or manifest.
-                if (!fileName.startsWith("META-INF/") ||
-                        !(fileName.equals("META-INF/") ||
-                          fileName.equals(INDEX_NAME) ||
-                          fileName.equals(JarFile.MANIFEST_NAME))) {
+                ZipEntry entry = entries.nextElement();
+                String fileName = entry.getName();
+
+                // Skip the META-INF directory, the index, and manifest.
+                // Any files in META-INF/ will be indexed explicitly
+                if (fileName.equals("META-INF/") ||
+                    fileName.equals(INDEX_NAME) ||
+                    fileName.equals(JarFile.MANIFEST_NAME))
+                    continue;
+
+                if (!metaInfFilenames || !fileName.startsWith("META-INF/")) {
                     add(fileName, currentJar);
+                } else if (!entry.isDirectory()) {
+                        // Add files under META-INF explicitly so that certain
+                        // services, like ServiceLoader, etc, can be located
+                        // with greater accuracy. Directories can be skipped
+                        // since each file will be added explicitly.
+                        addMapping(fileName, currentJar);
                 }
             }
+
             zrf.close();
         }
     }
@@ -233,11 +276,11 @@ public class JarIndex {
                 /* print out the jar file name */
                 String jar = jarFiles[i];
                 bw.write(jar + "\n");
-                LinkedList jarlist = (LinkedList)jarMap.get(jar);
+                LinkedList<String> jarlist = jarMap.get(jar);
                 if (jarlist != null) {
-                    Iterator listitr = jarlist.iterator();
+                    Iterator<String> listitr = jarlist.iterator();
                     while(listitr.hasNext()) {
-                        bw.write((String)(listitr.next()) + "\n");
+                        bw.write(listitr.next() + "\n");
                     }
                 }
                 bw.write("\n");
@@ -260,7 +303,7 @@ public class JarIndex {
         String currentJar = null;
 
         /* an ordered list of jar file names */
-        Vector jars = new Vector();
+        Vector<String> jars = new Vector<>();
 
         /* read until we see a .jar line */
         while((line = br.readLine()) != null && !line.endsWith(".jar"));
@@ -274,12 +317,11 @@ public class JarIndex {
                 jars.add(currentJar);
             } else {
                 String name = line;
-                addToList(name, currentJar, indexMap);
-                addToList(currentJar, name, jarMap);
+                addMapping(name, currentJar);
             }
         }
 
-        jarFiles = (String[])jars.toArray(new String[jars.size()]);
+        jarFiles = jars.toArray(new String[jars.size()]);
     }
 
     /**
@@ -293,18 +335,18 @@ public class JarIndex {
      *
      */
     public void merge(JarIndex toIndex, String path) {
-        Iterator itr = indexMap.entrySet().iterator();
+        Iterator<Map.Entry<String,LinkedList<String>>> itr = indexMap.entrySet().iterator();
         while(itr.hasNext()) {
-            Map.Entry e = (Map.Entry)itr.next();
-            String packageName = (String)e.getKey();
-            LinkedList from_list = (LinkedList)e.getValue();
-            Iterator listItr = from_list.iterator();
+            Map.Entry<String,LinkedList<String>> e = itr.next();
+            String packageName = e.getKey();
+            LinkedList<String> from_list = e.getValue();
+            Iterator<String> listItr = from_list.iterator();
             while(listItr.hasNext()) {
-                String jarName = (String)listItr.next();
+                String jarName = listItr.next();
                 if (path != null) {
                     jarName = path.concat(jarName);
                 }
-                toIndex.add(packageName, jarName);
+                toIndex.addMapping(packageName, jarName);
             }
         }
     }

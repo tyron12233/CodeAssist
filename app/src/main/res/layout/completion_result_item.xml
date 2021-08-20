@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	android:layout_width="fill_parent"
+	android:layout_height="wrap_content"
+	android:gravity="center_vertical"
+	android:orientation="horizontal"
+	android:paddingTop="4dp"
+	android:paddingBottom="4dp">
+
+	<ImageView
+		android:layout_height="24dp"
+		android:layout_width="24dp"
+		android:layout_marginLeft="4dp"
+		android:layout_marginRight="4dp"
+		android:id="@+id/result_item_image"/>
+
+	<LinearLayout
+		android:layout_height="wrap_content"
+		android:layout_width="match_parent"
+		android:orientation="horizontal"
+		android:gravity="center_vertical"
+		android:paddingLeft="4dp"
+		android:paddingRight="4dp">
+
+		<LinearLayout
+			android:layout_width="0dp"
+			android:layout_height="wrap_content"
+			android:layout_weight="1">
+
+			<TextView
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:text="THIS IS A REALLY LONG TEXT THAT SHOULS"
+				android:textColor="#FF000000"
+				android:id="@+id/result_item_label"
+				android:textSize="16sp"
+				android:singleLine="true"/>
+
+		</LinearLayout>
+
+		<TextView
+			android:gravity="center_vertical"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:text="Small Text"
+			android:id="@+id/result_item_desc"
+			android:textSize="12sp"
+			android:layout_marginLeft="8dp"
+			android:singleLine="true"/>
+
+	</LinearLayout>
+
+</LinearLayout>
+

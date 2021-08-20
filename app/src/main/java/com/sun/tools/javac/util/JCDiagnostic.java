@@ -1,33 +1,32 @@
 /*
- * Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 2003, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.util;
 
 import java.util.EnumSet;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 
 import javax.tools.Diagnostic;
@@ -35,6 +34,7 @@ import javax.tools.JavaFileObject;
 
 import com.sun.tools.javac.api.DiagnosticFormatter;
 import com.sun.tools.javac.code.Lint.LintCategory;
+import com.sun.tools.javac.tree.EndPosTable;
 import com.sun.tools.javac.tree.JCTree;
 
 import static com.sun.tools.javac.util.JCDiagnostic.DiagnosticType.*;
@@ -50,8 +50,8 @@ public class JCDiagnostic implements Diagnostic<JavaFileObject> {
     /** A factory for creating diagnostic objects. */
     public static class Factory {
         /** The context key for the diagnostic factory. */
-        protected static final Context.Key<Factory> diagnosticFactoryKey =
-            new Context.Key<Factory>();
+        protected static final Context.Key<JCDiagnostic.Factory> diagnosticFactoryKey =
+            new Context.Key<JCDiagnostic.Factory>();
 
         /** Get the Factory instance for this context. */
         public static Factory instance(Context context) {
@@ -70,7 +70,16 @@ public class JCDiagnostic implements Diagnostic<JavaFileObject> {
             this(JavacMessages.instance(context), "compiler");
             context.put(diagnosticFactoryKey, this);
 
-            Options options = Options.instance(context);
+            final Options options = Options.instance(context);
+            initOptions(options);
+            options.addListener(new Runnable() {
+               public void run() {
+                   initOptions(options);
+               }
+            });
+        }
+
+        private void initOptions(Options options) {
             if (options.isSet("onlySyntaxErrorsUnrecoverable"))
                 defaultErrorFlags.add(DiagnosticFlag.RECOVERABLE);
         }
@@ -204,7 +213,6 @@ public class JCDiagnostic implements Diagnostic<JavaFileObject> {
          * Create a new diagnostic of the given kind, which is not mandatory and which has
          * no lint category.
          *  @param kind        The diagnostic kind
-         *  @param ls          The lint category, if applicable, or null
          *  @param source      The source of the compilation unit, if any, in which to report the message.
          *  @param pos         The source position at which to report the message.
          *  @param key         The key for the localized message.
@@ -219,7 +227,7 @@ public class JCDiagnostic implements Diagnostic<JavaFileObject> {
          * Create a new diagnostic of the given kind.
          *  @param kind        The diagnostic kind
          *  @param lc          The lint category, if applicable, or null
-         *  @param isMandatory is diagnostic mandatory?
+         *  @param flags       The set of flags for the diagnostic
          *  @param source      The source of the compilation unit, if any, in which to report the message.
          *  @param pos         The source position at which to report the message.
          *  @param key         The key for the localized message.
@@ -304,7 +312,7 @@ public class JCDiagnostic implements Diagnostic<JavaFileObject> {
         /** If there is a tree node, and if endPositions are available, get
          *  the end position of the tree node. Otherwise, just returns the
          *  same as getPreferredPosition(). */
-        int getEndPosition(Map<JCTree, Integer> endPosTable);
+        int getEndPosition(EndPosTable endPosTable);
     }
 
     /**
@@ -328,7 +336,7 @@ public class JCDiagnostic implements Diagnostic<JavaFileObject> {
             return pos;
         }
 
-        public int getEndPosition(Map<JCTree, Integer> endPosTable) {
+        public int getEndPosition(EndPosTable endPosTable) {
             return pos;
         }
 
@@ -339,22 +347,52 @@ public class JCDiagnostic implements Diagnostic<JavaFileObject> {
         MANDATORY,
         RESOLVE_ERROR,
         SYNTAX,
-        RECOVERABLE
+        RECOVERABLE,
+        NON_DEFERRABLE,
+        COMPRESSED
     }
 
     private final DiagnosticType type;
     private final DiagnosticSource source;
     private final DiagnosticPosition position;
-    private final int line;
-    private final int column;
     private final String key;
     protected final Object[] args;
     private final Set<DiagnosticFlag> flags;
     private final LintCategory lintCategory;
 
+    /** source line position (set lazily) */
+    private SourcePosition sourcePosition;
+
+    /**
+     * This class is used to defer the line/column position fetch logic after diagnostic construction.
+     */
+    class SourcePosition {
+
+        private final int line;
+        private final int column;
+
+        SourcePosition() {
+            int n = (position == null ? Position.NOPOS : position.getPreferredPosition());
+            if (n == Position.NOPOS || source == null)
+                line = column = -1;
+            else {
+                line = source.getLineNumber(n);
+                column = source.getColumnNumber(n, true);
+            }
+        }
+
+        public int getLineNumber() {
+            return line;
+        }
+
+        public int getColumnNumber() {
+            return column;
+        }
+    }
+
     /**
      * Create a diagnostic object.
-     * @param fomatter the formatter to use for the diagnostic
+     * @param formatter the formatter to use for the diagnostic
      * @param dt the type of diagnostic
      * @param lc     the lint category for the diagnostic
      * @param source the name of the source file, or null if none.
@@ -380,15 +418,7 @@ public class JCDiagnostic implements Diagnostic<JavaFileObject> {
         this.source = source;
         this.position = pos;
         this.key = key;
-            this.args = args;
-
-        int n = (pos == null ? Position.NOPOS : pos.getPreferredPosition());
-        if (n == Position.NOPOS || source == null)
-            line = column = -1;
-        else {
-            line = source.getLineNumber(n);
-            column = source.getColumnNumber(n, true);
-        }
+        this.args = args;
     }
 
     /**
@@ -476,12 +506,19 @@ public class JCDiagnostic implements Diagnostic<JavaFileObject> {
         return getIntEndPosition();
     }
 
+    public DiagnosticPosition getDiagnosticPosition() {
+        return position;
+    }
+
     /**
      * Get the line number within the source referred to by this diagnostic.
      * @return  the line number within the source referred to by this diagnostic
      */
     public long getLineNumber() {
-        return line;
+        if (sourcePosition == null) {
+            sourcePosition = new SourcePosition();
+        }
+        return sourcePosition.getLineNumber();
     }
 
     /**
@@ -489,7 +526,10 @@ public class JCDiagnostic implements Diagnostic<JavaFileObject> {
      * @return  the column number within the line of source referred to by this diagnostic
      */
     public long getColumnNumber() {
-        return column;
+        if (sourcePosition == null) {
+            sourcePosition = new SourcePosition();
+        }
+        return sourcePosition.getColumnNumber();
     }
 
     /**
@@ -530,18 +570,18 @@ public class JCDiagnostic implements Diagnostic<JavaFileObject> {
 
     // Methods for javax.tools.Diagnostic
 
-    public Kind getKind() {
+    public Diagnostic.Kind getKind() {
         switch (type) {
         case NOTE:
-            return Kind.NOTE;
+            return Diagnostic.Kind.NOTE;
         case WARNING:
             return flags.contains(DiagnosticFlag.MANDATORY)
-                    ? Kind.MANDATORY_WARNING
-                    : Kind.WARNING;
+                    ? Diagnostic.Kind.MANDATORY_WARNING
+                    : Diagnostic.Kind.WARNING;
         case ERROR:
-            return Kind.ERROR;
+            return Diagnostic.Kind.ERROR;
         default:
-            return Kind.OTHER;
+            return Diagnostic.Kind.OTHER;
         }
     }
 

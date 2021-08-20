@@ -40,7 +40,7 @@ import java.util.NoSuchElementException;
 /**
  * A memory-sensitive implementation of the <code>Map</code> interface.
  *
- * <p> A <code>SoftCache</code> object uses {@link SoftReference
+ * <p> A <code>SoftCache</code> object uses {@link java.lang.ref.SoftReference
  * soft references} to implement a memory-sensitive hash map.  If the garbage
  * collector determines at a certain point in time that a value object in a
  * <code>SoftCache</code> entry is no longer strongly reachable, then it may
@@ -97,8 +97,8 @@ import java.util.NoSuchElementException;
  *
  * @author      Mark Reinhold
  * @since       1.2
- * @see         HashMap
- * @see         SoftReference
+ * @see         java.util.HashMap
+ * @see         java.lang.ref.SoftReference
  */
 
 

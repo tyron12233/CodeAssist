@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2005, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2010, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,21 +25,20 @@
 
 package com.sun.tools.javac.main;
 
-import com.sun.tools.javac.util.ListBuffer;
-
-import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
+import java.io.FileReader;
+import java.io.BufferedReader;
 import java.io.StreamTokenizer;
+import com.sun.tools.javac.util.ListBuffer;
 
 /**
  * Various utility methods for processing Java tool command line arguments.
- * <p>
- * <p><b>This is NOT part of any supported API.
- * If you write code that depends on this, you do so at your own risk.
- * This code and its internal interfaces are subject to change or
- * deletion without notice.</b>
+ *
+ *  <p><b>This is NOT part of any supported API.
+ *  If you write code that depends on this, you do so at your own risk.
+ *  This code and its internal interfaces are subject to change or
+ *  deletion without notice.</b>
  */
 public class CommandLine {
     /**
@@ -53,7 +52,8 @@ public class CommandLine {
      * the sequence '@@'.
      */
     public static String[] parse(String[] args)
-            throws IOException {
+        throws IOException
+    {
         ListBuffer<String> newArgs = new ListBuffer<String>();
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -72,7 +72,8 @@ public class CommandLine {
     }
 
     private static void loadCmdFile(String name, ListBuffer<String> args)
-            throws IOException {
+        throws IOException
+    {
         Reader r = new BufferedReader(new FileReader(name));
         StreamTokenizer st = new StreamTokenizer(r);
         st.resetSyntax();
@@ -81,7 +82,7 @@ public class CommandLine {
         st.commentChar('#');
         st.quoteChar('"');
         st.quoteChar('\'');
-        while (st.nextToken() != st.TT_EOF) {
+        while (st.nextToken() != StreamTokenizer.TT_EOF) {
             args.append(st.sval);
         }
         r.close();

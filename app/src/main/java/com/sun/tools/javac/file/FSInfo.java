@@ -1,8 +1,6 @@
 
 package com.sun.tools.javac.file;
 
-import com.sun.tools.javac.util.Context;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -12,6 +10,8 @@ import java.util.StringTokenizer;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
+
+import com.sun.tools.javac.util.Context;
 
 /**
  * Get meta-info about files. Default direct (non-caching) implementation.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2009, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -39,12 +39,12 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharsetDecoder;
-
 import javax.tools.JavaFileObject;
+import java.text.Normalizer;
 
 /**
  * A subclass of JavaFileObject representing regular files.
- * <p>
+ *
  * <p><b>This is NOT part of any supported API.
  * If you write code that depends on this, you do so at your own risk.
  * This code and its internal interfaces are subject to change or
@@ -52,13 +52,13 @@ import javax.tools.JavaFileObject;
  */
 class RegularFileObject extends BaseFileObject {
 
-    final File file;
-    /**
-     * Have the parent directories been created?
+    /** Have the parent directories been created?
      */
     private boolean hasParents = false;
     private String name;
+    final File file;
     private Reference<File> absFileRef;
+    final static boolean isMacOS = System.getProperty("os.name", "").contains("OS X");
 
     public RegularFileObject(JavacFileManager fileManager, File f) {
         this(fileManager, f.getName(), f);
@@ -73,38 +73,39 @@ class RegularFileObject extends BaseFileObject {
         this.file = f;
     }
 
-    //@Override
+    @Override
     public URI toUri() {
         return file.toURI().normalize();
     }
 
-    //@Override
+    @Override
     public String getName() {
         return file.getPath();
     }
 
-    //@Override
+    @Override
     public String getShortName() {
         return name;
     }
 
-    //@Override
+    @Override
     public JavaFileObject.Kind getKind() {
         return getKind(name);
     }
 
-    //@Override
+    @Override
     public InputStream openInputStream() throws IOException {
         return new FileInputStream(file);
     }
 
-    //@Override
+    @Override
     public OutputStream openOutputStream() throws IOException {
+        fileManager.flushCache(this);
         ensureParentDirectoriesExist();
         return new FileOutputStream(file);
     }
 
-    //@Override
+    @Override
     public CharBuffer getCharContent(boolean ignoreEncodingErrors) throws IOException {
         CharBuffer cb = fileManager.getCachedContent(this);
         if (cb == null) {
@@ -128,32 +129,33 @@ class RegularFileObject extends BaseFileObject {
         return cb;
     }
 
-    //@Override
+    @Override
     public Writer openWriter() throws IOException {
+        fileManager.flushCache(this);
         ensureParentDirectoriesExist();
         return new OutputStreamWriter(new FileOutputStream(file), fileManager.getEncodingName());
     }
 
-    //@Override
+    @Override
     public long getLastModified() {
         return file.lastModified();
     }
 
-    //@Override
+    @Override
     public boolean delete() {
         return file.delete();
     }
 
-    //@Override
+    @Override
     protected CharsetDecoder getDecoder(boolean ignoreEncodingErrors) {
         return fileManager.getDecoder(fileManager.getEncodingName(), ignoreEncodingErrors);
     }
 
-    //@Override
+    @Override
     protected String inferBinaryName(Iterable<? extends File> path) {
         String fPath = file.getPath();
         //System.err.println("RegularFileObject " + file + " " +r.getPath());
-        for (File dir : path) {
+        for (File dir: path) {
             //System.err.println("dir: " + dir);
             String dPath = dir.getPath();
             if (dPath.length() == 0)
@@ -161,7 +163,7 @@ class RegularFileObject extends BaseFileObject {
             if (!dPath.endsWith(File.separator))
                 dPath += File.separator;
             if (fPath.regionMatches(true, 0, dPath, 0, dPath.length())
-                    && new File(fPath.substring(0, dPath.length())).equals(new File(dPath))) {
+                && new File(fPath.substring(0, dPath.length())).equals(new File(dPath))) {
                 String relativeName = fPath.substring(dPath.length());
                 return removeExtension(relativeName).replace(File.separatorChar, '.');
             }
@@ -169,7 +171,7 @@ class RegularFileObject extends BaseFileObject {
         return null;
     }
 
-    //@Override
+    @Override
     public boolean isNameCompatible(String cn, JavaFileObject.Kind kind) {
         cn.getClass();
         // null check
@@ -180,7 +182,19 @@ class RegularFileObject extends BaseFileObject {
         if (name.equals(n)) {
             return true;
         }
-        if (name.equalsIgnoreCase(n)) {
+        if (isMacOS && Normalizer.isNormalized(name, Normalizer.Form.NFD)
+            && Normalizer.isNormalized(n, Normalizer.Form.NFC)) {
+            // On Mac OS X it is quite possible to file name and class
+            // name normalized in a different way - in that case we have to normalize file name
+            // to the Normal Form Compised (NFC)
+            String normName = Normalizer.normalize(name, Normalizer.Form.NFC);
+            if (normName.equals(n)) {
+                this.name = normName;
+                return true;
+            }
+        }
+
+            if (name.equalsIgnoreCase(n)) {
             try {
                 // allow for Windows
                 return file.getCanonicalFile().getName().equals(n);
@@ -209,7 +223,7 @@ class RegularFileObject extends BaseFileObject {
      * Two RegularFileObjects are equal if the absolute paths of the underlying
      * files are equal.
      */
-    //@Override
+    @Override
     public boolean equals(Object other) {
         if (this == other)
             return true;
@@ -221,7 +235,7 @@ class RegularFileObject extends BaseFileObject {
         return getAbsoluteFile().equals(o.getAbsoluteFile());
     }
 
-    //@Override
+    @Override
     public int hashCode() {
         return getAbsoluteFile().hashCode();
     }

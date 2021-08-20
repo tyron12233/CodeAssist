@@ -45,6 +45,8 @@ import com.tyron.code.rewrite.AddImport;
 import com.tyron.code.ParseTask;
 import java.io.File;
 import java.util.Collections;
+import javax.lang.model.element.TypeParameterElement;
+import com.sun.source.tree.MemberReferenceTree;
 
 /**
  * Main entry point for getting completions
@@ -138,6 +140,10 @@ public class CompletionProvider {
                 return completeIdentifier(path, partial, endsWithParen);
             case MEMBER_SELECT:              
                 return completeMemberSelect(path, partial, endsWithParen);
+            case MEMBER_REFERENCE:
+                return completeMemberReference(path, partial);
+            case SWITCH:
+                return completeSwitchConstant(path, partial);
             case IMPORT:
                 return completeImport(qualifiedPartialIdentifier(contents.toString(), (int) cursor));
             default:
@@ -409,6 +415,102 @@ public class CompletionProvider {
         return list;
     }
     
+    private CompletionList completeMemberReference(TreePath path, String partial) {
+        Trees trees = Trees.instance(parser.getTask());
+        MemberReferenceTree select = (MemberReferenceTree) path.getLeaf();
+        
+        path = new TreePath(path, select.getQualifierExpression());
+        Element element = trees.getElement(path);
+        boolean isStatic = element instanceof TypeElement;
+        Scope scope = trees.getScope(path);
+        TypeMirror type = trees.getTypeMirror(path);
+        if (type instanceof ArrayType) {
+            return completeArrayMemberReference(isStatic);
+        } else if (type instanceof TypeVariable) {
+            return completeTypeVariableMemberReference(scope, (TypeVariable) type, isStatic, partial);
+        } else if (type instanceof DeclaredType) {
+            return completeDeclaredTypeMemberReference(scope, (DeclaredType) type, isStatic, partial);
+        } else {
+            return new CompletionList();
+        }
+    }
+    
+    private CompletionList completeArrayMemberReference(boolean isStatic) {
+        if (isStatic) {
+            CompletionList list = new CompletionList();
+            list.items.add(keyword("new"));
+            return list;
+        } else {
+            return new CompletionList();
+        }
+    }
+
+    private CompletionList completeTypeVariableMemberReference(
+        Scope scope, TypeVariable type, boolean isStatic, String partial) {
+        if (type.getUpperBound() instanceof DeclaredType) {
+            return completeDeclaredTypeMemberReference(
+                scope, (DeclaredType) type.getUpperBound(), isStatic, partial);
+        } else if (type.getUpperBound() instanceof TypeVariable) {
+            return completeTypeVariableMemberReference(
+                scope, (TypeVariable) type.getUpperBound(), isStatic, partial);
+        } else {
+            return new CompletionList();
+        }
+    }
+
+    private CompletionList completeDeclaredTypeMemberReference(Scope scope, DeclaredType type, boolean isStatic, String partial) {
+        Trees trees = Trees.instance(parser.getTask());
+        TypeElement typeElement = (TypeElement) type.asElement();
+        List<CompletionItem> list = new ArrayList<>();
+        HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
+        for (Element member : parser.getTask().getElements().getAllMembers(typeElement)) {
+            if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) continue;
+            if (member.getKind() != ElementKind.METHOD) continue;
+            if (!trees.isAccessible(scope, member, type)) continue;
+            if (!isStatic && member.getModifiers().contains(Modifier.STATIC)) continue;
+            if (member.getKind() == ElementKind.METHOD) {
+                putMethod((ExecutableElement) member, methods);
+            } else {
+                list.add(item(member));
+            }
+        }
+        for (List<ExecutableElement> overloads : methods.values()) {
+            list.add(method( overloads, false));
+        }
+        if (isStatic) {
+            list.add(keyword("new"));
+        }
+        
+        CompletionList comp = new CompletionList();
+        comp.isIncomplete = false;
+        comp.items = list;
+        return comp;
+    }
+    
+    private CompletionList completeSwitchConstant(TreePath path, String partial) {
+        SwitchTree switchTree = (SwitchTree) path.getLeaf();
+        path = new TreePath(path, switchTree.getExpression());
+        TypeMirror type = Trees.instance(parser.getTask()).getTypeMirror(path);
+        
+        if (!(type instanceof DeclaredType)) {
+            return new CompletionList();
+        }
+        DeclaredType declared = (DeclaredType) type;
+        TypeElement element = (TypeElement) declared.asElement();
+        List<CompletionItem> list = new ArrayList<>();
+        for (Element member : parser.getTask().getElements().getAllMembers(element)) {
+            if (member.getKind() != ElementKind.ENUM_CONSTANT) continue;
+            if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) continue;
+            list.add(item(member));
+        }
+        
+        CompletionList comp = new CompletionList();
+        comp.isIncomplete = false;
+        comp.items = list;
+        return comp;
+    }
+    
+    
     private void addClassNames(CompilationUnitTree root, String partial, CompletionList list) {
         String packageName = Objects.toString(root.getPackageName(), "");
         Set<String> uniques = new HashSet<String>();
@@ -477,14 +579,33 @@ public class CompletionProvider {
     private CompletionItem method(List<ExecutableElement> overloads, boolean endsWithParen) {
         ExecutableElement first = overloads.get(0);
         CompletionItem item = new CompletionItem();
-        item.label = first.toString();
+        item.label = getMethodLabel(first);
         item.commitText = first.getSimpleName().toString() + "()";
-        item.detail = first.getReturnType().toString();
+        item.detail = simpleName(first.getReturnType().toString()).toString();
         item.cursorOffset = item.commitText.length();
         if (first.getParameters() != null && !first.getParameters().isEmpty()) {
             item.cursorOffset = item.commitText.length() - 1;
         }
         return item;
+    }
+    
+    private String getMethodLabel(ExecutableElement element) {
+        String string = element.toString();
+        String identifier = element.getSimpleName().toString();
+        
+        String paramsString = string.substring(string.indexOf("(") + 1, string.lastIndexOf(")"));
+        
+        
+        String params = "";
+        if (paramsString.contains(",")) {
+            String[] split = paramsString.split(",");
+            for (String s : split) {
+                params = params + (params.isEmpty() ? "" : ", ") + simpleName(s);
+            }
+        } else {
+            params = simpleName(paramsString).toString();
+        }
+        return identifier + "(" + params + ")";
     }
     
     private CharSequence simpleName(String className) {
@@ -496,7 +617,9 @@ public class CompletionProvider {
     public static boolean hasImport(CompilationUnitTree root, String className) {
         
         String packageName = className.substring(0, className.lastIndexOf("."));
-
+        
+        // if the package name of the class is java.lang, we dont need 
+        // to check since its already imported
         if (packageName.equals("java.lang")) {
             return true;
         }
@@ -507,6 +630,7 @@ public class CompletionProvider {
                 return true;
             }          
             
+            // if the import is a wildcard, lets check if theyre on the same package
             if (name.endsWith("*")) {
                 String first = name.substring(0, name.lastIndexOf("."));
                 String end = className.substring(0, name.lastIndexOf("."));

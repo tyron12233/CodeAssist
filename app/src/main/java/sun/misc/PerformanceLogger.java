@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -37,7 +37,7 @@ import java.io.Writer;
  * This class is intended to be a central place for the jdk to
  * log timing events of interest.  There is pre-defined event
  * of startTime, as well as a general
- * mechanism of setting aribtrary times in an array.
+ * mechanism of setting arbitrary times in an array.
  * All unreserved times in the array can be used by callers
  * in application-defined situations.  The caller is responsible
  * for setting and getting all times and for doing whatever
@@ -78,27 +78,25 @@ public class PerformanceLogger {
 
     private static boolean perfLoggingOn = false;
     private static boolean useNanoTime = false;
-    private static Vector times;
+    private static Vector<TimeData> times;
     private static String logFileName = null;
     private static Writer logWriter = null;
+    private static long baseTime;
 
     static {
-        //HACK
-        String perfLoggingProp = null;
-           // java.security.AccessController.doPrivileged(
-           // new sun.security.action.GetPropertyAction("sun.perflog"));
-
+        String perfLoggingProp =
+            java.security.AccessController.doPrivileged(
+            new sun.security.action.GetPropertyAction("sun.perflog"));
         if (perfLoggingProp != null) {
             perfLoggingOn = true;
 
             // Check if we should use nanoTime
-            String perfNanoProp = null;
-                //java.security.AccessController.doPrivileged(
-                //new sun.security.action.GetPropertyAction("sun.perflog.nano"));
+            String perfNanoProp =
+                java.security.AccessController.doPrivileged(
+                new sun.security.action.GetPropertyAction("sun.perflog.nano"));
             if (perfNanoProp != null) {
                 useNanoTime = true;
             }
-            useNanoTime = false;
 
             // Now, figure out what the user wants to do with the data
             if (perfLoggingProp.regionMatches(true, 0, "file:", 0, 5)) {
@@ -107,8 +105,8 @@ public class PerformanceLogger {
             if (logFileName != null) {
                 if (logWriter == null) {
                     java.security.AccessController.doPrivileged(
-                    new java.security.PrivilegedAction() {
-                        public Object run() {
+                    new java.security.PrivilegedAction<Void>() {
+                        public Void run() {
                             try {
                                 File logFile = new File(logFileName);
                                 logFile.createNewFile();
@@ -127,7 +125,7 @@ public class PerformanceLogger {
                 logWriter = new OutputStreamWriter(System.out);
             }
         }
-        times = new Vector(10);
+        times = new Vector<TimeData>(10);
         // Reserve predefined slots
         for (int i = 0; i <= LAST_RESERVED; ++i) {
             times.add(new TimeData("Time " + i + " not set", 0));
@@ -191,6 +189,16 @@ public class PerformanceLogger {
     }
 
     /**
+     * Sets the base time, output can then
+     * be displayed as offsets from the base time;.
+     */
+    public static void setBaseTime(long time) {
+        if (loggingEnabled()) {
+            baseTime = time;
+        }
+    }
+
+    /**
      * Sets the start time.
      * This version of the method is
      * given the time to log, instead of expecting this method to
@@ -210,7 +218,7 @@ public class PerformanceLogger {
      */
     public static long getStartTime() {
         if (loggingEnabled()) {
-            return ((TimeData)times.get(START_INDEX)).getTime();
+            return times.get(START_INDEX).getTime();
         } else {
             return 0;
         }
@@ -256,7 +264,7 @@ public class PerformanceLogger {
      */
     public static long getTimeAtIndex(int index) {
         if (loggingEnabled()) {
-            return ((TimeData)times.get(index)).getTime();
+            return times.get(index).getTime();
         } else {
             return 0;
         }
@@ -267,7 +275,7 @@ public class PerformanceLogger {
      */
     public static String getMessageAtIndex(int index) {
         if (loggingEnabled()) {
-            return ((TimeData)times.get(index)).getMessage();
+            return times.get(index).getMessage();
         } else {
             return null;
         }
@@ -281,10 +289,11 @@ public class PerformanceLogger {
             try {
                 synchronized(times) {
                     for (int i = 0; i < times.size(); ++i) {
-                        TimeData td = (TimeData)times.get(i);
+                        TimeData td = times.get(i);
                         if (td != null) {
                             writer.write(i + " " + td.getMessage() + ": " +
-                                         td.getTime() + "\n");
+                                         (td.getTime() - baseTime) + "\n");
+
                         }
                     }
                 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2004, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,7 +30,7 @@ import java.lang.reflect.Modifier;
 
 class UnsafeFieldAccessorFactory {
     static FieldAccessor newFieldAccessor(Field field, boolean override) {
-        Class type = field.getType();
+        Class<?> type = field.getType();
         boolean isStatic = Modifier.isStatic(field.getModifiers());
         boolean isFinal = Modifier.isFinal(field.getModifiers());
         boolean isVolatile = Modifier.isVolatile(field.getModifiers());

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1995, 2000, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1995, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -102,6 +102,7 @@ public class BASE64Decoder extends CharacterDecoder {
     /**
      * Decode one BASE64 atom into 1, 2, or 3 bytes of data.
      */
+    @SuppressWarnings("fallthrough")
     protected void decodeAtom(PushbackInputStream inStream, OutputStream outStream, int rem)
         throws java.io.IOException
     {

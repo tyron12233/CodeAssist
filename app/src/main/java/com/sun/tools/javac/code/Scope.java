@@ -1,32 +1,33 @@
 /*
- * Copyright (c) 1999, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 1999, 2015, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.code;
 
-import com.sun.tools.javac.util.*;
 import java.util.Iterator;
+
+import com.sun.tools.javac.util.*;
 
 /** A scope represents an area of visibility in a Java program. The
  *  Scope class is a container for symbols which provides
@@ -198,7 +199,7 @@ public class Scope {
     }
 
     public void enter(Symbol sym, Scope s) {
-        enter(sym, s, s);
+        enter(sym, s, s, false);
     }
 
     /**
@@ -206,7 +207,7 @@ public class Scope {
      * given scope `s' accessed through `origin'.  The last two
      * arguments are only used in import scopes.
      */
-    public void enter(Symbol sym, Scope s, Scope origin) {
+    public void enter(Symbol sym, Scope s, Scope origin, boolean staticallyImported) {
         Assert.check(shared == 0);
         if (nelems * 3 >= hashMask * 2)
             dble();
@@ -216,7 +217,7 @@ public class Scope {
             old = sentinel;
             nelems++;
         }
-        Entry e = makeEntry(sym, old, elems, s, origin);
+        Entry e = makeEntry(sym, old, elems, s, origin, staticallyImported);
         table[hash] = e;
         elems = e;
 
@@ -226,7 +227,7 @@ public class Scope {
         }
     }
 
-    Entry makeEntry(Symbol sym, Entry shadowed, Entry sibling, Scope scope, Scope origin) {
+    Entry makeEntry(Symbol sym, Entry shadowed, Entry sibling, Scope scope, Scope origin, boolean staticallyImported) {
         return new Entry(sym, shadowed, sibling, scope);
     }
 
@@ -240,12 +241,16 @@ public class Scope {
         listeners = listeners.prepend(sl);
     }
 
-    /** Remove symbol from this scope.  Used when an inner class
-     *  attribute tells us that the class isn't a package member.
+    /** Remove symbol from this scope.
      */
-    public void remove(Symbol sym) {
+    public void remove(final Symbol sym) {
         Assert.check(shared == 0);
-        Entry e = lookup(sym.name);
+        Entry e = lookup(sym.name, new Filter<Symbol>() {
+            @Override
+            public boolean accepts(Symbol candidate) {
+                return candidate == sym;
+            }
+        });
         if (e.scope == null) return;
 
         // remove e from table and shadowed list;
@@ -292,7 +297,7 @@ public class Scope {
      *  qualified name in this (import) scope?
      */
     public boolean includes(Symbol c) {
-        for (Entry e = lookup(c.name);
+        for (Scope.Entry e = lookup(c.name);
              e.scope == this;
              e = e.next()) {
             if (e.sym == c) return true;
@@ -315,6 +320,7 @@ public class Scope {
     public Entry lookup(Name name) {
         return lookup(name, noFilter);
     }
+
     public Entry lookup(Name name, Filter<Symbol> sf) {
         Entry e = table[getIndex(name)];
         if (e == null || e == sentinel)
@@ -360,6 +366,10 @@ public class Scope {
         }
     }
 
+    public boolean anyMatch(Filter<Symbol> sf) {
+        return getElements(sf).iterator().hasNext();
+    }
+
     public Iterable<Symbol> getElements() {
         return getElements(noFilter);
     }
@@ -369,7 +379,7 @@ public class Scope {
             public Iterator<Symbol> iterator() {
                 return new Iterator<Symbol>() {
                     private Scope currScope = Scope.this;
-                    private Entry currEntry = elems;
+                    private Scope.Entry currEntry = elems;
                     {
                         update();
                     }
@@ -418,13 +428,13 @@ public class Scope {
         return new Iterable<Symbol>() {
             public Iterator<Symbol> iterator() {
                  return new Iterator<Symbol>() {
-                    Entry currentEntry = lookup(name, sf);
+                    Scope.Entry currentEntry = lookup(name, sf);
 
                     public boolean hasNext() {
                         return currentEntry.scope != null;
                     }
                     public Symbol next() {
-                        Entry prevEntry = currentEntry;
+                        Scope.Entry prevEntry = currentEntry;
                         currentEntry = currentEntry.next(sf);
                         return prevEntry.sym;
                     }
@@ -493,6 +503,10 @@ public class Scope {
             else return shadowed.next(sf);
         }
 
+        public boolean isStaticallyImported() {
+            return false;
+        }
+
         public Scope getOrigin() {
             // The origin is only recorded for import scopes.  For all
             // other scope entries, the "enclosing" type is available
@@ -511,20 +525,19 @@ public class Scope {
         }
 
         @Override
-        Entry makeEntry(Symbol sym, Entry shadowed, Entry sibling, Scope scope, Scope origin) {
-            return new ImportEntry(sym, shadowed, sibling, scope, origin);
-        }
+        Entry makeEntry(Symbol sym, Entry shadowed, Entry sibling, Scope scope,
+                final Scope origin, final boolean staticallyImported) {
+            return new Entry(sym, shadowed, sibling, scope) {
+                @Override
+                public Scope getOrigin() {
+                    return origin;
+                }
 
-        static class ImportEntry extends Entry {
-            private Scope origin;
-
-            ImportEntry(Symbol sym, Entry shadowed, Entry sibling, Scope scope, Scope origin) {
-                super(sym, shadowed, sibling, scope);
-                this.origin = origin;
-            }
-
-            @Override
-            public Scope getOrigin() { return origin; }
+                @Override
+                public boolean isStaticallyImported() {
+                    return staticallyImported;
+                }
+            };
         }
     }
 
@@ -535,7 +548,7 @@ public class Scope {
         }
 
         public void importAll (Scope fromScope) {
-            for (Entry e = fromScope.elems; e != null; e = e.sibling) {
+            for (Scope.Entry e = fromScope.elems; e != null; e = e.sibling) {
                 if (e.sym.kind == Kinds.TYP && !includes(e.sym))
                     enter(e.sym, fromScope);
             }
@@ -718,7 +731,7 @@ public class Scope {
         }
 
         @Override
-        public void enter(Symbol sym, Scope s, Scope origin) {
+        public void enter(Symbol sym, Scope s, Scope origin, boolean staticallyImported) {
             throw new UnsupportedOperationException();
         }
 

@@ -72,7 +72,7 @@ class Lock {
      * has been freed, and then try to acquire it again.  This method
      * will not return until the lock has been acquired.
      *
-     * @exception  InterruptedException if any thread has
+     * @exception  java.lang.InterruptedException if any thread has
      *               interrupted this thread.
      */
     public final synchronized void lock() throws InterruptedException {

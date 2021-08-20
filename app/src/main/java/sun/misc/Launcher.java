@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2005, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,6 @@
 
 package sun.misc;
 
-import com.spartacusrex.spartacuside.helper.ParseUtil;
 import java.io.File;
 import java.io.IOException;
 import java.io.FilePermission;
@@ -44,13 +43,11 @@ import java.security.PrivilegedExceptionAction;
 import java.security.AccessControlContext;
 import java.security.PermissionCollection;
 import java.security.Permissions;
+import java.security.Permission;
 import java.security.ProtectionDomain;
 import java.security.CodeSource;
-//HACK
-//import sun.security.action.GetPropertyAction;
-
 import sun.security.util.SecurityConstants;
-
+import sun.net.www.ParseUtil;
 
 /**
  * This class is used by the system to launch the main application.
@@ -58,6 +55,8 @@ Launcher */
 public class Launcher {
     private static URLStreamHandlerFactory factory = new Factory();
     private static Launcher launcher = new Launcher();
+    private static String bootClassPath =
+        System.getProperty("sun.boot.class.path");
 
     public static Launcher getLauncher() {
         return launcher;
@@ -72,7 +71,7 @@ public class Launcher {
             extcl = ExtClassLoader.getExtClassLoader();
         } catch (IOException e) {
             throw new InternalError(
-                "Could not create extension class loader");
+                "Could not create extension class loader", e);
         }
 
         // Now create the class loader to use to launch the application
@@ -80,7 +79,7 @@ public class Launcher {
             loader = AppClassLoader.getAppClassLoader(extcl);
         } catch (IOException e) {
             throw new InternalError(
-                "Could not create application class loader");
+                "Could not create application class loader", e);
         }
 
         // Also set the context class loader for the primordial thread.
@@ -91,7 +90,7 @@ public class Launcher {
         if (s != null) {
             SecurityManager sm = null;
             if ("".equals(s) || "default".equals(s)) {
-                sm = new SecurityManager();
+                sm = new java.lang.SecurityManager();
             } else {
                 try {
                     sm = (SecurityManager)loader.loadClass(s).newInstance();
@@ -121,7 +120,10 @@ public class Launcher {
      * The class loader used for loading installed extensions.
      */
     static class ExtClassLoader extends URLClassLoader {
-        private File[] dirs;
+
+        static {
+            ClassLoader.registerAsParallelCapable();
+        }
 
         /**
          * create an ExtClassLoader. The ExtClassLoader is created
@@ -136,9 +138,9 @@ public class Launcher {
                 // aa synthesized ACC via a call to the private method
                 // ExtClassLoader.getContext().
 
-                return (ExtClassLoader) AccessController.doPrivileged(
-                     new PrivilegedExceptionAction() {
-                        public Object run() throws IOException {
+                return AccessController.doPrivileged(
+                    new PrivilegedExceptionAction<ExtClassLoader>() {
+                        public ExtClassLoader run() throws IOException {
                             int len = dirs.length;
                             for (int i = 0; i < len; i++) {
                                 MetaIndex.registerDirectory(dirs[i]);
@@ -147,12 +149,12 @@ public class Launcher {
                         }
                     });
             } catch (java.security.PrivilegedActionException e) {
-                    throw (IOException) e.getException();
+                throw (IOException) e.getException();
             }
         }
 
         void addExtURL(URL url) {
-                super.addURL(url);
+            super.addURL(url);
         }
 
         /*
@@ -160,7 +162,6 @@ public class Launcher {
          */
         public ExtClassLoader(File[] dirs) throws IOException {
             super(getExtURLs(dirs), null, factory);
-            this.dirs = dirs;
         }
 
         private static File[] getExtDirs() {
@@ -181,7 +182,7 @@ public class Launcher {
         }
 
         private static URL[] getExtURLs(File[] dirs) throws IOException {
-            Vector urls = new Vector();
+            Vector<URL> urls = new Vector<URL>();
             for (int i = 0; i < dirs.length; i++) {
                 String[] files = dirs[i].list();
                 if (files != null) {
@@ -207,20 +208,28 @@ public class Launcher {
          */
         public String findLibrary(String name) {
             name = System.mapLibraryName(name);
-            for (int i = 0; i < dirs.length; i++) {
-                // Look in architecture-specific subdirectory first
-                String arch = System.getProperty("os.arch");
-                if (arch != null) {
-                    File file = new File(new File(dirs[i], arch), name);
+            URL[] urls = super.getURLs();
+            File prevDir = null;
+            for (int i = 0; i < urls.length; i++) {
+                // Get the ext directory from the URL
+                File dir = new File(urls[i].getPath()).getParentFile();
+                if (dir != null && !dir.equals(prevDir)) {
+                    // Look in architecture-specific subdirectory first
+                    // Read from the saved system properties to avoid deadlock
+                    String arch = VM.getSavedProperty("os.arch");
+                    if (arch != null) {
+                        File file = new File(new File(dir, arch), name);
+                        if (file.exists()) {
+                            return file.getAbsolutePath();
+                        }
+                    }
+                    // Then check the extension directory
+                    File file = new File(dir, name);
                     if (file.exists()) {
                         return file.getAbsolutePath();
                     }
                 }
-                // Then check the extension directory
-                File file = new File(dirs[i], name);
-                if (file.exists()) {
-                    return file.getAbsolutePath();
-                }
+                prevDir = dir;
             }
             return null;
         }
@@ -249,6 +258,10 @@ public class Launcher {
      */
     static class AppClassLoader extends URLClassLoader {
 
+        static {
+            ClassLoader.registerAsParallelCapable();
+        }
+
         public static ClassLoader getAppClassLoader(final ClassLoader extcl)
             throws IOException
         {
@@ -262,9 +275,9 @@ public class Launcher {
             // when loading  classes. Specifically it prevent
             // accessClassInPackage.sun.* grants from being honored.
             //
-            return (AppClassLoader)
-                AccessController.doPrivileged(new PrivilegedAction() {
-                public Object run() {
+            return AccessController.doPrivileged(
+                new PrivilegedAction<AppClassLoader>() {
+                    public AppClassLoader run() {
                     URL[] urls =
                         (s == null) ? new URL[0] : pathToURLs(path);
                     return new AppClassLoader(urls, extcl);
@@ -282,7 +295,7 @@ public class Launcher {
         /**
          * Override loadClass so we can checkPackageAccess.
          */
-        public synchronized Class loadClass(String name, boolean resolve)
+        public Class<?> loadClass(String name, boolean resolve)
             throws ClassNotFoundException
         {
             int i = name.lastIndexOf('.');
@@ -326,7 +339,7 @@ public class Launcher {
          */
 
         private static AccessControlContext getContext(File[] cp)
-            throws MalformedURLException
+            throws java.net.MalformedURLException
         {
             PathPermissions perms =
                 new PathPermissions(cp);
@@ -343,38 +356,41 @@ public class Launcher {
         }
     }
 
-    public static URLClassPath getBootstrapClassPath() {
-        //HACK
-        String prop = "/";//AccessController.doPrivileged(new GetPropertyAction("sun.boot.class.path"));
-
-        URL[] urls;
-        if (prop != null) {
-            final String path = prop;
-            urls = (URL[])AccessController.doPrivileged(
-                new PrivilegedAction() {
-                    public Object run() {
-                        File[] classPath = getClassPath(path);
-                        int len = classPath.length;
-                        Set seenDirs = new HashSet();
-                        for (int i = 0; i < len; i++) {
-                            File curEntry = classPath[i];
-                            // Negative test used to properly handle
-                            // nonexistent jars on boot class path
-                            if (!curEntry.isDirectory()) {
-                                curEntry = curEntry.getParentFile();
+    private static class BootClassPathHolder {
+        static final URLClassPath bcp;
+        static {
+            URL[] urls;
+            if (bootClassPath != null) {
+                urls = AccessController.doPrivileged(
+                    new PrivilegedAction<URL[]>() {
+                        public URL[] run() {
+                            File[] classPath = getClassPath(bootClassPath);
+                            int len = classPath.length;
+                            Set<File> seenDirs = new HashSet<File>();
+                            for (int i = 0; i < len; i++) {
+                                File curEntry = classPath[i];
+                                // Negative test used to properly handle
+                                // nonexistent jars on boot class path
+                                if (!curEntry.isDirectory()) {
+                                    curEntry = curEntry.getParentFile();
+                                }
+                                if (curEntry != null && seenDirs.add(curEntry)) {
+                                    MetaIndex.registerDirectory(curEntry);
+                                }
                             }
-                            if (curEntry != null && seenDirs.add(curEntry)) {
-                                MetaIndex.registerDirectory(curEntry);
-                            }
+                            return pathToURLs(classPath);
                         }
-                        return pathToURLs(classPath);
                     }
-                }
-            );
-        } else {
-            urls = new URL[0];
+                );
+            } else {
+                urls = new URL[0];
+            }
+            bcp = new URLClassPath(urls, factory);
         }
-        return new URLClassPath(urls, factory);
+    }
+
+    public static URLClassPath getBootstrapClassPath() {
+        return BootClassPathHolder.bcp;
     }
 
     private static URL[] pathToURLs(File[] path) {
@@ -444,7 +460,7 @@ public class Launcher {
             return ParseUtil.fileToEncodedURL(file);
         } catch (MalformedURLException e) {
             // Should never happen since we specify the protocol...
-            throw new InternalError();
+            throw new InternalError(e);
         }
     }
 
@@ -457,17 +473,12 @@ public class Launcher {
         public URLStreamHandler createURLStreamHandler(String protocol) {
             String name = PREFIX + "." + protocol + ".Handler";
             try {
-                Class c = Class.forName(name);
+                Class<?> c = Class.forName(name);
                 return (URLStreamHandler)c.newInstance();
-            } catch (ClassNotFoundException e) {
-                e.printStackTrace();
-            } catch (InstantiationException e) {
-                e.printStackTrace();
-            } catch (IllegalAccessException e) {
-                e.printStackTrace();
+            } catch (ReflectiveOperationException e) {
+                throw new InternalError("could not load " + protocol +
+                                        "system protocol handler", e);
             }
-            throw new InternalError("could not load " + protocol +
-                                    "system protocol handler");
         }
     }
 }
@@ -511,8 +522,8 @@ class PathPermissions extends PermissionCollection {
         perms.add(new java.util.PropertyPermission("java.*",
             SecurityConstants.PROPERTY_READ_ACTION));
 
-        AccessController.doPrivileged(new PrivilegedAction() {
-            public Object run() {
+        AccessController.doPrivileged(new PrivilegedAction<Void>() {
+            public Void run() {
                 for (int i=0; i < path.length; i++) {
                     File f = path[i];
                     String path;
@@ -555,7 +566,7 @@ class PathPermissions extends PermissionCollection {
         return perms.implies(permission);
     }
 
-    public java.util.Enumeration elements() {
+    public java.util.Enumeration<Permission> elements() {
         if (perms == null)
             init();
         synchronized (perms) {

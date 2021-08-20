@@ -70,9 +70,9 @@ class CacheEntry extends Ref {
  *      }
  * </pre>
  *
- * @see Object#hashCode
- * @see Object#equals
- * @see Ref
+ * @see java.lang.Object#hashCode
+ * @see java.lang.Object#equals
+ * @see sun.misc.Ref
  */
 public
 class Cache extends Dictionary {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2005, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,20 +27,21 @@ package sun.misc;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
-import java.io.FileOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-
-//HACK
-//import sun.security.action.GetBooleanAction;
+import sun.security.action.GetBooleanAction;
 
 /**
  * ProxyGenerator contains the code to generate a dynamic proxy class
@@ -310,28 +311,48 @@ public class ProxyGenerator {
     private final static String handlerFieldName = "h";
 
     /** debugging flag for saving generated class files */
-    private final static boolean saveGeneratedFiles = false;
-        //HACK
-        //java.security.AccessController.doPrivileged(new GetBooleanAction("sun.misc.ProxyGenerator.saveGeneratedFiles")).booleanValue();
+    private final static boolean saveGeneratedFiles =
+        java.security.AccessController.doPrivileged(
+            new GetBooleanAction(
+                "sun.misc.ProxyGenerator.saveGeneratedFiles")).booleanValue();
+
+    /**
+     * Generate a public proxy class given a name and a list of proxy interfaces.
+     */
+    public static byte[] generateProxyClass(final String name,
+                                            Class<?>[] interfaces) {
+        return generateProxyClass(name, interfaces, (ACC_PUBLIC | ACC_FINAL | ACC_SUPER));
+    }
 
     /**
      * Generate a proxy class given a name and a list of proxy interfaces.
-     */
+     *
+     * @param name        the class name of the proxy class
+     * @param interfaces  proxy interfaces
+     * @param accessFlags access flags of the proxy class
+    */
     public static byte[] generateProxyClass(final String name,
-                                            Class[] interfaces)
+                                            Class<?>[] interfaces,
+                                            int accessFlags)
     {
-        ProxyGenerator gen = new ProxyGenerator(name, interfaces);
+        ProxyGenerator gen = new ProxyGenerator(name, interfaces, accessFlags);
         final byte[] classFile = gen.generateClassFile();
 
         if (saveGeneratedFiles) {
             java.security.AccessController.doPrivileged(
-            new java.security.PrivilegedAction() {
-                public Object run() {
+            new java.security.PrivilegedAction<Void>() {
+                public Void run() {
                     try {
-                        FileOutputStream file =
-                            new FileOutputStream(dotToSlash(name) + ".class");
-                        file.write(classFile);
-                        file.close();
+                        int i = name.lastIndexOf('.');
+                        Path path;
+                        if (i > 0) {
+                            Path dir = Paths.get(name.substring(0, i).replace('.', File.separatorChar));
+                            Files.createDirectories(dir);
+                            path = dir.resolve(name.substring(i+1, name.length()) + ".class");
+                        } else {
+                            path = Paths.get(name + ".class");
+                        }
+                        Files.write(path, classFile);
                         return null;
                     } catch (IOException e) {
                         throw new InternalError(
@@ -352,7 +373,7 @@ public class ProxyGenerator {
         try {
             hashCodeMethod = Object.class.getMethod("hashCode");
             equalsMethod =
-                Object.class.getMethod("equals", new Class[] { Object.class });
+                Object.class.getMethod("equals", new Class<?>[] { Object.class });
             toStringMethod = Object.class.getMethod("toString");
         } catch (NoSuchMethodException e) {
             throw new NoSuchMethodError(e.getMessage());
@@ -363,23 +384,25 @@ public class ProxyGenerator {
     private String className;
 
     /** proxy interfaces */
-    private Class[] interfaces;
+    private Class<?>[] interfaces;
+
+    /** proxy class access flags */
+    private int accessFlags;
 
     /** constant pool of class being generated */
     private ConstantPool cp = new ConstantPool();
 
     /** FieldInfo struct for each field of generated class */
-    private List<FieldInfo> fields = new ArrayList<FieldInfo>();
+    private List<FieldInfo> fields = new ArrayList<>();
 
     /** MethodInfo struct for each method of generated class */
-    private List<MethodInfo> methods = new ArrayList<MethodInfo>();
+    private List<MethodInfo> methods = new ArrayList<>();
 
     /**
      * maps method signature string to list of ProxyMethod objects for
      * proxy methods with that signature
      */
-    private Map<String, List<ProxyMethod>> proxyMethods =
-        new HashMap<String,List<ProxyMethod>>();
+    private Map<String, List<ProxyMethod>> proxyMethods = new HashMap<>();
 
     /** count of ProxyMethod objects added to proxyMethods */
     private int proxyMethodCount = 0;
@@ -391,9 +414,10 @@ public class ProxyGenerator {
      * A ProxyGenerator object contains the state for the ongoing
      * generation of a particular proxy class.
      */
-    private ProxyGenerator(String className, Class[] interfaces) {
+    private ProxyGenerator(String className, Class<?>[] interfaces, int accessFlags) {
         this.className = className;
         this.interfaces = interfaces;
+        this.accessFlags = accessFlags;
     }
 
     /**
@@ -423,10 +447,9 @@ public class ProxyGenerator {
          * earlier interfaces precedence over later ones with duplicate
          * methods.
          */
-        for (int i = 0; i < interfaces.length; i++) {
-            Method[] methods = interfaces[i].getMethods();
-            for (int j = 0; j < methods.length; j++) {
-                addProxyMethod(methods[j], interfaces[i]);
+        for (Class<?> intf : interfaces) {
+            for (Method m : intf.getMethods()) {
+                addProxyMethod(m, intf);
             }
         }
 
@@ -461,7 +484,7 @@ public class ProxyGenerator {
             methods.add(generateStaticInitializer());
 
         } catch (IOException e) {
-            throw new InternalError("unexpected I/O Exception");
+            throw new InternalError("unexpected I/O Exception", e);
         }
 
         if (methods.size() > 65535) {
@@ -481,8 +504,8 @@ public class ProxyGenerator {
          */
         cp.getClass(dotToSlash(className));
         cp.getClass(superclassName);
-        for (int i = 0; i < interfaces.length; i++) {
-            cp.getClass(dotToSlash(interfaces[i].getName()));
+        for (Class<?> intf: interfaces) {
+            cp.getClass(dotToSlash(intf.getName()));
         }
 
         /*
@@ -509,7 +532,7 @@ public class ProxyGenerator {
             cp.write(dout);             // (write constant pool)
 
                                         // u2 access_flags;
-            dout.writeShort(ACC_PUBLIC | ACC_FINAL | ACC_SUPER);
+            dout.writeShort(accessFlags);
                                         // u2 this_class;
             dout.writeShort(cp.getClass(dotToSlash(className)));
                                         // u2 super_class;
@@ -518,9 +541,9 @@ public class ProxyGenerator {
                                         // u2 interfaces_count;
             dout.writeShort(interfaces.length);
                                         // u2 interfaces[interfaces_count];
-            for (int i = 0; i < interfaces.length; i++) {
+            for (Class<?> intf : interfaces) {
                 dout.writeShort(cp.getClass(
-                    dotToSlash(interfaces[i].getName())));
+                    dotToSlash(intf.getName())));
             }
 
                                         // u2 fields_count;
@@ -541,7 +564,7 @@ public class ProxyGenerator {
             dout.writeShort(0); // (no ClassFile attributes for proxy classes)
 
         } catch (IOException e) {
-            throw new InternalError("unexpected I/O Exception");
+            throw new InternalError("unexpected I/O Exception", e);
         }
 
         return bout.toByteArray();
@@ -560,11 +583,11 @@ public class ProxyGenerator {
      * passed to the invocation handler's "invoke" method for a given
      * set of duplicate methods.
      */
-    private void addProxyMethod(Method m, Class fromClass) {
+    private void addProxyMethod(Method m, Class<?> fromClass) {
         String name = m.getName();
-        Class[] parameterTypes = m.getParameterTypes();
-        Class returnType = m.getReturnType();
-        Class[] exceptionTypes = m.getExceptionTypes();
+        Class<?>[] parameterTypes = m.getParameterTypes();
+        Class<?> returnType = m.getReturnType();
+        Class<?>[] exceptionTypes = m.getExceptionTypes();
 
         String sig = name + getParameterDescriptors(parameterTypes);
         List<ProxyMethod> sigmethods = proxyMethods.get(sig);
@@ -577,19 +600,19 @@ public class ProxyGenerator {
                      * compatibly with the throws clauses of both
                      * overridden methods.
                      */
-                    List<Class> legalExceptions = new ArrayList<Class>();
+                    List<Class<?>> legalExceptions = new ArrayList<>();
                     collectCompatibleTypes(
                         exceptionTypes, pm.exceptionTypes, legalExceptions);
                     collectCompatibleTypes(
                         pm.exceptionTypes, exceptionTypes, legalExceptions);
-                    pm.exceptionTypes = new Class[legalExceptions.size()];
+                    pm.exceptionTypes = new Class<?>[legalExceptions.size()];
                     pm.exceptionTypes =
                         legalExceptions.toArray(pm.exceptionTypes);
                     return;
                 }
             }
         } else {
-            sigmethods = new ArrayList<ProxyMethod>(3);
+            sigmethods = new ArrayList<>(3);
             proxyMethods.put(sig, sigmethods);
         }
         sigmethods.add(new ProxyMethod(name, parameterTypes, returnType,
@@ -619,11 +642,11 @@ public class ProxyGenerator {
          * List of return types that are not yet known to be
          * assignable from ("covered" by) any of the others.
          */
-        LinkedList<Class> uncoveredReturnTypes = new LinkedList<Class>();
+        LinkedList<Class<?>> uncoveredReturnTypes = new LinkedList<>();
 
     nextNewReturnType:
         for (ProxyMethod pm : methods) {
-            Class newReturnType = pm.returnType;
+            Class<?> newReturnType = pm.returnType;
             if (newReturnType.isPrimitive()) {
                 throw new IllegalArgumentException(
                     "methods with same signature " +
@@ -638,9 +661,9 @@ public class ProxyGenerator {
              * Compare the new return type to the existing uncovered
              * return types.
              */
-            ListIterator<Class> liter = uncoveredReturnTypes.listIterator();
+            ListIterator<Class<?>> liter = uncoveredReturnTypes.listIterator();
             while (liter.hasNext()) {
-                Class uncoveredReturnType = liter.next();
+                Class<?> uncoveredReturnType = liter.next();
 
                 /*
                  * If an existing uncovered return type is assignable
@@ -834,8 +857,8 @@ public class ProxyGenerator {
                                         // u2 number_of_exceptions;
             out.writeShort(declaredExceptions.length);
                         // u2 exception_index_table[number_of_exceptions];
-            for (int i = 0; i < declaredExceptions.length; i++) {
-                out.writeShort(declaredExceptions[i]);
+            for (short value : declaredExceptions) {
+                out.writeShort(value);
             }
         }
 
@@ -849,15 +872,15 @@ public class ProxyGenerator {
     private class ProxyMethod {
 
         public String methodName;
-        public Class[] parameterTypes;
-        public Class returnType;
-        public Class[] exceptionTypes;
-        public Class fromClass;
+        public Class<?>[] parameterTypes;
+        public Class<?> returnType;
+        public Class<?>[] exceptionTypes;
+        public Class<?> fromClass;
         public String methodFieldName;
 
-        private ProxyMethod(String methodName, Class[] parameterTypes,
-                            Class returnType, Class[] exceptionTypes,
-                            Class fromClass)
+        private ProxyMethod(String methodName, Class<?>[] parameterTypes,
+                            Class<?> returnType, Class<?>[] exceptionTypes,
+                            Class<?> fromClass)
         {
             this.methodName = methodName;
             this.parameterTypes = parameterTypes;
@@ -945,10 +968,10 @@ public class ProxyGenerator {
 
             tryEnd = pc = (short) minfo.code.size();
 
-            List<Class> catchList = computeUniqueCatchList(exceptionTypes);
+            List<Class<?>> catchList = computeUniqueCatchList(exceptionTypes);
             if (catchList.size() > 0) {
 
-                for (Class ex : catchList) {
+                for (Class<?> ex : catchList) {
                     minfo.exceptionTable.add(new ExceptionTableEntry(
                         tryBegin, tryEnd, pc,
                         cp.getClass(dotToSlash(ex.getName()))));
@@ -1002,7 +1025,7 @@ public class ProxyGenerator {
          * invocation handler's "invoke" method.  The code is written
          * to the supplied stream.
          */
-        private void codeWrapArgument(Class type, int slot,
+        private void codeWrapArgument(Class<?> type, int slot,
                                       DataOutputStream out)
             throws IOException
         {
@@ -1043,7 +1066,7 @@ public class ProxyGenerator {
          * Object) to its correct type.  The code is written to the
          * supplied stream.
          */
-        private void codeUnwrapReturnValue(Class type, DataOutputStream out)
+        private void codeUnwrapReturnValue(Class<?> type, DataOutputStream out)
             throws IOException
         {
             if (type.isPrimitive()) {
@@ -1392,7 +1415,7 @@ public class ProxyGenerator {
      * the supplied stream.  Note that the code generated by this method
      * may caused the checked ClassNotFoundException to be thrown.
      */
-    private void codeClassForName(Class cl, DataOutputStream out)
+    private void codeClassForName(Class<?> cl, DataOutputStream out)
         throws IOException
     {
         code_ldc(cp.getString(cl.getName()), out);
@@ -1423,8 +1446,8 @@ public class ProxyGenerator {
      * Return the "method descriptor" string for a method with the given
      * parameter types and return type.  See JVMS section 4.3.3.
      */
-    private static String getMethodDescriptor(Class[] parameterTypes,
-                                              Class returnType)
+    private static String getMethodDescriptor(Class<?>[] parameterTypes,
+                                              Class<?> returnType)
     {
         return getParameterDescriptors(parameterTypes) +
             ((returnType == void.class) ? "V" : getFieldType(returnType));
@@ -1437,7 +1460,7 @@ public class ProxyGenerator {
      * string is useful for constructing string keys for methods without
      * regard to their return type.
      */
-    private static String getParameterDescriptors(Class[] parameterTypes) {
+    private static String getParameterDescriptors(Class<?>[] parameterTypes) {
         StringBuilder desc = new StringBuilder("(");
         for (int i = 0; i < parameterTypes.length; i++) {
             desc.append(getFieldType(parameterTypes[i]));
@@ -1451,7 +1474,7 @@ public class ProxyGenerator {
      * a field descriptor, a parameter descriptor, or a return descriptor
      * other than "void".  See JVMS section 4.3.2.
      */
-    private static String getFieldType(Class type) {
+    private static String getFieldType(Class<?> type) {
         if (type.isPrimitive()) {
             return PrimitiveTypeInfo.get(type).baseTypeString;
         } else if (type.isArray()) {
@@ -1473,7 +1496,7 @@ public class ProxyGenerator {
      * method with the given name and parameter types.
      */
     private static String getFriendlyMethodSignature(String name,
-                                                     Class[] parameterTypes)
+                                                     Class<?>[] parameterTypes)
     {
         StringBuilder sig = new StringBuilder(name);
         sig.append('(');
@@ -1481,7 +1504,7 @@ public class ProxyGenerator {
             if (i > 0) {
                 sig.append(',');
             }
-            Class parameterType = parameterTypes[i];
+            Class<?> parameterType = parameterTypes[i];
             int dimensions = 0;
             while (parameterType.isArray()) {
                 parameterType = parameterType.getComponentType();
@@ -1505,7 +1528,7 @@ public class ProxyGenerator {
      * this abstract notion of a "word" in section 3.4, but that definition
      * was removed for the second edition.
      */
-    private static int getWordsPerType(Class type) {
+    private static int getWordsPerType(Class<?> type) {
         if (type == long.class || type == double.class) {
             return 2;
         } else {
@@ -1522,14 +1545,15 @@ public class ProxyGenerator {
      * declared exceptions from duplicate methods inherited from
      * different interfaces.
      */
-    private static void collectCompatibleTypes(Class[] from, Class[] with,
-                                               List<Class> list)
+    private static void collectCompatibleTypes(Class<?>[] from,
+                                               Class<?>[] with,
+                                               List<Class<?>> list)
     {
-        for (int i = 0; i < from.length; i++) {
-            if (!list.contains(from[i])) {
-                for (int j = 0; j < with.length; j++) {
-                    if (with[j].isAssignableFrom(from[i])) {
-                        list.add(from[i]);
+        for (Class<?> fc: from) {
+            if (!list.contains(fc)) {
+                for (Class<?> wc: with) {
+                    if (wc.isAssignableFrom(fc)) {
+                        list.add(fc);
                         break;
                     }
                 }
@@ -1558,16 +1582,15 @@ public class ProxyGenerator {
      * given list of declared exceptions, indicating that no exceptions
      * need to be caught.
      */
-    private static List<Class> computeUniqueCatchList(Class[] exceptions) {
-        List<Class> uniqueList = new ArrayList<Class>();
+    private static List<Class<?>> computeUniqueCatchList(Class<?>[] exceptions) {
+        List<Class<?>> uniqueList = new ArrayList<>();
                                                 // unique exceptions to catch
 
         uniqueList.add(Error.class);            // always catch/rethrow these
         uniqueList.add(RuntimeException.class);
 
     nextException:
-        for (int i = 0; i < exceptions.length; i++) {
-            Class ex = exceptions[i];
+        for (Class<?> ex: exceptions) {
             if (ex.isAssignableFrom(Throwable.class)) {
                 /*
                  * If Throwable is declared to be thrown by the proxy method,
@@ -1587,7 +1610,7 @@ public class ProxyGenerator {
              * exceptions that need to be caught:
              */
             for (int j = 0; j < uniqueList.size();) {
-                Class ex2 = uniqueList.get(j);
+                Class<?> ex2 = uniqueList.get(j);
                 if (ex2.isAssignableFrom(ex)) {
                     /*
                      * if a superclass of this exception is already on
@@ -1632,8 +1655,7 @@ public class ProxyGenerator {
         /** descriptor of same method */
         public String unwrapMethodDesc;
 
-        private static Map<Class,PrimitiveTypeInfo> table =
-            new HashMap<Class,PrimitiveTypeInfo>();
+        private static Map<Class<?>,PrimitiveTypeInfo> table = new HashMap<>();
         static {
             add(byte.class, Byte.class);
             add(char.class, Character.class);
@@ -1645,12 +1667,12 @@ public class ProxyGenerator {
             add(boolean.class, Boolean.class);
         }
 
-        private static void add(Class primitiveClass, Class wrapperClass) {
+        private static void add(Class<?> primitiveClass, Class<?> wrapperClass) {
             table.put(primitiveClass,
                       new PrimitiveTypeInfo(primitiveClass, wrapperClass));
         }
 
-        private PrimitiveTypeInfo(Class primitiveClass, Class wrapperClass) {
+        private PrimitiveTypeInfo(Class<?> primitiveClass, Class<?> wrapperClass) {
             assert primitiveClass.isPrimitive();
 
             baseTypeString =
@@ -1663,7 +1685,7 @@ public class ProxyGenerator {
             unwrapMethodDesc = "()" + baseTypeString;
         }
 
-        public static PrimitiveTypeInfo get(Class cl) {
+        public static PrimitiveTypeInfo get(Class<?> cl) {
             return table.get(cl);
         }
     }
@@ -1694,7 +1716,7 @@ public class ProxyGenerator {
          * and for assigning the next index value.  Note that element 0
          * of this list corresponds to constant pool index 1.
          */
-        private List<Entry> pool = new ArrayList<Entry>(32);
+        private List<Entry> pool = new ArrayList<>(32);
 
         /**
          * maps constant pool data of all types to constant pool indexes.
@@ -1702,7 +1724,7 @@ public class ProxyGenerator {
          * This map is used to look up the index of an existing entry for
          * values of all types.
          */
-        private Map<Object,Short> map = new HashMap<Object,Short>(16);
+        private Map<Object,Short> map = new HashMap<>(16);
 
         /** true if no new constant pool entries may be added */
         private boolean readOnly = false;

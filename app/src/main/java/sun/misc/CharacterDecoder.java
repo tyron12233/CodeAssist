@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1995, 2004, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1995, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -131,7 +131,7 @@ public abstract class CharacterDecoder {
      * read method.
      */
     protected int readFully(InputStream in, byte buffer[], int offset, int len)
-        throws IOException {
+        throws java.io.IOException {
         for (int i = 0; i < len; i++) {
             int q = in.read();
             if (q == -1)
@@ -145,7 +145,7 @@ public abstract class CharacterDecoder {
      * Decode the text from the InputStream and write the decoded
      * octets to the OutputStream. This method runs until the stream
      * is exhausted.
-     * @exception CEFormatException An error has occured while decoding
+     * @exception CEFormatException An error has occurred while decoding
      * @exception CEStreamExhausted The input stream is unexpectedly out of data
      */
     public void decodeBuffer(InputStream aStream, OutputStream bStream) throws IOException {
@@ -181,7 +181,7 @@ public abstract class CharacterDecoder {
     /**
      * Alternate decode interface that takes a String containing the encoded
      * buffer and returns a byte array containing the data.
-     * @exception CEFormatException An error has occured while decoding
+     * @exception CEFormatException An error has occurred while decoding
      */
     public byte decodeBuffer(String inputString)[] throws IOException {
         byte    inputBuffer[] = new byte[inputString.length()];

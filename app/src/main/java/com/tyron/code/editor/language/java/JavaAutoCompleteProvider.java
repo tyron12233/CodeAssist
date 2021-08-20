@@ -31,7 +31,7 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
     public List<CompletionItem> getAutoCompleteItems(String partial, boolean endsWithParen, TextAnalyzeResult prev, int line) {
         Cursor cursor = mEditor.getCursor();
         JavaParser parser = new JavaParser(viewModel);
-        CompilationUnitTree tree = parser.parse(mEditor.getText().toString(), cursor.getLeft());
+        CompilationUnitTree tree = parser.parse(mEditor.getCurrentFile(), mEditor.getText().toString(), cursor.getLeft());
         JavacTask task = parser.getTask();
         //JavaAnalyzer.getInstance().setDiagnostics(parser.getDiagnostics());
         CompletionProvider provider = new CompletionProvider(parser);

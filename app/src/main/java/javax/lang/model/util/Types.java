@@ -1,30 +1,33 @@
 /*
- * Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package javax.lang.model.util;
 
+import java.lang.annotation.Annotation;
+import java.lang.annotation.AnnotationTypeMismatchException;
+import java.lang.annotation.IncompleteAnnotationException;
 import java.util.List;
 import javax.lang.model.element.*;
 import javax.lang.model.type.*;
@@ -49,6 +52,7 @@ public interface Types {
      * Returns {@code null} if the type is not one with a
      * corresponding element.
      *
+     * @param t the type to map to an element
      * @return the element corresponding to the given type
      */
     Element asElement(TypeMirror t);
@@ -65,6 +69,13 @@ public interface Types {
      *   {@code List<?> list = new ArrayList<Object>();}
      *   {@code list.add(list.get(0));}
      * </pre>
+     *
+     * <p>Since annotations are only meta-data associated with a type,
+     * the set of annotations on either argument is <em>not</em> taken
+     * into account when computing whether or not two {@code
+     * TypeMirror} objects are the same type. In particular, two
+     * {@code TypeMirror} objects can have different annotations and
+     * still be considered the same.
      *
      * @param t1  the first type
      * @param t2  the second type

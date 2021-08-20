@@ -1,26 +1,26 @@
 /*
- * Copyright (c) 1999, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 1999, 2014, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.tree;
@@ -42,7 +42,7 @@ import com.sun.tools.javac.tree.JCTree.*;
  *  This code and its internal interfaces are subject to change or
  *  deletion without notice.</b>
  */
-public class TreeTranslator extends Visitor {
+public class TreeTranslator extends JCTree.Visitor {
 
     /** Visitor result field: a tree
      */
@@ -56,9 +56,9 @@ public class TreeTranslator extends Visitor {
             return null;
         } else {
             tree.accept(this);
-            JCTree result = this.result;
+            JCTree tmpResult = this.result;
             this.result = null;
-            return (T)result; // XXX cast
+            return (T)tmpResult; // XXX cast
         }
     }
 
@@ -139,6 +139,7 @@ public class TreeTranslator extends Visitor {
         tree.mods = translate(tree.mods);
         tree.restype = translate(tree.restype);
         tree.typarams = translateTypeParams(tree.typarams);
+        tree.recvparam = translate(tree.recvparam);
         tree.params = translateVarDefs(tree.params);
         tree.thrown = translate(tree.thrown);
         tree.body = translate(tree.body);
@@ -147,6 +148,7 @@ public class TreeTranslator extends Visitor {
 
     public void visitVarDef(JCVariableDecl tree) {
         tree.mods = translate(tree.mods);
+        tree.nameexpr = translate(tree.nameexpr);
         tree.vartype = translate(tree.vartype);
         tree.init = translate(tree.init);
         result = tree;
@@ -282,7 +284,18 @@ public class TreeTranslator extends Visitor {
         result = tree;
     }
 
+    public void visitLambda(JCLambda tree) {
+        tree.params = translate(tree.params);
+        tree.body = translate(tree.body);
+        result = tree;
+    }
+
     public void visitNewArray(JCNewArray tree) {
+        tree.annotations = translate(tree.annotations);
+        List<List<JCAnnotation>> dimAnnos = List.nil();
+        for (List<JCAnnotation> origDimAnnos : tree.dimAnnotations)
+            dimAnnos = dimAnnos.append(translate(origDimAnnos));
+        tree.dimAnnotations = dimAnnos;
         tree.elemtype = translate(tree.elemtype);
         tree.dims = translate(tree.dims);
         tree.elems = translate(tree.elems);
@@ -340,6 +353,11 @@ public class TreeTranslator extends Visitor {
         result = tree;
     }
 
+    public void visitReference(JCMemberReference tree) {
+        tree.expr = translate(tree.expr);
+        result = tree;
+    }
+
     public void visitIdent(JCIdent tree) {
         result = tree;
     }
@@ -368,7 +386,13 @@ public class TreeTranslator extends Visitor {
         result = tree;
     }
 
+    public void visitTypeIntersection(JCTypeIntersection tree) {
+        tree.bounds = translate(tree.bounds);
+        result = tree;
+    }
+
     public void visitTypeParameter(JCTypeParameter tree) {
+        tree.annotations = translate(tree.annotations);
         tree.bounds = translate(tree.bounds);
         result = tree;
     }
@@ -403,6 +427,12 @@ public class TreeTranslator extends Visitor {
     public void visitAnnotation(JCAnnotation tree) {
         tree.annotationType = translate(tree.annotationType);
         tree.args = translate(tree.args);
+        result = tree;
+    }
+
+    public void visitAnnotatedType(JCAnnotatedType tree) {
+        tree.annotations = translate(tree.annotations);
+        tree.underlyingType = translate(tree.underlyingType);
         result = tree;
     }
 

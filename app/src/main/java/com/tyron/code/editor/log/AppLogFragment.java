@@ -60,6 +60,7 @@ public class AppLogFragment extends Fragment {
                 .get(LogViewModel.class);
         model.getLogs(id).observe(this, (log) -> {
             mLogView.setText(log);
+            mLogView.setSelection(mLogView.getLineCount() - 1, 0, true);
         });
     }
 }

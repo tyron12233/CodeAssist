@@ -1,26 +1,26 @@
 /*
- * Copyright (c) 2008, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 2008, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 package com.sun.tools.javac.util;
 
@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+
 import javax.tools.JavaFileObject;
 
 import com.sun.tools.javac.api.DiagnosticFormatter;
@@ -43,8 +44,10 @@ import com.sun.tools.javac.code.Printer;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Type.CapturedType;
-
 import com.sun.tools.javac.file.BaseFileObject;
+import com.sun.tools.javac.jvm.Profile;
+import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.tree.Pretty;
 import static com.sun.tools.javac.util.JCDiagnostic.DiagnosticType.*;
 
 /**
@@ -180,6 +183,9 @@ public abstract class AbstractDiagnosticFormatter implements DiagnosticFormatter
             }
             return s;
         }
+        else if (arg instanceof JCExpression) {
+            return expr2String((JCExpression)arg);
+        }
         else if (arg instanceof Iterable<?>) {
             return formatIterable(d, (Iterable<?>)arg, l);
         }
@@ -192,6 +198,9 @@ public abstract class AbstractDiagnosticFormatter implements DiagnosticFormatter
         else if (arg instanceof JavaFileObject) {
             return ((JavaFileObject)arg).getName();
         }
+        else if (arg instanceof Profile) {
+            return ((Profile)arg).name;
+        }
         else if (arg instanceof Formattable) {
             return ((Formattable)arg).toString(l, messages);
         }
@@ -199,6 +208,20 @@ public abstract class AbstractDiagnosticFormatter implements DiagnosticFormatter
             return String.valueOf(arg);
         }
     }
+    //where
+            private String expr2String(JCExpression tree) {
+                switch(tree.getTag()) {
+                    case PARENS:
+                        return expr2String(((JCParens)tree).expr);
+                    case LAMBDA:
+                    case REFERENCE:
+                    case CONDEXPR:
+                        return Pretty.toSimpleString(tree);
+                    default:
+                        Assert.error("unexpected tree kind " + tree.getKind());
+                        return null;
+                }
+            }
 
     /**
      * Format an iterable argument of a given diagnostic.
@@ -465,7 +488,7 @@ public abstract class AbstractDiagnosticFormatter implements DiagnosticFormatter
         /**
          * Tells whether the caret display is active or not.
          *
-         * @param caretEnabled if true the caret is enabled
+         * @return true if the caret is enabled
          */
         public boolean isCaretEnabled() {
             return caretEnabled;
@@ -490,6 +513,7 @@ public abstract class AbstractDiagnosticFormatter implements DiagnosticFormatter
      * lead to infinite loops.
      */
     protected Printer printer = new Printer() {
+
         @Override
         protected String localize(Locale locale, String key, Object... args) {
             return AbstractDiagnosticFormatter.this.localize(locale, key, args);

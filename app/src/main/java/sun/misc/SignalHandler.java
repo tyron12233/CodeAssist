@@ -30,7 +30,7 @@ package sun.misc;
  *
  * @author   Sheng Liang
  * @author   Bill Shannon
- * @see      Signal
+ * @see      sun.misc.Signal
  * @since    1.2
  */
 

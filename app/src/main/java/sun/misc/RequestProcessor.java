@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,7 +36,7 @@ package sun.misc;
 
 public class RequestProcessor implements Runnable {
 
-    private static Queue requestQueue;
+    private static Queue<Request> requestQueue;
     private static Thread dispatcher;
 
     /**
@@ -55,15 +55,12 @@ public class RequestProcessor implements Runnable {
         lazyInitialize();
         while (true) {
             try {
-                Object obj = requestQueue.dequeue();
-                if (obj instanceof Request) { // ignore bogons
-                    Request req = (Request)obj;
-                    try {
-                        req.execute();
-                    } catch (Throwable t) {
-                        // do nothing at the moment...maybe report an error
-                        // in the future
-                    }
+                Request req = requestQueue.dequeue();
+                try {
+                    req.execute();
+                } catch (Throwable t) {
+                    // do nothing at the moment...maybe report an error
+                    // in the future
                 }
             } catch (InterruptedException e) {
                 // do nothing at the present time.
@@ -92,7 +89,7 @@ public class RequestProcessor implements Runnable {
      */
     private static synchronized void lazyInitialize() {
         if (requestQueue == null) {
-            requestQueue = new Queue();
+            requestQueue = new Queue<Request>();
         }
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2006, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,9 @@ package sun.misc;
 
 import java.security.*;
 import java.lang.reflect.*;
+
+import sun.reflect.CallerSensitive;
+import sun.reflect.Reflection;
 
 
 /**
@@ -80,9 +83,10 @@ public final class Unsafe {
      *             <code>checkPropertiesAccess</code> method doesn't allow
      *             access to the system properties.
      */
+    @CallerSensitive
     public static Unsafe getUnsafe() {
-        Class cc = sun.reflect.Reflection.getCallerClass(2);
-        if (cc.getClassLoader() != null)
+        Class<?> caller = Reflection.getCallerClass();
+        if (!VM.isSystemDomainLoader(caller.getClassLoader()))
             throw new SecurityException("Unsafe");
         return theUnsafe;
     }
@@ -103,7 +107,7 @@ public final class Unsafe {
      * The results are undefined unless one of the following cases is true:
      * <ul>
      * <li>The offset was obtained from {@link #objectFieldOffset} on
-     * the {@link Field} of some Java field and the object
+     * the {@link java.lang.reflect.Field} of some Java field and the object
      * referred to by <code>o</code> is of a class compatible with that
      * field's class.
      *
@@ -498,15 +502,63 @@ public final class Unsafe {
     /**
      * Sets all bytes in a given block of memory to a fixed value
      * (usually zero).
+     *
+     * <p>This method determines a block's base address by means of two parameters,
+     * and so it provides (in effect) a <em>double-register</em> addressing mode,
+     * as discussed in {@link #getInt(Object,long)}.  When the object reference is null,
+     * the offset supplies an absolute base address.
+     *
+     * <p>The stores are in coherent (atomic) units of a size determined
+     * by the address and length parameters.  If the effective address and
+     * length are all even modulo 8, the stores take place in 'long' units.
+     * If the effective address and length are (resp.) even modulo 4 or 2,
+     * the stores take place in units of 'int' or 'short'.
+     *
+     * @since 1.7
      */
-    public native void setMemory(long address, long bytes, byte value);
+    public native void setMemory(Object o, long offset, long bytes, byte value);
+
+    /**
+     * Sets all bytes in a given block of memory to a fixed value
+     * (usually zero).  This provides a <em>single-register</em> addressing mode,
+     * as discussed in {@link #getInt(Object,long)}.
+     *
+     * <p>Equivalent to <code>setMemory(null, address, bytes, value)</code>.
+     */
+    public void setMemory(long address, long bytes, byte value) {
+        setMemory(null, address, bytes, value);
+    }
 
     /**
      * Sets all bytes in a given block of memory to a copy of another
      * block.
+     *
+     * <p>This method determines each block's base address by means of two parameters,
+     * and so it provides (in effect) a <em>double-register</em> addressing mode,
+     * as discussed in {@link #getInt(Object,long)}.  When the object reference is null,
+     * the offset supplies an absolute base address.
+     *
+     * <p>The transfers are in coherent (atomic) units of a size determined
+     * by the address and length parameters.  If the effective addresses and
+     * length are all even modulo 8, the transfer takes place in 'long' units.
+     * If the effective addresses and length are (resp.) even modulo 4 or 2,
+     * the transfer takes place in units of 'int' or 'short'.
+     *
+     * @since 1.7
      */
-    public native void copyMemory(long srcAddress, long destAddress,
+    public native void copyMemory(Object srcBase, long srcOffset,
+                                  Object destBase, long destOffset,
                                   long bytes);
+    /**
+     * Sets all bytes in a given block of memory to a copy of another
+     * block.  This provides a <em>single-register</em> addressing mode,
+     * as discussed in {@link #getInt(Object,long)}.
+     *
+     * Equivalent to <code>copyMemory(null, srcAddress, null, destAddress, bytes)</code>.
+     */
+    public void copyMemory(long srcAddress, long destAddress, long bytes) {
+        copyMemory(null, srcAddress, null, destAddress, bytes);
+    }
 
     /**
      * Disposes of a block of native memory, as obtained from {@link
@@ -568,7 +620,7 @@ public final class Unsafe {
      * for a given class in one place.
      */
     @Deprecated
-    public Object staticFieldBase(Class c) {
+    public Object staticFieldBase(Class<?> c) {
         Field[] fields = c.getDeclaredFields();
         for (int i = 0; i < fields.length; i++) {
             if (Modifier.isStatic(fields[i].getModifiers())) {
@@ -630,11 +682,19 @@ public final class Unsafe {
     public native Object staticFieldBase(Field f);
 
     /**
+     * Detect if the given class may need to be initialized. This is often
+     * needed in conjunction with obtaining the static field base of a
+     * class.
+     * @return false only if a call to {@code ensureClassInitialized} would have no effect
+     */
+    public native boolean shouldBeInitialized(Class<?> c);
+
+    /**
      * Ensure the given class has been initialized. This is often
      * needed in conjunction with obtaining the static field base of a
      * class.
      */
-    public native void ensureClassInitialized(Class c);
+    public native void ensureClassInitialized(Class<?> c);
 
     /**
      * Report the offset of the first element in the storage allocation of a
@@ -646,7 +706,43 @@ public final class Unsafe {
      * @see #getInt(Object, long)
      * @see #putInt(Object, long, int)
      */
-    public native int arrayBaseOffset(Class arrayClass);
+    public native int arrayBaseOffset(Class<?> arrayClass);
+
+    /** The value of {@code arrayBaseOffset(boolean[].class)} */
+    public static final int ARRAY_BOOLEAN_BASE_OFFSET
+            = theUnsafe.arrayBaseOffset(boolean[].class);
+
+    /** The value of {@code arrayBaseOffset(byte[].class)} */
+    public static final int ARRAY_BYTE_BASE_OFFSET
+            = theUnsafe.arrayBaseOffset(byte[].class);
+
+    /** The value of {@code arrayBaseOffset(short[].class)} */
+    public static final int ARRAY_SHORT_BASE_OFFSET
+            = theUnsafe.arrayBaseOffset(short[].class);
+
+    /** The value of {@code arrayBaseOffset(char[].class)} */
+    public static final int ARRAY_CHAR_BASE_OFFSET
+            = theUnsafe.arrayBaseOffset(char[].class);
+
+    /** The value of {@code arrayBaseOffset(int[].class)} */
+    public static final int ARRAY_INT_BASE_OFFSET
+            = theUnsafe.arrayBaseOffset(int[].class);
+
+    /** The value of {@code arrayBaseOffset(long[].class)} */
+    public static final int ARRAY_LONG_BASE_OFFSET
+            = theUnsafe.arrayBaseOffset(long[].class);
+
+    /** The value of {@code arrayBaseOffset(float[].class)} */
+    public static final int ARRAY_FLOAT_BASE_OFFSET
+            = theUnsafe.arrayBaseOffset(float[].class);
+
+    /** The value of {@code arrayBaseOffset(double[].class)} */
+    public static final int ARRAY_DOUBLE_BASE_OFFSET
+            = theUnsafe.arrayBaseOffset(double[].class);
+
+    /** The value of {@code arrayBaseOffset(Object[].class)} */
+    public static final int ARRAY_OBJECT_BASE_OFFSET
+            = theUnsafe.arrayBaseOffset(Object[].class);
 
     /**
      * Report the scale factor for addressing elements in the storage
@@ -659,7 +755,43 @@ public final class Unsafe {
      * @see #getInt(Object, long)
      * @see #putInt(Object, long, int)
      */
-    public native int arrayIndexScale(Class arrayClass);
+    public native int arrayIndexScale(Class<?> arrayClass);
+
+    /** The value of {@code arrayIndexScale(boolean[].class)} */
+    public static final int ARRAY_BOOLEAN_INDEX_SCALE
+            = theUnsafe.arrayIndexScale(boolean[].class);
+
+    /** The value of {@code arrayIndexScale(byte[].class)} */
+    public static final int ARRAY_BYTE_INDEX_SCALE
+            = theUnsafe.arrayIndexScale(byte[].class);
+
+    /** The value of {@code arrayIndexScale(short[].class)} */
+    public static final int ARRAY_SHORT_INDEX_SCALE
+            = theUnsafe.arrayIndexScale(short[].class);
+
+    /** The value of {@code arrayIndexScale(char[].class)} */
+    public static final int ARRAY_CHAR_INDEX_SCALE
+            = theUnsafe.arrayIndexScale(char[].class);
+
+    /** The value of {@code arrayIndexScale(int[].class)} */
+    public static final int ARRAY_INT_INDEX_SCALE
+            = theUnsafe.arrayIndexScale(int[].class);
+
+    /** The value of {@code arrayIndexScale(long[].class)} */
+    public static final int ARRAY_LONG_INDEX_SCALE
+            = theUnsafe.arrayIndexScale(long[].class);
+
+    /** The value of {@code arrayIndexScale(float[].class)} */
+    public static final int ARRAY_FLOAT_INDEX_SCALE
+            = theUnsafe.arrayIndexScale(float[].class);
+
+    /** The value of {@code arrayIndexScale(double[].class)} */
+    public static final int ARRAY_DOUBLE_INDEX_SCALE
+            = theUnsafe.arrayIndexScale(double[].class);
+
+    /** The value of {@code arrayIndexScale(Object[].class)} */
+    public static final int ARRAY_OBJECT_INDEX_SCALE
+            = theUnsafe.arrayIndexScale(Object[].class);
 
     /**
      * Report the size in bytes of a native pointer, as stored via {@link
@@ -668,6 +800,9 @@ public final class Unsafe {
      * fully by their information content.
      */
     public native int addressSize();
+
+    /** The value of {@code addressSize()} */
+    public static final int ADDRESS_SIZE = theUnsafe.addressSize();
 
     /**
      * Report the size in bytes of a native memory page (whatever that is).
@@ -682,15 +817,32 @@ public final class Unsafe {
      * Tell the VM to define a class, without security checks.  By default, the
      * class loader and protection domain come from the caller's class.
      */
-    public native Class defineClass(String name, byte[] b, int off, int len,
-                                    ClassLoader loader,
-                                    ProtectionDomain protectionDomain);
+    public native Class<?> defineClass(String name, byte[] b, int off, int len,
+                                       ClassLoader loader,
+                                       ProtectionDomain protectionDomain);
 
-    public native Class defineClass(String name, byte[] b, int off, int len);
+    /**
+     * Define a class but do not make it known to the class loader or system dictionary.
+     * <p>
+     * For each CP entry, the corresponding CP patch must either be null or have
+     * the a format that matches its tag:
+     * <ul>
+     * <li>Integer, Long, Float, Double: the corresponding wrapper object type from java.lang
+     * <li>Utf8: a string (must have suitable syntax if used as signature or name)
+     * <li>Class: any java.lang.Class object
+     * <li>String: any object (not just a java.lang.String)
+     * <li>InterfaceMethodRef: (NYI) a method handle to invoke on that call site's arguments
+     * </ul>
+     * @params hostClass context for linkage, access control, protection domain, and class loader
+     * @params data      bytes of a class file
+     * @params cpPatches where non-null entries exist, they replace corresponding CP entries in data
+     */
+    public native Class<?> defineAnonymousClass(Class<?> hostClass, byte[] data, Object[] cpPatches);
+
 
     /** Allocate an instance but do not run any constructor.
         Initializes the class if it has not yet been. */
-    public native Object allocateInstance(Class cls)
+    public native Object allocateInstance(Class<?> cls)
         throws InstantiationException;
 
     /** Lock the object.  It must get unlocked via {@link #monitorExit}. */
@@ -858,4 +1010,133 @@ public final class Unsafe {
      *         if the load average is unobtainable.
      */
     public native int getLoadAverage(double[] loadavg, int nelems);
+
+    // The following contain CAS-based Java implementations used on
+    // platforms not supporting native instructions
+
+    /**
+     * Atomically adds the given value to the current value of a field
+     * or array element within the given object <code>o</code>
+     * at the given <code>offset</code>.
+     *
+     * @param o object/array to update the field/element in
+     * @param offset field/element offset
+     * @param delta the value to add
+     * @return the previous value
+     * @since 1.8
+     */
+    public final int getAndAddInt(Object o, long offset, int delta) {
+        int v;
+        do {
+            v = getIntVolatile(o, offset);
+        } while (!compareAndSwapInt(o, offset, v, v + delta));
+        return v;
+    }
+
+    /**
+     * Atomically adds the given value to the current value of a field
+     * or array element within the given object <code>o</code>
+     * at the given <code>offset</code>.
+     *
+     * @param o object/array to update the field/element in
+     * @param offset field/element offset
+     * @param delta the value to add
+     * @return the previous value
+     * @since 1.8
+     */
+    public final long getAndAddLong(Object o, long offset, long delta) {
+        long v;
+        do {
+            v = getLongVolatile(o, offset);
+        } while (!compareAndSwapLong(o, offset, v, v + delta));
+        return v;
+    }
+
+    /**
+     * Atomically exchanges the given value with the current value of
+     * a field or array element within the given object <code>o</code>
+     * at the given <code>offset</code>.
+     *
+     * @param o object/array to update the field/element in
+     * @param offset field/element offset
+     * @param newValue new value
+     * @return the previous value
+     * @since 1.8
+     */
+    public final int getAndSetInt(Object o, long offset, int newValue) {
+        int v;
+        do {
+            v = getIntVolatile(o, offset);
+        } while (!compareAndSwapInt(o, offset, v, newValue));
+        return v;
+    }
+
+    /**
+     * Atomically exchanges the given value with the current value of
+     * a field or array element within the given object <code>o</code>
+     * at the given <code>offset</code>.
+     *
+     * @param o object/array to update the field/element in
+     * @param offset field/element offset
+     * @param newValue new value
+     * @return the previous value
+     * @since 1.8
+     */
+    public final long getAndSetLong(Object o, long offset, long newValue) {
+        long v;
+        do {
+            v = getLongVolatile(o, offset);
+        } while (!compareAndSwapLong(o, offset, v, newValue));
+        return v;
+    }
+
+    /**
+     * Atomically exchanges the given reference value with the current
+     * reference value of a field or array element within the given
+     * object <code>o</code> at the given <code>offset</code>.
+     *
+     * @param o object/array to update the field/element in
+     * @param offset field/element offset
+     * @param newValue new value
+     * @return the previous value
+     * @since 1.8
+     */
+    public final Object getAndSetObject(Object o, long offset, Object newValue) {
+        Object v;
+        do {
+            v = getObjectVolatile(o, offset);
+        } while (!compareAndSwapObject(o, offset, v, newValue));
+        return v;
+    }
+
+
+    /**
+     * Ensures lack of reordering of loads before the fence
+     * with loads or stores after the fence.
+     * @since 1.8
+     */
+    public native void loadFence();
+
+    /**
+     * Ensures lack of reordering of stores before the fence
+     * with loads or stores after the fence.
+     * @since 1.8
+     */
+    public native void storeFence();
+
+    /**
+     * Ensures lack of reordering of loads or stores before the fence
+     * with loads or stores after the fence.
+     * @since 1.8
+     */
+    public native void fullFence();
+
+    /**
+     * Throws IllegalAccessError; for use by the VM.
+     * @since 1.8
+     */
+    private static void throwIllegalAccessError() {
+       throw new IllegalAccessError();
+    }
+
 }

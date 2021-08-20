@@ -36,17 +36,20 @@ import java.io.BufferedReader;
 import java.util.regex.Matcher;
 import java.io.IOException;
 import com.tyron.code.editor.log.LogViewModel;
+import java.util.Locale;
+import com.sun.source.util.Trees;
 
 public class JavaParser {
 
     private static final String TAG = "JavaParser";
     private static final String DOT = ".";
     private static final String CONSTRUCTOR_NAME = "<init>";
-
+    
+    private final JavacTool mTool = JavacTool.create();
     private final Context context;
-    private final ParserFactory parserFactory;
+    
     private final JavacFileManager fileManager;
-    private final FileManager internalFileManager = new FileManager();
+   
     private final DiagnosticCollector<JavaFileObject> diagnostics;
     private boolean canParse = true;
     
@@ -58,25 +61,26 @@ public class JavaParser {
         this.log = log;
         context = new Context();
         diagnostics = new DiagnosticCollector<>();
-        context.put(DiagnosticListener.class, diagnostics);
         
-        Options.instance(context).put("allowStringFolding", "false");
-        Options.instance(context).put("bootclasspath", internalFileManager.getAndroidJar().getAbsolutePath());
-        
-        fileManager = new JavacFileManager(context, true, Charset.defaultCharset());
+        fileManager = mTool.getStandardFileManager(diagnostics, Locale.ENGLISH, Charset.defaultCharset());
         try {
-            File file = new File(internalFileManager.getAndroidJar().getAbsolutePath());
-            fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, List.of(file));
-            internalFileManager.putJar(file);
+            File file = new File(FileManager.getInstance().getAndroidJar().getAbsolutePath());
+            fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, List.of(file, FileManager.getInstance().getLambdaStubs()));
+            
+            List<File> files = new ArrayList<>();
+            files.add(ApplicationLoader.applicationContext.getFilesDir());
+            files.add(FileManager.getInstance().getLambdaStubs());
+            fileManager.setLocation(StandardLocation.CLASS_OUTPUT, List.of(ApplicationLoader.applicationContext.getFilesDir()));
+            fileManager.setLocation(StandardLocation.CLASS_PATH, files);
         } catch (IOException e) {
-            ApplicationLoader.showToast(e.getMessage());
+            log.d(LogViewModel.DEBUG, e.getMessage());
             // impossible
             canParse = false;
         }
-        parserFactory = ParserFactory.instance(context);              
+                     
     }
 
-    public CompilationUnitTree parse(String src, int pos) {
+    public CompilationUnitTree parse(File file, String src, int pos) {
         if (!canParse) return null;
         long time = System.currentTimeMillis();
         
@@ -88,22 +92,19 @@ public class JavaParser {
             fix.insert(end, ';');
         }
         
-        SimpleJavaFileObject source = new SimpleJavaFileObject(URI.create("Test.java"), JavaFileObject.Kind.SOURCE) {
+        SimpleJavaFileObject source = new SimpleJavaFileObject(file.toURI(), JavaFileObject.Kind.SOURCE) {
             @Override
             public CharSequence getCharContent(boolean ignoreEncodingErrors) {
                 return fix;          
             }
-        };
+        }; 
         
-        Log.instance(context).useSource(source);
-        
-        task = JavacTool.create().getTask(null, fileManager,
+        task = mTool.getTask(null, fileManager,
                                           diagnostics, null, null, List.of(source));                                  
         CompilationUnitTree unit = null;
         try {
             unit = task.parse().iterator().next();
             task.analyze();
-           
         } catch (IOException e) {}
         return unit;
     }
@@ -126,7 +127,7 @@ public class JavaParser {
     
     public List<String> publicTopLevelTypes() {
         List<String> all = new ArrayList<>();
-        all.addAll(internalFileManager.all());
+        all.addAll(FileManager.getInstance().all());
         return all;
     }
 }

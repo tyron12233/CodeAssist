@@ -25,6 +25,7 @@
 
 package javax.annotation.processing;
 
+import javax.annotation.*;
 import javax.tools.Diagnostic;
 import javax.lang.model.element.*;
 

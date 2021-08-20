@@ -1,67 +1,59 @@
 /*
  * Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.processing;
 
-import com.sun.tools.javac.code.Lint;
-import com.sun.tools.javac.util.Context;
-import com.sun.tools.javac.util.Log;
-
 import java.io.Closeable;
 import java.io.FileNotFoundException;
-import java.io.FilterOutputStream;
-import java.io.FilterWriter;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.PrintWriter;
+import java.io.FilterOutputStream;
 import java.io.Reader;
 import java.io.Writer;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.Set;
+import java.io.FilterWriter;
+import java.io.PrintWriter;
+import java.io.IOException;
+import java.util.*;
 
-import javax.annotation.processing.Filer;
-import javax.annotation.processing.FilerException;
+import static java.util.Collections.*;
+
+import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.Modifier;
 import javax.lang.model.element.NestingKind;
-import javax.tools.FileObject;
-import javax.tools.ForwardingFileObject;
-import javax.tools.JavaFileManager;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.Element;
+import javax.tools.*;
 import javax.tools.JavaFileManager.Location;
-import javax.tools.JavaFileObject;
-import javax.tools.StandardLocation;
+
+import static javax.tools.StandardLocation.SOURCE_OUTPUT;
+import static javax.tools.StandardLocation.CLASS_OUTPUT;
+
+import com.sun.tools.javac.code.Lint;
+import com.sun.tools.javac.util.*;
 
 import static com.sun.tools.javac.code.Lint.LintCategory.PROCESSING;
-import static java.util.Collections.synchronizedMap;
-import static java.util.Collections.synchronizedSet;
-import static javax.tools.StandardLocation.CLASS_OUTPUT;
-import static javax.tools.StandardLocation.SOURCE_OUTPUT;
 
 /**
  * The FilerImplementation class must maintain a number of
@@ -173,12 +165,12 @@ public class JavacFiler implements Filer, Closeable {
             this.javaFileObject = javaFileObject;
         }
 
-        public Kind getKind() {
+        public JavaFileObject.Kind getKind() {
             return javaFileObject.getKind();
         }
 
         public boolean isNameCompatible(String simpleName,
-                                        Kind kind) {
+                                        JavaFileObject.Kind kind) {
             return javaFileObject.isNameCompatible(simpleName, kind);
         }
 
@@ -222,12 +214,12 @@ public class JavacFiler implements Filer, Closeable {
             this.javaFileObject = javaFileObject;
         }
 
-        public Kind getKind() {
+        public JavaFileObject.Kind getKind() {
             return javaFileObject.getKind();
         }
 
         public boolean isNameCompatible(String simpleName,
-                                        Kind kind) {
+                                        JavaFileObject.Kind kind) {
             return javaFileObject.isNameCompatible(simpleName, kind);
         }
 
@@ -423,7 +415,7 @@ public class JavacFiler implements Filer, Closeable {
         return new FilerOutputJavaFileObject(name, fileObject);
     }
 
-    public FileObject createResource(Location location,
+    public FileObject createResource(JavaFileManager.Location location,
                                      CharSequence pkg,
                                      CharSequence relativeName,
                                      Element... originatingElements) throws IOException {
@@ -444,7 +436,7 @@ public class JavacFiler implements Filer, Closeable {
             return new FilerOutputFileObject(null, fileObject);
     }
 
-    private void locationCheck(Location location) {
+    private void locationCheck(JavaFileManager.Location location) {
         if (location instanceof StandardLocation) {
             StandardLocation stdLoc = (StandardLocation) location;
             if (!stdLoc.isOutputLocation())
@@ -453,7 +445,7 @@ public class JavacFiler implements Filer, Closeable {
         }
     }
 
-    public FileObject getResource(Location location,
+    public FileObject getResource(JavaFileManager.Location location,
                                   CharSequence pkg,
                                   CharSequence relativeName) throws IOException {
         String strPkg = pkg.toString();

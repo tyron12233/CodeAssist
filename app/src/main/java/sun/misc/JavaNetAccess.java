@@ -31,5 +31,5 @@ public interface JavaNetAccess {
     /**
      * return the URLClassPath belonging to the given loader
      */
-    URLClassPath getURLClassPath(URLClassLoader u);
+    URLClassPath getURLClassPath (URLClassLoader u);
 }

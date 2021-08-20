@@ -46,6 +46,9 @@ import java.io.File;
 import com.tyron.code.completion.FindCompletionsAt;
 import com.tyron.code.editor.log.LogViewModel;
 import android.util.Log;
+import androidx.recyclerview.widget.RecyclerView;
+import com.tyron.code.editor.CompletionItemAdapter;
+import androidx.recyclerview.widget.LinearLayoutManager;
 
 /**
  * Auto complete window for editing code quicker
@@ -55,7 +58,8 @@ import android.util.Log;
 public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     private final static String TIP = "Refreshing...";
     private final CodeEditor mEditor;
-    private final ListView mListView;
+    private final LinearLayoutManager mLayoutManager;
+    private final RecyclerView mListView;
     private final TextView mTip;
     private final GradientDrawable mBg;
     protected boolean mCancelShowUp = false;
@@ -65,8 +69,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     private AutoCompleteProvider mProvider;
     private boolean mLoading;
     private int mMaxHeight;
-    private EditorCompletionAdapter mAdapter;
-
+    private final CompletionItemAdapter mAdapter;
+    
     /**
      * Create a panel instance for the given editor
      *
@@ -75,7 +79,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     public EditorAutoCompleteWindow(CodeEditor editor) {
         super(editor);
         mEditor = editor;
-        mAdapter = new DefaultCompletionItemAdapter();
+      /*  mAdapter = new DefaultCompletionItemAdapter();
         RelativeLayout layout = new RelativeLayout(mEditor.getContext());
         mListView = new ListView(mEditor.getContext());
         layout.addView(mListView, new LinearLayout.LayoutParams(-1, -1));
@@ -100,14 +104,54 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             } catch (Exception e) {
                 Toast.makeText(mEditor.getContext(), Log.getStackTraceString(e), Toast.LENGTH_SHORT).show();
             }
+        });*/
+        
+        RelativeLayout layout = new RelativeLayout(mEditor.getContext());
+        setContentView(layout);
+        
+        mAdapter = new CompletionItemAdapter();
+        mAdapter.setOnItemClickListener(new CompletionItemAdapter.OnClickListener() {
+                @Override
+                public void onClick(int position) {
+                    try {
+                        select(position);
+                    } catch (Exception e) {
+                        Toast.makeText(mEditor.getContext(), Log.getStackTraceString(e), Toast.LENGTH_SHORT).show();
+                    }
+                }
         });
+        mLayoutManager = new LinearLayoutManager(mEditor.getContext());
+        mListView = new RecyclerView(mEditor.getContext());
+        mListView.setLayoutManager(mLayoutManager);
+        mListView.setAdapter(mAdapter);
+        layout.addView(mListView , new LinearLayout.LayoutParams(-1, -1));
+        
+        
+        mTip = new TextView(mEditor.getContext());
+        mTip.setText(TIP);
+        mTip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        mTip.setBackgroundColor(0xeeeeeeee);
+        mTip.setTextColor(0xff000000);
+        layout.addView(mTip);
+        ((RelativeLayout.LayoutParams) mTip.getLayoutParams()).addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
+        
+        GradientDrawable gd = new GradientDrawable();
+        gd.setCornerRadius(1);
+        layout.setBackgroundDrawable(gd);
+        mBg = gd;
+        
+        applyColorScheme();
+        setLoading(true);
     }
-
+    
+    /**
+     * Not needed
+     */
     protected void setAdapter(EditorCompletionAdapter adapter) {
-        mAdapter = adapter;
+        /*mAdapter = adapter;
         if (adapter == null) {
             mAdapter = new DefaultCompletionItemAdapter();
-        }
+        }*/
     }
 
     @Override
@@ -168,11 +212,11 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      * Move selection down
      */
     public void moveDown() {
-        if (mCurrent + 1 >= mListView.getAdapter().getCount()) {
+        if (mCurrent + 1 >= mListView.getAdapter().getItemCount()) {
             return;
         }
         mCurrent++;
-        ((EditorCompletionAdapter) mListView.getAdapter()).notifyDataSetChanged();
+        mAdapter.notifyDataSetChanged();
         ensurePosition();
     }
 
@@ -184,7 +228,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             return;
         }
         mCurrent--;
-        ((EditorCompletionAdapter) mListView.getAdapter()).notifyDataSetChanged();
+        mAdapter.notifyDataSetChanged();
         ensurePosition();
     }
 
@@ -192,7 +236,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      * Make current selection visible
      */
     private void ensurePosition() {
-        mListView.setSelection(mCurrent);
+        mListView.scrollToPosition(mCurrent);
     }
 
     /**
@@ -208,7 +252,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      * @param pos Index of auto complete item
      */
     public void select(int pos) {
-        CompletionItem item = ((EditorCompletionAdapter) mListView.getAdapter()).getItem(pos);
+        CompletionItem item = mAdapter.getItem(pos);
         Cursor cursor = mEditor.getCursor();
         if (!cursor.isSelected()) {
             mCancelShowUp = true;
@@ -225,7 +269,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             if (item.item.kind == com.tyron.code.model.CompletionItem.Kind.IMPORT) {
                 LogViewModel mode = new ViewModelProvider((ViewModelStoreOwner) mEditor.getContext()).get(LogViewModel.class);
                 JavaParser parser = new JavaParser(mode);
-                CompilationUnitTree root = parser.parse(mEditor.getText().toString(), cursor.getLeft());
+                CompilationUnitTree root = parser.parse(mEditor.getCurrentFile(), mEditor.getText().toString(), cursor.getLeft());
                 ParseTask task = new ParseTask(parser.getTask(), root);
                 if (!CompletionProvider.hasImport(root, item.item.detail)) {
                     AddImport imp = new AddImport(new File(""), item.item.detail);

@@ -61,12 +61,11 @@ public class VMSupport {
         Properties props = new Properties();
 
         // stringPropertyNames() returns a snapshot of the property keys
-        //HACK
-        /*Set<String> keyset = p.stringPropertyNames();
+        Set<String> keyset = p.stringPropertyNames();
         for (String key : keyset) {
             String value = p.getProperty(key);
             props.put(key, value);
-        }*/
+        }
 
         props.store(out, null);
         return out.toByteArray();

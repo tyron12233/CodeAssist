@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1994, 1995, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1994, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,7 +28,7 @@ package sun.misc;
 /**
  * The CRC-16 class calculates a 16 bit cyclic redundancy check of a set
  * of bytes. This error detecting code is used to determine if bit rot
- * has occured in a byte stream.
+ * has occurred in a byte stream.
  */
 
 public class CRC16 {

@@ -1,34 +1,38 @@
 /*
  * Copyright (c) 2009, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 package com.sun.tools.javac.util;
 
-import com.sun.tools.javac.api.DiagnosticFormatter;
-
+import java.util.Set;
 import java.util.Locale;
-
 import javax.tools.Diagnostic;
+
+import com.sun.tools.javac.api.DiagnosticFormatter;
+import com.sun.tools.javac.api.DiagnosticFormatter.Configuration;
+import com.sun.tools.javac.api.DiagnosticFormatter.Configuration.DiagnosticPart;
+import com.sun.tools.javac.api.DiagnosticFormatter.Configuration.MultilineLimit;
+import com.sun.tools.javac.api.DiagnosticFormatter.PositionKind;
 
 /**
  * A delegated diagnostic formatter delegates all formatting
@@ -93,5 +97,41 @@ public class ForwardingDiagnosticFormatter<D extends Diagnostic<?>, F extends Di
         return formatter.formatSource(diag, fullname, l);
     }
 
+    /**
+     * A delegated formatter configuration delegates all configurations settings
+     * to an underlying configuration object (aka the delegated configuration).
+     */
+    public static class ForwardingConfiguration implements DiagnosticFormatter.Configuration {
 
+        /** The configurationr object to which the forwarding configuration delegates some settings */
+        protected Configuration configuration;
+
+        public ForwardingConfiguration(Configuration configuration) {
+            this.configuration = configuration;
+        }
+
+        /**
+         * Returns the underlying delegated configuration.
+         * @return delegated configuration
+         */
+        public Configuration getDelegatedConfiguration() {
+            return configuration;
+        }
+
+        public int getMultilineLimit(MultilineLimit limit) {
+            return configuration.getMultilineLimit(limit);
+        }
+
+        public Set<DiagnosticPart> getVisible() {
+            return configuration.getVisible();
+        }
+
+        public void setMultilineLimit(MultilineLimit limit, int value) {
+            configuration.setMultilineLimit(limit, value);
+        }
+
+        public void setVisible(Set<DiagnosticPart> diagParts) {
+            configuration.setVisible(diagParts);
+        }
+    }
 }

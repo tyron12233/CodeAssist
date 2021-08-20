@@ -28,7 +28,7 @@ package sun.nio;
 import java.nio.ByteBuffer;
 import java.io.IOException;
 
-/** This is an interface to adapt existing APIs to use {@link ByteBuffer
+/** This is an interface to adapt existing APIs to use {@link java.nio.ByteBuffer
  *  <tt>ByteBuffers</tt>} as the underlying
  *  data format.  Only the initial producer and final consumer have to be changed.<p>
  *

@@ -122,7 +122,7 @@ public abstract class CharacterEncoder {
      * read method.
      */
     protected int readFully(InputStream in, byte buffer[])
-        throws IOException {
+        throws java.io.IOException {
         for (int i = 0; i < buffer.length; i++) {
             int q = in.read();
             if (q == -1)

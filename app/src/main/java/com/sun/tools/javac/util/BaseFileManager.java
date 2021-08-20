@@ -1,35 +1,30 @@
 /*
- * Copyright (c) 2009, 2011, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * Copyright (c) 2009, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
  */
 
 package com.sun.tools.javac.util;
 
-import com.sun.tools.javac.code.Source;
-import com.sun.tools.javac.main.JavacOption;
-import com.sun.tools.javac.main.OptionName;
-import com.sun.tools.javac.main.RecognizedOptions;
-import com.sun.tools.javac.util.JCDiagnostic.SimpleDiagnosticPosition;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
@@ -51,8 +46,18 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import javax.tools.JavaFileObject;
 import javax.tools.JavaFileObject.Kind;
+
+import com.sun.tools.javac.code.Lint;
+import com.sun.tools.javac.code.Source;
+import com.sun.tools.javac.file.FSInfo;
+import com.sun.tools.javac.file.Locations;
+import com.sun.tools.javac.main.Option;
+import com.sun.tools.javac.main.OptionHelper;
+import com.sun.tools.javac.main.OptionHelper.GrumpyHelper;
+import com.sun.tools.javac.util.JCDiagnostic.SimpleDiagnosticPosition;
 
 /**
  * Utility methods for building a filemanager.
@@ -63,15 +68,21 @@ public abstract class BaseFileManager {
     protected BaseFileManager(Charset charset) {
         this.charset = charset;
         byteBufferCache = new ByteBufferCache();
+        locations = createLocations();
     }
 
     /**
      * Set the context for JavacPathFileManager.
      */
-    protected void setContext(Context context) {
+    public void setContext(Context context) {
         log = Log.instance(context);
         options = Options.instance(context);
         classLoaderClass = options.get("procloader");
+        locations.update(log, options, Lint.instance(context), FSInfo.instance(context));
+    }
+
+    protected Locations createLocations() {
+        return new Locations();
     }
 
     /**
@@ -88,8 +99,10 @@ public abstract class BaseFileManager {
 
     protected String classLoaderClass;
 
+    protected Locations locations;
+
     protected Source getSource() {
-        String sourceName = options.get(OptionName.SOURCE);
+        String sourceName = options.get(Option.SOURCE);
         Source source = null;
         if (sourceName != null)
             source = Source.lookup(sourceName);
@@ -99,9 +112,8 @@ public abstract class BaseFileManager {
     protected ClassLoader getClassLoader(URL[] urls) {
         ClassLoader thisClassLoader = getClass().getClassLoader();
 
-        // Bug: 6558476
-        // Ideally, ClassLoader should be Closeable, but before JDK7 it is not.
-        // On older versions, try the following, to get a closeable classloader.
+        // Allow the following to specify a closeable classloader
+        // other than URLClassLoader.
 
         // 1: Allow client to specify the class to use via hidden option
         if (classLoaderClass != null) {
@@ -115,33 +127,36 @@ public abstract class BaseFileManager {
                 // ignore errors loading user-provided class loader, fall through
             }
         }
-
-        // 2: If URLClassLoader implements Closeable, use that.
-        if (Closeable.class.isAssignableFrom(URLClassLoader.class))
-            return new URLClassLoader(urls, thisClassLoader);
-
-        // 3: Try using private reflection-based CloseableURLClassLoader
-        try {
-            return new CloseableURLClassLoader(urls, thisClassLoader);
-        } catch (Throwable t) {
-            // ignore errors loading workaround class loader, fall through
-        }
-
-        // 4: If all else fails, use plain old standard URLClassLoader
         return new URLClassLoader(urls, thisClassLoader);
     }
 
     // <editor-fold defaultstate="collapsed" desc="Option handling">
     public boolean handleOption(String current, Iterator<String> remaining) {
-        for (JavacOption o: javacFileManagerOptions) {
+        OptionHelper helper = new GrumpyHelper(log) {
+            @Override
+            public String get(Option option) {
+                return options.get(option.getText());
+            }
+
+            @Override
+            public void put(String name, String value) {
+                options.put(name, value);
+            }
+
+            @Override
+            public void remove(String name) {
+                options.remove(name);
+            }
+        };
+        for (Option o: javacFileManagerOptions) {
             if (o.matches(current))  {
                 if (o.hasArg()) {
                     if (remaining.hasNext()) {
-                        if (!o.process(options, current, remaining.next()))
+                        if (!o.process(helper, current, remaining.next()))
                             return true;
                     }
                 } else {
-                    if (!o.process(options, current))
+                    if (!o.process(helper, current))
                         return true;
                 }
                 // operand missing, or process returned false
@@ -152,12 +167,11 @@ public abstract class BaseFileManager {
         return false;
     }
     // where
-        private static JavacOption[] javacFileManagerOptions =
-            RecognizedOptions.getJavacFileManagerOptions(
-            new RecognizedOptions.GrumpyHelper());
+        private static final Set<Option> javacFileManagerOptions =
+            Option.getJavacFileManagerOptions();
 
     public int isSupportedOption(String option) {
-        for (JavacOption o : javacFileManagerOptions) {
+        for (Option o : javacFileManagerOptions) {
             if (o.matches(option))
                 return o.hasArg() ? 1 : 0;
         }
@@ -179,7 +193,7 @@ public abstract class BaseFileManager {
     }
 
     public String getEncodingName() {
-        String encName = options.get(OptionName.ENCODING);
+        String encName = options.get(Option.ENCODING);
         if (encName == null)
             return getDefaultEncodingName();
         else

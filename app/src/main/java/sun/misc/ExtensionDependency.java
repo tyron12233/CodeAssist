@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2006, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,6 @@
 
 package sun.misc;
 
-import com.spartacusrex.spartacuside.helper.ParseUtil;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
@@ -43,6 +42,7 @@ import java.security.PrivilegedExceptionAction;
 import java.security.PrivilegedActionException;
 import java.net.URL;
 import java.net.MalformedURLException;
+import sun.net.www.ParseUtil;
 
 /**
  * <p>
@@ -70,7 +70,7 @@ import java.net.MalformedURLException;
 public class ExtensionDependency {
 
     /* Callbak interfaces to delegate installation of missing extensions */
-    private static Vector providers;
+    private static Vector<ExtensionInstallationProvider> providers;
 
     /**
      * <p>
@@ -83,7 +83,7 @@ public class ExtensionDependency {
         (ExtensionInstallationProvider eip)
     {
         if (providers == null) {
-            providers = new Vector();
+            providers = new Vector<>();
         }
         providers.add(eip);
     }
@@ -93,7 +93,7 @@ public class ExtensionDependency {
      * Unregister a previously installed installation provider
      * </p>
      */
-    public synchronized  static void removeExtensionInstallationProvider
+    public synchronized static void removeExtensionInstallationProvider
         (ExtensionInstallationProvider eip)
     {
         providers.remove(eip);
@@ -265,7 +265,7 @@ public class ExtensionDependency {
      * the jar file.
      * </p>
      *
-     * @param extensionName key in the attibute list
+     * @param extensionName key in the attribute list
      * @param attr manifest file attributes
      * @param file installed extension jar file to compare the requested
      * extension against.
@@ -284,10 +284,9 @@ public class ExtensionDependency {
         // Load the jar file ...
         Manifest man;
         try {
-            man = (Manifest) AccessController.doPrivileged
-                (
-                 new PrivilegedExceptionAction() {
-                     public Object run()
+            man = AccessController.doPrivileged(
+                new PrivilegedExceptionAction<Manifest>() {
+                    public Manifest run()
                             throws IOException, FileNotFoundException {
                          if (!file.exists())
                              throw new FileNotFoundException(file.getName());
@@ -349,14 +348,16 @@ public class ExtensionDependency {
                                        ExtensionInfo instInfo)
         throws ExtensionInstallationException
     {
-
-        Vector currentProviders;
+        Vector<ExtensionInstallationProvider> currentProviders;
         synchronized(providers) {
-            currentProviders = (Vector) providers.clone();
+            @SuppressWarnings("unchecked")
+            Vector<ExtensionInstallationProvider> tmp =
+                (Vector<ExtensionInstallationProvider>) providers.clone();
+            currentProviders = tmp;
         }
-        for (Enumeration e=currentProviders.elements();e.hasMoreElements();) {
-            ExtensionInstallationProvider eip =
-                (ExtensionInstallationProvider) e.nextElement();
+        for (Enumeration<ExtensionInstallationProvider> e = currentProviders.elements();
+                e.hasMoreElements();) {
+            ExtensionInstallationProvider eip = e.nextElement();
 
             if (eip!=null) {
                 // delegate the installation to the provider
@@ -391,9 +392,9 @@ public class ExtensionDependency {
         final String extName = extensionName;
         final String[] fileExt = {".jar", ".zip"};
 
-        return (File) AccessController.doPrivileged
-            (new PrivilegedAction() {
-                public Object run() {
+        return AccessController.doPrivileged(
+            new PrivilegedAction<File>() {
+                public File run() {
                     try {
                         File fExtension;
                         File[] dirs = getExtDirs();
@@ -429,8 +430,8 @@ public class ExtensionDependency {
      * </p>
      */
     private static File[] getExtDirs() {
-        //HACK
-        String s = "";//java.security.AccessController.doPrivileged(new sun.security.action.GetPropertyAction("java.ext.dirs"));
+        String s = java.security.AccessController.doPrivileged(
+                new sun.security.action.GetPropertyAction("java.ext.dirs"));
 
         File[] dirs;
         if (s != null) {
@@ -460,7 +461,7 @@ public class ExtensionDependency {
      * @return the list of files installed in all the directories
      */
     private static File[] getExtFiles(File[] dirs) throws IOException {
-        Vector urls = new Vector();
+        Vector<File> urls = new Vector<File>();
         for (int i = 0; i < dirs.length; i++) {
             String[] files = dirs[i].list(new JarFilter());
             if (files != null) {
@@ -484,16 +485,15 @@ public class ExtensionDependency {
      * </p>
      */
     private File[] getInstalledExtensions() throws IOException {
-        return (File[]) AccessController.doPrivileged
-            (
-             new PrivilegedAction() {
-                 public Object run() {
+        return AccessController.doPrivileged(
+            new PrivilegedAction<File[]>() {
+                public File[] run() {
                      try {
                          return getExtFiles(getExtDirs());
                      } catch(IOException e) {
                          debug("Cannot get list of installed extensions");
                          debugException(e);
-                         return new URL[0];
+                        return new File[0];
                      }
                  }
             });

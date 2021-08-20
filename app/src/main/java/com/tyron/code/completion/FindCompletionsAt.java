@@ -14,6 +14,7 @@ import com.sun.source.tree.ImportTree;
 import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.ErroneousTree;
 import com.sun.source.tree.CaseTree;
+import com.sun.source.tree.MemberReferenceTree;
 
 public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
 
@@ -62,6 +63,18 @@ public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
         }
         return super.visitMemberSelect(node, find);
     }
+
+    @Override
+    public TreePath visitMemberReference(MemberReferenceTree t, Long find) {
+        long start = pos.getEndPosition(root, t.getQualifierExpression()) + 2;
+        long end = pos.getEndPosition(root, t);
+        if (start <= find && find <= end) {
+            return getCurrentPath();
+        }
+        return super.visitMemberReference(t, find);
+    }
+    
+    
     
     @Override
     public TreePath visitCase(CaseTree node, Long find) {
