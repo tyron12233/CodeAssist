@@ -105,6 +105,7 @@ public class JavaParser {
         try {
             unit = task.parse().iterator().next();
             task.analyze();
+            //task.generate();
         } catch (IOException e) {}
         return unit;
     }

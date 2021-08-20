@@ -47,6 +47,8 @@ import java.io.File;
 import java.util.Collections;
 import javax.lang.model.element.TypeParameterElement;
 import com.sun.source.tree.MemberReferenceTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.ExpressionTree;
 
 /**
  * Main entry point for getting completions
@@ -310,12 +312,20 @@ public class CompletionProvider {
          List<CompletionItem> list = new ArrayList<>();
          HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
          Scope scope = trees.getScope(path);
+         
+         Log.d("IDENTIFIER PATH", path.getParentPath().getLeaf().getKind().toString());
+         
          Predicate<CharSequence> filter = new Predicate() {
             @Override
             public boolean test(Object p1) {
                 return StringSearch.matchesPartialName(String.valueOf(p1), partial);
             }         
          };
+         
+         if (path.getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
+             //list.addAll(addLambdas(path.getParentPath(), partial));
+             list.addAll(completeMethodInvocation(path.getParentPath(), partial));
+         }
          for (Element element : ScopeHelper.scopeMembers(parser.getTask(), scope, filter)) {
               if (element.getKind() == ElementKind.METHOD) {
                   putMethod((ExecutableElement) element, methods);
@@ -328,6 +338,75 @@ public class CompletionProvider {
              list.add(method(overloads, !endsWithParen));
          }
          return list;
+    }
+    
+    public List<CompletionItem> completeMethodInvocation(TreePath path, String partial) {
+        Trees trees = Trees.instance(parser.getTask());
+        List<CompletionItem> items = new ArrayList<>();
+        MethodInvocationTree method = (MethodInvocationTree) path.getLeaf();
+        Element element = trees.getElement(path);
+        ExecutableElement executable = (ExecutableElement) element;
+       
+        int argumentToComplete= 0;
+        for (int i = 0; i < method.getArguments().size(); i++) {
+            ExpressionTree exp = method.getArguments().get(i);
+            if (exp.toString().equals(partial)) {
+                argumentToComplete = i;
+            }
+        }
+        
+        VariableElement var = executable.getParameters().get(argumentToComplete);
+        if (var.asType() instanceof DeclaredType) {
+            DeclaredType type = (DeclaredType) var.asType();
+            Element classElement = type.asElement();
+            
+            Log.d("FINAL STEP", "Declared type is declared type");
+            if (classElement.getKind() == ElementKind.CLASS || classElement.getKind() == ElementKind.INTERFACE) {
+                
+                Log.d("FINAL STEP", "Element is class or interface");
+                
+                Map<String, List<ExecutableElement>> methods = new HashMap<>();
+                
+                Log.d("FINAL STEP", "enclosed methods: " + classElement.getEnclosedElements().size());
+                for (Element enc : classElement.getEnclosedElements()) {
+                    if (enc.getKind() == ElementKind.METHOD) {
+                        putMethod((ExecutableElement) enc, methods);
+                    }
+                }
+                
+                if (methods.values().size() == 1) {
+                    ExecutableElement sam = methods.values().iterator().next().iterator().next();
+                    
+                    CompletionItem item = new CompletionItem();
+                    
+                    String label = "";
+                    for (VariableElement param : sam.getParameters()) {
+                        label = label + (label.isEmpty() ? "" : ", ") + param.getSimpleName().toString();
+                    }
+                    
+                    item.label = "(" + label + ")" + " -> ";
+                    item.commitText = item.label;
+                    item.detail = simpleName(sam.getReturnType().toString()).toString();
+                    item.cursorOffset = item.label.length();
+                    items.add(item);
+                }
+            }
+        }
+        
+        
+        Log.d("TYPE TYPE", executable.getParameters().iterator().next().asType().toString());
+        Log.d("EXEC EXEC", "type: " + executable.getTypeParameters() + "args: " + executable.getParameters() + "ec: " + executable.getEnclosedElements());
+       // for (int i = 0; i < executable.getT
+        Log.d("EXECUTABLE ELEMENT", executable.toString() + "Type: " + method.getTypeArguments() + " args:" + method.getArguments());
+        return items;
+    }
+    
+    public List<CompletionItem> addLambdas(TreePath path, String partial) {
+        List<CompletionItem> items = new ArrayList<>();
+        Trees trees = Trees.instance(parser.getTask());
+        MethodInvocationTree method = (MethodInvocationTree) path.getLeaf();
+        path = new TreePath(path, method.getMethodSelect());
+        return items;
     }
     
     private void addStaticImports(CompilationUnitTree root, String partial, boolean endsWithParen, CompletionList list) {

@@ -15,9 +15,19 @@ import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.ErroneousTree;
 import com.sun.source.tree.CaseTree;
 import com.sun.source.tree.MemberReferenceTree;
+import com.sun.source.tree.ParenthesizedTree;
+import com.tyron.code.ApplicationLoader;
+import android.util.Log;
+import com.sun.source.tree.LambdaExpressionTree;
+import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.TypeParameterTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.ExpressionStatementTree;
 
 public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
-
+    
+    private static final String TAG = FindCompletionsAt.class.getSimpleName();
+    
 	private final JavacTask task;
 	private CompilationUnitTree root;
     private SourcePositions pos;
@@ -73,8 +83,57 @@ public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
         }
         return super.visitMemberReference(t, find);
     }
+
+ /*   @Override
+    public TreePath visitParenthesized(ParenthesizedTree node, Long find) {
+        long start = pos.getEndPosition(root, node.getExpression()) + 1;
+        long end = pos.getEndPosition(root, node);
+        if (start <= find && find <= end) {
+            Log.d("PARENTHESIZED NODE", node.toString());
+            //return getCurrentPath();
+        }
+        return super.visitParenthesized(node, find);
+    }
+
+    @Override
+    public TreePath visitTypeParameter(TypeParameterTree node, Long find) {
+        long start = pos.getStartPosition(root, node);
+        long end = pos.getEndPosition(root, node);
+        if (start <= find && find <= end) {
+            Log.d(TAG, "visted typr parameter: " + node);
+            return getCurrentPath();
+        }
+        return super.visitTypeParameter(node, find);
+    }
+
+    @Override
+    public TreePath visitMethodInvocation(MethodInvocationTree node, Long find) {
+        long start = pos.getStartPosition(root, node);
+        long end = pos.getEndPosition(root, node);
+        if (start <= find && find <= end) {
+            Log.d(TAG, "visted method invocation: " + node);
+            return getCurrentPath();
+        }
+        return super.visitMethodInvocation(node, find);
+    }
+
+    @Override
+    public TreePath visitExpressionStatement(ExpressionStatementTree node, Long find) {
+        long start = pos.getStartPosition(root, node);
+        long end = pos.getEndPosition(root, node);
+        if (start <= find && find <= end) {
+            Log.d(TAG, "visted typr parameter: " + node);
+            return getCurrentPath();
+        }
+        return super.visitExpressionStatement(node, find);
+    }
+
     
-    
+    @Override
+    public TreePath visitLambdaExpression(LambdaExpressionTree node, Long p) {
+        Log.d(TAG, "visited lambda expression: " + node.toString());
+        return super.visitLambdaExpression(node, p);
+    }*/
     
     @Override
     public TreePath visitCase(CaseTree node, Long find) {
