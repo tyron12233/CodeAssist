@@ -24,7 +24,7 @@ public class FileManagerFragment extends Fragment {
     OnBackPressedCallback callback = new OnBackPressedCallback(false) {
         @Override
         public void handleOnBackPressed() {
-            if (!mCurrentFile.equals(mRoot)) {
+            if (!mCurrentFile.getParentFile().equals(mRoot)) {
                 mAdapter.submitFile(mCurrentFile.getParentFile());
                 check(mCurrentFile.getParentFile());
             }
@@ -79,7 +79,7 @@ public class FileManagerFragment extends Fragment {
             @Override
             public void onItemClick(File file, int position) {
                 if (position == 0) {
-                    if (!mCurrentFile.equals(mRoot)) {
+                    if (!mCurrentFile.getParentFile().equals(mRoot)) {
                         mAdapter.submitFile(mCurrentFile.getParentFile());
                         check(mCurrentFile.getParentFile());
                     }
