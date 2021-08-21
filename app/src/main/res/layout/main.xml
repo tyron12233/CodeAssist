@@ -5,7 +5,14 @@
 	android:layout_height="match_parent"
 	android:orientation="vertical"
 	android:gravity="center_horizontal">
-
+    
+    <androidx.appcompat.widget.Toolbar
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/toolbar"
+        android:background="#212121"
+        android:theme="@style/CodeEditorActionBar"/>
+        
 	<FrameLayout
 		android:layout_width="match_parent"
 		android:layout_height="match_parent"

@@ -48,7 +48,7 @@ public class JavaCompiler {
         try {
             File file = new File(internalFileManager.getAndroidJar().getAbsolutePath());
             fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, List.of(file));
-            fileManager.setLocation(StandardLocation.CLASS_PATH, List.of(FileManager.getInstance().getLambdaStubs()));
+            fileManager.setLocation(StandardLocation.CLASS_PATH, classpath());
             fileManager.setLocation(StandardLocation.CLASS_OUTPUT, List.of(ApplicationLoader.applicationContext.getCacheDir()));
         } catch (IOException e) {
             ApplicationLoader.showToast(e.getMessage());
@@ -85,5 +85,18 @@ public class JavaCompiler {
         log.d(LogViewModel.BUILD_LOG, "[javac] Finished");
         listener.onComplete(success);     
               
+    }
+    
+    private List<File> classpath() {
+        List<File> files = new ArrayList<>();
+        files.add(ApplicationLoader.applicationContext.getFilesDir());
+        files.add(FileManager.getInstance().getLambdaStubs());
+        
+        for (File file : ApplicationLoader.applicationContext.getFilesDir().listFiles()) {
+            if (file.getName().endsWith(".jar")) {
+                files.add(file);
+            }
+        }
+        return files;
     }
 }

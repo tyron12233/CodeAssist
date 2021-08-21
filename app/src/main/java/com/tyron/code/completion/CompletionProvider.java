@@ -49,12 +49,16 @@ import javax.lang.model.element.TypeParameterElement;
 import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.ExpressionTree;
+import com.tyron.code.editor.drawable.CircleDrawable;
+import com.sun.tools.javac.code.Type;
+import com.sun.tools.javac.code.Symbol;
+import com.sun.source.tree.NewClassTree;
 
 /**
  * Main entry point for getting completions
  */
 public class CompletionProvider {
-    
+
     private static final String[] TOP_LEVEL_KEYWORDS = {
         "package",
         "import",
@@ -117,22 +121,22 @@ public class CompletionProvider {
         "float",
         "double",
     };
-    
+
     private final JavaParser parser;
 
     private static final int MAX_COMPLETION_ITEMS = 50;
-    
+
     public CompletionProvider(JavaParser parser) {
         this.parser = parser;
     }
-    
+
     public CompletionList complete(CompilationUnitTree root, int index) {
         long started = System.currentTimeMillis();
         long cursor = index;
         StringBuilder contents = new PruneMethodBodies(parser.getTask()).scan(root, cursor);
         int end = endOfLine(contents, (int) cursor);
-       // contents.insert(end, ';');
-        
+        // contents.insert(end, ';');
+
         String partial = partialIdentifier(contents.toString(), (int) cursor);
         //ApplicationLoader.showToast(partial);
         boolean endsWithParen = endsWithParen(contents.toString(), (int) cursor);
@@ -154,7 +158,7 @@ public class CompletionProvider {
                 return list;
         }
     }
-    
+
     public static int endOfLine(CharSequence contents, int cursor) {
         while (cursor < contents.length()) {
             char c = contents.charAt(cursor);
@@ -163,7 +167,7 @@ public class CompletionProvider {
         }
         return cursor;
     }
-    
+
     private String partialIdentifier(String contents, int end) {
         int start = end;
         while (start > 0 && Character.isJavaIdentifierPart(contents.charAt(start - 1))) {
@@ -171,7 +175,7 @@ public class CompletionProvider {
         }
         return contents.substring(start, end);
     }
-    
+
     private String qualifiedPartialIdentifier(String contents, int end) {
         int start = end;
         while (start > 0 && isQualifiedIdentifierChar(contents.charAt(start - 1))) {
@@ -183,8 +187,8 @@ public class CompletionProvider {
     private boolean isQualifiedIdentifierChar(char c) {
         return c == '.' || Character.isJavaIdentifierPart(c);
     }
-    
-    
+
+
     private boolean endsWithParen(String contents, int cursor) {
         for (int i = cursor; i < contents.length(); i++) {
             if (!Character.isJavaIdentifierPart(contents.charAt(i))) {
@@ -193,7 +197,7 @@ public class CompletionProvider {
         }
         return false;
     }
-    
+
     private void addKeywords(TreePath path, String partial, CompletionList list) {
         Tree level = findKeywordLevel(path);
         String[] keywords = {};
@@ -222,7 +226,7 @@ public class CompletionProvider {
         }
         throw new RuntimeException("empty path");
     }
-    
+
     private CompletionList completeIdentifier(TreePath path, final String partial, boolean endsWithParen) {
         CompletionList list = new CompletionList();
         list.items = completeUsingScope(path, partial, endsWithParen);
@@ -233,7 +237,7 @@ public class CompletionProvider {
         addKeywords(path, partial, list);
         return list;
     }
-    
+
     private CompletionList completeMemberSelect(TreePath path, String partial, boolean endsWithParen) {
         Trees trees = Trees.instance(parser.getTask());
         MemberSelectTree select = (MemberSelectTree) path.getLeaf();     
@@ -252,7 +256,7 @@ public class CompletionProvider {
             return new CompletionList();
         }
     }
-    
+
     private CompletionList completeArrayMemberSelect(boolean isStatic) {
         if (isStatic) {
             return new CompletionList();
@@ -265,14 +269,14 @@ public class CompletionProvider {
 
     private CompletionList completeTypeVariableMemberSelect(Scope scope, TypeVariable type, boolean isStatic, String partial, boolean endsWithParen) {
         if (type.getUpperBound() instanceof DeclaredType) {
-            return completeDeclaredTypeMemberSelect( scope, (DeclaredType) type.getUpperBound(), isStatic, partial, endsWithParen);
+            return completeDeclaredTypeMemberSelect(scope, (DeclaredType) type.getUpperBound(), isStatic, partial, endsWithParen);
         } else if (type.getUpperBound() instanceof TypeVariable) {
             return completeTypeVariableMemberSelect(scope, (TypeVariable) type.getUpperBound(), isStatic, partial, endsWithParen);
         } else {
             return new CompletionList();
         }
     }
-    
+
     private CompletionList completeDeclaredTypeMemberSelect(Scope scope, DeclaredType type, boolean isStatic, String partial, boolean endsWithParen) {
         Trees trees = Trees.instance(parser.getTask());
         TypeElement typeElement = (TypeElement) type.asElement();
@@ -283,7 +287,7 @@ public class CompletionProvider {
             if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) continue;
             if (!trees.isAccessible(scope, member, type)) continue;
             Log.d("DeclaredTypeCompletion", "member name: " + member.getSimpleName());
-          //  if (isStatic != member.getModifiers().contains(Modifier.STATIC)) continue;
+            //  if (isStatic != member.getModifiers().contains(Modifier.STATIC)) continue;
             if (member.getKind() == ElementKind.METHOD) {
                 putMethod((ExecutableElement) member, methods);
             } else {
@@ -291,7 +295,7 @@ public class CompletionProvider {
             }
         }
         for (List<ExecutableElement> overloads : methods.values()) {
-            list.add(method(overloads, !endsWithParen));
+            list.addAll(method(overloads, !endsWithParen));
         }
         if (isStatic) {
             list.add(keyword("class"));
@@ -300,73 +304,77 @@ public class CompletionProvider {
             list.add(keyword("this"));
             list.add(keyword("super"));
         }
-        
+
         CompletionList cl = new CompletionList();
         cl.items = list;
         return cl;
     }
-    
-   
+
+
     private List<CompletionItem> completeUsingScope(TreePath path, final String partial, boolean endsWithParen) {
-         Trees trees = Trees.instance(parser.getTask());
-         List<CompletionItem> list = new ArrayList<>();
-         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
-         Scope scope = trees.getScope(path);
-         
-         Log.d("IDENTIFIER PATH", path.getParentPath().getLeaf().getKind().toString());
-         
-         Predicate<CharSequence> filter = new Predicate() {
+        Trees trees = Trees.instance(parser.getTask());
+        List<CompletionItem> list = new ArrayList<>();
+        HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
+        Scope scope = trees.getScope(path);
+
+        Log.d("IDENTIFIER PATH", path.getParentPath().getLeaf().getKind().toString());
+
+        Predicate<CharSequence> filter = new Predicate() {
             @Override
             public boolean test(Object p1) {
                 return StringSearch.matchesPartialName(String.valueOf(p1), partial);
             }         
-         };
-         
-         if (path.getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
-             //list.addAll(addLambdas(path.getParentPath(), partial));
-             list.addAll(completeMethodInvocation(path.getParentPath(), partial));
-         }
-         for (Element element : ScopeHelper.scopeMembers(parser.getTask(), scope, filter)) {
-              if (element.getKind() == ElementKind.METHOD) {
-                  putMethod((ExecutableElement) element, methods);
-              } else {
-                  list.add(item(element));
-              }
-         }
-         
-         for (List<ExecutableElement> overloads : methods.values()) {
-             list.add(method(overloads, !endsWithParen));
-         }
-         return list;
+        };
+
+        if (path.getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
+            //list.addAll(addLambdas(path.getParentPath(), partial));
+            list.addAll(addLambda(path.getParentPath(), partial));
+        }
+        
+        if (path.getParentPath().getLeaf().getKind() == Tree.Kind.NEW_CLASS) {
+            list.addAll(addAnonymous(path.getParentPath(), partial));
+        }
+        
+        for (Element element : ScopeHelper.scopeMembers(parser.getTask(), scope, filter)) {
+            if (element.getKind() == ElementKind.METHOD) {
+                putMethod((ExecutableElement) element, methods);
+            } else {
+                list.add(item(element));
+            }
+        }
+
+        for (List<ExecutableElement> overloads : methods.values()) {
+            list.addAll(method(overloads, !endsWithParen));
+        }
+        return list;
     }
-    
-    public List<CompletionItem> completeMethodInvocation(TreePath path, String partial) {
+
+    public List<CompletionItem> addLambda(TreePath path, String partial) {
         Trees trees = Trees.instance(parser.getTask());
         List<CompletionItem> items = new ArrayList<>();
         MethodInvocationTree method = (MethodInvocationTree) path.getLeaf();
         Element element = trees.getElement(path);
         ExecutableElement executable = (ExecutableElement) element;
-       
+
         int argumentToComplete= 0;
         for (int i = 0; i < method.getArguments().size(); i++) {
             ExpressionTree exp = method.getArguments().get(i);
-            if (exp.toString().equals(partial)) {
+            if (exp.toString().equals(partial) || exp.toString().equals("new " + partial)) {
                 argumentToComplete = i;
             }
         }
-        
+
         VariableElement var = executable.getParameters().get(argumentToComplete);
         if (var.asType() instanceof DeclaredType) {
             DeclaredType type = (DeclaredType) var.asType();
             Element classElement = type.asElement();
-            
-            Log.d("FINAL STEP", "Declared type is declared type");
+
             if (classElement.getKind() == ElementKind.CLASS || classElement.getKind() == ElementKind.INTERFACE) {
-                
+
                 Log.d("FINAL STEP", "Element is class or interface");
-                
+
                 Map<String, List<ExecutableElement>> methods = new HashMap<>();
-                
+
                 Log.d("FINAL STEP", "enclosed methods: " + classElement.getEnclosedElements().size());
                 for (Element enc : classElement.getEnclosedElements()) {
                     if (enc.getKind() == ElementKind.METHOD) {
@@ -376,48 +384,79 @@ public class CompletionProvider {
                         putMethod((ExecutableElement) enc, methods);
                     }
                 }
-                
+
+                // this is a SAM Interface, suggest a lambda
                 if (methods.values().size() == 1) {
                     ExecutableElement sam = methods.values().iterator().next().iterator().next();
-                    
+
                     CompletionItem item = new CompletionItem();
-                    
+
                     String label = "";
                     for (VariableElement param : sam.getParameters()) {
                         label = label + (label.isEmpty() ? "" : ", ") + param.getSimpleName().toString();
                     }
-                    
+
                     item.label = "(" + label + ")" + " -> ";
                     item.commitText = item.label;
                     item.detail = simpleName(sam.getReturnType().toString()).toString();
                     item.cursorOffset = item.label.length();
+                    item.iconKind = CircleDrawable.Kind.Lambda;
                     items.add(item);
-                }
+                } 
             }
         }
-        
-        
-        Log.d("TYPE TYPE", executable.getParameters().iterator().next().asType().toString());
-        Log.d("EXEC EXEC", "type: " + executable.getTypeParameters() + "args: " + executable.getParameters() + "ec: " + executable.getEnclosedElements());
-       // for (int i = 0; i < executable.getT
-        Log.d("EXECUTABLE ELEMENT", executable.toString() + "Type: " + method.getTypeArguments() + " args:" + method.getArguments());
+
+
         return items;
     }
-    
-    public List<CompletionItem> addLambdas(TreePath path, String partial) {
+
+    public List<CompletionItem> addAnonymous(TreePath path, String partial) {
         List<CompletionItem> items = new ArrayList<>();
-        Trees trees = Trees.instance(parser.getTask());
-        MethodInvocationTree method = (MethodInvocationTree) path.getLeaf();
-        path = new TreePath(path, method.getMethodSelect());
+        
+        NewClassTree tree = (NewClassTree) path.getLeaf();
+        
+        Log.d("ANONYMOUS", "type: " + path.getParentPath().getParentPath().getLeaf().getKind().toString());
+        
+        if (path.getParentPath().getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
+            Trees trees = Trees.instance(parser.getTask());
+            MethodInvocationTree method = (MethodInvocationTree) path.getParentPath().getParentPath().getLeaf();
+            Element element = trees.getElement(path.getParentPath().getParentPath());
+            ExecutableElement executable = (ExecutableElement) element;
+
+            int argumentToComplete = 0;
+            for (int i = 0; i < method.getArguments().size(); i++) {
+                ExpressionTree exp = method.getArguments().get(i);
+                if (exp.toString().equals(partial) || exp.toString().equals("new " + partial)) {
+                    argumentToComplete = i;
+                }
+            }
+            
+            VariableElement var = executable.getParameters().get(argumentToComplete);
+            if (var.asType() instanceof DeclaredType) {
+                DeclaredType type = (DeclaredType) var.asType();
+                Element classElement = type.asElement();
+                
+            
+          //  if (method.getArguments().get(argumentToComplete).toString().startsWith("new ")) {
+                CompletionItem item = new CompletionItem();
+                item.iconKind = CircleDrawable.Kind.Interface;
+                item.label = classElement.getSimpleName().toString() + "{...}";
+                item.commitText = "new " + classElement.getSimpleName() + " () {\n \r //TODO: \n}";
+                item.cursorOffset = item.commitText.length();
+                item.detail = "";
+                items.add(item);
+      //    }
+            }
+        }
         return items;
     }
-    
+
     private void addStaticImports(CompilationUnitTree root, String partial, boolean endsWithParen, CompletionList list) {
         Trees trees = Trees.instance(parser.getTask());
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         int previousSize = list.items.size();
         outer:
-        for ( ImportTree i : root.getImports()) {
+        for (ImportTree i : root.getImports()) {
             if (!i.isStatic()) continue;
             MemberSelectTree id = (MemberSelectTree) i.getQualifiedIdentifier();
             if (!importMatchesPartial(id.getIdentifier(), partial)) continue;
@@ -439,10 +478,10 @@ public class CompletionProvider {
             }
         }
         for (List<ExecutableElement> overloads : methods.values()) {
-            list.items.add(method(overloads, !endsWithParen));
+            list.items.addAll(method(overloads, !endsWithParen));
         }
     }
-    
+
     private boolean isEnclosingClass(DeclaredType type, Scope start) {
         for (Scope s : ScopeHelper.fastScopes(start)) {
             // If we reach a static method, stop looking
@@ -462,7 +501,7 @@ public class CompletionProvider {
         }
         return false;
     }
-    
+
     private boolean importMatchesPartial(Name staticImport, String partial) {
         return staticImport.contentEquals("*") || StringSearch.matchesPartialName(staticImport, partial);
     }
@@ -470,7 +509,7 @@ public class CompletionProvider {
     private boolean memberMatchesImport(Name staticImport, Element member) {
         return staticImport.contentEquals("*") || staticImport.contentEquals(member.getSimpleName());
     }
-    
+
     private CompletionList completeImport(String path) {
         Set<String> names = new HashSet<>();
         CompletionList list = new CompletionList();
@@ -496,11 +535,11 @@ public class CompletionProvider {
         }
         return list;
     }
-    
+
     private CompletionList completeMemberReference(TreePath path, String partial) {
         Trees trees = Trees.instance(parser.getTask());
         MemberReferenceTree select = (MemberReferenceTree) path.getLeaf();
-        
+
         path = new TreePath(path, select.getQualifierExpression());
         Element element = trees.getElement(path);
         boolean isStatic = element instanceof TypeElement;
@@ -516,7 +555,7 @@ public class CompletionProvider {
             return new CompletionList();
         }
     }
-    
+
     private CompletionList completeArrayMemberReference(boolean isStatic) {
         if (isStatic) {
             CompletionList list = new CompletionList();
@@ -557,23 +596,23 @@ public class CompletionProvider {
             }
         }
         for (List<ExecutableElement> overloads : methods.values()) {
-            list.add(method( overloads, false));
+            list.addAll(method(overloads, false));
         }
         if (isStatic) {
             list.add(keyword("new"));
         }
-        
+
         CompletionList comp = new CompletionList();
         comp.isIncomplete = false;
         comp.items = list;
         return comp;
     }
-    
+
     private CompletionList completeSwitchConstant(TreePath path, String partial) {
         SwitchTree switchTree = (SwitchTree) path.getLeaf();
         path = new TreePath(path, switchTree.getExpression());
         TypeMirror type = Trees.instance(parser.getTask()).getTypeMirror(path);
-        
+
         if (!(type instanceof DeclaredType)) {
             return new CompletionList();
         }
@@ -585,14 +624,14 @@ public class CompletionProvider {
             if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) continue;
             list.add(item(member));
         }
-        
+
         CompletionList comp = new CompletionList();
         comp.isIncomplete = false;
         comp.items = list;
         return comp;
     }
-    
-    
+
+
     private void addClassNames(CompilationUnitTree root, String partial, CompletionList list) {
         String packageName = Objects.toString(root.getPackageName(), "");
         Set<String> uniques = new HashSet<String>();
@@ -613,7 +652,7 @@ public class CompletionProvider {
             uniques.add(className);
         }
     }
-    
+
     private void putMethod(ExecutableElement method, Map<String, List<ExecutableElement>> methods) {
         String name = method.getSimpleName().toString();
         if (!methods.containsKey(name)) {
@@ -621,13 +660,14 @@ public class CompletionProvider {
         }
         methods.get(name).add(method);
     }
-    
+
     private CompletionItem packageItem(String name) {
         CompletionItem item = new CompletionItem();
         item.label = name;
         item.detail = "";
         item.commitText = name;
         item.cursorOffset = name.length();
+        item.iconKind = CircleDrawable.Kind.Package;
         return item;
     }
     private CompletionItem classItem(String className) {
@@ -636,83 +676,99 @@ public class CompletionProvider {
         item.detail = className;
         item.commitText = item.label;
         item.cursorOffset = item.label.length();
-        item.kind = CompletionItem.Kind.IMPORT;
+        item.action = CompletionItem.Kind.IMPORT;
+        item.iconKind = CircleDrawable.Kind.Class;
         return item;
     }
-    
+
     private CompletionItem item(Element element) {
         CompletionItem item = new CompletionItem();
         item.label = element.getSimpleName().toString();
         item.detail = element.asType().toString();
         item.commitText = element.getSimpleName().toString();
         item.cursorOffset =  item.commitText.length();
+
+
+        switch (element.getKind()) {
+            case METHOD:
+                item.iconKind = CircleDrawable.Kind.Method;
+                break;
+            case CLASS:
+                item.iconKind = CircleDrawable.Kind.Class;
+                break;
+            case INTERFACE:
+                item.iconKind = CircleDrawable.Kind.Interface;
+                break;
+        }
+
         return item;
     }
-    
+
     private CompletionItem keyword(String keyword) {
         CompletionItem item = new CompletionItem();
         item.label = keyword;
         item.commitText = keyword;
         item.cursorOffset = keyword.length();
         item.detail = "keyword";
+        item.iconKind = CircleDrawable.Kind.Keyword;
         return item;
     }
-    
-    private CompletionItem method(List<ExecutableElement> overloads, boolean endsWithParen) {
-        ExecutableElement first = overloads.get(0);
-        CompletionItem item = new CompletionItem();
-        item.label = getMethodLabel(first);
-        item.commitText = first.getSimpleName().toString() + "()";
-        item.detail = first.getReturnType().toString();
-        item.cursorOffset = item.commitText.length();
-        if (first.getParameters() != null && !first.getParameters().isEmpty()) {
-            item.cursorOffset = item.commitText.length() - 1;
-        }
-        return item;
-    }
-    
-    private String getMethodLabel(ExecutableElement element) {
-        String string = element.toString();
-        String identifier = element.getSimpleName().toString();
-        
-        String paramsString = string.substring(string.indexOf("(") + 1, string.lastIndexOf(")"));
-        
-        
-        String params = "";
-        if (paramsString.contains(",")) {
-            String[] split = paramsString.split(",");
-            for (String s : split) {
-                params = params + (params.isEmpty() ? "" : ", ") + simpleName(s);
+
+    private List<CompletionItem> method(List<ExecutableElement> overloads, boolean endsWithParen) {
+        List<CompletionItem> items = new ArrayList<>();
+        for (ExecutableElement first : overloads) {
+            CompletionItem item = new CompletionItem();
+            item.label = getMethodLabel(first);
+            item.commitText = first.getSimpleName().toString() + "()";
+            item.detail = simpleReturnType(first.getReturnType());
+            item.iconKind = CircleDrawable.Kind.Method;
+            item.cursorOffset = item.commitText.length();
+            if (first.getParameters() != null && !first.getParameters().isEmpty()) {
+                item.cursorOffset = item.commitText.length() - 1;
             }
-        } else {
-            params = simpleName(paramsString).toString();
+
+            items.add(item);
         }
-        return identifier + "(" + params + ")";
+        return items;
     }
-    
+
+    private String simpleReturnType(TypeMirror mirror) {
+        return mirror.toString().replaceAll("[a-zA-Z\\.0-9_\\$]+\\.", "");
+    }
+
+    private String getMethodLabel(ExecutableElement element) {
+        String name = element.getSimpleName().toString();
+        String params = "";
+        for (VariableElement var : element.getParameters()) {
+            params = params + (params.isEmpty() ? "" : ", ") + var.asType().toString() + " " + var.getSimpleName().toString();
+        }
+
+        return name + "(" + params + ")";
+    }
+
     private CharSequence simpleName(String className) {
         int dot = className.lastIndexOf('.');
         if (dot == -1) return className;
         return className.subSequence(dot + 1, className.length());
     }
-    
-    
+
+
     public static boolean hasImport(CompilationUnitTree root, String className) {
-        
+
         String packageName = className.substring(0, className.lastIndexOf("."));
-        
+
         // if the package name of the class is java.lang, we dont need 
         // to check since its already imported
         if (packageName.equals("java.lang")) {
             return true;
         }
-        
+
         for (ImportTree imp : root.getImports()) {
             String name = imp.getQualifiedIdentifier().toString();
             if (name.equals(className)) {
                 return true;
             }          
-            
+
             // if the import is a wildcard, lets check if theyre on the same package
             if (name.endsWith("*")) {
                 String first = name.substring(0, name.lastIndexOf("."));

@@ -8,5 +8,8 @@
         android:title="Run"
         android:icon="@drawable/round_play_arrow_24"
         app:showAsAction="always"></item>
-
+        
+    <item
+        android:id="@+id/debug_create"
+        android:title="Create project"/>
 </menu>

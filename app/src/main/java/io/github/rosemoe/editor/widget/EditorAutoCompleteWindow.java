@@ -266,12 +266,19 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                     mEditor.setSelection(charPosition.line, charPosition.column);
                 }
             }
-            if (item.item.kind == com.tyron.code.model.CompletionItem.Kind.IMPORT) {
+            if (item.item.action == com.tyron.code.model.CompletionItem.Kind.IMPORT) {
                 LogViewModel mode = new ViewModelProvider((ViewModelStoreOwner) mEditor.getContext()).get(LogViewModel.class);
                 JavaParser parser = new JavaParser(mode);
                 CompilationUnitTree root = parser.parse(mEditor.getCurrentFile(), mEditor.getText().toString(), cursor.getLeft());
                 ParseTask task = new ParseTask(parser.getTask(), root);
-                if (!CompletionProvider.hasImport(root, item.item.detail)) {
+                Log.d("PackageName", root.getPackageName().toString());
+                
+                boolean samePackage = false;
+                if (root.getPackageName().toString().equals(item.item.detail.substring(0, item.item.detail.lastIndexOf(".")))) {
+                    samePackage = true;
+                }
+                
+                if (!samePackage && !CompletionProvider.hasImport(root, item.item.detail)) {
                     AddImport imp = new AddImport(new File(""), item.item.detail);
                     Map<File, TextEdit> edits = imp.getText(task);
                     TextEdit edit = edits.values().iterator().next();

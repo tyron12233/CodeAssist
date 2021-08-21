@@ -1,41 +1,9 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/content"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
     
-    <!-- Ive put the toolbar outside so bottom sheet wont go below the toolbar -->
-    <com.google.android.material.appbar.AppBarLayout
-        android:id="@+id/appbar_layout"
-        app:theme="@style/CodeEditorActionBar"
-        android:background="#212121"
-        android:elevation="0dp"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-        <androidx.appcompat.widget.Toolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
-    </com.google.android.material.appbar.AppBarLayout>
-    
-    <androidx.coordinatorlayout.widget.CoordinatorLayout 
-        android:id="@+id/root"
-        android:layout_width="fill_parent"
-        android:layout_height="fill_parent"
-        android:orientation="vertical">
-       
-        <LinearLayout
-            android:id="@+id/content"
-            app:layout_behavior="@string/appbar_scrolling_view_behavior"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"/>
-
-        <FrameLayout
-            android:id="@+id/persistent_sheet"
-            android:layout_height="match_parent"
-            android:layout_width="match_parent"
-            android:background="#2e2e2e"
-            app:behavior_peekHeight="50dp"
-            app:layout_behavior="@string/bottom_sheet_behavior"/>
-    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+   
 </LinearLayout>

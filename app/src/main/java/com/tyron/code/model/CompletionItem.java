@@ -1,6 +1,7 @@
 package com.tyron.code.model;
 import java.util.List;
 import java.util.ArrayList;
+import com.tyron.code.editor.drawable.CircleDrawable;
 
 public class CompletionItem {
     
@@ -16,7 +17,9 @@ public class CompletionItem {
     
     public String commitText;
     
-    public Kind kind = Kind.NORMAL;
+    public Kind action = Kind.NORMAL;
+    
+    public CircleDrawable.Kind iconKind = CircleDrawable.Kind.Method;
     
     public int cursorOffset = -1;
     

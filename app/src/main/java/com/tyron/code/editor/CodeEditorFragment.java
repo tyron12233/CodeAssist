@@ -67,17 +67,15 @@ public class CodeEditorFragment extends Fragment {
     "}";
 
     private LinearLayout mRoot;
-    private AppBarLayout mAppBar;
     private LinearLayout mContent;
     private FrameLayout mBottomContainer;
     private BottomSheetBehavior mBehavior;
     
     private LogViewModel logViewModel;
     
-    private Toolbar mToolbar;
     private CodeEditor mEditor;
     
-    private File mCurrentFile = new File(ApplicationLoader.applicationContext.getFilesDir() + "/Test.java");
+    private File mCurrentFile = new File("");
 
     public static CodeEditorFragment newInstance(File file) {
         CodeEditorFragment fragment = new CodeEditorFragment();
@@ -87,15 +85,6 @@ public class CodeEditorFragment extends Fragment {
         return fragment;
     }
     
-    OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {
-        @Override
-        public void handleOnBackPressed() {
-             if (mBehavior != null) {
-                 mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
-             }
-        }
-    };
-
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -108,12 +97,7 @@ public class CodeEditorFragment extends Fragment {
         mRoot = (LinearLayout) inflater.inflate(R.layout.code_editor_fragment, container, false);
 
         mContent = mRoot.findViewById(R.id.content);
-        mAppBar = mRoot.findViewById(R.id.appbar_layout);
-        mBottomContainer = mRoot.findViewById(R.id.persistent_sheet);
         
-        mToolbar = mRoot.findViewById(R.id.toolbar);
-        mToolbar.inflateMenu(R.menu.code_editor_menu);
-
         mEditor = new CodeEditor(requireActivity());
         mEditor.setEditorLanguage(new JavaLanguage(mEditor));
         mEditor.setColorScheme(new SchemeDarcula());
@@ -126,7 +110,6 @@ public class CodeEditorFragment extends Fragment {
         mContent.addView(mEditor, new FrameLayout.LayoutParams(-1, -1));
         
         logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
-        requireActivity().getOnBackPressedDispatcher().addCallback(this, onBackPressedCallback);
         return mRoot;
     }
 
@@ -140,50 +123,10 @@ public class CodeEditorFragment extends Fragment {
             FileManager.getInstance().save(mCurrentFile, README);
             mEditor.setText(README);
         }
-        final BottomEditorFragment bottomEditorFragment = BottomEditorFragment.newInstance();
-        mBehavior = BottomSheetBehavior.from(mBottomContainer);
-        mBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
-                @Override
-                public void onStateChanged(View p1, int state) {
-                    switch (state) {
-                        case BottomSheetBehavior.STATE_COLLAPSED:
-                            mEditor.setEnabled(true);
-                            onBackPressedCallback.setEnabled(false);
-                            break;
-                        case BottomSheetBehavior.STATE_EXPANDED:
-                            mEditor.setEnabled(false);
-                            onBackPressedCallback.setEnabled(true);
-                    }
-                }
-
-                @Override
-                public void onSlide(View bottomSheet, float slideOffset) {
-                    bottomEditorFragment.setOffset(slideOffset);
-                }              
-            });
-              
-        mToolbar.setTitle(mCurrentFile.getName());
-        mToolbar.setOnMenuItemClickListener(new Toolbar.OnMenuItemClickListener() {
-                @Override
-                public boolean onMenuItemClick(MenuItem p1) {
-                    if (p1.getItemId() == R.id.action_run) {
-                         
-                        FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
-                        logViewModel.clear(LogViewModel.BUILD_LOG);
-                        mEditor.hideAutoCompleteWindow();
-                        mEditor.hideSoftInput();
-                        compile();
-                        
-                    }
-                    return true;
-                }         
-            });
- 
-        
-        // Display the persistent fragment
-        getChildFragmentManager().beginTransaction()
-                .replace(R.id.persistent_sheet, bottomEditorFragment)
-                .commit();
+    }
+    
+    public void save() {
+        FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
     }
     
     private void compile() {
@@ -211,14 +154,14 @@ public class CodeEditorFragment extends Fragment {
                     }
                     D8.main(args.toArray(new String[0]));
                     DexClassLoader loader = new DexClassLoader(requireContext().getCacheDir() + "/classes.dex",
-                    requireContext().getCacheDir().getAbsolutePath(), requireContext().getCacheDir().getAbsolutePath(), ClassLoader.getSystemClassLoader());
+                    requireContext().getCacheDir().getAbsolutePath(), requireContext().getCacheDir().getAbsolutePath(), requireActivity().getClassLoader());
                     
                     Class<?> test = loader.loadClass("Test");
                     Method method = test.getMethod("main", Context.class);
                     method.invoke(test.newInstance(), requireContext());
                     
                 } catch (InvocationTargetException e) {
-                    logViewModel.d(LogViewModel.BUILD_LOG, "Exception thrown in main: " + e.getMessage());
+                    logViewModel.d(LogViewModel.BUILD_LOG, "Exception thrown in main: " + e.getCause().getMessage());
                     mBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
                 } catch (Throwable e) {
                     logViewModel.d(LogViewModel.BUILD_LOG, "[D8] FAILED:" + e.getMessage());

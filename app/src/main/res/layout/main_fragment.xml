@@ -1,0 +1,30 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <androidx.coordinatorlayout.widget.CoordinatorLayout 
+        android:id="@+id/root"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/content"
+            app:layout_behavior="@string/appbar_scrolling_view_behavior"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+            
+            
+        </LinearLayout>
+        <FrameLayout
+            android:id="@+id/persistent_sheet"
+            android:layout_height="match_parent"
+            android:layout_width="match_parent"
+            android:background="#2e2e2e"
+            app:behavior_peekHeight="50dp"
+            app:layout_behavior="@string/bottom_sheet_behavior"/>
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+</LinearLayout>

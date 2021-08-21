@@ -26,14 +26,13 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
         viewModel = new ViewModelProvider((AppCompatActivity) editor.getContext()).get(LogViewModel.class);
     }
     
-    //TODO: Add return types / variable types
     @Override
     public List<CompletionItem> getAutoCompleteItems(String partial, boolean endsWithParen, TextAnalyzeResult prev, int line) {
         Cursor cursor = mEditor.getCursor();
         JavaParser parser = new JavaParser(viewModel);
         CompilationUnitTree tree = parser.parse(mEditor.getCurrentFile(), mEditor.getText().toString(), cursor.getLeft());
         JavacTask task = parser.getTask();
-        //JavaAnalyzer.getInstance().setDiagnostics(parser.getDiagnostics());
+        
         CompletionProvider provider = new CompletionProvider(parser);
         
         CompletionList list = provider.complete(tree, cursor.getLeft());

@@ -73,16 +73,20 @@ public class FileManager {
             putJar(getAndroidJar());
         } catch (IOException e) {}
         
-        javaFiles.putAll(project.javaFiles);
+        javaFiles.putAll(project.getJavaFiles());
         
-        for (String file : project.getLibraries()) {
+        for (File file : project.getLibraries()) {
             try {
-                putJar(new File(file));
+                putJar(file);
             } catch (IOException e) {}
         }
     }
     
-    public List<String> getLibraries() {
+    public Project getCurrentProject() {
+        return mCurrentProject;
+    }
+    
+    public List<File> getLibraries() {
         return mCurrentProject.getLibraries();
     }
     
@@ -155,6 +159,8 @@ public class FileManager {
                 }
             }
         }
+        
+        Log.d("FileManager", "Read string: " + sb);
 
         return sb.toString();
     }
@@ -210,6 +216,7 @@ public class FileManager {
         try {
             return new BufferedReader(new InputStreamReader(new FileInputStream(file)));
         } catch (FileNotFoundException e) {
+            Log.e("FileManager", Log.getStackTraceString(e));
             return new BufferedReader(new StringReader(""));
         }
     }

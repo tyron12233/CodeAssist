@@ -67,11 +67,9 @@ public class JavaParser {
             File file = new File(FileManager.getInstance().getAndroidJar().getAbsolutePath());
             fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, List.of(file, FileManager.getInstance().getLambdaStubs()));
             
-            List<File> files = new ArrayList<>();
-            files.add(ApplicationLoader.applicationContext.getFilesDir());
-            files.add(FileManager.getInstance().getLambdaStubs());
-            fileManager.setLocation(StandardLocation.CLASS_OUTPUT, List.of(ApplicationLoader.applicationContext.getFilesDir()));
-            fileManager.setLocation(StandardLocation.CLASS_PATH, files);
+            
+            fileManager.setLocation(StandardLocation.CLASS_OUTPUT, List.of(FileManager.getInstance().getCurrentProject().getBuildDirectory()));
+            fileManager.setLocation(StandardLocation.CLASS_PATH, classpath());
         } catch (IOException e) {
             log.d(LogViewModel.DEBUG, e.getMessage());
             // impossible
@@ -84,6 +82,7 @@ public class JavaParser {
         if (!canParse) return null;
         long time = System.currentTimeMillis();
         
+        log.d(LogViewModel.DEBUG, "Parsing source: " + src);
         final StringBuilder fix = new StringBuilder(src);
         
         // We add an extra ';' to the end of the line so parsing will produce the right tokens
@@ -99,8 +98,10 @@ public class JavaParser {
             }
         }; 
         
+        
         task = mTool.getTask(null, fileManager,
-                                          diagnostics, null, null, List.of(source));                                  
+                                          diagnostics, List.of("-g", "-parameters"), null, List.of(source));                                  
+       
         CompilationUnitTree unit = null;
         try {
             unit = task.parse().iterator().next();
@@ -130,5 +131,13 @@ public class JavaParser {
         List<String> all = new ArrayList<>();
         all.addAll(FileManager.getInstance().all());
         return all;
+    }
+    
+    private List<File> classpath() {
+        List<File> files = new ArrayList<>();
+        files.addAll(FileManager.getInstance().getLibraries());
+        files.add(FileManager.getInstance().getLambdaStubs());
+        files.add(FileManager.getInstance().getCurrentProject().getJavaDirectory());
+        return files;
     }
 }

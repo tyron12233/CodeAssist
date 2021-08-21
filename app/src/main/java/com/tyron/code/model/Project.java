@@ -7,6 +7,8 @@ import java.util.HashMap;
 import com.tyron.code.util.StringSearch;
 import android.util.Log;
 import javax.lang.model.SourceVersion;
+import com.tyron.code.util.Decompress;
+import com.tyron.code.ApplicationLoader;
 
 /**
  * Class for storing project data, directories and files
@@ -51,8 +53,14 @@ public class Project {
         }
     }
     
-    public List<String> getLibraries() {
-        List<String> libraries = new ArrayList<>();
+    public Map<String, File> getJavaFiles() {
+        javaFiles.clear();
+        findJavaFiles(getJavaDirectory());
+        return javaFiles;
+    }
+    
+    public List<File> getLibraries() {
+        List<File> libraries = new ArrayList<>();
         
         File libPath = new File(mRoot, "app/libs");
         
@@ -64,7 +72,7 @@ public class Project {
         
         for (File file : libPath.listFiles()) {
             if (file.getName().endsWith(".jar")) {
-                libraries.add(file.getAbsolutePath());
+                libraries.add(file);
                 Log.d("PROJECT LIBRARIES", "Adding " + file.getName());
             }
         }
@@ -83,5 +91,48 @@ public class Project {
         }
         
         return true;
+    }
+    
+    /**
+     * Creates a new project configured at mRoot, returns true if the project
+     * has been created, false if not.
+     */
+    public boolean create() {
+        
+        // this project already exists
+        if (isValidProject()) {
+            return false;
+        }
+        
+        File java = getJavaDirectory();
+        
+        if (!java.mkdirs()) {
+            return false;
+        }
+        
+        Decompress.unzipFromAssets(ApplicationLoader.applicationContext, "test_project.zip",
+                java.getAbsolutePath());
+        
+        if (!getLibraryDirectory().mkdirs()) {
+            return false;
+        }
+        
+        if (!getBuildDirectory().mkdirs()) {
+            return false;
+        }
+        
+        return true;
+    }
+    
+    public File getJavaDirectory() {
+        return new File(mRoot, "app/src/main/java");
+    }
+    
+    public File getLibraryDirectory() {
+        return new File(mRoot, "app/libs");
+    }
+    
+    public File getBuildDirectory() {
+        return new File(mRoot, "app/build");
     }
 }
