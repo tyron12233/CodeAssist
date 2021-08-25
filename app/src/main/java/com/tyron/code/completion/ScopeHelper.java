@@ -28,9 +28,9 @@ public class ScopeHelper {
         return scopes.subList(0, scopes.size() - 2);
     }
 
-    static List<Element> scopeMembers(JavacTask task, Scope inner, Predicate<CharSequence> filter) {
-        Trees trees = Trees.instance(task);
-        Elements elements = task.getElements();
+    static List<Element> scopeMembers(CompileTask task, Scope inner, Predicate<CharSequence> filter) {
+        Trees trees = Trees.instance(task.task);
+        Elements elements = task.task.getElements();
         boolean isStatic = false;
         List<Element> list = new ArrayList<>();
         for (Scope scope : fastScopes(inner)) {

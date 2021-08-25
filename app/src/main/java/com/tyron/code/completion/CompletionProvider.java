@@ -53,11 +53,22 @@ import com.tyron.code.editor.drawable.CircleDrawable;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.source.tree.NewClassTree;
+import java.io.IOException;
+import javax.lang.model.util.Elements;
+import com.sun.source.tree.VariableTree;
+import com.tyron.code.CompilerProvider;
+import com.tyron.code.SourceFileObject;
+import com.tyron.code.CompileTask;
+import com.tyron.code.parser.FileManager;
+import com.sun.source.tree.AnnotationTree;
+import com.sun.tools.javac.tree.JCTree;
 
 /**
  * Main entry point for getting completions
  */
 public class CompletionProvider {
+
+	private static final String TAG = CompletionProvider.class.getSimpleName();
 
     private static final String[] TOP_LEVEL_KEYWORDS = {
         "package",
@@ -122,41 +133,123 @@ public class CompletionProvider {
         "double",
     };
 
-    private final JavaParser parser;
+    //private final JavaParser parser;
+	private final CompilerProvider compiler;
 
     private static final int MAX_COMPLETION_ITEMS = 50;
 
-    public CompletionProvider(JavaParser parser) {
-        this.parser = parser;
+    public CompletionProvider(CompilerProvider compiler) {
+        this.compiler = compiler;
     }
 
-    public CompletionList complete(CompilationUnitTree root, int index) {
-        long started = System.currentTimeMillis();
-        long cursor = index;
-        StringBuilder contents = new PruneMethodBodies(parser.getTask()).scan(root, cursor);
-        int end = endOfLine(contents, (int) cursor);
-        // contents.insert(end, ';');
+	public CompletionList complete(File file, long index) {
+		ParseTask task = compiler.parse(Paths.get(file.getAbsolutePath()));
+		StringBuilder contents = new PruneMethodBodies(task.task).scan(task.root, index);
+		int end = endOfLine(contents, (int) index);
+		contents.insert(end, ';');
+		CompletionList list = compileAndComplete(file, contents.toString(), index);
+		//addTopLevelSnippets(task, list);
+		return list;
+	}
+	public CompletionList compileAndComplete(File file, String contents, long cursor) {
+		Instant start = Instant.now();
+		SourceFileObject source = new SourceFileObject(file.toPath());
+		String partial = partialIdentifier(contents, (int) cursor);
+		boolean endsWithParen = endsWithParen(contents, (int) cursor);
+		try (CompileTask task = compiler.compile(List.of(source))) {
+			Log.d(TAG, "Compiled in: " + Duration.between(start, Instant.now()).toMillis() + "ms");
+			TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor); 
+			switch (path.getLeaf().getKind()) {
+				case IDENTIFIER:             
+					return completeIdentifier(task, path, partial, endsWithParen);
+				case MEMBER_SELECT:              
+					return completeMemberSelect(task, path, partial, endsWithParen);
+				case MEMBER_REFERENCE:
+					return completeMemberReference(task, path, partial);
+				case CASE:
+					return completeSwitchConstant(task, path, partial);
+				case IMPORT:
+					return completeImport(qualifiedPartialIdentifier(contents.toString(), (int) cursor));
+				default:
+					CompletionList list = new CompletionList();
+					addKeywords(path, partial, list);
+					return list;
+			}
+		}
+	}
+	/*
+	 public CompletionList compileAndComplete(File file, String contents, long cursor) {
+	 SourceFileObject source = new SourceFileObject(file.toPath());
+	 String partial = partialIdentifier(contents, (int) cursor);
+	 boolean endsWithParen = endsWithParen(contents, (int) cursor);
+	 try (CompileTask task = compiler.compile(List.of(source))) {
+	 TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor); 
+	 switch (path.getLeaf().getKind()) {
+	 case IDENTIFIER:             
+	 return completeIdentifier(task, path, partial, endsWithParen);
+	 case MEMBER_SELECT:              
+	 return completeMemberSelect(task, path, partial, endsWithParen);
+	 case MEMBER_REFERENCE:
+	 return completeMemberReference(task, path, partial);
+	 case CASE:
+	 return completeSwitchConstant(task, path, partial);
+	 case IMPORT:
+	 return completeImport(qualifiedPartialIdentifier(contents.toString(), (int) cursor));
+	 default:
+	 CompletionList list = new CompletionList();
+	 addKeywords(path, partial, list);
+	 return list;
+	 }
+	 }
+	 }*/
 
-        String partial = partialIdentifier(contents.toString(), (int) cursor);
-        //ApplicationLoader.showToast(partial);
-        boolean endsWithParen = endsWithParen(contents.toString(), (int) cursor);
-        TreePath path = new FindCompletionsAt(parser.getTask()).scan(root, cursor);
-        switch (path.getLeaf().getKind()) {
-            case IDENTIFIER:             
-                return completeIdentifier(path, partial, endsWithParen);
-            case MEMBER_SELECT:              
-                return completeMemberSelect(path, partial, endsWithParen);
-            case MEMBER_REFERENCE:
-                return completeMemberReference(path, partial);
-            case CASE:
-                return completeSwitchConstant(path, partial);
-            case IMPORT:
-                return completeImport(qualifiedPartialIdentifier(contents.toString(), (int) cursor));
-            default:
-                CompletionList list = new CompletionList();
-                addKeywords(path, partial, list);
-                return list;
+	/**
+	 * Use compileAndComplete instead for incremental compilation
+	 */
+	@Deprecated
+    public CompletionList complete(CompilationUnitTree root, int index) {
+        /*long started = System.currentTimeMillis();
+		 long cursor = index;
+		 StringBuilder contents = new PruneMethodBodies(parser.getTask()).scan(root, cursor);
+
+		 String partial = partialIdentifier(contents.toString(), (int) cursor);
+
+		 boolean endsWithParen = endsWithParen(contents.toString(), (int) cursor);
+		 TreePath path = new FindCompletionsAt(parser.getTask()).scan(root, cursor);
+		 */
+
+        return null;
+		// }
+    }
+
+	private void addTopLevelSnippets(ParseTask task, CompletionList list) {
+        Path file = Paths.get(task.root.getSourceFile().toUri());
+        if (!hasTypeDeclaration(task.root)) {
+            list.items.add(classSnippet(file));
+            if (task.root.getPackageName() == null) {
+                list.items.add(packageSnippet(file));
+            }
         }
+    }
+
+	private CompletionItem packageSnippet(Path file) {
+        String name = "com.tyron.test";
+        return snippetItem("package " + name, "package " + name + ";\n\n");
+    }
+
+    private CompletionItem classSnippet(Path file) {
+        String name = file.getFileName().toString();
+        name = name.substring(0, name.length() - ".java".length());
+        return snippetItem("class " + name, "class " + name + " {\n    $0\n}");
+    }
+
+	private boolean hasTypeDeclaration(CompilationUnitTree root) {
+        for (Tree tree : root.getTypeDecls()) {
+            if (tree.getKind() != Tree.Kind.ERRONEOUS) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static int endOfLine(CharSequence contents, int cursor) {
@@ -226,32 +319,57 @@ public class CompletionProvider {
         }
         throw new RuntimeException("empty path");
     }
+    private boolean isClassMethodAnnotation(TreePath path) {
+		if (path == null) {
+			return false;
+		}
 
-    private CompletionList completeIdentifier(TreePath path, final String partial, boolean endsWithParen) {
+		if (path.getLeaf() instanceof JCTree.JCClassDecl) {
+			return true;
+		}
+		
+		if (path.getParentPath() != null && path.getParentPath().getLeaf() instanceof JCTree.JCClassDecl) {
+			return true;
+		}
+
+		if (path.getLeaf() instanceof JCTree.JCIdent) {
+			return isClassMethodAnnotation(path.getParentPath());
+		}
+
+		if (path.getLeaf() instanceof JCTree .JCAnnotation) {
+			return isClassMethodAnnotation(path.getParentPath());
+		}
+
+		return false;
+	}
+    private CompletionList completeIdentifier(CompileTask task, TreePath path, final String partial, boolean endsWithParen) {
         CompletionList list = new CompletionList();
-        list.items = completeUsingScope(path, partial, endsWithParen);
-        addStaticImports(path.getCompilationUnit(), partial, endsWithParen, list);
+        list.items = completeUsingScope(task, path, partial, endsWithParen);
+        addStaticImports(task, path.getCompilationUnit(), partial, endsWithParen, list);
         if (!list.isIncomplete && partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
             addClassNames(path.getCompilationUnit(), partial, list);
         }
         addKeywords(path, partial, list);
+		if (isClassMethodAnnotation(path)) {
+			CustomActions.addOverrideItem(list);
+		}
         return list;
     }
 
-    private CompletionList completeMemberSelect(TreePath path, String partial, boolean endsWithParen) {
-        Trees trees = Trees.instance(parser.getTask());
+    private CompletionList completeMemberSelect(CompileTask task, TreePath path, String partial, boolean endsWithParen) {
+        Trees trees = Trees.instance(task.task);
         MemberSelectTree select = (MemberSelectTree) path.getLeaf();     
         path = new TreePath(path, select.getExpression());
         boolean isStatic = trees.getElement(path) instanceof TypeElement;
         Scope scope = trees.getScope(path);
         TypeMirror type = trees.getTypeMirror(path);
-        Log.d("Completion on MemberSelect", "type: " + type.getKind() + " " + type.getClass().getName());
+		//  Log.d("Completion on MemberSelect", "type: " + type.getKind() + " " + type.getClass().getName());
         if (type instanceof ArrayType) {
             return completeArrayMemberSelect(isStatic);
         } else if (type instanceof TypeVariable) {
-            return completeTypeVariableMemberSelect(scope, (TypeVariable) type, isStatic, partial, endsWithParen);
+            return completeTypeVariableMemberSelect(task, scope, (TypeVariable) type, isStatic, partial, endsWithParen);
         } else if (type instanceof DeclaredType) {
-            return completeDeclaredTypeMemberSelect(scope, (DeclaredType) type, isStatic, partial, endsWithParen);
+            return completeDeclaredTypeMemberSelect(task, scope, (DeclaredType) type, isStatic, partial, endsWithParen);
         } else {
             return new CompletionList();
         }
@@ -267,27 +385,27 @@ public class CompletionProvider {
         }
     }
 
-    private CompletionList completeTypeVariableMemberSelect(Scope scope, TypeVariable type, boolean isStatic, String partial, boolean endsWithParen) {
+    private CompletionList completeTypeVariableMemberSelect(CompileTask task, Scope scope, TypeVariable type, boolean isStatic, String partial, boolean endsWithParen) {
         if (type.getUpperBound() instanceof DeclaredType) {
-            return completeDeclaredTypeMemberSelect(scope, (DeclaredType) type.getUpperBound(), isStatic, partial, endsWithParen);
+            return completeDeclaredTypeMemberSelect(task, scope, (DeclaredType) type.getUpperBound(), isStatic, partial, endsWithParen);
         } else if (type.getUpperBound() instanceof TypeVariable) {
-            return completeTypeVariableMemberSelect(scope, (TypeVariable) type.getUpperBound(), isStatic, partial, endsWithParen);
+            return completeTypeVariableMemberSelect(task, scope, (TypeVariable) type.getUpperBound(), isStatic, partial, endsWithParen);
         } else {
             return new CompletionList();
         }
     }
 
-    private CompletionList completeDeclaredTypeMemberSelect(Scope scope, DeclaredType type, boolean isStatic, String partial, boolean endsWithParen) {
-        Trees trees = Trees.instance(parser.getTask());
+    private CompletionList completeDeclaredTypeMemberSelect(CompileTask task, Scope scope, DeclaredType type, boolean isStatic, String partial, boolean endsWithParen) {
+        Trees trees = Trees.instance(task.task);
         TypeElement typeElement = (TypeElement) type.asElement();
         List<CompletionItem> list = new ArrayList<>();
         HashMap<String, List<ExecutableElement>> methods = new HashMap<String, List<ExecutableElement>>();
-        for (Element member : parser.getTask().getElements().getAllMembers(typeElement)) {
+        for (Element member : task.task.getElements().getAllMembers(typeElement)) {
             if (member.getKind() == ElementKind.CONSTRUCTOR) continue;
             if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) continue;
             if (!trees.isAccessible(scope, member, type)) continue;
             Log.d("DeclaredTypeCompletion", "member name: " + member.getSimpleName());
-            //  if (isStatic != member.getModifiers().contains(Modifier.STATIC)) continue;
+            if (isStatic != member.getModifiers().contains(Modifier.STATIC)) continue;
             if (member.getKind() == ElementKind.METHOD) {
                 putMethod((ExecutableElement) member, methods);
             } else {
@@ -311,8 +429,8 @@ public class CompletionProvider {
     }
 
 
-    private List<CompletionItem> completeUsingScope(TreePath path, final String partial, boolean endsWithParen) {
-        Trees trees = Trees.instance(parser.getTask());
+    private List<CompletionItem> completeUsingScope(CompileTask task, TreePath path, final String partial, boolean endsWithParen) {
+        Trees trees = Trees.instance(task.task);
         List<CompletionItem> list = new ArrayList<>();
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         Scope scope = trees.getScope(path);
@@ -328,14 +446,14 @@ public class CompletionProvider {
 
         if (path.getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
             //list.addAll(addLambdas(path.getParentPath(), partial));
-            list.addAll(addLambda(path.getParentPath(), partial));
+            list.addAll(addLambda(task, path.getParentPath(), partial));
         }
-        
+
         if (path.getParentPath().getLeaf().getKind() == Tree.Kind.NEW_CLASS) {
-            list.addAll(addAnonymous(path.getParentPath(), partial));
+            list.addAll(addAnonymous(task, path.getParentPath(), partial));
         }
-        
-        for (Element element : ScopeHelper.scopeMembers(parser.getTask(), scope, filter)) {
+
+        for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
             if (element.getKind() == ElementKind.METHOD) {
                 putMethod((ExecutableElement) element, methods);
             } else {
@@ -349,8 +467,8 @@ public class CompletionProvider {
         return list;
     }
 
-    public List<CompletionItem> addLambda(TreePath path, String partial) {
-        Trees trees = Trees.instance(parser.getTask());
+    public List<CompletionItem> addLambda(CompileTask task, TreePath path, String partial) {
+        Trees trees = Trees.instance(task.task);
         List<CompletionItem> items = new ArrayList<>();
         MethodInvocationTree method = (MethodInvocationTree) path.getLeaf();
         Element element = trees.getElement(path);
@@ -381,6 +499,9 @@ public class CompletionProvider {
                         if (enc.getModifiers().contains(Modifier.STATIC)) {
                             continue;
                         }
+						if (enc.getModifiers().contains(Modifier.DEFAULT)) {
+							continue;
+						}
                         putMethod((ExecutableElement) enc, methods);
                     }
                 }
@@ -393,7 +514,7 @@ public class CompletionProvider {
 
                     String label = "";
                     for (VariableElement param : sam.getParameters()) {
-                        label = label + (label.isEmpty() ? "" : ", ") + param.getSimpleName().toString();
+                        label = label + (label.isEmpty() ? "" : ", ") + param.getSimpleName();
                     }
 
                     item.label = "(" + label + ")" + " -> ";
@@ -406,53 +527,59 @@ public class CompletionProvider {
             }
         }
 
-
         return items;
     }
 
-    public List<CompletionItem> addAnonymous(TreePath path, String partial) {
+    public List<CompletionItem> addAnonymous(CompileTask task, TreePath path, String partial) {
         List<CompletionItem> items = new ArrayList<>();
-        
+		
+		if (!(path.getLeaf() instanceof NewClassTree)) {
+			return items;
+		}
+		
         NewClassTree tree = (NewClassTree) path.getLeaf();
-        
+
         Log.d("ANONYMOUS", "type: " + path.getParentPath().getParentPath().getLeaf().getKind().toString());
-        
+
         if (path.getParentPath().getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
-            Trees trees = Trees.instance(parser.getTask());
+            Trees trees = Trees.instance(task.task);
             MethodInvocationTree method = (MethodInvocationTree) path.getParentPath().getParentPath().getLeaf();
             Element element = trees.getElement(path.getParentPath().getParentPath());
-            ExecutableElement executable = (ExecutableElement) element;
 
-            int argumentToComplete = 0;
-            for (int i = 0; i < method.getArguments().size(); i++) {
-                ExpressionTree exp = method.getArguments().get(i);
-                if (exp.toString().equals(partial) || exp.toString().equals("new " + partial)) {
-                    argumentToComplete = i;
-                }
-            }
-            
-            VariableElement var = executable.getParameters().get(argumentToComplete);
-            if (var.asType() instanceof DeclaredType) {
-                DeclaredType type = (DeclaredType) var.asType();
-                Element classElement = type.asElement();
-                
-            
-          //  if (method.getArguments().get(argumentToComplete).toString().startsWith("new ")) {
-                CompletionItem item = new CompletionItem();
-                item.iconKind = CircleDrawable.Kind.Interface;
-                item.label = classElement.getSimpleName().toString() + "{...}";
-                item.commitText = "new " + classElement.getSimpleName() + " () {\n \r //TODO: \n}";
-                item.cursorOffset = item.commitText.length();
-                item.detail = "";
-                items.add(item);
-      //    }
+			if (element instanceof ExecutableElement) {
+				ExecutableElement executable = (ExecutableElement) element;
+
+				int argumentToComplete = 0;
+				for (int i = 0; i < method.getArguments().size(); i++) {
+					ExpressionTree exp = method.getArguments().get(i);
+					if (exp.toString().equals(partial) || exp.toString().equals("new " + partial)) {
+						argumentToComplete = i;
+					}
+				}
+
+				VariableElement var = executable.getParameters().get(argumentToComplete);
+				if (var.asType() instanceof DeclaredType) {
+					DeclaredType type = (DeclaredType) var.asType();
+					Element classElement = type.asElement();
+
+
+					//  if (method.getArguments().get(argumentToComplete).toString().startsWith("new ")) {
+					CompletionItem item = new CompletionItem();
+					item.iconKind = CircleDrawable.Kind.Interface;
+					item.label = classElement.getSimpleName().toString() + " {...}";
+					item.commitText = "new " + classElement.getSimpleName() + " () {\n \r //TODO: \n}";
+					item.cursorOffset = item.commitText.length();
+					item.detail = "";
+					items.add(item);
+					//    }
+				}
             }
         }
         return items;
     }
 
-    private void addStaticImports(CompilationUnitTree root, String partial, boolean endsWithParen, CompletionList list) {
-        Trees trees = Trees.instance(parser.getTask());
+    private void addStaticImports(CompileTask task, CompilationUnitTree root, String partial, boolean endsWithParen, CompletionList list) {
+        Trees trees = Trees.instance(task.task);
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         int previousSize = list.items.size();
         outer:
@@ -513,7 +640,7 @@ public class CompletionProvider {
     private CompletionList completeImport(String path) {
         Set<String> names = new HashSet<>();
         CompletionList list = new CompletionList();
-        for (String className : parser.publicTopLevelTypes()) {
+        for (String className : compiler.publicTopLevelTypes()) {
             if (className.startsWith(path)) {
                 int start = path.lastIndexOf('.');
                 int end = className.indexOf('.', path.length());
@@ -536,8 +663,8 @@ public class CompletionProvider {
         return list;
     }
 
-    private CompletionList completeMemberReference(TreePath path, String partial) {
-        Trees trees = Trees.instance(parser.getTask());
+    private CompletionList completeMemberReference(CompileTask task, TreePath path, String partial) {
+        Trees trees = Trees.instance(task.task);
         MemberReferenceTree select = (MemberReferenceTree) path.getLeaf();
 
         path = new TreePath(path, select.getQualifierExpression());
@@ -548,9 +675,9 @@ public class CompletionProvider {
         if (type instanceof ArrayType) {
             return completeArrayMemberReference(isStatic);
         } else if (type instanceof TypeVariable) {
-            return completeTypeVariableMemberReference(scope, (TypeVariable) type, isStatic, partial);
+            return completeTypeVariableMemberReference(task, scope, (TypeVariable) type, isStatic, partial);
         } else if (type instanceof DeclaredType) {
-            return completeDeclaredTypeMemberReference(scope, (DeclaredType) type, isStatic, partial);
+            return completeDeclaredTypeMemberReference(task, scope, (DeclaredType) type, isStatic, partial);
         } else {
             return new CompletionList();
         }
@@ -567,24 +694,24 @@ public class CompletionProvider {
     }
 
     private CompletionList completeTypeVariableMemberReference(
-        Scope scope, TypeVariable type, boolean isStatic, String partial) {
+        CompileTask task, Scope scope, TypeVariable type, boolean isStatic, String partial) {
         if (type.getUpperBound() instanceof DeclaredType) {
             return completeDeclaredTypeMemberReference(
-                scope, (DeclaredType) type.getUpperBound(), isStatic, partial);
+                task, scope, (DeclaredType) type.getUpperBound(), isStatic, partial);
         } else if (type.getUpperBound() instanceof TypeVariable) {
             return completeTypeVariableMemberReference(
-                scope, (TypeVariable) type.getUpperBound(), isStatic, partial);
+                task, scope, (TypeVariable) type.getUpperBound(), isStatic, partial);
         } else {
             return new CompletionList();
         }
     }
 
-    private CompletionList completeDeclaredTypeMemberReference(Scope scope, DeclaredType type, boolean isStatic, String partial) {
-        Trees trees = Trees.instance(parser.getTask());
+    private CompletionList completeDeclaredTypeMemberReference(CompileTask task, Scope scope, DeclaredType type, boolean isStatic, String partial) {
+        Trees trees = Trees.instance(task.task);
         TypeElement typeElement = (TypeElement) type.asElement();
         List<CompletionItem> list = new ArrayList<>();
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
-        for (Element member : parser.getTask().getElements().getAllMembers(typeElement)) {
+        for (Element member : task.task.getElements().getAllMembers(typeElement)) {
             if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) continue;
             if (member.getKind() != ElementKind.METHOD) continue;
             if (!trees.isAccessible(scope, member, type)) continue;
@@ -596,7 +723,7 @@ public class CompletionProvider {
             }
         }
         for (List<ExecutableElement> overloads : methods.values()) {
-            list.addAll(method(overloads, false));
+            list.addAll(method(overloads, false, true));
         }
         if (isStatic) {
             list.add(keyword("new"));
@@ -608,10 +735,10 @@ public class CompletionProvider {
         return comp;
     }
 
-    private CompletionList completeSwitchConstant(TreePath path, String partial) {
+    private CompletionList completeSwitchConstant(CompileTask task, TreePath path, String partial) {
         SwitchTree switchTree = (SwitchTree) path.getLeaf();
         path = new TreePath(path, switchTree.getExpression());
-        TypeMirror type = Trees.instance(parser.getTask()).getTypeMirror(path);
+        TypeMirror type = Trees.instance(task.task).getTypeMirror(path);
 
         if (!(type instanceof DeclaredType)) {
             return new CompletionList();
@@ -619,7 +746,7 @@ public class CompletionProvider {
         DeclaredType declared = (DeclaredType) type;
         TypeElement element = (TypeElement) declared.asElement();
         List<CompletionItem> list = new ArrayList<>();
-        for (Element member : parser.getTask().getElements().getAllMembers(element)) {
+        for (Element member : task.task.getElements().getAllMembers(element)) {
             if (member.getKind() != ElementKind.ENUM_CONSTANT) continue;
             if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) continue;
             list.add(item(member));
@@ -636,12 +763,12 @@ public class CompletionProvider {
         String packageName = Objects.toString(root.getPackageName(), "");
         Set<String> uniques = new HashSet<String>();
         int previousSize = list.items.size();
-        for (String className : parser.packagePrivateTopLevelTypes(packageName)) {
+        for (String className : compiler.packagePrivateTopLevelTypes(packageName)) {
             if (!StringSearch.matchesPartialName(className, partial)) continue;
             list.items.add(classItem(className));
             uniques.add(className);
         }
-        for (String className : parser.publicTopLevelTypes()) {
+        for (String className : compiler.publicTopLevelTypes()) {
             if (!StringSearch.matchesPartialName(simpleName(className), partial)) continue;
             if (uniques.contains(className)) continue;
             if (list.items.size() > MAX_COMPLETION_ITEMS) {
@@ -673,33 +800,33 @@ public class CompletionProvider {
     private CompletionItem classItem(String className) {
         CompletionItem item = new CompletionItem();
         item.label = simpleName(className).toString();
-        item.detail = className;
+        item.detail = className.substring(0, className.lastIndexOf("."));
         item.commitText = item.label;
+		item.data = className;
         item.cursorOffset = item.label.length();
         item.action = CompletionItem.Kind.IMPORT;
         item.iconKind = CircleDrawable.Kind.Class;
         return item;
     }
 
+	private CompletionItem snippetItem(String label, String snippet) {
+		CompletionItem item = new CompletionItem();
+		item.label = label;
+		item.commitText = snippet;
+		item.cursorOffset = item.commitText.length();
+		item.detail = "Snippet";
+	    item.iconKind = CircleDrawable.Kind.Snippet;
+		return item;
+	}
+
     private CompletionItem item(Element element) {
         CompletionItem item = new CompletionItem();
         item.label = element.getSimpleName().toString();
-        item.detail = element.asType().toString();
+        item.detail = simpleReturnType(element.asType());
         item.commitText = element.getSimpleName().toString();
         item.cursorOffset =  item.commitText.length();
+		item.iconKind = getKind(element);
 
-
-        switch (element.getKind()) {
-            case METHOD:
-                item.iconKind = CircleDrawable.Kind.Method;
-                break;
-            case CLASS:
-                item.iconKind = CircleDrawable.Kind.Class;
-                break;
-            case INTERFACE:
-                item.iconKind = CircleDrawable.Kind.Interface;
-                break;
-        }
 
         return item;
     }
@@ -714,33 +841,40 @@ public class CompletionProvider {
         return item;
     }
 
-    private List<CompletionItem> method(List<ExecutableElement> overloads, boolean endsWithParen) {
+	private List<CompletionItem> method(List<ExecutableElement> overloads, boolean endsWithParen) {
+		return method(overloads, endsWithParen, false);
+	}
+
+    private List<CompletionItem> method(List<ExecutableElement> overloads, boolean endsWithParen, boolean methodRef) {
         List<CompletionItem> items = new ArrayList<>();
         for (ExecutableElement first : overloads) {
             CompletionItem item = new CompletionItem();
             item.label = getMethodLabel(first);
-            item.commitText = first.getSimpleName().toString() + "()";
+            item.commitText = first.getSimpleName().toString() + (methodRef ? "" : "()");
             item.detail = simpleReturnType(first.getReturnType());
             item.iconKind = CircleDrawable.Kind.Method;
             item.cursorOffset = item.commitText.length();
             if (first.getParameters() != null && !first.getParameters().isEmpty()) {
-                item.cursorOffset = item.commitText.length() - 1;
+                item.cursorOffset = item.commitText.length() - (methodRef ? 0 : 1);
             }
-
             items.add(item);
         }
         return items;
     }
 
     private String simpleReturnType(TypeMirror mirror) {
-        return mirror.toString().replaceAll("[a-zA-Z\\.0-9_\\$]+\\.", "");
+        return simpleClassName(mirror.toString());
     }
+
+	private String simpleClassName(String name) {
+		return name.replaceAll("[a-zA-Z\\.0-9_\\$]+\\.", "");
+	}
 
     private String getMethodLabel(ExecutableElement element) {
         String name = element.getSimpleName().toString();
         String params = "";
         for (VariableElement var : element.getParameters()) {
-            params = params + (params.isEmpty() ? "" : ", ") + var.asType().toString() + " " + var.getSimpleName().toString();
+            params = params + (params.isEmpty() ? "" : ", ") + simpleReturnType(var.asType()) + " " + var.getSimpleName();
         }
 
         return name + "(" + params + ")";
@@ -751,6 +885,23 @@ public class CompletionProvider {
         if (dot == -1) return className;
         return className.subSequence(dot + 1, className.length());
     }
+
+	private CircleDrawable.Kind getKind(Element element) {
+		switch (element.getKind()) {
+            case METHOD:
+                return CircleDrawable.Kind.Method; 
+            case CLASS:
+                return CircleDrawable.Kind.Class;
+            case INTERFACE:
+                return CircleDrawable.Kind.Interface;
+			case FIELD:
+				return CircleDrawable.Kind.Filed;
+		    case LOCAL_VARIABLE:
+			    return CircleDrawable.Kind.LocalVariable;
+			default:
+				return CircleDrawable.Kind.LocalVariable;
+        }
+	}
 
 
     public static boolean hasImport(CompilationUnitTree root, String className) {
@@ -772,7 +923,7 @@ public class CompletionProvider {
             // if the import is a wildcard, lets check if theyre on the same package
             if (name.endsWith("*")) {
                 String first = name.substring(0, name.lastIndexOf("."));
-                String end = className.substring(0, name.lastIndexOf("."));
+                String end = className.substring(0, className.lastIndexOf("."));
                 if (first.equals(end)) {
                     return true;
                 }

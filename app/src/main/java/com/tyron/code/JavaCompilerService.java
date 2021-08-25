@@ -1,51 +1,109 @@
 package com.tyron.code;
-import java.nio.file.Path;
-import javax.tools.JavaFileObject;
-import java.util.List;
-import java.util.Optional;
-import java.util.Collection;
-import javax.tools.StandardJavaFileManager;
-import javax.tools.DiagnosticCollector;
 import com.sun.source.util.JavacTask;
 import com.sun.tools.javac.api.JavacTool;
-import java.io.IOException;
-import java.util.Set;
-import java.util.stream.Collectors;
-import javax.tools.StandardLocation;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.StandardLocation;
+import com.tyron.code.compiler.CompileBatch;
+import com.tyron.code.compiler.ReusableCompiler;
+import java.util.Map;
+import java.util.HashMap;
+import com.tyron.code.parser.FileManager;
+import android.util.Log;
+import com.tyron.code.parser.JavaParser;
+import com.sun.source.tree.CompilationUnitTree;
 
 public class JavaCompilerService implements CompilerProvider {
 
     private static JavacTool systemProvider = JavacTool.create();
 
-    public JavacTask task;
-    public StandardJavaFileManager fileManager;
-    DiagnosticCollector<JavaFileObject> collector = new DiagnosticCollector();
-    
-    public JavaCompilerService(File rootDir) {
-      
-        try {
-            fileManager = systemProvider.getStandardFileManager(collector, null, null);
+    public final SourceFileManager fileManager;
 
-            fileManager.setLocation(StandardLocation.CLASS_PATH, Collections.singleton(rootDir));
-            Iterable<JavaFileObject> sources = fileManager.list(
-                StandardLocation.CLASS_PATH,
-                "",
-                Collections.singleton(JavaFileObject.Kind.SOURCE),
-                true);
-            task = systemProvider.getTask(null, fileManager, collector,
-                                          null,
-                                          null,
-                                          sources);
+    public final List<Diagnostic<? extends JavaFileObject>>  diags = new ArrayList<>();
 
-           
-            
-        } catch (IOException e) {
+	public final Set<File> classPath, docPath;
+	public final Set<String> addExports;
+	public final ReusableCompiler compiler = new ReusableCompiler();
 
-        }
+    public JavaCompilerService(Set<File> classPath, Set<File> docPath, Set<String> addExports) {
 
+		this.classPath = Collections.unmodifiableSet(classPath);
+		this.docPath = Collections.unmodifiableSet(docPath);
+		this.addExports = Collections.unmodifiableSet(addExports);
+		this.fileManager = new SourceFileManager();
     }
+
+	public CompileBatch cachedCompile;
+
+	private Map<JavaFileObject, Long> cachedModified = new HashMap<>();
+
+    private boolean needsCompile(Collection<? extends JavaFileObject> sources) {
+        if (cachedModified.size() != sources.size()) {
+            return true;
+        }
+        for (JavaFileObject f : sources) {
+            if (!cachedModified.containsKey(f)) {
+                return true;
+            }
+            if (f.getLastModified() != cachedModified.get(f)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void loadCompile(Collection<? extends JavaFileObject> sources) {
+        if (cachedCompile != null) {
+            if (!cachedCompile.closed) {
+                throw new RuntimeException("Compiler is still in-use!");
+            }
+            cachedCompile.borrow.close();
+        }
+        cachedCompile = doCompile(sources);
+        cachedModified.clear();
+        for (JavaFileObject f : sources) {
+            cachedModified.put(f, f.getLastModified());
+        }
+    }
+
+    private CompileBatch doCompile(Collection<? extends JavaFileObject> sources) {
+        if (sources.isEmpty()) throw new RuntimeException("empty sources");
+        CompileBatch firstAttempt = new CompileBatch(this, sources);
+        Set<Path> addFiles = firstAttempt.needsAdditionalSources();
+        if (addFiles.isEmpty()) return firstAttempt;
+        // If the compiler needs additional source files that contain package-private files
+		//  LOG.info("...need to recompile with " + addFiles);
+	    Log.d("JavaCompilerService", "Need to recompile with " + addFiles);
+        firstAttempt.close();
+        firstAttempt.borrow.close();
+        List<JavaFileObject> moreSources = new ArrayList<>();
+        moreSources.addAll(sources);
+        for (Path add : addFiles) {
+            moreSources.add(new SourceFileObject(add));
+        }
+        return new CompileBatch(this, moreSources);
+    }
+
+    private synchronized CompileBatch compileBatch(Collection<? extends JavaFileObject> sources) {
+			if (needsCompile(sources)) {
+				loadCompile(sources);
+			} else {
+				Log.d("JavaCompilerService", "Using cached compile");
+			}
+			return cachedCompile;
+    }
+
 
     @Override
     public Set<String> imports() {
@@ -55,12 +113,14 @@ public class JavaCompilerService implements CompilerProvider {
 
     @Override
     public List<String> publicTopLevelTypes() {
-        return null;
+        List<String> classes = new ArrayList<>();
+		classes.addAll(FileManager.getInstance().all());
+		return classes;
     }
 
     @Override
     public List<String> packagePrivateTopLevelTypes(String packageName) {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override
@@ -90,23 +150,36 @@ public class JavaCompilerService implements CompilerProvider {
 
     @Override
     public ParseTask parse(Path file) {
-        return null;
+        Parser parser = Parser.parseFile(file);
+		return new ParseTask(parser.task, parser.root);
     }
 
     @Override
     public ParseTask parse(JavaFileObject file) {
-       // Parser parser = new Parser
-       return null;
+		Parser parser = Parser.parseJavaFileObject(file);
+		ParseTask task = new ParseTask(parser.task, parser.root);
+		return task;
     }
 
     @Override
     public CompileTask compile(Path... files) {
-        return null;
+        List<JavaFileObject> sources = new ArrayList<JavaFileObject>();
+        for (Path f : files) {
+            sources.add(new SourceFileObject(f));
+        }
+        return compile(sources);
     }
 
     @Override
     public CompileTask compile(Collection<? extends JavaFileObject> sources) {
-        return null;
+        CompileBatch compile = compileBatch(sources);
+	  /* JavaParser parser = new JavaParser(null);
+	   CompilationUnitTree tree = null;
+		try {
+			tree = parser.parse(((SourceFileObject) sources.iterator().next()).mFile.toFile(), sources.iterator().next().getCharContent(true).toString(), -1);
+		} catch (IOException e) {}
+		return new CompileTask(parser.getTask(), List.of(tree), diags, () -> {});*/
+		return new CompileTask(compile.task, compile.roots, diags, compile::close);
     }
 
 }

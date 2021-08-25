@@ -26,6 +26,7 @@ import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 
+import com.tyron.code.ApplicationLoader;
 import io.github.rosemoe.editor.text.CharPosition;
 import io.github.rosemoe.editor.text.Content;
 import io.github.rosemoe.editor.text.Cursor;

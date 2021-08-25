@@ -59,5 +59,4 @@ class DefaultCompletionItemAdapter extends EditorCompletionAdapter {
         iv.setImageDrawable(item.icon);
         return view;
     }
-
 }

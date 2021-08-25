@@ -110,9 +110,13 @@ public class Project {
             return false;
         }
         
+		if (!getResourceDirectory().mkdirs()) {
+			return false;
+		}
+		
         Decompress.unzipFromAssets(ApplicationLoader.applicationContext, "test_project.zip",
                 java.getAbsolutePath());
-        
+		
         if (!getLibraryDirectory().mkdirs()) {
             return false;
         }
@@ -123,6 +127,10 @@ public class Project {
         
         return true;
     }
+	
+	public File getResourceDirectory() {
+		return new File(mRoot, "app/src/main/res");
+	}
     
     public File getJavaDirectory() {
         return new File(mRoot, "app/src/main/java");

@@ -11,10 +11,13 @@ public class CircleDrawable extends Drawable {
     public enum Kind {
         Method("M", 0xffe92e2e),
         Interface("I", 0xffcc7832),
+		Filed("F", 0xffcc7832),
         Class("C", 0xff1c9344),
         Keyword("K", 0xffcc7832),
         Package("P", 0xffcc7832),
-        Lambda("L", 0xff36b9da);
+        Lambda("λ", 0xff36b9da),
+		Snippet("S", 0xffcc7832),
+		LocalVariable("V", 0xffcc7832);
         
         
         private int color;

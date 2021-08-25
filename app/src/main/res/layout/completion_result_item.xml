@@ -32,9 +32,10 @@
 				android:layout_width="wrap_content"
 				android:layout_height="wrap_content"
 				android:text="THIS IS A REALLY LONG TEXT THAT SHOULS"
-				android:textColor="#FF000000"
+				android:textColor="#FFFEFEFE"
 				android:id="@+id/result_item_label"
-				android:textSize="16sp"
+				android:textSize="14sp"
+				android:fontFamily="@font/mono_font"
 				android:singleLine="false"/>
 
 		</LinearLayout>
@@ -46,6 +47,8 @@
 			android:text="Small Text"
 			android:id="@+id/result_item_desc"
 			android:textSize="12sp"
+			android:textColor="#FFC9C9C9"
+			android:fontFamily="@font/mono_font"
 			android:layout_marginLeft="8dp"        
 			android:singleLine="false"/>
 

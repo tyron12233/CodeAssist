@@ -21,34 +21,39 @@ import com.sun.source.tree.ErroneousTree;
 import java.nio.file.Paths;
 import java.nio.file.Path;
 import javax.tools.JavaFileManager;
+import com.sun.tools.javac.api.JavacTool;
+import java.util.Set;
+import java.util.HashSet;
+import com.sun.source.tree.ClassTree;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.Name;
+import android.util.Log;
 public class Parser {
     
-    private static final JavaCompiler COMPILER = ServiceLoader.load(JavaCompiler.class).iterator().next();
-    
-    public static JavacTask createSingleFileTask(JavaFileObject file, JavaFileManager fileManager) {
-        return (JavacTask) COMPILER.getTask(
-                null,
-                fileManager,
-                null,
-                null,
-                null,
-                Collections.singleton(file));
-    }
-    
-    final JavaFileObject file;
-    final String contents;
-    final JavacTask task;
-    final CompilationUnitTree root;
-    final Trees trees;
+    private static final JavaCompiler COMPILER = JavacTool.create();
+    private static final SourceFileManager FILE_MANAGER = new SourceFileManager();
 
-    private Parser(JavaFileObject file, JavaFileManager manager) {
+		/** Create a task that compiles a single file */
+		private static JavacTask singleFileTask(JavaFileObject file) {
+			return (JavacTask)
+			COMPILER.getTask(null, FILE_MANAGER, Parser::ignoreError, List.of(), List.of(), List.of(file));
+		}
+			
+    
+    public final JavaFileObject file;
+    public final String contents;
+    public final JavacTask task;
+    public final CompilationUnitTree root;
+    public final Trees trees;
+
+    private Parser(JavaFileObject file) {
         this.file = file;
         try {
             this.contents = file.getCharContent(false).toString();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        this.task = createSingleFileTask(file, manager);
+        this.task = singleFileTask(file);
         try {
             this.root = task.parse().iterator().next();
         } catch (IOException e) {
@@ -58,19 +63,55 @@ public class Parser {
     }
     
     public static Parser parseFile(Path file) {
-        return null;
+        return parseJavaFileObject(new SourceFileObject(file));
     }
-    
-    public static Parser paseJavaFileObject(JavaFileObject object) {
-        return null;
+	
+    private static Parser cachedParse;
+    private static long cachedModified = -1;
+
+    private static boolean needsParse(JavaFileObject file) {
+        if (cachedParse == null) return true;
+        if (!cachedParse.file.equals(file)) return true;
+        if (file.getLastModified() > cachedModified) return true;
+        return false;
     }
+
+    private static void loadParse(JavaFileObject file) {
+        cachedParse = new Parser(file);
+        cachedModified = file.getLastModified();
+    }
+	
+	public static Parser parseJavaFileObject(JavaFileObject file) {
+        if (needsParse(file)) {
+			Log.d("Parser", "Parsing file " + file.getName());
+            loadParse(file);
+        } else {
+            Log.d("Parser", "Using cached parse for " + file.getName());
+        }
+        return cachedParse;
+    }
+	
+	public Set<Name> packagePrivateClasses() {
+		Set<Name>  result = new HashSet<>();
+		for (Tree t : root.getTypeDecls()) {
+			Log.d("Parser", t.getClass().toString());
+			if (t instanceof ClassTree) {
+				ClassTree c = (ClassTree) t;
+				boolean isPublic = c.getModifiers().getFlags().contains(Modifier.PUBLIC);
+				if (isPublic) {
+					result.add(c.getSimpleName());
+				}
+			}
+		}
+		return result;
+	}
     
     private static String prune(
         final CompilationUnitTree root,
         final SourcePositions pos,
         final StringBuilder buffer,
         final long[] offsets,
-        boolean eraseAfterCursor) {
+        final boolean eraseAfterCursor) {
         class Scan extends TreeScanner<Void, Void> {
             boolean erasedAfterCursor = !eraseAfterCursor;
 
@@ -192,10 +233,15 @@ public class Parser {
         }
     }
 
-    String prune(long cursor) {
+    public String prune(long cursor) {
         SourcePositions pos = Trees.instance(task).getSourcePositions();
         StringBuilder buffer = new StringBuilder(contents);
         long[] cursors = {cursor};
         return prune(root, pos, buffer, cursors, true);
+    }
+	
+	private static void ignoreError(javax.tools.Diagnostic<? extends JavaFileObject> __) {
+        // Too noisy, this only comes up in parse tasks which tend to be less important
+        // LOG.warning(err.getMessage(Locale.getDefault()));
     }
 }

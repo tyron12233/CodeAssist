@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.code.R;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.activity.OnBackPressedCallback;
+import com.tyron.code.main.MainFragment;
 
 public class FileManagerFragment extends Fragment {
     
@@ -24,7 +25,7 @@ public class FileManagerFragment extends Fragment {
     OnBackPressedCallback callback = new OnBackPressedCallback(false) {
         @Override
         public void handleOnBackPressed() {
-            if (!mCurrentFile.getParentFile().equals(mRoot)) {
+            if (!mCurrentFile.equals(mRootFile)) {
                 mAdapter.submitFile(mCurrentFile.getParentFile());
                 check(mCurrentFile.getParentFile());
             }
@@ -79,7 +80,7 @@ public class FileManagerFragment extends Fragment {
             @Override
             public void onItemClick(File file, int position) {
                 if (position == 0) {
-                    if (!mCurrentFile.getParentFile().equals(mRoot)) {
+                    if (!mCurrentFile.equals(mRootFile)) {
                         mAdapter.submitFile(mCurrentFile.getParentFile());
                         check(mCurrentFile.getParentFile());
                     }
@@ -87,7 +88,7 @@ public class FileManagerFragment extends Fragment {
                 }
                 
                 if (file.isFile()) {
-                    
+                    openFile(file);
                 } else if (file.isDirectory()) {
                     mAdapter.submitFile(file);
                     check(file);
@@ -95,6 +96,16 @@ public class FileManagerFragment extends Fragment {
             }
         });
     }
+	
+	private void openFile(File file) {
+		Fragment parent = getParentFragment();
+		
+		if (parent != null) {
+			if (parent instanceof MainFragment) {
+				((MainFragment) parent).openFile(file);
+			}
+		}
+	}
     
     /**
      * Checks if the current file is equal to the root file if so,
@@ -103,7 +114,7 @@ public class FileManagerFragment extends Fragment {
     private void check(File currentFile) {
         mCurrentFile = currentFile;
         
-        if (currentFile.equals(mRoot)) {
+        if (currentFile.getAbsolutePath().equals(mRootFile.getAbsolutePath())) {
             callback.setEnabled(false);
         } else {
             callback.setEnabled(true);

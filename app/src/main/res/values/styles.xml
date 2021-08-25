@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="AppTheme" parent="Theme.MaterialComponents.Light.NoActionBar">
         <item name="colorAccent">#FFCC7832</item>
+        <item name="android:textColorPrimary">#FFfefefe</item>
         <item name="android:statusBarColor">#212121</item>
 	</style>
 	    <style name="HorizontalDivider">

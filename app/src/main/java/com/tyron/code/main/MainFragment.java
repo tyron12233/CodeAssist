@@ -1,4 +1,5 @@
 package com.tyron.code.main;
+
 import androidx.fragment.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -6,6 +7,7 @@ import android.os.Bundle;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import com.google.android.material.tabs.TabLayout;
+import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.viewpager2.widget.ViewPager2;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 import java.io.File;
@@ -31,6 +33,22 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.parser.FileManager;
 import java.util.Collections;
 import java.util.Collection;
+import androidx.appcompat.widget.Toolbar;
+import com.tyron.code.file.FileManagerFragment;
+import android.view.Gravity;
+import com.tyron.code.compiler.JavaCompiler;
+import androidx.lifecycle.ViewModelProvider;
+import com.tyron.code.editor.log.LogViewModel;
+import java.util.stream.Collectors;
+import android.os.AsyncTask;
+import com.tyron.code.completion.CompletionEngine;
+import android.app.ProgressDialog;
+import com.tyron.code.JavaCompilerService;
+import com.tyron.code.CompileTask;
+import com.sun.source.util.TaskListener;
+import com.sun.source.util.TaskEvent;
+import androidx.core.widget.PopupMenuCompat;
+import androidx.appcompat.widget.PopupMenu;
 
 public class MainFragment extends Fragment {
     
@@ -38,7 +56,8 @@ public class MainFragment extends Fragment {
         
     }
     
-    private LinearLayout mRoot;
+    private DrawerLayout mRoot;
+    private Toolbar mToolbar;
     private LinearLayout mContent;
     private FrameLayout mBottomContainer;
     private BottomSheetBehavior mBehavior;
@@ -49,20 +68,32 @@ public class MainFragment extends Fragment {
     OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {
         @Override
         public void handleOnBackPressed() {
+			if (mRoot.isOpen()) {
+				mRoot.closeDrawer(Gravity.START, true);
+				return;
+			}
             if (mBehavior != null) {
                 mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
             }
         }
     };
+
+	@Override
+	public void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		
+		if (savedInstanceState != null) {
+			Project project = new Project(new File(savedInstanceState.getString("current_project")));
+			FileManager.getInstance().openProject(project);
+		}
+	}
     
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        mRoot = (LinearLayout) inflater.inflate(R.layout.main_fragment, container, false);
+        mRoot = (DrawerLayout) inflater.inflate(R.layout.main_fragment, container, false);
 
         mContent = mRoot.findViewById(R.id.content);
         mBottomContainer = mRoot.findViewById(R.id.persistent_sheet);
-        
-        setHasOptionsMenu(true);
         
         mTabLayout = new TabLayout(requireContext());
         mTabLayout.setBackgroundColor(0xff212121);
@@ -79,6 +110,9 @@ public class MainFragment extends Fragment {
         mPager.setBackgroundColor(0xff2b2b2b);
         mContent.addView(mPager, new LinearLayout.LayoutParams(-1, -1, 1));
         
+        mToolbar = mRoot.findViewById(R.id.toolbar);
+        mToolbar.inflateMenu(R.menu.code_editor_menu);
+        
         requireActivity().getOnBackPressedDispatcher().addCallback(this, onBackPressedCallback);
         
         return mRoot;
@@ -88,6 +122,32 @@ public class MainFragment extends Fragment {
     public void onViewCreated(View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         
+		mRoot.addDrawerListener(new DrawerLayout.DrawerListener() {
+			@Override
+			public void onDrawerSlide(View p1, float p) {
+
+			}
+
+			@Override
+			public void onDrawerOpened(View p1) {
+				onBackPressedCallback.setEnabled(true);
+			}
+
+			@Override
+			public void onDrawerClosed(View p1) {
+				if (mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {
+					onBackPressedCallback.setEnabled(true);
+				} else {
+					onBackPressedCallback.setEnabled(false);
+				}
+			}
+
+			@Override
+			public void onDrawerStateChanged(int p1) {
+
+			}
+		});
+		
         mTabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabUnselected(TabLayout.Tab p1) {
@@ -97,7 +157,17 @@ public class MainFragment extends Fragment {
 
             @Override
             public void onTabReselected(TabLayout.Tab p1) {
-
+				PopupMenu popup = new PopupMenu(requireActivity(), p1.view);
+				popup.getMenu().add("Close");
+				popup.getMenu().add("Close others");
+				popup.getMenu().add("Close all");
+				popup.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+					@Override
+					public boolean onMenuItemClick(MenuItem item) {
+						return true;
+					}
+				});
+				popup.show();
             }
 
             @Override
@@ -112,7 +182,76 @@ public class MainFragment extends Fragment {
             }
         }).attach();
         
-        mAdapter.submitList(List.of(new File(requireContext().getFilesDir(), "Test.java"), new File(requireContext().getFilesDir(), "Test1.java")));
+        mToolbar.setOnMenuItemClickListener(new Toolbar.OnMenuItemClickListener() {
+            @Override
+            public boolean onMenuItemClick(MenuItem item) {
+                if (item.getItemId() == R.id.debug_create) {
+
+                    final EditText et = new EditText(requireContext());
+                    et.setHint("path");
+					et.setHintTextColor(0xffe0e0e0);
+
+                    AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
+                        .setTitle("Create a project")
+                        .setNegativeButton("cancel", null)
+                        .setPositiveButton("create", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface i, int which) {
+                                File file = new File(et.getText().toString());
+                                Project project = new Project(file);
+
+                                if (project.create()) {
+
+
+                                } else {
+                                    //  ApplicationLoader.showToast("Unable to creste project");
+                                }
+                                FileManager.getInstance().openProject(project);                         
+                                /*final List<File> files = project.javaFiles.values().stream().limit(10).collect(Collectors.toList());
+								mAdapter.submitList(files);
+							    final Object lock = new Object();
+								final ProgressDialog d = new ProgressDialog(requireContext());
+								d.show();
+								d.setCancelable(false);
+								AsyncTask.execute(() -> {
+									for (File f : files) {
+										//synchronized(lock) {
+										requireActivity().runOnUiThread(() -> d.setMessage("Indexing " + f.getName()));
+										try {
+										JavaCompilerService c = CompletionEngine.getInstance().getCompiler();
+										CompileTask task = c.compile(f.toPath());
+										task.close();
+										} catch (Throwable e) {
+											continue;
+										}
+										//}
+									}
+									
+									requireActivity().runOnUiThread(() -> {
+										d.dismiss();
+									});
+								});*/
+                            }
+                        })
+                        .setView(et, 16, 0, 16, 0)
+                        .create();
+
+                    dialog.show();
+                    return true;
+                } else if (item.getItemId() == R.id.debug_refresh) {
+					Project project = FileManager.getInstance().getCurrentProject();
+					if (project != null) {
+						FileManager.getInstance().openProject(project);
+					}
+					
+					ApplicationLoader.showToast("Project files have been refreshed.");
+				} else if (item.getItemId() == R.id.action_run) {
+					compile();
+				}
+
+                return false;
+            }
+        });
         
         final BottomEditorFragment bottomEditorFragment = BottomEditorFragment.newInstance();
         mBehavior = BottomSheetBehavior.from(mBottomContainer);
@@ -136,58 +275,52 @@ public class MainFragment extends Fragment {
 
         // Display the persistent fragment
         getChildFragmentManager().beginTransaction()
-            .replace(R.id.persistent_sheet, bottomEditorFragment)
-            .commit();
+                .replace(R.id.persistent_sheet, bottomEditorFragment)
+                .commit();
+            
+        getChildFragmentManager().beginTransaction()
+                .replace(R.id.nav_root, FileManagerFragment.newInstance(new File("/sdcard")), "file_manager")
+                .commit();
     }
 
-    @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-        super.onCreateOptionsMenu(menu, inflater);
-        
-        menu.clear();
-        inflater.inflate(R.menu.code_editor_menu, menu);
-    }
+	@Override
+	public void onSaveInstanceState(Bundle outState) {
+		super.onSaveInstanceState(outState);
+		
+		Project current = FileManager.getInstance().getCurrentProject();
+		if (current != null) {
+			outState.putString("current_project", current.mRoot.getAbsolutePath());
+		}
+	}
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == R.id.debug_create) {
-            
-            final EditText et = new EditText(requireContext());
-            et.setHint("path");
-            
-            AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Create a project")
-                    .setNegativeButton("create", null)
-                    .setPositiveButton("cancel", new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface i, int which) {
-                            File file = new File(et.getText().toString());
-                            Project project = new Project(file);
-                            
-                            if (project.create()) {
-                                
-                                
-                            } else {
-                              //  ApplicationLoader.showToast("Unable to creste project");
-                            }
-                            FileManager.getInstance().openProject(project);                         
-                            mAdapter.submitList(project.javaFiles.values());
-                            
-                        }
-                    })
-                    .setView(et)
-                    .create();
-                    
-            dialog.show();
-            return true;
-        }
-        
-        return false;
-    }
-    
-    private void compile() {
-        
-    }
+    public void openFile(File file) {
+		if (!file.getName().endsWith(".java")) {
+			return;
+		}
+		
+		int pos = mAdapter.getPosition(file);
+		if (pos != -1) {
+			mPager.setCurrentItem(pos);
+		} else {
+			mAdapter.submitFile(file);
+			mPager.setCurrentItem(mAdapter.getPosition(file));
+		}
+		
+		mRoot.closeDrawer(Gravity.START, true);
+	}
+	
+	private void compile() {
+		JavaCompiler compiler = new JavaCompiler(new ViewModelProvider(requireActivity()).get(LogViewModel.class));
+		compiler.compile(new JavaCompiler.OnCompleteListener() {
+			@Override
+			public void onComplete(boolean success) {
+				ApplicationLoader.showToast(success ? "Compilation success" : "Compilation failed");
+				if (!success) {
+					mBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+				}
+			}
+		});
+	}
     
     private static class PageAdapter extends FragmentStateAdapter{
         
@@ -202,6 +335,11 @@ public class MainFragment extends Fragment {
             data.addAll(files);
             notifyDataSetChanged();
         }
+		
+		public void submitFile(File file) {
+			data.add(file);
+			notifyItemInserted(data.size());
+		}
         
         @Override
         public int getItemCount() {
@@ -221,6 +359,13 @@ public class MainFragment extends Fragment {
         public long getItemId(int position) {
             return data.get(position).getAbsolutePath().hashCode();
         }
+		
+		public int getPosition(File file) {
+			if (containsItem(file.getAbsolutePath().hashCode())) {
+				return data.indexOf(file);
+			}
+			return -1;
+		}
 
         @Override
         public boolean containsItem(long itemId) {
