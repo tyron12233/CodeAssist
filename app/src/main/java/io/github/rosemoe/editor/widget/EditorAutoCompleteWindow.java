@@ -50,6 +50,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.code.editor.CompletionItemAdapter;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import com.tyron.code.Parser;
+import android.view.ViewGroup;
+import com.tyron.code.util.AndroidUtilities;
 
 /**
  * Auto complete window for editing code quicker
@@ -127,7 +129,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         mListView.setAdapter(mAdapter);
         layout.addView(mListView , new LinearLayout.LayoutParams(-1, -1));
         
-        
+        layout.setLayoutParams(new ViewGroup.LayoutParams(-1, -2));
+		
         mTip = new TextView(mEditor.getContext());
         mTip.setText(TIP);
         mTip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
@@ -349,10 +352,16 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             mAdapter.attachAttributes(this, results);
             mListView.setAdapter(mAdapter);
             mCurrent = 0;
-            float newHeight = mEditor.getDpUnit() * 30 * results.size();
+			
+			mEditor.post(() -> {
+            float newHeight = AndroidUtilities.getHeight(mListView);//mEditor.getDpUnit() * 30 * results.size();
+			if (newHeight == 0) {
+				newHeight = mEditor.getDpUnit() * 30 * results.size();
+			}
             if (isShowing()) {
                 update(getWidth(), (int) Math.min(newHeight, mMaxHeight));
             }
+			});
         });
     }
 

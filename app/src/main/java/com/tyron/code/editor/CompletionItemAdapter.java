@@ -82,6 +82,9 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
     }
 
     public CompletionItem getItem(int position) {
+		if (items.size() < position) {
+			return null;
+		}
         return items.get(position);
     }
 
