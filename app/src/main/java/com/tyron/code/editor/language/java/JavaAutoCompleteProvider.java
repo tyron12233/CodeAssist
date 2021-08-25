@@ -15,29 +15,46 @@ import com.tyron.code.editor.log.LogViewModel;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.lifecycle.ViewModelStoreOwner;
 import androidx.appcompat.app.AppCompatActivity;
+import com.tyron.code.CompilerProvider;
+import com.tyron.code.JavaCompilerService;
+import com.tyron.code.parser.FileManager;
+import java.util.Collections;
+import java.util.stream.Collectors;
+import com.tyron.code.completion.CompletionEngine;
+import com.tyron.code.compiler.CompileBatch;
 
 public class JavaAutoCompleteProvider implements AutoCompleteProvider {
     
     private CodeEditor mEditor;
     private LogViewModel viewModel;
+	private CompilerProvider provider;
     
     public JavaAutoCompleteProvider(CodeEditor editor) {
         mEditor = editor;
         viewModel = new ViewModelProvider((AppCompatActivity) editor.getContext()).get(LogViewModel.class);
+		provider = new JavaCompilerService(
+			FileManager.getInstance().getCurrentProject().getJavaFiles().values().stream().collect(Collectors.toSet()),
+			Collections.emptySet(),
+			Collections.emptySet()
+		);
     }
     
+	JavaParser parser;
+	
     @Override
     public List<CompletionItem> getAutoCompleteItems(String partial, boolean endsWithParen, TextAnalyzeResult prev, int line) {
-        Cursor cursor = mEditor.getCursor();
-        JavaParser parser = new JavaParser(viewModel);
-        CompilationUnitTree tree = parser.parse(mEditor.getCurrentFile(), mEditor.getText().toString(), cursor.getLeft());
-        JavacTask task = parser.getTask();
+       FileManager.getInstance().save(mEditor.getCurrentFile(), mEditor.getText().toString());
+		Cursor cursor = mEditor.getCursor();
         
-        CompletionProvider provider = new CompletionProvider(parser);
-        
-        CompletionList list = provider.complete(tree, cursor.getLeft());
-        List<CompletionItem> result = new ArrayList<>();
-        
+		// The previous call hasnt finished
+		CompileBatch batch = CompletionEngine.getInstance().getCompiler().cachedCompile;
+		if (batch != null && !CompletionEngine.getInstance().getCompiler().cachedCompile.closed) {
+			return Collections.emptyList();
+		}
+		CompletionList list = CompletionEngine.getInstance().complete(mEditor.getCurrentFile(), cursor.getLeft());
+		
+		List<CompletionItem> result = new ArrayList<>();
+		
         for (com.tyron.code.model.CompletionItem item : list.items) {
             result.add(new CompletionItem(item));
         }

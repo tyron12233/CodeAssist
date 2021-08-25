@@ -30,6 +30,8 @@ import com.tyron.code.model.Project;
 import java.util.HashSet;
 import android.util.Log;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.nio.file.Path;
 
 /**
  * Class responsible for caching java files for fast
@@ -39,6 +41,16 @@ public class FileManager {
 
     private static FileManager INSTANCE = null;
     private final ExecutorService service = Executors.newFixedThreadPool(4);
+
+	public List<File> list(String packageName) {
+		List<File> list = new ArrayList<>();
+		for (String file : javaFiles.keySet()) {
+			if (file.substring(0, file.lastIndexOf(".")).equals(packageName)) {
+				list.add(javaFiles.get(file));
+			}
+		}
+		return list;
+	}
     
     public static FileManager getInstance() {
         if (INSTANCE == null) {

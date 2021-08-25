@@ -24,10 +24,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     private final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
 
     public static JavaAnalyzer getInstance() {
-        if (INSTANCE == null) {
-            INSTANCE = new JavaAnalyzer();
-        }
-        return INSTANCE;
+        return new JavaAnalyzer();
     }
     
     @Override

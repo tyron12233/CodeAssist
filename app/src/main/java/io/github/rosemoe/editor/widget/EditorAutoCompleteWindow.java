@@ -49,6 +49,7 @@ import android.util.Log;
 import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.code.editor.CompletionItemAdapter;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import com.tyron.code.Parser;
 
 /**
  * Auto complete window for editing code quicker
@@ -142,6 +143,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         
         applyColorScheme();
         setLoading(true);
+        
     }
     
     /**
@@ -184,8 +186,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      */
     public void applyColorScheme() {
         EditorColorScheme colors = mEditor.getColorScheme();
-        mBg.setStroke(1, colors.getColor(EditorColorScheme.AUTO_COMP_PANEL_CORNER));
-        mBg.setColor(colors.getColor(EditorColorScheme.AUTO_COMP_PANEL_BG));
+        mBg.setStroke(2, 0xff575757);
+        mBg.setColor(0xff2b2b2b);
     }
 
     /**
@@ -267,19 +269,17 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                 }
             }
             if (item.item.action == com.tyron.code.model.CompletionItem.Kind.IMPORT) {
-                LogViewModel mode = new ViewModelProvider((ViewModelStoreOwner) mEditor.getContext()).get(LogViewModel.class);
-                JavaParser parser = new JavaParser(mode);
-                CompilationUnitTree root = parser.parse(mEditor.getCurrentFile(), mEditor.getText().toString(), cursor.getLeft());
-                ParseTask task = new ParseTask(parser.getTask(), root);
-                Log.d("PackageName", root.getPackageName().toString());
+                Parser parser = Parser.parseFile(mEditor.getCurrentFile().toPath());
+                ParseTask task = new ParseTask(parser.task, parser.root);
+                Log.d("PackageName", task.root.getPackageName().toString());
                 
                 boolean samePackage = false;
-                if (root.getPackageName().toString().equals(item.item.detail.substring(0, item.item.detail.lastIndexOf(".")))) {
+                if (task.root.getPackageName().toString().equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
                     samePackage = true;
                 }
                 
-                if (!samePackage && !CompletionProvider.hasImport(root, item.item.detail)) {
-                    AddImport imp = new AddImport(new File(""), item.item.detail);
+                if (!samePackage && !CompletionProvider.hasImport(task.root, item.item.data)) {
+                    AddImport imp = new AddImport(new File(""), item.item.data);
                     Map<File, TextEdit> edits = imp.getText(task);
                     TextEdit edit = edits.values().iterator().next();
                     

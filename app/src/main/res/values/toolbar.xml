@@ -2,8 +2,12 @@
 <resources>
     <style name="CodeEditorActionBar" parent="AppTheme">
         <item name="colorAccent">#FFCC7832</item>
-        <item name="android:textColorPrimary">@android:color/white</item>
-        <item name="android:textColorSecondary">@android:color/white</item>
-        <item name="actionMenuTextColor">@android:color/white</item>         
+        <item name="android:textColorPrimary">#FFFEFEFE</item>
+        <item name="android:textColorSecondary">#FFEAEAEA</item>
+        <item name="actionMenuTextColor">#fffefefe</item>
     </style>
+	
+	<style name="CodeEditorThemeOverlay" parent ="ThemeOverlay.MaterialComponents.Toolbar.Primary">
+		<item name="colorSurface">#ff2b2b2b</item>
+	</style>
 </resources>

@@ -11,5 +11,8 @@
         
     <item
         android:id="@+id/debug_create"
-        android:title="Create project"/>
+        android:title="Create/Open project"/>
+	<item
+		android:id="@+id/debug_refresh"
+		android:title="Refresh project"/>
 </menu>

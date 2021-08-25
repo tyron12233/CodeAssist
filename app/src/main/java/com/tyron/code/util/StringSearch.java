@@ -34,5 +34,18 @@ public class StringSearch {
         // TODO fall back on parsing file
         return "";
     }
+	
+	// TODO this doesn't work for inner classes, eliminate
+    public static String mostName(String name) {
+        int lastDot = name.lastIndexOf('.');
+        return lastDot == -1 ? "" : name.substring(0, lastDot);
+    }
+
+    // TODO this doesn't work for inner classes, eliminate
+    public static String lastName(String name) {
+        int i = name.lastIndexOf('.');
+        if (i == -1) return name;
+        else return name.substring(i + 1);
+    }
     
 }

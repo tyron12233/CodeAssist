@@ -1,4 +1,5 @@
 package com.tyron.code.model;
+
 import io.github.rosemoe.editor.util.Objects;
 
 /**
@@ -21,7 +22,6 @@ public class Position {
         if (!(object instanceof Position)) {
             return false;
         }
-        
         Position that = (Position) object;
         return (this.line == that.line && this.column == that.column);
     }

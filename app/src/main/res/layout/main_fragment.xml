@@ -1,30 +1,57 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:fitsSystemWindows="true"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
-    <androidx.coordinatorlayout.widget.CoordinatorLayout 
-        android:id="@+id/root"
-        android:layout_width="fill_parent"
-        android:layout_height="fill_parent"
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:orientation="vertical">
+        <com.google.android.material.appbar.AppBarLayout
+            android:id="@+id/app_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#212121"
+            android:theme="@style/CodeEditorActionBar"
+            app:elevation="0dp">
 
-        <LinearLayout
-            android:id="@+id/content"
-            app:layout_behavior="@string/appbar_scrolling_view_behavior"
+            <androidx.appcompat.widget.Toolbar
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+				android:theme="@style/CodeEditorThemeOverlay"
+                android:id="@+id/toolbar" />
+        </com.google.android.material.appbar.AppBarLayout>
+
+        <androidx.coordinatorlayout.widget.CoordinatorLayout 
+            android:id="@+id/root"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical">
-            
-            
-        </LinearLayout>
-        <FrameLayout
-            android:id="@+id/persistent_sheet"
-            android:layout_height="match_parent"
-            android:layout_width="match_parent"
-            android:background="#2e2e2e"
-            app:behavior_peekHeight="50dp"
-            app:layout_behavior="@string/bottom_sheet_behavior"/>
-    </androidx.coordinatorlayout.widget.CoordinatorLayout>
-</LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/content"
+                app:layout_behavior="@string/appbar_scrolling_view_behavior"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+
+            </LinearLayout>
+            <FrameLayout
+                android:id="@+id/persistent_sheet"
+                android:layout_height="match_parent"
+                android:layout_width="match_parent"
+                android:background="#2e2e2e"
+                app:behavior_peekHeight="50dp"
+                app:layout_behavior="@string/bottom_sheet_behavior"/>
+        </androidx.coordinatorlayout.widget.CoordinatorLayout>
+    </LinearLayout>
+    <LinearLayout
+        android:background="#2b2b2b"
+        android:id="@+id/nav_root"
+        android:layout_width="300dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"/>
+</androidx.drawerlayout.widget.DrawerLayout>

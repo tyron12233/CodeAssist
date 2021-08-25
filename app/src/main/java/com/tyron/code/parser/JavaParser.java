@@ -39,6 +39,10 @@ import com.tyron.code.editor.log.LogViewModel;
 import java.util.Locale;
 import com.sun.source.util.Trees;
 
+
+/**
+ * @Deprecated use JavaCompilerService instead
+ */
 public class JavaParser {
 
     private static final String TAG = "JavaParser";
@@ -71,7 +75,7 @@ public class JavaParser {
             fileManager.setLocation(StandardLocation.CLASS_OUTPUT, List.of(FileManager.getInstance().getCurrentProject().getBuildDirectory()));
             fileManager.setLocation(StandardLocation.CLASS_PATH, classpath());
         } catch (IOException e) {
-            log.d(LogViewModel.DEBUG, e.getMessage());
+           // log.d(LogViewModel.DEBUG, e.getMessage());
             // impossible
             canParse = false;
         }
@@ -82,7 +86,7 @@ public class JavaParser {
         if (!canParse) return null;
         long time = System.currentTimeMillis();
         
-        log.d(LogViewModel.DEBUG, "Parsing source: " + src);
+       // log.d(LogViewModel.DEBUG, "Parsing source: " + file.getName());
         final StringBuilder fix = new StringBuilder(src);
         
         // We add an extra ';' to the end of the line so parsing will produce the right tokens
