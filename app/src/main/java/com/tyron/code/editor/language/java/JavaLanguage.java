@@ -13,6 +13,8 @@ import io.github.rosemoe.editor.text.TextAnalyzer;
 import io.github.rosemoe.editor.langs.internal.MyCharacter;
 import io.github.rosemoe.editor.langs.java.JavaTextTokenizer;
 import io.github.rosemoe.editor.langs.java.Tokens;
+import io.github.rosemoe.editor.interfaces.NewlineHandler.HandleResult;
+import android.util.Log;
 
 public class JavaLanguage implements EditorLanguage {
     
@@ -71,12 +73,38 @@ public class JavaLanguage implements EditorLanguage {
         return new SymbolPairMatch.DefaultSymbolPairs();
     }
     
-    private NewlineHandler[] newLineHandlers = new NewlineHandler[]{new BraceHandler()};
+    private NewlineHandler[] newLineHandlers = new NewlineHandler[]{new BraceHandler(), new TwoIndentHandler()};
     
     @Override
     public NewlineHandler[] getNewlineHandlers() {
         return newLineHandlers;
     }
+	
+	class TwoIndentHandler implements NewlineHandler {
+
+		@Override
+		public boolean matchesRequirement(String beforeText, String afterText) {
+			Log.d("BeforeText", beforeText);
+			if (beforeText.replace("\r", "").trim().startsWith(".")) {
+				return false;
+			}
+			return beforeText.endsWith(")") && !afterText.startsWith(";");
+		}
+
+		@Override
+		public NewlineHandler.HandleResult handleNewline(String beforeText, String afterText, int tabSize) {
+			int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
+            int advanceAfter = getIndentAdvance(afterText) + (4 * 2);
+            String text;
+            StringBuilder sb = new StringBuilder("")
+                .append('\n')
+                .append(text = TextUtils.createIndent(count + advanceAfter, tabSize, useTab()));
+            int shiftLeft = 0;
+            return new HandleResult(sb, shiftLeft);
+		}
+
+		
+	}
     
     class BraceHandler implements NewlineHandler {
 
