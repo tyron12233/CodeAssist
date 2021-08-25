@@ -106,7 +106,7 @@ public class CodeEditorFragment extends Fragment {
         mEditor.setCurrentFile(mCurrentFile);
         mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-        mEditor.setTypefaceText(ResourcesCompat.getFont(getContext(), R.font.JetBrainsMonoRegular));
+        mEditor.setTypefaceText(ResourcesCompat.getFont(getContext(), R.font.jetbrains_mono_regular));
         mContent.addView(mEditor, new FrameLayout.LayoutParams(-1, -1));
         
         logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
