@@ -9,6 +9,9 @@ import java.io.IOException;
 public class StringSearch {
     
     public static boolean matchesPartialName(CharSequence candidate, CharSequence partialName) {
+		if (partialName.length() == 1 && partialName.equals(".")) {
+			return true;
+		}
         if (candidate.length() < partialName.length()) return false;
         for (int i = 0; i < partialName.length(); i++) {
             if (candidate.charAt(i) != partialName.charAt(i)) return false;

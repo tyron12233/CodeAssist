@@ -258,8 +258,16 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         Cursor cursor = mEditor.getCursor();
         if (!cursor.isSelected()) {
             mCancelShowUp = true;
-            mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - mLastPrefix.length(), cursor.getLeftLine(), cursor.getLeftColumn());
+			
+			int length = mLastPrefix.length();
+			
+			if (mLastPrefix.contains(".")) {
+				length -= mLastPrefix.lastIndexOf(".") + 1;
+			}
+            mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - length, cursor.getLeftLine(), cursor.getLeftColumn());
+			
             cursor.onCommitText(item.commit);
+			
             if (item.cursorOffset != item.commit.length()) {
                 int delta = (item.commit.length() - item.cursorOffset);
                 if (delta != 0) {
@@ -268,6 +276,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                     mEditor.setSelection(charPosition.line, charPosition.column);
                 }
             }
+			
             if (item.item.action == com.tyron.code.model.CompletionItem.Kind.IMPORT) {
                 Parser parser = Parser.parseFile(mEditor.getCurrentFile().toPath());
                 ParseTask task = new ParseTask(parser.task, parser.root);

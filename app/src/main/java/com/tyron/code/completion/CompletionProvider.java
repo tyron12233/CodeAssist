@@ -277,7 +277,7 @@ public class CompletionProvider {
         return contents.substring(start, end);
     }
 
-    private boolean isQualifiedIdentifierChar(char c) {
+    public static boolean isQualifiedIdentifierChar(char c) {
         return c == '.' || Character.isJavaIdentifierPart(c);
     }
 
@@ -402,7 +402,7 @@ public class CompletionProvider {
         HashMap<String, List<ExecutableElement>> methods = new HashMap<String, List<ExecutableElement>>();
         for (Element member : task.task.getElements().getAllMembers(typeElement)) {
             if (member.getKind() == ElementKind.CONSTRUCTOR) continue;
-            if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) continue;
+            if (!StringSearch.matchesPartialName(member.getSimpleName(), partial) && !partial.endsWith(".")) continue;
             if (!trees.isAccessible(scope, member, type)) continue;
             Log.d("DeclaredTypeCompletion", "member name: " + member.getSimpleName());
             if (isStatic != member.getModifiers().contains(Modifier.STATIC)) continue;
