@@ -2132,10 +2132,12 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             mCompletionWindow.setWidth(getWidth() / 3);
         }
         if (!mCompletionWindow.isShowing()) {
-            mCompletionWindow.setHeight((int) restY);
+            mCompletionWindow.setHeight((int) restY);		
         }
         mCompletionWindow.setMaxHeight((int) restY);
         mCompletionWindow.updatePosition();
+		
+		Log.d("CompletionWindow", "panel x: " + panelX + " panel y: " + panelY + " restY: " + restY);
     }
 
     /**
@@ -4037,7 +4039,6 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         @Override
         public void run() {
             mCompletionWindow.setPrefix(prefix);
-            mCompletionWindow.show();
         }   
    }
 

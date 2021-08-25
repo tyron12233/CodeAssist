@@ -822,7 +822,7 @@ public class CompletionProvider {
     private CompletionItem item(Element element) {
         CompletionItem item = new CompletionItem();
         item.label = element.getSimpleName().toString();
-        item.detail = simpleReturnType(element.asType());
+        item.detail = simpleType(element.asType());
         item.commitText = element.getSimpleName().toString();
         item.cursorOffset =  item.commitText.length();
 		item.iconKind = getKind(element);
@@ -849,9 +849,10 @@ public class CompletionProvider {
         List<CompletionItem> items = new ArrayList<>();
         for (ExecutableElement first : overloads) {
             CompletionItem item = new CompletionItem();
-            item.label = getMethodLabel(first);
+            item.label = getMethodLabel(first) + getThrowsType(first);
+			
             item.commitText = first.getSimpleName().toString() + (methodRef ? "" : "()");
-            item.detail = simpleReturnType(first.getReturnType());
+            item.detail = simpleType(first.getReturnType());
             item.iconKind = CircleDrawable.Kind.Method;
             item.cursorOffset = item.commitText.length();
             if (first.getParameters() != null && !first.getParameters().isEmpty()) {
@@ -861,8 +862,24 @@ public class CompletionProvider {
         }
         return items;
     }
-
-    private String simpleReturnType(TypeMirror mirror) {
+	
+	private String getThrowsType(ExecutableElement e) {
+		if (e.getThrownTypes() == null) {
+			return "";
+		}
+		
+		if (e.getThrownTypes().isEmpty()) {
+			return "";
+		}
+		
+		String types = "";
+		for (TypeMirror m : e.getThrownTypes()) {
+			types = types + (types.isEmpty() ? "" : ", ") + simpleType(m);
+		}
+		
+		return " throws " + types;
+	}
+    private String simpleType(TypeMirror mirror) {
         return simpleClassName(mirror.toString());
     }
 
@@ -874,7 +891,7 @@ public class CompletionProvider {
         String name = element.getSimpleName().toString();
         String params = "";
         for (VariableElement var : element.getParameters()) {
-            params = params + (params.isEmpty() ? "" : ", ") + simpleReturnType(var.asType()) + " " + var.getSimpleName();
+            params = params + (params.isEmpty() ? "" : ", ") + simpleType(var.asType()) + " " + var.getSimpleName();
         }
 
         return name + "(" + params + ")";

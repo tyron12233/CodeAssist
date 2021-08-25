@@ -13,6 +13,9 @@ public class AndroidUtilities {
 	
 	public static int getHeight(ViewGroup viewGroup) {
 		
+		viewGroup.measure(View.MeasureSpec.makeMeasureSpec(-1, ViewGroup.MeasureSpec.AT_MOST),
+		ViewGroup.MeasureSpec.makeMeasureSpec(-2, ViewGroup.MeasureSpec.AT_MOST));
+		
 		int height = 0;
 		for (int i = 0; i < viewGroup.getChildCount(); i++) {
 			View view = viewGroup.getChildAt(i);

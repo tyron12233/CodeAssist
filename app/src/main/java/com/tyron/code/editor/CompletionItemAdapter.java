@@ -28,7 +28,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
 
     private OnClickListener onClickListener;
     private OnLongClickListener longClickListener;
-
+	
     @Override
     public CompletionItemAdapter.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
         LayoutInflater inflater = LayoutInflater.from(parent.getContext());
@@ -79,6 +79,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
         mWindow = window;
         this.items.clear();
         this.items.addAll(result);
+		notifyDataSetChanged();
     }
 
     public CompletionItem getItem(int position) {

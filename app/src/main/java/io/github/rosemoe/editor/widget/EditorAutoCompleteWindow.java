@@ -52,6 +52,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import com.tyron.code.Parser;
 import android.view.ViewGroup;
 import com.tyron.code.util.AndroidUtilities;
+import android.view.View.MeasureSpec;
 
 /**
  * Auto complete window for editing code quicker
@@ -124,10 +125,16 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                 }
         });
         mLayoutManager = new LinearLayoutManager(mEditor.getContext());
-        mListView = new RecyclerView(mEditor.getContext());
+        mListView = new RecyclerView(mEditor.getContext()) {
+			@Override
+			public void onMeasure(int widthSpec, int heightSpec) {
+				heightSpec = MeasureSpec.makeMeasureSpec(mMaxHeight, MeasureSpec.AT_MOST);
+				super.onMeasure(widthSpec, heightSpec);
+			}
+		};
         mListView.setLayoutManager(mLayoutManager);
         mListView.setAdapter(mAdapter);
-        layout.addView(mListView , new LinearLayout.LayoutParams(-1, -1));
+        layout.addView(mListView , new LinearLayout.LayoutParams(-1, -2));
         
         layout.setLayoutParams(new ViewGroup.LayoutParams(-1, -2));
 		
@@ -146,6 +153,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         
         applyColorScheme();
         setLoading(true);
+		setWindowLayoutMode(ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT);
         
     }
     
@@ -210,7 +219,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             mTip.setVisibility(View.GONE);
         }
         //mListView.setVisibility((!state) ? View.VISIBLE : View.GONE);
-        //update();
+        update();
     }
 
     /**
@@ -332,7 +341,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     public void setMaxHeight(int height) {
         mMaxHeight = height;
     }
-
+	
     /**
      * Display result of analysis
      *
@@ -349,19 +358,14 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                 hide();
                 return;
             }
-            mAdapter.attachAttributes(this, results);
-            mListView.setAdapter(mAdapter);
+			
+			mAdapter.attachAttributes(this, results);
             mCurrent = 0;
 			
-			mEditor.post(() -> {
-            float newHeight = AndroidUtilities.getHeight(mListView);//mEditor.getDpUnit() * 30 * results.size();
-			if (newHeight == 0) {
-				newHeight = mEditor.getDpUnit() * 30 * results.size();
+            if (!isShowing()) {
+				show();
 			}
-            if (isShowing()) {
-                update(getWidth(), (int) Math.min(newHeight, mMaxHeight));
-            }
-			});
+			update();
         });
     }
 
