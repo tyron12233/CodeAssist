@@ -33,12 +33,14 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.compiler.JavaCompiler;
 import com.tyron.code.completion.CompletionEngine;
+import com.tyron.code.completion.MainCompiler;
 import com.tyron.code.editor.BottomEditorFragment;
 import com.tyron.code.editor.CodeEditorFragment;
 import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.file.FileManagerFragment;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
+import com.tyron.code.util.exception.CompilationFailedException;
 
 import java.io.File;
 import java.io.IOException;
@@ -81,7 +83,7 @@ public class MainFragment extends Fragment {
 		super.onCreate(savedInstanceState);
 		
 		if (savedInstanceState != null) {
-			Project project = new Project(new File(savedInstanceState.getString("current_project")));
+			Project project = new Project(new File(savedInstanceState.getString("current_project","")));
 			FileManager.getInstance().openProject(project);
 		}
 	}
@@ -183,7 +185,7 @@ public class MainFragment extends Fragment {
 
                 final EditText et = new EditText(requireContext());
                 et.setHint("path");
-                et.setHintTextColor(0xffe0e0e0);
+                et.setHintTextColor(0xffeaeaea);
 
                 @SuppressLint("RestrictedApi")
                 AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
@@ -202,9 +204,9 @@ public class MainFragment extends Fragment {
                 return true;
             } else if (item.getItemId() == R.id.debug_refresh) {
                 Project project = FileManager.getInstance().getCurrentProject();
-                if (project != null) {
-                    FileManager.getInstance().openProject(project);
-                }
+
+                project.clear();
+                openProject(project);
 
                 ApplicationLoader.showToast("Project files have been refreshed.");
             } else if (item.getItemId() == R.id.action_run) {
@@ -261,8 +263,8 @@ public class MainFragment extends Fragment {
 		
 		Project current = FileManager.getInstance().getCurrentProject();
 		if (current != null) {
-			outState.putString("current_project", current.mRoot.getAbsolutePath());
-		}
+            outState.putString("current_project", current.mRoot.getAbsolutePath());
+        }
 	}
 
     public void openFile(File file) {
@@ -299,17 +301,26 @@ public class MainFragment extends Fragment {
         });
     }
 
-
+    /**
+     * Saves the current opened editor
+     */
+    private void saveCurrent() {
+	    int position = mPager.getCurrentItem();
+	    String tag = "f" + mAdapter.getItemId(position);
+	    CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager().findFragmentByTag(tag);
+	    if (fragment != null) {
+	        fragment.save();
+        }
+    }
     private void compile() {
-		JavaCompiler compiler = new JavaCompiler(new ViewModelProvider(requireActivity()).get(LogViewModel.class));
-		compiler.compile(success -> {
-            ApplicationLoader.showToast(success ? "Compilation success" : "Compilation failed");
-            if (!success) {
-                mBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
-            }
-        });
-	}
-    
+        MainCompiler compiler = new MainCompiler(FileManager.getInstance().getCurrentProject());
+        try {
+            compiler.compile();
+        } catch (IOException | CompilationFailedException e) {
+            ApplicationLoader.showToast(e.getMessage());
+        }
+    }
+
     private class PageAdapter extends FragmentStateAdapter{
         
         private final List<File> data = new ArrayList<>();

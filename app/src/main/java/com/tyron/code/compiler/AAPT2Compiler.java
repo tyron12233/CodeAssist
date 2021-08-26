@@ -14,7 +14,7 @@ public class AAPT2Compiler {
 	private Project mProject;
 
 	public AAPT2Compiler(Project project) {
-
+		mProject = project;
 	}
 
 	public void run() throws IOException, CompilationFailedException {

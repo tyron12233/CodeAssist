@@ -92,7 +92,7 @@ public class FileManager {
         return mCurrentProject;
     }
     
-    public List<File> getLibraries() {
+    public Set<File> getLibraries() {
         return mCurrentProject.getLibraries();
     }
     

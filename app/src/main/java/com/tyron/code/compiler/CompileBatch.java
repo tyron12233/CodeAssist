@@ -1,22 +1,32 @@
 package com.tyron.code.compiler;
 
-import com.sun.source.tree.*;
-import com.sun.source.util.*;
+import android.util.Log;
+
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.Trees;
+import com.tyron.code.JavaCompilerService;
+import com.tyron.code.parser.FileManager;
+import com.tyron.code.util.StringSearch;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
-import javax.lang.model.util.*;
-import javax.tools.*;
-import com.tyron.code.JavaCompilerService;
-import com.tyron.code.parser.FileManager;
-import com.tyron.code.util.StringSearch;
-import com.tyron.code.Parser;
-import javax.lang.model.element.Name;
-import android.util.Log;
 
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
+
+@SuppressWarnings("NewApi")
 public class CompileBatch implements AutoCloseable {
     static final int MAX_COMPLETION_ITEMS = 50;
 
@@ -58,8 +68,8 @@ public class CompileBatch implements AutoCloseable {
      */
     public Set<Path> needsAdditionalSources() {
         // Check for "class not found errors" that refer to package private classes
-        Set<Path> addFiles = new HashSet<Path>();
-        for (Diagnostic err : parent.diagnostics) {		
+        Set<Path> addFiles = new HashSet<>();
+        for (Diagnostic<? extends JavaFileObject> err : parent.diagnostics) {
             if (!err.getCode().equals("compiler.err.cant.resolve.location")) continue;
             if (!isValidFileRange(err)) continue;
             String className = errorText(err);
@@ -78,7 +88,7 @@ public class CompileBatch implements AutoCloseable {
 
     private String errorText(javax.tools.Diagnostic<? extends javax.tools.JavaFileObject> err) {
         Path file = Paths.get(err.getSource().toUri());
-        String contents = FileManager.getInstance().readFile(file.toFile());
+        String contents = FileManager.readFile(file.toFile());
         int begin = (int) err.getStartPosition();
         int end = (int) err.getEndPosition();
         return contents.substring(begin, end);

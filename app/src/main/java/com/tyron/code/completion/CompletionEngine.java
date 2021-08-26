@@ -53,6 +53,10 @@ public class CompletionEngine {
 		mIndexing = val;
 	}
 
+	public boolean isIndexing() {
+		return mIndexing;
+	}
+
 	@SuppressLint("NewApi")
 	public void index(Project project, Runnable callback) {
 		setIndexing(true);

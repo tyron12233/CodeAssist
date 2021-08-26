@@ -4,6 +4,9 @@ import java.util.List;
 import java.util.ArrayList;
 import com.tyron.code.parser.FileManager;
 
+/**
+ * Converts class files into dex files and merges them in the process
+ */
 public class D8Compiler {
 	
 	private final Project mProject;

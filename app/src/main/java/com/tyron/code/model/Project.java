@@ -1,10 +1,14 @@
 package com.tyron.code.model;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.ArrayList;
 import java.io.File;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Set;
+
+import com.tyron.code.compiler.LibraryChecker;
 import com.tyron.code.util.StringSearch;
 import android.util.Log;
 import javax.lang.model.SourceVersion;
@@ -20,6 +24,8 @@ public class Project {
     
     public Map<String, File> javaFiles = new HashMap<>();
     public List<String> jarFiles = new ArrayList<>();
+
+    private Set<File> libraries = new HashSet<>();
     
     /**
      * Creates a project object from specified root
@@ -55,31 +61,45 @@ public class Project {
     }
     
     public Map<String, File> getJavaFiles() {
-        javaFiles.clear();
-        findJavaFiles(getJavaDirectory());
+        if (javaFiles.isEmpty()) {
+            findJavaFiles(getJavaDirectory());
+        }
         return javaFiles;
     }
-    
-    public List<File> getLibraries() {
-        List<File> libraries = new ArrayList<>();
-        
-        File libPath = new File(mRoot, "app/libs");
-        
-        Log.d("PROJECT LIBRARIES", "" + libPath);
-        
-        File[] files = libPath.listFiles();
-        if (files == null) {
-            return Collections.emptyList();
-        }
 
-        for (File file : files) {
-            if (file.getName().endsWith(".jar")) {
-                libraries.add(file);
-                Log.d("PROJECT LIBRARIES", "Adding " + file.getName());
+    public void searchLibraries() {
+        libraries.clear();
+
+        File libPath = new File(getBuildDirectory(), "libs");
+        File[] files = libPath.listFiles();
+        if (files != null) {
+            for (File lib : files) {
+                if (lib.isDirectory()) {
+                    File check = new File(lib, "classes.jar");
+                    if (check.exists()) {
+                        libraries.add(check);
+                    }
+                }
             }
         }
-        
+    }
+    public Set<File> getLibraries() {
+        if (libraries.isEmpty()) {
+            LibraryChecker checker = new LibraryChecker(this);
+            checker.check();
+
+            searchLibraries();
+        }
         return libraries;
+    }
+
+    /**
+     * Clears all the cached files stored in this project, the next time ths project
+     * is opened, it will get loaded again
+     */
+    public void clear() {
+        javaFiles.clear();
+        libraries.clear();
     }
     /**
      * Used to check if this project contains the required directories
