@@ -1,62 +1,50 @@
 package com.tyron.code.main;
 
-import androidx.annotation.NonNull;
-import androidx.core.view.GravityCompat;
-import androidx.fragment.app.Fragment;
-
 import android.annotation.SuppressLint;
+import android.os.Bundle;
 import android.os.Environment;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.os.Bundle;
 import android.view.ViewGroup;
-import android.widget.LinearLayout;
-import com.google.android.material.tabs.TabLayout;
-import androidx.drawerlayout.widget.DrawerLayout;
-import androidx.recyclerview.widget.DiffUtil;
-import androidx.viewpager2.widget.ViewPager2;
-import androidx.viewpager2.adapter.FragmentStateAdapter;
-import java.io.File;
-import java.util.List;
-import java.util.ArrayList;
-import com.tyron.code.editor.CodeEditorFragment;
-import com.google.android.material.tabs.TabLayoutMediator;
-import android.view.MenuInflater;
-import android.view.Menu;
-import com.tyron.code.R;
-import android.widget.FrameLayout;
-import com.google.android.material.bottomsheet.BottomSheetBehavior;
-import com.tyron.code.editor.BottomEditorFragment;
-import androidx.activity.OnBackPressedCallback;
-import androidx.appcompat.app.AppCompatActivity;
-import android.view.MenuItem;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import androidx.appcompat.app.AlertDialog;
 import android.widget.EditText;
-import android.content.DialogInterface;
-import com.tyron.code.model.Project;
-import com.tyron.code.ApplicationLoader;
-import com.tyron.code.parser.FileManager;
-import java.util.Collections;
-import java.util.Collection;
-import androidx.appcompat.widget.Toolbar;
-import com.tyron.code.file.FileManagerFragment;
-import android.view.Gravity;
-import com.tyron.code.compiler.JavaCompiler;
-import androidx.lifecycle.ViewModelProvider;
-import com.tyron.code.editor.log.LogViewModel;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 
-import java.util.Objects;
-import java.util.stream.Collectors;
-import android.os.AsyncTask;
-import com.tyron.code.completion.CompletionEngine;
-import android.app.ProgressDialog;
-import com.tyron.code.JavaCompilerService;
-import com.tyron.code.CompileTask;
-import com.sun.source.util.TaskListener;
-import com.sun.source.util.TaskEvent;
-import androidx.core.widget.PopupMenuCompat;
+import androidx.activity.OnBackPressedCallback;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.PopupMenu;
+import androidx.appcompat.widget.Toolbar;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
+import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.DiffUtil;
+import androidx.viewpager2.adapter.FragmentStateAdapter;
+import androidx.viewpager2.widget.ViewPager2;
+
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
+import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.tabs.TabLayoutMediator;
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.R;
+import com.tyron.code.compiler.JavaCompiler;
+import com.tyron.code.completion.CompletionEngine;
+import com.tyron.code.editor.BottomEditorFragment;
+import com.tyron.code.editor.CodeEditorFragment;
+import com.tyron.code.editor.log.LogViewModel;
+import com.tyron.code.file.FileManagerFragment;
+import com.tyron.code.model.Project;
+import com.tyron.code.parser.FileManager;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.Executors;
 
 public class MainFragment extends Fragment {
     
@@ -66,6 +54,7 @@ public class MainFragment extends Fragment {
     
     private DrawerLayout mRoot;
     private Toolbar mToolbar;
+    private LinearProgressIndicator mProgressBar;
     private LinearLayout mContent;
     private FrameLayout mBottomContainer;
     private BottomSheetBehavior mBehavior;
@@ -109,7 +98,11 @@ public class MainFragment extends Fragment {
         mTabLayout.setTabTextColors(0xffffffff, 0xffcc7832);
         mTabLayout.setTabMode(TabLayout.MODE_SCROLLABLE);
         mContent.addView(mTabLayout, new LinearLayout.LayoutParams(-1, -2));
-        
+
+        mProgressBar = mRoot.findViewById(R.id.progressbar);
+        mProgressBar.setIndeterminate(true);
+        mProgressBar.setVisibility(View.GONE);
+
         mAdapter = new PageAdapter(this);
         
         mPager = new ViewPager2(requireContext());
@@ -198,9 +191,8 @@ public class MainFragment extends Fragment {
                     .setPositiveButton("create", (i, which) -> {
                         File file = new File(et.getText().toString());
                         Project project = new Project(file);
-
                         project.create();
-                        FileManager.getInstance().openProject(project);
+                        openProject(project);
                     })
                     .setView(et, 24, 0, 24, 0)
                     .create();
@@ -281,8 +273,21 @@ public class MainFragment extends Fragment {
 		
 		mRoot.closeDrawer(GravityCompat.START, true);
 	}
-	
-	private void compile() {
+
+    private void openProject(Project proj) {
+        mProgressBar.setVisibility(View.VISIBLE);
+        Executors.newSingleThreadExecutor().execute(() -> {
+            FileManager.getInstance().openProject(proj);
+            CompletionEngine.getInstance().index(proj, () -> {
+                if (mProgressBar != null) {
+                    mProgressBar.setVisibility(View.GONE);
+                }
+            });
+        });
+    }
+
+
+    private void compile() {
 		JavaCompiler compiler = new JavaCompiler(new ViewModelProvider(requireActivity()).get(LogViewModel.class));
 		compiler.compile(success -> {
             ApplicationLoader.showToast(success ? "Compilation success" : "Compilation failed");

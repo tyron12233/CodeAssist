@@ -1,9 +1,13 @@
 package com.tyron.code.completion;
 
+import android.annotation.SuppressLint;
 import android.util.Log;
 
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.CompileTask;
 import com.tyron.code.JavaCompilerService;
 import com.tyron.code.model.CompletionList;
+import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 
 import java.io.File;
@@ -47,6 +51,23 @@ public class CompletionEngine {
 	 */
 	public void setIndexing(boolean val) {
 		mIndexing = val;
+	}
+
+	@SuppressLint("NewApi")
+	public void index(Project project, Runnable callback) {
+		setIndexing(true);
+
+		JavaCompilerService compiler = getCompiler();
+
+		for (File file : project.javaFiles.values()) {
+			try {
+				 CompileTask task = compiler.compile(file.toPath());
+				 task.close();
+			} catch (Throwable ignored) {
+			}
+		}
+		setIndexing(false);
+		ApplicationLoader.applicationHandler.post(callback);
 	}
 
 	public synchronized CompletionList complete(File file, long cursor) {

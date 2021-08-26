@@ -2,7 +2,9 @@ package com.tyron.code.file;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import java.io.File;
+import java.io.IOException;
 import java.util.Objects;
+import java.util.concurrent.Executors;
 
 import android.os.Bundle;
 import android.view.ViewGroup;
@@ -10,10 +12,16 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.LinearLayout;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.tyron.code.R;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.activity.OnBackPressedCallback;
+
+import com.tyron.code.completion.CompletionEngine;
 import com.tyron.code.main.MainFragment;
+import com.tyron.code.model.Project;
+import com.tyron.code.parser.FileManager;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class FileManagerFragment extends Fragment {
@@ -68,7 +76,7 @@ public class FileManagerFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         mRoot = (LinearLayout) inflater.inflate(R.layout.file_manager_fragment, container, false);
-        
+
         mLayoutManager = new LinearLayoutManager(requireContext());
         mAdapter = new FileManagerAdapter();
         
@@ -112,7 +120,6 @@ public class FileManagerFragment extends Fragment {
 			}
 		}
 	}
-    
     /**
      * Checks if the current file is equal to the root file if so,
      * it disables the OnBackPressedCallback

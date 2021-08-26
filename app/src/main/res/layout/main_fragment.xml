@@ -24,6 +24,11 @@
                 android:id="@+id/toolbar" />
         </com.google.android.material.appbar.AppBarLayout>
 
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progressbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
+
         <androidx.coordinatorlayout.widget.CoordinatorLayout 
             android:id="@+id/root"
             android:layout_width="match_parent"
@@ -49,6 +54,7 @@
         </androidx.coordinatorlayout.widget.CoordinatorLayout>
     </LinearLayout>
     <LinearLayout
+        android:orientation="vertical"
         android:background="#2b2b2b"
         android:id="@+id/nav_root"
         android:layout_width="300dp"

@@ -161,8 +161,6 @@ public class FileManager {
                 }
             }
         }
-        
-        Log.d("FileManager", "Read string: " + sb);
 
         return sb.toString();
     }
