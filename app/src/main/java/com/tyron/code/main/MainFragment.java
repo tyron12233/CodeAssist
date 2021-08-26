@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.core.view.GravityCompat;
 import androidx.fragment.app.Fragment;
 
+import android.annotation.SuppressLint;
 import android.os.Environment;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -180,6 +181,7 @@ public class MainFragment extends Fragment {
                 
             }
         });
+        mTabLayout.setVisibility(View.GONE);
         new TabLayoutMediator(mTabLayout, mPager, (tab, pos) -> tab.setText(mAdapter.getItem(pos).getName())).attach();
         
         mToolbar.setOnMenuItemClickListener(item -> {
@@ -189,6 +191,7 @@ public class MainFragment extends Fragment {
                 et.setHint("path");
                 et.setHintTextColor(0xffe0e0e0);
 
+                @SuppressLint("RestrictedApi")
                 AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
                     .setTitle("Create a project")
                     .setNegativeButton("cancel", null)
@@ -289,7 +292,7 @@ public class MainFragment extends Fragment {
         });
 	}
     
-    private static class PageAdapter extends FragmentStateAdapter{
+    private class PageAdapter extends FragmentStateAdapter{
         
         private final List<File> data = new ArrayList<>();
         
@@ -322,9 +325,12 @@ public class MainFragment extends Fragment {
             data.clear();
             data.addAll(files);
             result.dispatchUpdatesTo(this);
+
+            mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
         }
 		
 		public void submitFile(File file) {
+            mTabLayout.setVisibility(View.VISIBLE);
 			data.add(file);
 			notifyItemInserted(data.size());
 		}

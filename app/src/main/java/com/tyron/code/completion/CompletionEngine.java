@@ -36,9 +36,9 @@ public class CompletionEngine {
 		
 		mProivider = new JavaCompilerService(
 				new HashSet<>(FileManager.getInstance().getCurrentProject().getJavaFiles().values()),
-			Collections.emptySet(),
-			Collections.emptySet()
-		);
+				Collections.emptySet(),
+				Collections.emptySet()
+			);
 		return mProivider;
 	}
 
@@ -48,6 +48,7 @@ public class CompletionEngine {
 	public void setIndexing(boolean val) {
 		mIndexing = val;
 	}
+
 	public synchronized CompletionList complete(File file, long cursor) {
 		// Do not request for completion if we're indexing
 		if (mIndexing) {
