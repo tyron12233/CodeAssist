@@ -48,6 +48,10 @@ public class FileManagerFragment extends Fragment {
         
     }
 
+    public void disableBackListener() {
+        callback.setEnabled(false);
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

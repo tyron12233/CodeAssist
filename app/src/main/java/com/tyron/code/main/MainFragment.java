@@ -76,7 +76,7 @@ public class MainFragment extends Fragment {
         @Override
         public void handleOnBackPressed() {
 			if (mRoot.isOpen()) {
-				mRoot.closeDrawer(Gravity.START, true);
+				mRoot.closeDrawer(GravityCompat.START, true);
 				return;
 			}
             if (mBehavior != null) {
@@ -120,7 +120,7 @@ public class MainFragment extends Fragment {
         mToolbar = mRoot.findViewById(R.id.toolbar);
         mToolbar.inflateMenu(R.menu.code_editor_menu);
         
-        requireActivity().getOnBackPressedDispatcher().addCallback(this, onBackPressedCallback);
+        requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), onBackPressedCallback);
         
         return mRoot;
     }
@@ -143,6 +143,11 @@ public class MainFragment extends Fragment {
 			@Override
 			public void onDrawerClosed(@NonNull View p1) {
                 onBackPressedCallback.setEnabled(mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED);
+
+                FileManagerFragment fragment = (FileManagerFragment) getChildFragmentManager().findFragmentByTag("file_manager");
+                if (fragment != null) {
+                    fragment.disableBackListener();
+                }
 			}
 
 			@Override
@@ -193,30 +198,6 @@ public class MainFragment extends Fragment {
 
                         project.create();
                         FileManager.getInstance().openProject(project);
-                        /*final List<File> files = project.javaFiles.values().stream().limit(10).collect(Collectors.toList());
-                        mAdapter.submitList(files);
-                        final Object lock = new Object();
-                        final ProgressDialog d = new ProgressDialog(requireContext());
-                        d.show();
-                        d.setCancelable(false);
-                        AsyncTask.execute(() -> {
-                            for (File f : files) {
-                                //synchronized(lock) {
-                                requireActivity().runOnUiThread(() -> d.setMessage("Indexing " + f.getName()));
-                                try {
-                                JavaCompilerService c = CompletionEngine.getInstance().getCompiler();
-                                CompileTask task = c.compile(f.toPath());
-                                task.close();
-                                } catch (Throwable e) {
-                                    continue;
-                                }
-                                //}
-                            }
-
-                            requireActivity().runOnUiThread(() -> {
-                                d.dismiss();
-                            });
-                        });*/
                     })
                     .setView(et, 24, 0, 24, 0)
                     .create();
