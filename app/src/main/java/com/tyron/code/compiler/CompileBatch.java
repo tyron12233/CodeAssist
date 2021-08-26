@@ -92,7 +92,10 @@ public class CompileBatch implements AutoCloseable {
     private static final Path FILE_NOT_FOUND = Paths.get("");
 
     private Path findPackagePrivateClass(String packageName, String className) {
-        for (File file : FileManager.getInstance().list(packageName)) {
+        // This is too expensive, parsing each file causing completions to slow down
+        // on small files
+
+        /*for (File file : FileManager.getInstance().list(packageName)) {
 			Log.d("CompileBatch", "Parsing file: " + file.getName());
             Parser parse = Parser.parseFile(file.toPath());
             for (Name candidate : parse.packagePrivateClasses()) {
@@ -101,7 +104,7 @@ public class CompileBatch implements AutoCloseable {
                     return file.toPath();
                 }
             }
-        }
+        }*/
         return FILE_NOT_FOUND;
     }
 

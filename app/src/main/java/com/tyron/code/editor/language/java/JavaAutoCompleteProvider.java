@@ -30,16 +30,10 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
     
     private final CodeEditor mEditor;
     private final LogViewModel viewModel;
-	private final CompilerProvider provider;
     
     public JavaAutoCompleteProvider(CodeEditor editor) {
         mEditor = editor;
         viewModel = new ViewModelProvider((AppCompatActivity) editor.getContext()).get(LogViewModel.class);
-		provider = new JavaCompilerService(
-                new HashSet<>(FileManager.getInstance().getCurrentProject().getJavaFiles().values()),
-			Collections.emptySet(),
-			Collections.emptySet()
-		);
     }
 
     @Override
@@ -49,7 +43,7 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
         
 		// The previous call hasnt finished
 		CompileBatch batch = CompletionEngine.getInstance().getCompiler().cachedCompile;
-		if (batch != null && !CompletionEngine.getInstance().getCompiler().cachedCompile.closed) {
+		if (batch != null && !batch.closed) {
 			return Collections.emptyList();
 		}
 		CompletionList list = CompletionEngine.getInstance().complete(mEditor.getCurrentFile(), cursor.getLeft());

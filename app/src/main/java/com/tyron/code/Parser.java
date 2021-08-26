@@ -2,6 +2,9 @@ package com.tyron.code;
 import com.sun.source.util.JavacTask;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
+
+import java.net.URI;
+import java.util.HashMap;
 import java.util.ServiceLoader;
 import java.util.List;
 import javax.tools.StandardJavaFileManager;
@@ -65,7 +68,7 @@ public class Parser {
     public static Parser parseFile(Path file) {
         return parseJavaFileObject(new SourceFileObject(file));
     }
-	
+
     private static Parser cachedParse;
     private static long cachedModified = -1;
 
@@ -80,10 +83,10 @@ public class Parser {
         cachedParse = new Parser(file);
         cachedModified = file.getLastModified();
     }
-	
-	public static Parser parseJavaFileObject(JavaFileObject file) {
+
+    public static Parser parseJavaFileObject(JavaFileObject file) {
         if (needsParse(file)) {
-			Log.d("Parser", "Parsing file " + file.getName());
+            Log.d("Parser", "Parsing file " + file.getName());
             loadParse(file);
         } else {
             Log.d("Parser", "Using cached parse for " + file.getName());

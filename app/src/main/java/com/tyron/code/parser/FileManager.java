@@ -102,6 +102,13 @@ public class FileManager {
         classpaths.addAll(Collections.emptySet());
         return classpaths;
     }
+
+    public Set<File> fileClasspath() {
+        Set<File> classpaths = new HashSet<>();
+        classpaths.addAll(javaFiles.values());
+        classpaths.addAll(mCurrentProject.getLibraries());
+        return classpaths;
+    }
     
     public List<String> all() {
         List<String> files = new ArrayList<>();

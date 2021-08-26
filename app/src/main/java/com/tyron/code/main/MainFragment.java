@@ -1,6 +1,7 @@
 package com.tyron.code.main;
 
 import android.annotation.SuppressLint;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.view.LayoutInflater;
@@ -242,9 +243,15 @@ public class MainFragment extends Fragment {
         getChildFragmentManager().beginTransaction()
                 .replace(R.id.persistent_sheet, bottomEditorFragment)
                 .commit();
-            
+
+        File root;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            root = requireActivity().getExternalFilesDir(null);
+        } else {
+            root = Environment.getExternalStorageDirectory();
+        }
         getChildFragmentManager().beginTransaction()
-                .replace(R.id.nav_root, FileManagerFragment.newInstance(Environment.getExternalStorageDirectory()), "file_manager")
+                .replace(R.id.nav_root, FileManagerFragment.newInstance(root), "file_manager")
                 .commit();
     }
 
@@ -276,11 +283,17 @@ public class MainFragment extends Fragment {
 
     private void openProject(Project proj) {
         mProgressBar.setVisibility(View.VISIBLE);
+        mToolbar.setTitle(proj.mRoot.getName());
+        mToolbar.setSubtitle("Indexing");
+
         Executors.newSingleThreadExecutor().execute(() -> {
             FileManager.getInstance().openProject(proj);
             CompletionEngine.getInstance().index(proj, () -> {
                 if (mProgressBar != null) {
                     mProgressBar.setVisibility(View.GONE);
+                }
+                if (mToolbar != null) {
+                    mToolbar.setSubtitle(null);
                 }
             });
         });

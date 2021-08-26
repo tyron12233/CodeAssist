@@ -39,7 +39,7 @@ public class CompletionEngine {
 		}
 		
 		mProivider = new JavaCompilerService(
-				new HashSet<>(FileManager.getInstance().getCurrentProject().getJavaFiles().values()),
+				FileManager.getInstance().fileClasspath(),
 				Collections.emptySet(),
 				Collections.emptySet()
 			);
@@ -59,11 +59,12 @@ public class CompletionEngine {
 
 		JavaCompilerService compiler = getCompiler();
 
-		for (File file : project.javaFiles.values()) {
+		for (File file : new HashSet<>(project.javaFiles.values())) {
 			try {
 				 CompileTask task = compiler.compile(file.toPath());
 				 task.close();
 			} catch (Throwable ignored) {
+
 			}
 		}
 		setIndexing(false);
@@ -79,10 +80,9 @@ public class CompletionEngine {
 		try {
 			return new CompletionProvider(mProivider).complete(file, cursor);
 		} catch (RuntimeException | AssertionError e) {
-			Log.d(TAG, "Completion failed: " + e.getMessage() + " Clearing cache.");
-			mProivider = null;
-			getCompiler();
-			
+			Log.d(TAG, "Completion failed: " + Log.getStackTraceString(e) + " Clearing cache.");
+			mProivider.cachedCompile.close();
+			mProivider.cachedCompile.borrow.close();
 		}
 		return CompletionList.EMPTY;
 	}
