@@ -1,16 +1,20 @@
 package com.tyron.code.file;
-import androidx.recyclerview.widget.RecyclerView;
+
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import java.util.List;
-import java.io.File;
-import java.util.ArrayList;
-import android.view.LayoutInflater;
-import com.tyron.code.R;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
+
+import com.tyron.code.R;
+
+import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.List;
 
 public class FileManagerAdapter extends RecyclerView.Adapter<FileManagerAdapter.ViewHolder> {
     
@@ -22,7 +26,7 @@ public class FileManagerAdapter extends RecyclerView.Adapter<FileManagerAdapter.
     }
     
     private OnItemClickListener mListener;
-    private List<File> mFiles = new ArrayList<>();
+    private final List<File> mFiles = new ArrayList<>();
     
     public void setOnItemClickListener(OnItemClickListener listener) {
         mListener = listener;
@@ -36,44 +40,38 @@ public class FileManagerAdapter extends RecyclerView.Adapter<FileManagerAdapter.
             mFiles.addAll(List.of(files));
         }
         
-        Collections.sort(mFiles, new Comparator<File>() {
+        Collections.sort(mFiles, (p1, p2) -> {
+            if (p1.isFile() && p2.isFile()) {
+                return p1.getName().compareTo(p2.getName());
+            }
 
-            @Override
-            public int compare(File p1, File p2) {
-                if (p1.isFile() && p2.isFile()) {
-                    return p1.getName().compareTo(p2.getName());
-                }
-                
-                if (p1.isFile() && p2.isDirectory()) {
-                    return -1;
-                }
-                
-                if (p1.isDirectory() && p2.isDirectory()) {
-                    return p1.getName().compareTo(p2.getName());
-                }
-                return 0;
-            }              
+            if (p1.isFile() && p2.isDirectory()) {
+                return -1;
+            }
+
+            if (p1.isDirectory() && p2.isDirectory()) {
+                return p1.getName().compareTo(p2.getName());
+            }
+            return 0;
         });
         notifyDataSetChanged();
     }
     
+    @NonNull
     @Override
     public ViewHolder onCreateViewHolder(ViewGroup parent, int p2) {
         View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.file_manager_item, parent, false);
         final ViewHolder holder = new ViewHolder(view);
         
         if (mListener != null) {
-            view.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    int position = holder.getAdapterPosition();
-                    if (position != RecyclerView.NO_POSITION) {
-                        File selected = null;
-                        if (position != 0) {
-                            selected = mFiles.get(position - 1);
-                        }
-                        mListener.onItemClick(selected, position);
+            view.setOnClickListener(v -> {
+                int position = holder.getBindingAdapterPosition();
+                if (position != RecyclerView.NO_POSITION) {
+                    File selected = null;
+                    if (position != 0) {
+                        selected = mFiles.get(position - 1);
                     }
+                    mListener.onItemClick(selected, position);
                 }
             });
         }

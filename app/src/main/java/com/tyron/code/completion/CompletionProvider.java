@@ -39,6 +39,8 @@ import com.sun.source.tree.ImportTree;
 import javax.lang.model.type.TypeMirror;
 import com.tyron.code.parser.JavaParser;
 import java.util.Set;
+
+import android.annotation.SuppressLint;
 import android.util.Log;
 import com.tyron.code.model.TextEdit;
 import com.tyron.code.rewrite.AddImport;
@@ -66,6 +68,7 @@ import com.sun.tools.javac.tree.JCTree;
 /**
  * Main entry point for getting completions
  */
+@SuppressWarnings("NewApi")
 public class CompletionProvider {
 
 	private static final String TAG = CompletionProvider.class.getSimpleName();
@@ -208,18 +211,7 @@ public class CompletionProvider {
 	 */
 	@Deprecated
     public CompletionList complete(CompilationUnitTree root, int index) {
-        /*long started = System.currentTimeMillis();
-		 long cursor = index;
-		 StringBuilder contents = new PruneMethodBodies(parser.getTask()).scan(root, cursor);
-
-		 String partial = partialIdentifier(contents.toString(), (int) cursor);
-
-		 boolean endsWithParen = endsWithParen(contents.toString(), (int) cursor);
-		 TreePath path = new FindCompletionsAt(parser.getTask()).scan(root, cursor);
-		 */
-
         return null;
-		// }
     }
 
 	private void addTopLevelSnippets(ParseTask task, CompletionList list) {
@@ -399,7 +391,7 @@ public class CompletionProvider {
         Trees trees = Trees.instance(task.task);
         TypeElement typeElement = (TypeElement) type.asElement();
         List<CompletionItem> list = new ArrayList<>();
-        HashMap<String, List<ExecutableElement>> methods = new HashMap<String, List<ExecutableElement>>();
+        HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         for (Element member : task.task.getElements().getAllMembers(typeElement)) {
             if (member.getKind() == ElementKind.CONSTRUCTOR) continue;
             if (!StringSearch.matchesPartialName(member.getSimpleName(), partial) && !partial.endsWith(".")) continue;
@@ -437,15 +429,9 @@ public class CompletionProvider {
 
         Log.d("IDENTIFIER PATH", path.getParentPath().getLeaf().getKind().toString());
 
-        Predicate<CharSequence> filter = new Predicate() {
-            @Override
-            public boolean test(Object p1) {
-                return StringSearch.matchesPartialName(String.valueOf(p1), partial);
-            }         
-        };
+        Predicate<CharSequence> filter = p1 -> StringSearch.matchesPartialName(String.valueOf(p1), partial);
 
         if (path.getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
-            //list.addAll(addLambdas(path.getParentPath(), partial));
             list.addAll(addLambda(task, path.getParentPath(), partial));
         }
 
@@ -512,9 +498,9 @@ public class CompletionProvider {
 
                     CompletionItem item = new CompletionItem();
 
-                    String label = "";
+                    StringBuilder label = new StringBuilder();
                     for (VariableElement param : sam.getParameters()) {
-                        label = label + (label.isEmpty() ? "" : ", ") + param.getSimpleName();
+                        label.append((label.length() == 0) ? "" : ", ").append(param.getSimpleName());
                     }
 
                     item.label = "(" + label + ")" + " -> ";
@@ -536,8 +522,6 @@ public class CompletionProvider {
 		if (!(path.getLeaf() instanceof NewClassTree)) {
 			return items;
 		}
-		
-        NewClassTree tree = (NewClassTree) path.getLeaf();
 
         Log.d("ANONYMOUS", "type: " + path.getParentPath().getParentPath().getLeaf().getKind().toString());
 
@@ -581,7 +565,6 @@ public class CompletionProvider {
     private void addStaticImports(CompileTask task, CompilationUnitTree root, String partial, boolean endsWithParen, CompletionList list) {
         Trees trees = Trees.instance(task.task);
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
-        int previousSize = list.items.size();
         outer:
         for (ImportTree i : root.getImports()) {
             if (!i.isStatic()) continue;
@@ -761,8 +744,7 @@ public class CompletionProvider {
 
     private void addClassNames(CompilationUnitTree root, String partial, CompletionList list) {
         String packageName = Objects.toString(root.getPackageName(), "");
-        Set<String> uniques = new HashSet<String>();
-        int previousSize = list.items.size();
+        Set<String> uniques = new HashSet<>();
         for (String className : compiler.packagePrivateTopLevelTypes(packageName)) {
             if (!StringSearch.matchesPartialName(className, partial)) continue;
             list.items.add(classItem(className));

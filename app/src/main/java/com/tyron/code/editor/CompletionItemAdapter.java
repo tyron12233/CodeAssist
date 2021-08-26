@@ -1,17 +1,22 @@
 package com.tyron.code.editor;
-import androidx.recyclerview.widget.RecyclerView;
+
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import java.util.List;
-import io.github.rosemoe.editor.struct.CompletionItem;
-import java.util.ArrayList;
-import android.widget.TextView;
 import android.widget.ImageView;
+import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
+
 import com.tyron.code.R;
-import android.view.LayoutInflater;
-import io.github.rosemoe.editor.widget.EditorAutoCompleteWindow;
-import android.view.View.OnLongClickListener;
 import com.tyron.code.editor.drawable.CircleDrawable;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import io.github.rosemoe.editor.struct.CompletionItem;
+import io.github.rosemoe.editor.widget.EditorAutoCompleteWindow;
 
 public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAdapter.ViewHolder> {
 
@@ -23,43 +28,38 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
         void onLongClick(int position);
     }
 
-    private List<CompletionItem> items = new ArrayList<>();
+    private final List<CompletionItem> items = new ArrayList<>();
     private EditorAutoCompleteWindow mWindow;
 
     private OnClickListener onClickListener;
     private OnLongClickListener longClickListener;
 	
+    @NonNull
     @Override
     public CompletionItemAdapter.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
         LayoutInflater inflater = LayoutInflater.from(parent.getContext());
         View view = inflater.inflate(R.layout.completion_result_item, parent, false);
         final ViewHolder holder = new ViewHolder(view);
 
-        view.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    int pos = holder.getAdapterPosition();
+        view.setOnClickListener(view1 -> {
+            int pos = holder.getBindingAdapterPosition();
 
-                    if (pos != RecyclerView.NO_POSITION) {
-                        if (onClickListener != null) {
-                            onClickListener.onClick(pos);
-                        }
-                    }
+            if (pos != RecyclerView.NO_POSITION) {
+                if (onClickListener != null) {
+                    onClickListener.onClick(pos);
                 }
-            });
-        view.setOnLongClickListener(new View.OnLongClickListener() {
-                @Override
-                public boolean onLongClick(View p1) {
-                    int pos = holder.getAdapterPosition();
+            }
+        });
+        view.setOnLongClickListener(p1 -> {
+            int pos = holder.getBindingAdapterPosition();
 
-                    if (pos != RecyclerView.NO_POSITION) {
-                        if (longClickListener != null) {
-                            longClickListener.onLongClick(pos);
-                        }
-                    }
-                    return true;
-                }                     
-            });
+            if (pos != RecyclerView.NO_POSITION) {
+                if (longClickListener != null) {
+                    longClickListener.onLongClick(pos);
+                }
+            }
+            return true;
+        });
 
         return holder;
     }
@@ -100,9 +100,9 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
 
-        private TextView mLabel;
-        private TextView mDesc;
-        private ImageView mIcon;
+        private final TextView mLabel;
+        private final TextView mDesc;
+        private final ImageView mIcon;
 
         public ViewHolder(View view) {
             super(view);

@@ -1,4 +1,6 @@
 package com.tyron.code;
+import android.annotation.SuppressLint;
+
 import java.util.List;
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
@@ -20,6 +22,7 @@ public class CompileTask implements AutoCloseable {
         return roots.get(0);
     }
 
+    @SuppressLint("NewApi")
     public CompilationUnitTree root(Path file) {
         for (CompilationUnitTree root : roots) {
             if (root.getSourceFile().toUri().equals(file.toUri())) {

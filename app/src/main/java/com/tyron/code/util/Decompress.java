@@ -27,6 +27,7 @@ public class Decompress {
         }
     }
 
+    @SuppressWarnings("unused")
     public static void unzip(String zipFile, String location) {
         try {
             FileInputStream fin = new FileInputStream(zipFile);
@@ -42,7 +43,7 @@ public class Decompress {
         byte[] buffer = new byte[BUFFER_SIZE];
         try {
             ZipInputStream zin = new ZipInputStream(stream);
-            ZipEntry ze = null;
+            ZipEntry ze;
 
             while ((ze = zin.getNextEntry()) != null) {
                 Log.v(TAG, "Unzipping " + ze.getName());

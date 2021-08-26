@@ -6,7 +6,7 @@ import java.io.File;
 public interface Language {
 	
 	/**
-	 * Subclasses return wether they support this file extension
+	 * Subclasses return whether they support this file extension
 	 */
 	boolean isApplicable(File ext);
 	

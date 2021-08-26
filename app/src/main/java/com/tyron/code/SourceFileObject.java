@@ -1,17 +1,21 @@
 package com.tyron.code;
-import java.io.File;
+
+import android.annotation.SuppressLint;
+
+import androidx.annotation.NonNull;
+
 import javax.tools.SimpleJavaFileObject;
 import javax.tools.JavaFileObject;
-import java.io.IOException;
 import com.tyron.code.parser.FileManager;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Instant;
 
+@SuppressLint("NewApi")
 public class SourceFileObject extends SimpleJavaFileObject {
 	
 	public Path mFile;
-	private Instant modified;
+	private final Instant modified;
 	
 	public SourceFileObject(Path file) {
 		this(file, Instant.EPOCH);
@@ -25,7 +29,7 @@ public class SourceFileObject extends SimpleJavaFileObject {
 	}
 
 	@Override
-	public CharSequence getCharContent(boolean ignoreEncodingErrors) throws IOException {
+	public CharSequence getCharContent(boolean ignoreEncodingErrors) {
 		return FileManager.readFile(mFile.toFile());
 	}
 	
@@ -59,6 +63,7 @@ public class SourceFileObject extends SimpleJavaFileObject {
 		return modified.toEpochMilli();
 	}
 	
+	@NonNull
 	@Override
 	public String toString() {
 		return mFile.toString();

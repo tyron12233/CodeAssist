@@ -1,7 +1,8 @@
 package com.tyron.code.rewrite;
+import android.annotation.SuppressLint;
+
 import com.tyron.code.model.Position;
 import com.sun.source.util.SourcePositions;
-import com.sun.source.util.JavacTask;
 import com.sun.source.tree.Tree;
 import com.sun.source.util.Trees;
 import com.tyron.code.ParseTask;
@@ -13,14 +14,15 @@ import java.io.File;
 
 public class AddImport {
     
-    private String className;
-    private File currentFile;
+    private final String className;
+    private final File currentFile;
     
     public AddImport(File currentFile, String className) {
         this.className = className;
         this.currentFile = currentFile;
     }
-    
+
+    @SuppressLint("NewApi")
     public Map<File, TextEdit> getText(ParseTask task) {
         Position point = insertPosition(task);
         String text = "import " + className + ";\n";

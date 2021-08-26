@@ -1,7 +1,5 @@
 package com.tyron.code.model;
 
-import io.github.rosemoe.editor.util.Objects;
-
 /**
  * Represents the position in the editor in 
  * terms of lines and columns

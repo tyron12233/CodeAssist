@@ -1,5 +1,8 @@
 package com.tyron.code.editor.language.java;
 import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;
+
+import java.io.File;
+import java.util.HashSet;
 import java.util.List;
 import io.github.rosemoe.editor.struct.CompletionItem;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
@@ -25,22 +28,20 @@ import com.tyron.code.compiler.CompileBatch;
 
 public class JavaAutoCompleteProvider implements AutoCompleteProvider {
     
-    private CodeEditor mEditor;
-    private LogViewModel viewModel;
-	private CompilerProvider provider;
+    private final CodeEditor mEditor;
+    private final LogViewModel viewModel;
+	private final CompilerProvider provider;
     
     public JavaAutoCompleteProvider(CodeEditor editor) {
         mEditor = editor;
         viewModel = new ViewModelProvider((AppCompatActivity) editor.getContext()).get(LogViewModel.class);
 		provider = new JavaCompilerService(
-			FileManager.getInstance().getCurrentProject().getJavaFiles().values().stream().collect(Collectors.toSet()),
+                new HashSet<>(FileManager.getInstance().getCurrentProject().getJavaFiles().values()),
 			Collections.emptySet(),
 			Collections.emptySet()
 		);
     }
-    
-	JavaParser parser;
-	
+
     @Override
     public List<CompletionItem> getAutoCompleteItems(String partial, boolean endsWithParen, TextAnalyzeResult prev, int line) {
        FileManager.getInstance().save(mEditor.getCurrentFile(), mEditor.getText().toString());

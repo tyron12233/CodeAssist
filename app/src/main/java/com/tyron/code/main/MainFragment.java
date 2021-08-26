@@ -1,6 +1,10 @@
 package com.tyron.code.main;
 
+import androidx.annotation.NonNull;
+import androidx.core.view.GravityCompat;
 import androidx.fragment.app.Fragment;
+
+import android.os.Environment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.os.Bundle;
@@ -8,6 +12,7 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import com.google.android.material.tabs.TabLayout;
 import androidx.drawerlayout.widget.DrawerLayout;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.viewpager2.widget.ViewPager2;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 import java.io.File;
@@ -39,6 +44,8 @@ import android.view.Gravity;
 import com.tyron.code.compiler.JavaCompiler;
 import androidx.lifecycle.ViewModelProvider;
 import com.tyron.code.editor.log.LogViewModel;
+
+import java.util.Objects;
 import java.util.stream.Collectors;
 import android.os.AsyncTask;
 import com.tyron.code.completion.CompletionEngine;
@@ -119,27 +126,23 @@ public class MainFragment extends Fragment {
     }
 
     @Override
-    public void onViewCreated(View view, Bundle savedInstanceState) {
+    public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         
 		mRoot.addDrawerListener(new DrawerLayout.DrawerListener() {
 			@Override
-			public void onDrawerSlide(View p1, float p) {
+			public void onDrawerSlide(@NonNull View p1, float p) {
 
 			}
 
 			@Override
-			public void onDrawerOpened(View p1) {
+			public void onDrawerOpened(@NonNull View p1) {
 				onBackPressedCallback.setEnabled(true);
 			}
 
 			@Override
-			public void onDrawerClosed(View p1) {
-				if (mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {
-					onBackPressedCallback.setEnabled(true);
-				} else {
-					onBackPressedCallback.setEnabled(false);
-				}
+			public void onDrawerClosed(@NonNull View p1) {
+                onBackPressedCallback.setEnabled(mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED);
 			}
 
 			@Override
@@ -152,7 +155,9 @@ public class MainFragment extends Fragment {
             @Override
             public void onTabUnselected(TabLayout.Tab p1) {
                 CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager().findFragmentByTag("f" + mAdapter.getItemId(p1.getPosition()));
-                fragment.save();
+                if (fragment != null) {
+                    fragment.save();
+                }
             }
 
             @Override
@@ -161,12 +166,7 @@ public class MainFragment extends Fragment {
 				popup.getMenu().add("Close");
 				popup.getMenu().add("Close others");
 				popup.getMenu().add("Close all");
-				popup.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-					@Override
-					public boolean onMenuItemClick(MenuItem item) {
-						return true;
-					}
-				});
+				popup.setOnMenuItemClickListener(item -> true);
 				popup.show();
             }
 
@@ -175,100 +175,89 @@ public class MainFragment extends Fragment {
                 
             }
         });
-        new TabLayoutMediator(mTabLayout, mPager, new TabLayoutMediator.TabConfigurationStrategy() {
-            @Override
-            public void onConfigureTab(TabLayout.Tab tab, int pos) {
-                tab.setText(mAdapter.getItem(pos).getName());
-            }
-        }).attach();
+        new TabLayoutMediator(mTabLayout, mPager, (tab, pos) -> tab.setText(mAdapter.getItem(pos).getName())).attach();
         
-        mToolbar.setOnMenuItemClickListener(new Toolbar.OnMenuItemClickListener() {
-            @Override
-            public boolean onMenuItemClick(MenuItem item) {
-                if (item.getItemId() == R.id.debug_create) {
+        mToolbar.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.debug_create) {
 
-                    final EditText et = new EditText(requireContext());
-                    et.setHint("path");
-					et.setHintTextColor(0xffe0e0e0);
+                final EditText et = new EditText(requireContext());
+                et.setHint("path");
+                et.setHintTextColor(0xffe0e0e0);
 
-                    AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
-                        .setTitle("Create a project")
-                        .setNegativeButton("cancel", null)
-                        .setPositiveButton("create", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface i, int which) {
-                                File file = new File(et.getText().toString());
-                                Project project = new Project(file);
+                AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
+                    .setTitle("Create a project")
+                    .setNegativeButton("cancel", null)
+                    .setPositiveButton("create", (i, which) -> {
+                        File file = new File(et.getText().toString());
+                        Project project = new Project(file);
 
-                                if (project.create()) {
-
-
-                                } else {
-                                    //  ApplicationLoader.showToast("Unable to creste project");
+                        project.create();
+                        FileManager.getInstance().openProject(project);
+                        /*final List<File> files = project.javaFiles.values().stream().limit(10).collect(Collectors.toList());
+                        mAdapter.submitList(files);
+                        final Object lock = new Object();
+                        final ProgressDialog d = new ProgressDialog(requireContext());
+                        d.show();
+                        d.setCancelable(false);
+                        AsyncTask.execute(() -> {
+                            for (File f : files) {
+                                //synchronized(lock) {
+                                requireActivity().runOnUiThread(() -> d.setMessage("Indexing " + f.getName()));
+                                try {
+                                JavaCompilerService c = CompletionEngine.getInstance().getCompiler();
+                                CompileTask task = c.compile(f.toPath());
+                                task.close();
+                                } catch (Throwable e) {
+                                    continue;
                                 }
-                                FileManager.getInstance().openProject(project);                         
-                                /*final List<File> files = project.javaFiles.values().stream().limit(10).collect(Collectors.toList());
-								mAdapter.submitList(files);
-							    final Object lock = new Object();
-								final ProgressDialog d = new ProgressDialog(requireContext());
-								d.show();
-								d.setCancelable(false);
-								AsyncTask.execute(() -> {
-									for (File f : files) {
-										//synchronized(lock) {
-										requireActivity().runOnUiThread(() -> d.setMessage("Indexing " + f.getName()));
-										try {
-										JavaCompilerService c = CompletionEngine.getInstance().getCompiler();
-										CompileTask task = c.compile(f.toPath());
-										task.close();
-										} catch (Throwable e) {
-											continue;
-										}
-										//}
-									}
-									
-									requireActivity().runOnUiThread(() -> {
-										d.dismiss();
-									});
-								});*/
+                                //}
                             }
-                        })
-                        .setView(et, 16, 0, 16, 0)
-                        .create();
 
-                    dialog.show();
-                    return true;
-                } else if (item.getItemId() == R.id.debug_refresh) {
-					Project project = FileManager.getInstance().getCurrentProject();
-					if (project != null) {
-						FileManager.getInstance().openProject(project);
-					}
-					
-					ApplicationLoader.showToast("Project files have been refreshed.");
-				} else if (item.getItemId() == R.id.action_run) {
-					compile();
-				}
+                            requireActivity().runOnUiThread(() -> {
+                                d.dismiss();
+                            });
+                        });*/
+                    })
+                    .setView(et, 24, 0, 24, 0)
+                    .create();
 
-                return false;
+                dialog.show();
+                return true;
+            } else if (item.getItemId() == R.id.debug_refresh) {
+                Project project = FileManager.getInstance().getCurrentProject();
+                if (project != null) {
+                    FileManager.getInstance().openProject(project);
+                }
+
+                ApplicationLoader.showToast("Project files have been refreshed.");
+            } else if (item.getItemId() == R.id.action_run) {
+                compile();
             }
+
+            return false;
         });
         
         final BottomEditorFragment bottomEditorFragment = BottomEditorFragment.newInstance();
         mBehavior = BottomSheetBehavior.from(mBottomContainer);
         mBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
                 @Override
-                public void onStateChanged(View p1, int state) {
+                public void onStateChanged(@NonNull View p1, int state) {
                     switch (state) {
-                        case BottomSheetBehavior.STATE_COLLAPSED:                          
+                        case BottomSheetBehavior.STATE_COLLAPSED:
                             onBackPressedCallback.setEnabled(false);
                             break;
-                        case BottomSheetBehavior.STATE_EXPANDED:                      
+                        case BottomSheetBehavior.STATE_EXPANDED:
                             onBackPressedCallback.setEnabled(true);
+                        case BottomSheetBehavior.STATE_DRAGGING:
+                        case BottomSheetBehavior.STATE_HALF_EXPANDED:
+                        case BottomSheetBehavior.STATE_HIDDEN:
+                        case BottomSheetBehavior.STATE_SETTLING:
+                            break;
                     }
                 }
 
                 @Override
-                public void onSlide(View bottomSheet, float slideOffset) {
+                public void onSlide(@NonNull View bottomSheet, float slideOffset) {
                     bottomEditorFragment.setOffset(slideOffset);
                 }              
             });
@@ -279,12 +268,12 @@ public class MainFragment extends Fragment {
                 .commit();
             
         getChildFragmentManager().beginTransaction()
-                .replace(R.id.nav_root, FileManagerFragment.newInstance(new File("/sdcard")), "file_manager")
+                .replace(R.id.nav_root, FileManagerFragment.newInstance(Environment.getExternalStorageDirectory()), "file_manager")
                 .commit();
     }
 
 	@Override
-	public void onSaveInstanceState(Bundle outState) {
+	public void onSaveInstanceState(@NonNull Bundle outState) {
 		super.onSaveInstanceState(outState);
 		
 		Project current = FileManager.getInstance().getCurrentProject();
@@ -306,34 +295,52 @@ public class MainFragment extends Fragment {
 			mPager.setCurrentItem(mAdapter.getPosition(file));
 		}
 		
-		mRoot.closeDrawer(Gravity.START, true);
+		mRoot.closeDrawer(GravityCompat.START, true);
 	}
 	
 	private void compile() {
 		JavaCompiler compiler = new JavaCompiler(new ViewModelProvider(requireActivity()).get(LogViewModel.class));
-		compiler.compile(new JavaCompiler.OnCompleteListener() {
-			@Override
-			public void onComplete(boolean success) {
-				ApplicationLoader.showToast(success ? "Compilation success" : "Compilation failed");
-				if (!success) {
-					mBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
-				}
-			}
-		});
+		compiler.compile(success -> {
+            ApplicationLoader.showToast(success ? "Compilation success" : "Compilation failed");
+            if (!success) {
+                mBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+            }
+        });
 	}
     
     private static class PageAdapter extends FragmentStateAdapter{
         
-        private List<File> data = new ArrayList<>();
+        private final List<File> data = new ArrayList<>();
         
         public PageAdapter(Fragment parent) {
             super(parent);
         }
         
-        public void submitList(Collection<File> files) {
+        public void submitList(List<File> files) {
+            DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+                @Override
+                public int getOldListSize() {
+                    return data.size();
+                }
+
+                @Override
+                public int getNewListSize() {
+                    return files.size();
+                }
+
+                @Override
+                public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                    return Objects.equals(data.get(oldItemPosition), files.get(newItemPosition));
+                }
+
+                @Override
+                public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                    return Objects.equals(data.get(oldItemPosition), files.get(newItemPosition));
+                }
+            });
             data.clear();
             data.addAll(files);
-            notifyDataSetChanged();
+            result.dispatchUpdatesTo(this);
         }
 		
 		public void submitFile(File file) {
@@ -346,6 +353,7 @@ public class MainFragment extends Fragment {
             return data.size();
         }
 
+        @NonNull
         @Override
         public Fragment createFragment(int p1) {
             return CodeEditorFragment.newInstance(data.get(p1));

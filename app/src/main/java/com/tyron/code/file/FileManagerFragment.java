@@ -1,6 +1,9 @@
 package com.tyron.code.file;
+import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import java.io.File;
+import java.util.Objects;
+
 import android.os.Bundle;
 import android.view.ViewGroup;
 import android.view.LayoutInflater;
@@ -12,6 +15,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.activity.OnBackPressedCallback;
 import com.tyron.code.main.MainFragment;
 
+@SuppressWarnings("FieldCanBeLocal")
 public class FileManagerFragment extends Fragment {
     
     public static FileManagerFragment newInstance(File file) {
@@ -26,12 +30,12 @@ public class FileManagerFragment extends Fragment {
         @Override
         public void handleOnBackPressed() {
             if (!mCurrentFile.equals(mRootFile)) {
-                mAdapter.submitFile(mCurrentFile.getParentFile());
+                mAdapter.submitFile(Objects.requireNonNull(mCurrentFile.getParentFile()));
                 check(mCurrentFile.getParentFile());
             }
         }
     };
-    
+
     private File mRootFile;
     private File mCurrentFile;
     
@@ -47,7 +51,8 @@ public class FileManagerFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
+
+        assert getArguments() != null;
         mRootFile = new File(getArguments().getString("path"));
         if (savedInstanceState != null) {
             mCurrentFile = new File(savedInstanceState.getString("currentFile"), mRootFile.getAbsolutePath());
@@ -67,32 +72,29 @@ public class FileManagerFragment extends Fragment {
         mListView.setLayoutManager(mLayoutManager);
         mListView.setAdapter(mAdapter);
         
-        requireActivity().getOnBackPressedDispatcher().addCallback(this, callback);
+        requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), callback);
         return mRoot;
     }
 
     @Override
-    public void onViewCreated(View view, Bundle savedInstanceState) {
+    public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         
         mAdapter.submitFile(mRootFile);
-        mAdapter.setOnItemClickListener(new FileManagerAdapter.OnItemClickListener() {
-            @Override
-            public void onItemClick(File file, int position) {
-                if (position == 0) {
-                    if (!mCurrentFile.equals(mRootFile)) {
-                        mAdapter.submitFile(mCurrentFile.getParentFile());
-                        check(mCurrentFile.getParentFile());
-                    }
-                    return;
+        mAdapter.setOnItemClickListener((file, position) -> {
+            if (position == 0) {
+                if (!mCurrentFile.equals(mRootFile)) {
+                    mAdapter.submitFile(Objects.requireNonNull(mCurrentFile.getParentFile()));
+                    check(mCurrentFile.getParentFile());
                 }
-                
-                if (file.isFile()) {
-                    openFile(file);
-                } else if (file.isDirectory()) {
-                    mAdapter.submitFile(file);
-                    check(file);
-                }
+                return;
+            }
+
+            if (file.isFile()) {
+                openFile(file);
+            } else if (file.isDirectory()) {
+                mAdapter.submitFile(file);
+                check(file);
             }
         });
     }
@@ -113,11 +115,7 @@ public class FileManagerFragment extends Fragment {
      */
     private void check(File currentFile) {
         mCurrentFile = currentFile;
-        
-        if (currentFile.getAbsolutePath().equals(mRootFile.getAbsolutePath())) {
-            callback.setEnabled(false);
-        } else {
-            callback.setEnabled(true);
-        }
+
+        callback.setEnabled(!currentFile.getAbsolutePath().equals(mRootFile.getAbsolutePath()));
     }
 }

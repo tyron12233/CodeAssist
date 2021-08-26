@@ -1,4 +1,5 @@
 package com.tyron.code.model;
+import java.util.Collections;
 import java.util.List;
 import java.util.ArrayList;
 import java.io.File;
@@ -66,11 +67,12 @@ public class Project {
         
         Log.d("PROJECT LIBRARIES", "" + libPath);
         
-        if (libPath.listFiles() == null) {
-            return libraries;
+        File[] files = libPath.listFiles();
+        if (files == null) {
+            return Collections.emptyList();
         }
-        
-        for (File file : libPath.listFiles()) {
+
+        for (File file : files) {
             if (file.getName().endsWith(".jar")) {
                 libraries.add(file);
                 Log.d("PROJECT LIBRARIES", "Adding " + file.getName());
@@ -85,12 +87,8 @@ public class Project {
      */
     public boolean isValidProject() {
         File check = new File(mRoot, "app/src/main/java");
-        
-        if (!check.exists()) {
-            return false;
-        }
-        
-        return true;
+
+        return check.exists();
     }
     
     /**
@@ -120,12 +118,8 @@ public class Project {
         if (!getLibraryDirectory().mkdirs()) {
             return false;
         }
-        
-        if (!getBuildDirectory().mkdirs()) {
-            return false;
-        }
-        
-        return true;
+
+        return getBuildDirectory().mkdirs();
     }
 	
 	public File getResourceDirectory() {

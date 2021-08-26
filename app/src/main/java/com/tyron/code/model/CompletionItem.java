@@ -1,7 +1,10 @@
 package com.tyron.code.model;
-import java.util.List;
-import java.util.ArrayList;
+
+import androidx.annotation.NonNull;
+
 import com.tyron.code.editor.drawable.CircleDrawable;
+
+import java.util.List;
 
 public class CompletionItem {
     
@@ -36,6 +39,7 @@ public class CompletionItem {
         this.label = label;
     }
     
+    @NonNull
     @Override
     public String toString() {
         return label;

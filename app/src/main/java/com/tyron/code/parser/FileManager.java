@@ -1,37 +1,31 @@
 package com.tyron.code.parser;
-import java.util.HashMap;
-import java.io.File;
-import java.util.Map;
-import java.util.jar.JarFile;
-import java.util.jar.JarEntry;
-import java.util.Enumeration;
-import java.io.IOException;
-import android.widget.Toast;
-import com.tyron.code.MainActivity;
+
+import android.util.Log;
+
 import com.tyron.code.ApplicationLoader;
-import java.util.List;
-import java.util.Set;
+import com.tyron.code.model.Project;
 import com.tyron.code.util.Decompress;
-import java.util.TreeMap;
-import java.time.Instant;
+
 import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.StringReader;
-import com.tyron.code.util.StringSearch;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.io.FileWriter;
-import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import com.tyron.code.model.Project;
-import java.util.HashSet;
-import android.util.Log;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.nio.file.Path;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 /**
  * Class responsible for caching java files for fast
@@ -62,7 +56,7 @@ public class FileManager {
     FileManager() {
         try {
             putJar(getAndroidJar());
-        } catch (IOException e) {}
+        } catch (IOException ignore) {}
     }
     
     private Project mCurrentProject;
@@ -83,14 +77,14 @@ public class FileManager {
         
         try {
             putJar(getAndroidJar());
-        } catch (IOException e) {}
+        } catch (IOException ignore) {}
         
         javaFiles.putAll(project.getJavaFiles());
         
         for (File file : project.getLibraries()) {
             try {
                 putJar(file);
-            } catch (IOException e) {}
+            } catch (IOException ignore) {}
         }
     }
     
@@ -105,6 +99,7 @@ public class FileManager {
     public Set<String> classpath() {
         Set<String> classpaths = new HashSet<>();
         classpaths.addAll(javaFiles.keySet());
+        classpaths.addAll(Collections.emptySet());
         return classpaths;
     }
     
@@ -140,12 +135,7 @@ public class FileManager {
     }
     
     public void save(final File file, final String contents) {
-        service.submit(new Runnable() {
-            @Override
-            public void run() {
-                writeFile(file, contents);
-            }
-        });
+        service.submit(() -> writeFile(file, contents));
     }
     
     public static String readFile(File file) {

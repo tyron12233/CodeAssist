@@ -1,13 +1,14 @@
 package com.tyron.code.editor.language;
-import java.util.List;
-import java.util.ArrayList;
-import com.tyron.code.editor.language.xml.XML;
+
 import com.tyron.code.editor.language.java.JAVA;
+import com.tyron.code.editor.language.xml.XML;
+
+import java.io.File;
+import java.util.HashSet;
+import java.util.Set;
+
 import io.github.rosemoe.editor.interfaces.EditorLanguage;
 import io.github.rosemoe.editor.widget.CodeEditor;
-import java.io.File;
-import java.util.Set;
-import java.util.HashSet;
 
 public class LanguageManager {
 	
@@ -20,7 +21,7 @@ public class LanguageManager {
 		return Instance;
 	}
 	
-	private Set<Language> mLanguages = new HashSet<>();
+	private final Set<Language> mLanguages = new HashSet<>();
 	
 	private LanguageManager() {
 		initLanguages();
