@@ -1,10 +1,17 @@
 package com.tyron.code.compiler;
 
+import android.net.Uri;
+
+import com.android.sdklib.build.ApkBuilderMain;
+import com.android.sdklib.build.ApkCreationException;
+import com.android.sdklib.build.DuplicateFileException;
+import com.android.sdklib.build.SealedApkException;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.model.Project;
 import com.tyron.code.util.exception.CompilationFailedException;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -54,5 +61,36 @@ public class ApkBuilder {
 
         D8Compiler d8Compiler = new D8Compiler(log, mProject);
         d8Compiler.compile();
+
+        File binDir = new File(mProject.getBuildDirectory(), "bin");
+
+        try {
+            com.android.sdklib.build.ApkBuilder builder = new com.android.sdklib.build.ApkBuilder(
+                    binDir + "/generated.apk",
+                    binDir + "/generated.apk.res",
+                    binDir + "/classes.dex",
+                    null,
+                    null
+            );
+
+            File[] binFiles = binDir.listFiles();
+            if (binFiles != null) {
+                for (File file : binFiles) {
+                    if (!file.getName().equals("classes.dex") && file.getName().endsWith(".dex")) {
+                        builder.addFile(file, Uri.parse(file.getAbsolutePath()).getLastPathSegment());
+                    }
+                }
+            }
+
+            for (File lib : mProject.getLibraries()) {
+                builder.addResourcesFromJar(lib);
+            }
+
+            builder.setDebugMode(false);
+            builder.sealApk();
+
+        } catch (ApkCreationException | SealedApkException | DuplicateFileException e) {
+            throw new CompilationFailedException(e);
+        }
     }
 }
