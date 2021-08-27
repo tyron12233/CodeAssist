@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,6 +32,7 @@ import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.compiler.D8Compiler;
 import com.tyron.code.compiler.JavaCompiler;
 import com.tyron.code.completion.CompletionEngine;
 import com.tyron.code.completion.MainCompiler;
@@ -313,11 +315,11 @@ public class MainFragment extends Fragment {
         }
     }
     private void compile() {
-        MainCompiler compiler = new MainCompiler(FileManager.getInstance().getCurrentProject());
+        D8Compiler compiler = new D8Compiler(FileManager.getInstance().getCurrentProject());
         try {
             compiler.compile();
-        } catch (IOException | CompilationFailedException e) {
-            ApplicationLoader.showToast(e.getMessage());
+        } catch (CompilationFailedException e) {
+            Log.d("MainFragment", e.getMessage());
         }
     }
 
