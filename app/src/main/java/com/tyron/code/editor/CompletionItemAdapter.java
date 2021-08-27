@@ -1,5 +1,9 @@
 package com.tyron.code.editor;
 
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.style.ForegroundColorSpan;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -7,8 +11,10 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.editor.drawable.CircleDrawable;
 
@@ -27,6 +33,8 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
     public interface OnLongClickListener {
         void onLongClick(int position);
     }
+
+    private String partial;
 
     private final List<CompletionItem> items = new ArrayList<>();
     private EditorAutoCompleteWindow mWindow;
@@ -79,7 +87,15 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
         mWindow = window;
         this.items.clear();
         this.items.addAll(result);
+        this.partial = getAfterLastDot(mWindow.getPrefix());
 		notifyDataSetChanged();
+    }
+
+    private String getAfterLastDot(String str) {
+        if (str.contains(".")) {
+            str = str.substring(str.lastIndexOf(".") + 1);
+        }
+        return str;
     }
 
     public CompletionItem getItem(int position) {
@@ -98,7 +114,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
     }
 
 
-    public static class ViewHolder extends RecyclerView.ViewHolder {
+    public class ViewHolder extends RecyclerView.ViewHolder {
 
         private final TextView mLabel;
         private final TextView mDesc;
@@ -116,6 +132,17 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
             mLabel.setText(item.label);
             mDesc.setText(item.desc);
 
+            if (partial != null && partial.length() > 0) {
+                if (item.label.startsWith(partial)) {
+                    ForegroundColorSpan span = new ForegroundColorSpan(
+                            ContextCompat.getColor(ApplicationLoader.applicationContext, R.color.colorAccent));
+
+                    SpannableString spannableString = new SpannableString(item.label);
+                    spannableString.setSpan(span, 0, partial.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+                    mLabel.setText(spannableString);
+                }
+            }
             
             mIcon.setVisibility(View.VISIBLE);
             mIcon.setImageDrawable(new CircleDrawable(item.item.iconKind));
