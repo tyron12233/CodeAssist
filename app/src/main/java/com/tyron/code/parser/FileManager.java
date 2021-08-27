@@ -107,6 +107,7 @@ public class FileManager {
         Set<File> classpaths = new HashSet<>();
         classpaths.addAll(javaFiles.values());
         classpaths.addAll(mCurrentProject.getLibraries());
+        classpaths.addAll(mCurrentProject.getRJavaFiles());
         return classpaths;
     }
     

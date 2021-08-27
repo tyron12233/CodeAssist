@@ -26,7 +26,7 @@ public class Project {
     public List<String> jarFiles = new ArrayList<>();
 
     private Set<File> libraries = new HashSet<>();
-    
+    private Set<File> RJavaFiles = new HashSet<>();
     /**
      * Creates a project object from specified root
      */
@@ -65,6 +65,25 @@ public class Project {
             findJavaFiles(getJavaDirectory());
         }
         return javaFiles;
+    }
+
+    private void searchRJavaFiles(File root) {
+        File[] files = root.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    searchRJavaFiles(file);
+                } else {
+                    RJavaFiles.add(file);
+                }
+            }
+        }
+    }
+    public Set<File> getRJavaFiles() {
+        if (RJavaFiles.isEmpty()) {
+            searchRJavaFiles(new File(getBuildDirectory(), "gen"));
+        }
+        return RJavaFiles;
     }
 
     public void searchLibraries() {
