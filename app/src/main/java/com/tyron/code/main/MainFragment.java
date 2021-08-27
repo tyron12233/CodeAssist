@@ -50,6 +50,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
+
+import javax.tools.Diagnostic;
 
 public class MainFragment extends Fragment {
     
@@ -315,11 +318,11 @@ public class MainFragment extends Fragment {
         }
     }
     private void compile() {
-        D8Compiler compiler = new D8Compiler(FileManager.getInstance().getCurrentProject());
+        JavaCompiler compiler = new JavaCompiler(FileManager.getInstance().getCurrentProject());
         try {
             compiler.compile();
         } catch (CompilationFailedException e) {
-            Log.d("MainFragment", e.getMessage());
+            Log.d("MainFragment", compiler.getDiagnostics().stream().map(Diagnostic::toString).collect(Collectors.joining("\n")));
         }
     }
 
