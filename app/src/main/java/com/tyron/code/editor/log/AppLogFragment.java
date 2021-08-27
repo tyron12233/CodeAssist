@@ -1,4 +1,5 @@
 package com.tyron.code.editor.log;
+import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import android.view.View;
 import android.os.Bundle;
@@ -12,6 +13,9 @@ import androidx.lifecycle.ViewModelStoreOwner;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.ViewModel;
 import androidx.lifecycle.Observer;
+
+import com.tyron.code.R;
+
 import io.github.rosemoe.editor.widget.schemes.SchemeDarcula;
 
 public class AppLogFragment extends Fragment {
@@ -42,6 +46,7 @@ public class AppLogFragment extends Fragment {
         FrameLayout root = new FrameLayout(requireContext());
         
         mLogView = new CodeEditor(requireContext());
+        mLogView.setTypefaceText(ResourcesCompat.getCachedFont(requireContext(), R.font.jetbrains_mono_regular));
         root.addView(mLogView, new FrameLayout.LayoutParams(-1, -1));
         
         return root;
