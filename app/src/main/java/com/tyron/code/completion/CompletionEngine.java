@@ -72,7 +72,9 @@ public class CompletionEngine {
 			}
 		}
 		setIndexing(false);
-		ApplicationLoader.applicationHandler.post(callback);
+		if (callback != null) {
+			ApplicationLoader.applicationHandler.post(callback);
+		}
 	}
 
 	public synchronized CompletionList complete(File file, long cursor) {
@@ -85,8 +87,8 @@ public class CompletionEngine {
 			return new CompletionProvider(mProivider).complete(file, cursor);
 		} catch (RuntimeException | AssertionError e) {
 			Log.d(TAG, "Completion failed: " + Log.getStackTraceString(e) + " Clearing cache.");
-			mProivider.cachedCompile.close();
-			mProivider.cachedCompile.borrow.close();
+			mProivider = null;
+			index(FileManager.getInstance().getCurrentProject(), null );
 		}
 		return CompletionList.EMPTY;
 	}
