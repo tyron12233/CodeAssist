@@ -3,13 +3,15 @@
   <component name="DesignSurface">
     <option name="filePathToZoomLevelMap">
       <map>
-        <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/main_fragment.xml" value="0.1983695652173913" />
         <entry key="app/src/main/res/font/mono_font.xml" value="0.22708333333333333" />
+        <entry key="app/src/main/res/layout/completion_result_item.xml" value="0.33" />
+        <entry key="app/src/main/res/layout/default_completion_result_item.xml" value="0.33" />
+        <entry key="app/src/main/res/layout/text_compose_panel.xml" value="0.25" />
+        <entry key="app/src/main/res/layout/text_compose_popup_window.xml" value="0.33" />
       </map>
     </option>
   </component>
-  <component name="ExternalStorageConfigurationManager" enabled="true" />
-  <component name="ProjectRootManager" version="2" languageLevel="JDK_11" default="true" project-jdk-name="11" project-jdk-type="JavaSDK">
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_11" default="true" project-jdk-name="1.8" project-jdk-type="JavaSDK">
     <output url="file://$PROJECT_DIR$/build/classes" />
   </component>
   <component name="ProjectType">

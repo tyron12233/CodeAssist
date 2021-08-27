@@ -11,6 +11,16 @@ public class AndroidUtilities {
         return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_PX,
                 px, ApplicationLoader.applicationContext.getResources().getDisplayMetrics()));
     }
+
+	/**
+	 * Converts a dp value into px that can be applied on margins, paddings etc
+	 * @param dp The dp value that will be converted into px
+	 * @return The converted px value from the dp argument given
+	 */
+	public static int dpToPx(float dp) {
+		return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
+				dp, ApplicationLoader.applicationContext.getResources().getDisplayMetrics()));
+	}
 	
 	public static int getHeight(ViewGroup viewGroup) {
 
