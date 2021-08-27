@@ -503,7 +503,9 @@ public class CompletionProvider {
                         label.append((label.length() == 0) ? "" : ", ").append(param.getSimpleName());
                     }
 
-                    item.label = "(" + label + ")" + " -> ";
+                    item.label = (sam.getParameters().size() == 1)
+                            ? label + " -> "
+                            : "(" + label + ")" + " -> ";
                     item.commitText = item.label;
                     item.detail = simpleName(sam.getReturnType().toString()).toString();
                     item.cursorOffset = item.label.length();
