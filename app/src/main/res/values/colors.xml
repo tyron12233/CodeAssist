@@ -15,5 +15,8 @@
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
 
 <resources>
+    <color name="colorAccent">#FFCC7832</color>
+    <color name="colorPrimary">#FFCC7832</color>
+
     <color name="textActionNameColor">@android:color/tertiary_text_light</color>
 </resources>
