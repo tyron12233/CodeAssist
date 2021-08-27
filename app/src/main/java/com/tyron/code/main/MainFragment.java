@@ -30,8 +30,11 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
+import com.sun.tools.javac.jvm.Code;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.compiler.AAPT2Compiler;
+import com.tyron.code.compiler.ApkBuilder;
 import com.tyron.code.compiler.D8Compiler;
 import com.tyron.code.compiler.JavaCompiler;
 import com.tyron.code.completion.CompletionEngine;
@@ -69,7 +72,9 @@ public class MainFragment extends Fragment {
     private TabLayout mTabLayout;
     private ViewPager2 mPager;
     private PageAdapter mAdapter;
-    
+
+    LogViewModel logViewModel;
+
     OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {
         @Override
         public void handleOnBackPressed() {
@@ -123,7 +128,8 @@ public class MainFragment extends Fragment {
         mToolbar.inflateMenu(R.menu.code_editor_menu);
         
         requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), onBackPressedCallback);
-        
+        logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
+
         return mRoot;
     }
 
@@ -317,13 +323,29 @@ public class MainFragment extends Fragment {
 	        fragment.save();
         }
     }
-    private void compile() {
-        JavaCompiler compiler = new JavaCompiler(FileManager.getInstance().getCurrentProject());
-        try {
-            compiler.compile();
-        } catch (CompilationFailedException e) {
-            Log.d("MainFragment", compiler.getDiagnostics().stream().map(Diagnostic::toString).collect(Collectors.joining("\n")));
+
+    private void saveAll() {
+        for (File file : mAdapter.getItems()) {
+            CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager().findFragmentByTag(
+                    "f" + file.getAbsolutePath().hashCode()
+            );
+            if (fragment != null) {
+                fragment.save();
+            }
         }
+    }
+    private void compile() {
+        saveAll();
+
+        ApkBuilder builder = new ApkBuilder(logViewModel, FileManager.getInstance().getCurrentProject());
+
+        mToolbar.setSubtitle("Compiling");
+        mProgressBar.setVisibility(View.VISIBLE);
+        builder.build((success, message) -> {
+            ApplicationLoader.showToast(message);
+            mToolbar.setSubtitle(null);
+            mProgressBar.setVisibility(View.GONE);
+        });
     }
 
     private class PageAdapter extends FragmentStateAdapter{
@@ -395,6 +417,10 @@ public class MainFragment extends Fragment {
 			}
 			return -1;
 		}
+
+		public List<File> getItems() {
+            return data;
+        }
 
         @Override
         public boolean containsItem(long itemId) {

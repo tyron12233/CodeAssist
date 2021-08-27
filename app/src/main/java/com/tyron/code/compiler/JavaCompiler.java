@@ -3,7 +3,9 @@ package com.tyron.code.compiler;
 
 import com.sun.source.util.JavacTask;
 import com.sun.tools.javac.api.JavacTool;
+import com.sun.tools.javac.util.Log;
 import com.tyron.code.SourceFileObject;
+import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.util.exception.CompilationFailedException;
@@ -20,15 +22,18 @@ import java.util.Locale;
 
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
+import javax.tools.DiagnosticListener;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.StandardLocation;
 
 public class JavaCompiler {
 
+    private final LogViewModel logViewModel;
     private final Project mProject;
 
-    public JavaCompiler(Project project) {
+    public JavaCompiler(LogViewModel log, Project project) {
+        logViewModel = log;
         mProject = project;
     }
 
@@ -43,8 +48,19 @@ public class JavaCompiler {
         if(!outputDir.mkdirs()) {
             throw new CompilationFailedException("Cannot create output directory");
         }
-        Collection<File> javaFiles = FileManager.getInstance().getCurrentProject().javaFiles.values();
-        DiagnosticCollector<JavaFileObject> diagnosticCollector = new DiagnosticCollector<>();
+        List<File> javaFiles = new ArrayList<>(FileManager.getInstance().getCurrentProject().javaFiles.values());
+        javaFiles.addAll(getJavaFiles(new File(mProject.getBuildDirectory(), "gen")));
+
+        DiagnosticListener<JavaFileObject> diagnosticCollector = diagnostic -> {
+            switch (diagnostic.getKind()) {
+                case ERROR:
+                    logViewModel.e(LogViewModel.BUILD_LOG, diagnostic.toString());
+                    break;
+                case WARNING:
+                    logViewModel.w(LogViewModel.BUILD_LOG, diagnostic.toString());
+            }
+        };
+
         JavacTool tool = JavacTool.create();
 
         StandardJavaFileManager standardJavaFileManager = tool.getStandardFileManager(
@@ -65,6 +81,7 @@ public class JavaCompiler {
         }
 
         List<JavaFileObject> javaFileObjects = new ArrayList<>();
+
         for (File file : javaFiles) {
             javaFileObjects.add(new SourceFileObject(file.toPath()));
         }
@@ -79,11 +96,29 @@ public class JavaCompiler {
         );
 
         if (!task.call()) {
-            diagnostics.addAll(diagnosticCollector.getDiagnostics());
             throw new CompilationFailedException("Compilation failed. Check diagnostics for more information.");
         }
+    }
 
-        diagnostics.addAll(diagnosticCollector.getDiagnostics());
+    private List<File> getJavaFiles(File dir) {
+        List<File> javaFiles = new ArrayList<>();
+
+        File[] files = dir.listFiles();
+        if (files == null) {
+            return Collections.emptyList();
+        }
+
+        for (File file : files) {
+            if (file.isDirectory()) {
+                javaFiles.addAll(getJavaFiles(file));
+            } else {
+                if (file.getName().endsWith(".java")) {
+                    javaFiles.add(file);
+                }
+            }
+        }
+
+        return javaFiles;
     }
 
     public List<Diagnostic<? extends JavaFileObject>> getDiagnostics() {

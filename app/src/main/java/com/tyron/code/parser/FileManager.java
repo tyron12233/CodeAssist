@@ -249,14 +249,12 @@ public class FileManager {
     public File getAndroidJar() {
         File jarFile = new File(ApplicationLoader.applicationContext
                                 .getFilesDir(), "rt.jar");
-        if (jarFile.exists()) {
-            return jarFile;
-        } else {
+        if (!jarFile.exists()) {
             Decompress.unzipFromAssets(ApplicationLoader.applicationContext,
-                                       "rt.zip",
-                                       jarFile.getParentFile().getAbsolutePath());          
-            return jarFile;
+                    "rt.zip",
+                    jarFile.getParentFile().getAbsolutePath());
         }
+        return jarFile;
     }
     
     public File getLambdaStubs() {

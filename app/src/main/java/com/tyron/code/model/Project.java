@@ -108,7 +108,15 @@ public class Project {
     public boolean isValidProject() {
         File check = new File(mRoot, "app/src/main/java");
 
-        return check.exists();
+        if (!check.exists()) {
+            return false;
+        }
+
+        if (!getResourceDirectory().exists()) {
+            return false;
+        }
+
+        return true;
     }
     
     /**
@@ -156,5 +164,9 @@ public class Project {
     
     public File getBuildDirectory() {
         return new File(mRoot, "app/build");
+    }
+
+    public File getManifestFile() {
+        return new File(mRoot, "app/src/main/AndroidManifest.xml");
     }
 }

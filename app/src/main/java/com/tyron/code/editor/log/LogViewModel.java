@@ -36,7 +36,7 @@ public class LogViewModel extends ViewModel {
         if (current.isEmpty()) {
             current = message;
         } else {
-            current = current + '\n' + message;
+            current = current + '\n' + "<$$debug>" + message + "</$$debug>";
         }
         
         if (Thread.currentThread() != Looper.getMainLooper().getThread()) {
@@ -49,5 +49,35 @@ public class LogViewModel extends ViewModel {
     public void clear(int id) {
         MutableLiveData<String> data = (MutableLiveData<String>) getLogs(id);
         data.setValue("");
+    }
+
+    public void w(int id, String message) {
+        String current = getLogs(id).getValue();
+        if (current.isEmpty()) {
+            current = message;
+        } else {
+            current = current + '\n' + "<$$warning>" + message + "</$$warning>";
+        }
+
+        if (Thread.currentThread() != Looper.getMainLooper().getThread()) {
+            log.get(id).postValue(current);
+        } else {
+            log.get(id).setValue(current);
+        }
+    }
+
+    public void e(int id, String message) {
+        String current = getLogs(id).getValue();
+        if (current.isEmpty()) {
+            current = message;
+        } else {
+            current = current + '\n' + "<$$error>" + message + "</$$error>";
+        }
+
+        if (Thread.currentThread() != Looper.getMainLooper().getThread()) {
+            log.get(id).postValue(current);
+        } else {
+            log.get(id).setValue(current);
+        }
     }
 }

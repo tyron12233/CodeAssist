@@ -12,6 +12,7 @@ import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
+import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.model.Project;
 
 import java.io.File;
@@ -34,11 +35,13 @@ import com.tyron.code.util.exception.CompilationFailedException;
 public class D8Compiler {
 
 	private static final String TAG = D8Compiler.class.getSimpleName();
-	
+
+	private final LogViewModel logViewModel;
 	private final Project mProject;
 	private final DiagnosticsHandler diagnosticsHandler = new DiagnosticHandler();
 	
-	public D8Compiler(Project project) {
+	public D8Compiler(LogViewModel model, Project project) {
+		logViewModel = model;
 		mProject = project;
 	}
 
@@ -51,7 +54,7 @@ public class D8Compiler {
 
 			List<Path> userLibraries = mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList());
 
-			D8Command command = D8Command.builder()
+			D8Command command = D8Command.builder(diagnosticsHandler)
 					.addClasspathFiles(userLibraries)
 					.setMinApiLevel(21)
 					.addLibraryFiles(getLibraryFiles())
@@ -126,15 +129,15 @@ public class D8Compiler {
 		return paths;
 	}
 
-	private static class DiagnosticHandler implements DiagnosticsHandler {
+	private class DiagnosticHandler implements DiagnosticsHandler {
 		@Override
 		public void error(Diagnostic diagnostic) {
-
+			logViewModel.e(LogViewModel.BUILD_LOG, diagnostic.getDiagnosticMessage());
 		}
 
 		@Override
 		public void warning(Diagnostic diagnostic) {
-
+			logViewModel.w(LogViewModel.BUILD_LOG, diagnostic.getDiagnosticMessage());
 		}
 
 		@Override
