@@ -88,9 +88,19 @@ public class ApkBuilder {
 
             builder.setDebugMode(false);
             builder.sealApk();
-
         } catch (ApkCreationException | SealedApkException | DuplicateFileException e) {
             throw new CompilationFailedException(e);
+        }
+
+        ApkSigner signer = new ApkSigner(
+                binDir + "/generated.apk",
+                binDir + "/signed.apk",
+                ApkSigner.Mode.TEST
+        );
+        try {
+            signer.sign();
+        } catch (Exception exception) {
+            throw new CompilationFailedException(exception);
         }
     }
 }

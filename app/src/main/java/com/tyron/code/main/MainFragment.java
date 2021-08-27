@@ -45,6 +45,7 @@ import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.file.FileManagerFragment;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
+import com.tyron.code.util.ApkInstaller;
 import com.tyron.code.util.exception.CompilationFailedException;
 
 import java.io.File;
@@ -343,8 +344,20 @@ public class MainFragment extends Fragment {
         mProgressBar.setVisibility(View.VISIBLE);
         builder.build((success, message) -> {
             ApplicationLoader.showToast(message);
-            mToolbar.setSubtitle(null);
-            mProgressBar.setVisibility(View.GONE);
+
+            if (mToolbar != null) {
+                mToolbar.setSubtitle(null);
+            }
+            if (mProgressBar != null) {
+                mProgressBar.setVisibility(View.GONE);
+            }
+            if (success && getContext() != null) {
+                Project project = FileManager.getInstance().getCurrentProject();
+                if (project != null) {
+                    File apkFile = new File(project.getBuildDirectory(), "bin/signed.apk");
+                    ApkInstaller.installApplication(getContext(), apkFile.getAbsolutePath());
+                }
+            }
         });
     }
 

@@ -41,6 +41,6 @@ dependencies {
     implementation files(
         'libs/javac.jar',
         'libs/language-base-0.5.0.jar',
-        'libs/language-java-0.5.0.jar',
+        'libs/language-java-0.5.0.jar', 'libs/apksigner.jar'
     )
 }
