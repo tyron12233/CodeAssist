@@ -1,10 +1,14 @@
 package com.tyron.code.main;
 
 import android.annotation.SuppressLint;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.util.Log;
+import android.os.IBinder;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -30,82 +34,71 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
-import com.sun.tools.javac.jvm.Code;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.compiler.AAPT2Compiler;
-import com.tyron.code.compiler.ApkBuilder;
-import com.tyron.code.compiler.D8Compiler;
-import com.tyron.code.compiler.JavaCompiler;
 import com.tyron.code.completion.CompletionEngine;
-import com.tyron.code.completion.MainCompiler;
 import com.tyron.code.editor.BottomEditorFragment;
 import com.tyron.code.editor.CodeEditorFragment;
 import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.file.FileManagerFragment;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
+import com.tyron.code.service.CompilerService;
+import com.tyron.code.service.ILogger;
 import com.tyron.code.util.ApkInstaller;
-import com.tyron.code.util.exception.CompilationFailedException;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
-
-import javax.tools.Diagnostic;
 
 public class MainFragment extends Fragment {
-    
-    public MainFragment() {
-        
-    }
-    
+
+    LogViewModel logViewModel;
     private DrawerLayout mRoot;
     private Toolbar mToolbar;
     private LinearProgressIndicator mProgressBar;
     private LinearLayout mContent;
     private FrameLayout mBottomContainer;
     private BottomSheetBehavior mBehavior;
-    private TabLayout mTabLayout;
-    private ViewPager2 mPager;
-    private PageAdapter mAdapter;
-
-    LogViewModel logViewModel;
-
     OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {
         @Override
         public void handleOnBackPressed() {
-			if (mRoot.isOpen()) {
-				mRoot.closeDrawer(GravityCompat.START, true);
-				return;
-			}
+            if (mRoot.isOpen()) {
+                mRoot.closeDrawer(GravityCompat.START, true);
+                return;
+            }
             if (mBehavior != null) {
                 mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
             }
         }
     };
+    private TabLayout mTabLayout;
+    private ViewPager2 mPager;
+    private PageAdapter mAdapter;
 
-	@Override
-	public void onCreate(Bundle savedInstanceState) {
-		super.onCreate(savedInstanceState);
-		
-		if (savedInstanceState != null) {
-			Project project = new Project(new File(savedInstanceState.getString("current_project","")));
-			FileManager.getInstance().openProject(project);
-		}
-	}
-    
+    public MainFragment() {
+
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        if (savedInstanceState != null) {
+            Project project = new Project(new File(savedInstanceState.getString("current_project", "")));
+            FileManager.getInstance().openProject(project);
+        }
+    }
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         mRoot = (DrawerLayout) inflater.inflate(R.layout.main_fragment, container, false);
 
         mContent = mRoot.findViewById(R.id.content);
         mBottomContainer = mRoot.findViewById(R.id.persistent_sheet);
-        
+
         mTabLayout = new TabLayout(requireContext());
         mTabLayout.setBackgroundColor(0xff212121);
         mTabLayout.setSelectedTabIndicatorColor(0xffcc7832);
@@ -118,16 +111,16 @@ public class MainFragment extends Fragment {
         mProgressBar.setVisibility(View.GONE);
 
         mAdapter = new PageAdapter(this);
-        
+
         mPager = new ViewPager2(requireContext());
         mPager.setAdapter(mAdapter);
         mPager.setUserInputEnabled(false);
         mPager.setBackgroundColor(0xff2b2b2b);
         mContent.addView(mPager, new LinearLayout.LayoutParams(-1, -1, 1));
-        
+
         mToolbar = mRoot.findViewById(R.id.toolbar);
         mToolbar.inflateMenu(R.menu.code_editor_menu);
-        
+
         requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), onBackPressedCallback);
         logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
 
@@ -137,34 +130,34 @@ public class MainFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        
-		mRoot.addDrawerListener(new DrawerLayout.DrawerListener() {
-			@Override
-			public void onDrawerSlide(@NonNull View p1, float p) {
 
-			}
+        mRoot.addDrawerListener(new DrawerLayout.DrawerListener() {
+            @Override
+            public void onDrawerSlide(@NonNull View p1, float p) {
 
-			@Override
-			public void onDrawerOpened(@NonNull View p1) {
-				onBackPressedCallback.setEnabled(true);
-			}
+            }
 
-			@Override
-			public void onDrawerClosed(@NonNull View p1) {
+            @Override
+            public void onDrawerOpened(@NonNull View p1) {
+                onBackPressedCallback.setEnabled(true);
+            }
+
+            @Override
+            public void onDrawerClosed(@NonNull View p1) {
                 onBackPressedCallback.setEnabled(mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED);
 
                 FileManagerFragment fragment = (FileManagerFragment) getChildFragmentManager().findFragmentByTag("file_manager");
                 if (fragment != null) {
                     fragment.disableBackListener();
                 }
-			}
+            }
 
-			@Override
-			public void onDrawerStateChanged(int p1) {
+            @Override
+            public void onDrawerStateChanged(int p1) {
 
-			}
-		});
-		
+            }
+        });
+
         mTabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabUnselected(TabLayout.Tab p1) {
@@ -176,22 +169,22 @@ public class MainFragment extends Fragment {
 
             @Override
             public void onTabReselected(TabLayout.Tab p1) {
-				PopupMenu popup = new PopupMenu(requireActivity(), p1.view);
-				popup.getMenu().add("Close");
-				popup.getMenu().add("Close others");
-				popup.getMenu().add("Close all");
-				popup.setOnMenuItemClickListener(item -> true);
-				popup.show();
+                PopupMenu popup = new PopupMenu(requireActivity(), p1.view);
+                popup.getMenu().add("Close");
+                popup.getMenu().add("Close others");
+                popup.getMenu().add("Close all");
+                popup.setOnMenuItemClickListener(item -> true);
+                popup.show();
             }
 
             @Override
             public void onTabSelected(TabLayout.Tab p1) {
-                
+
             }
         });
         mTabLayout.setVisibility(View.GONE);
         new TabLayoutMediator(mTabLayout, mPager, (tab, pos) -> tab.setText(mAdapter.getItem(pos).getName())).attach();
-        
+
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_create) {
 
@@ -201,16 +194,16 @@ public class MainFragment extends Fragment {
 
                 @SuppressLint("RestrictedApi")
                 AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
-                    .setTitle("Create a project")
-                    .setNegativeButton("cancel", null)
-                    .setPositiveButton("create", (i, which) -> {
-                        File file = new File(et.getText().toString());
-                        Project project = new Project(file);
-                        project.create();
-                        openProject(project);
-                    })
-                    .setView(et, 24, 0, 24, 0)
-                    .create();
+                        .setTitle("Create a project")
+                        .setNegativeButton("cancel", null)
+                        .setPositiveButton("create", (i, which) -> {
+                            File file = new File(et.getText().toString());
+                            Project project = new Project(file);
+                            project.create();
+                            openProject(project);
+                        })
+                        .setView(et, 24, 0, 24, 0)
+                        .create();
 
                 dialog.show();
                 return true;
@@ -227,31 +220,31 @@ public class MainFragment extends Fragment {
 
             return false;
         });
-        
+
         final BottomEditorFragment bottomEditorFragment = BottomEditorFragment.newInstance();
         mBehavior = BottomSheetBehavior.from(mBottomContainer);
         mBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
-                @Override
-                public void onStateChanged(@NonNull View p1, int state) {
-                    switch (state) {
-                        case BottomSheetBehavior.STATE_COLLAPSED:
-                            onBackPressedCallback.setEnabled(false);
-                            break;
-                        case BottomSheetBehavior.STATE_EXPANDED:
-                            onBackPressedCallback.setEnabled(true);
-                        case BottomSheetBehavior.STATE_DRAGGING:
-                        case BottomSheetBehavior.STATE_HALF_EXPANDED:
-                        case BottomSheetBehavior.STATE_HIDDEN:
-                        case BottomSheetBehavior.STATE_SETTLING:
-                            break;
-                    }
+            @Override
+            public void onStateChanged(@NonNull View p1, int state) {
+                switch (state) {
+                    case BottomSheetBehavior.STATE_COLLAPSED:
+                        onBackPressedCallback.setEnabled(false);
+                        break;
+                    case BottomSheetBehavior.STATE_EXPANDED:
+                        onBackPressedCallback.setEnabled(true);
+                    case BottomSheetBehavior.STATE_DRAGGING:
+                    case BottomSheetBehavior.STATE_HALF_EXPANDED:
+                    case BottomSheetBehavior.STATE_HIDDEN:
+                    case BottomSheetBehavior.STATE_SETTLING:
+                        break;
                 }
+            }
 
-                @Override
-                public void onSlide(@NonNull View bottomSheet, float slideOffset) {
-                    bottomEditorFragment.setOffset(slideOffset);
-                }              
-            });
+            @Override
+            public void onSlide(@NonNull View bottomSheet, float slideOffset) {
+                bottomEditorFragment.setOffset(slideOffset);
+            }
+        });
 
         // Display the persistent fragment
         getChildFragmentManager().beginTransaction()
@@ -269,31 +262,31 @@ public class MainFragment extends Fragment {
                 .commit();
     }
 
-	@Override
-	public void onSaveInstanceState(@NonNull Bundle outState) {
-		super.onSaveInstanceState(outState);
-		
-		Project current = FileManager.getInstance().getCurrentProject();
-		if (current != null) {
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+
+        Project current = FileManager.getInstance().getCurrentProject();
+        if (current != null) {
             outState.putString("current_project", current.mRoot.getAbsolutePath());
         }
-	}
+    }
 
     public void openFile(File file) {
-		if (!file.getName().endsWith(".java")) {
-			return;
-		}
-		
-		int pos = mAdapter.getPosition(file);
-		if (pos != -1) {
-			mPager.setCurrentItem(pos);
-		} else {
-			mAdapter.submitFile(file);
-			mPager.setCurrentItem(mAdapter.getPosition(file));
-		}
-		
-		mRoot.closeDrawer(GravityCompat.START, true);
-	}
+        if (!file.getName().endsWith(".java")) {
+            return;
+        }
+
+        int pos = mAdapter.getPosition(file);
+        if (pos != -1) {
+            mPager.setCurrentItem(pos);
+        } else {
+            mAdapter.submitFile(file);
+            mPager.setCurrentItem(mAdapter.getPosition(file));
+        }
+
+        mRoot.closeDrawer(GravityCompat.START, true);
+    }
 
     private void openProject(Project proj) {
         mProgressBar.setVisibility(View.VISIBLE);
@@ -317,11 +310,11 @@ public class MainFragment extends Fragment {
      * Saves the current opened editor
      */
     private void saveCurrent() {
-	    int position = mPager.getCurrentItem();
-	    String tag = "f" + mAdapter.getItemId(position);
-	    CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager().findFragmentByTag(tag);
-	    if (fragment != null) {
-	        fragment.save();
+        int position = mPager.getCurrentItem();
+        String tag = "f" + mAdapter.getItemId(position);
+        CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager().findFragmentByTag(tag);
+        if (fragment != null) {
+            fragment.save();
         }
     }
 
@@ -335,40 +328,65 @@ public class MainFragment extends Fragment {
             }
         }
     }
+
     private void compile() {
         saveAll();
 
-        ApkBuilder builder = new ApkBuilder(logViewModel, FileManager.getInstance().getCurrentProject());
+        ILogger logger = new ILogger() {
+            @Override
+            public void error(String message) {
+                logViewModel.e(LogViewModel.BUILD_LOG, message);
+            }
 
-        mToolbar.setSubtitle("Compiling");
+            @Override
+            public void warning(String message) {
+                logViewModel.w(LogViewModel.BUILD_LOG, message);
+            }
+
+            @Override
+            public void debug(String message) {
+                logViewModel.d(LogViewModel.BUILD_LOG, message);
+            }
+        };
         mProgressBar.setVisibility(View.VISIBLE);
-        builder.build((success, message) -> {
-            ApplicationLoader.showToast(message);
+        mToolbar.setSubtitle("Compiling");
 
-            if (mToolbar != null) {
-                mToolbar.setSubtitle(null);
-            }
-            if (mProgressBar != null) {
-                mProgressBar.setVisibility(View.GONE);
-            }
-            if (success && getContext() != null) {
-                Project project = FileManager.getInstance().getCurrentProject();
-                if (project != null) {
-                    File apkFile = new File(project.getBuildDirectory(), "bin/signed.apk");
-                    ApkInstaller.installApplication(getContext(), apkFile.getAbsolutePath());
-                }
-            }
-        });
+        requireActivity().startService(new Intent(requireContext(), CompilerService.class));
+        requireActivity().bindService(new Intent(requireContext(), CompilerService.class),
+                new ServiceConnection() {
+                    @Override
+                    public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+                        CompilerService.CompilerBinder binder = (CompilerService.CompilerBinder) iBinder;
+                        binder.getCompilerService().setLogger(logger);
+                        binder.getCompilerService().setOnResultListener((success, message) -> {
+                            if (mToolbar != null) {
+                                mToolbar.setSubtitle(null);
+                            }
+                            if (mProgressBar != null) {
+                                mProgressBar.setVisibility(View.GONE);
+                            }
+                            if (success && getActivity() != null) {
+                                File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
+                                ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath());
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onServiceDisconnected(ComponentName componentName) {
+
+                    }
+                }, Context.BIND_AUTO_CREATE);
     }
 
-    private class PageAdapter extends FragmentStateAdapter{
-        
+    private class PageAdapter extends FragmentStateAdapter {
+
         private final List<File> data = new ArrayList<>();
-        
+
         public PageAdapter(Fragment parent) {
             super(parent);
         }
-        
+
         public void submitList(List<File> files) {
             DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
                 @Override
@@ -397,13 +415,13 @@ public class MainFragment extends Fragment {
 
             mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
         }
-		
-		public void submitFile(File file) {
+
+        public void submitFile(File file) {
             mTabLayout.setVisibility(View.VISIBLE);
-			data.add(file);
-			notifyItemInserted(data.size());
-		}
-        
+            data.add(file);
+            notifyItemInserted(data.size());
+        }
+
         @Override
         public int getItemCount() {
             return data.size();
@@ -414,7 +432,7 @@ public class MainFragment extends Fragment {
         public Fragment createFragment(int p1) {
             return CodeEditorFragment.newInstance(data.get(p1));
         }
-        
+
         public File getItem(int position) {
             return data.get(position);
         }
@@ -423,15 +441,15 @@ public class MainFragment extends Fragment {
         public long getItemId(int position) {
             return data.get(position).getAbsolutePath().hashCode();
         }
-		
-		public int getPosition(File file) {
-			if (containsItem(file.getAbsolutePath().hashCode())) {
-				return data.indexOf(file);
-			}
-			return -1;
-		}
 
-		public List<File> getItems() {
+        public int getPosition(File file) {
+            if (containsItem(file.getAbsolutePath().hashCode())) {
+                return data.indexOf(file);
+            }
+            return -1;
+        }
+
+        public List<File> getItems() {
             return data;
         }
 

@@ -8,6 +8,7 @@ import com.android.sdklib.build.SealedApkException;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.model.Project;
+import com.tyron.code.service.ILogger;
 import com.tyron.code.util.exception.CompilationFailedException;
 
 import java.io.File;
@@ -26,13 +27,23 @@ public class ApkBuilder {
         void onComplete(boolean success, String message);
     }
 
-    private final LogViewModel log;
+    public interface TaskListener {
+        void onTaskStarted(String name, String message);
+    }
+
+    private final ILogger log;
     private final Project mProject;
     private final ExecutorService service = Executors.newFixedThreadPool(1);
 
-    public ApkBuilder(LogViewModel model, Project project) {
+    private TaskListener mTaskListener;
+
+    public ApkBuilder(ILogger model, Project project) {
         log = model;
         mProject = project;
+    }
+
+    public void setTaskListener(TaskListener listener) {
+        mTaskListener = listener;
     }
 
     public void build(OnResultListener listener) {
@@ -52,17 +63,21 @@ public class ApkBuilder {
     }
 
     private void doBuild() throws IOException, CompilationFailedException{
+        post(() -> mTaskListener.onTaskStarted("AAPT2", "Compiling resources"));
         AAPT2Compiler aapt2Compiler = new AAPT2Compiler(mProject);
         aapt2Compiler.run();
 
+        post(() -> mTaskListener.onTaskStarted("JAVAC", "Compiling java files"));
         JavaCompiler javaCompiler = new JavaCompiler(log, mProject);
         javaCompiler.compile();
 
+        post(() -> mTaskListener.onTaskStarted("D8", "Dexing/Merging source files"));
         D8Compiler d8Compiler = new D8Compiler(log, mProject);
         d8Compiler.compile();
 
         File binDir = new File(mProject.getBuildDirectory(), "bin");
 
+        post(() -> mTaskListener.onTaskStarted("APK Builder", "Packaging APK"));
         try {
             com.android.sdklib.build.ApkBuilder builder = new com.android.sdklib.build.ApkBuilder(
                     binDir + "/generated.apk",
@@ -91,6 +106,7 @@ public class ApkBuilder {
             throw new CompilationFailedException(e);
         }
 
+        post(() -> mTaskListener.onTaskStarted("APK Signer", "Signing APK"));
         ApkSigner signer = new ApkSigner(
                 binDir + "/generated.apk",
                 binDir + "/signed.apk",

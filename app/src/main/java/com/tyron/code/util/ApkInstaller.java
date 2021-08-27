@@ -28,7 +28,7 @@ public class ApkInstaller {
         }
     }
 
-    private static Uri uriFromFile(Context context, File file) {
+    public static Uri uriFromFile(Context context, File file) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             return FileProvider.getUriForFile(context, BuildConfig.APPLICATION_ID + ".provider", file);
         } else {

@@ -8,6 +8,7 @@ import com.tyron.code.SourceFileObject;
 import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
+import com.tyron.code.service.ILogger;
 import com.tyron.code.util.exception.CompilationFailedException;
 
 import java.io.File;
@@ -29,10 +30,10 @@ import javax.tools.StandardLocation;
 
 public class JavaCompiler {
 
-    private final LogViewModel logViewModel;
+    private final ILogger logViewModel;
     private final Project mProject;
 
-    public JavaCompiler(LogViewModel log, Project project) {
+    public JavaCompiler(ILogger log, Project project) {
         logViewModel = log;
         mProject = project;
     }
@@ -54,10 +55,10 @@ public class JavaCompiler {
         DiagnosticListener<JavaFileObject> diagnosticCollector = diagnostic -> {
             switch (diagnostic.getKind()) {
                 case ERROR:
-                    logViewModel.e(LogViewModel.BUILD_LOG, diagnostic.toString());
+                    logViewModel.error(diagnostic.toString());
                     break;
                 case WARNING:
-                    logViewModel.w(LogViewModel.BUILD_LOG, diagnostic.toString());
+                    logViewModel.warning(diagnostic.toString());
             }
         };
 

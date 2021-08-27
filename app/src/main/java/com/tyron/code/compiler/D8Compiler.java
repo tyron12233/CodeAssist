@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.tyron.code.parser.FileManager;
+import com.tyron.code.service.ILogger;
 import com.tyron.code.util.exception.CompilationFailedException;
 
 /**
@@ -36,11 +37,11 @@ public class D8Compiler {
 
 	private static final String TAG = D8Compiler.class.getSimpleName();
 
-	private final LogViewModel logViewModel;
+	private final ILogger logViewModel;
 	private final Project mProject;
 	private final DiagnosticsHandler diagnosticsHandler = new DiagnosticHandler();
 	
-	public D8Compiler(LogViewModel model, Project project) {
+	public D8Compiler(ILogger model, Project project) {
 		logViewModel = model;
 		mProject = project;
 	}
@@ -132,12 +133,12 @@ public class D8Compiler {
 	private class DiagnosticHandler implements DiagnosticsHandler {
 		@Override
 		public void error(Diagnostic diagnostic) {
-			logViewModel.e(LogViewModel.BUILD_LOG, diagnostic.getDiagnosticMessage());
+			logViewModel.error(diagnostic.getDiagnosticMessage());
 		}
 
 		@Override
 		public void warning(Diagnostic diagnostic) {
-			logViewModel.w(LogViewModel.BUILD_LOG, diagnostic.getDiagnosticMessage());
+			logViewModel.warning(diagnostic.getDiagnosticMessage());
 		}
 
 		@Override
