@@ -40,6 +40,7 @@ import com.tyron.code.completion.CompletionEngine;
 import com.tyron.code.editor.BottomEditorFragment;
 import com.tyron.code.editor.CodeEditorFragment;
 import com.tyron.code.editor.language.LanguageManager;
+import com.tyron.code.editor.log.AppLogFragment;
 import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.file.FileManagerFragment;
 import com.tyron.code.model.Project;
@@ -224,6 +225,8 @@ public class MainFragment extends Fragment {
 
         final BottomEditorFragment bottomEditorFragment = BottomEditorFragment.newInstance();
         mBehavior = BottomSheetBehavior.from(mBottomContainer);
+        mBehavior.setFitToContents(false);
+        mBehavior.setHalfExpandedRatio(0.3f);
         mBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
             @Override
             public void onStateChanged(@NonNull View p1, int state) {

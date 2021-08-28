@@ -8,8 +8,8 @@ import android.view.View;
 public class AndroidUtilities {
     
     public static int dp(float px) {
-        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_PX,
-                px, ApplicationLoader.applicationContext.getResources().getDisplayMetrics()));
+        return Math.round(ApplicationLoader.applicationContext
+				.getResources().getDisplayMetrics().density * px);
     }
 
 	/**

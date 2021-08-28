@@ -49,6 +49,7 @@
                 android:layout_height="match_parent"
                 android:layout_width="match_parent"
                 android:background="#2e2e2e"
+                app:behavior_hideable="false"
                 app:behavior_peekHeight="50dp"
                 app:layout_behavior="@string/bottom_sheet_behavior"/>
         </androidx.coordinatorlayout.widget.CoordinatorLayout>
