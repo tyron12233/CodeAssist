@@ -10,13 +10,12 @@
         android:layout_width="match_parent"
         android:layout_height="50dp"
         android:background="#212121"
-        android:visibility="visible"
         android:orientation="horizontal">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerview_shortcuts"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
+            android:layout_height="50dp"/>
 
     </LinearLayout>
     <com.google.android.material.tabs.TabLayout

@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentStatePagerAdapter;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.ViewPager;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
@@ -22,7 +23,13 @@ import com.google.android.material.tabs.TabLayoutMediator;
 import com.tyron.code.R;
 import com.tyron.code.editor.log.AppLogFragment;
 import com.tyron.code.editor.log.LogViewModel;
+import com.tyron.code.editor.shortcuts.ShortcutItem;
+import com.tyron.code.editor.shortcuts.ShortcutsAdapter;
 import com.tyron.code.util.AndroidUtilities;
+
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class BottomEditorFragment extends Fragment {
@@ -39,6 +46,8 @@ public class BottomEditorFragment extends Fragment {
     private ViewPager mPager;
     private PageAdapter mAdapter;
 
+    private RecyclerView mShortcutsRecyclerView;
+
     public BottomEditorFragment() {
 
     }
@@ -47,6 +56,7 @@ public class BottomEditorFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         mRoot = inflater.inflate(R.layout.bottom_editor_fragment, container, false);
         mRowLayout = mRoot.findViewById(R.id.row_layout);
+        mShortcutsRecyclerView = mRoot.findViewById(R.id.recyclerview_shortcuts);
         mPager = mRoot.findViewById(R.id.viewpager);
         mTabLayout = mRoot.findViewById(R.id.tablayout);
         return mRoot;
@@ -59,6 +69,10 @@ public class BottomEditorFragment extends Fragment {
         mAdapter = new PageAdapter(getChildFragmentManager());
         mPager.setAdapter(mAdapter);
         mTabLayout.setupWithViewPager(mPager);
+
+        LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false);
+        mShortcutsRecyclerView.setLayoutManager(layoutManager);
+        mShortcutsRecyclerView.setAdapter(new ShortcutsAdapter(getShortcuts()));
 
         setOffset(0f);
     }
@@ -75,6 +89,17 @@ public class BottomEditorFragment extends Fragment {
         mRowLayout.getLayoutParams()
                 .height = Math.round(AndroidUtilities.dp(50) * offset);
         mRowLayout.requestLayout();
+        mShortcutsRecyclerView.invalidate();
+    }
+
+    private List<ShortcutItem> getShortcuts() {
+        List<String> strings = List.of("<", ">", ";", "{", "}", ":");
+        return strings.stream()
+                .map(item -> {
+                    ShortcutItem it = new ShortcutItem();
+                    it.label = item;
+                    return it;
+                }).collect(Collectors.toList());
     }
 
     private static class PageAdapter extends FragmentStatePagerAdapter {

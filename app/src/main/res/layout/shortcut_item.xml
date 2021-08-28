@@ -4,8 +4,10 @@
     android:gravity="center"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content">
-    <ImageView
-        android:id="@+id/icon"
+    <TextView
+        android:id="@+id/shortcut_label"
+        android:gravity="center"
+        android:textSize="24sp"
         android:layout_width="48dp"
         android:layout_height="48dp"/>
 </LinearLayout>
