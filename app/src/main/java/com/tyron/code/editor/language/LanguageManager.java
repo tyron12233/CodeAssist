@@ -35,6 +35,15 @@ public class LanguageManager {
 			)
 		);
 	}
+
+	public boolean supports(File file) {
+		for (Language language : mLanguages) {
+			if (language.isApplicable(file)) {
+				return true;
+			}
+		}
+		return false;
+	}
 	
 	public EditorLanguage get(CodeEditor editor, File file) {
 		for (Language lang : mLanguages) {

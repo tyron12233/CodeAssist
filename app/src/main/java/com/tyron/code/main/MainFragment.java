@@ -39,6 +39,7 @@ import com.tyron.code.R;
 import com.tyron.code.completion.CompletionEngine;
 import com.tyron.code.editor.BottomEditorFragment;
 import com.tyron.code.editor.CodeEditorFragment;
+import com.tyron.code.editor.language.LanguageManager;
 import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.file.FileManagerFragment;
 import com.tyron.code.model.Project;
@@ -273,7 +274,7 @@ public class MainFragment extends Fragment {
     }
 
     public void openFile(File file) {
-        if (!file.getName().endsWith(".java")) {
+        if (!LanguageManager.getInstance().supports(file)) {
             return;
         }
 
@@ -359,6 +360,9 @@ public class MainFragment extends Fragment {
                         CompilerService.CompilerBinder binder = (CompilerService.CompilerBinder) iBinder;
                         binder.getCompilerService().setLogger(logger);
                         binder.getCompilerService().setOnResultListener((success, message) -> {
+                            if (!success) {
+                                mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+                            }
                             if (mToolbar != null) {
                                 mToolbar.setSubtitle(null);
                             }

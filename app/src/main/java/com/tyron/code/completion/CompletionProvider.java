@@ -180,31 +180,6 @@ public class CompletionProvider {
 			}
 		}
 	}
-	/*
-	 public CompletionList compileAndComplete(File file, String contents, long cursor) {
-	 SourceFileObject source = new SourceFileObject(file.toPath());
-	 String partial = partialIdentifier(contents, (int) cursor);
-	 boolean endsWithParen = endsWithParen(contents, (int) cursor);
-	 try (CompileTask task = compiler.compile(List.of(source))) {
-	 TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor); 
-	 switch (path.getLeaf().getKind()) {
-	 case IDENTIFIER:             
-	 return completeIdentifier(task, path, partial, endsWithParen);
-	 case MEMBER_SELECT:              
-	 return completeMemberSelect(task, path, partial, endsWithParen);
-	 case MEMBER_REFERENCE:
-	 return completeMemberReference(task, path, partial);
-	 case CASE:
-	 return completeSwitchConstant(task, path, partial);
-	 case IMPORT:
-	 return completeImport(qualifiedPartialIdentifier(contents.toString(), (int) cursor));
-	 default:
-	 CompletionList list = new CompletionList();
-	 addKeywords(path, partial, list);
-	 return list;
-	 }
-	 }
-	 }*/
 
 	/**
 	 * Use compileAndComplete instead for incremental compilation
@@ -765,7 +740,10 @@ public class CompletionProvider {
         if (!methods.containsKey(name)) {
             methods.put(name, new ArrayList<>());
         }
-        methods.get(name).add(method);
+        List<ExecutableElement> elements = methods.get(name);
+        if (elements != null) {
+            elements.add(method);
+        }
     }
 
     private CompletionItem packageItem(String name) {
@@ -852,9 +830,9 @@ public class CompletionProvider {
 			return "";
 		}
 		
-		String types = "";
+		StringBuilder types = new StringBuilder();
 		for (TypeMirror m : e.getThrownTypes()) {
-			types = types + (types.isEmpty() ? "" : ", ") + simpleType(m);
+			types.append((types.length() == 0) ? "" : ", ").append(simpleType(m));
 		}
 		
 		return " throws " + types;
@@ -869,9 +847,9 @@ public class CompletionProvider {
 
     private String getMethodLabel(ExecutableElement element) {
         String name = element.getSimpleName().toString();
-        String params = "";
+        StringBuilder params = new StringBuilder();
         for (VariableElement var : element.getParameters()) {
-            params = params + (params.isEmpty() ? "" : ", ") + simpleType(var.asType()) + " " + var.getSimpleName();
+            params.append((params.length() == 0) ? "" : ", ").append(simpleType(var.asType())).append(" ").append(var.getSimpleName());
         }
 
         return name + "(" + params + ")";
@@ -893,9 +871,7 @@ public class CompletionProvider {
                 return CircleDrawable.Kind.Interface;
 			case FIELD:
 				return CircleDrawable.Kind.Filed;
-		    case LOCAL_VARIABLE:
-			    return CircleDrawable.Kind.LocalVariable;
-			default:
+            default:
 				return CircleDrawable.Kind.LocalVariable;
         }
 	}
