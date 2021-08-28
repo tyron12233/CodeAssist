@@ -135,13 +135,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         mListView.setLayoutManager(mLayoutManager);
         mListView.setAdapter(mAdapter);
 
-        LinearLayout.LayoutParams mListViewLP = new LinearLayout.LayoutParams(-1, -2);
-        int margin = AndroidUtilities.dpToPx(6);
-        mListViewLP.setMargins(margin, margin, margin, margin);
-
-        layout.addView(mListView, mListViewLP);
-        
-        layout.setLayoutParams(new ViewGroup.LayoutParams(-1, -2));
+        layout.addView(mListView, new ViewGroup.LayoutParams(-1, -2));
 		
         mTip = new TextView(mEditor.getContext());
         mTip.setText(TIP);
