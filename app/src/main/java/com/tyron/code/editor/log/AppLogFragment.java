@@ -1,4 +1,5 @@
 package com.tyron.code.editor.log;
+import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import android.view.View;
@@ -42,11 +43,11 @@ public class AppLogFragment extends Fragment {
     }
   
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         FrameLayout root = new FrameLayout(requireContext());
         
         mLogView = new CodeEditor(requireContext());
-        mLogView.setTypefaceText(ResourcesCompat.getCachedFont(requireContext(), R.font.jetbrains_mono_regular));
+        mLogView.setTypefaceText(ResourcesCompat.getFont(requireContext(), R.font.jetbrains_mono_regular));
         root.addView(mLogView, new FrameLayout.LayoutParams(-1, -1));
         
         return root;
@@ -63,7 +64,7 @@ public class AppLogFragment extends Fragment {
         
         LogViewModel model = new ViewModelProvider(requireActivity())
                 .get(LogViewModel.class);
-        model.getLogs(id).observe(this, (log) -> {
+        model.getLogs(id).observe(getViewLifecycleOwner(), (log) -> {
             mLogView.setText(log);
             mLogView.setSelection(mLogView.getLineCount() - 1, 0, true);
         });

@@ -67,12 +67,12 @@ public class CompilerService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-
-        mProject = FileManager.getInstance().getCurrentProject();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+
+        mProject = FileManager.getInstance().getCurrentProject();
 
         Notification notification = setupNotification();
         startForeground(201, notification);
