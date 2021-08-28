@@ -473,13 +473,9 @@ public class CompletionProvider {
             DeclaredType type = (DeclaredType) var.asType();
             Element classElement = type.asElement();
 
-            if (classElement.getKind() == ElementKind.CLASS || classElement.getKind() == ElementKind.INTERFACE) {
-
-                Log.d("FINAL STEP", "Element is class or interface");
-
+            if (classElement.getKind() == ElementKind.INTERFACE) {
                 Map<String, List<ExecutableElement>> methods = new HashMap<>();
 
-                Log.d("FINAL STEP", "enclosed methods: " + classElement.getEnclosedElements().size());
                 for (Element enc : classElement.getEnclosedElements()) {
                     if (enc.getKind() == ElementKind.METHOD) {
                         if (enc.getModifiers().contains(Modifier.STATIC)) {
