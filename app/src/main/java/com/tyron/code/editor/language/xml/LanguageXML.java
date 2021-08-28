@@ -3,6 +3,8 @@ import com.tyron.code.editor.language.Language;
 import io.github.rosemoe.editor.interfaces.EditorLanguage;
 import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.editor.interfaces.CodeAnalyzer;
+import io.github.rosemoe.editor.text.TextAnalyzeResult;
+import io.github.rosemoe.editor.text.TextAnalyzer;
 import io.github.rosemoe.editor.widget.SymbolPairMatch;
 import io.github.rosemoe.editor.interfaces.NewlineHandler;
 import com.tyron.code.editor.language.xml.LanguageXML;
@@ -31,7 +33,9 @@ public class LanguageXML implements EditorLanguage {
 
 	@Override
 	public CodeAnalyzer getAnalyzer() {
-		return null;
+		return (content, colors, delegate) -> {
+
+		};
 	}
 
 	@Override
