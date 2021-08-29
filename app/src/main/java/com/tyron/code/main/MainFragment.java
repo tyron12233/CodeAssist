@@ -306,6 +306,10 @@ public class MainFragment extends Fragment {
         getChildFragmentManager().beginTransaction()
                 .replace(R.id.nav_root, FileManagerFragment.newInstance(root), "file_manager")
                 .commit();
+
+        if (FileManager.getInstance().getCurrentProject() != null) {
+            mToolbar.setTitle(FileManager.getInstance().getCurrentProject().mRoot.getName());
+        }
     }
 
     @Override
