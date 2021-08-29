@@ -77,6 +77,15 @@ public class CompilerService extends Service {
         Notification notification = setupNotification();
         startForeground(201, notification);
 
+        if (mProject == null) {
+            stopForeground(true);
+            updateNotification("Compilation failed", "Couldn't open project.");
+            if (onResultListener != null) {
+                onResultListener.onComplete(false, "Couldn't open project.");
+            }
+            return START_NOT_STICKY;
+        }
+
         Log.d("CompilerService", "Started compiler service");
         compile();
 
@@ -90,7 +99,7 @@ public class CompilerService extends Service {
         return new NotificationCompat.Builder(this, channelId)
                 .setContentTitle("CodeAssist")
                 .setSmallIcon(R.drawable.ic_launcher)
-                .setContentText("Compiling " + mProject.mRoot.getName())
+                .setContentText("Preparing")
                 .setPriority(Notification.PRIORITY_MIN)
                 .setOngoing(true)
             .build();

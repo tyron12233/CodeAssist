@@ -1,5 +1,6 @@
 package com.tyron.code.main;
 
+import androidx.annotation.NonNull;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
@@ -45,6 +46,14 @@ public class MainViewModel extends ViewModel {
         return files.get(currentPos);
     }
 
+    public void clear() {
+        mFiles.setValue(new ArrayList<>());
+    }
+
+    public void setFiles(@NonNull List<File> files) {
+        mFiles.setValue(files);
+    }
+
     public void addFile(File file) {
         List<File> files = getFiles().getValue();
         if (files == null) {
@@ -52,6 +61,15 @@ public class MainViewModel extends ViewModel {
         }
         files.add(file);
 
+        mFiles.setValue(files);
+    }
+
+    public void removeFile(File file) {
+        List<File> files = getFiles().getValue();
+        if (files == null) {
+            return;
+        }
+        files.remove(file);
         mFiles.setValue(files);
     }
 }

@@ -172,7 +172,8 @@ public class MainFragment extends Fragment {
         mTabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabUnselected(TabLayout.Tab p1) {
-                CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager().findFragmentByTag("f" + mAdapter.getItemId(p1.getPosition()));
+                CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager()
+                        .findFragmentByTag("f" + mAdapter.getItemId(p1.getPosition()));
                 if (fragment != null) {
                     fragment.save();
                 }
@@ -181,10 +182,27 @@ public class MainFragment extends Fragment {
             @Override
             public void onTabReselected(TabLayout.Tab p1) {
                 PopupMenu popup = new PopupMenu(requireActivity(), p1.view);
-                popup.getMenu().add("Close");
-                popup.getMenu().add("Close others");
-                popup.getMenu().add("Close all");
-                popup.setOnMenuItemClickListener(item -> true);
+                popup.getMenu().add(0, 0,  1, "Close");
+                popup.getMenu().add(0, 1, 2, "Close others");
+                popup.getMenu().add(0, 2, 3, "Close all");
+                popup.setOnMenuItemClickListener(item -> {
+                    switch (item.getItemId()) {
+                        case 0: mFilesViewModel.removeFile(mFilesViewModel.getCurrentFile()); break;
+                        case 1:
+                            File currentFile = mFilesViewModel.getCurrentFile();
+                            List<File> files = mFilesViewModel.getFiles().getValue();
+                            if (files != null) {
+                                files.clear();
+                                files.add(currentFile);
+                                mFilesViewModel.setFiles(files);
+                            }
+                            break;
+                        case 2:
+                            mFilesViewModel.clear();
+                    }
+
+                    return true;
+                });
                 popup.show();
             }
 
@@ -207,8 +225,7 @@ public class MainFragment extends Fragment {
             if (item.getItemId() == R.id.debug_create) {
 
                 final EditText et = new EditText(requireContext());
-                et.setHint("path");
-                et.setHintTextColor(0xffeaeaea);
+                et.setHint("Project root directory");
 
                 @SuppressLint("RestrictedApi")
                 AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
@@ -228,10 +245,10 @@ public class MainFragment extends Fragment {
             } else if (item.getItemId() == R.id.debug_refresh) {
                 Project project = FileManager.getInstance().getCurrentProject();
 
-                project.clear();
-                openProject(project);
-
-                ApplicationLoader.showToast("Project files have been refreshed.");
+                if (project != null) {
+                    project.clear();
+                    openProject(project);
+                }
             } else if (item.getItemId() == R.id.action_run) {
                 compile();
             } else if (item.getItemId() == R.id.action_format) {
@@ -319,6 +336,12 @@ public class MainFragment extends Fragment {
     }
 
     private void openProject(Project proj) {
+
+        if (!proj.isValidProject()) {
+            ApplicationLoader.showToast("Invalid project directory");
+            return;
+        }
+
         mProgressBar.setVisibility(View.VISIBLE);
         mToolbar.setTitle(proj.mRoot.getName());
         mToolbar.setSubtitle("Indexing");
@@ -472,6 +495,9 @@ public class MainFragment extends Fragment {
 
         @Override
         public long getItemId(int position) {
+            if (position > data.size()) {
+                return -1;
+            }
             return data.get(position).getAbsolutePath().hashCode();
         }
 
@@ -480,6 +506,14 @@ public class MainFragment extends Fragment {
                 return data.indexOf(file);
             }
             return -1;
+        }
+
+        public void removeItem(int position) {
+            if (position > data.size()) {
+                return;
+            }
+            data.remove(position);
+            notifyItemRemoved(position);
         }
 
         public List<File> getItems() {
