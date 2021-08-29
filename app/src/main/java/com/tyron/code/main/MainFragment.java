@@ -409,6 +409,7 @@ public class MainFragment extends Fragment {
         };
         mProgressBar.setVisibility(View.VISIBLE);
         mToolbar.setSubtitle("Compiling");
+        logViewModel.clear(LogViewModel.BUILD_LOG);
 
         requireActivity().startService(new Intent(requireContext(), CompilerService.class));
         requireActivity().bindService(new Intent(requireContext(), CompilerService.class),
