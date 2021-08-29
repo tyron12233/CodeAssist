@@ -161,7 +161,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
             }
 
             if (selected) {
-                mRoot.setBackgroundColor(0xfffe6262);
+                mRoot.setBackgroundColor(0x40000000);
             } else {
                 mRoot.setBackgroundColor(0xff2b2b2b);
             }
