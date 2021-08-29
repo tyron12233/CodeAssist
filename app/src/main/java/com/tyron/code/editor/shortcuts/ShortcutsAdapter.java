@@ -15,10 +15,19 @@ import java.util.List;
 
 public class ShortcutsAdapter extends RecyclerView.Adapter<ShortcutsAdapter.ViewHolder> {
 
+    public interface OnShortcutSelected {
+        void onShortcutClicked(ShortcutItem item, int position);
+    }
+
     private final List<ShortcutItem> mItems = new ArrayList<>();
+    private OnShortcutSelected mOnShortcutSelectedListener;
 
     public ShortcutsAdapter(List<ShortcutItem> items) {
         mItems.addAll(items);
+    }
+
+    public void setOnShortcutSelectedListener(OnShortcutSelected listener) {
+        mOnShortcutSelectedListener = listener;
     }
 
     @NonNull
@@ -27,6 +36,13 @@ public class ShortcutsAdapter extends RecyclerView.Adapter<ShortcutsAdapter.View
         View view = LayoutInflater.from(parent.getContext())
                 .inflate(R.layout.shortcut_item, parent, false);
         ViewHolder holder = new ViewHolder(view);
+
+        view.setOnClickListener(view1 -> {
+            int position = holder.getBindingAdapterPosition();
+            if (position != RecyclerView.NO_POSITION && mOnShortcutSelectedListener != null) {
+                mOnShortcutSelectedListener.onShortcutClicked(mItems.get(position), position);
+            }
+        });
         return holder;
     }
 

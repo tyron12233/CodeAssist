@@ -13,12 +13,16 @@ import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.editor.language.LanguageManager;
+import com.tyron.code.editor.shortcuts.ShortcutAction;
+import com.tyron.code.editor.shortcuts.ShortcutItem;
 import com.tyron.code.parser.FileManager;
 
 import java.io.File;
 
+import io.github.rosemoe.editor.text.Cursor;
 import io.github.rosemoe.editor.widget.CodeEditor;
 import io.github.rosemoe.editor.widget.schemes.SchemeDarcula;
 
@@ -86,5 +90,13 @@ public class CodeEditorFragment extends Fragment {
     
     public void save() {
         FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
+    }
+
+    public void performShortcut(ShortcutItem item) {
+        for (ShortcutAction action : item.actions) {
+            if (action.isApplicable(item.kind)) {
+                action.apply(mEditor, item);
+            }
+        }
     }
 }

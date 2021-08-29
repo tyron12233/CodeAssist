@@ -1,16 +1,10 @@
 package com.tyron.code.editor.shortcuts;
 
-public class ShortcutAction {
-    public enum Kind {
-        TextEdit,
-        CursorMove
-    }
+import io.github.rosemoe.editor.widget.CodeEditor;
 
-    public Kind kind;
+public interface ShortcutAction {
 
-    public String data;
+    boolean isApplicable(String kind);
 
-    public int start;
-
-    public int end;
+    void apply(CodeEditor editor, ShortcutItem item);
 }

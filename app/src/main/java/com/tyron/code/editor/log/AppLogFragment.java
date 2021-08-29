@@ -48,6 +48,7 @@ public class AppLogFragment extends Fragment {
     }
     
     private int id;
+    private NestedScrollView mRoot;
     private TextView mLogView;
     
     public AppLogFragment() {
@@ -62,8 +63,8 @@ public class AppLogFragment extends Fragment {
   
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        NestedScrollView root = new NestedScrollView(requireContext());
-        root.setFillViewport(true);
+        mRoot = new NestedScrollView(requireContext());
+        mRoot.setFillViewport(true);
 
         mLogView = new TextView(requireContext());
         mLogView.setTypeface(ResourcesCompat.getFont(requireContext(), R.font.jetbrains_mono_regular));
@@ -71,8 +72,8 @@ public class AppLogFragment extends Fragment {
         mLogView.setVerticalScrollBarEnabled(true);
         mLogView.setTextColor(0xffFFFFFF);
 
-        root.addView(mLogView, new FrameLayout.LayoutParams(-1, -1));
-        return root;
+        mRoot.addView(mLogView, new FrameLayout.LayoutParams(-1, -1));
+        return mRoot;
     }
 
     @Override
@@ -109,5 +110,6 @@ public class AppLogFragment extends Fragment {
             builder.append("\n");
         }
         mLogView.setText(builder);
+        mRoot.scrollTo(0, mLogView.getBottom());
     }
 }

@@ -41,6 +41,8 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
 
     private OnClickListener onClickListener;
     private OnLongClickListener longClickListener;
+
+    private int mCurrentSelected = RecyclerView.NO_POSITION;
 	
     @NonNull
     @Override
@@ -75,7 +77,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
     @Override
     public void onBindViewHolder(CompletionItemAdapter.ViewHolder holder, int position) {
         CompletionItem item = items.get(position);
-        holder.bind(item);
+        holder.bind(item, position == mCurrentSelected);
     }
 
     @Override
@@ -113,8 +115,21 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
         onClickListener = listener;
     }
 
+    public void setSelection(int position) {
+        int old = mCurrentSelected;
+        mCurrentSelected = position;
+
+        if (old != RecyclerView.NO_POSITION) {
+            notifyItemChanged(old);
+        }
+
+        notifyItemChanged(position);
+    }
+
 
     public class ViewHolder extends RecyclerView.ViewHolder {
+
+        private final View mRoot;
 
         private final TextView mLabel;
         private final TextView mDesc;
@@ -122,13 +137,14 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
 
         public ViewHolder(View view) {
             super(view);
+            mRoot = view;
 
             mLabel = view.findViewById(R.id.result_item_label);
             mDesc = view.findViewById(R.id.result_item_desc);
             mIcon = view.findViewById(R.id.result_item_image);
         }
 
-        public void bind(CompletionItem item) {
+        public void bind(CompletionItem item, boolean selected) {
             mLabel.setText(item.label);
             mDesc.setText(item.desc);
 
@@ -142,6 +158,12 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
 
                     mLabel.setText(spannableString);
                 }
+            }
+
+            if (selected) {
+                mRoot.setBackgroundColor(0xfffe6262);
+            } else {
+                mRoot.setBackgroundColor(0xff2b2b2b);
             }
             
             mIcon.setVisibility(View.VISIBLE);

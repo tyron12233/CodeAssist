@@ -9,7 +9,7 @@ import com.tyron.code.completion.PruneMethodBodies;
 public class CircleDrawable extends Drawable {
     
     public enum Kind {
-        Method("M", 0xffe92e2e),
+        Method("m", 0xffe92e2e),
         Interface("I", 0xffcc7832),
 		Filed("F", 0xffcc7832),
         Class("C", 0xff1c9344),
@@ -52,7 +52,7 @@ public class CircleDrawable extends Drawable {
         mTextPaint = new Paint();
         mTextPaint.setColor(0xffffffff);
         mTextPaint.setAntiAlias(true);
-        mTextPaint.setTextSize(AndroidUtilities.dp(20));
+        mTextPaint.setTextSize(AndroidUtilities.dp(14));
         mTextPaint.setTextAlign(Paint.Align.CENTER);
     }
     

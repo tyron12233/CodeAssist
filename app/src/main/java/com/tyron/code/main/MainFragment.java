@@ -18,12 +18,15 @@ import android.widget.LinearLayout;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
@@ -51,6 +54,8 @@ import com.tyron.code.util.ApkInstaller;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executors;
@@ -79,6 +84,8 @@ public class MainFragment extends Fragment {
     private TabLayout mTabLayout;
     private ViewPager2 mPager;
     private PageAdapter mAdapter;
+
+    private MainViewModel mFilesViewModel;
 
     public MainFragment() {
 
@@ -112,7 +119,7 @@ public class MainFragment extends Fragment {
         mProgressBar.setIndeterminate(true);
         mProgressBar.setVisibility(View.GONE);
 
-        mAdapter = new PageAdapter(this);
+        mAdapter = new PageAdapter(getChildFragmentManager(), getLifecycle());
 
         mPager = new ViewPager2(requireContext());
         mPager.setAdapter(mAdapter);
@@ -125,7 +132,9 @@ public class MainFragment extends Fragment {
 
         requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), onBackPressedCallback);
         logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
-
+        mFilesViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
+        mFilesViewModel.getFiles().observe(getViewLifecycleOwner(), mAdapter::submitList);
+        mFilesViewModel.currentPosition.observe(getViewLifecycleOwner(), mPager::setCurrentItem);
         return mRoot;
     }
 
@@ -186,6 +195,13 @@ public class MainFragment extends Fragment {
         });
         mTabLayout.setVisibility(View.GONE);
         new TabLayoutMediator(mTabLayout, mPager, (tab, pos) -> tab.setText(mAdapter.getItem(pos).getName())).attach();
+
+        mPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                mFilesViewModel.updateCurrentPosition(position);
+            }
+        });
 
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_create) {
@@ -269,6 +285,7 @@ public class MainFragment extends Fragment {
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
+        saveAll();
 
         Project current = FileManager.getInstance().getCurrentProject();
         if (current != null) {
@@ -285,8 +302,8 @@ public class MainFragment extends Fragment {
         if (pos != -1) {
             mPager.setCurrentItem(pos);
         } else {
-            mAdapter.submitFile(file);
-            mPager.setCurrentItem(mAdapter.getPosition(file));
+            mFilesViewModel.addFile(file);
+            mFilesViewModel.updateCurrentPosition(mAdapter.getPosition(file));
         }
 
         mRoot.closeDrawer(GravityCompat.START, true);
@@ -390,8 +407,8 @@ public class MainFragment extends Fragment {
 
         private final List<File> data = new ArrayList<>();
 
-        public PageAdapter(Fragment parent) {
-            super(parent);
+        public PageAdapter(FragmentManager fm, Lifecycle lifecycle) {
+            super(fm, lifecycle);
         }
 
         public void submitList(List<File> files) {

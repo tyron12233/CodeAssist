@@ -112,7 +112,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         
         RelativeLayout layout = new RelativeLayout(mEditor.getContext());
         setContentView(layout);
-        
+
         mAdapter = new CompletionItemAdapter();
         mAdapter.setOnItemClickListener(new CompletionItemAdapter.OnClickListener() {
                 @Override
@@ -128,7 +128,12 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         mListView = new RecyclerView(mEditor.getContext()) {
 			@Override
 			public void onMeasure(int widthSpec, int heightSpec) {
-				heightSpec = MeasureSpec.makeMeasureSpec(mMaxHeight, MeasureSpec.AT_MOST);
+			    // we subtract the height of the shortcuts view so the window wont obscure it
+                int height = mMaxHeight - AndroidUtilities.dp(38);
+                if (height < 1) {
+                    height = mMaxHeight;
+                }
+				heightSpec = MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST);
 				super.onMeasure(widthSpec, heightSpec);
 			}
 		};
@@ -154,6 +159,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         setLoading(true);
 		setWindowLayoutMode(ViewGroup.LayoutParams.MATCH_PARENT,
 				ViewGroup.LayoutParams.WRAP_CONTENT);
+
         
     }
     
@@ -229,7 +235,6 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             return;
         }
         mCurrent++;
-        mAdapter.notifyDataSetChanged();
         ensurePosition();
     }
 
@@ -241,7 +246,6 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             return;
         }
         mCurrent--;
-        mAdapter.notifyDataSetChanged();
         ensurePosition();
     }
 
@@ -250,6 +254,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      */
     private void ensurePosition() {
         mListView.scrollToPosition(mCurrent);
+        mAdapter.setSelection(mCurrent);
     }
 
     /**
@@ -258,6 +263,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     public void select() {
         select(mCurrent);
     }
+
+    private String selectedItem;
 
     /**
      * Select the given position
@@ -269,14 +276,15 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         Cursor cursor = mEditor.getCursor();
         if (!cursor.isSelected()) {
             mCancelShowUp = true;
-			
+
 			int length = mLastPrefix.length();
 			
 			if (mLastPrefix.contains(".")) {
 				length -= mLastPrefix.lastIndexOf(".") + 1;
 			}
             mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - length, cursor.getLeftLine(), cursor.getLeftColumn());
-			
+
+			selectedItem = item.commit;
             cursor.onCommitText(item.commit);
 			
             if (item.cursorOffset != item.commit.length()) {
@@ -331,6 +339,12 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         if (mCancelShowUp) {
             return;
         }
+
+        if (getAfterLastDot(mLastPrefix).equals(selectedItem)) {
+            selectedItem = "";
+            return;
+        }
+
         setLoading(true);
         mLastPrefix = prefix;
         mRequestTime = System.currentTimeMillis();
@@ -351,6 +365,11 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         if (mRequestTime != requestTime) {
             return;
         }
+
+        if (mLastPrefix.equals(selectedItem)) {
+            return;
+        }
+
         mEditor.post(() -> {
             setLoading(false);
             if (results == null || results.isEmpty()) {
@@ -359,7 +378,9 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             }
 			
 			mAdapter.attachAttributes(this, results);
+            mListView.scrollToPosition(0);
             mCurrent = 0;
+            mAdapter.setSelection(0);
 			
             if (!isShowing()) {
 				show();
@@ -403,5 +424,14 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
 
     }
 
+    private String getAfterLastDot(String str) {
+        if (str == null) {
+            return "";
+        }
+        if (str.contains(".")) {
+            str = str.substring(str.lastIndexOf(".") + 1);
+        }
+        return str;
+    }
 }
 

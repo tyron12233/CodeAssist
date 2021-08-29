@@ -50,7 +50,7 @@
                 android:layout_width="match_parent"
                 android:background="#2e2e2e"
                 app:behavior_hideable="false"
-                app:behavior_peekHeight="50dp"
+                app:behavior_peekHeight="38dp"
                 app:layout_behavior="@string/bottom_sheet_behavior"/>
         </androidx.coordinatorlayout.widget.CoordinatorLayout>
     </LinearLayout>

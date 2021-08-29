@@ -1,7 +1,7 @@
 package com.tyron.code.editor;
 
+import android.annotation.SuppressLint;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,24 +12,26 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentStatePagerAdapter;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.ViewPager;
-import androidx.viewpager2.adapter.FragmentStateAdapter;
-import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.tabs.TabLayout;
-import com.google.android.material.tabs.TabLayoutMediator;
 import com.tyron.code.R;
 import com.tyron.code.editor.log.AppLogFragment;
 import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.editor.shortcuts.ShortcutItem;
 import com.tyron.code.editor.shortcuts.ShortcutsAdapter;
+import com.tyron.code.editor.shortcuts.action.CursorMoveAction;
+import com.tyron.code.editor.shortcuts.action.TextInsertAction;
+import com.tyron.code.main.MainViewModel;
 import com.tyron.code.util.AndroidUtilities;
 
+import java.io.File;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class BottomEditorFragment extends Fragment {
@@ -48,6 +50,8 @@ public class BottomEditorFragment extends Fragment {
 
     private RecyclerView mShortcutsRecyclerView;
 
+    private MainViewModel mFilesViewModel;
+
     public BottomEditorFragment() {
 
     }
@@ -59,6 +63,9 @@ public class BottomEditorFragment extends Fragment {
         mShortcutsRecyclerView = mRoot.findViewById(R.id.recyclerview_shortcuts);
         mPager = mRoot.findViewById(R.id.viewpager);
         mTabLayout = mRoot.findViewById(R.id.tablayout);
+
+        mFilesViewModel = new ViewModelProvider(requireActivity())
+                .get(MainViewModel.class);
         return mRoot;
     }
 
@@ -70,36 +77,67 @@ public class BottomEditorFragment extends Fragment {
         mPager.setAdapter(mAdapter);
         mTabLayout.setupWithViewPager(mPager);
 
+        ShortcutsAdapter adapter = new ShortcutsAdapter(getShortcuts());
         LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false);
         mShortcutsRecyclerView.setLayoutManager(layoutManager);
-        mShortcutsRecyclerView.setAdapter(new ShortcutsAdapter(getShortcuts()));
+        mShortcutsRecyclerView.setAdapter(adapter);
+
+        adapter.setOnShortcutSelectedListener((item, pos) -> {
+            File currentFile = mFilesViewModel.getCurrentFile();
+            if (currentFile != null) {
+                CodeEditorFragment fragment = (CodeEditorFragment) getParentFragmentManager()
+                        .findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
+                if (fragment != null) {
+                    fragment.performShortcut(item);
+                }
+            }
+        });
 
         setOffset(0f);
     }
 
     public void setOffset(float offset) {
+        if (mRowLayout == null) {
+            return;
+        }
 
         if (offset >= 0.50f) {
             float invertedOffset = 0.5f - offset;
             setRowOffset(((invertedOffset + 0.5f) * 2f));
+        } else {
+            if (mRowLayout.getHeight() != AndroidUtilities.dp(30)) {
+                setRowOffset(1f);
+            }
         }
     }
 
     private void setRowOffset(float offset) {
         mRowLayout.getLayoutParams()
-                .height = Math.round(AndroidUtilities.dp(50) * offset);
+                .height = Math.round(AndroidUtilities.dp(38) * offset);
         mRowLayout.requestLayout();
-        mShortcutsRecyclerView.invalidate();
     }
 
+    @SuppressLint("NewApi")
+    @SuppressWarnings("all") // List.of(...)
     private List<ShortcutItem> getShortcuts() {
         List<String> strings = List.of("<", ">", ";", "{", "}", ":");
-        return strings.stream()
+        List<ShortcutItem> items = strings.stream()
                 .map(item -> {
                     ShortcutItem it = new ShortcutItem();
                     it.label = item;
+                    it.kind = "textinsert";
+                    it.actions = List.of(new TextInsertAction());
                     return it;
                 }).collect(Collectors.toList());
+        List<String> arrows = List.of("→", "←", "↑", "↓");
+        Collections.addAll(items,
+                new ShortcutItem(List.of(new CursorMoveAction(CursorMoveAction.Direction.UP, 1)),"↑", "cursormove"),
+                new ShortcutItem(List.of(new CursorMoveAction(CursorMoveAction.Direction.DOWN, 1)),"↓", "cursormove"),
+                new ShortcutItem(List.of(new CursorMoveAction(CursorMoveAction.Direction.LEFT, 1)),"←", "cursormove"),
+                new ShortcutItem(List.of(new CursorMoveAction(CursorMoveAction.Direction.RIGHT, 1)), "→", "cursormove")
+        );
+
+        return items;
     }
 
     private static class PageAdapter extends FragmentStatePagerAdapter {
