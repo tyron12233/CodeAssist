@@ -92,7 +92,7 @@ public class FileManagerFragment extends Fragment {
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         
-        mAdapter.submitFile(mRootFile);
+        mAdapter.submitFile(mCurrentFile);
         mAdapter.setOnItemClickListener((file, position) -> {
             if (position == 0) {
                 if (!mCurrentFile.equals(mRootFile)) {
@@ -109,6 +109,13 @@ public class FileManagerFragment extends Fragment {
                 check(file);
             }
         });
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+
+        outState.putSerializable("currentDir", mCurrentFile);
     }
 	
 	private void openFile(File file) {
