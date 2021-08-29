@@ -234,6 +234,15 @@ public class MainFragment extends Fragment {
                 ApplicationLoader.showToast("Project files have been refreshed.");
             } else if (item.getItemId() == R.id.action_run) {
                 compile();
+            } else if (item.getItemId() == R.id.action_format) {
+                File file = mAdapter.getItem(mPager.getCurrentItem());
+                if (file != null) {
+                    CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager()
+                            .findFragmentByTag("f" + file.getAbsolutePath().hashCode());
+                    if (fragment != null) {
+                        fragment.format();
+                    }
+                }
             }
 
             return false;

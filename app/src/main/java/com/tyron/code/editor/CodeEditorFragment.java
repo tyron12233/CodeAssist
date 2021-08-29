@@ -99,4 +99,10 @@ public class CodeEditorFragment extends Fragment {
             }
         }
     }
+
+    public void format() {
+        if (mEditor != null) {
+            mEditor.formatCodeAsync();
+        }
+    }
 }

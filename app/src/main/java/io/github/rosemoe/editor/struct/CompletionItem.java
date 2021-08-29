@@ -17,6 +17,8 @@ package io.github.rosemoe.editor.struct;
 
 import android.graphics.drawable.Drawable;
 
+import androidx.annotation.Nullable;
+
 import java.util.Comparator;
 import com.tyron.code.model.TextEdit;
 import java.util.List;
@@ -102,5 +104,25 @@ public class CompletionItem {
         return this;
     }
 
+    @Override
+    public boolean equals(@Nullable Object obj) {
+        if (obj == null) {
+            return false;
+        }
+        if (obj instanceof CompletionItem) {
+            CompletionItem that = (CompletionItem) obj;
+            if (!that.commit.equals(this.commit)) {
+                return false;
+            }
+            if (!that.label.equals(this.label)) {
+                return false;
+            }
+            if (that.cursorOffset != this.cursorOffset) {
+                return false;
+            }
+            return true;
+        }
+        return false;
+    }
 }
 

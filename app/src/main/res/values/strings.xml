@@ -3,10 +3,10 @@
 
     <string name="app_name">CodeAssist</string>
     <string name="hello_world">Hello world!</string>
- <item name="paste" type="string">Paste</item>
+    <item name="paste" type="string">Paste</item>
     <item name="copy" type="string">Copy</item>
-    <item name="selectAll" type="string" formatted="true">Select All</item>
-    <item name="saveToProject" type="string" translatable="false" >Project</item>
+    <item name="selectAll" formatted="true" type="string">Select All</item>
+    <item name="saveToProject" translatable="false" type="string">Project</item>
     <item name="cut" type="string">Cut</item>
     <item name="last" type="string">Last</item>
     <item name="next" type="string">Next</item>
@@ -16,6 +16,20 @@
     <item name="cancel" type="string">Cancel</item>
     <item name="text_to_search" type="string">Text to search</item>
 
-    <item name="more" type="string" translatable="false" >More</item>
+    <item name="more" translatable="false" type="string">More</item>
+    <!-- Preference Titles -->
+    <string name="messages_header">Messages</string>
+    <string name="sync_header">Sync</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">Your signature</string>
+    <string name="reply_title">Default reply action</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">Sync email periodically</string>
+    <string name="attachment_title">Download incoming attachments</string>
+    <string name="attachment_summary_on">Automatically download attachments for incoming emails
+    </string>
+    <string name="attachment_summary_off">Only download attachments when manually requested</string>
 
 </resources>
