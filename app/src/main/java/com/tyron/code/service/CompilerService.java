@@ -83,7 +83,7 @@ public class CompilerService extends Service {
             if (onResultListener != null) {
                 onResultListener.onComplete(false, "Couldn't open project.");
             }
-            return START_NOT_STICKY;
+            return START_STICKY;
         }
 
         Log.d("CompilerService", "Started compiler service");

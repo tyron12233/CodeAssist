@@ -1,8 +1,11 @@
 package com.tyron.code.util;
+import android.app.Activity;
+import android.util.Log;
 import android.util.TypedValue;
 import com.tyron.code.ApplicationLoader;
 import android.view.ViewGroup;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 
 @SuppressWarnings("unused")
 public class AndroidUtilities {
@@ -20,6 +23,21 @@ public class AndroidUtilities {
 	public static int dpToPx(float dp) {
 		return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
 				dp, ApplicationLoader.applicationContext.getResources().getDisplayMetrics()));
+	}
+
+	public static void hideKeyboard(View view) {
+		if (view == null) {
+			return;
+		}
+		try {
+			InputMethodManager imm = (InputMethodManager) view.getContext().getSystemService(Activity.INPUT_METHOD_SERVICE);
+			if (!imm.isActive()) {
+				return;
+			}
+			imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+		} catch (Exception e) {
+			Log.d("AndroidUtilities", "Failed to close keyboard " + e.getMessage());
+		}
 	}
 	
 	public static int getHeight(ViewGroup viewGroup) {

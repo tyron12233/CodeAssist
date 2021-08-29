@@ -37,6 +37,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
+import com.sun.tools.javac.jvm.Code;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.completion.CompletionEngine;
@@ -50,6 +51,7 @@ import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.service.CompilerService;
 import com.tyron.code.service.ILogger;
+import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ApkInstaller;
 
 import java.io.File;
@@ -416,6 +418,13 @@ public class MainFragment extends Fragment {
                         CompilerService.CompilerBinder binder = (CompilerService.CompilerBinder) iBinder;
                         binder.getCompilerService().setLogger(logger);
                         binder.getCompilerService().setOnResultListener((success, message) -> {
+                            if (mToolbar != null) {
+                                mToolbar.setSubtitle(null);
+                            }
+                            if (mProgressBar != null) {
+                                AndroidUtilities.hideKeyboard(mProgressBar);
+                                mProgressBar.setVisibility(View.GONE);
+                            }
                             if (!success) {
                                 mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
                             }
@@ -432,6 +441,7 @@ public class MainFragment extends Fragment {
                             mToolbar.setSubtitle(null);
                         }
                         if (mProgressBar != null) {
+                            AndroidUtilities.hideKeyboard(mProgressBar);
                             mProgressBar.setVisibility(View.GONE);
                         }
                     }
