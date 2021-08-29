@@ -299,15 +299,17 @@ public class MainFragment extends Fragment {
                 .replace(R.id.persistent_sheet, bottomEditorFragment)
                 .commit();
 
-        File root;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            root = requireActivity().getExternalFilesDir(null);
-        } else {
-            root = Environment.getExternalStorageDirectory();
+        if (getChildFragmentManager().findFragmentByTag("file_manager") == null) {
+            File root;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                root = requireActivity().getExternalFilesDir(null);
+            } else {
+                root = Environment.getExternalStorageDirectory();
+            }
+            getChildFragmentManager().beginTransaction()
+                    .replace(R.id.nav_root, FileManagerFragment.newInstance(root), "file_manager")
+                    .commit();
         }
-        getChildFragmentManager().beginTransaction()
-                .replace(R.id.nav_root, FileManagerFragment.newInstance(root), "file_manager")
-                .commit();
 
         if (FileManager.getInstance().getCurrentProject() != null) {
             mToolbar.setTitle(FileManager.getInstance().getCurrentProject().mRoot.getName());

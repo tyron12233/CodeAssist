@@ -1,5 +1,5 @@
 package com.tyron.code.compiler;
-import android.text.TextUtils;
+
 import android.util.Log;
 
 import java.io.File;
@@ -8,6 +8,8 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.model.Project;
 import java.util.List;
 import java.util.ArrayList;
+
+import com.tyron.code.service.ILogger;
 import com.tyron.code.util.BinaryExecutor;
 import com.tyron.code.util.exception.CompilationFailedException;
 import com.tyron.code.parser.FileManager;
@@ -16,9 +18,11 @@ public class AAPT2Compiler {
 
 	private static final String TAG = AAPT2Compiler.class.getSimpleName();
 
-	private Project mProject;
+	private final Project mProject;
+	private final ILogger mLogger;
 
-	public AAPT2Compiler(Project project) {
+	public AAPT2Compiler(ILogger log, Project project) {
+		mLogger = log;
 		mProject = project;
 	}
 
@@ -29,7 +33,7 @@ public class AAPT2Compiler {
 
 	private void compileProject() throws IOException, CompilationFailedException {
 
-		Log.d(TAG, "Compiling project");
+		mLogger.debug("Compiling project resources.");
 
 		FileManager.deleteDir(getOutputPath());
 
@@ -53,8 +57,13 @@ public class AAPT2Compiler {
 
 	private void compileLibraries() throws IOException, CompilationFailedException {
 
+		mLogger.debug("Compiling libraries.");
+
 		for (File file : mProject.getLibraries()) {
 			File parent = file.getParentFile();
+			if (parent == null) {
+				throw new IOException("Library folder doesn't exist");
+			}
 			File[] files = parent.listFiles();
 			if (files == null) {
 				continue;
@@ -83,6 +92,8 @@ public class AAPT2Compiler {
 	}
 	
 	private void link() throws IOException, CompilationFailedException {
+		mLogger.debug("Linking resources");
+
 		List<String> args = new ArrayList<>();
 		
 		args.add(getBinary().getAbsolutePath());
@@ -133,16 +144,26 @@ public class AAPT2Compiler {
 		}
 	}
 	
-	private File getOutputPath() {
+	private File getOutputPath() throws IOException {
 		File file = new File(mProject.getBuildDirectory(), "bin/res");
-		file.mkdirs();
+		if (!file.exists()) {
+			if (!file.mkdirs()) {
+				throw new IOException("Failed to get resource directory");
+			}
+		}
 		return file;
 	}
 
 	private File createNewFile(File parent, String name) throws IOException {
         File createdFile = new File(parent, name);
-		parent.mkdirs();
-		createdFile.createNewFile();
+        if (!parent.exists()) {
+			if (!parent.mkdirs()) {
+				throw new IOException("Unable to create directories");
+			}
+		}
+		if (!createdFile.createNewFile()) {
+			throw new IOException("Unable to create file " + name);
+		}
 		return createdFile;
 	}
 

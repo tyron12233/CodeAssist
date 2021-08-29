@@ -62,9 +62,9 @@ public class ApkBuilder {
         ApplicationLoader.applicationHandler.post(runnable);
     }
 
-    private void doBuild() throws IOException, CompilationFailedException{
+    private void doBuild() throws IOException, CompilationFailedException {
         post(() -> mTaskListener.onTaskStarted("AAPT2", "Compiling resources"));
-        AAPT2Compiler aapt2Compiler = new AAPT2Compiler(mProject);
+        AAPT2Compiler aapt2Compiler = new AAPT2Compiler(log, mProject);
         aapt2Compiler.run();
 
         post(() -> mTaskListener.onTaskStarted("JAVAC", "Compiling java files"));
