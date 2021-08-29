@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 	<style name="CodeEditorDialog" parent="@style/ThemeOverlay.MaterialComponents.MaterialAlertDialog">
-		<item name="android:background">#FF2B2B2B</item>
 		<item name="colorOnSurface">#FFFEFEFE</item>
 		<item name="buttonBarPositiveButtonStyle">@style/PositiveButtonStyle</item>
 		<item name="buttonBarNegativeButtonStyle">@style/PositiveButtonStyle</item>
+		<item name="android:windowBackground">@color/colorSurface</item>
 	</style>
+
 	
 	<style name="PositiveButtonStyle" parent="@style/Widget.MaterialComponents.Button">
-		<item name="android:textColor">#ffcc7832</item>
+		<item name="android:textColor">@color/colorPrimary</item>
 		<item name="android:background">@android:color/transparent</item>
 	</style>
 </resources>

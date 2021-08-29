@@ -16,9 +16,6 @@ import io.github.rosemoe.editor.langs.java.Tokens;
 import io.github.rosemoe.editor.interfaces.NewlineHandler.HandleResult;
 import android.util.Log;
 
-import com.google.googlejavaformat.java.Formatter;
-import com.google.googlejavaformat.java.FormatterException;
-
 public class JavaLanguage implements EditorLanguage {
     
     private CodeEditor mEditor;
