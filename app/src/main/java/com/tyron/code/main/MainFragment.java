@@ -417,13 +417,7 @@ public class MainFragment extends Fragment {
                         binder.getCompilerService().setLogger(logger);
                         binder.getCompilerService().setOnResultListener((success, message) -> {
                             if (!success) {
-                                mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
-                            }
-                            if (mToolbar != null) {
-                                mToolbar.setSubtitle(null);
-                            }
-                            if (mProgressBar != null) {
-                                mProgressBar.setVisibility(View.GONE);
+                                mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
                             }
                             if (success && getActivity() != null) {
                                 File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
@@ -434,7 +428,12 @@ public class MainFragment extends Fragment {
 
                     @Override
                     public void onServiceDisconnected(ComponentName componentName) {
-
+                        if (mToolbar != null) {
+                            mToolbar.setSubtitle(null);
+                        }
+                        if (mProgressBar != null) {
+                            mProgressBar.setVisibility(View.GONE);
+                        }
                     }
                 }, Context.BIND_AUTO_CREATE);
     }

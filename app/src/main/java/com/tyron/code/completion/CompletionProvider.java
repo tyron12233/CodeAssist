@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
-import java.util.logging.Logger;
+
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
@@ -30,39 +30,28 @@ import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeVariable;
-import com.tyron.code.ApplicationLoader;
-import com.sun.source.util.JavacTask;
+
 import com.tyron.code.model.CompletionList;
 import com.tyron.code.util.StringSearch;
 import com.tyron.code.model.CompletionItem;
 import com.sun.source.tree.ImportTree;
 import javax.lang.model.type.TypeMirror;
-import com.tyron.code.parser.JavaParser;
+
 import java.util.Set;
 
-import android.annotation.SuppressLint;
 import android.util.Log;
-import com.tyron.code.model.TextEdit;
-import com.tyron.code.rewrite.AddImport;
+
 import com.tyron.code.ParseTask;
 import java.io.File;
-import java.util.Collections;
-import javax.lang.model.element.TypeParameterElement;
+
 import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.ExpressionTree;
 import com.tyron.code.editor.drawable.CircleDrawable;
-import com.sun.tools.javac.code.Type;
-import com.sun.tools.javac.code.Symbol;
 import com.sun.source.tree.NewClassTree;
-import java.io.IOException;
-import javax.lang.model.util.Elements;
-import com.sun.source.tree.VariableTree;
 import com.tyron.code.CompilerProvider;
 import com.tyron.code.SourceFileObject;
 import com.tyron.code.CompileTask;
-import com.tyron.code.parser.FileManager;
-import com.sun.source.tree.AnnotationTree;
 import com.sun.tools.javac.tree.JCTree;
 
 /**
@@ -159,6 +148,7 @@ public class CompletionProvider {
 		SourceFileObject source = new SourceFileObject(file.toPath());
 		String partial = partialIdentifier(contents, (int) cursor);
 		boolean endsWithParen = endsWithParen(contents, (int) cursor);
+		//noinspection (List.of(...))
 		try (CompileTask task = compiler.compile(List.of(source))) {
 			Log.d(TAG, "Compiled in: " + Duration.between(start, Instant.now()).toMillis() + "ms");
 			TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor); 
@@ -286,26 +276,16 @@ public class CompletionProvider {
         }
         throw new RuntimeException("empty path");
     }
-    private boolean isClassMethodAnnotation(TreePath path) {
+    private boolean isAnnotationTree(TreePath path) {
 		if (path == null) {
 			return false;
 		}
-
-		if (path.getLeaf() instanceof JCTree.JCClassDecl) {
-			return true;
-		}
 		
-		if (path.getParentPath() != null && path.getParentPath().getLeaf() instanceof JCTree.JCClassDecl) {
-			return true;
-		}
-
 		if (path.getLeaf() instanceof JCTree.JCIdent) {
-			return isClassMethodAnnotation(path.getParentPath());
-		}
-
-		if (path.getLeaf() instanceof JCTree .JCAnnotation) {
-			return isClassMethodAnnotation(path.getParentPath());
-		}
+		    if (path.getParentPath().getLeaf() instanceof JCTree.JCAnnotation) {
+		        return true;
+            }
+        }
 
 		return false;
 	}
@@ -317,8 +297,10 @@ public class CompletionProvider {
             addClassNames(path.getCompilationUnit(), partial, list);
         }
         addKeywords(path, partial, list);
-		if (isClassMethodAnnotation(path)) {
-			CustomActions.addOverrideItem(list);
+		if (isAnnotationTree(path)) {
+			if (StringSearch.matchesPartialName("Override", partial)) {
+                CustomActions.addOverrideItem(list);
+            }
 		}
         return list;
     }
