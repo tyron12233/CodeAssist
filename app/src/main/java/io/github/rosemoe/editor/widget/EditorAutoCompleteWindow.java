@@ -15,8 +15,11 @@
  */
 package io.github.rosemoe.editor.widget;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.RelativeLayout;
@@ -31,6 +34,16 @@ import io.github.rosemoe.editor.struct.CompletionItem;
 import io.github.rosemoe.editor.text.CharPosition;
 import io.github.rosemoe.editor.text.Cursor;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
+
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.Trees;
+import com.tyron.code.CompileTask;
+import com.tyron.code.JavaCompilerService;
+import com.tyron.code.compiler.CompileBatch;
+import com.tyron.code.completion.CompletionEngine;
+import com.tyron.code.completion.EnclosingClassFinder;
 import com.tyron.code.model.TextEdit;
 import com.tyron.code.completion.CompletionProvider;
 import com.tyron.code.ParseTask;
@@ -45,6 +58,14 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import com.tyron.code.Parser;
 import android.view.ViewGroup;
 import com.tyron.code.util.AndroidUtilities;
+
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.DeclaredType;
 
 /**
  * Auto complete window for editing code quicker
@@ -263,6 +284,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      *
      * @param pos Index of auto complete item
      */
+    @SuppressLint("NewApi")
     public void select(int pos) {
         CompletionItem item = mAdapter.getItem(pos);
         Cursor cursor = mEditor.getCursor();
@@ -277,7 +299,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - length, cursor.getLeftLine(), cursor.getLeftColumn());
 
 			selectedItem = item.commit;
-            cursor.onCommitText(item.commit);
+            // cursor.onCommitText(item.commit); will be invoked automatically if item.commit isn't multiline
+            cursor.onCommitMultilineText(item.commit);
 			
             if (item.cursorOffset != item.commit.length()) {
                 int delta = (item.commit.length() - item.cursorOffset);
@@ -294,7 +317,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                 Log.d("PackageName", task.root.getPackageName().toString());
                 
                 boolean samePackage = false;
-                if (task.root.getPackageName().toString().equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
+                if (!item.item.data.contains(".") //it's either in the same class or it's already imported
+                        || task.root.getPackageName().toString().equals(getAfterLastDot(item.item.data))) {
                     samePackage = true;
                 }
                 

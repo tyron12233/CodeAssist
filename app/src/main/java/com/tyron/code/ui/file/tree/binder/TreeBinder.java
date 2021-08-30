@@ -38,7 +38,7 @@ public class TreeBinder extends TreeViewBinder<TreeBinder.ViewHolder> {
             viewHolder.icon.setImageResource(R.drawable.round_insert_drive_file_24);
         }
 
-        viewHolder.arrow.setVisibility(treeNode.isLeaf() ? View.GONE : View.VISIBLE);
+        viewHolder.arrow.setVisibility(treeNode.isLeaf() ? View.INVISIBLE : View.VISIBLE);
     }
 
     @Override

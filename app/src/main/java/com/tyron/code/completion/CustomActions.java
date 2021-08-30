@@ -30,6 +30,7 @@ public class CustomActions {
 			item.action = CompletionItem.Kind.OVERRIDE;
 			item.label = "Override methods";
 			item.commitText = "";
+			item.cursorOffset = 0;
 			item.detail = "";
 			list.items.add(0, item);
 	}
