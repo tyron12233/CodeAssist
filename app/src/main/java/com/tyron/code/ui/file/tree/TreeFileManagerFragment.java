@@ -93,6 +93,9 @@ public class TreeFileManagerFragment extends Fragment {
                         .start();
             }
 
+            /**
+             * Expands sub folders if there is only one in children.
+             */
             public void expandRecursively(TreeNode treeNode) {
                 if (treeNode != null && !treeNode.isLeaf()) {
                     List<TreeNode> children = treeNode.getChildList();
