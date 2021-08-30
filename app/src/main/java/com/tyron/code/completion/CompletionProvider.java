@@ -148,7 +148,7 @@ public class CompletionProvider {
 		SourceFileObject source = new SourceFileObject(file.toPath());
 		String partial = partialIdentifier(contents, (int) cursor);
 		boolean endsWithParen = endsWithParen(contents, (int) cursor);
-		//noinspection (List.of(...))
+		//noinspection
 		try (CompileTask task = compiler.compile(List.of(source))) {
 			Log.d(TAG, "Compiled in: " + Duration.between(start, Instant.now()).toMillis() + "ms");
 			TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor); 
@@ -478,8 +478,6 @@ public class CompletionProvider {
 			return items;
 		}
 
-        Log.d("ANONYMOUS", "type: " + path.getParentPath().getParentPath().getLeaf().getKind().toString());
-
         if (path.getParentPath().getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
             Trees trees = Trees.instance(task.task);
             MethodInvocationTree method = (MethodInvocationTree) path.getParentPath().getParentPath().getLeaf();
@@ -501,16 +499,15 @@ public class CompletionProvider {
 					DeclaredType type = (DeclaredType) var.asType();
 					Element classElement = type.asElement();
 
-
-					//  if (method.getArguments().get(argumentToComplete).toString().startsWith("new ")) {
-					CompletionItem item = new CompletionItem();
-					item.iconKind = CircleDrawable.Kind.Interface;
-					item.label = classElement.getSimpleName().toString() + " {...}";
-					item.commitText = "new " + classElement.getSimpleName() + " () {\n \r //TODO: \n}";
-					item.cursorOffset = item.commitText.length();
-					item.detail = "";
-					items.add(item);
-					//    }
+					if (StringSearch.matchesPartialName(classElement.getSimpleName().toString(), partial)) {
+                        CompletionItem item = new CompletionItem();
+                        item.iconKind = CircleDrawable.Kind.Interface;
+                        item.label = classElement.getSimpleName().toString() + " {...}";
+                        item.commitText = "new " + classElement.getSimpleName() + " () {\n \r //TODO: \n}";
+                        item.cursorOffset = item.commitText.length();
+                        item.detail = "";
+                        items.add(item);
+                    }
 				}
             }
         }
@@ -659,6 +656,10 @@ public class CompletionProvider {
             } else {
                 list.add(item(member));
             }
+
+            if (list.size() > MAX_COMPLETION_ITEMS) {
+                break;
+            }
         }
         for (List<ExecutableElement> overloads : methods.values()) {
             list.addAll(method(overloads, false, true));
@@ -668,7 +669,7 @@ public class CompletionProvider {
         }
 
         CompletionList comp = new CompletionList();
-        comp.isIncomplete = false;
+        comp.isIncomplete = !(list.size() > MAX_COMPLETION_ITEMS);
         comp.items = list;
         return comp;
     }
