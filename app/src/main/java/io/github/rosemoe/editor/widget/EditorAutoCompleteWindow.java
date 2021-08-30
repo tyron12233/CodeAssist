@@ -340,7 +340,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             return;
         }
 
-        if (getAfterLastDot(mLastPrefix).equals(selectedItem)) {
+        if (getAfterLastDot(prefix).equals(selectedItem) && !prefix.endsWith(".")) {
             selectedItem = "";
             return;
         }
@@ -367,6 +367,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         }
 
         if (mLastPrefix.equals(selectedItem)) {
+            selectedItem = "";
             return;
         }
 
