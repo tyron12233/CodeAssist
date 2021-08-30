@@ -6,7 +6,6 @@ import com.android.sdklib.build.ApkCreationException;
 import com.android.sdklib.build.DuplicateFileException;
 import com.android.sdklib.build.SealedApkException;
 import com.tyron.code.ApplicationLoader;
-import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.model.Project;
 import com.tyron.code.service.ILogger;
 import com.tyron.code.util.exception.CompilationFailedException;

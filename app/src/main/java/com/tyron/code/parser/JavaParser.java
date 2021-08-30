@@ -1,43 +1,28 @@
 package com.tyron.code.parser;
 import com.sun.tools.javac.file.JavacFileManager;
-import com.sun.tools.javac.parser.Parser;
-import com.sun.tools.javac.parser.ParserFactory;
-import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.util.Context;
-import com.sun.tools.javac.util.Log;
-import com.sun.tools.javac.util.Options;
+
 import java.io.IOException;
-import java.net.URI;
 import java.nio.charset.Charset;
 import java.util.Collections;
 import java.util.List;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
-import javax.tools.DiagnosticListener;
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
 import javax.tools.StandardLocation;
 import com.sun.source.util.JavacTask;
 import com.sun.tools.javac.api.JavacTool;
 import com.sun.source.tree.CompilationUnitTree;
-import java.util.Arrays;
+
 import java.io.File;
-import java.util.Set;
-import java.util.HashSet;
 import java.util.ArrayList;
-import com.tyron.code.ApplicationLoader;
+
 import com.tyron.code.completion.CompletionProvider;
-import java.util.Collection;
 
 
-
-import java.util.regex.Pattern;
-import java.io.BufferedReader;
-import java.util.regex.Matcher;
-import java.io.IOException;
-import com.tyron.code.editor.log.LogViewModel;
+import com.tyron.code.ui.editor.log.LogViewModel;
 import java.util.Locale;
-import com.sun.source.util.Trees;
 
 
 /**

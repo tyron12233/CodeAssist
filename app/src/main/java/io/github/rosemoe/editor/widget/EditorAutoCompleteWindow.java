@@ -19,8 +19,6 @@ import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.View;
-import android.widget.LinearLayout;
-import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -36,23 +34,17 @@ import io.github.rosemoe.editor.text.TextAnalyzeResult;
 import com.tyron.code.model.TextEdit;
 import com.tyron.code.completion.CompletionProvider;
 import com.tyron.code.ParseTask;
-import com.tyron.code.parser.JavaParser;
-import androidx.lifecycle.ViewModelProvider;
-import androidx.lifecycle.ViewModelStoreOwner;
-import com.sun.source.tree.CompilationUnitTree;
 import com.tyron.code.rewrite.AddImport;
 import java.util.Map;
 import java.io.File;
-import com.tyron.code.completion.FindCompletionsAt;
-import com.tyron.code.editor.log.LogViewModel;
+
 import android.util.Log;
 import androidx.recyclerview.widget.RecyclerView;
-import com.tyron.code.editor.CompletionItemAdapter;
+import com.tyron.code.ui.editor.CompletionItemAdapter;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import com.tyron.code.Parser;
 import android.view.ViewGroup;
 import com.tyron.code.util.AndroidUtilities;
-import android.view.View.MeasureSpec;
 
 /**
  * Auto complete window for editing code quicker

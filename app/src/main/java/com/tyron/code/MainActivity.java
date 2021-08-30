@@ -2,14 +2,8 @@ package com.tyron.code;
 
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
-import com.tyron.code.editor.CodeEditorFragment;
-import androidx.core.content.ContextCompat;
-import java.io.File;
-import com.tyron.code.model.Project;
-import com.tyron.code.parser.FileManager;
-import com.tyron.code.main.MainFragment;
-import androidx.appcompat.widget.Toolbar;
-import com.tyron.code.file.FileManagerFragment;
+
+import com.tyron.code.ui.main.MainFragment;
 
 public class MainActivity extends AppCompatActivity {
     @Override

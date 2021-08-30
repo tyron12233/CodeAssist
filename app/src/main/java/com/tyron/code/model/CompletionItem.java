@@ -2,7 +2,7 @@ package com.tyron.code.model;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.code.editor.drawable.CircleDrawable;
+import com.tyron.code.ui.editor.drawable.CircleDrawable;
 
 import java.util.List;
 
