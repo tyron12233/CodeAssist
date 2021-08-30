@@ -10,6 +10,7 @@ import com.tyron.code.parser.FileManager;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Objects;
 
 @SuppressLint("NewApi")
 public class SourceFileObject extends SimpleJavaFileObject {
@@ -67,5 +68,18 @@ public class SourceFileObject extends SimpleJavaFileObject {
 	@Override
 	public String toString() {
 		return mFile.toString();
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) return true;
+		if (o == null || getClass() != o.getClass()) return false;
+		SourceFileObject that = (SourceFileObject) o;
+		return Objects.equals(mFile, that.mFile);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(mFile);
 	}
 }
