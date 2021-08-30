@@ -41,7 +41,7 @@ public class JavaCompilerService implements CompilerProvider {
 
 	private final Map<JavaFileObject, Long> cachedModified = new HashMap<>();
 
-    private boolean needsCompile(Collection<? extends JavaFileObject> sources) {
+    private synchronized boolean needsCompile(Collection<? extends JavaFileObject> sources) {
         if (cachedModified.size() != sources.size()) {
             return true;
         }
@@ -60,7 +60,7 @@ public class JavaCompilerService implements CompilerProvider {
         return false;
     }
 
-    private void loadCompile(Collection<? extends JavaFileObject> sources) {
+    private synchronized void loadCompile(Collection<? extends JavaFileObject> sources) {
         if (cachedCompile != null) {
             if (!cachedCompile.closed) {
                 throw new RuntimeException("Compiler is still in-use!");
@@ -74,7 +74,7 @@ public class JavaCompilerService implements CompilerProvider {
         }
     }
 
-    private CompileBatch doCompile(Collection<? extends JavaFileObject> sources) {
+    private synchronized CompileBatch doCompile(Collection<? extends JavaFileObject> sources) {
         if (sources.isEmpty()) throw new RuntimeException("empty sources");
         CompileBatch firstAttempt = new CompileBatch(this, sources);
         Set<Path> addFiles = firstAttempt.needsAdditionalSources();
