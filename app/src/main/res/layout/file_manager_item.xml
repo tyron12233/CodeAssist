@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
 	xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:app="http://schemas.android.com/apk/res-auto"
 	android:layout_width="match_parent"
 	android:layout_height="wrap_content"
 	android:orientation="horizontal"
@@ -11,10 +12,17 @@
 	android:paddingEnd="8dp">
 
 	<ImageView
+		android:id="@+id/arrow"
+		android:layout_width="24dp"
+		android:layout_height="24dp"
+		android:layout_marginEnd="8dp"
+		android:src="@drawable/ic_baseline_keyboard_arrow_right_24" />
+
+	<ImageView
 		android:id="@+id/icon"
 		android:layout_width="24dp"
 		android:layout_height="24dp"
-		android:tint="#fffefefe"/>
+		android:src="@drawable/round_folder_24" />
 
 	<TextView
         android:id="@+id/name"

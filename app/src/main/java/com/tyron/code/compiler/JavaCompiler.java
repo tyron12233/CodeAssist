@@ -1,11 +1,11 @@
 package com.tyron.code.compiler;
 
 
+import android.annotation.SuppressLint;
+
 import com.sun.source.util.JavacTask;
 import com.sun.tools.javac.api.JavacTool;
-import com.sun.tools.javac.util.Log;
 import com.tyron.code.SourceFileObject;
-import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.service.ILogger;
@@ -16,13 +16,11 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
 import javax.tools.Diagnostic;
-import javax.tools.DiagnosticCollector;
 import javax.tools.DiagnosticListener;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
@@ -40,6 +38,7 @@ public class JavaCompiler {
 
     private final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
 
+    @SuppressLint("NewApi")
     public void compile() throws CompilationFailedException {
 
         File outputDir = new File(mProject.getBuildDirectory(), "bin/classes");
@@ -82,7 +81,6 @@ public class JavaCompiler {
         }
 
         List<JavaFileObject> javaFileObjects = new ArrayList<>();
-
         for (File file : javaFiles) {
             javaFileObjects.add(new SourceFileObject(file.toPath()));
         }

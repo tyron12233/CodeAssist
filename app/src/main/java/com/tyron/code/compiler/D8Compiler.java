@@ -1,9 +1,6 @@
 package com.tyron.code.compiler;
 
-import android.os.Build;
 import android.util.Log;
-
-import androidx.annotation.RequiresApi;
 
 import com.android.tools.r8.CompilationMode;
 import com.android.tools.r8.D8;
@@ -12,22 +9,20 @@ import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
-import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.model.Project;
+import com.tyron.code.parser.FileManager;
+import com.tyron.code.service.ILogger;
+import com.tyron.code.util.exception.CompilationFailedException;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
-import com.tyron.code.parser.FileManager;
-import com.tyron.code.service.ILogger;
-import com.tyron.code.util.exception.CompilationFailedException;
 
 /**
  * Converts class files into dex files and merges them in the process
@@ -51,7 +46,8 @@ public class D8Compiler {
 	public void compile() throws CompilationFailedException {
 		try {
 			ensureDexedLibraries();
-			Log.d(TAG, "Background thread test");
+
+			logViewModel.debug("Dexing and merging sources.");
 
 			List<Path> userLibraries = mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList());
 
@@ -81,9 +77,15 @@ public class D8Compiler {
 		Set<File> libraries = mProject.getLibraries();
 
 		outer : for (File lib : libraries) {
+			File parentFile = lib.getParentFile();
+			if (parentFile == null) {
+				continue;
+			}
 			File[] libFiles = lib.getParentFile().listFiles();
 			if (libFiles == null) {
-				lib.delete();
+				if (!lib.delete()) {
+					logViewModel.warning("Failed to delete " + lib.getAbsolutePath());
+				}
 			} else {
 				for (File libFile : libFiles) {
 					if (libFile.getName().startsWith("classes") &&

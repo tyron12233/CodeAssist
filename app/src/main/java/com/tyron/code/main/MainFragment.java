@@ -47,6 +47,7 @@ import com.tyron.code.editor.language.LanguageManager;
 import com.tyron.code.editor.log.AppLogFragment;
 import com.tyron.code.editor.log.LogViewModel;
 import com.tyron.code.file.FileManagerFragment;
+import com.tyron.code.file.tree.TreeFileManagerFragment;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.service.CompilerService;
@@ -158,11 +159,6 @@ public class MainFragment extends Fragment {
             @Override
             public void onDrawerClosed(@NonNull View p1) {
                 onBackPressedCallback.setEnabled(mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED);
-
-                FileManagerFragment fragment = (FileManagerFragment) getChildFragmentManager().findFragmentByTag("file_manager");
-                if (fragment != null) {
-                    fragment.disableBackListener();
-                }
             }
 
             @Override
@@ -307,7 +303,7 @@ public class MainFragment extends Fragment {
                 root = Environment.getExternalStorageDirectory();
             }
             getChildFragmentManager().beginTransaction()
-                    .replace(R.id.nav_root, FileManagerFragment.newInstance(root), "file_manager")
+                    .replace(R.id.nav_root, TreeFileManagerFragment.newInstance(root), "file_manager")
                     .commit();
         }
 
