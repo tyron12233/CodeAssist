@@ -6,4 +6,5 @@
     <color name="colorSurface">#FF2b2b2b</color>
     <color name="colorControlNormal">#FFEAEAEA</color>
     <color name="textActionNameColor">@android:color/tertiary_text_light</color>
+    <color name="white">#FFEAEAEA</color>
 </resources>

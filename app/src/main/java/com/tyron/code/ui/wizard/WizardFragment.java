@@ -1,0 +1,424 @@
+package com.tyron.code.ui.wizard;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.text.Editable;
+import android.text.InputType;
+import android.text.TextWatcher;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
+import android.widget.Button;
+import android.widget.LinearLayout;
+
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.transition.TransitionManager;
+
+import com.google.android.material.textfield.TextInputLayout;
+import com.google.android.material.transition.MaterialFade;
+import com.google.android.material.transition.MaterialFadeThrough;
+import com.google.android.material.transition.MaterialSharedAxis;
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.R;
+import com.tyron.code.model.Project;
+import com.tyron.code.parser.FileManager;
+import com.tyron.code.ui.wizard.adapter.WizardTemplateAdapter;
+import com.tyron.code.util.AndroidUtilities;
+import com.tyron.code.util.Decompress;
+import com.tyron.code.util.FileUtils;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.stream.IntStream;
+
+public class WizardFragment extends Fragment {
+
+    private Button mNavigateButton;
+    private Button mExitButton;
+    private RecyclerView mRecyclerView;
+    private LinearLayout mLoadingLayout;
+    private WizardTemplateAdapter mAdapter;
+
+    private View mWizardTemplatesView;
+    private View mWizardDetailsView;
+
+    private boolean mLast;
+
+    private ActivityResultLauncher<Uri> mLocationLauncher;
+
+    private WizardTemplate mCurrentTemplate;
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        setEnterTransition(new MaterialSharedAxis(MaterialSharedAxis.X, false));
+        setExitTransition(new MaterialSharedAxis(MaterialSharedAxis.X, true));
+
+        mLocationLauncher = registerForActivityResult(
+                new ActivityResultContracts.OpenDocumentTree(),
+                result -> {
+                    if (result != null) {
+                        //noinspection ConstantConditions
+                        mSaveLocationLayout.getEditText()
+                                .setText(FileUtils.getPath(result));
+                    }
+                }
+        );
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
+        View view = inflater.inflate(R.layout.wizard_fragment, container, false);
+        LinearLayout layout = view.findViewById(R.id.setup_wizard_layout);
+
+        mNavigateButton = layout.findViewById(R.id.wizard_next);
+        mNavigateButton.setVisibility(View.GONE);
+        mNavigateButton.setOnClickListener(this::onNavigateNext);
+
+        mExitButton = layout.findViewById(R.id.exit_button);
+        mExitButton.setOnClickListener(this::onNavigateBack);
+
+        mRecyclerView = layout.findViewById(R.id.template_recyclerview);
+        mRecyclerView.setLayoutManager(new GridLayoutManager(requireContext(),
+                AndroidUtilities.getRowCount(AndroidUtilities.dp(132))));
+
+        mLoadingLayout = layout.findViewById(R.id.loading_layout);
+        mWizardTemplatesView = layout.findViewById(R.id.wizard_templates_layout);
+        mWizardDetailsView = layout.findViewById(R.id.wizard_details_layout);
+
+        mAdapter = new WizardTemplateAdapter();
+        mRecyclerView.setAdapter(mAdapter);
+
+        initDetailsView();
+
+        return view;
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        loadTemplates();
+    }
+
+    private void onNavigateBack(View view) {
+        if (!mLast) {
+            getParentFragmentManager().beginTransaction()
+                    .remove(this)
+                    .commit();
+        } else {
+            showTemplatesView();
+            mLast = false;
+        }
+    }
+
+
+    private void onNavigateNext(View view) {
+        if (!mLast) {
+            showDetailsView();
+            mLast = true;
+        } else {
+            try {
+                createProject();
+            } catch (IOException e) {
+                ApplicationLoader.showToast(e.getMessage());
+            }
+        }
+    }
+
+    private void showTemplatesView() {
+        mWizardTemplatesView.setVisibility(View.GONE);
+
+        MaterialSharedAxis sharedAxis = new MaterialSharedAxis(MaterialSharedAxis.X, false);
+
+        TransitionManager.beginDelayedTransition((ViewGroup) requireView(), sharedAxis);
+
+        mWizardDetailsView.setVisibility(View.GONE);
+        mWizardTemplatesView.setVisibility(View.VISIBLE);
+        mNavigateButton.setVisibility(View.GONE);
+        mNavigateButton.setText(R.string.wizard_next);
+        mExitButton.setText(R.string.wizard_exit);
+    }
+
+    private TextInputLayout mNameLayout;
+    private TextInputLayout mSaveLocationLayout;
+    private TextInputLayout mPackageNameLayout;
+    private TextInputLayout mMinSdkLayout;
+    private TextInputLayout mLanguageLayout;
+
+    private AutoCompleteTextView mLanguageText;
+    private AutoCompleteTextView mMinSdkText;
+
+    @SuppressWarnings("ConstantConditions")
+    private void initDetailsView() {
+        List<String> languages = Arrays.asList("Java", "Kotlin");
+
+        mNameLayout = mWizardDetailsView.findViewById(R.id.til_app_name);
+        mNameLayout.getEditText().addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+
+            }
+
+            @Override
+            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+
+            }
+
+            @Override
+            public void afterTextChanged(Editable editable) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    File file = new File(requireContext().getExternalFilesDir(null) + "/" + "Projects" + "/" + editable.toString());
+                    String suffix = "";
+                    if (file.exists()) {
+                        suffix = "-1";
+                    }
+                    String path = file.getAbsolutePath() + suffix;
+                    mSaveLocationLayout.getEditText().setText(
+                            path
+                    );
+                }
+            }
+        });
+        mPackageNameLayout = mWizardDetailsView.findViewById(R.id.til_package_name);
+        mPackageNameLayout.getEditText().addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+
+            }
+
+            @Override
+            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+
+            }
+
+            @Override
+            public void afterTextChanged(Editable editable) {
+                if (!editable.toString().matches("^[a-zA-Z\\.]+$")) {
+                    mPackageNameLayout.setError(getString(R.string.wizard_package_illegal));
+                } else {
+                    mPackageNameLayout.setErrorEnabled(false);
+                }
+            }
+        });
+        mSaveLocationLayout = mWizardDetailsView.findViewById(R.id.til_save_location);
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+            mSaveLocationLayout.setHelperText(getString(R.string.wizard_scoped_storage_info));
+            mSaveLocationLayout.getEditText().setText(requireContext().getExternalFilesDir("Projects").getAbsolutePath());
+            mSaveLocationLayout.getEditText().setInputType(InputType.TYPE_NULL);
+        } else {
+            mSaveLocationLayout.setEndIconOnClickListener(view -> {
+                mLocationLauncher.launch(null);
+            });
+        }
+        mSaveLocationLayout.getEditText().addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+
+            }
+
+            @Override
+            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+
+            }
+
+            @Override
+            public void afterTextChanged(Editable editable) {
+                if (editable.toString().length() >= 240) {
+                    mSaveLocationLayout.setError(getString(R.string.wizard_path_exceeds));
+                } else {
+                    mSaveLocationLayout.setErrorEnabled(false);
+                }
+                File file = new File(editable.toString());
+                if (!file.getParentFile().canWrite()) {
+                    mSaveLocationLayout.setError(getString(R.string.wizard_file_not_writable));
+                } else {
+                    mSaveLocationLayout.setErrorEnabled(false);
+                }
+            }
+        });
+
+        mLanguageLayout = mWizardDetailsView.findViewById(R.id.til_language);
+        mLanguageText = mWizardDetailsView.findViewById(R.id.et_language);
+        mLanguageText.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_list_item_1, languages));
+
+        mMinSdkLayout = mWizardDetailsView.findViewById(R.id.til_min_sdk);
+        mMinSdkText = mWizardDetailsView.findViewById(R.id.et_min_sdk);
+        mMinSdkText.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_list_item_1, getSdks()));
+        mMinSdkText.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
+                mMinSdkLayout.setErrorEnabled(false);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+                mMinSdkLayout.setError(getString(R.string.wizard_select_min_sdk));
+            }
+        });
+    }
+
+    @SuppressWarnings("ConstantConditions")
+    private void createProject() throws IOException  {
+        if (!validateDetails()) {
+            return;
+        }
+
+        File projectRoot = new File(mSaveLocationLayout.getEditText().getText().toString());
+        if (!projectRoot.exists()) {
+            if (!projectRoot.mkdirs()) {
+                throw new IOException("Unable to create directory");
+            }
+        }
+        boolean isJava = mLanguageText.getText().toString().equals("Java");
+        File sourcesDir = new File(mCurrentTemplate.getPath() + "/" + (isJava ? "java" : "kotlin"));
+        if (!sourcesDir.exists()) {
+            throw new IOException("Unable to find source file for language " + mLanguageText.getText());
+        }
+
+        String packageNameDir = mPackageNameLayout.getEditText().getText().toString().replace(".", "/");
+        File targetSourceDir = new File(projectRoot, "/app/src/main/java/" + packageNameDir);
+        if (!targetSourceDir.exists()) {
+            if (!targetSourceDir.mkdirs()) {
+                throw new IOException("Unable to create target directory");
+            }
+        }
+        org.apache.commons.io.FileUtils.copyDirectory(new File(sourcesDir, "$packagename"), targetSourceDir);
+        org.apache.commons.io.FileUtils.copyDirectory(new File(sourcesDir.getParentFile(), "files"), projectRoot);
+    }
+
+    private boolean validateDetails() {
+
+        if (mSaveLocationLayout.isErrorEnabled()) {
+            return false;
+        }
+
+        if (mPackageNameLayout.isErrorEnabled()) {
+            return false;
+        }
+
+        if (mMinSdkLayout.isErrorEnabled()) {
+            return false;
+        }
+
+        if (mCurrentTemplate == null) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private List<String> getSdks() {
+        return Arrays.asList(
+                "API 16: Android 4.0 (JellyBean)",
+                "API 17: Android 4.2 (JellyBean)",
+                "API 18: Android 4.3 (JellyBean)",
+                "API 19: Android 4.4 (KitKat)",
+                "API 20: Android 4.4W (KitKat Wear)",
+                "API 21: Android 5.0 (Lollipop)",
+                "API 22: Android 5.1 (Lollipop)",
+                "API 23: Android 6.0 (Marshmallow)",
+                "API 24: Android 7.0 (Nougat)",
+                "API 25: Android 7.1 (Nougat)",
+                "API 26: Android 8.0 (Oreo)",
+                "API 27: Android 8.1 (Oreo)",
+                "API 28: Android 9.0 (Pie)",
+                "API 29: Android 10.0 (Q)",
+                "API 30: Android 11.0 (R)",
+                "API 31: Android 12.0 (S)"
+        );
+    }
+
+    private void showDetailsView() {
+        mWizardDetailsView.setVisibility(View.GONE);
+
+        MaterialSharedAxis sharedAxis = new MaterialSharedAxis(MaterialSharedAxis.X, true);
+
+        TransitionManager.beginDelayedTransition((ViewGroup) requireView(), sharedAxis);
+
+        mWizardDetailsView.setVisibility(View.VISIBLE);
+        mWizardTemplatesView.setVisibility(View.GONE);
+        mNavigateButton.setText(R.string.wizard_create);
+        mNavigateButton.setVisibility(View.VISIBLE);
+        mExitButton.setText(R.string.wizard_previous);
+    }
+
+    private void loadTemplates() {
+        TransitionManager.beginDelayedTransition((ViewGroup) requireView(), new MaterialFadeThrough());
+        mLoadingLayout.setVisibility(View.VISIBLE);
+        mRecyclerView.setVisibility(View.GONE);
+
+        Executors.newSingleThreadExecutor().execute(() -> {
+            List<WizardTemplate> templates = getTemplates();
+
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(() -> {
+                    TransitionManager.beginDelayedTransition((ViewGroup) requireView(), new MaterialFadeThrough());
+                    mLoadingLayout.setVisibility(View.GONE);
+                    mRecyclerView.setVisibility(View.VISIBLE);
+
+                    mAdapter.submitList(templates);
+
+
+                    mAdapter.setOnItemClickListener((item, pos) -> {
+                        mCurrentTemplate = item;
+                        onNavigateNext(mNavigateButton);
+                    });
+                });
+            }
+        });
+    }
+
+    private List<WizardTemplate> getTemplates() {
+        File file = requireContext().getExternalFilesDir("templates");
+        if (!file.exists()) {
+            extractTemplates();
+        }
+
+        File[] templateFiles = file.listFiles();
+        if (templateFiles == null) {
+            return Collections.emptyList();
+        }
+        if (templateFiles.length == 0) {
+            extractTemplates();
+        }
+        templateFiles = file.listFiles();
+        if (templateFiles == null) {
+            return Collections.emptyList();
+        }
+
+        List<WizardTemplate> templates = new ArrayList<>();
+        for (File child : templateFiles) {
+            WizardTemplate template = WizardTemplate.fromFile(child);
+            if (template != null) {
+                templates.add(template);
+            }
+        }
+        return templates;
+    }
+
+    private void extractTemplates() {
+        Decompress.unzipFromAssets(requireContext(),
+                "templates.zip",
+                requireContext().getExternalFilesDir(null).getAbsolutePath());
+    }
+}

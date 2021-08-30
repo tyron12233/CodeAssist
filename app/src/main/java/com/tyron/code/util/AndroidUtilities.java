@@ -1,5 +1,6 @@
 package com.tyron.code.util;
 import android.app.Activity;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
 import com.tyron.code.ApplicationLoader;
@@ -50,5 +51,12 @@ public class AndroidUtilities {
 		}
 		
 		return height;
+	}
+
+	public static int getRowCount(int itemWidth) {
+		DisplayMetrics displayMetrics = ApplicationLoader.applicationContext
+				.getResources().getDisplayMetrics();
+
+		return (displayMetrics.widthPixels / itemWidth);
 	}
 }

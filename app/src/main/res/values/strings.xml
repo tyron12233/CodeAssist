@@ -17,6 +17,7 @@
     <item name="text_to_search" type="string">Text to search</item>
 
     <item name="more" translatable="false" type="string">More</item>
+
     <!-- Preference Titles -->
     <string name="messages_header">Messages</string>
     <string name="sync_header">Sync</string>
@@ -32,4 +33,26 @@
     </string>
     <string name="attachment_summary_off">Only download attachments when manually requested</string>
 
+
+    <!-- wizard -->
+    <string name="wizard_next">Next</string>
+    <string name="wizard_finish">Finish</string>
+    <string name="wizard_cancel">Cancel</string>
+    <string name="wizard_templates">Templates</string>
+    <string name="wizard_exit">Exit</string>
+    <string name="wizard_desc">Select from Activity templates</string>
+    <string name="wizard_empty_templates">Templates are empty :(</string>
+    <string name="wizard_loading">Loading templates</string>
+    <string name="wizard_app_name">App name</string>
+    <string name="wizard_package_name">com.my.myapplication</string>
+    <string name="wizard_save_location">Save location</string>
+    <string name="wizard_language">Language</string>
+    <string name="wizard_minimum_sdk">Minimum SDK</string>
+    <string name="wizard_create">Create</string>
+    <string name="wizard_previous">Previous</string>
+    <string name="wizard_scoped_storage_info">Due to Android 11 storage restrictions, you can only save files on the app\'s internal storage.</string>
+    <string name="wizard_file_not_writable">Directory is not writable, select another location</string>
+    <string name="wizard_path_exceeds">Location path exceeds 240 characters.</string>
+    <string name="wizard_package_illegal">Package name contains illegal characters.</string>
+    <string name="wizard_select_min_sdk">Select a minimum SDK version.</string>
 </resources>

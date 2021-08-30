@@ -39,6 +39,7 @@ dependencies {
     implementation 'androidx.drawerlayout:drawerlayout:1.1.1'
     implementation 'com.github.TellH:RecyclerTreeView:1.2.0'
     implementation 'com.android.tools:r8:2.2.64'
+    implementation 'commons-io:commons-io:2.11.0'
     implementation files(
         'libs/javac.jar',
         'libs/language-base-0.5.0.jar',
