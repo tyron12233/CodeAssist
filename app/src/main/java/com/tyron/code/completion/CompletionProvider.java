@@ -1,13 +1,32 @@
 package com.tyron.code.completion;
+
+import android.util.Log;
+
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.ImportTree;
+import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.NewClassTree;
 import com.sun.source.tree.Scope;
 import com.sun.source.tree.SwitchTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.util.TreePath;
 import com.sun.source.util.Trees;
+import com.sun.tools.javac.tree.JCTree;
+import com.tyron.code.CompileTask;
+import com.tyron.code.CompilerProvider;
+import com.tyron.code.ParseTask;
+import com.tyron.code.SourceFileObject;
+import com.tyron.code.model.CompletionItem;
+import com.tyron.code.model.CompletionList;
+import com.tyron.code.ui.editor.drawable.CircleDrawable;
+import com.tyron.code.util.StringSearch;
+
+import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -18,6 +37,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Predicate;
 
 import javax.lang.model.element.Element;
@@ -29,30 +49,8 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeVariable;
-
-import com.tyron.code.model.CompletionList;
-import com.tyron.code.util.StringSearch;
-import com.tyron.code.model.CompletionItem;
-import com.sun.source.tree.ImportTree;
 import javax.lang.model.type.TypeMirror;
-
-import java.util.Set;
-
-import android.util.Log;
-
-import com.tyron.code.ParseTask;
-import java.io.File;
-
-import com.sun.source.tree.MemberReferenceTree;
-import com.sun.source.tree.MethodInvocationTree;
-import com.sun.source.tree.ExpressionTree;
-import com.tyron.code.ui.editor.drawable.CircleDrawable;
-import com.sun.source.tree.NewClassTree;
-import com.tyron.code.CompilerProvider;
-import com.tyron.code.SourceFileObject;
-import com.tyron.code.CompileTask;
-import com.sun.tools.javac.tree.JCTree;
+import javax.lang.model.type.TypeVariable;
 
 /**
  * Main entry point for getting completions
@@ -503,9 +501,15 @@ public class CompletionProvider {
                         CompletionItem item = new CompletionItem();
                         item.iconKind = CircleDrawable.Kind.Interface;
                         item.label = classElement.getSimpleName().toString() + " {...}";
-                        item.commitText = "new " + classElement.getSimpleName() + " () {\n \r //TODO: \n}";
+                        item.commitText = "new " + classElement.getSimpleName() + "() {\n\t//TODO:\n}";
                         item.cursorOffset = item.commitText.length();
                         item.detail = "";
+
+                        if (classElement instanceof TypeElement) {
+                            // import the class
+                            item.action = CompletionItem.Kind.IMPORT;
+                            item.data = ((TypeElement) classElement).getQualifiedName().toString();
+                        }
                         items.add(item);
                     }
 				}

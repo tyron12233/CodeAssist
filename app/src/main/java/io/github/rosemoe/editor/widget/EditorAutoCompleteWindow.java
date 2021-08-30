@@ -317,7 +317,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                 Log.d("PackageName", task.root.getPackageName().toString());
                 
                 boolean samePackage = false;
-                if (task.root.getPackageName().toString().equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
+                if (!item.item.data.contains(".") //it's either in the same class or it's already imported
+                        || task.root.getPackageName().toString().equals(getAfterLastDot(item.item.data))) {
                     samePackage = true;
                 }
                 
