@@ -66,7 +66,8 @@ public class TreeFileManagerFragment extends Fragment {
             @Override
             public boolean onClick(TreeNode treeNode, RecyclerView.ViewHolder viewHolder) {
                 if (!treeNode.isLeaf()) {
-                    onToggle(!treeNode.isExpand(), viewHolder);
+                    //onToggle(!treeNode.isExpand(), viewHolder);
+                    toggle(!treeNode.isExpand(), viewHolder, treeNode);
                 } else {
                     openFile(((TreeFile) treeNode.getContent()).getFile());
                     return true;
@@ -76,12 +77,35 @@ public class TreeFileManagerFragment extends Fragment {
 
             @Override
             public void onToggle(boolean isExpand, RecyclerView.ViewHolder viewHolder) {
+                toggle(isExpand, viewHolder, null);
+            }
+
+            public void toggle(boolean isExpand, RecyclerView.ViewHolder viewHolder, TreeNode treeNode) {
+                if (isExpand) {
+                    expandRecursively(treeNode);
+                }
+
                 TreeBinder.ViewHolder holder = (TreeBinder.ViewHolder) viewHolder;
                 int rotateDegree = isExpand ? 90 : -90;
                 holder.arrow.animate()
                         .setDuration(180L)
                         .rotationBy(rotateDegree)
                         .start();
+            }
+
+            public void expandRecursively(TreeNode treeNode) {
+                if (treeNode != null && !treeNode.isLeaf()) {
+                    List<TreeNode> children = treeNode.getChildList();
+
+                    if (children != null && children.size() == 1) {
+                        TreeNode childNode = children.get(0);
+
+                        if (childNode != null && !childNode.isLeaf()) {
+                            childNode.expand();
+                            expandRecursively(childNode);
+                        }
+                    }
+                }
             }
         });
         mListView.setAdapter(adapter);
