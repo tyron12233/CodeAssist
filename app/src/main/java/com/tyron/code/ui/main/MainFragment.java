@@ -339,7 +339,7 @@ public class MainFragment extends Fragment {
         mRoot.closeDrawer(GravityCompat.START, true);
     }
 
-    private void openProject(Project proj) {
+    public void openProject(Project proj) {
 
         if (!proj.isValidProject()) {
             ApplicationLoader.showToast("Invalid project directory");

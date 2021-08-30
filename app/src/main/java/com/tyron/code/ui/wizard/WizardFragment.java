@@ -1,7 +1,5 @@
 package com.tyron.code.ui.wizard;
 
-import android.app.Activity;
-import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -17,7 +15,6 @@ import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.LinearLayout;
 
-import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
@@ -28,13 +25,14 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.transition.TransitionManager;
 
 import com.google.android.material.textfield.TextInputLayout;
-import com.google.android.material.transition.MaterialFade;
 import com.google.android.material.transition.MaterialFadeThrough;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.completion.CompletionEngine;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
+import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.wizard.adapter.WizardTemplateAdapter;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.Decompress;
@@ -47,7 +45,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
-import java.util.stream.IntStream;
 
 public class WizardFragment extends Fragment {
 
@@ -137,11 +134,7 @@ public class WizardFragment extends Fragment {
             showDetailsView();
             mLast = true;
         } else {
-            try {
-                createProject();
-            } catch (IOException e) {
-                ApplicationLoader.showToast(e.getMessage());
-            }
+            createProjectAsync();
         }
     }
 
@@ -213,7 +206,7 @@ public class WizardFragment extends Fragment {
 
             @Override
             public void afterTextChanged(Editable editable) {
-                if (!editable.toString().matches("^[a-zA-Z\\.]+$")) {
+                if (!editable.toString().matches("^[a-zA-Z.]+$")) {
                     mPackageNameLayout.setError(getString(R.string.wizard_package_illegal));
                 } else {
                     mPackageNameLayout.setErrorEnabled(false);
@@ -226,9 +219,7 @@ public class WizardFragment extends Fragment {
             mSaveLocationLayout.getEditText().setText(requireContext().getExternalFilesDir("Projects").getAbsolutePath());
             mSaveLocationLayout.getEditText().setInputType(InputType.TYPE_NULL);
         } else {
-            mSaveLocationLayout.setEndIconOnClickListener(view -> {
-                mLocationLauncher.launch(null);
-            });
+            mSaveLocationLayout.setEndIconOnClickListener(view -> mLocationLauncher.launch(null));
         }
         mSaveLocationLayout.getEditText().addTextChangedListener(new TextWatcher() {
             @Override
@@ -277,6 +268,28 @@ public class WizardFragment extends Fragment {
         });
     }
 
+    private void createProjectAsync() {
+        TransitionManager.beginDelayedTransition((ViewGroup) requireView(), new MaterialFadeThrough());
+
+        mWizardTemplatesView.setVisibility(View.GONE);
+        mWizardDetailsView.setVisibility(View.GONE);
+        mLoadingLayout.setVisibility(View.VISIBLE);
+
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                createProject();
+            } catch (IOException e) {
+                ApplicationLoader.showToast(e.getMessage());
+                showDetailsView();
+                return;
+            }
+
+            Project project = new Project(new File(mSaveLocationLayout.getEditText().getText().toString()));
+            if (getParentFragment() != null && getParentFragment() instanceof MainFragment) {
+                ((MainFragment) getParentFragment()).openProject(project);
+            }
+        });
+    }
     @SuppressWarnings("ConstantConditions")
     private void createProject() throws IOException  {
         if (!validateDetails()) {
@@ -320,11 +333,7 @@ public class WizardFragment extends Fragment {
             return false;
         }
 
-        if (mCurrentTemplate == null) {
-            return false;
-        }
-
-        return true;
+        return mCurrentTemplate != null;
     }
 
     private List<String> getSdks() {
