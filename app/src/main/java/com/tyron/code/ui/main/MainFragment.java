@@ -1,6 +1,5 @@
 package com.tyron.code.ui.main;
 
-import android.annotation.SuppressLint;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -12,13 +11,11 @@ import android.os.IBinder;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.GravityCompat;
@@ -32,22 +29,21 @@ import androidx.viewpager2.adapter.FragmentStateAdapter;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.completion.CompletionEngine;
+import com.tyron.code.model.Project;
+import com.tyron.code.parser.FileManager;
+import com.tyron.code.service.CompilerService;
+import com.tyron.code.service.ILogger;
 import com.tyron.code.ui.editor.BottomEditorFragment;
 import com.tyron.code.ui.editor.CodeEditorFragment;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.log.LogViewModel;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
-import com.tyron.code.model.Project;
-import com.tyron.code.parser.FileManager;
-import com.tyron.code.service.CompilerService;
-import com.tyron.code.service.ILogger;
 import com.tyron.code.ui.wizard.WizardFragment;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ApkInstaller;
@@ -220,7 +216,6 @@ public class MainFragment extends Fragment {
                 WizardFragment fragment = new WizardFragment();
                 getParentFragmentManager().beginTransaction()
                         .add(R.id.fragment_container, fragment, "wizard_fragment")
-                        .show(fragment)
                         .commit();
 //                final EditText et = new EditText(requireContext());
 //                et.setHint("Project root directory");
@@ -344,6 +339,11 @@ public class MainFragment extends Fragment {
         if (!proj.isValidProject()) {
             ApplicationLoader.showToast("Invalid project directory");
             return;
+        }
+
+        Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
+        if (fragment instanceof TreeFileManagerFragment) {
+            ((TreeFileManagerFragment) fragment).refresh();
         }
 
         mProgressBar.setVisibility(View.VISIBLE);

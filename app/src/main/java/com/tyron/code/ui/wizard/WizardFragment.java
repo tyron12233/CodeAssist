@@ -285,11 +285,47 @@ public class WizardFragment extends Fragment {
             }
 
             Project project = new Project(new File(mSaveLocationLayout.getEditText().getText().toString()));
-            if (getParentFragment() != null && getParentFragment() instanceof MainFragment) {
-                ((MainFragment) getParentFragment()).openProject(project);
-            }
+
+            requireActivity().runOnUiThread(() -> {
+                Fragment fragment = getParentFragmentManager().findFragmentByTag("main_fragment");
+                if (fragment instanceof MainFragment) {
+                    ((MainFragment) fragment).openProject(project);
+                }
+            });
         });
     }
+
+    /**
+     * Traverses all files in a directory, including subdirectory and replaces
+     * placeholders with the right text.
+     * @param file Root directory to start
+     */
+    private void replacePlaceholders(File file) {
+        File[] files = file.listFiles();
+        if (files != null) {
+            for (File child : files) {
+                if (child.getName().equals("build.gradle")) {
+                    replacePlaceholder(file);
+                } else if (child.getName().endsWith(".java")) {
+                    replacePlaceholder(file);
+                } else if (child.getName().endsWith(".xml"));
+            }
+        }
+    }
+
+    /**
+     * Replaces the placeholders in a file such as $packagename, $appname
+     * @param file Input file
+     */
+    private void replacePlaceholder(File file) {
+        String string = FileManager.readFile(file);
+        FileManager.writeFile(
+                file,
+                string.replace("$packagename", mPackageNameLayout.getEditText().getText())
+                .replace("$appname", mNameLayout.getEditText().getText())
+        );
+    }
+
     @SuppressWarnings("ConstantConditions")
     private void createProject() throws IOException  {
         if (!validateDetails()) {

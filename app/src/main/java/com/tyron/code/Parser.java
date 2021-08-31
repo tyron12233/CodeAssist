@@ -1,36 +1,34 @@
 package com.tyron.code;
-import com.sun.source.util.JavacTask;
-import javax.tools.JavaCompiler;
-import javax.tools.JavaFileObject;
 
-import java.net.URI;
-import java.util.HashMap;
-import java.util.ServiceLoader;
-import java.util.List;
-import javax.tools.StandardJavaFileManager;
-import java.util.Collections;
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.util.Trees;
-import java.io.IOException;
-import com.sun.source.tree.Tree;
-import java.util.Collection;
-import com.sun.source.util.TreeScanner;
-import com.sun.source.util.SourcePositions;
-import com.sun.source.tree.ImportTree;
-import com.sun.source.tree.SwitchTree;
-import com.sun.source.tree.BlockTree;
-import com.sun.source.tree.StatementTree;
-import com.sun.source.tree.ErroneousTree;
-import java.nio.file.Paths;
-import java.nio.file.Path;
-import javax.tools.JavaFileManager;
-import com.sun.tools.javac.api.JavacTool;
-import java.util.Set;
-import java.util.HashSet;
-import com.sun.source.tree.ClassTree;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.Name;
 import android.util.Log;
+
+import org.openjdk.javax.lang.model.element.Modifier;
+import org.openjdk.javax.lang.model.element.Name;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaCompiler;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.source.tree.BlockTree;
+import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.ErroneousTree;
+import org.openjdk.source.tree.ImportTree;
+import org.openjdk.source.tree.StatementTree;
+import org.openjdk.source.tree.SwitchTree;
+import org.openjdk.source.tree.Tree;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.source.util.SourcePositions;
+import org.openjdk.source.util.TreeScanner;
+import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.api.JavacTool;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 public class Parser {
     
     private static final JavaCompiler COMPILER = JavacTool.create();
@@ -95,7 +93,7 @@ public class Parser {
     }
 	
 	public Set<Name> packagePrivateClasses() {
-		Set<Name>  result = new HashSet<>();
+		Set<Name> result = new HashSet<>();
 		for (Tree t : root.getTypeDecls()) {
 			Log.d("Parser", t.getClass().toString());
 			if (t instanceof ClassTree) {
@@ -243,7 +241,7 @@ public class Parser {
         return prune(root, pos, buffer, cursors, true);
     }
 	
-	private static void ignoreError(javax.tools.Diagnostic<? extends JavaFileObject> __) {
+	private static void ignoreError(Diagnostic<? extends JavaFileObject> __) {
         // Too noisy, this only comes up in parse tasks which tend to be less important
         // LOG.warning(err.getMessage(Locale.getDefault()));
     }

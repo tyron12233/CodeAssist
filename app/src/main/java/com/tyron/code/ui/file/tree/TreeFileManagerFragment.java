@@ -37,6 +37,7 @@ public class TreeFileManagerFragment extends Fragment {
     private File mRootFile;
 
     private RecyclerView mListView;
+    private TreeViewAdapter mAdapter;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -61,8 +62,8 @@ public class TreeFileManagerFragment extends Fragment {
         LinearLayoutManager manager = new LinearLayoutManager(requireContext());
         mListView.setLayoutManager(manager);
 
-        TreeViewAdapter adapter = new TreeViewAdapter(new ArrayList<>(getNodes()), Collections.singletonList(new TreeBinder()));
-        adapter.setOnTreeNodeListener(new TreeViewAdapter.OnTreeNodeListener() {
+        mAdapter = new TreeViewAdapter(new ArrayList<>(getNodes()), Collections.singletonList(new TreeBinder()));
+        mAdapter.setOnTreeNodeListener(new TreeViewAdapter.OnTreeNodeListener() {
             @Override
             public boolean onClick(TreeNode treeNode, RecyclerView.ViewHolder viewHolder) {
                 if (!treeNode.isLeaf()) {
@@ -80,7 +81,7 @@ public class TreeFileManagerFragment extends Fragment {
                 toggle(isExpand, viewHolder, null);
             }
 
-            public void toggle(boolean isExpand, RecyclerView.ViewHolder viewHolder, TreeNode treeNode) {
+            public void toggle(boolean isExpand, RecyclerView.ViewHolder viewHolder, TreeNode<TreeFile> treeNode) {
                 if (isExpand) {
                     expandRecursively(treeNode);
                 }
@@ -93,12 +94,12 @@ public class TreeFileManagerFragment extends Fragment {
                         .start();
             }
 
-            public void expandRecursively(TreeNode treeNode) {
+            public void expandRecursively(TreeNode<TreeFile> treeNode) {
                 if (treeNode != null && !treeNode.isLeaf()) {
-                    List<TreeNode> children = treeNode.getChildList();
+                    List<TreeNode<TreeFile>> children = treeNode.getChildList();
 
                     if (children != null && children.size() == 1) {
-                        TreeNode childNode = children.get(0);
+                        TreeNode<TreeFile> childNode = children.get(0);
 
                         if (childNode != null && !childNode.isLeaf()) {
                             childNode.expand();
@@ -108,8 +109,13 @@ public class TreeFileManagerFragment extends Fragment {
                 }
             }
         });
-        mListView.setAdapter(adapter);
+        mListView.setAdapter(mAdapter);
 
+    }
+
+    public void refresh() {
+        List<TreeNode<TreeFile>> nodes = getNodes();
+        mAdapter.refresh(new ArrayList<>(nodes));
     }
 
     private List<TreeNode<TreeFile>> getNodes() {

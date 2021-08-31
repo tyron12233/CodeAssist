@@ -35,15 +35,6 @@ import io.github.rosemoe.editor.text.CharPosition;
 import io.github.rosemoe.editor.text.Cursor;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
 
-import com.sun.source.tree.ClassTree;
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.util.JavacTask;
-import com.sun.source.util.Trees;
-import com.tyron.code.CompileTask;
-import com.tyron.code.JavaCompilerService;
-import com.tyron.code.compiler.CompileBatch;
-import com.tyron.code.completion.CompletionEngine;
-import com.tyron.code.completion.EnclosingClassFinder;
 import com.tyron.code.model.TextEdit;
 import com.tyron.code.completion.CompletionProvider;
 import com.tyron.code.ParseTask;
@@ -58,15 +49,6 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import com.tyron.code.Parser;
 import android.view.ViewGroup;
 import com.tyron.code.util.AndroidUtilities;
-
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.DeclaredType;
-
 /**
  * Auto complete window for editing code quicker
  *

@@ -4,8 +4,8 @@ import android.annotation.SuppressLint;
 
 import androidx.annotation.NonNull;
 
-import javax.tools.SimpleJavaFileObject;
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.SimpleJavaFileObject;
+import org.openjdk.javax.tools.JavaFileObject;
 import com.tyron.code.parser.FileManager;
 import java.net.URI;
 import java.nio.file.Path;

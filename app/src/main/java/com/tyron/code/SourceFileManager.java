@@ -1,23 +1,24 @@
 package com.tyron.code;
-import javax.tools.ForwardingJavaFileManager;
-import com.sun.tools.javac.main.JavaCompiler;
-import com.sun.tools.javac.util.ServiceLoader;
-import javax.tools.StandardJavaFileManager;
-import java.nio.charset.Charset;
-import javax.tools.Diagnostic;
-import com.sun.tools.javac.api.JavacTool;
-import javax.tools.JavaFileManager.Location;
-import javax.tools.JavaFileObject;
-import java.util.Set;
-import javax.tools.JavaFileObject.Kind;
-import javax.tools.JavaFileManager;
-import java.io.IOException;
-import javax.tools.StandardLocation;
+
 import com.tyron.code.parser.FileManager;
-import java.io.File;
-import java.util.stream.Stream;
 import com.tyron.code.util.StringSearch;
-import javax.tools.FileObject;
+
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.FileObject;
+import org.openjdk.javax.tools.JavaFileManager;
+import org.openjdk.javax.tools.JavaFileManager.Location;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.StandardLocation;
+import org.openjdk.tools.javac.api.JavacTool;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.util.Set;
+import java.util.stream.Stream;
+
+import org.openjdk.javax.tools.ForwardingJavaFileManager;
+import org.openjdk.javax.tools.StandardJavaFileManager;
 
 public class SourceFileManager extends ForwardingJavaFileManager {
 	

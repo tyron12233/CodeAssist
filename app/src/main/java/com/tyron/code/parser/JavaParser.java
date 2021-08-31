@@ -1,27 +1,25 @@
 package com.tyron.code.parser;
-import com.sun.tools.javac.file.JavacFileManager;
-import com.sun.tools.javac.util.Context;
-
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.util.Collections;
-import java.util.List;
-import javax.tools.Diagnostic;
-import javax.tools.DiagnosticCollector;
-import javax.tools.JavaFileObject;
-import javax.tools.SimpleJavaFileObject;
-import javax.tools.StandardLocation;
-import com.sun.source.util.JavacTask;
-import com.sun.tools.javac.api.JavacTool;
-import com.sun.source.tree.CompilationUnitTree;
-
-import java.io.File;
-import java.util.ArrayList;
 
 import com.tyron.code.completion.CompletionProvider;
-
-
 import com.tyron.code.ui.editor.log.LogViewModel;
+
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticCollector;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.SimpleJavaFileObject;
+import org.openjdk.javax.tools.StandardLocation;
+import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.tools.javac.api.JavacTool;
+import org.openjdk.tools.javac.file.JavacFileManager;
+import org.openjdk.tools.javac.util.Context;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 
 

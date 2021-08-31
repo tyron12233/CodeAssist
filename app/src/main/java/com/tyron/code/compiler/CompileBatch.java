@@ -2,9 +2,9 @@ package com.tyron.code.compiler;
 
 import android.util.Log;
 
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.util.JavacTask;
-import com.sun.source.util.Trees;
+import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.source.util.Trees;
 import com.tyron.code.JavaCompilerService;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.util.StringSearch;
@@ -21,10 +21,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
-import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.lang.model.util.Elements;
+import org.openjdk.javax.lang.model.util.Types;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
 
 @SuppressWarnings("NewApi")
 public class CompileBatch implements AutoCloseable {
@@ -86,7 +86,7 @@ public class CompileBatch implements AutoCloseable {
         return addFiles;
     }
 
-    private String errorText(javax.tools.Diagnostic<? extends javax.tools.JavaFileObject> err) {
+    private String errorText(Diagnostic<? extends JavaFileObject> err) {
         Path file = Paths.get(err.getSource().toUri());
         String contents = FileManager.readFile(file.toFile());
         int begin = (int) err.getStartPosition();
@@ -94,7 +94,7 @@ public class CompileBatch implements AutoCloseable {
         return contents.substring(begin, end);
     }
 
-    private String packageName(javax.tools.Diagnostic<? extends javax.tools.JavaFileObject> err) {
+    private String packageName(Diagnostic<? extends JavaFileObject> err) {
         Path file = Paths.get(err.getSource().toUri());
         return StringSearch.packageName(file.toFile());
     }
@@ -165,7 +165,7 @@ public class CompileBatch implements AutoCloseable {
         return list;
     }
 
-    private boolean isValidFileRange(javax.tools.Diagnostic<? extends JavaFileObject> d) {
+    private boolean isValidFileRange(Diagnostic<? extends JavaFileObject> d) {
         return d.getSource().toUri().getScheme().equals("file") && d.getStartPosition() >= 0 && d.getEndPosition() >= 0;
     }
 }

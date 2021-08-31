@@ -1,19 +1,21 @@
 package com.tyron.code.model;
-import java.util.Collections;
+
+import android.util.Log;
+
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.compiler.LibraryChecker;
+import com.tyron.code.util.Decompress;
+import com.tyron.code.util.StringSearch;
+
+import org.openjdk.javax.lang.model.SourceVersion;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.ArrayList;
-import java.io.File;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.Set;
-
-import com.tyron.code.compiler.LibraryChecker;
-import com.tyron.code.util.StringSearch;
-import android.util.Log;
-import javax.lang.model.SourceVersion;
-import com.tyron.code.util.Decompress;
-import com.tyron.code.ApplicationLoader;
 
 /**
  * Class for storing project data, directories and files

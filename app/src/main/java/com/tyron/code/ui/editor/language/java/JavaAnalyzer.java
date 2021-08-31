@@ -1,10 +1,11 @@
 package com.tyron.code.ui.editor.language.java;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
+
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
 import io.github.rosemoe.editor.text.TextAnalyzer;
 import io.github.rosemoe.editor.langs.java.JavaCodeAnalyzer;
 import java.util.List;
-import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
 import java.util.ArrayList;
 
 import io.github.rosemoe.editor.widget.EditorColorScheme;

@@ -1,17 +1,20 @@
 package com.tyron.code.completion;
 
-import com.sun.source.tree.Scope;
-import com.sun.source.util.Trees;
+import android.annotation.SuppressLint;
+
 import com.tyron.code.CompileTask;
+
+import org.openjdk.javax.lang.model.element.Element;
+import org.openjdk.javax.lang.model.element.Modifier;
+import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.type.DeclaredType;
+import org.openjdk.javax.lang.model.util.Elements;
+import org.openjdk.source.tree.Scope;
+import org.openjdk.source.util.Trees;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.type.DeclaredType;
-import com.sun.source.util.JavacTask;
-import javax.lang.model.util.Elements;
-import javax.lang.model.element.TypeElement;
 
 public class ScopeHelper {
     // TODO is this still necessary? Test speed. We could get rid of the extra static-imports step.
@@ -28,6 +31,7 @@ public class ScopeHelper {
         return scopes.subList(0, scopes.size() - 2);
     }
 
+    @SuppressLint("NewApi")
     static List<Element> scopeMembers(CompileTask task, Scope inner, Predicate<CharSequence> filter) {
         Trees trees = Trees.instance(task.task);
         Elements elements = task.task.getElements();

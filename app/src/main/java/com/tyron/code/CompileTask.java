@@ -1,12 +1,14 @@
 package com.tyron.code;
+
 import android.annotation.SuppressLint;
 
-import java.util.List;
-import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.util.JavacTask;
+
 import java.nio.file.Path;
-import com.sun.source.util.JavacTask;
-import com.sun.source.tree.CompilationUnitTree;
+import java.util.List;
 
 public class CompileTask implements AutoCloseable {
     
