@@ -285,12 +285,17 @@ public class WizardFragment extends Fragment {
             }
 
             Project project = new Project(new File(mSaveLocationLayout.getEditText().getText().toString()));
+            replacePlaceholders(project.mRoot);
 
             requireActivity().runOnUiThread(() -> {
                 Fragment fragment = getParentFragmentManager().findFragmentByTag("main_fragment");
                 if (fragment instanceof MainFragment) {
                     ((MainFragment) fragment).openProject(project);
                 }
+
+                getParentFragmentManager().beginTransaction()
+                        .remove(WizardFragment.this)
+                        .commit();
             });
         });
     }
@@ -304,11 +309,17 @@ public class WizardFragment extends Fragment {
         File[] files = file.listFiles();
         if (files != null) {
             for (File child : files) {
+                if (child.isDirectory()) {
+                    replacePlaceholders(child);
+                    continue;
+                }
                 if (child.getName().equals("build.gradle")) {
-                    replacePlaceholder(file);
+                    replacePlaceholder(child);
                 } else if (child.getName().endsWith(".java")) {
-                    replacePlaceholder(file);
-                } else if (child.getName().endsWith(".xml"));
+                    replacePlaceholder(child);
+                } else if (child.getName().endsWith(".xml")) {
+                    replacePlaceholder(child);
+                }
             }
         }
     }

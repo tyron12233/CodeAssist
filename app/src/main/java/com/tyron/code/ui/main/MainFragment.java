@@ -223,6 +223,27 @@ public class MainFragment extends Fragment {
                         .commit();
 
                 return true;
+            } else if (item.getItemId() == R.id.action_open) {
+                final EditText et = new EditText(requireContext());
+                et.setHint("Project root directory");
+
+                @SuppressLint("RestrictedApi")
+                AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
+                        .setTitle("Create a project")
+                        .setNegativeButton("cancel", null)
+                        .setPositiveButton("create", (i, which) -> {
+                            File file = new File(et.getText().toString());
+                            Project project = new Project(file);
+                            if (project.isValidProject()) {
+                                openProject(project);
+                            } else {
+                                ApplicationLoader.showToast("The selected directory is not a valid project directory");
+                            }
+                        })
+                        .setView(et, 24, 0, 24, 0)
+                        .create();
+
+                dialog.show();
             } else if (item.getItemId() == R.id.debug_refresh) {
                 Project project = FileManager.getInstance().getCurrentProject();
 
