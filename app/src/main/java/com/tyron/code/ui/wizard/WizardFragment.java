@@ -330,10 +330,17 @@ public class WizardFragment extends Fragment {
      */
     private void replacePlaceholder(File file) {
         String string = FileManager.readFile(file);
+        String targetSdk = "31";
+        String minSdk = mMinSdkText.getText().toString()
+                .substring("API".length() + 1, "API".length() + 3); // atleast 2 digits
+        int minSdkInt = Integer.parseInt(minSdk);
+
         FileManager.writeFile(
                 file,
                 string.replace("$packagename", mPackageNameLayout.getEditText().getText())
                 .replace("$appname", mNameLayout.getEditText().getText())
+                .replace("$targetsdk", targetSdk)
+                .replace("$minsdk", String.valueOf(minSdkInt))
         );
     }
 
