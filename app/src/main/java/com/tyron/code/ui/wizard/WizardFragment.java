@@ -290,7 +290,7 @@ public class WizardFragment extends Fragment {
             requireActivity().runOnUiThread(() -> {
                 Fragment fragment = getParentFragmentManager().findFragmentByTag("main_fragment");
                 if (fragment instanceof MainFragment) {
-                    ((MainFragment) fragment).openProject(project);
+                    ((MainFragment) fragment).openProject(project, true);
                 }
 
                 getParentFragmentManager().beginTransaction()

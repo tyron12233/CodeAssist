@@ -51,11 +51,20 @@ import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.wizard.WizardFragment;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ApkInstaller;
+import com.tyron.resolver.DependencyDownloader;
+import com.tyron.resolver.DependencyResolver;
+import com.tyron.resolver.DependencyUtils;
+import com.tyron.resolver.ResolveTask;
+import com.tyron.resolver.exception.DuplicateDependencyException;
+import com.tyron.resolver.model.Dependency;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Executors;
 
 public class MainFragment extends Fragment {
@@ -343,7 +352,11 @@ public class MainFragment extends Fragment {
         mRoot.closeDrawer(GravityCompat.START, true);
     }
 
-    public void openProject(Project proj) {
+    public void openProject(Project project) {
+        openProject(project, false);
+    }
+
+    public void openProject(Project proj, boolean downloadLibs) {
 
         if (!proj.isValidProject()) {
             ApplicationLoader.showToast("Invalid project directory");
@@ -357,9 +370,40 @@ public class MainFragment extends Fragment {
 
         mProgressBar.setVisibility(View.VISIBLE);
         mToolbar.setTitle(proj.mRoot.getName());
-        mToolbar.setSubtitle("Indexing");
 
         Executors.newSingleThreadExecutor().execute(() -> {
+
+            if (downloadLibs) {
+                requireActivity().runOnUiThread(() -> mToolbar.setSubtitle("Resolving dependencies"));
+
+                // this is the existing libraries from app/libs
+                Set<Dependency> libs = DependencyUtils.fromLibs(proj.getLibraryDirectory());
+
+                // dependencies parsed from the build.gradle file
+                Set<Dependency> dependencies = new HashSet<>();
+                try {
+                    dependencies.addAll(DependencyUtils.parseGradle(new File(proj.mRoot, "app/build.gradle")));
+                } catch (Exception exception) {
+                    //TODO: handle parse error
+                    exception.printStackTrace();
+                }
+
+                DependencyResolver resolver = new DependencyResolver(dependencies, proj.getLibraryDirectory());
+                dependencies = resolver.resolveMain();
+                logViewModel.d(LogViewModel.BUILD_LOG, "Resolved dependencies: " + dependencies);
+
+                requireActivity().runOnUiThread(() -> mToolbar.setSubtitle("Downloading dependencies"));
+                logViewModel.d(LogViewModel.BUILD_LOG, "Downloading dependencies");
+                DependencyDownloader downloader = new DependencyDownloader(libs, proj.getLibraryDirectory());
+                try {
+                    downloader.download(dependencies);
+                } catch (IOException e) {
+                    logViewModel.e(LogViewModel.BUILD_LOG, e.getMessage());
+                }
+            }
+
+            requireActivity().runOnUiThread(() -> mToolbar.setSubtitle("Indexing"));
+
             FileManager.getInstance().openProject(proj);
             CompletionEngine.getInstance().index(proj, () -> {
                 if (mProgressBar != null) {
