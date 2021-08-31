@@ -11,8 +11,8 @@ import java.util.List;
 
 public class TreeNode<T extends LayoutItemType> implements Cloneable {
     private T content;
-    private TreeNode parent;
-    private List<TreeNode> childList;
+    private TreeNode<T> parent;
+    private List<TreeNode<T>> childList;
     private boolean isExpand;
     private boolean isLocked;
     //the tree high
@@ -49,18 +49,18 @@ public class TreeNode<T extends LayoutItemType> implements Cloneable {
         return content;
     }
 
-    public List<TreeNode> getChildList() {
+    public List<TreeNode<T>> getChildList() {
         return childList;
     }
 
-    public void setChildList(List<TreeNode> childList) {
+    public void setChildList(List<TreeNode<T>> childList) {
         this.childList.clear();
-        for (TreeNode treeNode : childList) {
+        for (TreeNode<T> treeNode : childList) {
             addChild(treeNode);
         }
     }
 
-    public TreeNode addChild(TreeNode node) {
+    public TreeNode<T> addChild(TreeNode<T> node) {
         if (childList == null)
             childList = new ArrayList<>();
         childList.add(node);
@@ -83,7 +83,7 @@ public class TreeNode<T extends LayoutItemType> implements Cloneable {
         if (childList == null || childList.isEmpty()) {
             return;
         }
-        for (TreeNode child : this.childList) {
+        for (TreeNode<T> child : this.childList) {
             child.collapseAll();
         }
     }
@@ -99,7 +99,7 @@ public class TreeNode<T extends LayoutItemType> implements Cloneable {
         if (childList == null || childList.isEmpty()) {
             return;
         }
-        for (TreeNode child : this.childList) {
+        for (TreeNode<T> child : this.childList) {
             child.expandAll();
         }
     }
@@ -108,11 +108,11 @@ public class TreeNode<T extends LayoutItemType> implements Cloneable {
         return isExpand;
     }
 
-    public void setParent(TreeNode parent) {
+    public void setParent(TreeNode<T> parent) {
         this.parent = parent;
     }
 
-    public TreeNode getParent() {
+    public TreeNode<T> getParent() {
         return parent;
     }
 
@@ -130,6 +130,7 @@ public class TreeNode<T extends LayoutItemType> implements Cloneable {
         return isLocked;
     }
 
+    @NonNull
     @Override
     public String toString() {
         return "TreeNode{" +
@@ -140,6 +141,7 @@ public class TreeNode<T extends LayoutItemType> implements Cloneable {
                 '}';
     }
 
+    @NonNull
     @Override
     protected TreeNode<T> clone() throws CloneNotSupportedException {
         TreeNode<T> clone = new TreeNode<>(this.content);
