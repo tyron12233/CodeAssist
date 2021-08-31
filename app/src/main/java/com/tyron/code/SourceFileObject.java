@@ -4,33 +4,38 @@ import android.annotation.SuppressLint;
 
 import androidx.annotation.NonNull;
 
-import org.openjdk.javax.tools.SimpleJavaFileObject;
-import org.openjdk.javax.tools.JavaFileObject;
 import com.tyron.code.parser.FileManager;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
 
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
+
 @SuppressLint("NewApi")
 public class SourceFileObject extends SimpleJavaFileObject {
-	
+
 	public Path mFile;
 	private final Instant modified;
+	private String mContents;
 	
 	public SourceFileObject(Path file) {
-		this(file, Instant.EPOCH);
+		this(file, null, Instant.EPOCH);
 	}
 	
-	public SourceFileObject(Path file, Instant modified) {
+	public SourceFileObject(Path file, String contents, Instant modified) {
 		super(file.toUri(), JavaFileObject.Kind.SOURCE);
-		
+		mContents = contents;
 		mFile = file;
 		this.modified = modified;
 	}
 
 	@Override
 	public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+		if (mContents != null) {
+			return mContents;
+		}
 		return FileManager.readFile(mFile.toFile());
 	}
 	
@@ -72,14 +77,13 @@ public class SourceFileObject extends SimpleJavaFileObject {
 
 	@Override
 	public boolean equals(Object o) {
-		if (this == o) return true;
-		if (o == null || getClass() != o.getClass()) return false;
+		if (getClass() != o.getClass()) return false;
 		SourceFileObject that = (SourceFileObject) o;
-		return Objects.equals(mFile, that.mFile);
+		return this.mFile.equals(that.mFile);
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(mFile);
+		return mFile.hashCode();
 	}
 }

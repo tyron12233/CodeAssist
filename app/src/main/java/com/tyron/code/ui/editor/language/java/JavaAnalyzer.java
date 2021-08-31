@@ -1,6 +1,4 @@
 package com.tyron.code.ui.editor.language.java;
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
 
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
 import io.github.rosemoe.editor.text.TextAnalyzer;
@@ -15,6 +13,9 @@ import io.github.rosemoe.editor.langs.java.JavaTextTokenizer;
 import io.github.rosemoe.editor.struct.BlockLine;
 import io.github.rosemoe.editor.struct.NavigationItem;
 import java.util.Stack;
+
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
 
 public class JavaAnalyzer extends JavaCodeAnalyzer {
     

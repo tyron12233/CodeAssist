@@ -1,16 +1,16 @@
 package com.tyron.code.rewrite;
 import android.annotation.SuppressLint;
 
+import com.sun.source.tree.Tree;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.Trees;
 import com.tyron.code.model.Position;
 import com.tyron.code.ParseTask;
 import java.util.List;
 import java.util.Map;
 import com.tyron.code.model.TextEdit;
 
-import org.openjdk.source.tree.ImportTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.ImportTree;
 
 import java.io.File;
 

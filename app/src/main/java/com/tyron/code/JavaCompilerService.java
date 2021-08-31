@@ -8,8 +8,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
+
 import com.tyron.code.compiler.CompileBatch;
 import com.tyron.code.compiler.ReusableCompiler;
 import java.util.Map;
@@ -18,6 +17,9 @@ import com.tyron.code.parser.FileManager;
 
 import android.annotation.SuppressLint;
 import android.util.Log;
+
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
 
 public class JavaCompilerService implements CompilerProvider {
 
