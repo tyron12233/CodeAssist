@@ -39,7 +39,7 @@ public class LogViewModel extends ViewModel {
             current = current + '\n' + "<$$debug>" + message + "</$$debug>";
         }
         
-        if (Thread.currentThread() != Looper.getMainLooper().getThread()) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
            log.get(id).postValue(current);
         } else {
            log.get(id).setValue(current);
