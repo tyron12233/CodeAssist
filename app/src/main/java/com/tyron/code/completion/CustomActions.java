@@ -1,15 +1,12 @@
 package com.tyron.code.completion;
+
+import com.tyron.code.ParseTask;
 import com.tyron.code.model.CompletionItem;
 import com.tyron.code.model.CompletionList;
-import com.tyron.code.ParseTask;
-import java.util.List;
+
 import java.util.ArrayList;
-import com.tyron.code.util.StringSearch;
-import com.sun.source.util.TreePath;
-import com.sun.tools.javac.tree.JCTree;
-import android.util.Log;
-import com.sun.source.tree.Tree;
-import com.sun.source.tree.AnnotationTree;
+import java.util.List;
+
 
 /**
  * Convenience class for getting completions on custom actions like

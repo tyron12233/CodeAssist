@@ -1,36 +1,35 @@
 package com.tyron.code;
+
+import android.util.Log;
+
+import com.sun.source.tree.BlockTree;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ErroneousTree;
+import com.sun.source.tree.ImportTree;
+import com.sun.source.tree.StatementTree;
+import com.sun.source.tree.SwitchTree;
+import com.sun.source.tree.Tree;
 import com.sun.source.util.JavacTask;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreeScanner;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.api.JavacTool;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.Name;
+import javax.tools.Diagnostic;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 
-import java.net.URI;
-import java.util.HashMap;
-import java.util.ServiceLoader;
-import java.util.List;
-import javax.tools.StandardJavaFileManager;
-import java.util.Collections;
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.util.Trees;
-import java.io.IOException;
-import com.sun.source.tree.Tree;
-import java.util.Collection;
-import com.sun.source.util.TreeScanner;
-import com.sun.source.util.SourcePositions;
-import com.sun.source.tree.ImportTree;
-import com.sun.source.tree.SwitchTree;
-import com.sun.source.tree.BlockTree;
-import com.sun.source.tree.StatementTree;
-import com.sun.source.tree.ErroneousTree;
-import java.nio.file.Paths;
-import java.nio.file.Path;
-import javax.tools.JavaFileManager;
-import com.sun.tools.javac.api.JavacTool;
-import java.util.Set;
-import java.util.HashSet;
-import com.sun.source.tree.ClassTree;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.Name;
-import android.util.Log;
 public class Parser {
     
     private static final JavaCompiler COMPILER = JavacTool.create();
@@ -95,7 +94,7 @@ public class Parser {
     }
 	
 	public Set<Name> packagePrivateClasses() {
-		Set<Name>  result = new HashSet<>();
+		Set<Name> result = new HashSet<>();
 		for (Tree t : root.getTypeDecls()) {
 			Log.d("Parser", t.getClass().toString());
 			if (t instanceof ClassTree) {
@@ -243,7 +242,7 @@ public class Parser {
         return prune(root, pos, buffer, cursors, true);
     }
 	
-	private static void ignoreError(javax.tools.Diagnostic<? extends JavaFileObject> __) {
+	private static void ignoreError(Diagnostic<? extends JavaFileObject> __) {
         // Too noisy, this only comes up in parse tasks which tend to be less important
         // LOG.warning(err.getMessage(Locale.getDefault()));
     }

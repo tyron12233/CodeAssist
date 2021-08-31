@@ -3,27 +3,32 @@ package com.tyron.code.compiler;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.TaskEvent;
 import com.sun.source.util.TaskListener;
-import com.sun.tools.javac.api.*;
+import com.sun.tools.javac.api.JavacTaskImpl;
+import com.sun.tools.javac.api.JavacTool;
+import com.sun.tools.javac.api.JavacTrees;
+import com.sun.tools.javac.api.MultiTaskListener;
 import com.sun.tools.javac.code.Types;
 import com.sun.tools.javac.comp.Annotate;
 import com.sun.tools.javac.comp.Check;
 import com.sun.tools.javac.comp.CompileStates;
 import com.sun.tools.javac.comp.Enter;
-import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.model.JavacElements;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.Log;
+import com.sun.tools.javac.main.JavaCompiler;
+
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticListener;
 import javax.tools.JavaFileManager;
 import javax.tools.JavaFileObject;
-import java.lang.reflect.Method;
 
 /**
  * A pool of reusable JavacTasks. When a task is no valid anymore, it is returned to the pool, and its Context may be
@@ -46,6 +51,7 @@ import java.lang.reflect.Method;
  * <p><b>This is NOT part of any supported API. If you write code that depends on this, you do so at your own risk. This
  * code and its internal interfaces are subject to change or deletion without notice.</b>
  */
+
 public class ReusableCompiler {
 
     private static final Logger LOG = Logger.getLogger("main");
@@ -56,7 +62,7 @@ public class ReusableCompiler {
     private boolean checkedOut;
 
     /**
-     * Creates a new task as if by {@link javax.tools.JavaCompiler#getTask} and runs the provided worker with it. The
+     * Creates a new task as if by JavaCompiler and runs the provided worker with it. The
      * task is only valid while the worker is running. The internal structures may be reused from some previous
      * compilation.
      *
@@ -136,10 +142,10 @@ public class ReusableCompiler {
         }
 
         public void clear() {
-           // drop(Arguments.argsKey);
+//            drop(Arguments.argsKey);
             drop(DiagnosticListener.class);
             drop(Log.outKey);
-            //drop(Log.errKey);
+//            drop(Log.errKey);
             drop(JavaFileManager.class);
             drop(JavacTask.class);
             drop(JavacTrees.class);
@@ -152,7 +158,7 @@ public class ReusableCompiler {
                 ((ReusableJavaCompiler) ReusableJavaCompiler.instance(this)).clear();
                 Types.instance(this).newRound();
                 Check.instance(this).newRound();
-              //  Modules.instance(this).newRound();
+                //Modules.instance(this).newRound();
                 Annotate.instance(this).newRound();
                 CompileStates.instance(this).clear();
                 MultiTaskListener.instance(this).clear();
@@ -200,7 +206,7 @@ public class ReusableCompiler {
                 newRound();
             }
 
-           // @Override
+            //@Override
             protected void checkReusable() {
                 // do nothing - it's ok to reuse the compiler
             }

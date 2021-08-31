@@ -29,7 +29,7 @@ public class BinaryExecutor {
 
 			process.waitFor();
         } catch (Exception e) {
-            Log.e(TAG, e.getMessage());
+            Log.e(TAG, String.valueOf(new PrintWriter(mWriter)));
         }
         return mWriter.toString();
     }

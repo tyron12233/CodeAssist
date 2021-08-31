@@ -1,10 +1,13 @@
 package com.tyron.code.completion;
+
+
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.SourcePositions;
 import com.sun.source.util.TreeScanner;
 import com.sun.source.util.Trees;
+
 import java.io.IOException;
 
 public class PruneMethodBodies extends TreeScanner<StringBuilder, Long> {

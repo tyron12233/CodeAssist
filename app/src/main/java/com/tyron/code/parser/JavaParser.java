@@ -1,28 +1,26 @@
 package com.tyron.code.parser;
+
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.JavacTask;
+import com.sun.tools.javac.api.JavacTool;
 import com.sun.tools.javac.file.JavacFileManager;
 import com.sun.tools.javac.util.Context;
+import com.tyron.code.completion.CompletionProvider;
+import com.tyron.code.ui.editor.log.LogViewModel;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
 import javax.tools.StandardLocation;
-import com.sun.source.util.JavacTask;
-import com.sun.tools.javac.api.JavacTool;
-import com.sun.source.tree.CompilationUnitTree;
-
-import java.io.File;
-import java.util.ArrayList;
-
-import com.tyron.code.completion.CompletionProvider;
-
-
-import com.tyron.code.ui.editor.log.LogViewModel;
-import java.util.Locale;
 
 
 /**

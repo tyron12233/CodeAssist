@@ -39,15 +39,15 @@ import com.google.android.material.tabs.TabLayoutMediator;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.completion.CompletionEngine;
+import com.tyron.code.model.Project;
+import com.tyron.code.parser.FileManager;
+import com.tyron.code.service.CompilerService;
+import com.tyron.code.service.ILogger;
 import com.tyron.code.ui.editor.BottomEditorFragment;
 import com.tyron.code.ui.editor.CodeEditorFragment;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.log.LogViewModel;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
-import com.tyron.code.model.Project;
-import com.tyron.code.parser.FileManager;
-import com.tyron.code.service.CompilerService;
-import com.tyron.code.service.ILogger;
 import com.tyron.code.ui.wizard.WizardFragment;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ApkInstaller;
@@ -220,26 +220,30 @@ public class MainFragment extends Fragment {
                 WizardFragment fragment = new WizardFragment();
                 getParentFragmentManager().beginTransaction()
                         .add(R.id.fragment_container, fragment, "wizard_fragment")
-                        .show(fragment)
                         .commit();
-//                final EditText et = new EditText(requireContext());
-//                et.setHint("Project root directory");
-//
-//                @SuppressLint("RestrictedApi")
-//                AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
-//                        .setTitle("Create a project")
-//                        .setNegativeButton("cancel", null)
-//                        .setPositiveButton("create", (i, which) -> {
-//                            File file = new File(et.getText().toString());
-//                            Project project = new Project(file);
-//                            project.create();
-//                            openProject(project);
-//                        })
-//                        .setView(et, 24, 0, 24, 0)
-//                        .create();
-//
-//                dialog.show();
+
                 return true;
+            } else if (item.getItemId() == R.id.action_open) {
+                final EditText et = new EditText(requireContext());
+                et.setHint("Project root directory");
+
+                @SuppressLint("RestrictedApi")
+                AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
+                        .setTitle("Create a project")
+                        .setNegativeButton("cancel", null)
+                        .setPositiveButton("create", (i, which) -> {
+                            File file = new File(et.getText().toString());
+                            Project project = new Project(file);
+                            if (project.isValidProject()) {
+                                openProject(project);
+                            } else {
+                                ApplicationLoader.showToast("The selected directory is not a valid project directory");
+                            }
+                        })
+                        .setView(et, 24, 0, 24, 0)
+                        .create();
+
+                dialog.show();
             } else if (item.getItemId() == R.id.debug_refresh) {
                 Project project = FileManager.getInstance().getCurrentProject();
 
@@ -344,6 +348,11 @@ public class MainFragment extends Fragment {
         if (!proj.isValidProject()) {
             ApplicationLoader.showToast("Invalid project directory");
             return;
+        }
+
+        Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
+        if (fragment instanceof TreeFileManagerFragment) {
+            ((TreeFileManagerFragment) fragment).refresh();
         }
 
         mProgressBar.setVisibility(View.VISIBLE);

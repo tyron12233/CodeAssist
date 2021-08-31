@@ -1,15 +1,17 @@
 package com.tyron.code.rewrite;
 import android.annotation.SuppressLint;
 
-import com.tyron.code.model.Position;
-import com.sun.source.util.SourcePositions;
 import com.sun.source.tree.Tree;
+import com.sun.source.util.SourcePositions;
 import com.sun.source.util.Trees;
+import com.tyron.code.model.Position;
 import com.tyron.code.ParseTask;
 import java.util.List;
-import com.sun.source.tree.ImportTree;
 import java.util.Map;
 import com.tyron.code.model.TextEdit;
+
+import com.sun.source.tree.ImportTree;
+
 import java.io.File;
 
 public class AddImport {

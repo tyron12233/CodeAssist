@@ -1,28 +1,18 @@
 package com.tyron.code.completion;
+
+import com.sun.source.tree.CaseTree;
 import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.util.JavacTask;
-import com.sun.source.util.TreePath;
+import com.sun.source.tree.ErroneousTree;
 import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.ImportTree;
+import com.sun.source.tree.MemberReferenceTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.JavacTask;
 import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreePath;
 import com.sun.source.util.TreePathScanner;
 import com.sun.source.util.Trees;
-import com.sun.tools.javac.util.Context;
-import com.sun.tools.javac.tree.TreeInfo;
-import com.sun.source.tree.Tree;
-import com.sun.tools.javac.tree.JCTree;
-import com.sun.source.tree.ImportTree;
-import com.sun.source.tree.MemberSelectTree;
-import com.sun.source.tree.ErroneousTree;
-import com.sun.source.tree.CaseTree;
-import com.sun.source.tree.MemberReferenceTree;
-import com.sun.source.tree.ParenthesizedTree;
-import com.tyron.code.ApplicationLoader;
-import android.util.Log;
-import com.sun.source.tree.LambdaExpressionTree;
-import com.sun.source.tree.NewClassTree;
-import com.sun.source.tree.TypeParameterTree;
-import com.sun.source.tree.MethodInvocationTree;
-import com.sun.source.tree.ExpressionStatementTree;
 
 public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
     

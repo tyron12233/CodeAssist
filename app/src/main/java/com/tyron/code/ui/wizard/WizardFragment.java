@@ -285,11 +285,65 @@ public class WizardFragment extends Fragment {
             }
 
             Project project = new Project(new File(mSaveLocationLayout.getEditText().getText().toString()));
-            if (getParentFragment() != null && getParentFragment() instanceof MainFragment) {
-                ((MainFragment) getParentFragment()).openProject(project);
-            }
+            replacePlaceholders(project.mRoot);
+
+            requireActivity().runOnUiThread(() -> {
+                Fragment fragment = getParentFragmentManager().findFragmentByTag("main_fragment");
+                if (fragment instanceof MainFragment) {
+                    ((MainFragment) fragment).openProject(project);
+                }
+
+                getParentFragmentManager().beginTransaction()
+                        .remove(WizardFragment.this)
+                        .commit();
+            });
         });
     }
+
+    /**
+     * Traverses all files in a directory, including subdirectory and replaces
+     * placeholders with the right text.
+     * @param file Root directory to start
+     */
+    private void replacePlaceholders(File file) {
+        File[] files = file.listFiles();
+        if (files != null) {
+            for (File child : files) {
+                if (child.isDirectory()) {
+                    replacePlaceholders(child);
+                    continue;
+                }
+                if (child.getName().equals("build.gradle")) {
+                    replacePlaceholder(child);
+                } else if (child.getName().endsWith(".java")) {
+                    replacePlaceholder(child);
+                } else if (child.getName().endsWith(".xml")) {
+                    replacePlaceholder(child);
+                }
+            }
+        }
+    }
+
+    /**
+     * Replaces the placeholders in a file such as $packagename, $appname
+     * @param file Input file
+     */
+    private void replacePlaceholder(File file) {
+        String string = FileManager.readFile(file);
+        String targetSdk = "31";
+        String minSdk = mMinSdkText.getText().toString()
+                .substring("API".length() + 1, "API".length() + 3); // atleast 2 digits
+        int minSdkInt = Integer.parseInt(minSdk);
+
+        FileManager.writeFile(
+                file,
+                string.replace("$packagename", mPackageNameLayout.getEditText().getText())
+                .replace("$appname", mNameLayout.getEditText().getText())
+                .replace("$targetsdk", targetSdk)
+                .replace("$minsdk", String.valueOf(minSdkInt))
+        );
+    }
+
     @SuppressWarnings("ConstantConditions")
     private void createProject() throws IOException  {
         if (!validateDetails()) {

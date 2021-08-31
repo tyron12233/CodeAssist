@@ -26,6 +26,7 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 
+
 @SuppressWarnings("NewApi")
 public class CompileBatch implements AutoCloseable {
     static final int MAX_COMPLETION_ITEMS = 50;
@@ -86,7 +87,7 @@ public class CompileBatch implements AutoCloseable {
         return addFiles;
     }
 
-    private String errorText(javax.tools.Diagnostic<? extends javax.tools.JavaFileObject> err) {
+    private String errorText(Diagnostic<? extends JavaFileObject> err) {
         Path file = Paths.get(err.getSource().toUri());
         String contents = FileManager.readFile(file.toFile());
         int begin = (int) err.getStartPosition();
@@ -94,7 +95,7 @@ public class CompileBatch implements AutoCloseable {
         return contents.substring(begin, end);
     }
 
-    private String packageName(javax.tools.Diagnostic<? extends javax.tools.JavaFileObject> err) {
+    private String packageName(Diagnostic<? extends JavaFileObject> err) {
         Path file = Paths.get(err.getSource().toUri());
         return StringSearch.packageName(file.toFile());
     }
@@ -165,7 +166,7 @@ public class CompileBatch implements AutoCloseable {
         return list;
     }
 
-    private boolean isValidFileRange(javax.tools.Diagnostic<? extends JavaFileObject> d) {
+    private boolean isValidFileRange(Diagnostic<? extends JavaFileObject> d) {
         return d.getSource().toUri().getScheme().equals("file") && d.getStartPosition() >= 0 && d.getEndPosition() >= 0;
     }
 }

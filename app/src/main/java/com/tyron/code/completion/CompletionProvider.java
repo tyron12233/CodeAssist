@@ -27,6 +27,7 @@ import com.tyron.code.ui.editor.drawable.CircleDrawable;
 import com.tyron.code.util.StringSearch;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -141,15 +142,16 @@ public class CompletionProvider {
 		//addTopLevelSnippets(task, list);
 		return list;
 	}
+
 	public CompletionList compileAndComplete(File file, String contents, long cursor) {
 		Instant start = Instant.now();
-		SourceFileObject source = new SourceFileObject(file.toPath());
+		SourceFileObject source = new SourceFileObject(file.toPath(), contents, Instant.now());
 		String partial = partialIdentifier(contents, (int) cursor);
 		boolean endsWithParen = endsWithParen(contents, (int) cursor);
 		//noinspection
 		try (CompileTask task = compiler.compile(List.of(source))) {
 			Log.d(TAG, "Compiled in: " + Duration.between(start, Instant.now()).toMillis() + "ms");
-			TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor); 
+			TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
 			switch (path.getLeaf().getKind()) {
 				case IDENTIFIER:             
 					return completeIdentifier(task, path, partial, endsWithParen);
@@ -304,13 +306,13 @@ public class CompletionProvider {
     }
 
     private CompletionList completeMemberSelect(CompileTask task, TreePath path, String partial, boolean endsWithParen) {
-        Trees trees = Trees.instance(task.task);
-        MemberSelectTree select = (MemberSelectTree) path.getLeaf();     
+        MemberSelectTree select = (MemberSelectTree) path.getLeaf();
         path = new TreePath(path, select.getExpression());
+        Trees trees = Trees.instance(task.task);
         boolean isStatic = trees.getElement(path) instanceof TypeElement;
         Scope scope = trees.getScope(path);
         TypeMirror type = trees.getTypeMirror(path);
-		//  Log.d("Completion on MemberSelect", "type: " + type.getKind() + " " + type.getClass().getName());
+        //  Log.d("Completion on MemberSelect", "type: " + type.getKind() + " " + type.getClass().getName());
         if (type instanceof ArrayType) {
             return completeArrayMemberSelect(isStatic);
         } else if (type instanceof TypeVariable) {
@@ -471,7 +473,7 @@ public class CompletionProvider {
 
     public List<CompletionItem> addAnonymous(CompileTask task, TreePath path, String partial) {
         List<CompletionItem> items = new ArrayList<>();
-		
+
 		if (!(path.getLeaf() instanceof NewClassTree)) {
 			return items;
 		}
@@ -605,7 +607,6 @@ public class CompletionProvider {
     private CompletionList completeMemberReference(CompileTask task, TreePath path, String partial) {
         Trees trees = Trees.instance(task.task);
         MemberReferenceTree select = (MemberReferenceTree) path.getLeaf();
-
         path = new TreePath(path, select.getQualifierExpression());
         Element element = trees.getElement(path);
         boolean isStatic = element instanceof TypeElement;
