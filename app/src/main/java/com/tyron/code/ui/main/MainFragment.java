@@ -217,27 +217,11 @@ public class MainFragment extends Fragment {
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_create) {
 
-//                WizardFragment fragment = new WizardFragment();
-//                getParentFragmentManager().beginTransaction()
-//                        .add(R.id.fragment_container, fragment, "wizard_fragment")
-//                        .commit();
-                final EditText et = new EditText(requireContext());
-                et.setHint("Project root directory");
+                WizardFragment fragment = new WizardFragment();
+                getParentFragmentManager().beginTransaction()
+                        .add(R.id.fragment_container, fragment, "wizard_fragment")
+                        .commit();
 
-                @SuppressLint("RestrictedApi")
-                AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
-                        .setTitle("Create a project")
-                        .setNegativeButton("cancel", null)
-                        .setPositiveButton("create", (i, which) -> {
-                            File file = new File(et.getText().toString());
-                            Project project = new Project(file);
-                            project.create();
-                            openProject(project);
-                        })
-                        .setView(et, 24, 0, 24, 0)
-                        .create();
-
-                dialog.show();
                 return true;
             } else if (item.getItemId() == R.id.debug_refresh) {
                 Project project = FileManager.getInstance().getCurrentProject();
