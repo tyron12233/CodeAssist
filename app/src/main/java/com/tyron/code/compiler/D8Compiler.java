@@ -15,8 +15,11 @@ import com.tyron.code.service.ILogger;
 import com.tyron.code.util.exception.CompilationFailedException;
 
 import java.io.File;
+import java.io.FileFilter;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -53,14 +56,14 @@ public class D8Compiler {
 			logViewModel.debug("Merging dexes and source files");
 
 			startTime = System.currentTimeMillis();
-			List<Path> userLibraries = mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList());
+			List<Path> libraryDexes = getLibraryDexes();
 
 			D8Command command = D8Command.builder(diagnosticsHandler)
-					.addClasspathFiles(userLibraries)
+					.addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
 					.setMinApiLevel(21)
 					.addLibraryFiles(getLibraryFiles())
 					.addProgramFiles(getClassFiles(new File(mProject.getBuildDirectory(), "bin/classes")))
-					.addProgramFiles(userLibraries)
+					.addProgramFiles(libraryDexes)
 					.setOutput(new File(mProject.getBuildDirectory(), "bin").toPath(), OutputMode.DexIndexed)
 					.build();
 			D8.run(command);
@@ -117,6 +120,24 @@ public class D8Compiler {
 		path.add(FileManager.getInstance().getAndroidJar().toPath());
 		path.add(FileManager.getInstance().getLambdaStubs().toPath());
 		return path;
+	}
+
+	/**
+	 * Retrieves a list of all libraries dexes including the extra dex files if it has one
+	 * @return list of all dex files
+	 */
+	private	 List<Path> getLibraryDexes() {
+		List<Path> dexes = new ArrayList<>();
+		for (File file : mProject.getLibraries()) {
+			File parent = file.getParentFile();
+			if (parent != null) {
+				File[] dexFiles = parent.listFiles(file1 -> file1.getName().endsWith(".dex"));
+				if (dexFiles != null) {
+					dexes.addAll(Arrays.stream(dexFiles).map(File::toPath).collect(Collectors.toList()));
+				}
+			}
+		}
+		return dexes;
 	}
 
 	private List<Path> getClassFiles(File root) {
