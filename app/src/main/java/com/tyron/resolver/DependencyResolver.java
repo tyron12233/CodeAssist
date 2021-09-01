@@ -5,6 +5,7 @@ import com.tyron.resolver.model.Dependency;
 
 import java.io.File;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
 import java.io.InputStream;
@@ -16,6 +17,8 @@ import java.util.Collections;
 
 import org.apache.commons.io.FileUtils;
 import org.xmlpull.v1.XmlPullParserException;
+
+import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.concurrent.ExecutorService;
@@ -49,18 +52,33 @@ public class DependencyResolver {
         for (Dependency lib : library) {
             resolveDependency(lib);
         }
-        return resolvedDependencies;
+        return mResolvedLibraries.keySet();
     }
+
     /**
      *  The list of libraries that are already present in app/libs folder
      *  so we can check later if theres already a library present
      */
-    private Set<Dependency> resolvedDependencies = new HashSet<>();
+    private final Set<Dependency> resolvedDependencies = new HashSet<>();
+    private final Map<Dependency, String> mResolvedLibraries = new HashMap<>();
 
     private void resolveDependency(Dependency parent) {
-        if (resolvedDependencies.contains(parent)) {
-            Log.d(TAG, "Skipping " + parent);
-            return;
+        if (mResolvedLibraries.containsKey(parent)) {
+            String resolvedVersion = mResolvedLibraries.get(parent);
+            String thisVersion = parent.getVersion();
+
+            int result = new ComparableVersion(resolvedVersion)
+                    .compareTo(new ComparableVersion(thisVersion));
+
+            if (result > 0) {
+                // we have already resolved a version more recent than this one
+                return;
+            } else if (result == 0) {
+                return;
+            } else {
+                Log.d(TAG, "Found old version of library " + parent.getAtrifactId() + "\nold: " + resolvedVersion + "\nnew: " + thisVersion);
+                mResolvedLibraries.remove(parent);
+            }
         }
 
         InputStream is = getInputStream(parent);
@@ -84,7 +102,7 @@ public class DependencyResolver {
             Log.d(TAG, "Failed to resolve " + parent + ", " + e.getMessage());
         }
 
-        resolvedDependencies.add(parent);
+        mResolvedLibraries.put(parent, parent.getVersion());
 
         Log.d(TAG, "Resolved " + parent + " took: " + (start - System.currentTimeMillis()));
 
