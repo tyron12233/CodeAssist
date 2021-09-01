@@ -213,7 +213,7 @@ public class AAPT2Compiler {
 		String manifestString = FileManager.readFile(manifestFile);
 		Matcher matcher = MANIFEST_PACKAGE.matcher(manifestString);
 		if (matcher.find()) {
-			return matcher.group(3);
+			return matcher.group(4);
 		}
 
 		return null;
