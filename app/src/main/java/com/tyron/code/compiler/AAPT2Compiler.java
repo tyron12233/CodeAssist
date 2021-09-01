@@ -8,6 +8,8 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.model.Project;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.tyron.code.service.ILogger;
 import com.tyron.code.util.BinaryExecutor;
@@ -16,6 +18,7 @@ import com.tyron.code.parser.FileManager;
 
 public class AAPT2Compiler {
 
+	private static final Pattern MANIFEST_PACKAGE = Pattern.compile("\\s*(package)\\s*(=)\\s*(\")([a-zA-Z0-9.]+)(\")");
 	private static final String TAG = AAPT2Compiler.class.getSimpleName();
 
 	private final Project mProject;
@@ -137,6 +140,13 @@ public class AAPT2Compiler {
 		args.add("-o");
 		args.add(getOutputPath().getParent() + "/generated.apk.res");
 
+		String extraPackages = getPackageNames();
+		if (!extraPackages.isEmpty()) {
+			args.add("--extra-packages");
+			// remove the last ":"
+			args.add(extraPackages.substring(0, extraPackages.length() - 1));
+		}
+
 		BinaryExecutor exec = new BinaryExecutor();
 		exec.setCommands(args);
 		if (!exec.execute().trim().isEmpty()) {
@@ -165,6 +175,48 @@ public class AAPT2Compiler {
 			throw new IOException("Unable to create file " + name);
 		}
 		return createdFile;
+	}
+
+	/**
+	 * Retrieves the package names of libraries of has a resource file
+	 * @return list of package names in a form of string separated by ":" for use with AAPT2 directly
+	 */
+	private String getPackageNames() {
+		StringBuilder builder = new StringBuilder();
+
+		// getLibraries return list of classes.jar, get its parent
+		for (File library : mProject.getLibraries()) {
+			File parent = library.getParentFile();
+
+			String packageName = getPackageName(parent);
+			if (packageName != null) {
+				builder.append(packageName);
+				builder.append(":");
+			}
+		}
+
+		return builder.toString();
+	}
+
+	/**
+	 * Gets the pacakge name of the library if it needs a R.java file
+	 * @param library the directory in which the res folder or classes.jar is located
+	 * @return Package name of the library, null if it has no resource folder
+	 */
+	private String getPackageName(File library) {
+		File manifestFile = new File(library, "AndroidManifest.xml");
+		if (!manifestFile.exists()) {
+			// This library doesn't have a resource file
+			return null;
+		}
+
+		String manifestString = FileManager.readFile(manifestFile);
+		Matcher matcher = MANIFEST_PACKAGE.matcher(manifestString);
+		if (matcher.find()) {
+			return matcher.group(3);
+		}
+
+		return null;
 	}
 
 	private static File getBinary() throws IOException {
