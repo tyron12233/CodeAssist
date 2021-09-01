@@ -5,7 +5,10 @@ import android.annotation.SuppressLint;
 import androidx.annotation.NonNull;
 
 import com.tyron.code.parser.FileManager;
+
+import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
@@ -21,7 +24,7 @@ public class SourceFileObject extends SimpleJavaFileObject {
 	private String mContents;
 	
 	public SourceFileObject(Path file) {
-		this(file, null, Instant.EPOCH);
+		this(file, null, null);
 	}
 	
 	public SourceFileObject(Path file, String contents, Instant modified) {
@@ -66,6 +69,13 @@ public class SourceFileObject extends SimpleJavaFileObject {
 
 	@Override
 	public long getLastModified() {
+		if (modified == null) {
+			try {
+				return Files.getLastModifiedTime(mFile).toMillis();
+			} catch (IOException e) {
+				return Instant.EPOCH.toEpochMilli();
+			}
+		}
 		return modified.toEpochMilli();
 	}
 	

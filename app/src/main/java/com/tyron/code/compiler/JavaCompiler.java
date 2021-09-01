@@ -2,6 +2,7 @@ package com.tyron.code.compiler;
 
 
 import android.annotation.SuppressLint;
+import android.util.Log;
 
 import com.sun.source.util.JavacTask;
 import com.sun.tools.javac.api.JavacTool;
@@ -40,6 +41,9 @@ public class JavaCompiler {
 
     @SuppressLint("NewApi")
     public void compile() throws CompilationFailedException {
+
+        long startTime = System.currentTimeMillis();
+        logViewModel.debug("Compiling java files.");
 
         File outputDir = new File(mProject.getBuildDirectory(), "bin/classes");
         if (outputDir.exists()) {
@@ -97,6 +101,8 @@ public class JavaCompiler {
         if (!task.call()) {
             throw new CompilationFailedException("Compilation failed. Check diagnostics for more information.");
         }
+
+        Log.d("JavaCompiler", "Compilation took: " + (System.currentTimeMillis() - startTime) + " ms");
     }
 
     private List<File> getJavaFiles(File dir) {

@@ -19,7 +19,7 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.StandardLocation;
 
-public class SourceFileManager extends ForwardingJavaFileManager {
+public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFileManager> {
 	
 	public SourceFileManager() {
 		super(createDelegateFileManager());
@@ -97,5 +97,8 @@ public class SourceFileManager extends ForwardingJavaFileManager {
         }
         return super.getFileForInput(location, packageName, relativeName);
     }
-	
+
+    public void setLocation(Location location, Iterable<? extends  File> path) throws IOException {
+	    fileManager.setLocation(location, path);
+    }
 }

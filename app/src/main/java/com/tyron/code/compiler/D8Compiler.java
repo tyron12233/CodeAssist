@@ -41,14 +41,18 @@ public class D8Compiler {
 		mProject = project;
 	}
 
-	ExecutorService service = Executors.newSingleThreadExecutor();
+	ExecutorService service = Executors.newFixedThreadPool(4);
 	
 	public void compile() throws CompilationFailedException {
 		try {
+			logViewModel.debug("Dexing libraries.");
+			long startTime = System.currentTimeMillis();
 			ensureDexedLibraries();
+			Log.d("D8Compiler", "Dexing libraries took " + (System.currentTimeMillis() - startTime) + " ms");
 
-			logViewModel.debug("Dexing and merging sources.");
+			logViewModel.debug("Merging dexes and source files");
 
+			startTime = System.currentTimeMillis();
 			List<Path> userLibraries = mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList());
 
 			D8Command command = D8Command.builder(diagnosticsHandler)
@@ -59,12 +63,11 @@ public class D8Compiler {
 					.addProgramFiles(userLibraries)
 					.setOutput(new File(mProject.getBuildDirectory(), "bin").toPath(), OutputMode.DexIndexed)
 					.build();
-			D8.run(command, service);
+			D8.run(command);
 
-			// wait for all tasks to finish
-			service.shutdown();
-			service.awaitTermination(Long.MAX_VALUE, TimeUnit.MILLISECONDS);
-		} catch (com.android.tools.r8.CompilationFailedException | InterruptedException e) {
+			Log.d("D8Compiler", "Merging dex files took " + (System.currentTimeMillis() - startTime) + " ms");
+
+		} catch (com.android.tools.r8.CompilationFailedException e) {
 			throw new com.tyron.code.util.exception.CompilationFailedException(e);
 		}
 	}
@@ -75,6 +78,8 @@ public class D8Compiler {
 	 */
 	private void ensureDexedLibraries() throws com.android.tools.r8.CompilationFailedException {
 		Set<File> libraries = mProject.getLibraries();
+
+		Log.d(TAG, "Dexing libraries");
 
 		outer : for (File lib : libraries) {
 			File parentFile = lib.getParentFile();
@@ -87,14 +92,12 @@ public class D8Compiler {
 					logViewModel.warning("Failed to delete " + lib.getAbsolutePath());
 				}
 			} else {
-				for (File libFile : libFiles) {
-					if (libFile.getName().startsWith("classes") &&
-							libFile.getName().endsWith(".dex")) {
-						continue outer;
-					}
+				File dex = new File(lib.getParentFile(), "classes.dex");
+				if (dex.exists()) {
+					continue;
 				}
 				if (lib.exists()) {
-					Log.d(TAG, "Dexing jar " + lib.getParentFile().getName());
+					logViewModel.debug("Dexing jar " + lib.getName());
 					D8Command command = D8Command.builder(diagnosticsHandler)
 							.addLibraryFiles(getLibraryFiles())
 							.addClasspathFiles(libraries.stream().map(File::toPath).collect(Collectors.toList()))
@@ -103,7 +106,7 @@ public class D8Compiler {
 							.setMode(CompilationMode.RELEASE)
 							.setOutput(lib.getParentFile().toPath(), OutputMode.DexIndexed)
 							.build();
-					D8.run(command, service);
+					D8.run(command);
 				}
 			}
 		}

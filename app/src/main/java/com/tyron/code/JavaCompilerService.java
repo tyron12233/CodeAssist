@@ -1,6 +1,7 @@
 package com.tyron.code;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -20,6 +21,7 @@ import android.util.Log;
 
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
+import javax.tools.StandardLocation;
 
 public class JavaCompilerService implements CompilerProvider {
 
@@ -37,6 +39,13 @@ public class JavaCompilerService implements CompilerProvider {
 		this.docPath = Collections.unmodifiableSet(docPath);
 		this.addExports = Collections.unmodifiableSet(addExports);
 		this.fileManager = new SourceFileManager();
+
+        try {
+            fileManager.setLocation(StandardLocation.CLASS_PATH, classPath);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
     }
 
 	public CompileBatch cachedCompile;

@@ -96,7 +96,6 @@ public class Parser {
 	public Set<Name> packagePrivateClasses() {
 		Set<Name> result = new HashSet<>();
 		for (Tree t : root.getTypeDecls()) {
-			Log.d("Parser", t.getClass().toString());
 			if (t instanceof ClassTree) {
 				ClassTree c = (ClassTree) t;
 				boolean isPublic = c.getModifiers().getFlags().contains(Modifier.PUBLIC);

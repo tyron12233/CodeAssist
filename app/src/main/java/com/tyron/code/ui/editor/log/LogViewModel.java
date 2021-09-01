@@ -5,6 +5,8 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.LiveData;
 import java.util.List;
 import java.util.ArrayList;
+
+import android.os.Handler;
 import android.os.Looper;
 
 public class LogViewModel extends ViewModel {
@@ -13,7 +15,9 @@ public class LogViewModel extends ViewModel {
     public static final int APP_LOG = totalCount++;
     public static final int BUILD_LOG = totalCount++;
     public static final int DEBUG = totalCount++;
-    
+
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
     private List<MutableLiveData<String>> log;
     
     public LiveData<String> getLogs(int id) {
@@ -40,7 +44,8 @@ public class LogViewModel extends ViewModel {
         }
         
         if (Looper.myLooper() != Looper.getMainLooper()) {
-           log.get(id).postValue(current);
+            String finalCurrent = current;
+            mainHandler.post(() -> log.get(id).setValue(finalCurrent));
         } else {
            log.get(id).setValue(current);
         }

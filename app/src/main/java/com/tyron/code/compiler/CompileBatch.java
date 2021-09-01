@@ -6,6 +6,7 @@ import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.Trees;
 import com.tyron.code.JavaCompilerService;
+import com.tyron.code.Parser;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.util.StringSearch;
 
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import javax.lang.model.element.Name;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
@@ -106,7 +108,7 @@ public class CompileBatch implements AutoCloseable {
         // This is too expensive, parsing each file causing completions to slow down
         // on small files
 
-        /*for (File file : FileManager.getInstance().list(packageName)) {
+        for (File file : FileManager.getInstance().list(packageName)) {
 			Log.d("CompileBatch", "Parsing file: " + file.getName());
             Parser parse = Parser.parseFile(file.toPath());
             for (Name candidate : parse.packagePrivateClasses()) {
@@ -115,7 +117,7 @@ public class CompileBatch implements AutoCloseable {
                     return file.toPath();
                 }
             }
-        }*/
+        }
         return FILE_NOT_FOUND;
     }
 
@@ -139,10 +141,10 @@ public class CompileBatch implements AutoCloseable {
     private static List<String> options(Set<File> classPath, Set<String> addExports) {
         List<String> list = new ArrayList<>();
 
-        Collections.addAll(list, "-classpath", joinPath(classPath));
-		Collections.addAll(list, "-bootclasspath", joinPath(List.of(FileManager.getInstance().getAndroidJar(), FileManager.getInstance().getLambdaStubs())));
-      //  Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
-        // Collections.addAll(list, "-verbose");
+//        Collections.addAll(list, "-classpath", joinPath(classPath));
+//        Collections.addAll(list, "-bootclasspath", joinPath(List.of(FileManager.getInstance().getAndroidJar(), FileManager.getInstance().getLambdaStubs())));
+//        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
+        Collections.addAll(list, "-verbose");
         Collections.addAll(list, "-proc:none");
         Collections.addAll(list, "-g");
         // You would think we could do -Xlint:all,

@@ -145,7 +145,7 @@ public class CompletionProvider {
 
 	public CompletionList compileAndComplete(File file, String contents, long cursor) {
 		Instant start = Instant.now();
-		SourceFileObject source = new SourceFileObject(file.toPath(), contents, Instant.now());
+		SourceFileObject source = new SourceFileObject(file.toPath(), contents, start);
 		String partial = partialIdentifier(contents, (int) cursor);
 		boolean endsWithParen = endsWithParen(contents, (int) cursor);
 		//noinspection
