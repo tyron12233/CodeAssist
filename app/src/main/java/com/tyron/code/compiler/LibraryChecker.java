@@ -2,15 +2,9 @@ package com.tyron.code.compiler;
 
 import android.util.Log;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.util.Decompress;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -19,10 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Checks libraries in app/libs and copies them to app/build/libs
@@ -50,12 +41,11 @@ public class LibraryChecker {
 
         for (File lib : libs) {
             try {
-                HashMap<String, String> map = new HashMap<>();
                 if (lib.getName().endsWith(".jar")) {
                     copyIfNeeded(lib);
                     files.add(lib.getName().substring(0, lib.getName().lastIndexOf(".")));
                 } else if (lib.getName().endsWith(".aar")) {
-                    copyAar(lib);
+                    copyAarIfNeeded(lib);
                     files.add(lib.getName().substring(0, lib.getName().lastIndexOf(".")));
                 }
             } catch (IOException e) {
@@ -86,21 +76,30 @@ public class LibraryChecker {
             }
         }
         Log.d(TAG, "Copying jar file " + file.getName());
-        check.getParentFile().mkdirs();
-        check.createNewFile();
-        check.createNewFile();
+        File parent = check.getParentFile();
+        if (parent == null) {
+            throw new IOException("Unable to access parent file of " + check.getName());
+        }
+        if (!check.getParentFile().mkdirs()) {
+            throw new IOException("Couldn't create directories for " + nameNoExt);
+        }
+        if (!check.createNewFile()) {
+            throw new IOException("Couldn't create the jar file for " + nameNoExt);
+        }
         copy(file, check);
     }
 
-    private void copyAar(File aar) {
+    private void copyAarIfNeeded(File aar) throws IOException {
         String nameNoExt = aar.getName().substring(0, aar.getName().lastIndexOf("."));
         File check = new File(mLibsDir, nameNoExt);
         if (check.exists()) {
-            check.delete();
+            return;
         }
 
         Log.d(TAG, "Copying aar file " + aar.getName());
-        check.mkdirs();
+        if (!check.mkdirs()) {
+            throw new IOException("Couldn't create directories for " + nameNoExt);
+        }
         Decompress.unzip(aar.getAbsolutePath(), check.getAbsolutePath());
     }
 
