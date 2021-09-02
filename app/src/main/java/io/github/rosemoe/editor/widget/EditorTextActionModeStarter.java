@@ -127,7 +127,7 @@ class EditorTextActionModeStarter implements CodeEditor.EditorTextActionPresente
         int line = IntPair.getFirst(packed);
         int column = IntPair.getSecond(packed);
         mEditor.setSelection(line, column);
-        mEditor.hideAutoCompleteWindow();
+        //mEditor.hideAutoCompleteWindow();
     }
 
     @Override

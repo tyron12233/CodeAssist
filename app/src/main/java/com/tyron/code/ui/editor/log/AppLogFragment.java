@@ -85,8 +85,8 @@ public class AppLogFragment extends Fragment {
             }
             int color;
             switch (type) {
-                case "warning": color = 0xffFFFF00; break;
-                case "error": color = 0xffFF0000; break;
+                case "warning": color = 0xffFFEB3B; break;
+                case "error": color = 0xffcf6679; break;
                 case "debug": color = 0xffEAEAEA; break;
                 default: color = 0xffFFFFFF;
             }

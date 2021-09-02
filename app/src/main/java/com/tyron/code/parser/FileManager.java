@@ -5,6 +5,7 @@ import android.util.Log;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.model.Project;
 import com.tyron.code.util.Decompress;
+import com.tyron.code.util.StringSearch;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -26,6 +27,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.stream.Collectors;
 
 /**
  * Class responsible for caching java files for fast
@@ -107,7 +109,7 @@ public class FileManager {
         Set<File> classpaths = new HashSet<>();
         classpaths.addAll(javaFiles.values());
         classpaths.addAll(mCurrentProject.getLibraries());
-        classpaths.addAll(mCurrentProject.getRJavaFiles());
+        classpaths.addAll(mCurrentProject.getRJavaFiles().values());
         return classpaths;
     }
     
@@ -115,6 +117,7 @@ public class FileManager {
         List<String> files = new ArrayList<>();
         files.addAll(javaFiles.keySet());
         files.addAll(classFiles.keySet());
+        files.addAll(mCurrentProject.getRJavaFiles().keySet());
         return files;
     }
 

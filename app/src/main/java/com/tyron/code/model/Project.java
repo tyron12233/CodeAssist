@@ -29,7 +29,7 @@ public class Project {
     public List<String> jarFiles = new ArrayList<>();
 
     private Set<File> libraries = new HashSet<>();
-    private Set<File> RJavaFiles = new HashSet<>();
+    private Map<String, File> RJavaFiles = new HashMap<>();
     /**
      * Creates a project object from specified root
      */
@@ -77,12 +77,16 @@ public class Project {
                 if (file.isDirectory()) {
                     searchRJavaFiles(file);
                 } else {
-                    RJavaFiles.add(file);
+                    String packageName = StringSearch.packageName(file);
+                    if (!packageName.isEmpty()) {
+                        packageName = packageName + "." + file.getName().substring(0, file.getName().lastIndexOf("."));
+                        RJavaFiles.put(packageName, file);
+                    }
                 }
             }
         }
     }
-    public Set<File> getRJavaFiles() {
+    public Map<String, File> getRJavaFiles() {
         if (RJavaFiles.isEmpty()) {
             searchRJavaFiles(new File(getBuildDirectory(), "gen"));
         }
