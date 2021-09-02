@@ -204,6 +204,12 @@ public class AAPT2Compiler {
 	 * @return Package name of the library, null if it has no resource folder
 	 */
 	private String getPackageName(File library) {
+
+		File resFolder = new File(library, "res");
+		if (!resFolder.exists()) {
+			return null;
+		}
+
 		File manifestFile = new File(library, "AndroidManifest.xml");
 		if (!manifestFile.exists()) {
 			// This library doesn't have a resource file
@@ -215,7 +221,6 @@ public class AAPT2Compiler {
 		if (matcher.find()) {
 			return matcher.group(4);
 		}
-
 		return null;
 	}
 

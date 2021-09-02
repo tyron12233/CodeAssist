@@ -10,17 +10,24 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.completion.CompletionEngine;
+import com.tyron.code.hover.HoverProvider;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.parser.FileManager;
 
 import java.io.File;
+import java.util.List;
 
+import io.github.rosemoe.editor.interfaces.EditorEventListener;
 import io.github.rosemoe.editor.widget.CodeEditor;
 import io.github.rosemoe.editor.widget.schemes.SchemeDarcula;
 
@@ -84,6 +91,49 @@ public class CodeEditorFragment extends Fragment {
         if (mCurrentFile.exists()) {
            mEditor.setText(FileManager.readFile(mCurrentFile));
         }
+
+        mEditor.setEventListener(new EditorEventListener() {
+            @Override
+            public boolean onRequestFormat(CodeEditor editor, boolean async) {
+                List<String> hovers = new HoverProvider(CompletionEngine.getInstance().getCompiler()).hover(mEditor.getCurrentFile().toPath(),
+                        mEditor.getCursor().getLeft());
+                AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
+                        .setItems(hovers.toArray(new String[0]), null)
+                        .create();
+                requireActivity().runOnUiThread(dialog::show);
+                return false;
+            }
+
+            @Override
+            public boolean onFormatFail(CodeEditor editor, Throwable cause) {
+                return false;
+            }
+
+            @Override
+            public void onFormatSucceed(CodeEditor editor) {
+
+            }
+
+            @Override
+            public void onNewTextSet(CodeEditor editor) {
+
+            }
+
+            @Override
+            public void afterDelete(CodeEditor editor, CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence deletedContent) {
+
+            }
+
+            @Override
+            public void afterInsert(CodeEditor editor, CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence insertedContent) {
+
+            }
+
+            @Override
+            public void beforeReplace(CodeEditor editor, CharSequence content) {
+
+            }
+        });
     }
     
     public void save() {

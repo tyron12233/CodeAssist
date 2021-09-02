@@ -93,7 +93,7 @@ public class JavaCompiler {
                 null,
                 standardJavaFileManager,
                 diagnosticCollector,
-                null,
+                List.of("-verbose"),
                 null,
                 javaFileObjects
         );

@@ -106,7 +106,7 @@ public class CompileBatch implements AutoCloseable {
 
     private Path findPackagePrivateClass(String packageName, String className) {
         // This is too expensive, parsing each file causing completions to slow down
-        // on small files
+        // on large files
 
         for (File file : FileManager.getInstance().list(packageName)) {
 			Log.d("CompileBatch", "Parsing file: " + file.getName());
