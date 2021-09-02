@@ -56,7 +56,7 @@
     <string name="wizard_package_illegal">Package name contains illegal characters.</string>
     <string name="wizard_select_min_sdk">Select a minimum SDK version.</string>
     <string name="menu_open_project">Open project</string>
-    <string name="menu_create_project">Create/Open project</string>
+    <string name="menu_create_project">Create project</string>
     <string name="menu_run">Run</string>
     <string name="menu_refresh">Refresh project</string>
     <string name="menu_format">Format</string>
