@@ -59,6 +59,10 @@ public class DependencyResolver {
             mResolvedLibraries.put(dep, dep.getVersion());
         }
     }
+
+    /**
+     * Performs the resolution on the current thread
+     */
     public Set<Dependency> resolveMain() {
         for (Dependency lib : library) {
             resolveDependency(lib);

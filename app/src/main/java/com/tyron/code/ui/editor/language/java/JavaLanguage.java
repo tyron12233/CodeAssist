@@ -70,7 +70,8 @@ public class JavaLanguage implements EditorLanguage {
         return new SymbolPairMatch.DefaultSymbolPairs();
     }
     
-    private NewlineHandler[] newLineHandlers = new NewlineHandler[]{new BraceHandler(), new TwoIndentHandler()};
+    private final NewlineHandler[] newLineHandlers = new NewlineHandler[]{
+            new BraceHandler(), new TwoIndentHandler(), new JavaDocStartHandler(), new JavaDocHandler()};
     
     @Override
     public NewlineHandler[] getNewlineHandlers() {
@@ -93,7 +94,7 @@ public class JavaLanguage implements EditorLanguage {
 			int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
             int advanceAfter = getIndentAdvance(afterText) + (4 * 2);
             String text;
-            StringBuilder sb = new StringBuilder("")
+            StringBuilder sb = new StringBuilder()
                 .append('\n')
                 .append(text = TextUtils.createIndent(count + advanceAfter, tabSize, useTab()));
             int shiftLeft = 0;
@@ -124,5 +125,49 @@ public class JavaLanguage implements EditorLanguage {
             return new HandleResult(sb, shiftLeft);
         }
     }
-    
+
+    class JavaDocStartHandler implements NewlineHandler {
+
+        private boolean shouldCreateEnd = true;
+
+        @Override
+        public boolean matchesRequirement(String beforeText, String afterText) {
+            return beforeText.trim().startsWith("/**");
+        }
+
+        @Override
+        public HandleResult handleNewline(String beforeText, String afterText, int tabSize) {
+            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
+            int advanceAfter = getIndentAdvance(afterText);
+            String text = "";
+            StringBuilder sb = new StringBuilder()
+                    .append("\n")
+                    .append(TextUtils.createIndent(count + advanceAfter, tabSize, useTab()))
+                    .append(" * ");
+            if (shouldCreateEnd) {
+                sb.append("\n").append(text = TextUtils.createIndent(count + advanceAfter, tabSize, useTab()))
+                        .append(" */");
+            }
+            return new HandleResult(sb, text.length() + 4);
+        }
+    }
+
+    class JavaDocHandler implements NewlineHandler {
+
+        @Override
+        public boolean matchesRequirement(String beforeText, String afterText) {
+            return beforeText.trim().startsWith("*");
+        }
+
+        @Override
+        public HandleResult handleNewline(String beforeText, String afterText, int tabSize) {
+            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
+            int advanceAfter = getIndentAdvance(afterText);
+            StringBuilder sb = new StringBuilder()
+                    .append("\n")
+                    .append(TextUtils.createIndent(count + advanceAfter, tabSize, useTab()))
+                    .append("* ");
+            return new HandleResult(sb, 0);
+        }
+    }
 }
