@@ -84,6 +84,7 @@ public class DependencyResolver {
                 // we have already resolved a version more recent than this one
                 return;
             } else if (result == 0) {
+                Log.d(TAG, "Skipping resolution of " + parent.getAtrifactId());
                 return;
             } else {
                 Log.d(TAG, "Found old version of library " + parent.getAtrifactId() + "\nold: " + resolvedVersion + "\nnew: " + thisVersion);
