@@ -48,6 +48,17 @@ public class DependencyResolver {
         mOutputDir = file;
     }
 
+    /**
+     * Adds a list of libraries into the resolved libraries list, useful when
+     * the user has already downloaded some libraries and you only need to download
+     * the new ones, the resolver will then skip these libraries or download a newer version if needed
+     * @param resolved list of downloaded libraries
+     */
+    public void addResolvedLibraries(Set<Dependency> resolved) {
+        for (Dependency dep : resolved) {
+            mResolvedLibraries.put(dep, dep.getVersion());
+        }
+    }
     public Set<Dependency> resolveMain() {
         for (Dependency lib : library) {
             resolveDependency(lib);
@@ -59,7 +70,6 @@ public class DependencyResolver {
      *  The list of libraries that are already present in app/libs folder
      *  so we can check later if theres already a library present
      */
-    private final Set<Dependency> resolvedDependencies = new HashSet<>();
     private final Map<Dependency, String> mResolvedLibraries = new HashMap<>();
 
     private void resolveDependency(Dependency parent) {
