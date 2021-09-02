@@ -15,6 +15,7 @@ import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.LinearLayout;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
@@ -63,6 +64,13 @@ public class WizardFragment extends Fragment {
 
     private WizardTemplate mCurrentTemplate;
 
+    private final OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(true) {
+        @Override
+        public void handleOnBackPressed() {
+            onNavigateBack(mExitButton);
+        }
+    };
+
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -80,6 +88,8 @@ public class WizardFragment extends Fragment {
                     }
                 }
         );
+        requireActivity().getOnBackPressedDispatcher()
+                .addCallback(onBackPressedCallback);
     }
 
     @Nullable
