@@ -16,10 +16,12 @@
 package io.github.rosemoe.editor.widget;
 
 import android.content.res.TypedArray;
-import android.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
+
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.view.ActionMode;
 
 import io.github.rosemoe.editor.util.IntPair;
 
@@ -42,7 +44,7 @@ class EditorTextActionModeStarter implements CodeEditor.EditorTextActionPresente
         if (mActionMode != null) {
             return;
         }
-        mActionMode = mEditor.startActionMode(new ActionMode.Callback() {
+        mActionMode = ((AppCompatActivity) mEditor.getContext()).startSupportActionMode(new ActionMode.Callback() {
             @Override
             public boolean onCreateActionMode(ActionMode actionMode, Menu menu) {
                 mEditor.mStartedActionMode = CodeEditor.ACTION_MODE_SELECT_TEXT;
