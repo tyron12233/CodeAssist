@@ -258,7 +258,7 @@ public class MainFragment extends Fragment {
 
                 if (project != null) {
                     project.clear();
-                    openProject(project);
+                    openProject(project, true);
                 }
             } else if (item.getItemId() == R.id.action_run) {
                 compile();
@@ -389,6 +389,7 @@ public class MainFragment extends Fragment {
                 }
 
                 DependencyResolver resolver = new DependencyResolver(dependencies, proj.getLibraryDirectory());
+                resolver.addResolvedLibraries(libs);
                 dependencies = resolver.resolveMain();
                 logViewModel.d(LogViewModel.BUILD_LOG, "Resolved dependencies: " + dependencies);
 
