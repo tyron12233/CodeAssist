@@ -104,7 +104,7 @@ public class MainFragment extends Fragment {
 
         if (savedInstanceState != null) {
             Project project = new Project(new File(savedInstanceState.getString("current_project", "")));
-            FileManager.getInstance().openProject(project);
+            openProject(project, false);
         }
     }
 
