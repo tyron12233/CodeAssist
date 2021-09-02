@@ -460,6 +460,7 @@ public class MainFragment extends Fragment {
                 logViewModel.d(LogViewModel.BUILD_LOG, message);
             }
         };
+
         mProgressBar.setVisibility(View.VISIBLE);
         mToolbar.setSubtitle("Compiling");
         logViewModel.clear(LogViewModel.BUILD_LOG);
@@ -472,21 +473,26 @@ public class MainFragment extends Fragment {
                         CompilerService.CompilerBinder binder = (CompilerService.CompilerBinder) iBinder;
                         binder.getCompilerService().setLogger(logger);
                         binder.getCompilerService().setOnResultListener((success, message) -> {
-                            if (mToolbar != null) {
-                                mToolbar.setSubtitle(null);
-                            }
-                            if (mProgressBar != null) {
-                                AndroidUtilities.hideKeyboard(mProgressBar);
-                                mProgressBar.setVisibility(View.GONE);
-                            }
-                            if (!success) {
-                                mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
-                            }
-                            if (success && getActivity() != null) {
-                                File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
-                                ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath());
-                            }
+                            requireActivity().runOnUiThread(() -> {
+                                if (mToolbar != null) {
+                                    mToolbar.setSubtitle(null);
+                                }
+                                if (mProgressBar != null) {
+                                    AndroidUtilities.hideKeyboard(mProgressBar);
+                                    mProgressBar.setVisibility(View.GONE);
+                                }
+                                if (!success) {
+                                    logger.error(message);
+                                    mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                                }
+                                if (success && getActivity() != null) {
+                                    File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
+                                    ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath());
+                                }
+                            });
                         });
+
+                        binder.getCompilerService().compile();
                     }
 
                     @Override

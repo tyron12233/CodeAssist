@@ -5,7 +5,9 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -33,6 +35,9 @@ public class CompilerService extends Service {
     private Project mProject;
     private ApkBuilder.OnResultListener onResultListener;
     private ILogger external;
+    /**
+     * Logger that  delegates logs to the external logger set
+     */
     private final ILogger logger = new ILogger() {
         @Override
         public void error(String message) {
@@ -56,6 +61,12 @@ public class CompilerService extends Service {
         }
     };
 
+    private boolean shouldShowNotification = true;
+
+    public void setShouldShowNotification(boolean val) {
+        shouldShowNotification = val;
+    }
+
     public void setLogger(ILogger logger) {
         this.external = logger;
     }
@@ -72,22 +83,8 @@ public class CompilerService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
 
-        mProject = FileManager.getInstance().getCurrentProject();
-
         Notification notification = setupNotification();
         startForeground(201, notification);
-
-        if (mProject == null) {
-            stopForeground(true);
-            updateNotification("Compilation failed", "Couldn't open project.");
-            if (onResultListener != null) {
-                onResultListener.onComplete(false, "Couldn't open project.");
-            }
-            return START_STICKY;
-        }
-
-        Log.d("CompilerService", "Started compiler service");
-        compile();
 
         return START_STICKY;
     }
@@ -106,7 +103,9 @@ public class CompilerService extends Service {
     }
 
     private void updateNotification(String title, String message) {
-
+        if (!shouldShowNotification) {
+            return;
+        }
         Notification notif = new NotificationCompat.Builder(this, "Compiler")
                 .setContentTitle(title)
                 .setContentText(message)
@@ -137,7 +136,21 @@ public class CompilerService extends Service {
         return mBinder;
     }
 
-    private void compile() {
+    public void compile() {
+        mProject = FileManager.getInstance().getCurrentProject();
+
+
+        if (mProject == null) {
+            if (onResultListener != null) {
+                new Handler().post(() -> onResultListener.onComplete(false, "Failed to open project  (Have you opened a project?)"));
+            }
+
+            if (shouldShowNotification) {
+                updateNotification("Compilation failed", "Unable to open project");
+            }
+            return;
+        }
+
         ApkBuilder apkBuilder = new ApkBuilder(logger, mProject);
         apkBuilder.setTaskListener(this::updateNotification);
         apkBuilder.build((success, message) -> {
