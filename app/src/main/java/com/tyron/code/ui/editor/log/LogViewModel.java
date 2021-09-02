@@ -8,6 +8,7 @@ import java.util.ArrayList;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 
 public class LogViewModel extends ViewModel {
     
@@ -37,11 +38,11 @@ public class LogViewModel extends ViewModel {
     
     public void d(int id, String message) {
         String current = getLogs(id).getValue();
-        if (current.isEmpty()) {
-            current = message;
-        } else {
-            current = current + '\n' + "<$$debug>" + message + "</$$debug>";
+        if (current == null) {
+            current = "";
         }
+        current = current + (current.isEmpty() ? "" : '\n') + "<$$debug>" + message + "</$$debug>";
+
         
         if (Looper.myLooper() != Looper.getMainLooper()) {
             String finalCurrent = current;
@@ -58,11 +59,11 @@ public class LogViewModel extends ViewModel {
 
     public void w(int id, String message) {
         String current = getLogs(id).getValue();
-        if (current.isEmpty()) {
-            current = message;
-        } else {
-            current = current + '\n' + "<$$warning>" + message + "</$$warning>";
+        if (current == null) {
+            current = "";
         }
+        current = current + (current.isEmpty() ? "" : '\n') + "<$$warning>" + message + "</$$warning>";
+
 
         if (Thread.currentThread() != Looper.getMainLooper().getThread()) {
             log.get(id).postValue(current);
@@ -73,11 +74,11 @@ public class LogViewModel extends ViewModel {
 
     public void e(int id, String message) {
         String current = getLogs(id).getValue();
-        if (current.isEmpty()) {
-            current = message;
-        } else {
-            current = current + '\n' + "<$$error>" + message + "</$$error>";
+        if (current == null) {
+            current = "";
         }
+        current = current + (current.isEmpty() ? "" : '\n') + "<$$error>" + message + "</$$error>";
+
 
         if (Thread.currentThread() != Looper.getMainLooper().getThread()) {
             log.get(id).postValue(current);
