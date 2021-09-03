@@ -1,5 +1,6 @@
 package com.tyron.resolver.parser;
 
+import java.io.File;
 import java.util.List;
 import java.io.InputStream;
 import java.io.IOException;
@@ -7,6 +8,8 @@ import android.util.Xml;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import java.util.ArrayList;
+
+import com.tyron.code.parser.FileManager;
 import com.tyron.resolver.model.Dependency;
 import java.util.Collections;
 
@@ -14,16 +17,20 @@ public class POMParser {
 
     private static final String ns = null;
 
+    public List<Dependency> parse(File in) throws IOException, XmlPullParserException {
+        XmlPullParser parser = Xml.newPullParser();
+        parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
+        parser.setInput(FileManager.bufferedReader(in));
+        parser.nextTag();
+        return readProject(parser);
+    }
+
     public List<Dependency> parse(InputStream in) throws IOException, XmlPullParserException {
-        try {
-            XmlPullParser parser = Xml.newPullParser();
-            parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
-            parser.setInput(in, null);
-            parser.nextTag();
-            return readProject(parser);
-        } finally {
-            in.close();
-        }
+        XmlPullParser parser = Xml.newPullParser();
+        parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
+        parser.setInput(in, null);
+        parser.nextTag();
+        return readProject(parser);
     }
 
     private List<Dependency> readProject(XmlPullParser parser) throws IOException, XmlPullParserException {

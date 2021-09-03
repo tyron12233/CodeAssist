@@ -1,9 +1,16 @@
 package com.tyron.resolver;
 
+import com.android.tools.r8.v.b.P;
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.parser.FileManager;
 import com.tyron.resolver.exception.DuplicateDependencyException;
 import com.tyron.resolver.model.Dependency;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -16,6 +23,7 @@ import com.tyron.resolver.parser.POMParser;
 import java.util.Collections;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.util.Map;
@@ -96,7 +104,28 @@ public class DependencyResolver {
             }
         }
 
-        InputStream is = getInputStream(parent);
+        File cache = getPomFromCache(parent);
+
+        if (cache != null) {
+
+            POMParser parser = new POMParser();
+            try {
+                for (Dependency dep : parser.parse(cache)) {
+                    // skip test dependencies as its not important for now
+                    if (dep.getScope() != null && dep.getScope().equals("test")) {
+                        continue;
+                    }
+                    resolveDependency(dep);
+                }
+            } catch (IOException | XmlPullParserException e) {
+                Log.d(TAG, "Failed to resolve " + parent + ", " + e.getMessage());
+            }
+
+            mResolvedLibraries.put(parent, parent.getVersion());
+            return;
+        }
+
+       InputStream is = getInputStream(parent);
 
         if (is == null) {
             return;
@@ -119,11 +148,51 @@ public class DependencyResolver {
 
         mResolvedLibraries.put(parent, parent.getVersion());
 
-        Log.d(TAG, "Resolved " + parent + " took: " + (start - System.currentTimeMillis()));
+        Log.d(TAG, "Resolved " + parent + " took: " + (System.currentTimeMillis() - start));
 
         try {
             is.close();
-        } catch (IOException e) {}
+        } catch (IOException ignored) {}
+    }
+
+    /**
+     * Retrieves pom file from the cache
+     * @param dependency library to retrieve
+     * @return the input stream of the file, null if its not found
+     */
+    private File getPomFromCache(Dependency dependency) {
+        File pomCacheDir = new File(ApplicationLoader.applicationContext.getCacheDir(), "pom");
+
+        if (!pomCacheDir.exists()) {
+            return null;
+        }
+
+        File file = new File(pomCacheDir, dependency.toString() + ".pom");
+
+        if (!file.exists()) {
+            return null;
+        }
+
+        return file;
+    }
+
+    private void savePomToCache(InputStream pom, Dependency dependency) throws IOException {
+        File pomCacheDir = new File(ApplicationLoader.applicationContext.getCacheDir(), "pom");
+
+        if (!pomCacheDir.exists()) {
+            if (!pomCacheDir.mkdir()) {
+                throw new IOException("Failed to create cache directory for pom file");
+            }
+        }
+
+        File file = new File(pomCacheDir, dependency.toString() + ".pom");
+        if (!file.exists()) {
+            if (!file.createNewFile()) {
+                throw new IOException("Failed to create cache pom file " + file.getName());
+            }
+        }
+
+        FileUtils.copyInputStreamToFile(pom, file);
     }
 
 

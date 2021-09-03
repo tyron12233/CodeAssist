@@ -2,6 +2,7 @@ package com.tyron.resolver;
 
 import android.util.Log;
 
+import com.tyron.code.ApplicationLoader;
 import com.tyron.resolver.model.Dependency;
 
 import org.apache.commons.io.FileUtils;
@@ -71,6 +72,22 @@ public class DependencyDownloader {
             }
         }
 
+        // check the cache first if we have downloaded this library before
+        File cachedLibrary = getFromCache(library);
+        if (cachedLibrary != null) {
+            Log.d(TAG, "Retrieved cached library " + cachedLibrary.getName());
+            // there is a cache for it, don't proceed on download
+
+            File outputFile = new File(mOutputDir, cachedLibrary.getName());
+            if (!outputFile.exists()) {
+                if (!outputFile.createNewFile()) {
+                    throw new IOException("Unable to create file: " + outputFile.getName());
+                }
+            }
+            FileUtils.copyFile(cachedLibrary, outputFile);
+            return;
+        }
+
         // if we got into here then we download the library
         // lets try with aar first
         boolean isAar = true;
@@ -88,12 +105,61 @@ public class DependencyDownloader {
 
         Log.d(TAG, "Downloading library: " + library.getFileName());
 
-            File outputFile = new File(mOutputDir, library.toString() + (isAar ? ".aar" : ".jar"));
-            if (!outputFile.exists()) {
-                if (!outputFile.createNewFile()) {
-                    throw new IOException("Unable to create file: " + outputFile.getName());
-                }
+        File outputFile = new File(mOutputDir, library.toString() + (isAar ? ".aar" : ".jar"));
+        if (!outputFile.exists()) {
+            if (!outputFile.createNewFile()) {
+                throw new IOException("Unable to create file: " + outputFile.getName());
             }
-            FileUtils.copyInputStreamToFile(is, outputFile);
+        }
+        FileUtils.copyInputStreamToFile(is, outputFile);
+
+        // after downloading, copy the library to our cache so we wont dowload it again on a new project
+        saveToCache(outputFile);
+    }
+
+    /**
+     * Checks if we have downloaded the library before
+     * @param dependency library to download
+     * @return null if it doesn't exist on the cache otherwise it returns the file
+     */
+    private File getFromCache(Dependency dependency) {
+        File libraryCacheDir = new File(ApplicationLoader.applicationContext.getCacheDir(), "libraries");
+        if (!libraryCacheDir.exists()) {
+            return null;
+        }
+
+        File libraryToCheck = new File(libraryCacheDir, dependency.toString() + ".aar");
+        if (!libraryToCheck.exists()) {
+            libraryToCheck = new File(libraryCacheDir, dependency.toString() + ".jar");
+        }
+
+        if (!libraryToCheck.exists()) {
+            return null;
+        }
+
+        return libraryToCheck;
+    }
+
+    private void saveToCache(File library) throws IOException {
+        if (!library.exists()) {
+            return;
+        }
+
+        File libraryCacheDir = new File(ApplicationLoader.applicationContext.getCacheDir(), "libraries");
+        if (!libraryCacheDir.exists()) {
+            if (!libraryCacheDir.mkdir()) {
+                throw new IOException("Unable to create library cache directory");
+            }
+        }
+
+        File libraryFile = new File(libraryCacheDir, library.getName());
+        if (!libraryFile.exists()) {
+            if (!libraryFile.createNewFile()) {
+                throw new IOException("Unable to create library cache file for " + libraryFile.getName());
+            }
+        }
+
+        Log.d(TAG, "Saving library " + library + " to cache");
+        FileUtils.copyFile(library, libraryFile);
     }
 }
