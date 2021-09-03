@@ -89,7 +89,7 @@ public class WizardFragment extends Fragment {
                 }
         );
         requireActivity().getOnBackPressedDispatcher()
-                .addCallback(onBackPressedCallback);
+                .addCallback(this, onBackPressedCallback);
     }
 
     @Nullable
