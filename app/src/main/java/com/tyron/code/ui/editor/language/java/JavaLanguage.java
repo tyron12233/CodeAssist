@@ -16,19 +16,25 @@ import android.util.Log;
 public class JavaLanguage implements EditorLanguage {
     
     private CodeEditor mEditor;
-    
+
+    private final CodeAnalyzer mAnalyzer;
+    private final AutoCompleteProvider mAutoCompleteProvider;
+
     public JavaLanguage(CodeEditor editor) {
         mEditor = editor;
+
+        mAnalyzer = new JavaAnalyzer(editor);
+        mAutoCompleteProvider = new JavaAutoCompleteProvider(mEditor);
     }
     
     @Override
     public CodeAnalyzer getAnalyzer() {
-        return JavaAnalyzer.getInstance();
+        return mAnalyzer;
     }
 
     @Override
     public AutoCompleteProvider getAutoCompleteProvider() {
-        return new JavaAutoCompleteProvider(mEditor);
+        return mAutoCompleteProvider;
     }
 
     @Override

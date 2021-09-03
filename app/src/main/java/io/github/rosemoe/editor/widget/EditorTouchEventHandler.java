@@ -547,6 +547,13 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
             handleLongPressForModifiedTextAction(e);
             return;
         }
+
+        if (mEditor.mTextActionPresenter instanceof EditorTextActionWindow) {
+            EditorTextActionWindow window = ((EditorTextActionWindow) mEditor.mTextActionPresenter);
+            if (window.isShowing()) {
+                window.onSelectedTextLongClicked(e);
+            }
+        }
         if (mEditor.getCursor().isSelected() || e.getPointerCount() != 1) {
             return;
         }

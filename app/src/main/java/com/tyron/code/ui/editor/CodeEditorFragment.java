@@ -78,9 +78,7 @@ public class CodeEditorFragment extends Fragment {
         mEditor.setTextActionMode(CodeEditor.TextActionMode.POPUP_WINDOW);
         mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(), R.font.jetbrains_mono_regular));
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-			mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-		}
+        mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         mContent.addView(mEditor, new FrameLayout.LayoutParams(-1, -1));
         return mRoot;
     }

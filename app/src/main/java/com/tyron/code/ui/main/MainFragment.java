@@ -19,7 +19,6 @@ import android.widget.LinearLayout;
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.GravityCompat;
@@ -55,8 +54,6 @@ import com.tyron.code.util.ApkInstaller;
 import com.tyron.resolver.DependencyDownloader;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.DependencyUtils;
-import com.tyron.resolver.ResolveTask;
-import com.tyron.resolver.exception.DuplicateDependencyException;
 import com.tyron.resolver.model.Dependency;
 
 import java.io.File;

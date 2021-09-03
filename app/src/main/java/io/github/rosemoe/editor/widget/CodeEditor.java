@@ -243,6 +243,10 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     private File mCurrentFile;
     KeyMetaStates mKeyMetaStates = new KeyMetaStates(this);
 
+    public interface OnSelectedTextLongClick {
+
+    }
+
     public CodeEditor(Context context) {
         this(context, null);
     }
