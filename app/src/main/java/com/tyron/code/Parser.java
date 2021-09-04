@@ -2,19 +2,19 @@ package com.tyron.code;
 
 import android.util.Log;
 
-import com.sun.source.tree.BlockTree;
-import com.sun.source.tree.ClassTree;
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.tree.ErroneousTree;
-import com.sun.source.tree.ImportTree;
-import com.sun.source.tree.StatementTree;
-import com.sun.source.tree.SwitchTree;
-import com.sun.source.tree.Tree;
-import com.sun.source.util.JavacTask;
-import com.sun.source.util.SourcePositions;
-import com.sun.source.util.TreeScanner;
-import com.sun.source.util.Trees;
-import com.sun.tools.javac.api.JavacTool;
+import org.openjdk.source.tree.BlockTree;
+import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.ErroneousTree;
+import org.openjdk.source.tree.ImportTree;
+import org.openjdk.source.tree.StatementTree;
+import org.openjdk.source.tree.SwitchTree;
+import org.openjdk.source.tree.Tree;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.source.util.SourcePositions;
+import org.openjdk.source.util.TreeScanner;
+import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.api.JavacTool;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -24,11 +24,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.Name;
-import javax.tools.Diagnostic;
-import javax.tools.JavaCompiler;
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.lang.model.element.Modifier;
+import org.openjdk.javax.lang.model.element.Name;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaCompiler;
+import org.openjdk.javax.tools.JavaFileObject;
 
 public class Parser {
     

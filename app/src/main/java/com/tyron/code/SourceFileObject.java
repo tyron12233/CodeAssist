@@ -13,8 +13,8 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
 
-import javax.tools.JavaFileObject;
-import javax.tools.SimpleJavaFileObject;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.SimpleJavaFileObject;
 
 @SuppressLint("NewApi")
 public class SourceFileObject extends SimpleJavaFileObject {

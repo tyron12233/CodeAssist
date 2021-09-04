@@ -4,8 +4,8 @@ package com.tyron.code.compiler;
 import android.annotation.SuppressLint;
 import android.util.Log;
 
-import com.sun.source.util.JavacTask;
-import com.sun.tools.javac.api.JavacTool;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.tools.javac.api.JavacTool;
 import com.tyron.code.SourceFileObject;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
@@ -21,11 +21,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
-import javax.tools.Diagnostic;
-import javax.tools.DiagnosticListener;
-import javax.tools.JavaFileObject;
-import javax.tools.StandardJavaFileManager;
-import javax.tools.StandardLocation;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.StandardJavaFileManager;
+import org.openjdk.javax.tools.StandardLocation;
 
 public class JavaCompiler {
 

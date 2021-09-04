@@ -2,9 +2,11 @@ package com.tyron.code;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -20,9 +22,9 @@ import com.tyron.code.parser.FileManager;
 import android.annotation.SuppressLint;
 import android.util.Log;
 
-import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
-import javax.tools.StandardLocation;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.StandardLocation;
 
 public class JavaCompilerService implements CompilerProvider {
 
@@ -46,6 +48,10 @@ public class JavaCompilerService implements CompilerProvider {
 
         try {
             fileManager.setLocation(StandardLocation.CLASS_PATH, classPath);
+            fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, Arrays.asList(
+                    FileManager.getInstance().getAndroidJar(),
+                    FileManager.getInstance().getLambdaStubs()
+            ));
         } catch (IOException e) {
             e.printStackTrace();
         }

@@ -1,21 +1,24 @@
 package com.tyron.code.compiler;
 
-import com.sun.source.util.JavacTask;
-import com.sun.source.util.TaskEvent;
-import com.sun.source.util.TaskListener;
-import com.sun.tools.javac.api.JavacTaskImpl;
-import com.sun.tools.javac.api.JavacTool;
-import com.sun.tools.javac.api.JavacTrees;
-import com.sun.tools.javac.api.MultiTaskListener;
-import com.sun.tools.javac.code.Types;
-import com.sun.tools.javac.comp.Annotate;
-import com.sun.tools.javac.comp.Check;
-import com.sun.tools.javac.comp.CompileStates;
-import com.sun.tools.javac.comp.Enter;
-import com.sun.tools.javac.model.JavacElements;
-import com.sun.tools.javac.util.Context;
-import com.sun.tools.javac.util.Log;
-import com.sun.tools.javac.main.JavaCompiler;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.source.util.TaskEvent;
+import org.openjdk.source.util.TaskListener;
+import org.openjdk.tools.javac.api.JavacTaskImpl;
+import org.openjdk.tools.javac.api.JavacTool;
+import org.openjdk.tools.javac.api.JavacTrees;
+import org.openjdk.tools.javac.api.MultiTaskListener;
+import org.openjdk.tools.javac.code.Types;
+import org.openjdk.tools.javac.comp.Annotate;
+import org.openjdk.tools.javac.comp.Check;
+import org.openjdk.tools.javac.comp.CompileStates;
+import org.openjdk.tools.javac.comp.Enter;
+import org.openjdk.tools.javac.comp.Modules;
+import org.openjdk.tools.javac.main.Arguments;
+import org.openjdk.tools.javac.model.JavacElements;
+import org.openjdk.tools.javac.util.Context;
+import org.openjdk.tools.javac.util.DefinedBy;
+import org.openjdk.tools.javac.util.Log;
+import org.openjdk.tools.javac.main.JavaCompiler;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -25,10 +28,10 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-import javax.tools.Diagnostic;
-import javax.tools.DiagnosticListener;
-import javax.tools.JavaFileManager;
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileManager;
+import org.openjdk.javax.tools.JavaFileObject;
 
 /**
  * A pool of reusable JavacTasks. When a task is no valid anymore, it is returned to the pool, and its Context may be
@@ -142,10 +145,10 @@ public class ReusableCompiler {
         }
 
         public void clear() {
-//            drop(Arguments.argsKey);
+            drop(Arguments.argsKey);
             drop(DiagnosticListener.class);
             drop(Log.outKey);
-//            drop(Log.errKey);
+            drop(Log.errKey);
             drop(JavaFileManager.class);
             drop(JavacTask.class);
             drop(JavacTrees.class);
@@ -158,7 +161,7 @@ public class ReusableCompiler {
                 ((ReusableJavaCompiler) ReusableJavaCompiler.instance(this)).clear();
                 Types.instance(this).newRound();
                 Check.instance(this).newRound();
-                //Modules.instance(this).newRound();
+                Modules.instance(this).newRound();
                 Annotate.instance(this).newRound();
                 CompileStates.instance(this).clear();
                 MultiTaskListener.instance(this).clear();
@@ -166,13 +169,13 @@ public class ReusableCompiler {
         }
 
         @Override
-      //  @DefinedBy(Api.COMPILER_TREE)
+        @DefinedBy(DefinedBy.Api.COMPILER_TREE)
         public void finished(TaskEvent e) {
             // do nothing
         }
 
         @Override
-      //  @DefinedBy(Api.COMPILER_TREE)
+        @DefinedBy(DefinedBy.Api.COMPILER_TREE)
         public void started(TaskEvent e) {
             // do nothing
         }
@@ -206,7 +209,7 @@ public class ReusableCompiler {
                 newRound();
             }
 
-            //@Override
+            @Override
             protected void checkReusable() {
                 // do nothing - it's ok to reuse the compiler
             }
@@ -240,7 +243,7 @@ public class ReusableCompiler {
 					DiagnosticListener<JavaFileObject> cachedListener;
 
 					@Override
-					//@DefinedBy(Api.COMPILER)
+					@DefinedBy(DefinedBy.Api.COMPILER)
 					@SuppressWarnings("unchecked")
 					public void report(Diagnostic<? extends JavaFileObject> diagnostic) {
 						if (cachedListener == null) {

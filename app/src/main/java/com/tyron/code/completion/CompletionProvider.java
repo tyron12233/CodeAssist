@@ -2,21 +2,6 @@ package com.tyron.code.completion;
 
 import android.util.Log;
 
-import com.sun.source.tree.ClassTree;
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.tree.ExpressionTree;
-import com.sun.source.tree.ImportTree;
-import com.sun.source.tree.MemberReferenceTree;
-import com.sun.source.tree.MemberSelectTree;
-import com.sun.source.tree.MethodInvocationTree;
-import com.sun.source.tree.MethodTree;
-import com.sun.source.tree.NewClassTree;
-import com.sun.source.tree.Scope;
-import com.sun.source.tree.SwitchTree;
-import com.sun.source.tree.Tree;
-import com.sun.source.util.TreePath;
-import com.sun.source.util.Trees;
-import com.sun.tools.javac.tree.JCTree;
 import com.tyron.code.CompileTask;
 import com.tyron.code.CompilerProvider;
 import com.tyron.code.ParseTask;
@@ -41,17 +26,32 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.Name;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.ArrayType;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.type.TypeVariable;
+import org.openjdk.javax.lang.model.element.Element;
+import org.openjdk.javax.lang.model.element.ElementKind;
+import org.openjdk.javax.lang.model.element.ExecutableElement;
+import org.openjdk.javax.lang.model.element.Modifier;
+import org.openjdk.javax.lang.model.element.Name;
+import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.element.VariableElement;
+import org.openjdk.javax.lang.model.type.ArrayType;
+import org.openjdk.javax.lang.model.type.DeclaredType;
+import org.openjdk.javax.lang.model.type.TypeMirror;
+import org.openjdk.javax.lang.model.type.TypeVariable;
+import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.ExpressionTree;
+import org.openjdk.source.tree.ImportTree;
+import org.openjdk.source.tree.MemberReferenceTree;
+import org.openjdk.source.tree.MemberSelectTree;
+import org.openjdk.source.tree.MethodInvocationTree;
+import org.openjdk.source.tree.MethodTree;
+import org.openjdk.source.tree.NewClassTree;
+import org.openjdk.source.tree.Scope;
+import org.openjdk.source.tree.SwitchTree;
+import org.openjdk.source.tree.Tree;
+import org.openjdk.source.util.TreePath;
+import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.tree.JCTree;
 
 /**
  * Main entry point for getting completions

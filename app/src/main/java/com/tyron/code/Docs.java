@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import javax.tools.StandardLocation;
+import org.openjdk.javax.tools.StandardLocation;
 
 /**
  * Main class that holds all the files that ends with "-sources" including

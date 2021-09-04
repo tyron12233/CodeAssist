@@ -2,9 +2,9 @@ package com.tyron.code.compiler;
 
 import android.util.Log;
 
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.util.JavacTask;
-import com.sun.source.util.Trees;
+import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.source.util.Trees;
 import com.tyron.code.JavaCompilerService;
 import com.tyron.code.Parser;
 import com.tyron.code.parser.FileManager;
@@ -22,11 +22,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import javax.lang.model.element.Name;
-import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
-import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.lang.model.element.Name;
+import org.openjdk.javax.lang.model.util.Elements;
+import org.openjdk.javax.lang.model.util.Types;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
 
 
 @SuppressWarnings("NewApi")

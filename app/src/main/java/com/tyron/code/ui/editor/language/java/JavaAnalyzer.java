@@ -2,18 +2,18 @@ package com.tyron.code.ui.editor.language.java;
 
 import android.util.Log;
 
-import com.sun.source.tree.AnnotationTree;
-import com.sun.source.tree.ClassTree;
-import com.sun.source.tree.ErroneousTree;
-import com.sun.source.tree.IdentifierTree;
-import com.sun.source.tree.MethodTree;
-import com.sun.source.tree.ModifiersTree;
-import com.sun.source.tree.NewClassTree;
-import com.sun.source.tree.Tree;
-import com.sun.source.util.JavacTask;
-import com.sun.source.util.SourcePositions;
-import com.sun.source.util.TreePathScanner;
-import com.sun.source.util.Trees;
+import org.openjdk.source.tree.AnnotationTree;
+import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.ErroneousTree;
+import org.openjdk.source.tree.IdentifierTree;
+import org.openjdk.source.tree.MethodTree;
+import org.openjdk.source.tree.ModifiersTree;
+import org.openjdk.source.tree.NewClassTree;
+import org.openjdk.source.tree.Tree;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.source.util.SourcePositions;
+import org.openjdk.source.util.TreePathScanner;
+import org.openjdk.source.util.Trees;
 import com.tyron.code.CompileTask;
 import com.tyron.code.JavaCompilerService;
 import com.tyron.code.ParseTask;
@@ -42,8 +42,8 @@ import io.github.rosemoe.editor.struct.NavigationItem;
 import java.util.Locale;
 import java.util.Stack;
 
-import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
 
 public class JavaAnalyzer extends JavaCodeAnalyzer {
 

@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.JavaFileObject;
 
 public interface CompilerProvider {
     
