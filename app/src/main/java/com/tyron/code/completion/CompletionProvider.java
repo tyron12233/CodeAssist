@@ -18,6 +18,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -415,6 +416,11 @@ public class CompletionProvider {
         List<CompletionItem> items = new ArrayList<>();
         MethodInvocationTree method = (MethodInvocationTree) path.getLeaf();
         Element element = trees.getElement(path);
+
+        if (!(element instanceof ExecutableElement)) {
+            return Collections.emptyList();
+        }
+
         ExecutableElement executable = (ExecutableElement) element;
 
         int argumentToComplete= 0;
@@ -424,8 +430,14 @@ public class CompletionProvider {
                 argumentToComplete = i;
             }
         }
+        List<? extends VariableElement> variableElements = executable.getParameters();
 
-        VariableElement var = executable.getParameters().get(argumentToComplete);
+        if (argumentToComplete > variableElements.size() - 1) {
+            return Collections.emptyList();
+        }
+
+        VariableElement var = variableElements.get(argumentToComplete);
+
         if (var.asType() instanceof DeclaredType) {
             DeclaredType type = (DeclaredType) var.asType();
             Element classElement = type.asElement();
