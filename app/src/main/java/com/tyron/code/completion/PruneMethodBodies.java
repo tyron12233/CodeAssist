@@ -37,15 +37,19 @@ public class PruneMethodBodies extends TreeScanner<StringBuilder, Long> {
     public StringBuilder visitMethod(MethodTree t, Long find) {
         SourcePositions pos = Trees.instance(task).getSourcePositions();
         if (t.getBody() == null) return buf;
-        long start = pos.getStartPosition(root, t.getBody());
-        long end = pos.getEndPosition(root, t.getBody());
-        if (!(start <= find && find < end)) {
-            for (int i = (int) start + 1; i < end - 1; i++) {
-                if (!Character.isWhitespace(buf.charAt(i))) {
-                    buf.setCharAt(i, ' ');
+        try {
+            long start = pos.getStartPosition(root, t.getBody());
+            long end = pos.getEndPosition(root, t.getBody());
+            if (!(start <= find && find < end)) {
+                for (int i = (int) start + 1; i < end - 1; i++) {
+                    if (!Character.isWhitespace(buf.charAt(i))) {
+                        buf.setCharAt(i, ' ');
+                    }
                 }
+                return buf;
             }
-            return buf;
+        } catch (IndexOutOfBoundsException ignore) {
+
         }
         super.visitMethod(t, find);
         return buf;

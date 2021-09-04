@@ -13,6 +13,7 @@ import com.tyron.code.parser.FileManager;
 import java.io.File;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Set;
 
 public class CompletionEngine {
 	private static final String TAG = CompletionEngine.class.getSimpleName();
@@ -63,7 +64,10 @@ public class CompletionEngine {
 
 		JavaCompilerService compiler = getCompiler();
 
-		for (File file : new HashSet<>(project.javaFiles.values())) {
+		Set<File> filesToIndex = new HashSet<>(project.getJavaFiles().values());
+		filesToIndex.addAll(project.getRJavaFiles().values());
+
+		for (File file : filesToIndex) {
 			try {
 				 CompileTask task = compiler.compile(file.toPath());
 				 task.close();
