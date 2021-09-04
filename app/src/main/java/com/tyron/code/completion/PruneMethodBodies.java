@@ -37,7 +37,6 @@ public class PruneMethodBodies extends TreeScanner<StringBuilder, Long> {
     public StringBuilder visitMethod(MethodTree t, Long find) {
         SourcePositions pos = Trees.instance(task).getSourcePositions();
         if (t.getBody() == null) return buf;
-        try {
             long start = pos.getStartPosition(root, t.getBody());
             long end = pos.getEndPosition(root, t.getBody());
             if (!(start <= find && find < end)) {
@@ -48,9 +47,6 @@ public class PruneMethodBodies extends TreeScanner<StringBuilder, Long> {
                 }
                 return buf;
             }
-        } catch (IndexOutOfBoundsException ignore) {
-
-        }
         super.visitMethod(t, find);
         return buf;
     }
