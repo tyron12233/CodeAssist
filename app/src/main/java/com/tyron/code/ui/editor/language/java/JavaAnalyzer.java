@@ -72,13 +72,13 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
         // do not compile the file if it not yet closed as it will cause issues when
         // compiling multiple files at the same time
-//        if (service.cachedCompile.closed) {
-//            try (CompileTask task = service.compile(
-//                    List.of(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
-//                diagnostics.clear();
-//                diagnostics.addAll(task.diagnostics);
-//            }
-//        }
+        if (service.cachedCompile.closed) {
+            try (CompileTask task = service.compile(
+                    List.of(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
+                diagnostics.clear();
+                diagnostics.addAll(task.diagnostics);
+            }
+        }
 
         while (delegate.shouldAnalyze()) {
             try {

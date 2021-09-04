@@ -94,12 +94,6 @@ public class CodeEditorFragment extends Fragment {
         mEditor.setEventListener(new EditorEventListener() {
             @Override
             public boolean onRequestFormat(CodeEditor editor, boolean async) {
-                List<String> hovers = new HoverProvider(CompletionEngine.getInstance().getCompiler()).hover(mEditor.getCurrentFile().toPath(),
-                        mEditor.getCursor().getLeft());
-                AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
-                        .setItems(hovers.toArray(new String[0]), null)
-                        .create();
-                requireActivity().runOnUiThread(dialog::show);
                 return false;
             }
 

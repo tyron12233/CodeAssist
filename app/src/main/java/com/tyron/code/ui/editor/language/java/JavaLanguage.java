@@ -13,6 +13,9 @@ import io.github.rosemoe.editor.langs.java.Tokens;
 
 import android.util.Log;
 
+import com.google.googlejavaformat.java.Formatter;
+import com.google.googlejavaformat.java.FormatterException;
+
 public class JavaLanguage implements EditorLanguage {
     
     private CodeEditor mEditor;
@@ -68,7 +71,12 @@ public class JavaLanguage implements EditorLanguage {
 
     @Override
     public CharSequence format(CharSequence p1) {
-        return p1;
+        try {
+            return new Formatter().formatSourceAndFixImports(p1.toString());
+        } catch (FormatterException e) {
+            Log.e("JavaFormatter", e.getMessage());
+            return p1;
+        }
     }
 
     @Override
