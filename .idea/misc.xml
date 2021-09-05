@@ -3,7 +3,9 @@
   <component name="DesignSurface">
     <option name="filePathToZoomLevelMap">
       <map>
+        <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/drawable/messages.xml" value="0.18489583333333334" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/drawable/round_play_arrow_24.xml" value="0.171875" />
+        <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/drawable/sync.xml" value="0.18489583333333334" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/bottom_editor_fragment.xml" value="0.1" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/code_editor_fragment.xml" value="0.1933876811594203" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/completion_result_item.xml" value="0.33" />
@@ -11,6 +13,8 @@
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/loading_layout.xml" value="0.125" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/main.xml" value="0.17255434782608695" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/main_fragment.xml" value="0.18385416666666668" />
+        <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/settings_activity.xml" value="0.13043478260869565" />
+        <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/settings_fragment.xml" value="0.13043478260869565" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/setup_footer.xml" value="0.22" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/shortcut_item.xml" value="0.15989583333333332" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/wizard_details.xml" value="0.33" />
@@ -18,7 +22,11 @@
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/wizard_template_item.xml" value="0.22" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/layout/wizard_templates.xml" value="0.25" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/menu/code_editor_menu.xml" value="0.18854166666666666" />
+        <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/xml/editor_preferences.xml" value="0.1" />
+        <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/xml/header_preferences.xml" value="0.13043478260869565" />
+        <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/xml/messages_preferences.xml" value="0.25" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/xml/root_preferences.xml" value="0.22" />
+        <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/xml/sync_preferences.xml" value="0.13043478260869565" />
         <entry key="app/src/main/res/font/mono_font.xml" value="0.22708333333333333" />
         <entry key="app/src/main/res/layout/completion_result_item.xml" value="0.33" />
         <entry key="app/src/main/res/layout/default_completion_result_item.xml" value="0.33" />

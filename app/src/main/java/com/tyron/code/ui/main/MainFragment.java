@@ -49,6 +49,8 @@ import com.tyron.code.ui.editor.CodeEditorFragment;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.log.LogViewModel;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
+import com.tyron.code.ui.settings.SettingsActivity;
+import com.tyron.code.ui.settings.SettingsFragment;
 import com.tyron.code.ui.wizard.WizardFragment;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ApkInstaller;
@@ -265,6 +267,11 @@ public class MainFragment extends Fragment {
                         fragment.format();
                     }
                 }
+            } else if (item.getItemId() == R.id.menu_settings) {
+                Intent intent = new Intent();
+                intent.setClass(requireActivity(), SettingsActivity.class);
+                startActivity(intent);
+                return true;
             }
 
             return false;
@@ -563,7 +570,11 @@ public class MainFragment extends Fragment {
             return CodeEditorFragment.newInstance(data.get(p1));
         }
 
+        @Nullable
         public File getItem(int position) {
+            if (position > data.size() - 1) {
+                return null;
+            }
             return data.get(position);
         }
 

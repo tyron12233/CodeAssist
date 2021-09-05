@@ -1,5 +1,9 @@
 package com.tyron.code.ui.editor.language.java;
 
+import android.content.SharedPreferences;
+
+import androidx.preference.PreferenceManager;
+
 import com.tyron.code.compiler.java.CompileBatch;
 import com.tyron.code.completion.CompletionEngine;
 import com.tyron.code.model.CompletionList;
@@ -18,14 +22,21 @@ import io.github.rosemoe.editor.widget.CodeEditor;
 public class JavaAutoCompleteProvider implements AutoCompleteProvider {
     
     private final CodeEditor mEditor;
-    
+    private final SharedPreferences mPreferences;
+
     public JavaAutoCompleteProvider(CodeEditor editor) {
         mEditor = editor;
+        mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
     }
 
     @Override
     public List<CompletionItem> getAutoCompleteItems(String partial, boolean endsWithParen, TextAnalyzeResult prev, int line) {
-       FileManager.getInstance().save(mEditor.getCurrentFile(), mEditor.getText().toString());
+        FileManager.getInstance().save(mEditor.getCurrentFile(), mEditor.getText().toString());
+
+        if (!mPreferences.getBoolean("code_editor_completion", true)) {
+            return Collections.emptyList();
+        }
+
 		Cursor cursor = mEditor.getCursor();
 
 		// The previous call hasn't finished

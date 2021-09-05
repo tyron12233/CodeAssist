@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <PreferenceCategory
+        android:title="@string/code_engine_title">
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="code_editor_completion"
+            android:iconSpaceReserved="false"
+            android:title="@string/settings_code_completions" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:iconSpaceReserved="false"
+            android:key="code_editor_error_highlight"
+            android:title="@string/code_editor_error_highlight"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/text_settings_title">
+
+        <EditTextPreference
+            android:dialogTitle="@string/font_size_title"
+            android:defaultValue="14"
+            android:inputType="number"
+            android:digits="0123456789"
+            android:title="@string/font_size_title"
+            android:summary="@string/font_size_summary"
+            android:key="font_size"
+            android:dialogMessage="@string/font_size_message"
+            android:negativeButtonText="@android:string/cancel"
+            android:positiveButtonText="@android:string/ok"/>
+    </PreferenceCategory>
+</PreferenceScreen>

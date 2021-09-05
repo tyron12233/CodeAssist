@@ -21,4 +21,8 @@
 	<item
 		android:id="@+id/action_format"
 		android:title="@string/menu_format" />
+
+	<item
+		android:id="@+id/menu_settings"
+		android:title="@string/menu_settings"/>
 </menu>

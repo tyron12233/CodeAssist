@@ -1,5 +1,6 @@
 package com.tyron.code.ui.editor;
 
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -13,6 +14,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
+import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.code.ApplicationLoader;
@@ -65,15 +67,16 @@ public class CodeEditorFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        mRoot = (LinearLayout) inflater.inflate(R.layout.code_editor_fragment, container, false);
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
 
+        mRoot = (LinearLayout) inflater.inflate(R.layout.code_editor_fragment, container, false);
         mContent = mRoot.findViewById(R.id.content);
         
         mEditor = new CodeEditor(requireActivity());
         mEditor.setEditorLanguage(LanguageManager.getInstance().get(mEditor, mCurrentFile));
         mEditor.setColorScheme(new SchemeDarcula());
         mEditor.setOverScrollEnabled(false);
-        mEditor.setTextSize(12);
+        mEditor.setTextSize(Integer.parseInt(preferences.getString("font_size", "12")));
         mEditor.setCurrentFile(mCurrentFile);
         mEditor.setTextActionMode(CodeEditor.TextActionMode.POPUP_WINDOW);
         mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);

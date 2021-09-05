@@ -1,6 +1,9 @@
 package com.tyron.code.ui.editor.language.java;
 
+import android.content.SharedPreferences;
 import android.util.Log;
+
+import androidx.preference.PreferenceManager;
 
 import org.openjdk.source.tree.AnnotationTree;
 import org.openjdk.source.tree.ClassTree;
@@ -50,8 +53,11 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     private final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
     private final CodeEditor mEditor;
 
+    private final SharedPreferences mPreferences;
+
     public JavaAnalyzer(CodeEditor editor) {
         mEditor = editor;
+        mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
     }
     @Override
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
@@ -72,7 +78,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
         // do not compile the file if it not yet closed as it will cause issues when
         // compiling multiple files at the same time
-        if (service.cachedCompile.closed) {
+        if (mPreferences.getBoolean("code_editor_error_highlight", true) && service.cachedCompile.closed) {
             try (CompileTask task = service.compile(
                     List.of(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
                 diagnostics.clear();
