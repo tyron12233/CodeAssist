@@ -481,7 +481,10 @@ public class MainFragment extends Fragment {
                                 }
                                 if (!success) {
                                     logger.error(message);
-                                    mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+
+                                    if (mBehavior.getState() == BottomSheetBehavior.STATE_COLLAPSED) {
+                                        mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                                    }
                                 }
                                 if (success && getActivity() != null) {
                                     File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
