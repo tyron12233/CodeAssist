@@ -1,5 +1,7 @@
 package com.tyron.code.compiler.symbol;
 
+import android.util.Log;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
@@ -30,6 +32,8 @@ public class SymbolProcessor {
     }
 
     public void run() throws IOException {
+
+        long start = System.currentTimeMillis();
         
         SymbolLoader fullSymbolValues = null;
         Multimap<String, SymbolLoader> libMap = ArrayListMultimap.create();
@@ -74,5 +78,7 @@ public class SymbolProcessor {
             }
             writer.write();
         }
+
+        Log.d("SymbolProcessor", "Generating symbols took " + (System.currentTimeMillis() - start) + " ms");
     }
 }

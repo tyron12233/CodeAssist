@@ -9,6 +9,7 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.compiler.dex.D8Compiler;
 import com.tyron.code.compiler.java.JavaCompiler;
 import com.tyron.code.compiler.resource.AAPT2Compiler;
+import com.tyron.code.compiler.symbol.SymbolProcessor;
 import com.tyron.code.model.Project;
 import com.tyron.code.service.ILogger;
 import com.tyron.code.util.exception.CompilationFailedException;
@@ -51,9 +52,10 @@ public class ApkBuilder {
     public void build(OnResultListener listener) {
         service.execute(() -> {
             try {
+                long initialStart = System.currentTimeMillis();
                 doBuild();
 
-                post(() -> listener.onComplete(true, "Build success."));
+                post(() -> listener.onComplete(true, "Build success. Took " + (System.currentTimeMillis() - initialStart) + " ms"));
             } catch (IOException | CompilationFailedException e) {
                 post(() -> listener.onComplete(false, e.getMessage()));
             }
@@ -64,10 +66,15 @@ public class ApkBuilder {
         ApplicationLoader.applicationHandler.post(runnable);
     }
 
+    // TODO: run tasks in parallel if applicable
     private void doBuild() throws IOException, CompilationFailedException {
         post(() -> mTaskListener.onTaskStarted("AAPT2", "Compiling resources"));
         AAPT2Compiler aapt2Compiler = new AAPT2Compiler(log, mProject);
         aapt2Compiler.run();
+
+        post(() -> mTaskListener.onTaskStarted("SymbolProcessor", "Generating symbols"));
+        SymbolProcessor processor = new SymbolProcessor(mProject, log);
+        processor.run();
 
         post(() -> mTaskListener.onTaskStarted("JAVAC", "Compiling java files"));
         JavaCompiler javaCompiler = new JavaCompiler(log, mProject);

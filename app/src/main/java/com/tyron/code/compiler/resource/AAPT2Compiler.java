@@ -33,8 +33,12 @@ public class AAPT2Compiler {
 	}
 
 	public void run() throws IOException, CompilationFailedException {
+		long start = System.currentTimeMillis();
+
 		compileProject();
 		link();
+
+		Log.d(TAG, "Resource compilation took " + (System.currentTimeMillis() - start) + " ms");
 	}
 
 	private void compileProject() throws IOException, CompilationFailedException {
@@ -157,10 +161,6 @@ public class AAPT2Compiler {
 		if (!exec.execute().trim().isEmpty()) {
 			throw new CompilationFailedException(exec.getLog());
 		}
-
-		// generate Symbols
-		SymbolProcessor processor = new SymbolProcessor(mProject, mLogger);
-		processor.run();
 	}
 	
 	private File getOutputPath() throws IOException {
