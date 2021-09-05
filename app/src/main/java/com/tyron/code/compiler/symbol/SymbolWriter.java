@@ -55,7 +55,7 @@ public class SymbolWriter {
         for (String folder : folders) {
             file = new File(file, folder);
         }
-        if (!file.mkdirs()) {
+        if (!file.exists() && !file.mkdirs()) {
             throw new IOException("Unable to create resource directories for " + file);
         }
         file = new File(file, "R.java");
