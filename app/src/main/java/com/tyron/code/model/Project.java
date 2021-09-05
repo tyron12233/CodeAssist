@@ -4,6 +4,7 @@ import android.graphics.drawable.VectorDrawable;
 import android.util.Log;
 
 import com.tyron.code.ApplicationLoader;
+import com.tyron.code.compiler.AAPT2Compiler;
 import com.tyron.code.compiler.LibraryChecker;
 import com.tyron.code.util.Decompress;
 import com.tyron.code.util.StringSearch;
@@ -28,8 +29,15 @@ public class Project {
     public Map<String, File> javaFiles = new HashMap<>();
     public List<String> jarFiles = new ArrayList<>();
 
-    private Set<File> libraries = new HashSet<>();
-    private Map<String, File> RJavaFiles = new HashMap<>();
+    private final Set<File> libraries = new HashSet<>();
+    private final Map<String, File> RJavaFiles = new HashMap<>();
+
+    //TODO: Adjust these values according to build.gradle or manifest
+    private final int minSdk = 21;
+    private final int targetSdk = 31;
+
+    private String packageName;
+
     /**
      * Creates a project object from specified root
      */
@@ -61,6 +69,17 @@ public class Project {
                 }
             }
         }
+    }
+
+    public String getPackageName() {
+        if (packageName == null) {
+            loadPackageName();
+        }
+        return packageName;
+    }
+
+    private void loadPackageName() {
+        packageName = AAPT2Compiler.getPackageName(getManifestFile());
     }
     
     public Map<String, File> getJavaFiles() {
@@ -124,6 +143,10 @@ public class Project {
      * is opened, it will get loaded again
      */
     public void clear() {
+        packageName = null;
+
+        RJavaFiles.clear();
+        libraries.clear();
         javaFiles.clear();
         libraries.clear();
     }
@@ -174,6 +197,14 @@ public class Project {
         }
 
         return getBuildDirectory().mkdirs();
+    }
+
+    public int getMinSdk() {
+        return minSdk;
+    }
+
+    public int getTargetSdk() {
+        return targetSdk;
     }
 	
 	public File getResourceDirectory() {

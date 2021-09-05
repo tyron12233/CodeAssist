@@ -114,8 +114,10 @@ public class TreeFileManagerFragment extends Fragment {
     }
 
     public void refresh() {
-        List<TreeNode<TreeFile>> nodes = getNodes();
-        mAdapter.refresh(new ArrayList<>(nodes));
+        if (mAdapter != null) {
+            List<TreeNode<TreeFile>> nodes = getNodes();
+            mAdapter.refresh(new ArrayList<>(nodes));
+        }
     }
 
     private List<TreeNode<TreeFile>> getNodes() {

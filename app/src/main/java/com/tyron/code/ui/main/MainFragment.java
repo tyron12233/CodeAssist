@@ -18,6 +18,7 @@ import android.widget.LinearLayout;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.appcompat.widget.Toolbar;
@@ -99,11 +100,6 @@ public class MainFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        if (savedInstanceState != null) {
-            Project project = new Project(new File(savedInstanceState.getString("current_project", "")));
-            openProject(project, false);
-        }
     }
 
     @Override
@@ -320,6 +316,11 @@ public class MainFragment extends Fragment {
 
         if (FileManager.getInstance().getCurrentProject() != null) {
             mToolbar.setTitle(FileManager.getInstance().getCurrentProject().mRoot.getName());
+        }
+
+        if (savedInstanceState != null) {
+            Project project = new Project(new File(savedInstanceState.getString("current_project", "")));
+            openProject(project, false);
         }
     }
 

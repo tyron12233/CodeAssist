@@ -5,7 +5,10 @@ import android.util.Log;
 import java.io.File;
 import java.io.IOException;
 import com.tyron.code.ApplicationLoader;
+import com.tyron.code.compiler.symbol.SymbolProcessor;
 import com.tyron.code.model.Project;
+
+import java.nio.file.Files;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.regex.Matcher;
@@ -39,6 +42,7 @@ public class AAPT2Compiler {
 		mLogger.debug("Compiling project resources.");
 
 		FileManager.deleteDir(getOutputPath());
+		FileManager.deleteDir(new File(mProject.getBuildDirectory(), "gen"));
 
 		List<String> args = new ArrayList<>();
 		args.add(getBinary().getAbsolutePath());
@@ -108,9 +112,9 @@ public class AAPT2Compiler {
         args.add("--no-version-transitions");
         args.add("--auto-add-overlay");
         args.add("--min-sdk-version");
-		args.add("21");
+		args.add(String.valueOf(mProject.getMinSdk()));
 		args.add("--target-sdk-version");
-		args.add("30");
+		args.add(String.valueOf(mProject.getTargetSdk()));
 		
 		File[] resources = getOutputPath().listFiles();
 		if (resources != null) {
@@ -140,18 +144,23 @@ public class AAPT2Compiler {
 		args.add("-o");
 		args.add(getOutputPath().getParent() + "/generated.apk.res");
 
-		String extraPackages = getPackageNames();
-		if (!extraPackages.isEmpty()) {
-			args.add("--extra-packages");
-			// remove the last ":"
-			args.add(extraPackages.substring(0, extraPackages.length() - 1));
+		args.add("--output-text-symbols");
+		File file = new File(getOutputPath(), "R.txt");
+		Files.deleteIfExists(file.toPath());
+		if (!file.createNewFile()) {
+			throw new IOException("Unable to create R.txt file");
 		}
+		args.add(file.getAbsolutePath());
 
 		BinaryExecutor exec = new BinaryExecutor();
 		exec.setCommands(args);
 		if (!exec.execute().trim().isEmpty()) {
 			throw new CompilationFailedException(exec.getLog());
 		}
+
+		// generate Symbols
+		SymbolProcessor processor = new SymbolProcessor(mProject, mLogger);
+		processor.run();
 	}
 	
 	private File getOutputPath() throws IOException {
@@ -199,11 +208,11 @@ public class AAPT2Compiler {
 	}
 
 	/**
-	 * Gets the pacakge name of the library if it needs a R.java file
+	 * Gets the package name of the library if it needs a R.java file
 	 * @param library the directory in which the res folder or classes.jar is located
 	 * @return Package name of the library, null if it has no resource folder
 	 */
-	private String getPackageName(File library) {
+	public static String getPackageName(File library) {
 
 		File resFolder = new File(library, "res");
 		if (!resFolder.exists()) {
