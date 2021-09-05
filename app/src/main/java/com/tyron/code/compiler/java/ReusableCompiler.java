@@ -1,4 +1,4 @@
-package com.tyron.code.compiler;
+package com.tyron.code.compiler.java;
 
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TaskEvent;

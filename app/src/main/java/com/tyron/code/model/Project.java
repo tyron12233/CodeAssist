@@ -1,10 +1,9 @@
 package com.tyron.code.model;
 
-import android.graphics.drawable.VectorDrawable;
 import android.util.Log;
 
 import com.tyron.code.ApplicationLoader;
-import com.tyron.code.compiler.AAPT2Compiler;
+import com.tyron.code.compiler.resource.AAPT2Compiler;
 import com.tyron.code.compiler.LibraryChecker;
 import com.tyron.code.util.Decompress;
 import com.tyron.code.util.StringSearch;

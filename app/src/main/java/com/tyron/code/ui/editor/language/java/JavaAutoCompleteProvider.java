@@ -1,6 +1,6 @@
 package com.tyron.code.ui.editor.language.java;
 
-import com.tyron.code.compiler.CompileBatch;
+import com.tyron.code.compiler.java.CompileBatch;
 import com.tyron.code.completion.CompletionEngine;
 import com.tyron.code.model.CompletionList;
 import com.tyron.code.parser.FileManager;

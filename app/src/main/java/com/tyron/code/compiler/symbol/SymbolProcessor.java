@@ -3,7 +3,7 @@ package com.tyron.code.compiler.symbol;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
-import com.tyron.code.compiler.AAPT2Compiler;
+import com.tyron.code.compiler.resource.AAPT2Compiler;
 import com.tyron.code.model.Project;
 import com.tyron.code.service.ILogger;
 

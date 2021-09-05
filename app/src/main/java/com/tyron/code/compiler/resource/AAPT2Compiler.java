@@ -1,4 +1,4 @@
-package com.tyron.code.compiler;
+package com.tyron.code.compiler.resource;
 
 import android.util.Log;
 

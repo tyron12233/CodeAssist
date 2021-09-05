@@ -2,9 +2,7 @@ package com.tyron.code;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.FileSystems;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -13,8 +11,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import com.tyron.code.compiler.CompileBatch;
-import com.tyron.code.compiler.ReusableCompiler;
+import com.tyron.code.compiler.java.CompileBatch;
+import com.tyron.code.compiler.java.ReusableCompiler;
 import java.util.Map;
 import java.util.HashMap;
 import com.tyron.code.parser.FileManager;

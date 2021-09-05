@@ -1,4 +1,4 @@
-package com.tyron.code.compiler;
+package com.tyron.code.compiler.java;
 
 import android.util.Log;
 
@@ -7,6 +7,7 @@ import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.Trees;
 import com.tyron.code.JavaCompilerService;
 import com.tyron.code.Parser;
+import com.tyron.code.compiler.java.ReusableCompiler;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.util.StringSearch;
 
@@ -84,7 +85,7 @@ public class CompileBatch implements AutoCloseable {
                 addFiles.add(location);
             }
         }
-		
+
 		Log.d("CompileBatch", "Additional sources: " + addFiles.toString());
         return addFiles;
     }
