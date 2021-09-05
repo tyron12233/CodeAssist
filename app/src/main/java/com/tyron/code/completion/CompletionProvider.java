@@ -8,6 +8,7 @@ import com.tyron.code.ParseTask;
 import com.tyron.code.SourceFileObject;
 import com.tyron.code.model.CompletionItem;
 import com.tyron.code.model.CompletionList;
+import com.tyron.code.parser.FileManager;
 import com.tyron.code.ui.editor.drawable.CircleDrawable;
 import com.tyron.code.util.StringSearch;
 
@@ -136,9 +137,15 @@ public class CompletionProvider {
 
 	public CompletionList complete(File file, long index) {
 		ParseTask task = compiler.parse(Paths.get(file.getAbsolutePath()));
-		StringBuilder contents = new PruneMethodBodies(task.task).scan(task.root, index);
-		int end = endOfLine(contents, (int) index);
-		contents.insert(end, ';');
+
+		StringBuilder contents;
+		try {
+            contents = new PruneMethodBodies(task.task).scan(task.root, index);
+            int end = endOfLine(contents, (int) index);
+            contents.insert(end, ';');
+        } catch (IndexOutOfBoundsException ignore) {
+            return new CompletionList();
+        }
 		CompletionList list = compileAndComplete(file, contents.toString(), index);
 		//addTopLevelSnippets(task, list);
 		return list;
