@@ -97,7 +97,7 @@ public class D8Compiler {
 					continue;
 				}
 				if (lib.exists()) {
-					logViewModel.debug("Dexing jar " + lib.getName());
+					logViewModel.debug("Dexing jar " + parentFile.getName());
 					D8Command command = D8Command.builder(diagnosticsHandler)
 							.addLibraryFiles(getLibraryFiles())
 							.addClasspathFiles(libraries.stream().map(File::toPath).collect(Collectors.toList()))
