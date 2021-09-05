@@ -7,6 +7,7 @@ import com.android.sdklib.build.DuplicateFileException;
 import com.android.sdklib.build.SealedApkException;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.compiler.dex.D8Compiler;
+import com.tyron.code.compiler.incremental.resource.IncrementalAAPT2Compiler;
 import com.tyron.code.compiler.java.JavaCompiler;
 import com.tyron.code.compiler.resource.AAPT2Compiler;
 import com.tyron.code.compiler.symbol.SymbolProcessor;
@@ -69,7 +70,7 @@ public class ApkBuilder {
     // TODO: run tasks in parallel if applicable
     private void doBuild() throws IOException, CompilationFailedException {
         post(() -> mTaskListener.onTaskStarted("AAPT2", "Compiling resources"));
-        AAPT2Compiler aapt2Compiler = new AAPT2Compiler(log, mProject);
+        IncrementalAAPT2Compiler aapt2Compiler = new IncrementalAAPT2Compiler(mProject, log);
         aapt2Compiler.run();
 
         post(() -> mTaskListener.onTaskStarted("SymbolProcessor", "Generating symbols"));
