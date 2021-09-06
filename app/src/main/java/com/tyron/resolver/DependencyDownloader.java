@@ -45,6 +45,8 @@ public class DependencyDownloader {
                 continue;
             }
 
+
+
             ComparableVersion downloadedVersion = new ComparableVersion(downloaded.getVersion());
             ComparableVersion willDownloadVersion = new ComparableVersion(library.getVersion());
 
@@ -52,7 +54,28 @@ public class DependencyDownloader {
             if (result == 0) {
                 // The versions are equal, so don't bother downloading this one
                 return;
-            } else if (result > 0) {
+            }
+
+            // the version is explicitly defined by the user, delete the newer library and
+            // download this one
+            if (library.isUserDefined()) {
+                File file = new File(mOutputDir, downloaded.toString() + ".jar");
+                if (!file.exists()) {
+                    // lets try if this is an aar
+                    file = new File(mOutputDir, downloaded.toString() + ".aar");
+                }
+
+                if (file.exists()) {
+                    if (!file.delete()) {
+                        throw new IOException("Failed to delete library: " + file.getName());
+                    }
+                }
+
+                Log.d(TAG, "Overriding newer library " + downloaded.toString());
+                break;
+            }
+
+            if (result > 0) {
                 // the downloaded version is greater than this one, so keep the downloaded version
                 return;
             } else {

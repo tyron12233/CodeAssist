@@ -29,7 +29,8 @@ public class DependencyUtils {
         while (matcher.find()) {
             String declaration = matcher.group(3);
             try {
-                deps.add(Dependency.from(declaration));
+                Dependency dependency = Dependency.from(declaration);
+                dependency.setUserDefined(true);
             } catch (IllegalArgumentException e) {
                 throw new Exception("Cannot parse build.gradle: " + e.getMessage());
             }

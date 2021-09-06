@@ -92,15 +92,21 @@ public class DependencyResolver {
             int result = new ComparableVersion(resolvedVersion)
                     .compareTo(new ComparableVersion(thisVersion));
 
-            if (result > 0) {
-                // we have already resolved a version more recent than this one
-                return;
-            } else if (result == 0) {
+            if (result == 0) {
                 Log.d(TAG, "Skipping resolution of " + parent.getAtrifactId());
                 return;
-            } else {
-                Log.d(TAG, "Found old version of library " + parent.getAtrifactId() + "\nold: " + resolvedVersion + "\nnew: " + thisVersion);
+            }
+
+            if (parent.isUserDefined()) {
                 mResolvedLibraries.remove(parent);
+            } else {
+                if (result > 0) {
+                    // we have already resolved a version more recent than this one
+                    return;
+                } else {
+                    Log.d(TAG, "Found old version of library " + parent.getAtrifactId() + "\nold: " + resolvedVersion + "\nnew: " + thisVersion);
+                    mResolvedLibraries.remove(parent);
+                }
             }
         }
 

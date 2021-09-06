@@ -30,6 +30,11 @@ public class Dependency {
 
     private String type;
 
+    /**
+     * Whether this dependency is explicitly defined in the app's build.gradle file
+     */
+    private boolean userDefined;
+
     public void setGroupId(String groupId) {
         this.groupId = groupId;
     }
@@ -123,5 +128,13 @@ public class Dependency {
         }
 
         return false;
+    }
+
+    public boolean isUserDefined() {
+        return userDefined;
+    }
+
+    public void setUserDefined(boolean userDefined) {
+        this.userDefined = userDefined;
     }
 }
