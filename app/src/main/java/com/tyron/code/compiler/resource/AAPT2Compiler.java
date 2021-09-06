@@ -4,6 +4,8 @@ import android.util.Log;
 
 import java.io.File;
 import java.io.IOException;
+
+import com.android.tools.r8.v.b.P;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.compiler.symbol.SymbolProcessor;
 import com.tyron.code.model.Project;
@@ -75,29 +77,26 @@ public class AAPT2Compiler {
 			if (parent == null) {
 				throw new IOException("Library folder doesn't exist");
 			}
-			File[] files = parent.listFiles();
-			if (files == null) {
+
+			File resFolder = new File(parent, "res");
+			if (!resFolder.exists() || !resFolder.isDirectory()) {
 				continue;
 			}
 
-			for (File inside : files) {
-				if (inside.isDirectory() && inside.getName().equals("res")) {
-					Log.d(TAG, "Compiling library " + parent.getName());
+			Log.d(TAG, "Compiling library " + parent.getName());
 
-					List<String> args = new ArrayList<>();
-					args.add(getBinary().getAbsolutePath());
-					args.add("compile");
-					args.add("--dir");
-					args.add(inside.getAbsolutePath());
-					args.add("-o");
-					args.add(createNewFile(getOutputPath(), parent.getName() + ".zip").getAbsolutePath());
+			List<String> args = new ArrayList<>();
+			args.add(getBinary().getAbsolutePath());
+			args.add("compile");
+			args.add("--dir");
+			args.add(resFolder.getAbsolutePath());
+			args.add("-o");
+			args.add(createNewFile(getOutputPath(), parent.getName() + ".zip").getAbsolutePath());
 
-					BinaryExecutor exec = new BinaryExecutor();
-					exec.setCommands(args);
-					if (!exec.execute().trim().isEmpty()) {
-						throw new CompilationFailedException(exec.getLog());
-					}
-				}
+			BinaryExecutor exec = new BinaryExecutor();
+			exec.setCommands(args);
+			if (!exec.execute().trim().isEmpty()) {
+				throw new CompilationFailedException(exec.getLog());
 			}
 		}
 	}
@@ -216,7 +215,10 @@ public class AAPT2Compiler {
 
 		File resFolder = new File(library, "res");
 		if (!resFolder.exists()) {
-			return null;
+			File text = new File(library, "R.txt");
+			if (!text.exists()) {
+				return null;
+			}
 		}
 
 		File manifestFile = new File(library, "AndroidManifest.xml");

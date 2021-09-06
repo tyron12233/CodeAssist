@@ -31,6 +31,7 @@ public class DependencyUtils {
             try {
                 Dependency dependency = Dependency.from(declaration);
                 dependency.setUserDefined(true);
+                deps.add(dependency);
             } catch (IllegalArgumentException e) {
                 throw new Exception("Cannot parse build.gradle: " + e.getMessage());
             }
