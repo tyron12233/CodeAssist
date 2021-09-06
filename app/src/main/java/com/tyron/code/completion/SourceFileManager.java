@@ -1,4 +1,4 @@
-package com.tyron.code;
+package com.tyron.code.completion;
 
 import org.openjdk.tools.javac.api.JavacTool;
 import com.tyron.code.parser.FileManager;

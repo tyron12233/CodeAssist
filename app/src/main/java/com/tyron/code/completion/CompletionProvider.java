@@ -2,18 +2,12 @@ package com.tyron.code.completion;
 
 import android.util.Log;
 
-import com.tyron.code.CompileTask;
-import com.tyron.code.CompilerProvider;
-import com.tyron.code.ParseTask;
-import com.tyron.code.SourceFileObject;
 import com.tyron.code.model.CompletionItem;
 import com.tyron.code.model.CompletionList;
-import com.tyron.code.parser.FileManager;
 import com.tyron.code.ui.editor.drawable.CircleDrawable;
 import com.tyron.code.util.StringSearch;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;

@@ -30,25 +30,6 @@ public class MainActivity extends AppCompatActivity {
                     .replace(R.id.fragment_container, new MainFragment(), "main_fragment") //FileManagerFragment.newInstance(new File("/sdcard")))
                     .commit();
         }
-
-//        Dependency dependency = new Dependency();
-//        dependency.setGroupId("androidx.compose.runtime");
-//        dependency.setArtifactId("runtime");
-//        dependency.setVersion("1.0.1");
-//
-//        DependencyResolver resolver = new DependencyResolver(dependency, getExternalFilesDir("libTest"));
-//       // resolver.setDownloadedLibraries(new HashSet<>(Collections.singleton(test)));
-//        resolver.resolve(new ResolveTask<List<Dependency>>() {
-//            @Override
-//            public void onResult(List<Dependency> result) {
-//                ApplicationLoader.showToast(result.toString());
-//            }
-//
-//            @Override
-//            public void onError(String message) {
-//                ApplicationLoader.showToast(message);
-//            }
-//        });
     }
 	
 	@Override

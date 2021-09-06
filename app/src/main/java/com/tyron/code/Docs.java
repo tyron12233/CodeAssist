@@ -1,5 +1,6 @@
 package com.tyron.code;
 
+import com.tyron.code.completion.SourceFileManager;
 import com.tyron.code.util.Decompress;
 
 import java.io.File;
@@ -16,7 +17,7 @@ import org.openjdk.javax.tools.StandardLocation;
  */
 public class Docs {
 
-    final SourceFileManager fileManager = new SourceFileManager();
+    public final SourceFileManager fileManager = new SourceFileManager();
 
     public Docs(Set<File> docPaths) {
         // we include android sources into the list

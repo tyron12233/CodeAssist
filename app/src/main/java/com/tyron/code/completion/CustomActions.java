@@ -1,6 +1,5 @@
 package com.tyron.code.completion;
 
-import com.tyron.code.ParseTask;
 import com.tyron.code.model.CompletionItem;
 import com.tyron.code.model.CompletionList;
 

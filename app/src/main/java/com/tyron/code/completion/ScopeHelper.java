@@ -4,7 +4,6 @@ import android.annotation.SuppressLint;
 
 import org.openjdk.source.tree.Scope;
 import org.openjdk.source.util.Trees;
-import com.tyron.code.CompileTask;
 
 import java.util.ArrayList;
 import java.util.List;

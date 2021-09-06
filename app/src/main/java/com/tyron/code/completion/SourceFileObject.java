@@ -1,4 +1,4 @@
-package com.tyron.code;
+package com.tyron.code.completion;
 
 import android.annotation.SuppressLint;
 
@@ -11,7 +11,6 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.Objects;
 
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.javax.tools.SimpleJavaFileObject;

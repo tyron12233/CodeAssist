@@ -5,7 +5,7 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
 import com.tyron.code.model.Position;
-import com.tyron.code.ParseTask;
+import com.tyron.code.completion.ParseTask;
 import java.util.List;
 import java.util.Map;
 import com.tyron.code.model.TextEdit;

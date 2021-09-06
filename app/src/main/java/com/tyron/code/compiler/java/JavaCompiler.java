@@ -6,7 +6,7 @@ import android.util.Log;
 
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.tools.javac.api.JavacTool;
-import com.tyron.code.SourceFileObject;
+import com.tyron.code.completion.SourceFileObject;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.service.ILogger;

@@ -1,4 +1,4 @@
-package com.tyron.code;
+package com.tyron.code.completion;
 
 import org.openjdk.source.tree.ArrayTypeTree;
 import org.openjdk.source.tree.ClassTree;
@@ -10,10 +10,8 @@ import org.openjdk.source.tree.ParameterizedTypeTree;
 import org.openjdk.source.tree.PrimitiveTypeTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.VariableTree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+
 import java.io.IOException;
-import java.net.URI;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 

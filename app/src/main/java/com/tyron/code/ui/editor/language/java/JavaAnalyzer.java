@@ -5,31 +5,16 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
-import org.openjdk.source.tree.AnnotationTree;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.ErroneousTree;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.ModifiersTree;
-import org.openjdk.source.tree.NewClassTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.TreePathScanner;
-import org.openjdk.source.util.Trees;
-import com.tyron.code.CompileTask;
-import com.tyron.code.JavaCompilerService;
-import com.tyron.code.ParseTask;
-import com.tyron.code.SourceFileObject;
+import com.tyron.code.completion.CompileTask;
+import com.tyron.code.completion.JavaCompilerService;
+import com.tyron.code.completion.SourceFileObject;
 import com.tyron.code.completion.CompletionEngine;
-import com.tyron.code.parser.FileManager;
 
 import io.github.rosemoe.editor.struct.Span;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
 import io.github.rosemoe.editor.text.TextAnalyzer;
 import io.github.rosemoe.editor.langs.java.JavaCodeAnalyzer;
 
-import java.io.File;
 import java.time.Instant;
 import java.util.List;
 import java.util.ArrayList;

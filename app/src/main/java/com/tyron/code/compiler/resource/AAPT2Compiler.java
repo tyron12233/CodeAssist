@@ -221,6 +221,7 @@ public class AAPT2Compiler {
 			}
 		}
 
+
 		File manifestFile = new File(library, "AndroidManifest.xml");
 		if (!manifestFile.exists()) {
 			// This library doesn't have a resource file

@@ -1,4 +1,4 @@
-package com.tyron.code;
+package com.tyron.code.completion;
 
 
 import java.nio.file.Path;

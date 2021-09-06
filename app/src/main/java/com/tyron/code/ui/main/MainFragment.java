@@ -5,6 +5,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -28,6 +29,7 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.preference.PreferenceManager;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 import androidx.viewpager2.widget.ViewPager2;
@@ -37,6 +39,9 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import com.tyron.ProjectManager;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.completion.CompletionEngine;
@@ -67,16 +72,18 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 public class MainFragment extends Fragment {
 
-    LogViewModel logViewModel;
+    private ProjectManager mProjectManager;
+    private LogViewModel logViewModel;
     private DrawerLayout mRoot;
     private Toolbar mToolbar;
     private LinearProgressIndicator mProgressBar;
-    private LinearLayout mContent;
     private FrameLayout mBottomContainer;
-    private BottomSheetBehavior mBehavior;
+    private BottomSheetBehavior<View> mBehavior;
+
     OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {
         @Override
         public void handleOnBackPressed() {
@@ -102,13 +109,15 @@ public class MainFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        requireActivity().getOnBackPressedDispatcher().addCallback(this, onBackPressedCallback);
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         mRoot = (DrawerLayout) inflater.inflate(R.layout.main_fragment, container, false);
 
-        mContent = mRoot.findViewById(R.id.content);
+        LinearLayout mContent = mRoot.findViewById(R.id.content);
         mBottomContainer = mRoot.findViewById(R.id.persistent_sheet);
 
         mTabLayout = new TabLayout(requireContext());
@@ -133,11 +142,12 @@ public class MainFragment extends Fragment {
         mToolbar = mRoot.findViewById(R.id.toolbar);
         mToolbar.inflateMenu(R.menu.code_editor_menu);
 
-        requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), onBackPressedCallback);
         logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
         mFilesViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         mFilesViewModel.getFiles().observe(getViewLifecycleOwner(), mAdapter::submitList);
         mFilesViewModel.currentPosition.observe(getViewLifecycleOwner(), mPager::setCurrentItem);
+
+        mProjectManager = new ProjectManager(logViewModel);
         return mRoot;
     }
 
@@ -180,12 +190,14 @@ public class MainFragment extends Fragment {
             @Override
             public void onTabReselected(TabLayout.Tab p1) {
                 PopupMenu popup = new PopupMenu(requireActivity(), p1.view);
-                popup.getMenu().add(0, 0,  1, "Close");
+                popup.getMenu().add(0, 0, 1, "Close");
                 popup.getMenu().add(0, 1, 2, "Close others");
                 popup.getMenu().add(0, 2, 3, "Close all");
                 popup.setOnMenuItemClickListener(item -> {
                     switch (item.getItemId()) {
-                        case 0: mFilesViewModel.removeFile(mFilesViewModel.getCurrentFile()); break;
+                        case 0:
+                            mFilesViewModel.removeFile(mFilesViewModel.getCurrentFile());
+                            break;
                         case 1:
                             File currentFile = mFilesViewModel.getCurrentFile();
                             List<File> files = mFilesViewModel.getFiles().getValue();
@@ -234,9 +246,9 @@ public class MainFragment extends Fragment {
 
                 @SuppressLint("RestrictedApi")
                 AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
-                        .setTitle("Create a project")
+                        .setTitle("Open a project")
                         .setNegativeButton("cancel", null)
-                        .setPositiveButton("create", (i, which) -> {
+                        .setPositiveButton("OPEN", (i, which) -> {
                             File file = new File(et.getText().toString());
                             Project project = new Project(file);
                             if (project.isValidProject()) {
@@ -328,6 +340,44 @@ public class MainFragment extends Fragment {
         if (savedInstanceState != null) {
             Project project = new Project(new File(savedInstanceState.getString("current_project", "")));
             openProject(project, false);
+        } else {
+            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
+            String lastProjectString = preferences.getString("last_opened_project", null);
+            if (lastProjectString != null) {
+                Project project = new Project(new File(lastProjectString));
+                if (project.isValidProject()) {
+                    openProject(project);
+
+                    String openedFiles = preferences.getString("last_opened_files", null);
+                    if (openedFiles != null) {
+                        List<String> openedFilesList = new Gson().fromJson(openedFiles, new TypeToken<ArrayList<String>>(){}.getType());
+                        if (openedFilesList != null) {
+                            mFilesViewModel.setFiles(openedFilesList.stream()
+                                    .map(File::new).collect(Collectors.toList()));
+                        }
+                    }
+                } else {
+                    ApplicationLoader.showToast("Unable to open last project.");
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+        Project current = FileManager.getInstance().getCurrentProject();
+        if (current != null) {
+            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
+            SharedPreferences.Editor editor = preferences.edit();
+
+            editor.putString("last_opened_project", current.mRoot.getAbsolutePath());
+            List<File> openedFiles = mAdapter.getItems();
+            editor.putString("last_opened_files", new Gson().toJson(
+                    openedFiles.stream().map(File::getAbsolutePath).collect(Collectors.toList())
+            ));
+            editor.apply();
         }
     }
 
@@ -377,50 +427,37 @@ public class MainFragment extends Fragment {
         mProgressBar.setVisibility(View.VISIBLE);
         mToolbar.setTitle(proj.mRoot.getName());
 
-        Executors.newSingleThreadExecutor().execute(() -> {
-
-            if (downloadLibs) {
-                requireActivity().runOnUiThread(() -> mToolbar.setSubtitle("Resolving dependencies"));
-
-                // this is the existing libraries from app/libs
-                Set<Dependency> libs = DependencyUtils.fromLibs(proj.getLibraryDirectory());
-
-                // dependencies parsed from the build.gradle file
-                Set<Dependency> dependencies = new HashSet<>();
-                try {
-                    dependencies.addAll(DependencyUtils.parseGradle(new File(proj.mRoot, "app/build.gradle")));
-                } catch (Exception exception) {
-                    //TODO: handle parse error
-                    exception.printStackTrace();
+        mProjectManager.openProject(proj, downloadLibs, new ProjectManager.TaskListener() {
+            @Override
+            public void onTaskStarted(String message) {
+                if (getActivity() == null) {
+                    return;
                 }
-
-                DependencyResolver resolver = new DependencyResolver(dependencies, proj.getLibraryDirectory());
-                resolver.addResolvedLibraries(libs);
-                dependencies = resolver.resolveMain();
-                logViewModel.d(LogViewModel.BUILD_LOG, "Resolved dependencies: " + dependencies);
-
-                requireActivity().runOnUiThread(() -> mToolbar.setSubtitle("Downloading dependencies"));
-                logViewModel.d(LogViewModel.BUILD_LOG, "Downloading dependencies");
-                DependencyDownloader downloader = new DependencyDownloader(libs, proj.getLibraryDirectory());
-                try {
-                    downloader.download(dependencies);
-                } catch (IOException e) {
-                    logViewModel.e(LogViewModel.BUILD_LOG, e.getMessage());
-                }
+                requireActivity().runOnUiThread(() -> mToolbar.setSubtitle(message));
             }
 
-            requireActivity().runOnUiThread(() -> mToolbar.setSubtitle("Indexing"));
+            @Override
+            public void onComplete(boolean success, String message) {
+                if (getActivity() == null) {
+                    return;
+                }
 
-            FileManager.getInstance().openProject(proj);
-            CompletionEngine.getInstance().index(proj, () -> {
-                if (mProgressBar != null) {
-                    mProgressBar.setVisibility(View.GONE);
-                }
-                if (mToolbar != null) {
+                requireActivity().runOnUiThread(() -> {
+                    if (mToolbar == null || mProgressBar == null) {
+                        return;
+                    }
+
                     mToolbar.setSubtitle(null);
-                }
-            });
+                    mProgressBar.setVisibility(View.GONE);
+                    if (!success) {
+                        if (mBehavior.getState() != BottomSheetBehavior.STATE_EXPANDED) {
+                            mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                        }
+                    }
+                });
+            }
         });
+
     }
 
     /**

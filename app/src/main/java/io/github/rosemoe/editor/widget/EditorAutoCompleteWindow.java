@@ -18,8 +18,6 @@ package io.github.rosemoe.editor.widget;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.RelativeLayout;
@@ -37,7 +35,7 @@ import io.github.rosemoe.editor.text.TextAnalyzeResult;
 
 import com.tyron.code.model.TextEdit;
 import com.tyron.code.completion.CompletionProvider;
-import com.tyron.code.ParseTask;
+import com.tyron.code.completion.ParseTask;
 import com.tyron.code.rewrite.AddImport;
 import java.util.Map;
 import java.io.File;
@@ -46,7 +44,7 @@ import android.util.Log;
 import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.code.ui.editor.CompletionItemAdapter;
 import androidx.recyclerview.widget.LinearLayoutManager;
-import com.tyron.code.Parser;
+import com.tyron.code.completion.Parser;
 import android.view.ViewGroup;
 import com.tyron.code.util.AndroidUtilities;
 /**

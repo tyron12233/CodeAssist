@@ -1,4 +1,4 @@
-package com.tyron.code;
+package com.tyron.code.completion;
 
 import org.openjdk.source.tree.*;
 import org.openjdk.source.util.TreeScanner;

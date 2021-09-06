@@ -5,9 +5,8 @@ import android.util.Log;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.Trees;
-import com.tyron.code.JavaCompilerService;
-import com.tyron.code.Parser;
-import com.tyron.code.compiler.java.ReusableCompiler;
+import com.tyron.code.completion.JavaCompilerService;
+import com.tyron.code.completion.Parser;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.util.StringSearch;
 

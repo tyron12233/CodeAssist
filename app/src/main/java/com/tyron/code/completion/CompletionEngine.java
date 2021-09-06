@@ -4,8 +4,6 @@ import android.annotation.SuppressLint;
 import android.util.Log;
 
 import com.tyron.code.ApplicationLoader;
-import com.tyron.code.CompileTask;
-import com.tyron.code.JavaCompilerService;
 import com.tyron.code.model.CompletionList;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
