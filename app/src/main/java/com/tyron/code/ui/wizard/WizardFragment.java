@@ -224,7 +224,7 @@ public class WizardFragment extends Fragment {
             }
         });
         mSaveLocationLayout = mWizardDetailsView.findViewById(R.id.til_save_location);
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             mSaveLocationLayout.setHelperText(getString(R.string.wizard_scoped_storage_info));
             mSaveLocationLayout.getEditText().setText(requireContext().getExternalFilesDir("Projects").getAbsolutePath());
             mSaveLocationLayout.getEditText().setInputType(InputType.TYPE_NULL);
@@ -349,8 +349,8 @@ public class WizardFragment extends Fragment {
                 file,
                 string.replace("$packagename", mPackageNameLayout.getEditText().getText())
                 .replace("$appname", mNameLayout.getEditText().getText())
-                .replace("$targetsdk", targetSdk)
-                .replace("$minsdk", String.valueOf(minSdkInt))
+                .replace("${targetSdkVersion}", targetSdk)
+                .replace("${minSdkVersion}", String.valueOf(minSdkInt))
         );
     }
 
