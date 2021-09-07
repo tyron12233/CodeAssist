@@ -1,4 +1,4 @@
-package com.tyron.code.compiler.manifest;
+package com.tyron.code.util;
 
 import static com.google.common.base.Charsets.UTF_16BE;
 import static com.google.common.base.Charsets.UTF_16LE;
@@ -19,6 +19,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.common.io.Files;
+import com.tyron.code.compiler.manifest.SdkConstants;
 
 import org.w3c.dom.Attr;
 import org.w3c.dom.Document;

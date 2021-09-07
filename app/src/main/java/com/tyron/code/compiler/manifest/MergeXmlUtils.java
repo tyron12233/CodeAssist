@@ -2,9 +2,12 @@ package com.tyron.code.compiler.manifest;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import com.tyron.code.compiler.manifest.IMergerLog.FileAndLine;
+import androidx.annotation.VisibleForTesting;
+
+import com.tyron.code.model.FileAndLine;
 import com.tyron.code.compiler.manifest.IMergerLog.Severity;
 import com.tyron.code.service.ILogger;
+import com.tyron.code.util.XmlUtils;
 
 import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
@@ -14,12 +17,10 @@ import org.w3c.dom.Node;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXParseException;
-import java.io.BufferedReader;
+
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.Reader;
-import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,6 +30,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
@@ -37,13 +39,16 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+
 /**
  * A few XML handling utilities.
  */
 class MergerXmlUtils {
+
     private static final String DATA_ORIGIN_FILE = "manif.merger.file";         //$NON-NLS-1$
     private static final String DATA_FILE_NAME   = "manif.merger.filename";     //$NON-NLS-1$
     private static final String DATA_LINE_NUMBER = "manif.merger.line#";        //$NON-NLS-1$
+
     /**
      * Parses the given XML file as a DOM document.
      * The parser does not validate the DTD nor any kind of schema.
@@ -54,17 +59,20 @@ class MergerXmlUtils {
      *
      * @param xmlFile The XML {@link File} to parse. Must not be null.
      * @param log An {@link ILogger} for reporting errors. Must not be null.
+     * @param merger The {@link ManifestMerger} this document is intended for
      * @return A new DOM {@link Document}, or null.
      */
     @Nullable
-    static Document parseDocument(@NonNull final File xmlFile, @NonNull final IMergerLog log) {
+    static Document parseDocument(@NonNull final File xmlFile, @NonNull final IMergerLog log,
+                                  @NonNull ManifestMerger merger) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            Reader reader = new BufferedReader(new FileReader(xmlFile));
+            Reader reader = XmlUtils.getUtfReader(xmlFile);
             InputSource is = new InputSource(reader);
             factory.setNamespaceAware(true);
             factory.setValidating(false);
             DocumentBuilder builder = factory.newDocumentBuilder();
+
             // We don't want the default handler which prints errors to stderr.
             builder.setErrorHandler(new ErrorHandler() {
                 @Override
@@ -89,22 +97,32 @@ class MergerXmlUtils {
                             e.toString());
                 }
             });
+
             Document doc = builder.parse(is);
             doc.setUserData(DATA_ORIGIN_FILE, xmlFile, null /*handler*/);
             findLineNumbers(doc, 1);
+
+            if (merger.isInsertSourceMarkers()) {
+                setSource(doc, xmlFile);
+            }
+
             return doc;
+
         } catch (FileNotFoundException e) {
             log.error(Severity.ERROR,
                     new FileAndLine(xmlFile.getAbsolutePath(), 0),
                     "XML file not found");
+
         } catch (Exception e) {
             log.error(Severity.ERROR,
                     new FileAndLine(xmlFile.getAbsolutePath(), 0),
                     "Failed to parse XML file: %1$s",
                     e.toString());
         }
+
         return null;
     }
+
     /**
      * Parses the given XML string as a DOM document.
      * The parser does not validate the DTD nor any kind of schema.
@@ -114,24 +132,25 @@ class MergerXmlUtils {
      * @param log An {@link ILogger} for reporting errors. Must not be null.
      * @return A new DOM {@link Document}, or null.
      */
+    @VisibleForTesting
     @Nullable
     static Document parseDocument(@NonNull String xml,
                                   @NonNull IMergerLog log,
                                   @NonNull FileAndLine errorContext) {
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            InputSource is = new InputSource(new StringReader(xml));
-            factory.setNamespaceAware(true);
-            factory.setValidating(false);
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc = builder.parse(is);
+            Document doc = XmlUtils.parseDocument(xml, true);
             findLineNumbers(doc, 1);
+            if (errorContext.getFileName() != null) {
+                setSource(doc, new File(errorContext.getFileName()));
+            }
             return doc;
         } catch (Exception e) {
             log.error(Severity.ERROR, errorContext, "Failed to parse XML string");
         }
+
         return null;
     }
+
     /**
      * Decorates the document with the specified file name, which can be
      * retrieved later by calling {@link #extractLineNumber(Node)}.
@@ -149,6 +168,7 @@ class MergerXmlUtils {
         doc.setUserData(DATA_FILE_NAME, fileName, null /*handler*/);
         findLineNumbers(doc, 1);
     }
+
     /**
      * Returns a new {@link FileAndLine} structure that identifies
      * the base filename & line number from which the XML node was parsed.
@@ -165,11 +185,13 @@ class MergerXmlUtils {
         int line = extractLineNumber(node); // 0 in case of error or unknown
         return new FileAndLine(name, line);
     }
+
     /**
-     * Extracts the origin {@link File} that {@link #parseDocument(File, IMergerLog)}
-     * added to the XML document or the string added by
+     * Extracts the origin {@link File} that {@link #parseDocument(File, IMergerLog,
+     * ManifestMerger)} added to the XML document or the string added by
      *
-     * @param xmlNode Any node from a document returned by {@link #parseDocument(File, IMergerLog)}.
+     * @param xmlNode Any node from a document returned by {@link #parseDocument(File, IMergerLog,
+     *              ManifestMerger)}.
      * @return The {@link File} object used to create the document or null.
      */
     @Nullable
@@ -180,15 +202,32 @@ class MergerXmlUtils {
         if (xmlNode != null) {
             Object data = xmlNode.getUserData(DATA_ORIGIN_FILE);
             if (data instanceof File) {
-                return ((File) data).getName();
+                return ((File) data).getPath();
             }
             data = xmlNode.getUserData(DATA_FILE_NAME);
             if (data instanceof String) {
                 return (String) data;
             }
         }
+
         return null;
     }
+
+    public static void setSource(@NonNull Node node, @NonNull File source) {
+        //noinspection ConstantConditions
+        for (; node != null; node = node.getNextSibling()) {
+            short nodeType = node.getNodeType();
+            if (nodeType == Node.ELEMENT_NODE
+                    || nodeType == Node.COMMENT_NODE
+                    || nodeType == Node.DOCUMENT_NODE
+                    || nodeType == Node.CDATA_SECTION_NODE) {
+                node.setUserData(DATA_ORIGIN_FILE, source, null);
+            }
+            Node child = node.getFirstChild();
+            setSource(child, source);
+        }
+    }
+
     /**
      * This is a CRUDE INEXACT HACK to decorate the DOM with some kind of line number
      * information for elements. It's inexact because by the time we get the DOM we
@@ -203,14 +242,16 @@ class MergerXmlUtils {
     private static int findLineNumbers(Node node, int line) {
         for (; node != null; node = node.getNextSibling()) {
             node.setUserData(DATA_LINE_NUMBER, Integer.valueOf(line), null /*handler*/);
+
             if (node.getNodeType() == Node.TEXT_NODE) {
                 String text = node.getNodeValue();
-                if (text.length() > 0) {
+                if (!text.isEmpty()) {
                     for (int pos = 0; (pos = text.indexOf('\n', pos)) != -1; pos++) {
                         ++line;
                     }
                 }
             }
+
             Node child = node.getFirstChild();
             if (child != null) {
                 line = findLineNumbers(child, line);
@@ -218,10 +259,12 @@ class MergerXmlUtils {
         }
         return line;
     }
+
     /**
      * Extracts the line number that {@link #findLineNumbers} added to the XML nodes.
      *
-     * @param xmlNode Any node from a document returned by {@link #parseDocument(File, IMergerLog)}.
+     * @param xmlNode Any node from a document returned by {@link #parseDocument(File, IMergerLog,
+     *                ManifestMerger)}.
      * @return The line number if found or 0.
      */
     static int extractLineNumber(@Nullable Node xmlNode) {
@@ -231,8 +274,10 @@ class MergerXmlUtils {
                 return ((Integer) data).intValue();
             }
         }
+
         return 0;
     }
+
     /**
      * Outputs the given XML {@link Document} to the file {@code outFile}.
      *
@@ -265,6 +310,7 @@ class MergerXmlUtils {
             return false;
         }
     }
+
     /**
      * Outputs the given XML {@link Document} as a string.
      *
@@ -295,6 +341,7 @@ class MergerXmlUtils {
             return null;
         }
     }
+
     /**
      * Dumps the structure of the DOM to a simple text string.
      *
@@ -307,6 +354,8 @@ class MergerXmlUtils {
     static String dump(@Nullable Node node, boolean nextSiblings) {
         return dump(node, 0 /*offset*/, nextSiblings, true /*deep*/, null /*keyAttr*/);
     }
+
+
     /**
      * Dumps the structure of the DOM to a simple text string.
      * Each line is terminated with a \n separator.
@@ -329,12 +378,15 @@ class MergerXmlUtils {
             boolean deep,
             @Nullable String keyAttr) {
         StringBuilder sb = new StringBuilder();
+
         String offset = "";                 //$NON-NLS-1$
         for (int i = 0; i < offsetIndex; i++) {
             offset += "  ";                 //$NON-NLS-1$
         }
+
         if (node == null) {
             sb.append(offset).append("(end reached)\n");
+
         } else {
             for (; node != null; node = node.getNextSibling()) {
                 String type = null;
@@ -360,7 +412,7 @@ class MergerXmlUtils {
                         break;
                     case Node.TEXT_NODE:
                         String txt = node.getNodeValue().trim();
-                        if (txt.length() == 0) {
+                        if (txt.isEmpty()) {
                             // Keep this for debugging. TODO make it a flag
                             // to dump whitespace on debugging. Otherwise ignore it.
                             // txt = "[whitespace]";
@@ -384,20 +436,24 @@ class MergerXmlUtils {
                     default:
                         type = Integer.toString(t);
                 }
+
                 if (type != null) {
                     sb.append(String.format("%1$s[%2$s] <%3$s> %4$s\n",
                             offset, type, node.getNodeName(), node.getNodeValue()));
                 }
+
                 if (deep) {
                     for (Attr attr : sortedAttributeList(node.getAttributes())) {
                         sb.append(String.format("%1$s    @%2$s = %3$s\n",
                                 offset, attr.getNodeName(), attr.getNodeValue()));
                     }
+
                     Node child = node.getFirstChild();
                     if (child != null) {
                         sb.append(dump(child, offsetIndex+1, true, true, keyAttr));
                     }
                 }
+
                 if (!nextSiblings) {
                     break;
                 }
@@ -405,6 +461,7 @@ class MergerXmlUtils {
         }
         return sb.toString();
     }
+
     /**
      * Returns a sorted list of attributes.
      * The list is never null and does not contain null items.
@@ -417,6 +474,7 @@ class MergerXmlUtils {
     @NonNull
     static List<Attr> sortedAttributeList(@Nullable NamedNodeMap attrMap) {
         List<Attr> list = new ArrayList<Attr>();
+
         if (attrMap != null) {
             for (int i = 0; i < attrMap.getLength(); i++) {
                 Node attr = attrMap.item(i);
@@ -425,12 +483,15 @@ class MergerXmlUtils {
                 }
             }
         }
+
         if (list.size() > 1) {
             // Sort it by attribute name
             Collections.sort(list, getAttrComparator());
         }
+
         return list;
     }
+
     /**
      * Returns a comparator for {@link Attr}, alphabetically sorted by name.
      * The "name" attribute is special and always sorted to the front.
@@ -442,8 +503,10 @@ class MergerXmlUtils {
             public int compare(Attr a1, Attr a2) {
                 String s1 = a1 == null ? "" : a1.getNodeName();         //$NON-NLS-1$
                 String s2 = a2 == null ? "" : a2.getNodeName();         //$NON-NLS-1$
+
                 boolean name1 = s1.equals("name");                      //$NON-NLS-1$
                 boolean name2 = s2.equals("name");                      //$NON-NLS-1$
+
                 if (name1 && name2) {
                     return 0;
                 } else if (name1) {
@@ -456,6 +519,7 @@ class MergerXmlUtils {
             }
         };
     }
+
     /**
      * Inject attributes into an existing document.
      * <p/>
@@ -477,15 +541,18 @@ class MergerXmlUtils {
         if (doc == null || attributeMap == null || attributeMap.isEmpty()) {
             return;
         }
+
         //                                        1=path  2=URI    3=local name
         final Pattern keyRx = Pattern.compile("^/([^\\|]+)\\|([^ ]*) +(.+)$");      //$NON-NLS-1$
         final FileAndLine docInfo = xmlFileAndLine(doc);
+
         nextAttribute: for (Entry<String, String> entry : attributeMap.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             if (key == null || key.isEmpty()) {
                 continue;
             }
+
             Matcher m = keyRx.matcher(key);
             if (!m.matches()) {
                 log.error(Severity.WARNING, docInfo, "Invalid injected attribute key: %s", key);
@@ -494,7 +561,9 @@ class MergerXmlUtils {
             String path = m.group(1);
             String attrNsUri = m.group(2);
             String attrName  = m.group(3);
+
             String[] segment = path.split(Pattern.quote("/"));                      //$NON-NLS-1$
+
             // Get the path elements. Create them as needed if they don't exist.
             Node element = doc;
             nextSegment: for (int i = 0; i < segment.length; i++) {
@@ -517,24 +586,31 @@ class MergerXmlUtils {
                     // element, then we're done: there's no such attribute to remove.
                     break nextAttribute;
                 }
+
                 Element child = doc.createElement(name);
                 element = element.insertBefore(child, element.getFirstChild());
             }
+
             if (element == null) {
                 log.error(Severity.WARNING, docInfo, "Invalid injected attribute path: %s", path);
                 return;
             }
+
             NamedNodeMap attrs = element.getAttributes();
             if (attrs != null) {
+
+
                 if (attrNsUri != null && attrNsUri.isEmpty()) {
                     attrNsUri = null;
                 }
                 Node attr = attrs.getNamedItemNS(attrNsUri, attrName);
+
                 if (value == null) {
                     // We want to remove the attribute from the attribute map.
                     if (attr != null) {
                         attrs.removeNamedItemNS(attrNsUri, attrName);
                     }
+
                 } else {
                     // We want to add or replace the attribute.
                     if (attr == null) {
@@ -549,7 +625,9 @@ class MergerXmlUtils {
             }
         }
     }
+
     // -------
+
     /**
      * Flatten the element to a string. This "pretty prints" the XML tree starting
      * from the given node and all its children and attributes.
@@ -579,14 +657,17 @@ class MergerXmlUtils {
         printAttributes(sb, node, nsPrefix, prefix);
         sb.append(">\n");                                                           //$NON-NLS-1$
         printChildren(sb, node.getFirstChild(), true, nsPrefix, prefix + "    ");   //$NON-NLS-1$
+
         sb.append(prefix).append("</");                                             //$NON-NLS-1$
         if (uri != null) {
             sb.append(uri).append(':');
         }
         sb.append(node.getLocalName());
         sb.append(">\n");                                                           //$NON-NLS-1$
+
         return sb.toString();
     }
+
     /**
      * Flatten several children elements to a string.
      * This is an implementation detail for {@link #printElement(Node, Map, String)}.
@@ -607,6 +688,7 @@ class MergerXmlUtils {
             @NonNull Map<String, String> nsPrefix,
             @NonNull String prefix) {
         ArrayList<String> children = new ArrayList<String>();
+
         boolean hasText = false;
         for (; child != null; child = child.getNextSibling()) {
             short t = child.getNodeType();
@@ -615,7 +697,7 @@ class MergerXmlUtils {
                 // If there are, just dump them as-is into the element representation.
                 // We do trim whitespace and ignore all-whitespace or empty text nodes.
                 String s = child.getNodeValue().trim();
-                if (s.length() > 0) {
+                if (!s.isEmpty()) {
                     sb.append(s);
                     hasText = true;
                 }
@@ -626,17 +708,21 @@ class MergerXmlUtils {
                 }
             }
         }
+
         if (hasText) {
             sb.append('\n');
         }
+
         if (!children.isEmpty()) {
             Collections.sort(children);
             for (String s : children) {
                 sb.append(s);
             }
         }
+
         return sb;
     }
+
     /**
      * Flatten several attributes to a string using their alphabetical order.
      * This is an implementation detail for {@link #printElement(Node, Map, String)}.
@@ -648,6 +734,7 @@ class MergerXmlUtils {
             @NonNull Map<String, String> nsPrefix,
             @NonNull String prefix) {
         ArrayList<String> attrs = new ArrayList<String>();
+
         NamedNodeMap attrMap = node.getAttributes();
         if (attrMap != null) {
             StringBuilder sb2 = new StringBuilder();
@@ -667,14 +754,18 @@ class MergerXmlUtils {
                 }
             }
         }
+
         Collections.sort(attrs);
+
         for(String attr : attrs) {
             sb.append('\n');
             sb.append(prefix).append("    ").append(attr);                          //$NON-NLS-1$
         }
         return sb;
     }
+
     //------------
+
     /**
      * Computes a quick diff between two strings generated by
      * {@link #printElement(Node, Map, String)}.
@@ -718,8 +809,10 @@ class MergerXmlUtils {
         boolean contextE = true;
         boolean contextA = true;
         int numDiff = 0;
+
         StringBuilder sE = new StringBuilder();
         StringBuilder sA = new StringBuilder();
+
         outerLoop: for (int i = 0, iE = 0, iA = 0; i < lm; i++) {
             if (iE < lE && iA < lA && aE[iE].equals(aA[iA])) {
                 if (numDiff > 0) {
@@ -737,7 +830,7 @@ class MergerXmlUtils {
                         for (int kE = iE-1; kE >= 0; kE--) {
                             if (!aE[kE].startsWith(p)) {
                                 sE.insert(0, '\n').insert(0, diffReplaceNs(aE[kE], nsPrefixE)).insert(0, "  ");
-                                if (p.length() == 0) {
+                                if (p.isEmpty()) {
                                     break;
                                 }
                                 p = diffGetPrefix(aE[kE]);
@@ -756,6 +849,7 @@ class MergerXmlUtils {
                 } else {
                     sE.append("--").append(diffReplaceNs(aE[iE++], nsPrefixE)).append('\n');
                 }
+
                 if (contextA) {
                     if (iA > 0) {
                         String p = diffGetPrefix(aA[iA]);
@@ -763,7 +857,7 @@ class MergerXmlUtils {
                             if (!aA[kA].startsWith(p)) {
                                 sA.insert(0, '\n').insert(0, diffReplaceNs(aA[kA], nsPrefixA)).insert(0, "  ");
                                 p = diffGetPrefix(aA[kA]);
-                                if (p.length() == 0) {
+                                if (p.isEmpty()) {
                                     break;
                                 }
                             } else if (aA[kA].contains(keyAttr) || kA == 0) {
@@ -781,6 +875,7 @@ class MergerXmlUtils {
                 } else {
                     sA.append("++").append(diffReplaceNs(aA[iA++], nsPrefixA)).append('\n');
                 }
+
                 // Dump up to 3 lines of difference
                 numDiff++;
                 if (numDiff == 3) {
@@ -788,9 +883,11 @@ class MergerXmlUtils {
                 }
             }
         }
+
         sb.append(sE);
         sb.append(sA);
     }
+
     /**
      * Returns all the whitespace at the beginning of a string.
      * Implementation details for {@link #printXmlDiff} used to find the "parent"
@@ -804,6 +901,7 @@ class MergerXmlUtils {
         }
         return str.substring(0, pos);
     }
+
     /**
      * Simplifies a diff line by replacing NS URIs by their prefix.
      * Implementation details for {@link #printXmlDiff}.
@@ -817,5 +915,22 @@ class MergerXmlUtils {
             }
         }
         return str;
+    }
+
+    /**
+     * Returns the file associated with the given specific node, if any.
+     * Note that this will not search upwards for parent nodes; it returns a
+     * file associated with this specific node, if any.
+     */
+    @Nullable
+    public static File getFileFor(@NonNull Node node) {
+        return (File) node.getUserData(DATA_ORIGIN_FILE);
+    }
+
+    /**
+     * Sets the file associated with the given node, if any
+     */
+    public static void setFileFor(Node node, File file) {
+        node.setUserData(MergerXmlUtils.DATA_ORIGIN_FILE, file, null);
     }
 }

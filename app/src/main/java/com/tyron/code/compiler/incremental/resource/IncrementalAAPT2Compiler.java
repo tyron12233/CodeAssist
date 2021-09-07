@@ -181,7 +181,11 @@ public class IncrementalAAPT2Compiler {
         args.add(gen.getAbsolutePath());
 
         args.add("--manifest");
-        args.add(mProject.getManifestFile().getAbsolutePath());
+        File mergedManifest = new File(mProject.getBuildDirectory(), "bin/AndroidManifest.xml");
+        if (!mergedManifest.exists()) {
+            throw new IOException("Unable to get merged manifest file");
+        }
+        args.add(mergedManifest.getAbsolutePath());
 
         args.add("-o");
         args.add(getOutputPath().getParent() + "/generated.apk.res");

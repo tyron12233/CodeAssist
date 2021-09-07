@@ -1,10 +1,11 @@
 package com.tyron.code.compiler.manifest;
 
-import com.tyron.code.compiler.manifest.IMergerLog.Severity;
-import com.tyron.code.compiler.manifest.IMergerLog.FileAndLine;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.tyron.code.compiler.manifest.IMergerLog.Severity;
+import com.tyron.code.model.FileAndLine;
+import com.tyron.code.util.SdkUtils;
+import com.tyron.code.util.XmlUtils;
 
 import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
@@ -12,7 +13,9 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+
 import java.io.File;
+import java.net.MalformedURLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -20,14 +23,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
+
 /**
  * Merges a library manifest into a main application manifest.
  * <p/>
  * To use, create with {@link ManifestMerger#ManifestMerger(IMergerLog, ICallback)} then
- * call ManifestMerger#process(File, File, File[], Map).
+ * call {@link ManifestMerger#process(File, File, File[], Map, String)}.
  * <p/>
  * <pre> Merge operations:
  * - root manifest: attributes ignored, warn if defined.
@@ -106,6 +111,7 @@ import javax.xml.xpath.XPathExpressionException;
  * </pre>
  */
 public class ManifestMerger {
+
     /** Logger object. Never null. */
     private final IMergerLog mLog;
     /** An optional callback that the merger can use to query the calling SDK. */
@@ -114,12 +120,15 @@ public class ManifestMerger {
     private Document mMainDoc;
     /** Option to extract the package prefixes from the merged manifest. */
     private boolean mExtractPackagePrefix;
+    /** Whether the merger should insert comments pointing to the merge source files */
+    private boolean mInsertSourceMarkers;
+
     /** Namespace for Android attributes in an AndroidManifest.xml */
-    private static final String NS_URI    = "http://schemas.android.com/apk/res/android";
+    private static final String NS_URI    = SdkConstants.NS_RESOURCES;
     /** Prefix for the Android namespace to use in XPath expressions. */
     private static final String NS_PREFIX = AndroidXPathFactory.DEFAULT_NS_PREFIX;
     /** Namespace used in XML files for Android Tooling attributes */
-    private static final String TOOLS_URI = "http://schemas.androd.com/tools";
+    private static final String TOOLS_URI = SdkConstants.TOOLS_URI;
     /** The name of the tool:merge attribute, to either override or ignore merges. */
     private static final String MERGE_ATTR     = "merge";                           //$NON-NLS-1$
     /** tool:merge="override" means to ignore what comes from libraries and only keep the
@@ -128,6 +137,7 @@ public class ManifestMerger {
     /** tool:merge="remove" means to remove a node and prevent merging -- not only is the
      *  node from the libraries not merged, but the element is removed from the main manifest. */
     private static final String MERGE_REMOVE   = "remove";                          //$NON-NLS-1$
+
     /**
      * Sets of element/attribute that need to be treated as class names.
      * The attribute name must be the local name for the Android namespace.
@@ -137,12 +147,15 @@ public class ManifestMerger {
             "application/name",
             "application/backupAgent",
             "activity/name",
+            "activity/parentActivityName",
             "activity-alias/name",
+            "activity-alias/targetActivity",
             "receiver/name",
             "service/name",
             "provider/name",
             "instrumentation/name"
     };
+
     /**
      * Creates a new {@link ManifestMerger}.
      *
@@ -153,6 +166,7 @@ public class ManifestMerger {
         mLog = log;
         mCallback = callback;
     }
+
     /**
      * Sets whether the manifest merger should extract package prefixes.
      * <p/>
@@ -167,6 +181,7 @@ public class ManifestMerger {
         mExtractPackagePrefix = extract;
         return this;
     }
+
     /**
      * Performs the merge operation.
      * <p/>
@@ -195,16 +210,24 @@ public class ManifestMerger {
             File[] libraryFiles,
             Map<String, String> injectAttributes,
             String packageOverride) {
-        Document mainDoc = MergerXmlUtils.parseDocument(mainFile, mLog);
+        Document mainDoc = MergerXmlUtils.parseDocument(mainFile, mLog, this);
         if (mainDoc == null) {
+            mLog.error(Severity.ERROR, new FileAndLine(mainFile.getAbsolutePath(), 0),
+                    "Failed to read manifest file.");
             return false;
         }
+
         boolean success = process(mainDoc, libraryFiles, injectAttributes, packageOverride);
+
         if (!MergerXmlUtils.printXmlFile(mainDoc, outputFile, mLog)) {
+            mLog.error(Severity.ERROR, new FileAndLine(outputFile.getAbsolutePath(), 0),
+                    "Failed to write manifest file.");
             success = false;
         }
+
         return success;
     }
+
     /**
      * Performs the merge operation in-place in the given DOM.
      * <p/>
@@ -231,32 +254,44 @@ public class ManifestMerger {
             File[] libraryFiles,
             Map<String, String> injectAttributes,
             String packageOverride) {
+
         boolean success = true;
         mMainDoc = mainDoc;
         MergerXmlUtils.decorateDocument(mainDoc, IMergerLog.MAIN_MANIFEST);
         MergerXmlUtils.injectAttributes(mainDoc, injectAttributes, mLog);
+
         String prefix = XmlUtils.lookupNamespacePrefix(mainDoc, SdkConstants.NS_RESOURCES);
         mXPath = AndroidXPathFactory.newXPath(prefix);
+
         expandFqcns(mainDoc);
         for (File libFile : libraryFiles) {
-            Document libDoc = MergerXmlUtils.parseDocument(libFile, mLog);
+            Document libDoc = MergerXmlUtils.parseDocument(libFile, mLog, this);
             if (libDoc == null || !mergeLibDoc(cleanupToolsAttributes(libDoc))) {
                 success = false;
             }
         }
+
         if (packageOverride != null) {
             MergerXmlUtils.injectAttributes(mainDoc,
                     Collections.singletonMap("/manifest| package", packageOverride),
                     mLog);
         }
+
         cleanupToolsAttributes(mainDoc);
+
         if (mExtractPackagePrefix) {
             extractFqcns(mainDoc);
         }
+
+        if (mInsertSourceMarkers) {
+            insertSourceMarkers(mainDoc);
+        }
+
         mXPath = null;
         mMainDoc = null;
         return success;
     }
+
     /**
      * Performs the merge operation in-place in the given DOM.
      * <p/>
@@ -271,11 +306,14 @@ public class ManifestMerger {
      * @return True on success, false if any error occurred (printed to the {@link IMergerLog}).
      */
     public boolean process(@NonNull Document mainDoc, @NonNull Document... libraryDocs) {
+
         boolean success = true;
         mMainDoc = mainDoc;
         MergerXmlUtils.decorateDocument(mainDoc, IMergerLog.MAIN_MANIFEST);
+
         String prefix = XmlUtils.lookupNamespacePrefix(mainDoc, SdkConstants.NS_RESOURCES);
         mXPath = AndroidXPathFactory.newXPath(prefix);
+
         expandFqcns(mainDoc);
         for (Document libDoc : libraryDocs) {
             MergerXmlUtils.decorateDocument(libDoc, IMergerLog.LIBRARY);
@@ -283,12 +321,24 @@ public class ManifestMerger {
                 success = false;
             }
         }
+
         cleanupToolsAttributes(mainDoc);
+
+        if (mExtractPackagePrefix) {
+            extractFqcns(mainDoc);
+        }
+
+        if (mInsertSourceMarkers) {
+            insertSourceMarkers(mainDoc);
+        }
+
         mXPath = null;
         mMainDoc = null;
         return success;
     }
+
     // --------
+
     /**
      * Merges the given library manifest into the destination manifest.
      * See {@link ManifestMerger} for merge details.
@@ -297,17 +347,23 @@ public class ManifestMerger {
      * @return True on success, false if any error occurred (printed to the {@link IMergerLog}).
      */
     private boolean mergeLibDoc(Document libDoc) {
+
         boolean err = false;
+
         expandFqcns(libDoc);
+
         // Strategy G (check <application> is compatible)
         err |= !checkApplication(libDoc);
+
         // Strategy B
         err |= !doNotMergeCheckEqual("/manifest/uses-configuration",  libDoc);     //$NON-NLS-1$
         err |= !doNotMergeCheckEqual("/manifest/supports-screens",    libDoc);     //$NON-NLS-1$
         err |= !doNotMergeCheckEqual("/manifest/compatible-screens",  libDoc);     //$NON-NLS-1$
         err |= !doNotMergeCheckEqual("/manifest/supports-gl-texture", libDoc);     //$NON-NLS-1$
+
         boolean skipApplication = hasOverrideOrRemoveTag(
                 findFirstElement(mMainDoc, "/manifest/application"));  //$NON-NLS-1$
+
         // Strategy C
         if (!skipApplication) {
             err |= !mergeNewOrEqual(
@@ -356,6 +412,7 @@ public class ManifestMerger {
                 "name",                                                         //$NON-NLS-1$
                 libDoc,
                 false);
+
         // Strategy D
         if (!skipApplication) {
             err |= !mergeAdjustRequired(
@@ -376,12 +433,16 @@ public class ManifestMerger {
                 "required",                                                     //$NON-NLS-1$
                 libDoc,
                 "glEsVersion" /*alternateKeyAttr*/);
+
         // Strategy E
         err |= !checkSdkVersion(libDoc);
+
         // Strategy F
         err |= !checkGlEsVersion(libDoc);
+
         return !err;
     }
+
     /**
      * Expand all possible class names attributes in the given document.
      * <p/>
@@ -402,7 +463,8 @@ public class ManifestMerger {
         if (manifest != null) {
             pkg = manifest.getAttribute("package");
         }
-        if (pkg == null || pkg.length() == 0) {
+
+        if (pkg == null || pkg.isEmpty()) {
             // We can't adjust FQCNs if we don't know the root package name.
             // It's not a proper manifest if this is missing anyway.
             assert manifest != null;
@@ -411,6 +473,7 @@ public class ManifestMerger {
                     "Missing 'package' attribute in manifest.");
             return;
         }
+
         for (String elementAttr : sClassAttributes) {
             String[] names = elementAttr.split("/");
             if (names.length != 2) {
@@ -425,9 +488,10 @@ public class ManifestMerger {
                     Attr attr = ((Element) elem).getAttributeNodeNS(NS_URI, attrName);
                     if (attr != null) {
                         String value = attr.getNodeValue();
+
                         // We know it's a shortened FQCN if it starts with a dot
                         // or does not contain any dot.
-                        if (value != null && value.length() > 0 &&
+                        if (value != null && !value.isEmpty() &&
                                 (value.indexOf('.') == -1 || value.charAt(0) == '.')) {
                             if (value.charAt(0) == '.') {
                                 value = pkg + value;
@@ -441,6 +505,7 @@ public class ManifestMerger {
             }
         }
     }
+
     /**
      * Extracts the fully qualified class names from the manifest and uses the
      * prefix notation relative to the manifest package. This basically reverses
@@ -456,9 +521,11 @@ public class ManifestMerger {
         if (manifest != null) {
             pkg = manifest.getAttribute("package");
         }
-        if (pkg == null || pkg.length() == 0) {
+
+        if (pkg == null || pkg.isEmpty()) {
             return;
         }
+
         int pkgLength = pkg.length();
         for (String elementAttr : sClassAttributes) {
             String[] names = elementAttr.split("/");
@@ -474,6 +541,7 @@ public class ManifestMerger {
                     Attr attr = ((Element) elem).getAttributeNodeNS(NS_URI, attrName);
                     if (attr != null) {
                         String value = attr.getNodeValue();
+
                         // We know it's a shortened FQCN if it starts with a dot
                         // or does not contain any dot.
                         if (value != null && value.length() > pkgLength &&
@@ -486,6 +554,7 @@ public class ManifestMerger {
             }
         }
     }
+
     /**
      * Checks (but does not merge) the application attributes using the following rules:
      * <pre>
@@ -499,8 +568,10 @@ public class ManifestMerger {
      * @return True on success, false if any error occurred (printed to the {@link IMergerLog}).
      */
     private boolean checkApplication(Document libDoc) {
+
         Element mainApp = findFirstElement(mMainDoc, "/manifest/application");  //$NON-NLS-1$
         Element libApp  = findFirstElement(libDoc,   "/manifest/application");  //$NON-NLS-1$
+
         // A manifest does not necessarily define an application.
         // If the lib has none, there's nothing to check for.
         if (libApp == null) {
@@ -510,9 +581,10 @@ public class ManifestMerger {
             // Don't check the <application> element since it is tagged with override or remove.
             return true;
         }
+
         for (String attrName : new String[] { "name", "backupAgent" }) {
             String libValue  = getAttributeValue(libApp, attrName);
-            if (libValue == null || libValue.length() == 0) {
+            if (libValue == null || libValue.isEmpty()) {
                 // Nothing to do if the attribute is not defined in the lib.
                 continue;
             }
@@ -531,8 +603,10 @@ public class ManifestMerger {
                         libValue);
             }
         }
+
         return true;
     }
+
     /**
      * Do not merge anything. Instead it checks that the requested elements from the
      * given library are all present and equal in the destination and prints a warning
@@ -552,8 +626,11 @@ public class ManifestMerger {
      * @return True on success, false if any error occurred (printed to the {@link IMergerLog}).
      */
     private boolean doNotMergeCheckEqual(String path, Document libDoc) {
+
         for (Element src : findElements(libDoc, path)) {
+
             boolean found = false;
+
             for (Element dest : findElements(mMainDoc, path)) {
                 if (hasOverrideOrRemoveTag(dest)) {
                     continue;
@@ -563,6 +640,7 @@ public class ManifestMerger {
                     break;
                 }
             }
+
             if (!found) {
                 mLog.conflict(Severity.WARNING,
                         xmlFileAndLine(mMainDoc),
@@ -572,8 +650,10 @@ public class ManifestMerger {
                         MergerXmlUtils.dump(src, false /*nextSiblings*/));
             }
         }
+
         return true;
     }
+
     /**
      * Merges the requested elements from the library in the main document.
      * The key attribute name is used to identify the same elements.
@@ -595,6 +675,7 @@ public class ManifestMerger {
             String keyAttr,
             Document libDoc,
             boolean warnDups) {
+
         // The parent of XPath /p1/p2/p3 is /p1/p2. To find it, delete the last "/segment"
         int pos = path.lastIndexOf('/');
         assert pos > 1;
@@ -608,10 +689,12 @@ public class ManifestMerger {
                     parentPath);
             return false;
         }
+
         boolean success = true;
+
         nextSource: for (Element src : findElements(libDoc, path)) {
             String name = getAttributeValue(src, keyAttr);
-            if (name.length() == 0) {
+            if (name.isEmpty()) {
                 mLog.error(Severity.ERROR,
                         xmlFileAndLine(src),
                         "Undefined '%1$s' attribute in %2$s.",
@@ -619,6 +702,7 @@ public class ManifestMerger {
                 success = false;
                 continue;
             }
+
             // Look for the same item in the destination
             List<Element> dests = findElements(mMainDoc, path, keyAttr, name);
             if (dests.size() > 1) {
@@ -658,14 +742,18 @@ public class ManifestMerger {
                     continue nextSource;
                 }
             }
+
             if (doMerge) {
                 // Ready to merge element src. Select which previous siblings to merge.
                 Node start = selectPreviousSiblings(src);
+
                 insertAtEndOf(parent, start, src);
             }
         }
+
         return success;
     }
+
     /**
      * Returns the value of the given "android:attribute" in the given element.
      *
@@ -679,6 +767,7 @@ public class ManifestMerger {
         String value = attr == null ? "" : attr.getNodeValue();  //$NON-NLS-1$
         return value;
     }
+
     /**
      * Merge elements as identified by their key name attribute.
      * The element must have an option boolean "required" attribute which can be either "true" or
@@ -705,6 +794,7 @@ public class ManifestMerger {
             String requiredAttr,
             Document libDoc,
             @Nullable String alternateKeyAttr) {
+
         // The parent of XPath /p1/p2/p3 is /p1/p2. To find it, delete the last "/segment"
         int pos = path.lastIndexOf('/');
         assert pos > 1;
@@ -718,19 +808,22 @@ public class ManifestMerger {
                     parentPath);
             return false;
         }
+
         boolean success = true;
+
         for (Element src : findElements(libDoc, path)) {
             Attr attr = src.getAttributeNodeNS(NS_URI, keyAttr);
             String name = attr == null ? "" : attr.getNodeValue().trim();  //$NON-NLS-1$
-            if (name.length() == 0) {
+            if (name.isEmpty()) {
                 if (alternateKeyAttr != null) {
                     attr = src.getAttributeNodeNS(NS_URI, alternateKeyAttr);
                     String s = attr == null ? "" : attr.getNodeValue().trim(); //$NON-NLS-1$
-                    if (s.length() != 0) {
+                    if (!s.isEmpty()) {
                         // This element lacks the keyAttr but has the alternateKeyAttr. Skip it.
                         continue;
                     }
                 }
+
                 mLog.error(Severity.ERROR,
                         xmlFileAndLine(src),
                         "Undefined '%1$s' attribute in %2$s.",
@@ -738,6 +831,7 @@ public class ManifestMerger {
                 success = false;
                 continue;
             }
+
             // Look for the same item in the destination
             List<Element> dests = findElements(mMainDoc, path, keyAttr, name);
             if (dests.size() > 1) {
@@ -747,7 +841,8 @@ public class ManifestMerger {
                         "Manifest has more than one %1$s[@%2$s=%3$s] element.",
                         path, keyAttr, name);
             }
-            if (dests.size() > 0) {
+            if (!dests.isEmpty()) {
+
                 attr = src.getAttributeNodeNS(NS_URI, requiredAttr);
                 String value = attr == null ? "true" : attr.getNodeValue();    //$NON-NLS-1$
                 if (value == null || !(value.equals("true") || value.equals("false"))) {
@@ -758,11 +853,13 @@ public class ManifestMerger {
                     continue;
                 }
                 boolean boolE = Boolean.parseBoolean(value);
+
                 for (Element dest : dests) {
                     // Don't try to merge this element since it has tools:merge=override|remove.
                     if (hasOverrideOrRemoveTag(dest)) {
                         continue;
                     }
+
                     // Compare the required attributes.
                     attr = dest.getAttributeNodeNS(NS_URI, requiredAttr);
                     value = attr == null ? "true" : attr.getNodeValue();    //$NON-NLS-1$
@@ -774,9 +871,11 @@ public class ManifestMerger {
                         continue;
                     }
                     boolean boolD = Boolean.parseBoolean(value);
+
                     if (!boolD && boolE) {
                         // Required attributes differ: destination is false and source was true
                         // so we need to change the destination to true.
+
                         // If attribute was already in the destination, change it in place
                         if (attr != null) {
                             attr.setNodeValue("true");                        //$NON-NLS-1$
@@ -784,6 +883,7 @@ public class ManifestMerger {
                             // Otherwise, do nothing. The destination doesn't have the
                             // required=true attribute, and true is the default value.
                             // Consequently not setting is the right thing to do.
+
                             // -- code snippet for reference --
                             // If we wanted to create a new attribute, we'd use the code
                             // below. There's a simpler call to d.setAttributeNS(ns, name, value)
@@ -804,7 +904,9 @@ public class ManifestMerger {
                 // Destination doesn't exist. We simply merge the source element.
                 // Select which previous siblings to merge.
                 Node start = selectPreviousSiblings(src);
+
                 Node node = insertAtEndOf(parent, start, src);
+
                 NamedNodeMap attrs = node.getAttributes();
                 if (attrs != null) {
                     for (int i = 0; i < attrs.getLength(); i++) {
@@ -828,8 +930,12 @@ public class ManifestMerger {
                 }
             }
         }
+
         return success;
     }
+
+
+
     /**
      * Checks (but does not merge) uses-feature glEsVersion attribute using the following rules:
      * <pre>
@@ -842,6 +948,7 @@ public class ManifestMerger {
      * @return True on success, false if any error occurred (printed to the {@link IMergerLog}).
      */
     private boolean checkGlEsVersion(Document libDoc) {
+
         String parentPath = "/manifest";                                    //$NON-NLS-1$
         Element parent = findFirstElement(mMainDoc, parentPath);
         assert parent != null;
@@ -852,6 +959,7 @@ public class ManifestMerger {
                     parentPath);
             return false;
         }
+
         // Find the max glEsVersion on the destination side
         String path = "/manifest/uses-feature";                             //$NON-NLS-1$
         String keyAttr = "glEsVersion";                                     //$NON-NLS-1$
@@ -861,7 +969,7 @@ public class ManifestMerger {
         for (Element dest : findElements(mMainDoc, path)) {
             Attr attr = dest.getAttributeNodeNS(NS_URI, keyAttr);
             String value = attr == null ? "" : attr.getNodeValue().trim();   //$NON-NLS-1$
-            if (value.length() != 0) {
+            if (!value.isEmpty()) {
                 try {
                     // Note that the value can be an hex number such as 0x00020001 so we
                     // need Integer.decode instead of Integer.parseInt.
@@ -890,18 +998,21 @@ public class ManifestMerger {
                 }
             }
         }
+
         // If we found at least one valid with no error, use that, otherwise bail out.
         if (!result && destNode == null) {
             return false;
         }
+
         // Now find the max glEsVersion on the source side.
+
         long srcGlEsVersion = 0x00010000L; // default minimum is 1.0
         Element srcNode = null;
         result = true;
         for (Element src : findElements(libDoc, path)) {
             Attr attr = src.getAttributeNodeNS(NS_URI, keyAttr);
             String value = attr == null ? "" : attr.getNodeValue().trim();   //$NON-NLS-1$
-            if (value.length() != 0) {
+            if (!value.isEmpty()) {
                 try {
                     // See comment on Long.decode above.
                     long version = Long.decode(value);
@@ -925,6 +1036,7 @@ public class ManifestMerger {
                 }
             }
         }
+
         if (srcNode != null && destGlEsVersion < srcGlEsVersion) {
             mLog.conflict(Severity.WARNING,
                     xmlFileAndLine(destNode == null ? mMainDoc : destNode),
@@ -937,8 +1049,10 @@ public class ManifestMerger {
             );
             result = false;
         }
+
         return result;
     }
+
     /**
      * Checks (but does not merge) uses-sdk attributes using the following rules:
      * <pre>
@@ -951,17 +1065,23 @@ public class ManifestMerger {
      * @return True on success, false if any error occurred (printed to the {@link IMergerLog}).
      */
     private boolean checkSdkVersion(Document libDoc) {
+
         boolean result = true;
+
         Element destUsesSdk = findFirstElement(mMainDoc, "/manifest/uses-sdk");  //$NON-NLS-1$
+
         if (hasOverrideOrRemoveTag(destUsesSdk)) {
             // Don't try to check this element since it has tools:merge=override|remove.
             return true;
         }
+
         Element srcUsesSdk  = findFirstElement(libDoc,   "/manifest/uses-sdk");  //$NON-NLS-1$
+
         AtomicInteger destValue = new AtomicInteger(1);
         AtomicInteger srcValue  = new AtomicInteger(1);
         AtomicBoolean destImplied = new AtomicBoolean(true);
         AtomicBoolean srcImplied = new AtomicBoolean(true);
+
         // Check minSdkVersion
         int destMinSdk = 1;
         result = extractSdkVersionAttribute(
@@ -970,13 +1090,16 @@ public class ManifestMerger {
                 "min",  //$NON-NLS-1$
                 destValue, srcValue,
                 destImplied, srcImplied);
+
         if (result) {
             // Make it an error for an application to use a library with a greater
             // minSdkVersion. This means the library code may crash unexpectedly.
             // TODO it would be nice to be able to work around this in case the
             // user think s/he knows what s/he's doing.
             // We could define a simple XML comment flag: <!-- @NoMinSdkVersionMergeError -->
+
             destMinSdk = destValue.get();
+
             if (destMinSdk < srcValue.get()) {
                 mLog.conflict(Severity.ERROR,
                         xmlFileAndLine(destUsesSdk == null ? mMainDoc : destUsesSdk),
@@ -990,22 +1113,28 @@ public class ManifestMerger {
                 result = false;
             }
         }
+
         // Check targetSdkVersion.
+
         // Note that destValue/srcValue purposely defaults to whatever minSdkVersion was last read
         // since that's their definition when missing.
         destImplied.set(true);
         srcImplied.set(true);
+
         boolean result2 = extractSdkVersionAttribute(
                 libDoc,
                 destUsesSdk, srcUsesSdk,
                 "target",  //$NON-NLS-1$
                 destValue, srcValue,
                 destImplied, srcImplied);
+
         result &= result2;
         if (result2) {
             // Make it a warning for an application to use a library with a greater
             // targetSdkVersion.
+
             int destTargetSdk = destImplied.get() ? destMinSdk : destValue.get();
+
             if (destTargetSdk < srcValue.get()) {
                 mLog.conflict(Severity.WARNING,
                         xmlFileAndLine(destUsesSdk == null ? mMainDoc : destUsesSdk),
@@ -1019,8 +1148,10 @@ public class ManifestMerger {
                 result = false;
             }
         }
+
         return result;
     }
+
     /**
      * Implementation detail for {@link #checkSdkVersion(Document)}.
      * Note that the various atomic out-variables must be preset to their default before
@@ -1041,11 +1172,12 @@ public class ManifestMerger {
             AtomicBoolean srcImplied) {
         String s = destUsesSdk == null ? ""                                      //$NON-NLS-1$
                 : destUsesSdk.getAttributeNS(NS_URI, attr + "SdkVersion");  //$NON-NLS-1$
+
         boolean result = true;
         assert s != null;
         s = s.trim();
         try {
-            if (s.length() > 0) {
+            if (!s.isEmpty()) {
                 destValue.set(Integer.parseInt(s));
                 destImplied.set(false);
             }
@@ -1072,12 +1204,13 @@ public class ManifestMerger {
                 result = false;
             }
         }
+
         s = srcUsesSdk == null ? ""                                      //$NON-NLS-1$
                 : srcUsesSdk.getAttributeNS(NS_URI, attr + "SdkVersion");  //$NON-NLS-1$
         assert s != null;
         s = s.trim();
         try {
-            if (s.length() > 0) {
+            if (!s.isEmpty()) {
                 srcValue.set(Integer.parseInt(s));
                 srcImplied.set(false);
             }
@@ -1102,9 +1235,14 @@ public class ManifestMerger {
                 result = false;
             }
         }
+
         return result;
     }
+
+
     // -----
+
+
     /**
      * Given an element E, select which previous siblings we want to merge.
      * We want to include any whitespace up to the closing of the previous element.
@@ -1114,13 +1252,14 @@ public class ManifestMerger {
      */
     @NonNull
     private Node selectPreviousSiblings(Node end) {
+
         Node start = end;
         Node prev = start.getPreviousSibling();
         while (prev != null) {
             short t = prev.getNodeType();
             if (t == Node.TEXT_NODE) {
                 String text = prev.getNodeValue();
-                if (text == null || text.trim().length() != 0) {
+                if (text == null || !text.trim().isEmpty()) {
                     // Not whitespace, we don't want it.
                     break;
                 }
@@ -1133,8 +1272,10 @@ public class ManifestMerger {
             start = prev;
             prev = start.getPreviousSibling();
         }
+
         return start;
     }
+
     /**
      * Inserts all siblings from {@code start} to {@code end} at the end
      * of the given destination element.
@@ -1154,6 +1295,7 @@ public class ManifestMerger {
         String destPrefix = XmlUtils.lookupNamespacePrefix(mMainDoc, NS_URI);
         String srcPrefix  = XmlUtils.lookupNamespacePrefix(start.getOwnerDocument(), NS_URI);
         boolean needPrefixChange = destPrefix != null && !destPrefix.equals(srcPrefix);
+
         // First let's figure out the insertion point.
         // We want the end of the last 'content' element of the
         // destination element and basically we want to insert right
@@ -1162,7 +1304,7 @@ public class ManifestMerger {
         while (target != null) {
             if (target.getNodeType() == Node.TEXT_NODE) {
                 String text = target.getNodeValue();
-                if (text == null || text.trim().length() != 0) {
+                if (text == null || !text.trim().isEmpty()) {
                     // Not whitespace, insert after.
                     break;
                 }
@@ -1175,18 +1317,30 @@ public class ManifestMerger {
         if (target != null) {
             target = target.getNextSibling();
         }
+
         // Destination and start..end must not be part of the same document
         // because we try to import below. If they were, it would mess the
         // structure.
         assert dest.getOwnerDocument() == mMainDoc;
         assert dest.getOwnerDocument() != start.getOwnerDocument();
         assert start.getOwnerDocument() == end.getOwnerDocument();
+
         while (start != null) {
             Node node = mMainDoc.importNode(start, true /*deep*/);
             if (needPrefixChange) {
                 changePrefix(node, srcPrefix, destPrefix);
             }
+
+            if (mInsertSourceMarkers) {
+                // Duplicate source node attribute
+                File file = MergerXmlUtils.getFileFor(start);
+                if (file != null) {
+                    MergerXmlUtils.setFileFor(node, file);
+                }
+            }
+
             dest.insertBefore(node, target);
+
             if (start == end) {
                 return node;
             }
@@ -1194,6 +1348,7 @@ public class ManifestMerger {
         }
         return null;
     }
+
     /**
      * Changes the namespace prefix of all nodes, recursively.
      *
@@ -1212,6 +1367,7 @@ public class ManifestMerger {
             }
         }
     }
+
     /**
      * Compares two {@link Element}s recursively.
      * They must be identical with the same structure.
@@ -1245,6 +1401,7 @@ public class ManifestMerger {
             return false;
         }
     }
+
     /**
      * Finds the first element matching the given XPath expression in the given document.
      *
@@ -1262,6 +1419,7 @@ public class ManifestMerger {
             if (result instanceof Element) {
                 return (Element) result;
             }
+
             if (result != null) {
                 mLog.error(Severity.ERROR,
                         xmlFileAndLine(doc),
@@ -1276,6 +1434,7 @@ public class ManifestMerger {
         }
         return null;
     }
+
     /**
      * Finds zero or more elements matching the given XPath expression in the given document.
      *
@@ -1288,6 +1447,8 @@ public class ManifestMerger {
             @NonNull String path) {
         return findElements(doc, path, null, null);
     }
+
+
     /**
      * Finds zero or more elements matching the given XPath expression in the given document.
      * <p/>
@@ -1313,12 +1474,14 @@ public class ManifestMerger {
             @Nullable String attrName,
             @Nullable String attrValue) {
         List<Element> elements = new ArrayList<Element>();
+
         if (attrName != null) {
             assert attrValue != null;
             // Generate expression /manifest/application/activity[@android:name='my.fqcn']
             path = String.format("%1$s[@%2$s:%3$s='%4$s']",                     //$NON-NLS-1$
                     path, NS_PREFIX, attrName, attrValue);
         }
+
         try {
             NodeList results = (NodeList) mXPath.evaluate(path, doc, XPathConstants.NODESET);
             if (results != null && results.getLength() > 0) {
@@ -1335,14 +1498,17 @@ public class ManifestMerger {
                     }
                 }
             }
+
         } catch (XPathExpressionException e) {
             mLog.error(Severity.ERROR,
                     xmlFileAndLine(doc),
                     "XPath error on expr %s: %s",                       //$NON-NLS-1$
                     path, e.toString());
         }
+
         return elements;
     }
+
     /**
      * Returns a new {@link FileAndLine} structure that identifies
      * the base filename & line number from which the XML node was parsed.
@@ -1357,6 +1523,7 @@ public class ManifestMerger {
     private FileAndLine xmlFileAndLine(@NonNull Node node) {
         return MergerXmlUtils.xmlFileAndLine(node);
     }
+
     /**
      * Checks whether the given element has a tools:merge=override or tools:merge=remove attribute.
      * @param node The node to check.
@@ -1371,6 +1538,7 @@ public class ManifestMerger {
         String value = merge == null ? null : merge.getNodeValue();
         return MERGE_OVERRIDE.equals(value) || MERGE_REMOVE.equals(value);
     }
+
     /**
      * Cleans up all tools attributes from the given node hierarchy.
      * <p/>
@@ -1397,6 +1565,7 @@ public class ManifestMerger {
             }
             assert attrs.getNamedItemNS(TOOLS_URI, MERGE_ATTR) == null;
         }
+
         for (Node child = root.getFirstChild(); child != null; ) {
             if (child.getNodeType() != Node.ELEMENT_NODE) {
                 child = child.getNextSibling();
@@ -1412,7 +1581,7 @@ public class ManifestMerger {
                 root.removeChild(child);
                 // If there's some whitespace just before that element, clean it up too.
                 while (prev != null && prev.getNodeType() == Node.TEXT_NODE) {
-                    if (prev.getNodeValue().trim().length() == 0) {
+                    if (prev.getNodeValue().trim().isEmpty()) {
                         Node prevPrev = prev.getPreviousSibling();
                         root.removeChild(prev);
                         prev = prevPrev;
@@ -1426,11 +1595,121 @@ public class ManifestMerger {
             child = sibling;
         }
     }
+
     /**
      * @see #cleanupToolsAttributes(Node)
      */
     private Document cleanupToolsAttributes(@NonNull Document doc) {
         cleanupToolsAttributes(doc.getFirstChild());
         return doc;
+    }
+
+    /**
+     * Sets whether this manifest merger will insert source markers into the merged source
+     *
+     * @param insertSourceMarkers if true, insert source markers
+     */
+    public void setInsertSourceMarkers(boolean insertSourceMarkers) {
+        mInsertSourceMarkers = insertSourceMarkers;
+    }
+
+    /**
+     * Returns whether this manifest merger will insert source markers into the merged source
+     *
+     * @return whether this manifest merger will insert source markers into the merged source
+     */
+    public boolean isInsertSourceMarkers() {
+        return mInsertSourceMarkers;
+    }
+
+    /** Inserts source markers in the given document */
+    private static void insertSourceMarkers(@NonNull Document mainDoc) {
+        Element root = mainDoc.getDocumentElement();
+        if (root != null) {
+            File file = MergerXmlUtils.getFileFor(root);
+            if (file != null) {
+                insertSourceMarker(mainDoc, root, file, false);
+            }
+
+            insertSourceMarkers(root, file);
+        }
+    }
+
+    private static File insertSourceMarkers(@NonNull Node node, @Nullable File currentFile) {
+        for (int i = 0; i < node.getChildNodes().getLength(); i++) {
+            Node child = node.getChildNodes().item(i);
+            short nodeType = child.getNodeType();
+            if (nodeType == Node.ELEMENT_NODE
+                    || nodeType == Node.COMMENT_NODE
+                    || nodeType == Node.DOCUMENT_NODE
+                    || nodeType == Node.CDATA_SECTION_NODE) {
+                File file = MergerXmlUtils.getFileFor(child);
+                if (file != null && !file.equals(currentFile)) {
+                    i += insertSourceMarker(node, child, file, false);
+                    currentFile = file;
+                }
+
+                currentFile = insertSourceMarkers(child, currentFile);
+            }
+        }
+
+        Node lastElement = node.getLastChild();
+        while (lastElement != null && lastElement.getNodeType() == Node.TEXT_NODE) {
+            lastElement = lastElement.getPreviousSibling();
+        }
+        if (lastElement != null && lastElement.getNodeType() == Node.ELEMENT_NODE) {
+            File parentFile = MergerXmlUtils.getFileFor(node);
+            File lastFile = MergerXmlUtils.getFileFor(lastElement);
+            if (lastFile != null && parentFile != null && !parentFile.equals(lastFile)) {
+                insertSourceMarker(node, lastElement, parentFile, true);
+                currentFile = parentFile;
+            }
+        }
+
+        return currentFile;
+    }
+
+    private static int insertSourceMarker(@NonNull Node parent, @NonNull Node node,
+                                          @NonNull File file, boolean after) {
+        int insertCount = 0;
+        Document doc = parent.getNodeType() ==
+                Node.DOCUMENT_NODE ? (Document) parent : parent.getOwnerDocument();
+
+        String comment;
+        try {
+            comment = SdkUtils.createPathComment(file, true);
+        } catch (MalformedURLException e) {
+            return insertCount;
+        }
+
+        Node prev = node.getPreviousSibling();
+        String newline;
+        if (prev != null && prev.getNodeType() == Node.TEXT_NODE) {
+            // Duplicate indentation from previous line. Once we switch the merger
+            // over to using the XmlPrettyPrinter, we won't need this.
+            newline = prev.getNodeValue();
+            int index = newline.lastIndexOf('\n');
+            if (index != -1) {
+                newline = newline.substring(index);
+            }
+        } else {
+            newline = "\n";
+        }
+
+        if (after) {
+            node = node.getNextSibling();
+        }
+
+        parent.insertBefore(doc.createComment(comment), node);
+        insertCount++;
+
+        // Can't add text nodes at the document level in Xerces, even though
+        // it will happily parse these
+        if (parent.getNodeType() != Node.DOCUMENT_NODE) {
+            parent.insertBefore(doc.createTextNode(newline), node);
+            insertCount++;
+        }
+
+        return insertCount;
     }
 }

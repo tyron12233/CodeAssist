@@ -9,6 +9,7 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.compiler.dex.D8Compiler;
 import com.tyron.code.compiler.incremental.resource.IncrementalAAPT2Compiler;
 import com.tyron.code.compiler.java.JavaCompiler;
+import com.tyron.code.compiler.manifest.ManifestMergeTask;
 import com.tyron.code.compiler.resource.AAPT2Compiler;
 import com.tyron.code.compiler.symbol.SymbolProcessor;
 import com.tyron.code.model.Project;
@@ -69,6 +70,11 @@ public class ApkBuilder {
 
     // TODO: run tasks in parallel if applicable
     private void doBuild() throws IOException, CompilationFailedException {
+
+        Task manifestMergeTask = new ManifestMergeTask();
+        manifestMergeTask.prepare(mProject, log);
+        manifestMergeTask.run();
+
         post(() -> mTaskListener.onTaskStarted("AAPT2", "Compiling resources"));
         IncrementalAAPT2Compiler aapt2Compiler = new IncrementalAAPT2Compiler(mProject, log);
         aapt2Compiler.run();

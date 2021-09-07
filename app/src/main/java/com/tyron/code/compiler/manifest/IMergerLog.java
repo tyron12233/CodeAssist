@@ -1,7 +1,8 @@
 package com.tyron.code.compiler.manifest;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+
+import com.tyron.code.model.FileAndLine;
 
 /**
  * Logger interface for the {@link ManifestMerger}
@@ -40,46 +41,6 @@ public interface IMergerLog {
             @NonNull FileAndLine location2,
             @NonNull String message,
             Object... msgParams);
-
-    /**
-     * Information about the file and line number where an error occured.
-     */
-    public static class FileAndLine {
-        private final String mFilePath;
-        private final int mLine;
-
-        public FileAndLine(@Nullable String filePath, int line) {
-            mFilePath = filePath;
-            mLine = line;
-        }
-
-        @Nullable
-        public String getFileName() {
-            return mFilePath;
-        }
-
-        public int getLine() {
-            return mLine;
-        }
-
-        @NonNull
-        @Override
-        public String toString() {
-            String name = mFilePath;
-            if (MAIN_MANIFEST.equals(name)) {
-                name = "main manifest";
-            } else if (LIBRARY.equals(name)) {
-                name = "library";
-            } else if (name == null) {
-                name = "(Unknown)";
-            }
-            if (mLine <= 0) {
-                return name;
-            } else {
-                return name + ':' + mLine;
-            }
-        }
-    }
 
     public static final String MAIN_MANIFEST = "@main";
 

@@ -5,6 +5,8 @@ import com.tyron.code.model.Project;
 import com.tyron.code.service.ILogger;
 import com.tyron.code.util.exception.CompilationFailedException;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -67,6 +69,17 @@ public class ManifestMergeTask extends Task {
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-        mMerger.process(mOutputFile, mMainManifest, mLibraryManifestFiles, null, null);
+
+        if (mLibraryManifestFiles == null || mLibraryManifestFiles.length == 0) {
+            // no libraries to merge, just copy the manifest file to the output
+            FileUtils.copyFile(mMainManifest, mOutputFile);
+            return;
+        }
+
+        boolean success = mMerger.process(mOutputFile, mMainManifest, mLibraryManifestFiles, null, null);
+
+        if (!success) {
+            throw new CompilationFailedException("Failed to merge manifests");
+        }
     }
 }
