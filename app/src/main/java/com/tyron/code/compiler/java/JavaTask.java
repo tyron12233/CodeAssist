@@ -6,6 +6,8 @@ import android.util.Log;
 
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.tools.javac.api.JavacTool;
+
+import com.tyron.code.compiler.Task;
 import com.tyron.code.completion.SourceFileObject;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
@@ -27,14 +29,25 @@ import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.javax.tools.StandardJavaFileManager;
 import org.openjdk.javax.tools.StandardLocation;
 
-public class JavaCompiler {
+public class JavaTask extends Task {
 
-    private final ILogger logViewModel;
-    private final Project mProject;
+    private ILogger logViewModel;
+    private Project mProject;
 
-    public JavaCompiler(ILogger log, Project project) {
-        logViewModel = log;
+    @Override
+    public String getName() {
+        return "Java Compiler";
+    }
+
+    @Override
+    public void prepare(Project project, ILogger logger) throws IOException {
         mProject = project;
+        logViewModel = logger;
+    }
+
+    @Override
+    public void run() throws IOException, CompilationFailedException {
+        compile();
     }
 
     private final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();

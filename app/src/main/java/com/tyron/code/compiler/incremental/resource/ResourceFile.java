@@ -7,7 +7,7 @@ import java.io.File;
 import java.net.URI;
 
 /**
- * Used by {@link IncrementalAAPT2Compiler} to find differences between two files
+ * Used by {@link IncrementalAapt2Task} to find differences between two files
  */
 public class ResourceFile extends File {
 

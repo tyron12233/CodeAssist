@@ -9,40 +9,50 @@ import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
+import com.tyron.code.compiler.Task;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.service.ILogger;
 import com.tyron.code.util.exception.CompilationFailedException;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 /**
  * Converts class files into dex files and merges them in the process
  */
 @SuppressWarnings("NewApi")
-public class D8Compiler {
+public class D8Task extends Task {
 
-	private static final String TAG = D8Compiler.class.getSimpleName();
+	private static final String TAG = D8Task.class.getSimpleName();
 
-	private final ILogger logViewModel;
-	private final Project mProject;
 	private final DiagnosticsHandler diagnosticsHandler = new DiagnosticHandler();
-	
-	public D8Compiler(ILogger model, Project project) {
-		logViewModel = model;
-		mProject = project;
+
+	private ILogger logViewModel;
+	private Project mProject;
+
+	@Override
+	public String getName() {
+		return TAG;
 	}
 
-	ExecutorService service = Executors.newFixedThreadPool(4);
-	
+	@Override
+	public void prepare(Project project, ILogger logger) throws IOException {
+		mProject = project;
+		logViewModel = logger;
+	}
+
+	@Override
+	public void run() throws IOException, CompilationFailedException {
+		compile();
+	}
+
 	public void compile() throws CompilationFailedException {
 		try {
 			logViewModel.debug("Dexing libraries.");

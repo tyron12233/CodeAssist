@@ -41,7 +41,7 @@ public class ApkSigner {
         commands.add(mApkOutputPath);
         commands.add("--in");
         commands.add(mApkInputPath);
-        com.android.apksigner.ApkSignerTool.main(commands.toArray(new String[commands.size()]));
+        com.android.apksigner.ApkSignerTool.main(commands.toArray(new String[0]));
 
     }
 

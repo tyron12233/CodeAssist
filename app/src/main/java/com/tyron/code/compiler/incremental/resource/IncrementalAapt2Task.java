@@ -4,6 +4,7 @@ import android.util.Log;
 
 import com.android.tools.r8.v.b.P;
 import com.tyron.code.ApplicationLoader;
+import com.tyron.code.compiler.Task;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.service.ILogger;
@@ -23,14 +24,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class IncrementalAAPT2Compiler {
+public class IncrementalAapt2Task extends Task {
 
     private static final String TAG = "IncrementalAAPT2";
 
-    private final Project mProject;
-    private final ILogger mLogger;
+    private Project mProject;
+    private ILogger mLogger;
 
-    public IncrementalAAPT2Compiler(Project project, ILogger logger) {
+    @Override
+    public String getName() {
+        return TAG;
+    }
+
+    @Override
+    public void prepare(Project project, ILogger logger) throws IOException {
         mProject = project;
         mLogger = logger;
     }

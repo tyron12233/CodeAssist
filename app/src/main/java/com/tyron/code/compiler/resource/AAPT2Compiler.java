@@ -5,9 +5,7 @@ import android.util.Log;
 import java.io.File;
 import java.io.IOException;
 
-import com.android.tools.r8.v.b.P;
 import com.tyron.code.ApplicationLoader;
-import com.tyron.code.compiler.symbol.SymbolProcessor;
 import com.tyron.code.model.Project;
 
 import java.nio.file.Files;
