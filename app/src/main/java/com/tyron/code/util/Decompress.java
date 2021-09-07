@@ -53,6 +53,11 @@ public class Decompress {
                 } else {
                     File f = new File(destination, ze.getName());
                     if (!f.exists()) {
+                        if (f.getParentFile() == null || !f.getParentFile().exists()) {
+                            if (!f.getParentFile().mkdirs()) {
+                                continue;
+                            }
+                        }
                         boolean success = f.createNewFile();
                         if (!success) {
                             Log.w(TAG, "Failed to create file " + f.getName());
