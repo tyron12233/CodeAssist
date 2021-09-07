@@ -403,21 +403,26 @@ public class MainFragment extends Fragment {
             return;
         }
 
+        int delay = 0;
+
         int pos = mAdapter.getPosition(file);
         if (pos != -1) {
             mPager.setCurrentItem(pos);
         } else {
             mFilesViewModel.addFile(file);
             mFilesViewModel.updateCurrentPosition(mAdapter.getPosition(file));
+            delay = 200;
         }
 
-        requireActivity().runOnUiThread(() -> {
+        mPager.postDelayed(() -> {
             Fragment fragment = getChildFragmentManager().findFragmentByTag("f" + file.getAbsolutePath().hashCode());
             if (fragment instanceof CodeEditorFragment) {
                 ((CodeEditorFragment) fragment).setCursorPosition(lineNumber, 0);
             }
-        });
+        }, delay);
         mRoot.closeDrawer(GravityCompat.START, true);
+
+        mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
     }
 
     /**
