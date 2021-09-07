@@ -1,4 +1,5 @@
 package com.tyron.code.ui.editor.log;
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.core.widget.NestedScrollView;
@@ -6,7 +7,9 @@ import androidx.fragment.app.Fragment;
 
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
+import android.text.method.LinkMovementMethod;
 import android.text.method.ScrollingMovementMethod;
+import android.text.style.ClickableSpan;
 import android.text.style.ForegroundColorSpan;
 import android.view.View;
 import android.os.Bundle;
@@ -18,8 +21,16 @@ import android.widget.TextView;
 
 import androidx.lifecycle.ViewModelProvider;
 
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.model.DiagnosticWrapper;
+import com.tyron.code.ui.main.MainFragment;
 
+import org.openjdk.javax.tools.Diagnostic;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,6 +47,7 @@ public class AppLogFragment extends Fragment {
     private int id;
     private NestedScrollView mRoot;
     private TextView mLogView;
+    private boolean mIgnoreProcess;
     
     public AppLogFragment() {
         
@@ -54,7 +66,7 @@ public class AppLogFragment extends Fragment {
 
         mLogView = new TextView(requireContext());
         mLogView.setTypeface(ResourcesCompat.getFont(requireContext(), R.font.jetbrains_mono_regular));
-        mLogView.setMovementMethod(new ScrollingMovementMethod());
+        mLogView.setMovementMethod(LinkMovementMethod.getInstance());
         mLogView.setVerticalScrollBarEnabled(true);
         mLogView.setTextColor(0xffFFFFFF);
 
@@ -71,31 +83,60 @@ public class AppLogFragment extends Fragment {
         model.getLogs(id).observe(getViewLifecycleOwner(), this::process);
     }
 
-    private final Pattern pattern = Pattern.compile("<\\$\\$(.+?)>(.+?)</\\$\\$(.+?)>", Pattern.DOTALL);
+    private void process(List<DiagnosticWrapper> text) {
+        if (mIgnoreProcess) {
+            return;
+        }
+        mIgnoreProcess = true;
 
-    private void process(String text) {
-        Matcher matcher = pattern.matcher(text);
         SpannableStringBuilder builder = new SpannableStringBuilder();
 
-        while (matcher.find()) {
+        for (DiagnosticWrapper diagnostic : new ArrayList<>(text)) {
 
-            String type = matcher.group(1);
-            if (type == null) {
-                type = "";
+            if (diagnostic.getKind() != null) {
+                builder.append(diagnostic.getKind().name() + ": ", new ForegroundColorSpan(getColor(diagnostic.getKind())), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
-            int color;
-            switch (type) {
-                case "warning": color = 0xffFFEB3B; break;
-                case "error": color = 0xffcf6679; break;
-                case "debug": color = 0xffEAEAEA; break;
-                default: color = 0xffFFFFFF;
+            builder.append(diagnostic.getMessage(Locale.getDefault()));
+            if (diagnostic.getSource() != null) {
+                builder.append(' ');
+                addClickableFile(builder, diagnostic);
             }
+            builder.append('\n');
 
-            ForegroundColorSpan span = new ForegroundColorSpan(color);
-            builder.append(matcher.group(2), span, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            builder.append("\n");
         }
         mLogView.setText(builder);
         mRoot.scrollTo(0, mLogView.getBottom());
+
+        mIgnoreProcess = false;
+    }
+
+    @ColorInt
+    private int getColor(Diagnostic.Kind kind) {
+        switch (kind) {
+            case ERROR: return 0xffcf6679;
+            case WARNING: return 0xffFFFF00;
+            default: return 0xffFFFFFF;
+        }
+    }
+
+    private void addClickableFile(SpannableStringBuilder sb, final DiagnosticWrapper diagnostic) {
+        ClickableSpan span = new ClickableSpan() {
+            @Override
+            public void onClick(@NonNull View view) {
+                // MainFragment -> BottomEditorFragment -> AppLogFragment
+                Fragment parent = getParentFragment();
+                if (parent != null) {
+                    Fragment main = parent.getParentFragment();
+                    if (main instanceof MainFragment) {
+                        ((MainFragment) main).openFile(diagnostic.getSource(), (int) diagnostic.getLineNumber() - 1);
+                    }
+                }
+            }
+        };
+
+        String label = diagnostic.getSource().getName();
+        label = label + ":" + diagnostic.getLineNumber();
+
+        sb.append("[" + label + "]", span, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     }
 }

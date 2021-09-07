@@ -10,6 +10,7 @@ import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
 import com.tyron.code.compiler.Task;
+import com.tyron.code.model.DiagnosticWrapper;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.service.ILogger;
@@ -166,23 +167,29 @@ public class D8Task extends Task {
 	private class DiagnosticHandler implements DiagnosticsHandler {
 		@Override
 		public void error(Diagnostic diagnostic) {
-			logViewModel.error(diagnostic.getDiagnosticMessage());
+			logViewModel.error(wrap(diagnostic));
 		}
 
 		@Override
 		public void warning(Diagnostic diagnostic) {
-			logViewModel.warning(diagnostic.getDiagnosticMessage());
+			logViewModel.warning(wrap(diagnostic));
 		}
 
 		@Override
 		public void info(Diagnostic diagnostic) {
-
+			logViewModel.info(wrap(diagnostic));
 		}
 
 		@Override
 		public DiagnosticsLevel modifyDiagnosticsLevel(DiagnosticsLevel diagnosticsLevel, Diagnostic diagnostic) {
 			Log.d("DiagnosticHandler", diagnostic.getDiagnosticMessage());
 			return null;
+		}
+
+		private DiagnosticWrapper wrap(Diagnostic diagnostic) {
+			DiagnosticWrapper wrapper = new DiagnosticWrapper();
+			wrapper.setMessage(diagnostic.getDiagnosticMessage());
+			return wrapper;
 		}
 	}
 }

@@ -45,6 +45,7 @@ import com.tyron.ProjectManager;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.completion.CompletionEngine;
+import com.tyron.code.model.DiagnosticWrapper;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.service.CompilerService;
@@ -392,7 +393,12 @@ public class MainFragment extends Fragment {
         }
     }
 
-    public void openFile(File file) {
+    /**
+     * Tries to open a file and show the given line
+     * @param file File to open
+     * @param lineNumber Line number to navigate to
+     */
+    public void openFile(File file, int lineNumber) {
         if (!LanguageManager.getInstance().supports(file)) {
             return;
         }
@@ -405,7 +411,21 @@ public class MainFragment extends Fragment {
             mFilesViewModel.updateCurrentPosition(mAdapter.getPosition(file));
         }
 
+        requireActivity().runOnUiThread(() -> {
+            Fragment fragment = getChildFragmentManager().findFragmentByTag("f" + file.getAbsolutePath().hashCode());
+            if (fragment instanceof CodeEditorFragment) {
+                ((CodeEditorFragment) fragment).setCursorPosition(lineNumber, 0);
+            }
+        });
         mRoot.closeDrawer(GravityCompat.START, true);
+    }
+
+    /**
+     * Tries to open a file into the editor
+     * @param file file to open
+     */
+    public void openFile(File file) {
+       openFile(file, 0);
     }
 
     public void openProject(Project project) {
@@ -488,18 +508,23 @@ public class MainFragment extends Fragment {
 
         ILogger logger = new ILogger() {
             @Override
-            public void error(String message) {
-                logViewModel.e(LogViewModel.BUILD_LOG, message);
+            public void info(DiagnosticWrapper wrapper) {
+
             }
 
             @Override
-            public void warning(String message) {
-                logViewModel.w(LogViewModel.BUILD_LOG, message);
+            public void debug(DiagnosticWrapper wrapper) {
+                logViewModel.d(LogViewModel.BUILD_LOG, wrapper);
             }
 
             @Override
-            public void debug(String message) {
-                logViewModel.d(LogViewModel.BUILD_LOG, message);
+            public void warning(DiagnosticWrapper wrapper) {
+                logViewModel.d(LogViewModel.BUILD_LOG, wrapper);
+            }
+
+            @Override
+            public void error(DiagnosticWrapper wrapper) {
+                logViewModel.d(LogViewModel.BUILD_LOG, wrapper);
             }
         };
 

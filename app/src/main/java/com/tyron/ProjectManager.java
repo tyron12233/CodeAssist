@@ -50,15 +50,15 @@ public class ProjectManager {
                 DependencyResolver resolver = new DependencyResolver(dependencies, proj.getLibraryDirectory());
                 resolver.addResolvedLibraries(libs);
                 dependencies = resolver.resolveMain();
-                mLogger.d(LogViewModel.BUILD_LOG, "Resolved dependencies: " + dependencies);
+               // mLogger.d(LogViewModel.BUILD_LOG, "Resolved dependencies: " + dependencies);
 
                 mListener.onTaskStarted("Downloading dependencies");
-                mLogger.d(LogViewModel.BUILD_LOG, "Downloading dependencies");
+             //   mLogger.d(LogViewModel.BUILD_LOG, "Downloading dependencies");
                 DependencyDownloader downloader = new DependencyDownloader(libs, proj.getLibraryDirectory());
                 try {
                     downloader.download(dependencies);
                 } catch (IOException e) {
-                    mLogger.e(LogViewModel.BUILD_LOG, e.getMessage());
+
                 }
             }
 

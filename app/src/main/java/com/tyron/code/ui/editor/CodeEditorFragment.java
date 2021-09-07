@@ -136,6 +136,13 @@ public class CodeEditorFragment extends Fragment {
         FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
     }
 
+    public void setCursorPosition(int line, int column) {
+        if (mEditor != null) {
+            mEditor.getCursor()
+                    .set(line, column);
+        }
+    }
+
     public void performShortcut(ShortcutItem item) {
         for (ShortcutAction action : item.actions) {
             if (action.isApplicable(item.kind)) {

@@ -10,6 +10,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 
+import com.tyron.code.model.DiagnosticWrapper;
+
 public class LogViewModel extends ViewModel {
     
     private static int totalCount;
@@ -19,67 +21,61 @@ public class LogViewModel extends ViewModel {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    private List<MutableLiveData<String>> log;
+    private List<MutableLiveData<List<DiagnosticWrapper>>> log;
     
-    public LiveData<String> getLogs(int id) {
+    public LiveData<List<DiagnosticWrapper>> getLogs(int id) {
         if (log == null) {
             log = init();
         }
         return log.get(id);
     }
     
-    private List<MutableLiveData<String>> init() {
-        List<MutableLiveData<String>> list = new ArrayList<>();
+    private List<MutableLiveData<List<DiagnosticWrapper>>> init() {
+        List<MutableLiveData<List<DiagnosticWrapper>>> list = new ArrayList<>();
         for (int i = 0; i < totalCount; i++) {
-            list.add(new MutableLiveData<>(""));
+            list.add(new MutableLiveData<>(new ArrayList<>()));
         }
         return list;
     }
     
-    public void d(int id, String message) {
-        String current = getLogs(id).getValue();
-        if (current == null) {
-            current = "";
-        }
-        current = current + (current.isEmpty() ? "" : '\n') + "<$$debug>" + message + "</$$debug>";
-
-        
-        if (Looper.myLooper() != Looper.getMainLooper()) {
-            String finalCurrent = current;
-            mainHandler.post(() -> log.get(id).setValue(finalCurrent));
-        } else {
-           log.get(id).setValue(current);
-        }
-    }
-    
     public void clear(int id) {
-        MutableLiveData<String> data = (MutableLiveData<String>) getLogs(id);
-        data.setValue("");
+        MutableLiveData<List<DiagnosticWrapper>> data = (MutableLiveData<List<DiagnosticWrapper>>) getLogs(id);
+        data.setValue(new ArrayList<>());
     }
 
-    public void w(int id, String message) {
-        String current = getLogs(id).getValue();
-        if (current == null) {
-            current = "";
-        }
-        current = current + (current.isEmpty() ? "" : '\n') + "<$$warning>" + message + "</$$warning>";
-
-
-        if (Thread.currentThread() != Looper.getMainLooper().getThread()) {
-            log.get(id).postValue(current);
-        } else {
-            log.get(id).setValue(current);
-        }
+    public void e(int id, DiagnosticWrapper diagnostic) {
+        add(id, diagnostic);
     }
 
-    public void e(int id, String message) {
-        String current = getLogs(id).getValue();
-        if (current == null) {
-            current = "";
+    public void d(int id, DiagnosticWrapper diagnosticWrapper) {
+        add(id, diagnosticWrapper);
+    }
+
+    public void w(int id, DiagnosticWrapper diagnosticWrapper) {
+        add(id, diagnosticWrapper);
+    }
+
+
+    /**
+     * Convenience method to add a diagnostic to a ViewModel
+     * @param id the log id to set to
+     * @param diagnosticWrapper the DiagnosticWrapper to add
+     */
+    private void add(int id, DiagnosticWrapper diagnosticWrapper) {
+        List<DiagnosticWrapper> list = getLogs(id).getValue();
+        if (list == null) {
+            list = new ArrayList<>();
         }
-        current = current + (current.isEmpty() ? "" : '\n') + "<$$error>" + message + "</$$error>";
+        list.add(diagnosticWrapper);
+        maybePost(id, list);
+    }
 
-
+    /**
+     * Checks if the current thread is the main thread and does not post it if so
+     * @param id log id to set the value to
+     * @param current Value to set to the ViewModel
+     */
+    private void maybePost(int id, List<DiagnosticWrapper> current) {
         if (Thread.currentThread() != Looper.getMainLooper().getThread()) {
             log.get(id).postValue(current);
         } else {

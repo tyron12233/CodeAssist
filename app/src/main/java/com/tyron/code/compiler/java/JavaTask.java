@@ -9,6 +9,7 @@ import org.openjdk.tools.javac.api.JavacTool;
 
 import com.tyron.code.compiler.Task;
 import com.tyron.code.completion.SourceFileObject;
+import com.tyron.code.model.DiagnosticWrapper;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.service.ILogger;
@@ -71,10 +72,10 @@ public class JavaTask extends Task {
         DiagnosticListener<JavaFileObject> diagnosticCollector = diagnostic -> {
             switch (diagnostic.getKind()) {
                 case ERROR:
-                    logViewModel.error(diagnostic.toString());
+                    logViewModel.error(new DiagnosticWrapper(diagnostic));
                     break;
                 case WARNING:
-                    logViewModel.warning(diagnostic.toString());
+                    logViewModel.warning(new DiagnosticWrapper(diagnostic));
             }
         };
 

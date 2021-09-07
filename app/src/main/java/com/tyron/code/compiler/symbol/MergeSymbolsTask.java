@@ -51,7 +51,7 @@ public class MergeSymbolsTask extends Task {
             File parent = library.getParentFile();
             Preconditions.checkNotNull(parent, "Unable to access parent directory for " + library);
 
-            String packageName = AAPT2Compiler.getPackageName(parent);
+            String packageName = AAPT2Compiler.getPackageName(new File(parent, "AndroidManifest.xml"));
             if (packageName == null) {
                 continue;
             }

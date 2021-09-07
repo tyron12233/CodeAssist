@@ -204,29 +204,8 @@ public class AAPT2Compiler {
 		return builder.toString();
 	}
 
-	/**
-	 * Gets the package name of the library if it needs a R.java file
-	 * @param library the directory in which the res folder or classes.jar is located
-	 * @return Package name of the library, null if it has no resource folder
-	 */
 	public static String getPackageName(File library) {
-
-		File resFolder = new File(library, "res");
-		if (!resFolder.exists()) {
-			File text = new File(library, "R.txt");
-			if (!text.exists()) {
-				return null;
-			}
-		}
-
-
-		File manifestFile = new File(library, "AndroidManifest.xml");
-		if (!manifestFile.exists()) {
-			// This library doesn't have a resource file
-			return null;
-		}
-
-		String manifestString = FileManager.readFile(manifestFile);
+		String manifestString = FileManager.readFile(library);
 		Matcher matcher = MANIFEST_PACKAGE.matcher(manifestString);
 		if (matcher.find()) {
 			return matcher.group(4);

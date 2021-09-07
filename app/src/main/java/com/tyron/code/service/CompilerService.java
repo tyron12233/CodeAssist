@@ -17,6 +17,7 @@ import androidx.core.app.NotificationManagerCompat;
 
 import com.tyron.code.R;
 import com.tyron.code.compiler.ApkBuilder;
+import com.tyron.code.model.DiagnosticWrapper;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.util.ApkInstaller;
@@ -39,24 +40,32 @@ public class CompilerService extends Service {
      * Logger that  delegates logs to the external logger set
      */
     private final ILogger logger = new ILogger() {
+
         @Override
-        public void error(String message) {
+        public void info(DiagnosticWrapper wrapper) {
             if (external != null) {
-                external.error(message);
+                external.info(wrapper);
             }
         }
 
         @Override
-        public void warning(String message) {
+        public void debug(DiagnosticWrapper wrapper) {
             if (external != null) {
-                external.warning(message);
+                external.debug(wrapper);
             }
         }
 
         @Override
-        public void debug(String message) {
+        public void warning(DiagnosticWrapper wrapper) {
             if (external != null) {
-                external.debug(message);
+                external.warning(wrapper);
+            }
+        }
+
+        @Override
+        public void error(DiagnosticWrapper wrapper) {
+            if (external != null) {
+                external.error(wrapper);
             }
         }
     };

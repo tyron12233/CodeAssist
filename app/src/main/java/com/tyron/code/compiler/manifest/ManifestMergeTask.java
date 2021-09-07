@@ -1,7 +1,9 @@
 package com.tyron.code.compiler.manifest;
 
 import com.tyron.code.compiler.Task;
+import com.tyron.code.compiler.resource.AAPT2Compiler;
 import com.tyron.code.model.Project;
+import com.tyron.code.parser.FileManager;
 import com.tyron.code.service.ILogger;
 import com.tyron.code.util.exception.CompilationFailedException;
 
@@ -59,7 +61,9 @@ public class ManifestMergeTask extends Task {
 
             File manifest = new File(parent, "AndroidManifest.xml");
             if (manifest.exists()) {
-                manifests.add(manifest);
+                if (manifest.length() != 0) {
+                    manifests.add(manifest);
+                }
             }
         }
 
@@ -81,5 +85,16 @@ public class ManifestMergeTask extends Task {
         if (!success) {
             throw new CompilationFailedException("Failed to merge manifests");
         }
+
+        replaceApplicationId(mOutputFile);
+    }
+
+    private void replaceApplicationId(File file) throws IOException {
+        String packageName = AAPT2Compiler.getPackageName(file);
+        if (packageName == null) {
+            throw new IOException("Failed to parse package name");
+        }
+        FileManager.writeFile(file, FileManager.readFile(file).replace("${applicationId}", packageName));
+
     }
 }
