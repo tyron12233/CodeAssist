@@ -394,11 +394,9 @@ public class MainFragment extends Fragment {
     }
 
     /**
-     * Tries to open a file and show the given line
-     * @param file File to open
-     * @param lineNumber Line number to navigate to
+     * Tries to open a file and show the given line and column
      */
-    public void openFile(File file, int lineNumber) {
+    public void openFile(File file, int lineNumber, int column) {
         if (!LanguageManager.getInstance().supports(file)) {
             return;
         }
@@ -430,7 +428,7 @@ public class MainFragment extends Fragment {
      * @param file file to open
      */
     public void openFile(File file) {
-       openFile(file, 0);
+       openFile(file, 0, 0);
     }
 
     public void openProject(Project project) {
