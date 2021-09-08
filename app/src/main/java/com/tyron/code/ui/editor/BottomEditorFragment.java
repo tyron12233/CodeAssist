@@ -44,7 +44,6 @@ public class BottomEditorFragment extends Fragment {
 
     private TabLayout mTabLayout;
     private LinearLayout mRowLayout;
-    private float mTabLayoutHeight;
     private ViewPager mPager;
     private PageAdapter mAdapter;
 
@@ -140,6 +139,7 @@ public class BottomEditorFragment extends Fragment {
         return items;
     }
 
+    @SuppressWarnings("deprecation")
     private static class PageAdapter extends FragmentStatePagerAdapter {
         
         public PageAdapter(FragmentManager parent) {

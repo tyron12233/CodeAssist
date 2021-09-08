@@ -1,7 +1,6 @@
 package com.tyron.code.ui.editor;
 
 import android.content.SharedPreferences;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -11,23 +10,17 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.preference.PreferenceManager;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.completion.CompletionEngine;
-import com.tyron.code.hover.HoverProvider;
+import com.tyron.code.parser.FileManager;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
-import com.tyron.code.parser.FileManager;
 
 import java.io.File;
-import java.util.List;
 
 import io.github.rosemoe.editor.interfaces.EditorEventListener;
 import io.github.rosemoe.editor.widget.CodeEditor;

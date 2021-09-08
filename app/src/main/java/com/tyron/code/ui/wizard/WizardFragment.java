@@ -5,6 +5,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -30,7 +31,6 @@ import com.google.android.material.transition.MaterialFadeThrough;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.completion.CompletionEngine;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.ui.main.MainFragment;
@@ -47,6 +47,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
 
+@SuppressWarnings("ConstantConditions")
 public class WizardFragment extends Fragment {
 
     private Button mNavigateButton;
@@ -171,9 +172,8 @@ public class WizardFragment extends Fragment {
     private AutoCompleteTextView mLanguageText;
     private AutoCompleteTextView mMinSdkText;
 
-    @SuppressWarnings("ConstantConditions")
     private void initDetailsView() {
-        List<String> languages = Arrays.asList("Java", "Kotlin");
+        List<String> languages = Collections.singletonList("Java");
 
         mNameLayout = mWizardDetailsView.findViewById(R.id.til_app_name);
         mNameLayout.getEditText().addTextChangedListener(new TextWatcher() {
@@ -354,7 +354,6 @@ public class WizardFragment extends Fragment {
         );
     }
 
-    @SuppressWarnings("ConstantConditions")
     private void createProject() throws IOException  {
         if (!validateDetails()) {
             return;
@@ -394,6 +393,11 @@ public class WizardFragment extends Fragment {
         }
 
         if (mMinSdkLayout.isErrorEnabled()) {
+            return false;
+        }
+
+        if (TextUtils.isEmpty(mNameLayout.getEditText().getText())) {
+            mNameLayout.setError(getString(R.string.wizard_error_name_empty));
             return false;
         }
 

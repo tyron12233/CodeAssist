@@ -5,7 +5,6 @@ import android.util.Log;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.model.Project;
 import com.tyron.code.util.Decompress;
-import com.tyron.code.util.StringSearch;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -27,7 +26,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
-import java.util.stream.Collectors;
 
 /**
  * Class responsible for caching java files for fast
@@ -201,7 +199,7 @@ public class FileManager {
         if (!file.exists()) {
             file.mkdirs();
         }
-	}
+    }
 
     public static void writeFile(File file, String str) {
         createNewFile(file);
@@ -235,10 +233,12 @@ public class FileManager {
     public static boolean deleteDir(File dir) {
         if (dir.isDirectory()) {
             String[] children = dir.list();
-            for (int i=0; i<children.length; i++) {
-                boolean success = deleteDir(new File(dir, children[i]));
-                if (!success) {
-                    return false;
+            if (children != null) {
+                for (String child : children) {
+                    boolean success = deleteDir(new File(dir, child));
+                    if (!success) {
+                        return false;
+                    }
                 }
             }
         }

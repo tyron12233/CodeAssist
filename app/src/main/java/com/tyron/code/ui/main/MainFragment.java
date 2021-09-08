@@ -44,7 +44,6 @@ import com.google.gson.reflect.TypeToken;
 import com.tyron.ProjectManager;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.completion.CompletionEngine;
 import com.tyron.code.model.DiagnosticWrapper;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
@@ -56,23 +55,14 @@ import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.log.LogViewModel;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.settings.SettingsActivity;
-import com.tyron.code.ui.settings.SettingsFragment;
 import com.tyron.code.ui.wizard.WizardFragment;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ApkInstaller;
-import com.tyron.resolver.DependencyDownloader;
-import com.tyron.resolver.DependencyResolver;
-import com.tyron.resolver.DependencyUtils;
-import com.tyron.resolver.model.Dependency;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class MainFragment extends Fragment {
@@ -223,7 +213,14 @@ public class MainFragment extends Fragment {
             }
         });
         mTabLayout.setVisibility(View.GONE);
-        new TabLayoutMediator(mTabLayout, mPager, (tab, pos) -> tab.setText(mAdapter.getItem(pos).getName())).attach();
+        new TabLayoutMediator(mTabLayout, mPager, (tab, pos) -> {
+            File file = mAdapter.getItem(pos);
+            if (file != null) {
+                tab.setText(file.getName());
+            } else {
+                tab.setText("Unknown");
+            }
+        }).attach();
 
         mPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
@@ -415,7 +412,7 @@ public class MainFragment extends Fragment {
         mPager.postDelayed(() -> {
             Fragment fragment = getChildFragmentManager().findFragmentByTag("f" + file.getAbsolutePath().hashCode());
             if (fragment instanceof CodeEditorFragment) {
-                ((CodeEditorFragment) fragment).setCursorPosition(lineNumber, 0);
+                ((CodeEditorFragment) fragment).setCursorPosition(lineNumber, column);
             }
         }, delay);
         mRoot.closeDrawer(GravityCompat.START, true);
@@ -542,29 +539,26 @@ public class MainFragment extends Fragment {
                     public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
                         CompilerService.CompilerBinder binder = (CompilerService.CompilerBinder) iBinder;
                         binder.getCompilerService().setLogger(logger);
-                        binder.getCompilerService().setOnResultListener((success, message) -> {
-                            requireActivity().runOnUiThread(() -> {
-                                if (mToolbar != null) {
-                                    mToolbar.setSubtitle(null);
-                                }
-                                if (mProgressBar != null) {
-                                    AndroidUtilities.hideKeyboard(mProgressBar);
-                                    mProgressBar.setVisibility(View.GONE);
-                                }
-                                if (!success) {
-                                    logger.error(message);
+                        binder.getCompilerService().setOnResultListener((success, message) -> requireActivity().runOnUiThread(() -> {
+                            if (mToolbar != null) {
+                                mToolbar.setSubtitle(null);
+                            }
+                            if (mProgressBar != null) {
+                                AndroidUtilities.hideKeyboard(mProgressBar);
+                                mProgressBar.setVisibility(View.GONE);
+                            }
+                            if (!success) {
+                                logger.error(message);
 
-                                    if (mBehavior.getState() == BottomSheetBehavior.STATE_COLLAPSED) {
-                                        mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
-                                    }
+                                if (mBehavior.getState() == BottomSheetBehavior.STATE_COLLAPSED) {
+                                    mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
                                 }
-                                if (success && getActivity() != null) {
-                                    File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
-                                    ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath());
-                                }
-                            });
-                        });
-
+                            }
+                            if (success && getActivity() != null) {
+                                File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
+                                ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath());
+                            }
+                        }));
                         binder.getCompilerService().compile();
                     }
 

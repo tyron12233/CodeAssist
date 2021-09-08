@@ -1,27 +1,24 @@
 package com.tyron.code.ui.editor.log;
+
+import android.os.Bundle;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.method.LinkMovementMethod;
+import android.text.style.ClickableSpan;
+import android.text.style.ForegroundColorSpan;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.TextView;
+
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
-
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.method.LinkMovementMethod;
-import android.text.method.ScrollingMovementMethod;
-import android.text.style.ClickableSpan;
-import android.text.style.ForegroundColorSpan;
-import android.view.View;
-import android.os.Bundle;
-import android.view.ViewGroup;
-import android.view.LayoutInflater;
-
-import android.widget.FrameLayout;
-import android.widget.TextView;
-
 import androidx.lifecycle.ViewModelProvider;
 
-import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.model.DiagnosticWrapper;
 import com.tyron.code.ui.main.MainFragment;
@@ -31,8 +28,6 @@ import org.openjdk.javax.tools.Diagnostic;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class AppLogFragment extends Fragment {
     
@@ -56,7 +51,7 @@ public class AppLogFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        id = getArguments().getInt("id");
+        id = requireArguments().getInt("id");
     }
   
     @Override

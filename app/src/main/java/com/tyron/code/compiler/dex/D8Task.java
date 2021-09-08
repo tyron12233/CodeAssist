@@ -92,7 +92,7 @@ public class D8Task extends Task {
 
 		Log.d(TAG, "Dexing libraries");
 
-		outer : for (File lib : libraries) {
+		for (File lib : libraries) {
 			File parentFile = lib.getParentFile();
 			if (parentFile == null) {
 				continue;
