@@ -34,7 +34,7 @@ import io.github.rosemoe.editor.text.Cursor;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
 
 import com.tyron.code.model.TextEdit;
-import com.tyron.code.completion.CompletionProvider;
+import com.tyron.code.completion.provider.CompletionProvider;
 import com.tyron.code.completion.ParseTask;
 import com.tyron.code.rewrite.AddImport;
 import java.util.Map;

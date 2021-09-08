@@ -1,4 +1,4 @@
-package com.tyron.code.completion;
+package com.tyron.code.completion.provider;
 
 
 import org.openjdk.source.tree.CompilationUnitTree;

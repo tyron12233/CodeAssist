@@ -1,6 +1,8 @@
-package com.tyron.code.completion;
+package com.tyron.code.completion.provider;
 
 import android.annotation.SuppressLint;
+
+import com.tyron.code.completion.CompileTask;
 
 import org.openjdk.source.tree.Scope;
 import org.openjdk.source.util.Trees;

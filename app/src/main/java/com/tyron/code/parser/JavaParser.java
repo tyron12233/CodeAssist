@@ -5,7 +5,7 @@ import org.openjdk.source.util.JavacTask;
 import org.openjdk.tools.javac.api.JavacTool;
 import org.openjdk.tools.javac.file.JavacFileManager;
 import org.openjdk.tools.javac.util.Context;
-import com.tyron.code.completion.CompletionProvider;
+import com.tyron.code.completion.provider.CompletionProvider;
 import com.tyron.code.ui.editor.log.LogViewModel;
 
 import java.io.File;

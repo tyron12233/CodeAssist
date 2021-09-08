@@ -1,9 +1,11 @@
-package com.tyron.code.completion;
+package com.tyron.code.completion.provider;
 
 import android.annotation.SuppressLint;
 import android.util.Log;
 
 import com.tyron.code.ApplicationLoader;
+import com.tyron.code.completion.CompileTask;
+import com.tyron.code.completion.JavaCompilerService;
 import com.tyron.code.model.CompletionList;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;

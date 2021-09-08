@@ -1,7 +1,12 @@
-package com.tyron.code.completion;
+package com.tyron.code.completion.provider;
 
 import android.util.Log;
 
+import com.tyron.code.completion.CompileTask;
+import com.tyron.code.completion.CompilerProvider;
+import com.tyron.code.completion.CustomActions;
+import com.tyron.code.completion.ParseTask;
+import com.tyron.code.completion.SourceFileObject;
 import com.tyron.code.model.CompletionItem;
 import com.tyron.code.model.CompletionList;
 import com.tyron.code.ui.editor.drawable.CircleDrawable;

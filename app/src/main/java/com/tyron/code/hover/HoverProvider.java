@@ -7,7 +7,7 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import com.tyron.code.completion.CompileTask;
 import com.tyron.code.completion.CompilerProvider;
-import com.tyron.code.completion.FindHelper;
+import com.tyron.code.completion.provider.FindHelper;
 import com.tyron.code.completion.ParseTask;
 
 import java.nio.file.Path;

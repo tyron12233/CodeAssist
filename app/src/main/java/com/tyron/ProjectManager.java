@@ -1,8 +1,6 @@
 package com.tyron;
 
-import android.view.View;
-
-import com.tyron.code.completion.CompletionEngine;
+import com.tyron.code.completion.provider.CompletionEngine;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.ui.editor.log.LogViewModel;

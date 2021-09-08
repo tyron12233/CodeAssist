@@ -84,7 +84,6 @@ import io.github.rosemoe.editor.util.LongArrayList;
 import android.os.Handler;
 import android.os.Looper;
 import java.io.File;
-import com.tyron.code.completion.CompletionProvider;
 
 /**
  * CodeEditor is a editor that can highlight text regions by doing basic syntax analyzing
