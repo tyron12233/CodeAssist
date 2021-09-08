@@ -8,16 +8,26 @@
 		android:title="@string/menu_run"
 		android:icon="@drawable/round_play_arrow_24"
 		app:showAsAction="always" />
-        
-    <item
-        android:id="@+id/debug_create"
-        android:title="@string/menu_create_project"/>
 
-	<item android:id="@+id/action_open"
-		android:title="@string/menu_open_project"/>
 	<item
-		android:id="@+id/debug_refresh"
-		android:title="@string/menu_refresh"/>
+		android:id="@+id/item_project"
+		android:icon="@drawable/round_folder_24"
+		android:title="@string/item_project"
+		app:showAsAction="ifRoom">
+		<menu>
+			<item
+				android:id="@+id/debug_create"
+				android:title="@string/menu_create_project" />
+
+			<item
+				android:id="@+id/action_open"
+				android:title="@string/menu_open_project" />
+			<item
+				android:id="@+id/debug_refresh"
+				android:title="@string/menu_refresh" />
+		</menu>
+	</item>
+
 	<item
 		android:id="@+id/action_format"
 		android:title="@string/menu_format" />

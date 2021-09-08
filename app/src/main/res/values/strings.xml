@@ -56,6 +56,7 @@
     <string name="wizard_package_illegal">Package name contains illegal characters.</string>
     <string name="wizard_package_too_short">Package name is too short.</string>
     <string name="wizard_package_contains_spaces">Package name cannot contain spaces.</string>
+    <string name="wizard_error_name_empty">Name cannot be empty.</string>
     <string name="wizard_package_empty">Package name cannot be empty.</string>
     <string name="wizard_select_min_sdk">Select a minimum SDK version.</string>
 
@@ -79,5 +80,10 @@
     <string name="font_size_title">Font size</string>
     <string name="font_size_message">Set editor font size</string>
     <string name="font_size_summary">Specify the default font size of the editor</string>
-    <string name="wizard_error_name_empty">Name cannot be empty.</string>
+
+    <!-- file manager menu -->
+    <string name="menu_action_new_java_class">Java class file</string>
+    <string name="menu_new">New</string>
+    <string name="menu_refactor">Refactor</string>
+    <string name="item_project">Project</string>
 </resources>

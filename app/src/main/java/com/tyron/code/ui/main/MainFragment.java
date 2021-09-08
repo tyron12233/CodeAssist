@@ -131,6 +131,7 @@ public class MainFragment extends Fragment {
         mContent.addView(mPager, new LinearLayout.LayoutParams(-1, -1, 1));
 
         mToolbar = mRoot.findViewById(R.id.toolbar);
+        mToolbar.setNavigationIcon(R.drawable.ic_baseline_menu_24);
         mToolbar.inflateMenu(R.menu.code_editor_menu);
 
         logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
@@ -145,7 +146,14 @@ public class MainFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-
+        
+        mToolbar.setNavigationOnClickListener(v -> {
+            if (mRoot.isDrawerOpen(GravityCompat.START)) {
+                mRoot.closeDrawer(GravityCompat.START, true);
+            } else if (!mRoot.isDrawerOpen(GravityCompat.START)) {
+                mRoot.openDrawer(GravityCompat.START);
+            }
+        });
         mRoot.addDrawerListener(new DrawerLayout.DrawerListener() {
             @Override
             public void onDrawerSlide(@NonNull View p1, float p) {
@@ -228,7 +236,6 @@ public class MainFragment extends Fragment {
                 mFilesViewModel.updateCurrentPosition(position);
             }
         });
-
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_create) {
 
@@ -328,7 +335,7 @@ public class MainFragment extends Fragment {
             }
             getChildFragmentManager().beginTransaction()
                     .replace(R.id.nav_root, TreeFileManagerFragment.newInstance(root), "file_manager")
-                    .commit();
+                    .commitNow();
         }
 
         if (FileManager.getInstance().getCurrentProject() != null) {
@@ -439,11 +446,6 @@ public class MainFragment extends Fragment {
             return;
         }
 
-        Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
-        if (fragment instanceof TreeFileManagerFragment) {
-            ((TreeFileManagerFragment) fragment).refresh();
-        }
-
         mProgressBar.setVisibility(View.VISIBLE);
         mToolbar.setTitle(proj.mRoot.getName());
 
@@ -478,6 +480,12 @@ public class MainFragment extends Fragment {
             }
         });
 
+        requireActivity().runOnUiThread(() -> {
+            Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
+            if (fragment instanceof TreeFileManagerFragment) {
+                ((TreeFileManagerFragment) fragment).setRoot(proj.mRoot);
+            }
+        });
     }
 
     /**
@@ -674,4 +682,5 @@ public class MainFragment extends Fragment {
             return false;
         }
     }
+
 }
