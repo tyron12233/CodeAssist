@@ -54,6 +54,9 @@
     <string name="wizard_file_not_writable">Directory is not writable, select another location</string>
     <string name="wizard_path_exceeds">Location path exceeds 240 characters.</string>
     <string name="wizard_package_illegal">Package name contains illegal characters.</string>
+    <string name="wizard_package_too_short">Package name is too short.</string>
+    <string name="wizard_package_contains_spaces">Package name cannot contain spaces.</string>
+    <string name="wizard_package_empty">Package name cannot be empty.</string>
     <string name="wizard_select_min_sdk">Select a minimum SDK version.</string>
 
     <string name="menu_open_project">Open project</string>

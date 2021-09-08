@@ -216,7 +216,17 @@ public class WizardFragment extends Fragment {
 
             @Override
             public void afterTextChanged(Editable editable) {
-                if (!editable.toString().matches("^[a-zA-Z.]+$")) {
+                String packageName = editable.toString();
+                String[] packages = packageName.split("\\.");
+                if (packages == null) {
+                    mPackageNameLayout.setError(getString(R.string.wizard_package_empty));
+                } else if (packages.length == 1) {
+                    mPackageNameLayout.setError(getString(R.string.wizard_package_too_short));
+                } else if (packageName.endsWith(".")) {
+                    mPackageNameLayout.setError(getString(R.string.wizard_package_illegal));
+                } else if (packageName.contains(" ")) {
+                    mPackageNameLayout.setError(getString(R.string.wizard_package_contains_spaces));
+                } else if (!packageName.matches("^[a-zA-Z0-9.]+$")) {
                     mPackageNameLayout.setError(getString(R.string.wizard_package_illegal));
                 } else {
                     mPackageNameLayout.setErrorEnabled(false);
@@ -383,6 +393,10 @@ public class WizardFragment extends Fragment {
     }
 
     private boolean validateDetails() {
+
+        if (mPackageNameLayout.isErrorEnabled()) {
+            return false;
+        }
 
         if (mSaveLocationLayout.isErrorEnabled()) {
             return false;
