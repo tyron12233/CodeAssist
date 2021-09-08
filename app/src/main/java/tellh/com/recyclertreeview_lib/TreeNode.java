@@ -9,7 +9,7 @@ import java.util.List;
  * Created by tlh on 2016/10/1 :)
  */
 
-public class TreeNode<T extends LayoutItemType> implements Cloneable {
+public class TreeNode<T> implements Cloneable {
     private T content;
     private TreeNode<T> parent;
     private List<TreeNode<T>> childList;
