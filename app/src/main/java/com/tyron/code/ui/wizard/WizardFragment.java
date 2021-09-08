@@ -195,10 +195,8 @@ public class WizardFragment extends Fragment {
                     if (file.exists()) {
                         suffix = "-1";
                     }
-                    String path = file.getAbsolutePath() + suffix;
-                    mSaveLocationLayout.getEditText().setText(
-                            path
-                    );
+                    String path = file.getAbsolutePath() + suffix.trim();
+                    mSaveLocationLayout.getEditText().setText(path);
                 }
             }
         });
@@ -410,8 +408,8 @@ public class WizardFragment extends Fragment {
             return false;
         }
 
-        if (TextUtils.isEmpty(mNameLayout.getEditText().getText())) {
-            mNameLayout.setError(getString(R.string.wizard_error_name_empty));
+        if (TextUtils.isEmpty(mNameLayout.getEditText().getText().toString())) {
+            mNameLayout.post(() -> mNameLayout.setError(getString(R.string.wizard_error_name_empty)));
             return false;
         }
 
