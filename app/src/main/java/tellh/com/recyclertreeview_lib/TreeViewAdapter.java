@@ -110,6 +110,7 @@ public class TreeViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                 notifyItemRangeRemoved(positionStart, removeChildNodes(selectedNode, true));
             }
         });
+
         holder.itemView.setOnLongClickListener(view -> {
             if (onTreeNodeListener != null) {
                 TreeNode<? extends LayoutItemType> node = displayNodes.get(holder.getBindingAdapterPosition());
@@ -123,7 +124,7 @@ public class TreeViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         }
     }
 
-    private int addChildNodes(TreeNode<? extends LayoutItemType> pNode, int startIndex) {
+    public int addChildNodes(TreeNode<? extends LayoutItemType> pNode, int startIndex) {
         List<? extends TreeNode<? extends LayoutItemType>> childList = pNode.getChildList();
         int addChildCount = 0;
         for (TreeNode<? extends LayoutItemType> treeNode : childList) {
@@ -137,8 +138,21 @@ public class TreeViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         return addChildCount;
     }
 
-    private int removeChildNodes(TreeNode<? extends LayoutItemType> pNode) {
+    public int getIndex(TreeNode<? extends LayoutItemType> node) {
+        return displayNodes.indexOf(node) + 1;
+    }
+
+    public int removeChildNodes(TreeNode<? extends LayoutItemType> pNode) {
         return removeChildNodes(pNode, true);
+    }
+
+    public int addChildNode(TreeNode pNode, TreeNode<? extends LayoutItemType> childNode) {
+        TreeNode node = pNode.addChild(childNode);
+
+        int parentIndex = displayNodes.indexOf(pNode);
+        displayNodes.add(parentIndex + 1, childNode);
+
+        return parentIndex + 1;
     }
 
     private int removeChildNodes(TreeNode<? extends LayoutItemType> pNode, boolean shouldToggle) {

@@ -3,7 +3,9 @@ package com.tyron;
 import com.tyron.code.completion.provider.CompletionEngine;
 import com.tyron.code.model.Project;
 import com.tyron.code.parser.FileManager;
+import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.ui.editor.log.LogViewModel;
+import com.tyron.code.util.ProjectUtils;
 import com.tyron.resolver.DependencyDownloader;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.DependencyUtils;
@@ -48,10 +50,8 @@ public class ProjectManager {
                 DependencyResolver resolver = new DependencyResolver(dependencies, proj.getLibraryDirectory());
                 resolver.addResolvedLibraries(libs);
                 dependencies = resolver.resolveMain();
-               // mLogger.d(LogViewModel.BUILD_LOG, "Resolved dependencies: " + dependencies);
 
                 mListener.onTaskStarted("Downloading dependencies");
-             //   mLogger.d(LogViewModel.BUILD_LOG, "Downloading dependencies");
                 DependencyDownloader downloader = new DependencyDownloader(libs, proj.getLibraryDirectory());
                 try {
                     downloader.download(dependencies);
@@ -65,5 +65,32 @@ public class ProjectManager {
             FileManager.getInstance().openProject(proj);
             CompletionEngine.getInstance().index(proj, () -> mListener.onComplete(true, "Index successful"));
         });
+    }
+
+    public static File createClass(File directory, String className, CodeTemplate template) throws IOException {
+        if (!directory.isDirectory()) {
+            return null;
+        }
+
+        String packageName = ProjectUtils.getPackageName(directory);
+        if (packageName == null) {
+            return null;
+        }
+
+        String code = template.get()
+                .replace(CodeTemplate.PACKAGE_NAME, packageName)
+                .replace(CodeTemplate.CLASS_NAME, className);
+
+        File classFile = new File(directory, className + template.getExtension());
+        if (classFile.exists()) {
+            return null;
+        }
+        if (!classFile.createNewFile()) {
+            return null;
+        }
+
+        FileManager.writeFile(classFile, code);
+
+        return classFile;
     }
 }
