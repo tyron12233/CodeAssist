@@ -15,6 +15,7 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -23,6 +24,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.ProjectManager;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.parser.FileManager;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.template.java.JavaClassTemplate;
 import com.tyron.code.ui.file.CreateClassDialogFragment;
@@ -63,7 +65,7 @@ public class TreeFileManagerFragment extends Fragment {
         super.onCreate(savedInstanceState);
 
         mRootFile = (File) requireArguments().getSerializable("rootFile");
-        mMainViewModel = new ViewModelProvider(this).get(MainViewModel.class);
+        mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     }
 
     @Nullable
@@ -109,29 +111,7 @@ public class TreeFileManagerFragment extends Fragment {
                 final TreeNode<TreeFile> fileNode = (TreeNode<TreeFile>) node;
 
                 mListView.setOnCreateContextMenuListener((contextMenu, view1, contextMenuInfo) -> {
-
-                    SubMenu newSubMenu = contextMenu.addSubMenu("New");
-                    newSubMenu.add("Java class")
-                            .setOnMenuItemClickListener(menuItem -> {
-                                CreateClassDialogFragment fragment = new CreateClassDialogFragment();
-                                fragment.show(getChildFragmentManager(), "create_class_fragment");
-
-                                fragment.setOnClassCreatedListener((className, template) -> {
-
-                                    TreeNode<?> selectedNode = node.isLeaf() ? node.getParent() : node;
-                                    File directory = getDirectory((TreeNode<TreeFile>) node);
-                                    try {
-                                        File createdFile = ProjectManager.createClass(directory, className, template);
-                                        TreeNode<TreeFile> newNode = new TreeNode<>(TreeFile.fromFile(createdFile));
-                                        mAdapter.notifyItemInserted(mAdapter.addChildNode(selectedNode, newNode));
-
-                                        mMainViewModel.addFile(createdFile);
-                                    } catch (IOException e) {
-                                        ApplicationLoader.showToast("Unable to create class: " + e.getMessage());
-                                    }
-                                });
-                                return true;
-                            });
+                    addMenus(contextMenu, (TreeNode<TreeFile>) node);
                 });
                 int x = (int) holder.itemView.getX() + AndroidUtilities.dp(8);
                 int y = (int) holder.itemView.getY() + holder.itemView.getHeight();
@@ -170,6 +150,54 @@ public class TreeFileManagerFragment extends Fragment {
         });
         mListView.setAdapter(mAdapter);
 
+    }
+
+    /**
+     * Add menus to the current ContextMenu based on the current {@link TreeNode}
+     * @param contextMenu The ContextMenu to add to
+     * @param node The current TreeNode in the file tree
+     */
+    private void addMenus(ContextMenu contextMenu, TreeNode<TreeFile> node) {
+        File currentFile = node.getContent().getFile();
+
+        SubMenu newSubMenu = contextMenu.addSubMenu("New");
+        newSubMenu.add("Java class")
+                .setOnMenuItemClickListener(menuItem -> {
+                    CreateClassDialogFragment fragment = new CreateClassDialogFragment();
+                    fragment.show(getChildFragmentManager(), "create_class_fragment");
+
+                    fragment.setOnClassCreatedListener((className, template) -> {
+
+                        TreeNode<?> selectedNode = node.isLeaf() ? node.getParent() : node;
+                        File directory = getDirectory(node);
+                        try {
+                            File createdFile = ProjectManager.createClass(directory, className, template);
+                            TreeNode<TreeFile> newNode = new TreeNode<>(TreeFile.fromFile(createdFile));
+                            mAdapter.notifyItemInserted(mAdapter.addChildNode(selectedNode, newNode));
+                            mMainViewModel.addFile(createdFile);
+                            FileManager.getInstance().addJavaFile(createdFile);
+                        } catch (IOException e) {
+                            ApplicationLoader.showToast("Unable to create class: " + e.getMessage());
+                        }
+                    });
+                    return true;
+                });
+
+        contextMenu.add("Delete")
+                .setOnMenuItemClickListener(menuItem -> {
+                    AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                            .setMessage(String.format(getString(R.string.dialog_confirm_delete), currentFile.getName()))
+                            .setPositiveButton(getString(R.string.dialog_delete), (d, which) -> {
+                                if (currentFile.delete()) {
+                                    if (node.isLeaf()) {
+                                        mMainViewModel.removeFile(currentFile);
+                                        mAdapter.notifyItemRemoved(mAdapter.removeChildNode(node));
+                                    }
+                                }
+                            })
+                            .show();
+                    return true;
+                });
     }
 
     /**

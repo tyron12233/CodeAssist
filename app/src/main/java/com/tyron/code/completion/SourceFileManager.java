@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.openjdk.javax.tools.Diagnostic;
@@ -35,13 +36,13 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
     }
 
 	@Override
-	public Iterable<JavaFileObject> list(JavaFileManager.Location location, String packageName, Set kinds, boolean recurse) throws IOException {
+	public Iterable<JavaFileObject> list(JavaFileManager.Location location, String packageName, Set<JavaFileObject.Kind> kinds, boolean recurse) throws IOException {
 		
 		if (location == StandardLocation.SOURCE_PATH) {
 			Stream<JavaFileObject> stream = FileManager.getInstance()
 					.list(packageName).stream()
 					.map(this::asJavaFileObject);
-			return stream::iterator;
+			return stream.collect(Collectors.toList());
 		}
 		return super.list(location, packageName, kinds, recurse);
 	}

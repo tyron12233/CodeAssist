@@ -66,13 +66,13 @@ public class CreateClassDialogFragment extends DialogFragment {
         builder.setPositiveButton(R.string.create_class_dialog_positive, ((dialogInterface, i) -> {
             if (mListener != null) {
 
-                String name = String.valueOf(classTypeTextView.getText());
+                String name = String.valueOf(mClassNameEditText.getText());
                 CodeTemplate template = mTemplates.stream()
                         .filter(temp -> temp.getName().equals(name))
                         .findAny()
                         .orElse(new JavaClassTemplate());
 
-                mListener.onClassCreated(name, template);
+                mListener.onClassCreated(String.valueOf(mClassNameEditText.getText()), template);
             }
         }));
         builder.setNegativeButton(android.R.string.cancel, null);

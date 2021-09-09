@@ -5,6 +5,7 @@ import android.util.Log;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.model.Project;
 import com.tyron.code.util.Decompress;
+import com.tyron.code.util.StringSearch;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -36,16 +37,6 @@ public class FileManager {
     private static FileManager INSTANCE = null;
     private final ExecutorService service = Executors.newFixedThreadPool(4);
 
-	public List<File> list(String packageName) {
-		List<File> list = new ArrayList<>();
-		for (String file : javaFiles.keySet()) {
-			if (file.substring(0, file.lastIndexOf(".")).equals(packageName)) {
-				list.add(javaFiles.get(file));
-			}
-		}
-		return list;
-	}
-    
     public static FileManager getInstance() {
         if (INSTANCE == null) {
             INSTANCE = new FileManager();
@@ -64,7 +55,31 @@ public class FileManager {
     // Map of compiled (.class) files with their fully qualified name as key
     private final Map<String, File> classFiles = new HashMap<>();
     private final Map<String, File> javaFiles = new HashMap<>();
-    
+
+    public List<File> list(String packageName) {
+        List<File> list = new ArrayList<>();
+        for (String file : javaFiles.keySet()) {
+            if (file.substring(0, file.lastIndexOf(".")).equals(packageName)) {
+                list.add(javaFiles.get(file));
+            }
+        }
+
+        for (String name : classFiles.keySet()) {
+            if (name.substring(0, name.lastIndexOf(".")).equals(packageName)) {
+                list.add(classFiles.get(name));
+            }
+        }
+        return list;
+    }
+
+    public void addJavaFile(File javaFile) {
+        String packageName = StringSearch.packageName(javaFile);
+
+        if (packageName != null) {
+            javaFiles.put(packageName, javaFile);
+        }
+    }
+
     public void openProject(Project project) {
         if (!project.isValidProject()) {
             //TODO: throw exception
@@ -104,11 +119,11 @@ public class FileManager {
     }
 
     public Set<File> fileClasspath() {
-        Set<File> classpaths = new HashSet<>();
-        classpaths.addAll(javaFiles.values());
-        classpaths.addAll(mCurrentProject.getLibraries());
-        classpaths.addAll(mCurrentProject.getRJavaFiles().values());
-        return classpaths;
+        Set<File> classpath = new HashSet<>();
+        classpath.addAll(javaFiles.values());
+        classpath.addAll(mCurrentProject.getLibraries());
+        classpath.addAll(mCurrentProject.getRJavaFiles().values());
+        return classpath;
     }
     
     public List<String> all() {

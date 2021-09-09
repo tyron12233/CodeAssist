@@ -155,6 +155,16 @@ public class TreeViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         return parentIndex + 1;
     }
 
+    public int removeChildNode(TreeNode<? extends LayoutItemType> childNode) {
+        TreeNode<? extends LayoutItemType> pNode = childNode.getParent();
+        pNode.getChildList().remove(childNode);
+
+        int index = displayNodes.indexOf(childNode);
+        displayNodes.remove(childNode);
+
+        return index;
+    }
+
     private int removeChildNodes(TreeNode<? extends LayoutItemType> pNode, boolean shouldToggle) {
         if (pNode.isLeaf())
             return 0;

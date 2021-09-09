@@ -126,7 +126,9 @@ public class CodeEditorFragment extends Fragment {
     }
     
     public void save() {
-        FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
+        if(mCurrentFile.exists()) {
+            FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
+        }
     }
 
     public void setCursorPosition(int line, int column) {

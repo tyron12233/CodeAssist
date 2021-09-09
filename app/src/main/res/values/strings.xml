@@ -91,4 +91,7 @@
     <string name="create_class_dialog_positive">Create class</string>
     <string name="create_class_dialog_class_type">Class type</string>
     <string name="create_class_dialog_invalid_name">Invalid class name</string>
+
+    <string name="dialog_confirm_delete">Are you sure you want to delete %1$s?</string>
+    <string name="dialog_delete">Delete</string>
 </resources>

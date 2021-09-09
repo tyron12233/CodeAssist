@@ -27,7 +27,7 @@ public class CompletionEngine {
 		return Instance;
 	}
 	
-	private JavaCompilerService mProivider;
+	private JavaCompilerService mProvider;
 	private boolean mIndexing;
 	
 	private CompletionEngine() {
@@ -35,16 +35,16 @@ public class CompletionEngine {
 	}
 	
 	public JavaCompilerService getCompiler() {
-		if (mProivider != null) {
-			return mProivider;
+		if (mProvider != null) {
+			return mProvider;
 		}
 		
-		mProivider = new JavaCompilerService(
+		mProvider = new JavaCompilerService(
 				FileManager.getInstance().fileClasspath(),
 				Collections.emptySet(),
 				Collections.emptySet()
 			);
-		return mProivider;
+		return mProvider;
 	}
 
 	/**
@@ -88,10 +88,10 @@ public class CompletionEngine {
 		}
 
 		try {
-			return new CompletionProvider(mProivider).complete(file, cursor);
+			return new CompletionProvider(mProvider).complete(file, cursor);
 		} catch (RuntimeException | AssertionError e) {
 			Log.d(TAG, "Completion failed: " + Log.getStackTraceString(e) + " Clearing cache.");
-			mProivider = null;
+			mProvider = null;
 			index(FileManager.getInstance().getCurrentProject(), null );
 		}
 		return CompletionList.EMPTY;

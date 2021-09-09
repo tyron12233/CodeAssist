@@ -124,7 +124,7 @@ public class AppLogFragment extends Fragment {
                     Fragment main = parent.getParentFragment();
                     if (main instanceof MainFragment) {
                         ((MainFragment) main).openFile(diagnostic.getSource(),
-                                (int) diagnostic.getLineNumber() - 1, (int) diagnostic.getColumnNumber());
+                                (int) diagnostic.getLineNumber() - 1, (int) diagnostic.getColumnNumber() - 1);
                     }
                 }
             }
