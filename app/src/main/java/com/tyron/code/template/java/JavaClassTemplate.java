@@ -5,6 +5,11 @@ import com.tyron.code.template.CodeTemplate;
 public class JavaClassTemplate extends CodeTemplate {
 
     @Override
+    public String getName() {
+        return "Java class";
+    }
+
+    @Override
     public String get() {
         return "package " +
                 CodeTemplate.PACKAGE_NAME +

@@ -5,6 +5,11 @@ import com.tyron.code.template.CodeTemplate;
 public class InterfaceTemplate extends CodeTemplate {
 
     @Override
+    public String getName() {
+        return "Interface";
+    }
+
+    @Override
     public String get() {
         return "package " +
                 CodeTemplate.PACKAGE_NAME +
