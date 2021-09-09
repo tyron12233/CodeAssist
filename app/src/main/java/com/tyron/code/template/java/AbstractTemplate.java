@@ -5,11 +5,16 @@ import com.tyron.code.template.CodeTemplate;
 public class AbstractTemplate extends CodeTemplate {
 
     @Override
+    public String getName() {
+        return "Abstract";
+    }
+
+    @Override
     public String get() {
         return "package " +
                 CodeTemplate.PACKAGE_NAME +
                 ";\n" +
-                "\npublic  abstract " +
+                "\npublic abstract" +
                 " class " +
                 CodeTemplate.CLASS_NAME +
                 " {\n\t\n}";
