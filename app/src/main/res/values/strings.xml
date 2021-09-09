@@ -86,4 +86,9 @@
     <string name="menu_new">New</string>
     <string name="menu_refactor">Refactor</string>
     <string name="item_project">Project</string>
+    <string name="dialog_create_class_title">Create a class</string>
+    <string name="create_class_dialog_class_name">Class name</string>
+    <string name="create_class_dialog_positive">Create class</string>
+    <string name="create_class_dialog_class_type">Class type</string>
+    <string name="create_class_dialog_invalid_name">Invalid class name</string>
 </resources>

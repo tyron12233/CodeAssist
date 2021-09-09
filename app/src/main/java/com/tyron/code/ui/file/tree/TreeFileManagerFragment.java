@@ -8,6 +8,7 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.MotionEvent;
+import android.view.SubMenu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -15,16 +16,20 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.tyron.ProjectManager;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.template.java.JavaClassTemplate;
+import com.tyron.code.ui.file.CreateClassDialogFragment;
 import com.tyron.code.ui.file.tree.binder.TreeBinder;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.code.ui.main.MainFragment;
+import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.AndroidUtilities;
 
 import java.io.File;
@@ -37,7 +42,7 @@ import tellh.com.recyclertreeview_lib.LayoutItemType;
 import tellh.com.recyclertreeview_lib.TreeNode;
 import tellh.com.recyclertreeview_lib.TreeViewAdapter;
 
-public class TreeFileManagerFragment extends Fragment implements View.OnContextClickListener {
+public class TreeFileManagerFragment extends Fragment {
 
     public static TreeFileManagerFragment newInstance(File root) {
         TreeFileManagerFragment fragment = new TreeFileManagerFragment();
@@ -51,12 +56,14 @@ public class TreeFileManagerFragment extends Fragment implements View.OnContextC
 
     private RecyclerView mListView;
     private TreeViewAdapter mAdapter;
+    private MainViewModel mMainViewModel;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         mRootFile = (File) requireArguments().getSerializable("rootFile");
+        mMainViewModel = new ViewModelProvider(this).get(MainViewModel.class);
     }
 
     @Nullable
@@ -96,42 +103,39 @@ public class TreeFileManagerFragment extends Fragment implements View.OnContextC
                 toggle(isExpand, viewHolder, null);
             }
 
+            @SuppressWarnings("unchecked")
             @Override
             public boolean onLongClick(TreeNode<? extends LayoutItemType> node, RecyclerView.ViewHolder holder) {
-                // noinspection unchecked
-//                final TreeNode<TreeFile> fileNode = (TreeNode<TreeFile>) node;
-//
-//                mListView.setOnCreateContextMenuListener((contextMenu, view1, contextMenuInfo) -> {
-//                    MenuInflater inflater = new MenuInflater(view1.getContext());
-//                    inflater.inflate(R.menu.file_manager_menu, contextMenu);
-//
-//                    contextMenu.getItem(0).getSubMenu().getItem(0).setOnMenuItemClickListener(menuItem -> {
-//                        CodeTemplate template = new JavaClassTemplate();
-//                        File directory;
-//                        if (node.isLeaf()) {
-//                            directory = ((TreeFile) node.getParent().getContent()).getFile();
-//                        } else {
-//                            directory = ((TreeFile) node.getContent()).getFile();
-//                        }
-//                        String className = "TestClass";
-//
-//                        File file = null;
-//                        try {
-//                            file = ProjectManager.createClass(directory, className, template);
-//                        } catch (IOException e) {
-//                            e.printStackTrace();
-//                        }
-//
-//                        if (file != null) {
-//                            TreeNode<TreeFile> newNode = new TreeNode<>(TreeFile.fromFile(file));
-//                            mAdapter.notifyItemInserted(mAdapter.addChildNode(node.getParent(), newNode));
-//                        }
-//                        return true;
-//                    });
-//                });
-//                int x = (int) holder.itemView.getX() + AndroidUtilities.dp(8);
-//                int y = (int) holder.itemView.getY() + holder.itemView.getHeight();
-//                mListView.showContextMenu(x, y);
+                final TreeNode<TreeFile> fileNode = (TreeNode<TreeFile>) node;
+
+                mListView.setOnCreateContextMenuListener((contextMenu, view1, contextMenuInfo) -> {
+
+                    SubMenu newSubMenu = contextMenu.addSubMenu("New");
+                    newSubMenu.add("Java class")
+                            .setOnMenuItemClickListener(menuItem -> {
+                                CreateClassDialogFragment fragment = new CreateClassDialogFragment();
+                                fragment.show(getChildFragmentManager(), "create_class_fragment");
+
+                                fragment.setOnClassCreatedListener((className, template) -> {
+
+                                    TreeNode<?> selectedNode = node.isLeaf() ? node.getParent() : node;
+                                    File directory = getDirectory((TreeNode<TreeFile>) node);
+                                    try {
+                                        File createdFile = ProjectManager.createClass(directory, className, template);
+                                        TreeNode<TreeFile> newNode = new TreeNode<>(TreeFile.fromFile(createdFile));
+                                        mAdapter.notifyItemInserted(mAdapter.addChildNode(selectedNode, newNode));
+
+                                        mMainViewModel.addFile(createdFile);
+                                    } catch (IOException e) {
+                                        ApplicationLoader.showToast("Unable to create class: " + e.getMessage());
+                                    }
+                                });
+                                return true;
+                            });
+                });
+                int x = (int) holder.itemView.getX() + AndroidUtilities.dp(8);
+                int y = (int) holder.itemView.getY() + holder.itemView.getHeight();
+                mListView.showContextMenu(x, y);
                 return true;
             }
 
@@ -168,9 +172,18 @@ public class TreeFileManagerFragment extends Fragment implements View.OnContextC
 
     }
 
-    @Override
-    public boolean onContextClick(View view) {
-        return false;
+    /**
+     * Gets the parent directory of a node, if the node is already a directory then
+     * it is returned
+     * @param node the node to search
+     * @return parent directory or itself if its already a directory
+     */
+    private File getDirectory(TreeNode<TreeFile> node) {
+        if (node.isLeaf()) {
+            return node.getParent().getContent().getFile();
+        } else {
+            return node.getContent().getFile();
+        }
     }
 
     /**
@@ -207,9 +220,9 @@ public class TreeFileManagerFragment extends Fragment implements View.OnContextC
         TreeNode<TreeFile> childNode = new TreeNode<>(TreeFile.fromFile(file));
 
         if (file.isDirectory()) {
-            File[] childs = file.listFiles();
-            if (childs != null) {
-                for (File child : childs) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
                     addNode(childNode, child);
                 }
             }

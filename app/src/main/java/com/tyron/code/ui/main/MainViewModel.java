@@ -61,6 +61,7 @@ public class MainViewModel extends ViewModel {
         files.add(file);
 
         mFiles.setValue(files);
+        updateCurrentPosition(files.indexOf(file));
     }
 
     public void removeFile(File file) {
