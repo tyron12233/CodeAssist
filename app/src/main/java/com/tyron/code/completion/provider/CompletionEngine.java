@@ -3,6 +3,8 @@ package com.tyron.code.completion.provider;
 import android.annotation.SuppressLint;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.completion.CompileTask;
 import com.tyron.code.completion.JavaCompilerService;
@@ -33,7 +35,8 @@ public class CompletionEngine {
 	private CompletionEngine() {
 		getCompiler();
 	}
-	
+
+	@NonNull
 	public JavaCompilerService getCompiler() {
 		if (mProvider != null) {
 			return mProvider;
@@ -81,6 +84,7 @@ public class CompletionEngine {
 		}
 	}
 
+	@NonNull
 	public synchronized CompletionList complete(File file, long cursor) {
 		// Do not request for completion if we're indexing
 		if (mIndexing) {

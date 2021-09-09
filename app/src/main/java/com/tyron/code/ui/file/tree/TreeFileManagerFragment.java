@@ -33,6 +33,7 @@ import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.AndroidUtilities;
+import com.tyron.code.util.StringSearch;
 
 import java.io.File;
 import java.io.IOException;
@@ -188,8 +189,10 @@ public class TreeFileManagerFragment extends Fragment {
                     AlertDialog dialog = new AlertDialog.Builder(requireContext())
                             .setMessage(String.format(getString(R.string.dialog_confirm_delete), currentFile.getName()))
                             .setPositiveButton(getString(R.string.dialog_delete), (d, which) -> {
-                                if (currentFile.delete()) {
+                                String packageName = StringSearch.packageName(currentFile);
+                                if (packageName != null && currentFile.delete()) {
                                     if (node.isLeaf()) {
+                                        FileManager.getInstance().removeJavaFile(packageName);
                                         mMainViewModel.removeFile(currentFile);
                                         mAdapter.notifyItemRemoved(mAdapter.removeChildNode(node));
                                     }

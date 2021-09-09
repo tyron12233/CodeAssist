@@ -2,6 +2,8 @@ package com.tyron.code.parser;
 
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.model.Project;
 import com.tyron.code.util.Decompress;
@@ -78,6 +80,10 @@ public class FileManager {
         if (packageName != null) {
             javaFiles.put(packageName, javaFile);
         }
+    }
+
+    public void removeJavaFile(@NonNull String packageName) {
+        javaFiles.remove(packageName);
     }
 
     public void openProject(Project project) {
