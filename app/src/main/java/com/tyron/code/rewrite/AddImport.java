@@ -4,8 +4,13 @@ import android.annotation.SuppressLint;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
+
+import com.tyron.code.completion.CompilerProvider;
 import com.tyron.code.model.Position;
 import com.tyron.code.completion.ParseTask;
+
+import java.nio.file.Path;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -16,7 +21,7 @@ import org.openjdk.source.tree.ImportTree;
 
 import java.io.File;
 
-public class AddImport {
+public class AddImport implements Rewrite {
     
     private final String className;
     private final File currentFile;
@@ -26,12 +31,20 @@ public class AddImport {
         this.currentFile = currentFile;
     }
 
-    @SuppressLint("NewApi")
+    @Override
+    public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
+        ParseTask task = compiler.parse(currentFile.toPath());
+        Position point = insertPosition(task);
+        String text = "import " + className + ";\n";
+        TextEdit[] edits = { new TextEdit(new Range(point, point), text)};
+        return Collections.singletonMap(currentFile.toPath(), edits);
+    }
+
     public Map<File, TextEdit> getText(ParseTask task) {
         Position point = insertPosition(task);
         String text = "import " + className + ";\n";
         TextEdit edit = new TextEdit(new Range(point, point), text);
-        return Map.of(currentFile, edit);
+        return Collections.singletonMap(currentFile, edit);
     }
     
     private Position insertPosition(ParseTask task) {

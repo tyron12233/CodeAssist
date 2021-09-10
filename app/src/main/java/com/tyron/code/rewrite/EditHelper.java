@@ -73,8 +73,8 @@ public class EditHelper {
             buf.append("protected ");
         }
         buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(' ');
-        buf.append('(');
         buf.append(method.getSimpleName()).append(' ');
+        buf.append('(');
         buf.append(printParameters(parameterizedType, source));
         buf.append(") {\n\tthrow new UnsupportedOperationException(\"TODO\");\n}");
         return buf.toString();

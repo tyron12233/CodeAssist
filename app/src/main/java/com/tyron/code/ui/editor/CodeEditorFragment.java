@@ -21,6 +21,7 @@ import com.tyron.code.action.CodeActionProvider;
 import com.tyron.code.completion.SourceFileObject;
 import com.tyron.code.completion.provider.CompletionEngine;
 import com.tyron.code.model.CodeAction;
+import com.tyron.code.model.CodeActionList;
 import com.tyron.code.model.Range;
 import com.tyron.code.model.TextEdit;
 import com.tyron.code.parser.FileManager;
@@ -146,38 +147,39 @@ public class CodeEditorFragment extends Fragment {
 
             }
         });
-        mEditor.setOnLongPressListener((start, end) -> {
+        mEditor.setOnLongPressListener((start, end, event) -> {
             if (mLanguage instanceof JavaLanguage) {
-                List<Diagnostic<? extends JavaFileObject>> diagnostics = ((JavaAnalyzer) mLanguage.getAnalyzer()).getDiagnostics();
-                Optional<Diagnostic<? extends JavaFileObject>> diagnostic = diagnostics.stream()
-                        .filter(d -> d.getStartPosition() <= start && d.getEndPosition() >= end)
-                        .reduce((one, two) -> {
-                            if (one.getStartPosition() >= two.getStartPosition() && one.getEndPosition() <= two.getEndPosition()) {
-                                return one;
-                            } else {
-                                return two;
-                            }
-                        });
-
                 final Path current = mEditor.getCurrentFile().toPath();
-                List<CodeAction> actions = new CodeActionProvider(CompletionEngine.getInstance().getCompiler())
+                List<CodeActionList> actions = new CodeActionProvider(CompletionEngine.getInstance().getCompiler())
                         .codeActionsForCursor(current, mEditor.getCursor().getLeft());
 
-                new MaterialAlertDialogBuilder(requireContext())
-                        .setTitle("Code actions")
-                        .setItems(actions.stream().map(CodeAction::getTitle).toArray(String[]:: new), ((dialogInterface, i) -> {
-                            CodeAction action = actions.get(i);
-                            Map<Path, List<TextEdit>> rewrites = action.getEdits();
-                            List<TextEdit> edits = rewrites.values().iterator().next();
-                            for (TextEdit edit : edits) {
-                                Range range = edit.range;
-                                if (range.start.equals(range.end)) {
-                                    mEditor.getText().insert(range.start.line, range.start.column, edit.newText);
-                                } else {
-                                    mEditor.getText().replace(range.start.line, range.start.column, range.end.line, range.end.column, edit.newText);
-                                }
-                            }
-                        })).show();
+                mEditor.setOnCreateContextMenuListener((menu, view1, info) -> {
+                    for (final CodeActionList action : actions) {
+                        if (action.getActions().isEmpty()) {
+                            continue;
+                        }
+                        menu.add(action.getTitle()).setOnMenuItemClickListener(menuItem -> {
+                            FileManager.writeFile(mEditor.getCurrentFile(), mEditor.getText().toString());
+                            new MaterialAlertDialogBuilder(requireContext())
+                                    .setTitle(action.getTitle())
+                                    .setItems(action.getActions().stream().map(CodeAction::getTitle).toArray(String[]:: new), ((dialogInterface, i) -> {
+                                        CodeAction codeAction = action.getActions().get(i);
+                                        Map<Path, List<TextEdit>> rewrites = codeAction.getEdits();
+                                        List<TextEdit> edits = rewrites.values().iterator().next();
+                                        for (TextEdit edit : edits) {
+                                            Range range = edit.range;
+                                            if (range.start.equals(range.end)) {
+                                                mEditor.getText().insert(range.start.line, range.start.column, edit.newText);
+                                            } else {
+                                                mEditor.getText().replace(range.start.line, range.start.column, range.end.line, range.end.column, edit.newText);
+                                            }
+                                        }
+                                    })).show();
+                            return true;
+                        });
+                    }
+                });
+                mEditor.showContextMenu(event.getX(), event.getY());
             }
         });
     }

@@ -2,6 +2,7 @@ package com.tyron.code.completion;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -28,9 +29,11 @@ import android.annotation.SuppressLint;
 import android.util.Log;
 
 import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.FileObject;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.javax.tools.StandardLocation;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.tools.javac.file.PathFileObject;
 
 public class JavaCompilerService implements CompilerProvider {
 
@@ -290,12 +293,34 @@ public class JavaCompilerService implements CompilerProvider {
     private Cache<String, ParseTask> parseCache = new Cache<>();
 
     private ParseTask cachedParse(Path file) {
-        if (parseCache.needs(file, file.toFile().getAbsolutePath())) {
+        if (parseCache.needs(file, null)) {
             Parser parser = Parser.parseFile(file);
-            parseCache.load(file, file.toFile().getAbsolutePath(), new ParseTask(parser.task, parser.root));
+            parseCache.load(file, null, new ParseTask(parser.task, parser.root));
         }
-        return parseCache.get(file, file.toFile().getAbsolutePath());
+        return parseCache.get(file, null);
     }
+
+    private ParseTask cachedParse(JavaFileObject file) {
+        if (file instanceof PathFileObject) {
+            // workaround to get the file uri of a JarFileObject
+            String path = file.toUri().toString()
+                    .substring(4, file.toUri().toString().lastIndexOf("!"));
+            Log.d("TEST", path);
+
+            Path parsedPath = new File(URI.create(path)).toPath();
+            if (parseCache.needs(parsedPath, file.getName())) {
+                Parser parser = Parser.parseJavaFileObject(file);
+                parseCache.load(parsedPath, file.getName(), new ParseTask(parser.task, parser.root));
+            }
+            return parseCache.get(parsedPath, file.getName());
+        } else if (file instanceof SourceFileObject) {
+            return cachedParse(((SourceFileObject) file).mFile);
+        }
+
+        Parser parser = Parser.parseJavaFileObject(file);
+        return new ParseTask(parser.task, parser.root);
+    }
+
     /**
      * Convenience method for parsing a path
      * @param file Path of java file to compile
@@ -313,8 +338,7 @@ public class JavaCompilerService implements CompilerProvider {
      */
     @Override
     public ParseTask parse(JavaFileObject file) {
-		Parser parser = Parser.parseJavaFileObject(file);
-        return new ParseTask(parser.task, parser.root);
+        return cachedParse(file);
     }
 
     /**

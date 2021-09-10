@@ -564,7 +564,7 @@ public class MainFragment extends Fragment {
                             }
                             if (success && getActivity() != null) {
                                 File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
-                                ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath());
+                                requireActivity().runOnUiThread(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()));
                             }
                         }));
                         binder.getCompilerService().compile();
