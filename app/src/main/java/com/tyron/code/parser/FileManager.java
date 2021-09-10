@@ -65,12 +65,6 @@ public class FileManager {
                 list.add(javaFiles.get(file));
             }
         }
-
-        for (String name : classFiles.keySet()) {
-            if (name.substring(0, name.lastIndexOf(".")).equals(packageName)) {
-                list.add(classFiles.get(name));
-            }
-        }
         return list;
     }
 

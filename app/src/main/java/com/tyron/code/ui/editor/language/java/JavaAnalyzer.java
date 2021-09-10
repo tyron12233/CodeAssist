@@ -9,6 +9,7 @@ import com.tyron.code.completion.CompileTask;
 import com.tyron.code.completion.JavaCompilerService;
 import com.tyron.code.completion.SourceFileObject;
 import com.tyron.code.completion.provider.CompletionEngine;
+import com.tyron.code.parser.FileManager;
 
 import io.github.rosemoe.editor.struct.Span;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
@@ -64,6 +65,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         // do not compile the file if it not yet closed as it will cause issues when
         // compiling multiple files at the same time
         if (mPreferences.getBoolean("code_editor_error_highlight", true) && service.cachedCompile.closed) {
+            FileManager.writeFile(mEditor.getCurrentFile(), mEditor.getText().toString());
             try (CompileTask task = service.compile(
                     List.of(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
                 diagnostics.clear();
@@ -246,7 +248,11 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         colors.setSuppressSwitch(maxSwitch + 10);
         colors.setNavigation(labels);
     }
-    
+
+    public List<Diagnostic<? extends JavaFileObject>> getDiagnostics() {
+        return diagnostics;
+    }
+
     public void setDiagnostics(List<Diagnostic<? extends JavaFileObject>> diags) {
         diagnostics.clear();
         diagnostics.addAll(diags);

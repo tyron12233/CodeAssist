@@ -33,6 +33,7 @@ import io.github.rosemoe.editor.text.CharPosition;
 import io.github.rosemoe.editor.text.Cursor;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
 
+import com.tyron.code.model.Range;
 import com.tyron.code.model.TextEdit;
 import com.tyron.code.completion.provider.CompletionProvider;
 import com.tyron.code.completion.ParseTask;
@@ -306,9 +307,11 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                     AddImport imp = new AddImport(new File(""), item.item.data);
                     Map<File, TextEdit> edits = imp.getText(task);
                     TextEdit edit = edits.values().iterator().next();
-                    
-                    if (edit.start.equals(edit.end)) {
-                        mEditor.getText().insert(edit.start.line, edit.start.column, edit.edit);
+
+                    Range range = edit.range;
+
+                    if (range.start.equals(range.end)) {
+                        mEditor.getText().insert(range.start.line, range.start.column, edit.newText);
                     }
                 }
             }

@@ -65,6 +65,7 @@ import com.tyron.code.R;
 import io.github.rosemoe.editor.interfaces.EditorEventListener;
 import io.github.rosemoe.editor.interfaces.EditorLanguage;
 import io.github.rosemoe.editor.interfaces.NewlineHandler;
+import io.github.rosemoe.editor.interfaces.OnLongPressListener;
 import io.github.rosemoe.editor.langs.EmptyLanguage;
 import io.github.rosemoe.editor.struct.BlockLine;
 import io.github.rosemoe.editor.struct.Span;
@@ -242,9 +243,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     private File mCurrentFile;
     KeyMetaStates mKeyMetaStates = new KeyMetaStates(this);
 
-    public interface OnSelectedTextLongClick {
-
-    }
+    private OnLongPressListener mLongPressListener;
 
     public CodeEditor(Context context) {
         this(context, null);
@@ -378,6 +377,14 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     protected float getOffset(int line, int column) {
         prepareLine(line);
         return measureText(mBuffer, 0, column) + measureTextRegionOffset() - getOffsetX();
+    }
+
+    public void setOnLongPressListener(OnLongPressListener listener) {
+        mLongPressListener = listener;
+    }
+
+    public OnLongPressListener getOnLongPressListener() {
+        return mLongPressListener;
     }
 
     /**

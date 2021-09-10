@@ -24,6 +24,7 @@ import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.widget.OverScroller;
 
+import io.github.rosemoe.editor.text.Cursor;
 import io.github.rosemoe.editor.util.IntPair;
 
 /**
@@ -109,6 +110,7 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
 		boolean isShowing1 = mEditor.getTextActionPresenter() instanceof EditorTextActionWindow && ((EditorTextActionWindow) mEditor.getTextActionPresenter()).isShowing();
 		boolean isShowing2 = mEditor.getTextActionPresenter() instanceof TextActionPopupWindow && ((TextActionPopupWindow) mEditor.getTextActionPresenter()).isShowing();
 		char text = mEditor.getText().charAt(line, column);
+		Log.d(TAG, "current char: " + text);
 		if (isWhitespace(text) || isShowing1 || isShowing2) {
             mEditor.setSelection(line, column);
         } else {
@@ -549,14 +551,14 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
         }
 
         if (mEditor.mTextActionPresenter instanceof EditorTextActionWindow) {
-            EditorTextActionWindow window = ((EditorTextActionWindow) mEditor.mTextActionPresenter);
-            if (window.isShowing()) {
-                window.onSelectedTextLongClicked(e);
-            }
+            //EditorTextActionWindow window = ((EditorTextActionWindow) mEditor.mTextActionPresenter);
+          //  window.onSelectedTextLongClicked(e);
+
         }
-        if (mEditor.getCursor().isSelected() || e.getPointerCount() != 1) {
+        if (e.getPointerCount() != 1) {
             return;
         }
+
         long res = mEditor.getPointPositionOnScreen(e.getX(), e.getY());
         int line = IntPair.getFirst(res);
         int column = IntPair.getSecond(res);
@@ -571,20 +573,35 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
         while (endColumn < maxColumn && isIdentifierPart(mEditor.getText().charAt(line, endColumn))) {
             endColumn++;
         }
+
+        boolean overrideChecks = false;
         if (startColumn == endColumn) {
-            if (startColumn > 0) {
-                startColumn--;
-            } else if (endColumn < maxColumn) {
-                endColumn++;
-            } else {
-                if (line > 0) {
-                    int lastColumn = mEditor.getText().getColumnCount(line - 1);
-                    startLine = line - 1;
-                    startColumn = lastColumn;
-                } else if (line < mEditor.getLineCount() - 1) {
-                    endLine = line + 1;
-                    endColumn = 0;
-                }
+            overrideChecks = true;
+
+            // The default behavior is it will select text anyways which we don't want in our case
+//            if (startColumn > 0) {
+//                startColumn--;
+//            } else if (endColumn < maxColumn) {
+//                endColumn++;
+//            } else {
+//                if (line > 0) {
+//                    int lastColumn = mEditor.getText().getColumnCount(line - 1);
+//                    startLine = line - 1;
+//                    startColumn = lastColumn;
+//                } else if (line < mEditor.getLineCount() - 1) {
+//                    endLine = line + 1;
+//                    endColumn = 0;
+//                }
+//            }
+        }
+
+        Cursor cursor = mEditor.getCursor();
+        if (overrideChecks || (startLine == cursor.getLeftLine() && startColumn == cursor.getLeftColumn()
+            && endLine == cursor.getRightLine() && endColumn == cursor.getRightColumn())) {
+            Log.d(TAG, "WILL SHOW ACTIONS");
+            if (mEditor.mTextActionPresenter instanceof EditorTextActionWindow) {
+                EditorTextActionWindow window = ((EditorTextActionWindow) mEditor.mTextActionPresenter);
+                window.onSelectedTextLongClicked(e);
             }
         }
         mEditor.setSelectionRegion(startLine, startColumn, endLine, endColumn);

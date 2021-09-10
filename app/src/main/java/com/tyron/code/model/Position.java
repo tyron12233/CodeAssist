@@ -5,6 +5,8 @@ package com.tyron.code.model;
  * terms of lines and columns
  */
 public class Position {
+
+    public static final Position NONE = new Position(-1, -1);
     
     public int line;
     

@@ -18,6 +18,7 @@ package io.github.rosemoe.editor.widget;
 import android.annotation.SuppressLint;
 import android.content.res.Resources;
 import android.graphics.drawable.GradientDrawable;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -26,6 +27,9 @@ import android.widget.Button;
 
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+
+import io.github.rosemoe.editor.interfaces.OnLongPressListener;
+import io.github.rosemoe.editor.text.Cursor;
 
 /**
  * This will show when selecting text
@@ -194,7 +198,10 @@ class EditorTextActionWindow extends EditorBasePopupWindow implements View.OnCli
     }
 
     public void onSelectedTextLongClicked(MotionEvent e) {
-        ApplicationLoader.showToast("YOU LONG CLICKED ME");
+        OnLongPressListener listener = mEditor.getOnLongPressListener();
+        if (listener != null) {
+            Cursor cursor = mEditor.getCursor();listener.onLongPress(cursor.getLeft(), cursor.getRight());
+        }
     }
 }
 

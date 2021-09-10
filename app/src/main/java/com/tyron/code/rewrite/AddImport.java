@@ -8,6 +8,8 @@ import com.tyron.code.model.Position;
 import com.tyron.code.completion.ParseTask;
 import java.util.List;
 import java.util.Map;
+
+import com.tyron.code.model.Range;
 import com.tyron.code.model.TextEdit;
 
 import org.openjdk.source.tree.ImportTree;
@@ -28,7 +30,7 @@ public class AddImport {
     public Map<File, TextEdit> getText(ParseTask task) {
         Position point = insertPosition(task);
         String text = "import " + className + ";\n";
-        TextEdit edit = new TextEdit(point, point, text);
+        TextEdit edit = new TextEdit(new Range(point, point), text);
         return Map.of(currentFile, edit);
     }
     

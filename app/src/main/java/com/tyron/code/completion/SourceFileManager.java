@@ -1,5 +1,7 @@
 package com.tyron.code.completion;
 
+import android.text.TextUtils;
+
 import org.openjdk.tools.javac.api.JavacTool;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.util.StringSearch;
@@ -77,6 +79,9 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
     @Override
     public JavaFileObject getJavaFileForInput(Location location, String className, JavaFileObject.Kind kind)
 	throws IOException {
+	    if (TextUtils.isEmpty(className)) {
+	        return null;
+        }
         // FileStore shadows disk
         if (location == StandardLocation.SOURCE_PATH) {
             String packageName = StringSearch.mostName(className);

@@ -3,6 +3,7 @@ package com.tyron.code.completion;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -16,7 +17,12 @@ import com.tyron.code.compiler.java.CompileBatch;
 import com.tyron.code.compiler.java.ReusableCompiler;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import com.tyron.code.parser.FileManager;
+import com.tyron.code.util.Cache;
+import com.tyron.code.util.StringSearch;
 
 import android.annotation.SuppressLint;
 import android.util.Log;
@@ -24,6 +30,7 @@ import android.util.Log;
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.javax.tools.StandardLocation;
+import org.openjdk.source.tree.CompilationUnitTree;
 
 public class JavaCompilerService implements CompilerProvider {
 
@@ -58,7 +65,7 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
 	public CompileBatch cachedCompile;
-
+    private final Object mCachedCompileLock = new Object();
 	private final Map<JavaFileObject, Long> cachedModified = new HashMap<>();
 
     /**
@@ -66,7 +73,7 @@ public class JavaCompilerService implements CompilerProvider {
      * @param sources list of java files to compile
      * @return true if there's a valid cache for it, false otherwise
      */
-    private synchronized boolean needsCompile(Collection<? extends JavaFileObject> sources) {
+    private boolean needsCompile(Collection<? extends JavaFileObject> sources) {
         if (cachedModified.size() != sources.size()) {
             return true;
         }
@@ -85,7 +92,7 @@ public class JavaCompilerService implements CompilerProvider {
         return false;
     }
 
-    private synchronized void loadCompile(Collection<? extends JavaFileObject> sources) {
+    private void loadCompile(Collection<? extends JavaFileObject> sources) {
         if (cachedCompile != null) {
             if (!cachedCompile.closed) {
                 throw new RuntimeException("Compiler is still in-use!");
@@ -99,7 +106,7 @@ public class JavaCompilerService implements CompilerProvider {
         }
     }
 
-    private synchronized CompileBatch doCompile(Collection<? extends JavaFileObject> sources) {
+    private CompileBatch doCompile(Collection<? extends JavaFileObject> sources) {
         if (sources.isEmpty()) throw new RuntimeException("empty sources");
         CompileBatch firstAttempt = new CompileBatch(this, sources);
         Set<Path> addFiles = firstAttempt.needsAdditionalSources();
@@ -121,13 +128,15 @@ public class JavaCompilerService implements CompilerProvider {
      * @param sources Files to compile
      * @return CompileBatch for this compilation
      */
-    private synchronized CompileBatch compileBatch(Collection<? extends JavaFileObject> sources) {
-			if (needsCompile(sources)) {
-				loadCompile(sources);
-			} else {
-				Log.d("JavaCompilerService", "Using cached compile");
-			}
-			return cachedCompile;
+    private CompileBatch compileBatch(Collection<? extends JavaFileObject> sources) {
+       synchronized (mCachedCompileLock) {
+           if (needsCompile(sources)) {
+               loadCompile(sources);
+           } else {
+               Log.d("JavaCompilerService", "Using cached compile");
+           }
+           return cachedCompile;
+       }
     }
 
 
@@ -191,11 +200,82 @@ public class JavaCompilerService implements CompilerProvider {
         }
     }
 
-    @Override
-    public Path findTypeDeclaration(String className) {
-        return NOT_FOUND ;
+    private static final Pattern PACKAGE_EXTRACTOR = Pattern.compile("^([a-z][_a-zA-Z0-9]*\\.)*[a-z][_a-zA-Z0-9]*");
+
+    private String packageName(String className) {
+        Matcher m = PACKAGE_EXTRACTOR.matcher(className);
+        if (m.find()) {
+            return m.group();
+        }
+        return "";
     }
 
+    private static final Pattern SIMPLE_EXTRACTOR = Pattern.compile("[A-Z][_a-zA-Z0-9]*$");
+
+    private String simpleName(String className) {
+        Matcher m = SIMPLE_EXTRACTOR.matcher(className);
+        if (m.find()) {
+            return m.group();
+        }
+        return "";
+    }
+
+    private static final Cache<String, Boolean> cacheContainsWord = new Cache<>();
+
+    private boolean containsWord(Path file, String word) {
+        if (cacheContainsWord.needs(file, word)) {
+            cacheContainsWord.load(file, word, StringSearch.containsWord(file, word));
+        }
+        return cacheContainsWord.get(file, word);
+    }
+
+    private static final Cache<Void, List<String>> cacheContainsType = new Cache<>();
+
+    private boolean containsType(Path file, String className) {
+        if (cacheContainsType.needs(file, null)) {
+            CompilationUnitTree root = parse(file).root;
+            List<String> types = new ArrayList<>();
+            new FindTypeDeclarations().scan(root, types);
+            cacheContainsType.load(file, null, types);
+        }
+        return cacheContainsType.get(file, null).contains(className);
+    }
+
+
+    @Override
+    public Path findTypeDeclaration(String className) {
+        Path fastFind = findPublicTypeDeclaration(className);
+        if (fastFind != NOT_FOUND) {
+            return fastFind;
+        }
+
+        String packageName = packageName(className);
+        String simpleName = simpleName(className);
+        for (File file : FileManager.getInstance().list(packageName)) {
+            if (containsWord(file.toPath(), simpleName) && containsType(file.toPath(), className)) {
+                if (file.getName().endsWith(".java")) {
+                    return file.toPath();
+                }
+            }
+        }
+        return NOT_FOUND;
+    }
+
+    private Path findPublicTypeDeclaration(String className) {
+        JavaFileObject source;
+        try {
+            source =
+                    fileManager.getJavaFileForInput(
+                            StandardLocation.SOURCE_PATH, className, JavaFileObject.Kind.SOURCE);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        if (source == null) return NOT_FOUND;
+        if (!source.toUri().getScheme().equals("file")) return NOT_FOUND;
+        Path file = Paths.get(source.toUri());
+        if (!containsType(file, className)) return NOT_FOUND;
+        return file;
+    }
 
     @Override
     public Path[] findTypeReferences(String className) {
@@ -207,6 +287,15 @@ public class JavaCompilerService implements CompilerProvider {
         return null;
     }
 
+    private Cache<String, ParseTask> parseCache = new Cache<>();
+
+    private ParseTask cachedParse(Path file) {
+        if (parseCache.needs(file, file.toFile().getAbsolutePath())) {
+            Parser parser = Parser.parseFile(file);
+            parseCache.load(file, file.toFile().getAbsolutePath(), new ParseTask(parser.task, parser.root));
+        }
+        return parseCache.get(file, file.toFile().getAbsolutePath());
+    }
     /**
      * Convenience method for parsing a path
      * @param file Path of java file to compile
@@ -214,8 +303,7 @@ public class JavaCompilerService implements CompilerProvider {
      */
     @Override
     public ParseTask parse(Path file) {
-        Parser parser = Parser.parseFile(file);
-		return new ParseTask(parser.task, parser.root);
+        return cachedParse(file);
     }
 
     /**

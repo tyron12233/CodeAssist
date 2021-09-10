@@ -5,19 +5,20 @@ package com.tyron.code.model;
  * applied on the target file
  */
 public class TextEdit {
-    
-    // determines what line and column this edit should be applied
-    public Position start;
-    public Position end;
-    
-    // The String that will be applied on the file,
-    // if this string is empty, the characters between the 
-    // positions specified should be deleted.
-    public String edit;
-    
-    public TextEdit(Position start, Position end, String edit) {
-        this.start = start;
-        this.end = end;
-        this.edit = edit;
+    public Range range;
+    public String newText;
+
+    public TextEdit() {}
+
+    public TextEdit(Range range, String newText) {
+        this.range = range;
+        this.newText = newText;
     }
+
+    @Override
+    public String toString() {
+        return range + "/" + newText;
+    }
+
+    public static final TextEdit NONE = new TextEdit(Range.NONE, "");
 }

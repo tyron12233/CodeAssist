@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -66,7 +67,9 @@ public class JavaTask extends Task {
         if(!outputDir.mkdirs()) {
             throw new CompilationFailedException("Cannot create output directory");
         }
-        List<File> javaFiles = new ArrayList<>(FileManager.getInstance().getCurrentProject().javaFiles.values());
+
+        mProject.clear();
+        List<File> javaFiles = new ArrayList<>(mProject.getJavaFiles().values());
         javaFiles.addAll(getJavaFiles(new File(mProject.getBuildDirectory(), "gen")));
 
         DiagnosticListener<JavaFileObject> diagnosticCollector = diagnostic -> {
@@ -107,7 +110,7 @@ public class JavaTask extends Task {
                 null,
                 standardJavaFileManager,
                 diagnosticCollector,
-                List.of("-verbose"),
+                null,
                 null,
                 javaFileObjects
         );

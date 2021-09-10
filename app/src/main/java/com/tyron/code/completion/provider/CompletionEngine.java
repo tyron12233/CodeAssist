@@ -64,18 +64,15 @@ public class CompletionEngine {
 	@SuppressLint("NewApi")
 	public void index(Project project, Runnable callback) {
 		setIndexing(true);
+		project.clear();
 
 		JavaCompilerService compiler = getCompiler();
-
 		Set<File> filesToIndex = new HashSet<>(project.getJavaFiles().values());
 		filesToIndex.addAll(project.getRJavaFiles().values());
 
 		for (File file : filesToIndex) {
-			try {
-				 CompileTask task = compiler.compile(file.toPath());
-				 task.close();
-			} catch (Throwable ignored) {
-
+			try (CompileTask task = compiler.compile(file.toPath())) {
+				Log.d(getClass().getSimpleName(), file.getName() + " compiled successfully");
 			}
 		}
 		setIndexing(false);

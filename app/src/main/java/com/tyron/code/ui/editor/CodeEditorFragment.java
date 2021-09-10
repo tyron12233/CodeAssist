@@ -14,15 +14,37 @@ import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.preference.PreferenceManager;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.action.CodeActionProvider;
+import com.tyron.code.completion.SourceFileObject;
+import com.tyron.code.completion.provider.CompletionEngine;
+import com.tyron.code.model.CodeAction;
+import com.tyron.code.model.Range;
+import com.tyron.code.model.TextEdit;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.ui.editor.language.LanguageManager;
+import com.tyron.code.ui.editor.language.java.JavaAnalyzer;
+import com.tyron.code.ui.editor.language.java.JavaLanguage;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
+
 import java.io.File;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.IntFunction;
 
 import io.github.rosemoe.editor.interfaces.EditorEventListener;
+import io.github.rosemoe.editor.interfaces.EditorLanguage;
+import io.github.rosemoe.editor.text.Content;
 import io.github.rosemoe.editor.widget.CodeEditor;
 import io.github.rosemoe.editor.widget.schemes.SchemeDarcula;
 
@@ -32,7 +54,8 @@ public class CodeEditorFragment extends Fragment {
     private LinearLayout mRoot;
     private LinearLayout mContent;
     private CodeEditor mEditor;
-    
+
+    private EditorLanguage mLanguage;
     private File mCurrentFile = new File("");
 
     public static CodeEditorFragment newInstance(File file) {
@@ -66,7 +89,7 @@ public class CodeEditorFragment extends Fragment {
         mContent = mRoot.findViewById(R.id.content);
         
         mEditor = new CodeEditor(requireActivity());
-        mEditor.setEditorLanguage(LanguageManager.getInstance().get(mEditor, mCurrentFile));
+        mEditor.setEditorLanguage(mLanguage = LanguageManager.getInstance().get(mEditor, mCurrentFile));
         mEditor.setColorScheme(new SchemeDarcula());
         mEditor.setOverScrollEnabled(false);
         mEditor.setTextSize(Integer.parseInt(preferences.getString("font_size", "12")));
@@ -121,6 +144,40 @@ public class CodeEditorFragment extends Fragment {
             @Override
             public void beforeReplace(CodeEditor editor, CharSequence content) {
 
+            }
+        });
+        mEditor.setOnLongPressListener((start, end) -> {
+            if (mLanguage instanceof JavaLanguage) {
+                List<Diagnostic<? extends JavaFileObject>> diagnostics = ((JavaAnalyzer) mLanguage.getAnalyzer()).getDiagnostics();
+                Optional<Diagnostic<? extends JavaFileObject>> diagnostic = diagnostics.stream()
+                        .filter(d -> d.getStartPosition() <= start && d.getEndPosition() >= end)
+                        .reduce((one, two) -> {
+                            if (one.getStartPosition() >= two.getStartPosition() && one.getEndPosition() <= two.getEndPosition()) {
+                                return one;
+                            } else {
+                                return two;
+                            }
+                        });
+
+                final Path current = mEditor.getCurrentFile().toPath();
+                List<CodeAction> actions = new CodeActionProvider(CompletionEngine.getInstance().getCompiler())
+                        .codeActionsForCursor(current, mEditor.getCursor().getLeft());
+
+                new MaterialAlertDialogBuilder(requireContext())
+                        .setTitle("Code actions")
+                        .setItems(actions.stream().map(CodeAction::getTitle).toArray(String[]:: new), ((dialogInterface, i) -> {
+                            CodeAction action = actions.get(i);
+                            Map<Path, List<TextEdit>> rewrites = action.getEdits();
+                            List<TextEdit> edits = rewrites.values().iterator().next();
+                            for (TextEdit edit : edits) {
+                                Range range = edit.range;
+                                if (range.start.equals(range.end)) {
+                                    mEditor.getText().insert(range.start.line, range.start.column, edit.newText);
+                                } else {
+                                    mEditor.getText().replace(range.start.line, range.start.column, range.end.line, range.end.column, edit.newText);
+                                }
+                            }
+                        })).show();
             }
         });
     }

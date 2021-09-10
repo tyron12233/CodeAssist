@@ -15,6 +15,7 @@ import android.util.Log;
 
 import com.google.googlejavaformat.java.Formatter;
 import com.google.googlejavaformat.java.FormatterException;
+import com.google.googlejavaformat.java.JavaFormatterOptions;
 
 public class JavaLanguage implements EditorLanguage {
     
@@ -72,7 +73,8 @@ public class JavaLanguage implements EditorLanguage {
     @Override
     public CharSequence format(CharSequence p1) {
         try {
-            return new Formatter().formatSourceAndFixImports(p1.toString());
+            return new Formatter(JavaFormatterOptions.builder()
+                    .style(JavaFormatterOptions.Style.AOSP).build()).formatSourceAndFixImports(p1.toString());
         } catch (FormatterException e) {
             Log.e("JavaFormatter", e.getMessage());
             return p1;
