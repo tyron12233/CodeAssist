@@ -1,5 +1,7 @@
 package com.tyron.code.rewrite;
 
+import androidx.annotation.Nullable;
+
 import com.tyron.code.model.Position;
 import com.tyron.code.model.Range;
 import com.tyron.code.model.TextEdit;
@@ -46,6 +48,14 @@ public class EditHelper {
         return new TextEdit(range, "");
     }
 
+    /**
+     * Prints a given method into a String, adds {@code throws UnsupportedOperationException} to the method body
+     * if the source is null, it will get the parameter names from the class file which will be {@code arg1, arg2, arg3}
+     * @param method method to print
+     * @param parameterizedType type parameters of this method
+     * @param source the source method, in which the parameter names are fetched
+     * @return a string that represents the method
+     */
     public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, MethodTree source) {
         StringBuilder buf = new StringBuilder();
         // TODO leading \n is extra, but needed for indent replaceAll trick
@@ -58,30 +68,23 @@ public class EditHelper {
         }
         buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(" ");
         buf.append(method.getSimpleName()).append("(");
-        buf.append(printParameters(parameterizedType, source));
+        if (source == null) {
+            buf.append(printParameters(parameterizedType, method));
+        } else {
+            buf.append(printParameters(parameterizedType, source));
+        }
         buf.append(") {\n\t");
         buf.append("throw new UnsupportedOperationException(\"TODO\");\n");
         buf.append("}");
         return buf.toString();
     }
 
-    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, ExecutableElement source) {
-        StringBuilder buf = new StringBuilder();
-
-        buf.append("\n@Override\n");
-        if (method.getModifiers().contains(Modifier.PUBLIC)) {
-            buf.append("public ");
-        } else if (method.getModifiers().contains(Modifier.PROTECTED)) {
-            buf.append("protected ");
-        }
-        buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(' ');
-        buf.append(method.getSimpleName()).append(' ');
-        buf.append('(');
-        buf.append(printParameters(parameterizedType, source));
-        buf.append(") {\n\tthrow new UnsupportedOperationException(\"TODO\");\n}");
-        return buf.toString();
-    }
-
+    /**
+     * Prints parameters given the source method that contains parameter names
+     * @param method element from the .class file
+     * @param source element from the .java file
+     * @return Formatted string that represents the methods parameters with proper names
+     */
     private static String printParameters(ExecutableType method, MethodTree source) {
         StringJoiner join = new StringJoiner(", ");
         for (int i = 0; i < method.getParameterTypes().size(); i++) {
@@ -92,6 +95,13 @@ public class EditHelper {
         return join.toString();
     }
 
+    /**
+     * Prints parameters with the default names eg. {@code arg0, arg1}
+     * this is used when the source file of the class isn't found
+     * @param method element to print
+     * @param source the class file of the method
+     * @return Formatted String that represents the parameters of this method
+     */
     private static String printParameters(ExecutableType method, ExecutableElement source) {
         StringJoiner join = new StringJoiner(", ");
         for (int i = 0; i < method.getParameterTypes().size(); i++) {

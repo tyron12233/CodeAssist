@@ -71,8 +71,7 @@ public class OverrideInheritedMethod implements Rewrite {
                 text = text + "\n\n";
                 return text;
             } else {
-                ExecutableElement element = FindHelper.findMethod(task, superClassName, methodName, erasedParameterTypes);
-                String text = EditHelper.printMethod(superMethod, parameterizedType, element);
+                String text = EditHelper.printMethod(superMethod, parameterizedType, null);
                 text = text.replaceAll("\n", "\n" + Strings.repeat(" ", indent));
                 text = text + "\n\n";
                 return text;
