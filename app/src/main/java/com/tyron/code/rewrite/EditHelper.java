@@ -59,7 +59,9 @@ public class EditHelper {
         buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(" ");
         buf.append(method.getSimpleName()).append("(");
         buf.append(printParameters(parameterizedType, source));
-        buf.append(") {\n    // TODO\n}");
+        buf.append(") {\n\t");
+        buf.append("throw new UnsupportedOperationException(\"TODO\");\n");
+        buf.append("}");
         return buf.toString();
     }
 

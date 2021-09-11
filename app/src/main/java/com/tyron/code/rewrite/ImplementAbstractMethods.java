@@ -59,6 +59,7 @@ public class ImplementAbstractMethods implements Rewrite {
                     MethodTree source = findSource(compiler, task, method);
                     if (source == null) {
                         Log.w(getClass().getSimpleName(), "Unable to find source for " + method);
+                        continue;
                     }
                     ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType, method);
                     String text = EditHelper.printMethod(method, parameterizedType, source);

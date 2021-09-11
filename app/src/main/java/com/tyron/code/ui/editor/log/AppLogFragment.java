@@ -22,6 +22,7 @@ import androidx.lifecycle.ViewModelProvider;
 import com.tyron.code.R;
 import com.tyron.code.model.DiagnosticWrapper;
 import com.tyron.code.ui.main.MainFragment;
+import com.tyron.code.ui.main.MainViewModel;
 
 import org.openjdk.javax.tools.Diagnostic;
 
@@ -43,6 +44,8 @@ public class AppLogFragment extends Fragment {
     private NestedScrollView mRoot;
     private TextView mLogView;
     private boolean mIgnoreProcess;
+
+    private MainViewModel mMainViewModel;
     
     public AppLogFragment() {
         
@@ -52,6 +55,8 @@ public class AppLogFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         id = requireArguments().getInt("id");
+
+        mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     }
   
     @Override
@@ -124,7 +129,7 @@ public class AppLogFragment extends Fragment {
                     Fragment main = parent.getParentFragment();
                     if (main instanceof MainFragment) {
                         ((MainFragment) main).openFile(diagnostic.getSource(),
-                                (int) diagnostic.getLineNumber() - 1, (int) diagnostic.getColumnNumber() - 1);
+                                (int) diagnostic.getLineNumber() - 1, 0);
                     }
                 }
             }
