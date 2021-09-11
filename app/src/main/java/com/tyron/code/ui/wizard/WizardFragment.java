@@ -189,6 +189,11 @@ public class WizardFragment extends Fragment {
 
             @Override
             public void afterTextChanged(Editable editable) {
+                if (TextUtils.isEmpty(mNameLayout.getEditText().getText())) {
+                    mNameLayout.setError(getString(R.string.wizard_error_name_empty));
+                } else {
+                    mNameLayout.setErrorEnabled(false);
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     File file = new File(requireContext().getExternalFilesDir(null) + "/" + "Projects" + "/" + editable.toString());
                     String suffix = "";
@@ -297,8 +302,10 @@ public class WizardFragment extends Fragment {
             try {
                 createProject();
             } catch (IOException e) {
-                ApplicationLoader.showToast(e.getMessage());
-                showDetailsView();
+                requireActivity().runOnUiThread(() -> {
+                    ApplicationLoader.showToast(e.getMessage());
+                    showDetailsView();
+                });
                 return;
             }
 
@@ -411,6 +418,10 @@ public class WizardFragment extends Fragment {
         if (TextUtils.isEmpty(mNameLayout.getEditText().getText().toString())) {
             mNameLayout.post(() -> mNameLayout.setError(getString(R.string.wizard_error_name_empty)));
             return false;
+        }
+
+        if (TextUtils.isEmpty(mSaveLocationLayout.getEditText().getText())) {
+            mSaveLocationLayout.post(() -> mSaveLocationLayout.setError(getString(R.string.wizard_select_save_location)));
         }
 
         return mCurrentTemplate != null;

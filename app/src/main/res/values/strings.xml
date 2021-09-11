@@ -59,6 +59,7 @@
     <string name="wizard_error_name_empty">Name cannot be empty.</string>
     <string name="wizard_package_empty">Package name cannot be empty.</string>
     <string name="wizard_select_min_sdk">Select a minimum SDK version.</string>
+    <string name="wizard_select_save_location">Select a save location</string>
 
     <string name="menu_open_project">Open project</string>
     <string name="menu_create_project">Create project</string>
