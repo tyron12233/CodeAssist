@@ -83,9 +83,12 @@ public class WizardFragment extends Fragment {
                 new ActivityResultContracts.OpenDocumentTree(),
                 result -> {
                     if (result != null) {
-                        //noinspection ConstantConditions
-                        mSaveLocationLayout.getEditText()
-                                .setText(FileUtils.getPath(result));
+                        try {
+                            mSaveLocationLayout.getEditText()
+                                    .setText(FileUtils.getPath(result));
+                        } catch (Exception e) {
+                            ApplicationLoader.showToast(e.getMessage());
+                        }
                     }
                 }
         );
@@ -263,7 +266,7 @@ public class WizardFragment extends Fragment {
                     mSaveLocationLayout.setErrorEnabled(false);
                 }
                 File file = new File(editable.toString());
-                if (!file.getParentFile().canWrite()) {
+                if (file.getParentFile() == null || !file.getParentFile().canWrite()) {
                     mSaveLocationLayout.setError(getString(R.string.wizard_file_not_writable));
                 } else {
                     mSaveLocationLayout.setErrorEnabled(false);
@@ -293,14 +296,17 @@ public class WizardFragment extends Fragment {
 
     private void createProjectAsync() {
         TransitionManager.beginDelayedTransition((ViewGroup) requireView(), new MaterialFadeThrough());
-
         mWizardTemplatesView.setVisibility(View.GONE);
         mWizardDetailsView.setVisibility(View.GONE);
         mLoadingLayout.setVisibility(View.VISIBLE);
 
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
-                createProject();
+                if (validateDetails()) {
+                    createProject();
+                } else {
+                    requireActivity().runOnUiThread(this::showDetailsView);
+                }
             } catch (IOException e) {
                 requireActivity().runOnUiThread(() -> {
                     ApplicationLoader.showToast(e.getMessage());
@@ -422,6 +428,7 @@ public class WizardFragment extends Fragment {
 
         if (TextUtils.isEmpty(mSaveLocationLayout.getEditText().getText())) {
             mSaveLocationLayout.post(() -> mSaveLocationLayout.setError(getString(R.string.wizard_select_save_location)));
+            return false;
         }
 
         return mCurrentTemplate != null;

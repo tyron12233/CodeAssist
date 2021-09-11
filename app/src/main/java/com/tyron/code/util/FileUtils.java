@@ -30,7 +30,7 @@ public class FileUtils {
     @SuppressLint("NewApi")
     public static String getPath( final Uri uri) {
         // check here to KITKAT or new version
-        final boolean isKitKat = Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT;
+        final boolean isKitKat = true;
         String selection = null;
         String[] selectionArgs = null;
         // DocumentProvider
