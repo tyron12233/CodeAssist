@@ -28,6 +28,11 @@ public class DependencyDownloader {
     }
 
     public void download(Set<Dependency> libraries) throws IOException {
+        if (!mOutputDir.exists()) {
+            if (!mOutputDir.mkdirs()) {
+                throw new IOException("Unable to create library output directory");
+            }
+        }
         for (Dependency dependency : libraries) {
             download(dependency);
         }

@@ -32,6 +32,11 @@ public class LibraryChecker {
     }
 
     public void check() {
+        if (!mLibsDir.exists()) {
+            if (!mLibsDir.mkdirs()) {
+                return;
+            }
+        }
         File[] libs = mProject.getLibraryDirectory().listFiles();
         if (libs == null) {
             return;
