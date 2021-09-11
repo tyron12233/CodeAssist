@@ -379,9 +379,13 @@ public class MainFragment extends Fragment {
 
             editor.putString("last_opened_project", current.mRoot.getAbsolutePath());
             List<File> openedFiles = mAdapter.getItems();
-            editor.putString("last_opened_files", new Gson().toJson(
-                    openedFiles.stream().map(File::getAbsolutePath).collect(Collectors.toList())
-            ));
+            if (openedFiles.isEmpty()) {
+                editor.remove("last_opened_files");
+            } else {
+                editor.putString("last_opened_files", new Gson().toJson(
+                        openedFiles.stream().map(File::getAbsolutePath).collect(Collectors.toList())
+                ));
+            }
             editor.apply();
         }
     }

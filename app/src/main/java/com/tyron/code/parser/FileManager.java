@@ -9,6 +9,8 @@ import com.tyron.code.model.Project;
 import com.tyron.code.util.Decompress;
 import com.tyron.code.util.StringSearch;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -76,8 +78,33 @@ public class FileManager {
         }
     }
 
+    /**
+     * Removes a java file from the indices
+     * @param packageName fully qualified name of the class
+     */
     public void removeJavaFile(@NonNull String packageName) {
         javaFiles.remove(packageName);
+    }
+
+    /**
+     * Removes all the java files from the directory on the index and deletes the file
+     * @param directory The directory to delete
+     * @throws IOException if the directory cannot be deleted
+     * @return The files that are deleted
+     */
+    public List<File> deleteDirectory(File directory) throws IOException {
+        List<File> javaFiles = findFilesWithExtension(directory, ".java");
+        for (File file : javaFiles) {
+            String packageName = StringSearch.packageName(file);
+            if (packageName != null) {
+                this.javaFiles.remove(packageName);
+                FileUtils.delete(file);
+            }
+        }
+
+        FileUtils.deleteDirectory(directory);
+
+        return javaFiles;
     }
 
     public void openProject(Project project) {
@@ -243,6 +270,24 @@ public class FileManager {
             Log.e("FileManager", Log.getStackTraceString(e));
             return new BufferedReader(new StringReader(""));
         }
+    }
+
+    public static List<File> findFilesWithExtension(File directory, String extension) {
+        List<File> files = new ArrayList<>();
+        File[] children = directory.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                if (child.isDirectory()) {
+                    files.addAll(findFilesWithExtension(child, extension));
+                } else {
+                    if (child.getName().endsWith(extension)) {
+                        files.add(child);
+                    }
+                }
+            }
+        }
+
+        return files;
     }
 
     public static boolean deleteDir(File dir) {

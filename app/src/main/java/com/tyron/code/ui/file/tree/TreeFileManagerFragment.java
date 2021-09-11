@@ -33,7 +33,10 @@ import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.AndroidUtilities;
+import com.tyron.code.util.ProjectUtils;
 import com.tyron.code.util.StringSearch;
+
+import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -109,8 +112,6 @@ public class TreeFileManagerFragment extends Fragment {
             @SuppressWarnings("unchecked")
             @Override
             public boolean onLongClick(TreeNode<? extends LayoutItemType> node, RecyclerView.ViewHolder holder) {
-                final TreeNode<TreeFile> fileNode = (TreeNode<TreeFile>) node;
-
                 mListView.setOnCreateContextMenuListener((contextMenu, view1, contextMenuInfo) -> {
                     addMenus(contextMenu, (TreeNode<TreeFile>) node);
                 });
@@ -186,16 +187,52 @@ public class TreeFileManagerFragment extends Fragment {
 
         contextMenu.add("Delete")
                 .setOnMenuItemClickListener(menuItem -> {
+
+                    //TODO: IMPROVE
                     AlertDialog dialog = new AlertDialog.Builder(requireContext())
                             .setMessage(String.format(getString(R.string.dialog_confirm_delete), currentFile.getName()))
                             .setPositiveButton(getString(R.string.dialog_delete), (d, which) -> {
-                                String packageName = StringSearch.packageName(currentFile);
-                                if (packageName != null && currentFile.delete()) {
-                                    if (node.isLeaf()) {
-                                        FileManager.getInstance().removeJavaFile(packageName);
+                                String packageName = ProjectUtils.getPackageName(currentFile);
+                                if (packageName != null) {
+                                    if (node.isLeaf() || !node.isExpand()) {
                                         mMainViewModel.removeFile(currentFile);
+                                        FileManager.getInstance().removeJavaFile(packageName);
                                         mAdapter.notifyItemRemoved(mAdapter.removeChildNode(node));
+                                        currentFile.delete();
+                                    } else {
+                                        // need help deleting a directory :(
+//                                        try {
+//                                            List<File> deletedFiles = FileManager.getInstance().deleteDirectory(currentFile);
+//                                            for (File file : deletedFiles) {
+//                                                mMainViewModel.removeFile(file);
+//                                            }
+//                                            if (deletedFiles.isEmpty()) {
+//                                                mAdapter.notifyItemRemoved(mAdapter.removeChildNode(node) - 1);
+//                                            } else {
+//                                                int startPosition = mAdapter.getIndex(node) - 1;
+//                                                node.getParent().getChildList().remove(node);
+//                                                mAdapter.notifyItemRangeRemoved(startPosition, mAdapter.removeChildNodes(node, false) + 1);
+//                                            }
+//                                        } catch (IOException e) {
+//                                            ApplicationLoader.showToast(e.getMessage());
+//                                        }
                                     }
+                                } else {
+//                                    int startPosition = mAdapter.getIndex(node);
+//                                    try {
+//                                        if (node.isLeaf() || !node.isExpand()) {
+//                                            mAdapter.removeChildNodes(node);
+//                                            mAdapter.notifyItemRemoved(startPosition - 1);
+//                                            FileUtils.delete(currentFile);
+//                                        } else {
+//                                            node.getParent().getChildList().remove(node);
+//                                            mAdapter.notifyItemRangeRemoved(startPosition - 1, mAdapter.removeChildNodes(node, false) + 1);
+//                                            FileUtils.deleteDirectory(currentFile);
+//
+//                                        }
+//                                    } catch (IOException e) {
+//                                        e.printStackTrace();
+//                                    }
                                 }
                             })
                             .show();
