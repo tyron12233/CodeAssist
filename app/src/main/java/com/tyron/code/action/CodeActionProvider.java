@@ -1,5 +1,7 @@
 package com.tyron.code.action;
 
+import android.util.Log;
+
 import com.tyron.code.completion.CompileTask;
 import com.tyron.code.completion.CompilerProvider;
 import com.tyron.code.completion.FindTypeDeclarationAt;
@@ -32,6 +34,8 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.api.ClientCodeWrapper;
+import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -161,25 +165,31 @@ public class CodeActionProvider {
     }
 
     public List<CodeAction> quickFixes(CompileTask task, Path file, Diagnostic<? extends JavaFileObject> d) {
-        switch(d.getCode()) {
-            case "compiler.err.does.not.override.abstract":
-                String missingAbstracts = findClass(task, getRange(task, d));
-                Rewrite implementAbstracts = new ImplementAbstractMethods(missingAbstracts);
-                return createQuickFix("Implement abstract methods", implementAbstracts);
-            case "compiler.err.cant.resolve":
-            case "compiler.err.cant.resolve.location":
-                CharSequence simpleName = extractRange(task, getRange(task, d));
-                List<CodeAction> allImports = new ArrayList<>();
-                for (String qualifiedName : mCompiler.publicTopLevelTypes()) {
-                    if (qualifiedName.endsWith("." + simpleName)) {
-                        String title = "Import " + qualifiedName;
-                        Rewrite addImport = new AddImport(file.toFile(), qualifiedName);
-                        allImports.addAll(createQuickFix(title, addImport));
-                    }
-                }
-                return allImports;
-        }
 
+        if (d instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
+
+            JCDiagnostic diagnostic = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) d).d;
+            switch (d.getCode()) {
+                case "compiler.err.does.not.override.abstract":
+                    String missingAbstracts = findClass(task, getRange(task, d));
+                    Rewrite implementAbstracts = new ImplementAbstractMethods(missingAbstracts);
+                    return createQuickFix("Implement abstract methods", implementAbstracts);
+                case "compiler.err.cant.resolve":
+                case "compiler.err.cant.resolve.location":
+                    CharSequence simpleName = diagnostic.getArgs()[1].toString();
+                    List<CodeAction> allImports = new ArrayList<>();
+                    Log.d(null, "simple name: " + simpleName);
+                    for (String qualifiedName : mCompiler.publicTopLevelTypes()) {
+                        if (qualifiedName.endsWith("." + simpleName)) {
+                            String title = "Import " + qualifiedName;
+                            Rewrite addImport = new AddImport(file.toFile(), qualifiedName);
+                            allImports.addAll(createQuickFix(title, addImport));
+                        }
+                    }
+                    return allImports;
+            }
+
+        }
         return Collections.emptyList();
     }
 

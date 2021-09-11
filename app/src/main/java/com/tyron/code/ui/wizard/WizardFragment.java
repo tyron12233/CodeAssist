@@ -357,7 +357,7 @@ public class WizardFragment extends Fragment {
         String string = FileManager.readFile(file);
         String targetSdk = "31";
         String minSdk = mMinSdkText.getText().toString()
-                .substring("API".length() + 1, "API".length() + 3); // atleast 2 digits
+                .substring("API".length() + 1, "API".length() + 3); // at least 2 digits
         int minSdkInt = Integer.parseInt(minSdk);
 
         FileManager.writeFile(
