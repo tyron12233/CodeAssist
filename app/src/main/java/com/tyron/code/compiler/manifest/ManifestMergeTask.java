@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.jar.Manifest;
 
 public class ManifestMergeTask extends Task {
 

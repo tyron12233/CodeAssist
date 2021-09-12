@@ -53,7 +53,9 @@ public final class SdkConstants {
     /** An SDK Project's AndroidManifest.xml file */
     public static final String FN_ANDROID_MANIFEST_XML= "AndroidManifest.xml";        //$NON-NLS-1$
     /** pre-dex jar filename. i.e. "classes.jar" */
-    public static final String FN_CLASSES_JAR = "classes.jar";                        //$NON-NLS-1$
+    public static final String TOOLS_NS_NAME = "tools";
+    public static final String FN_CLASSES_JAR = "classes.jar";
+    //$NON-NLS-1$
     /** Dex filename inside the APK. i.e. "classes.dex" */
     public static final String FN_APK_CLASSES_DEX = "classes.dex";                    //$NON-NLS-1$
     /** Dex filename inside the APK. i.e. "classes.dex" */
@@ -605,6 +607,7 @@ public final class SdkConstants {
     public static final String LT_ENTITY = "&lt;";                           //$NON-NLS-1$
     /** The entity for the greater than character */
     public static final String GT_ENTITY = "&gt;";                           //$NON-NLS-1$
+    public static final String NEWLINE_ENTITY = "&#xA;";
     // ---- Elements and Attributes ----
     /** Namespace prefix used for all resources */
     public static final String URI_PREFIX =

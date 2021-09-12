@@ -16,6 +16,8 @@ public interface ILogger {
 
     void error (DiagnosticWrapper wrapper);
 
+
+
     default void info(String message) {
         debug(wrap(message));
     }
@@ -27,8 +29,13 @@ public interface ILogger {
     default void warning(String message) {
         warning(wrap(message));
     }
+
     default void error(String message) {
        error(wrap(message));
+    }
+
+    default void verbose(String message) {
+
     }
 
     static DiagnosticWrapper wrap(String message) {
