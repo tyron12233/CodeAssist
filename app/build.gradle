@@ -49,7 +49,7 @@ dependencies {
     implementation 'com.google.guava:guava:30.1.1-jre'
     implementation 'com.android.tools:r8:2.2.64'
     implementation 'commons-io:commons-io:2.11.0'
-
+    implementation 'org.antlr:antlr4-runtime:4.9.2'
     implementation files (
         'libs/google-java-format-1.7.jar',
         'libs/javac-new.jar',

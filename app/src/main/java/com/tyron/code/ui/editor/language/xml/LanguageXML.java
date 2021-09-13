@@ -36,13 +36,7 @@ public class LanguageXML implements EditorLanguage {
 
 	@Override
 	public CodeAnalyzer getAnalyzer() {
-		return new CodeAnalyzer() {
-			@Override
-			public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
-
-
-			}
-		};
+		return new XMLAnalyzer();
 	}
 
 	@Override
