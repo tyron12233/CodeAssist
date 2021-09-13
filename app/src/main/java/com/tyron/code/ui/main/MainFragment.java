@@ -389,6 +389,8 @@ public class MainFragment extends Fragment {
             }
             editor.apply();
         }
+
+        requireActivity().unbindService(mServiceConnection);
     }
 
     @Override
@@ -514,77 +516,61 @@ public class MainFragment extends Fragment {
         }
     }
 
+    private final ServiceConnection mServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+            ILogger logger = ILogger.wrap(logViewModel);
+
+            CompilerService.CompilerBinder binder = (CompilerService.CompilerBinder) iBinder;
+            binder.getCompilerService().setLogger(logger);
+            binder.getCompilerService().setOnResultListener((success, message) -> requireActivity().runOnUiThread(() -> {
+                if (mToolbar != null) {
+                    mToolbar.setSubtitle(null);
+                }
+                if (mProgressBar != null) {
+                    AndroidUtilities.hideKeyboard(mProgressBar);
+                    mProgressBar.setVisibility(View.GONE);
+                }
+                if (!success) {
+                    logger.error(message);
+
+                    if (mBehavior.getState() == BottomSheetBehavior.STATE_COLLAPSED) {
+                        mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                    }
+                }
+                if (success && getActivity() != null) {
+                    File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
+                    requireActivity().runOnUiThread(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()));
+                }
+            }));
+            binder.getCompilerService().compile();
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName componentName) {
+            if (mToolbar != null) {
+                mToolbar.setSubtitle(null);
+            }
+            if (mProgressBar != null) {
+                AndroidUtilities.hideKeyboard(mProgressBar);
+                mProgressBar.setVisibility(View.GONE);
+            }
+        }
+    };
+
     private void compile() {
         saveAll();
 
-        ILogger logger = new ILogger() {
-            @Override
-            public void info(DiagnosticWrapper wrapper) {
-
-            }
-
-            @Override
-            public void debug(DiagnosticWrapper wrapper) {
-                logViewModel.d(LogViewModel.BUILD_LOG, wrapper);
-            }
-
-            @Override
-            public void warning(DiagnosticWrapper wrapper) {
-                logViewModel.d(LogViewModel.BUILD_LOG, wrapper);
-            }
-
-            @Override
-            public void error(DiagnosticWrapper wrapper) {
-                logViewModel.d(LogViewModel.BUILD_LOG, wrapper);
-            }
-        };
-
-        mProgressBar.setVisibility(View.VISIBLE);
-        mToolbar.setSubtitle("Compiling");
+        mFilesViewModel.setCurrentState("Compiling");
+        mFilesViewModel.setIndexing(true);
         logViewModel.clear(LogViewModel.BUILD_LOG);
 
         requireActivity().startService(new Intent(requireContext(), CompilerService.class));
         requireActivity().bindService(new Intent(requireContext(), CompilerService.class),
-                new ServiceConnection() {
-                    @Override
-                    public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-                        CompilerService.CompilerBinder binder = (CompilerService.CompilerBinder) iBinder;
-                        binder.getCompilerService().setLogger(logger);
-                        binder.getCompilerService().setOnResultListener((success, message) -> requireActivity().runOnUiThread(() -> {
-                            if (mToolbar != null) {
-                                mToolbar.setSubtitle(null);
-                            }
-                            if (mProgressBar != null) {
-                                AndroidUtilities.hideKeyboard(mProgressBar);
-                                mProgressBar.setVisibility(View.GONE);
-                            }
-                            if (!success) {
-                                logger.error(message);
-
-                                if (mBehavior.getState() == BottomSheetBehavior.STATE_COLLAPSED) {
-                                    mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
-                                }
-                            }
-                            if (success && getActivity() != null) {
-                                File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
-                                requireActivity().runOnUiThread(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()));
-                            }
-                        }));
-                        binder.getCompilerService().compile();
-                    }
-
-                    @Override
-                    public void onServiceDisconnected(ComponentName componentName) {
-                        if (mToolbar != null) {
-                            mToolbar.setSubtitle(null);
-                        }
-                        if (mProgressBar != null) {
-                            AndroidUtilities.hideKeyboard(mProgressBar);
-                            mProgressBar.setVisibility(View.GONE);
-                        }
-                    }
-                }, Context.BIND_AUTO_CREATE);
+                mServiceConnection, Context.BIND_AUTO_CREATE);
     }
+
+
 
     private class PageAdapter extends FragmentStateAdapter {
 
