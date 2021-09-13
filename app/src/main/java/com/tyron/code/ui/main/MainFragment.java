@@ -372,12 +372,16 @@ public class MainFragment extends Fragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        requireActivity().unbindService(mServiceConnection);
+        if (mBinder != null) {
+            requireActivity().unbindService(mServiceConnection);
+        }
     }
 
     @Override
     public void onPause() {
         super.onPause();
+
+        mBinder.getCompilerService().setShouldShowNotification(true);
 
         Project current = FileManager.getInstance().getCurrentProject();
         if (current != null) {
@@ -520,22 +524,23 @@ public class MainFragment extends Fragment {
             }
         }
     }
-
+    private CompilerService.CompilerBinder mBinder;
     private final ServiceConnection mServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
             ILogger logger = ILogger.wrap(logViewModel);
 
-            CompilerService.CompilerBinder binder = (CompilerService.CompilerBinder) iBinder;
-            binder.getCompilerService().setLogger(logger);
-            binder.getCompilerService().setOnResultListener((success, message) -> requireActivity().runOnUiThread(() -> {
-                if (mToolbar != null) {
-                    mToolbar.setSubtitle(null);
-                }
+            mBinder = (CompilerService.CompilerBinder) iBinder;
+            mBinder.getCompilerService().setLogger(logger);
+            mBinder.getCompilerService().setShouldShowNotification(false);
+            mBinder.getCompilerService().setOnResultListener((success, message) -> requireActivity().runOnUiThread(() -> {
+                mFilesViewModel.setCurrentState(null);
+
                 if (mProgressBar != null) {
                     AndroidUtilities.hideKeyboard(mProgressBar);
-                    mProgressBar.setVisibility(View.GONE);
                 }
+                mFilesViewModel.setIndexing(false);
+
                 if (!success) {
                     logger.error(message);
 
@@ -548,17 +553,16 @@ public class MainFragment extends Fragment {
                     requireActivity().runOnUiThread(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()));
                 }
             }));
-            binder.getCompilerService().compile();
+            mBinder.getCompilerService().compile();
         }
 
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
-            if (mToolbar != null) {
-                mToolbar.setSubtitle(null);
-            }
+            mBinder = null;
+            mFilesViewModel.setCurrentState(null);
+            mFilesViewModel.setIndexing(false);
             if (mProgressBar != null) {
                 AndroidUtilities.hideKeyboard(mProgressBar);
-                mProgressBar.setVisibility(View.GONE);
             }
         }
     };
