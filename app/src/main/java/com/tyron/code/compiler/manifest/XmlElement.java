@@ -107,7 +107,7 @@ public class XmlElement extends OrphanXmlElement {
                                             instruction,
                                             Joiner.on(',').join(AttributeOperationType.values())
                                     );
-                            throw new RuntimeException(MergingException.wrapException(e)
+                            throw new RuntimeException(MergingException.wrapException(e1)
                                     .withMessage(errorMessage)
                                     .withFile(mDocument.getSourceFile())
                                     .withPosition(mDocument.getNodePosition(xml)).build());

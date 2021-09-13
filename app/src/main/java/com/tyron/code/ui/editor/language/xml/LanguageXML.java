@@ -1,4 +1,8 @@
 package com.tyron.code.ui.editor.language.xml;
+import com.tyron.code.compiler.manifest.xml.XmlFormatPreferences;
+import com.tyron.code.compiler.manifest.xml.XmlFormatStyle;
+import com.tyron.code.compiler.manifest.xml.XmlPrettyPrinter;
+
 import io.github.rosemoe.editor.interfaces.EditorLanguage;
 import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.editor.interfaces.CodeAnalyzer;
@@ -21,7 +25,8 @@ public class LanguageXML implements EditorLanguage {
 
 	@Override
 	public CharSequence format(CharSequence text) {
-		return text;
+		return XmlPrettyPrinter.prettyPrint(String.valueOf(text),
+				XmlFormatPreferences.defaults(), XmlFormatStyle.LAYOUT, "\n");
 	}
 
 	@Override

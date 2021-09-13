@@ -1,5 +1,7 @@
 package com.tyron.code.compiler.manifest;
 
+import android.util.Log;
+
 import com.tyron.code.compiler.Task;
 import com.tyron.code.compiler.resource.AAPT2Compiler;
 import com.tyron.code.model.Project;
@@ -11,6 +13,7 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -22,6 +25,7 @@ public class ManifestMergeTask extends Task {
     private File mOutputFile;
     private File mMainManifest;
     private File[] mLibraryManifestFiles;
+    private String mPackageName;
 
     private ILogger mLogger;
 
@@ -33,6 +37,8 @@ public class ManifestMergeTask extends Task {
     @Override
     public void prepare(Project project, ILogger logger) throws IOException {
         mLogger = logger;
+
+        mPackageName = getApplicationId(project);
 
         mOutputFile = new File(project.getBuildDirectory(), "bin");
         if (!mOutputFile.exists()) {
@@ -86,22 +92,26 @@ public class ManifestMergeTask extends Task {
         ManifestMerger2.Invoker invoker = ManifestMerger2.newMerger(mMainManifest,
                 mLogger, ManifestMerger2.MergeType.APPLICATION)
                 .addLibraryManifests(mLibraryManifestFiles);
+        invoker.setOverride(ManifestMerger2.SystemProperty.PACKAGE, mPackageName);
 
         try {
             MergingReport report = invoker.merge();
+            if (report.getResult().isError()) {
+                throw new CompilationFailedException(report.getReportString());
+            }
+            if (report.getMergedDocument().isPresent()) {
+                FileUtils.writeStringToFile(mOutputFile, report.getMergedDocument().get().prettyPrint(), Charset.defaultCharset());
+            }
         } catch (ManifestMerger2.MergeFailureException e) {
             throw new CompilationFailedException(e);
         }
-
-        replaceApplicationId(mOutputFile);
     }
 
-    private void replaceApplicationId(File file) throws IOException {
-        String packageName = AAPT2Compiler.getPackageName(file);
+    private String getApplicationId(Project project) throws IOException {
+        String packageName = project.getPackageName();
         if (packageName == null) {
             throw new IOException("Failed to parse package name");
         }
-        FileManager.writeFile(file, FileManager.readFile(file).replace("${applicationId}", packageName));
-
+        return packageName;
     }
 }
