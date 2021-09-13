@@ -336,7 +336,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
      * @return EditorTextActionPresenter
      */
     @NonNull
-    protected EditorTextActionPresenter getTextActionPresenter() {
+    public EditorTextActionPresenter getTextActionPresenter() {
         return mTextActionPresenter;
     }
 
@@ -4250,7 +4250,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     /**
      * Interface for various ways to present text action panel
      */
-    protected interface EditorTextActionPresenter {
+    public interface EditorTextActionPresenter {
 
         /**
          * Selected text is clicked

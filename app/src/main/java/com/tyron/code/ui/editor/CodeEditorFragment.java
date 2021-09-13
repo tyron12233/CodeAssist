@@ -88,8 +88,9 @@ public class CodeEditorFragment extends Fragment {
 	@Override
 	public void onPause() {
 		super.onPause();
-		
-		mEditor.hideAutoCompleteWindow();
+
+        mEditor.getTextActionPresenter().onExit();
+        mEditor.hideAutoCompleteWindow();
 //        if (mLanguage instanceof LanguageXML) {
 //            Project project = FileManager.getInstance().getCurrentProject();
 //            if (mCurrentFile != null && project != null && ProjectUtils.isResourceXMLFile(mCurrentFile)) {
