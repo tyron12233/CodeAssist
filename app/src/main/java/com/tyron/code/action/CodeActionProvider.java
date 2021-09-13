@@ -57,34 +57,82 @@ public class CodeActionProvider {
 
     public List<CodeActionList> codeActionsForCursor(Path file, long cursor) {
         List<CodeActionList> codeActionList = new ArrayList<>();
+
+        Tree currentTree = null;
+        Diagnostic<? extends JavaFileObject> diagnostic;
+        TreeMap<String, Rewrite> overrideMethods = new TreeMap<>();
         try (CompileTask task = mCompiler.compile(file)) {
-            addQuickFixes(codeActionList, task, file, cursor);
-            codeActionList.add(getOverrideInheritedMethods(task, file, cursor));
+            diagnostic = getDiagnostic(task, cursor);
+            overrideMethods.putAll(getOverrideInheritedMethods(task, file, cursor));
+            currentTree = new FindCurrentTree(task.task).scan(task.root(), cursor);
+        }
+        if (diagnostic != null) {
+            codeActionList.add(getDiagnosticActions(file, diagnostic));
+        }
+
+        CodeActionList overrideAction = new CodeActionList();
+        overrideAction.setTitle("Override inherited methods");
+        overrideAction.setActions(getActionsFromRewrites(overrideMethods));
+        codeActionList.add(overrideAction);
+
+        if (currentTree != null) {
+            for (IAction action : getActions()) {
+                if (action.isApplicable(currentTree)) {
+                    codeActionList.add(action.get(null));
+                }
+            }
         }
 
         return codeActionList;
     }
 
-    private void addQuickFixes(List<CodeActionList> list, CompileTask task, Path file, long cursor) {
+    private List<CodeAction> getActionsFromRewrites(Map<String, Rewrite> rewrites) {
+        List<CodeAction> actions = new ArrayList<>();
+        for (Map.Entry<String, Rewrite> entry : rewrites.entrySet()) {
+            actions.addAll(createQuickFix(entry.getKey(), entry.getValue()));
+        }
+        return actions;
+    }
+
+    private CodeActionList getDiagnosticActions(Path file, Diagnostic<? extends JavaFileObject> diagnostic) {
+        CodeActionList list = new CodeActionList();
+        list.setTitle("Quick fixes");
+
+        TreeMap<String, Rewrite> rewrites = new TreeMap<>(quickFixes(file, diagnostic));
+
+        List<CodeAction> actions = new ArrayList<>();
+        for (Map.Entry<String, Rewrite> entry : rewrites.entrySet()) {
+            actions.addAll(createQuickFix(entry.getKey(), entry.getValue()));
+        }
+        list.setActions(actions);
+
+        return list;
+    }
+
+    /**
+     * Gets the diagnostics of the current compile task
+     *
+     * @param task the current compile task where the diagnostic is retrieved
+     * @param cursor the current cursor position
+     * @return null if no diagnostic is found
+     */
+    private Diagnostic<? extends JavaFileObject> getDiagnostic(CompileTask task, long cursor) {
         for (Diagnostic<? extends JavaFileObject> diagnostic : task.diagnostics) {
             if (diagnostic.getStartPosition() <= cursor && cursor < diagnostic.getEndPosition()) {
-                CodeActionList action = new CodeActionList();
-                action.setTitle("Quick fixes");
-                action.setActions(getQuickFixes(file, diagnostic));
-                list.add(action);
+                return diagnostic;
             }
         }
+        return null;
     }
-    private CodeActionList getOverrideInheritedMethods(CompileTask task, Path file, long cursor) {
+
+    private Map<String, Rewrite> getOverrideInheritedMethods(CompileTask task, Path file, long cursor) {
         TreeMap<String, Rewrite> rewrites = new TreeMap<>(overrideInheritedMethods(task, file, cursor));
+
         List<CodeAction> actions = new ArrayList<>();
         for (String title : rewrites.keySet()) {
             actions.addAll(createQuickFix(title, rewrites.get(title)));
         }
-        CodeActionList overrideInheritedMethods = new CodeActionList();
-        overrideInheritedMethods.setTitle("Override inherited methods");
-        overrideInheritedMethods.setActions(actions);
-        return overrideInheritedMethods;
+       return rewrites;
     }
 
     private Map<String, Rewrite> overrideInheritedMethods(CompileTask task, Path file, long cursor) {
@@ -158,39 +206,34 @@ public class CodeActionProvider {
         return true;
     }
 
-    public List<CodeAction> getQuickFixes(Path file, Diagnostic<? extends JavaFileObject> d) {
-        try (CompileTask task = mCompiler.compile(file)) {
-            return quickFixes(task, file, d);
-        }
-    }
-
-    public List<CodeAction> quickFixes(CompileTask task, Path file, Diagnostic<? extends JavaFileObject> d) {
-
+    public Map<String, Rewrite> quickFixes(Path file, Diagnostic<? extends JavaFileObject> d) {
+        Log.d(null, "Class name: " + d.getClass().toString());
         if (d instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
-
             JCDiagnostic diagnostic = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) d).d;
+            Log.d(null, "code: " + diagnostic.getCode());
             switch (d.getCode()) {
                 case "compiler.err.does.not.override.abstract":
-                    String missingAbstracts = findClass(task, getRange(task, d));
+                    String missingAbstracts = diagnostic.getArgs()[0].toString();
+                    Log.d(null, "simple abstract name: " + missingAbstracts);
                     Rewrite implementAbstracts = new ImplementAbstractMethods(missingAbstracts);
-                    return createQuickFix("Implement abstract methods", implementAbstracts);
+                    return Collections.singletonMap("Implement abstract methods", implementAbstracts);
                 case "compiler.err.cant.resolve":
                 case "compiler.err.cant.resolve.location":
                     CharSequence simpleName = diagnostic.getArgs()[1].toString();
-                    List<CodeAction> allImports = new ArrayList<>();
+                    TreeMap<String, Rewrite> allImports = new TreeMap<>();
                     Log.d(null, "simple name: " + simpleName);
                     for (String qualifiedName : mCompiler.publicTopLevelTypes()) {
                         if (qualifiedName.endsWith("." + simpleName)) {
                             String title = "Import " + qualifiedName;
                             Rewrite addImport = new AddImport(file.toFile(), qualifiedName);
-                            allImports.addAll(createQuickFix(title, addImport));
+                            allImports.put(title, addImport);
                         }
                     }
                     return allImports;
             }
 
         }
-        return Collections.emptyList();
+        return Collections.emptyMap();
     }
 
     private List<CodeAction> createQuickFix(String title, Rewrite rewrite) {
@@ -309,6 +352,13 @@ public class CodeActionProvider {
 
         CharSequence charSequence = contents.subSequence(start, end);
         return charSequence;
+    }
+
+
+    private List<IAction> getActions() {
+        return Arrays.asList(
+                new ConvertToAnonymousAction()
+        );
     }
 
 }

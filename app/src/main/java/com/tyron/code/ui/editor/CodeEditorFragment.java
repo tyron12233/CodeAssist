@@ -16,44 +16,27 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.action.CodeActionProvider;
-import com.tyron.code.completion.CompileTask;
-import com.tyron.code.completion.JavaCompilerService;
-import com.tyron.code.completion.SourceFileObject;
 import com.tyron.code.completion.provider.CompletionEngine;
 import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;
-import com.tyron.code.model.Project;
 import com.tyron.code.model.Range;
 import com.tyron.code.model.TextEdit;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.ui.editor.language.LanguageManager;
-import com.tyron.code.ui.editor.language.java.JavaAnalyzer;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
-import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.main.MainViewModel;
-import com.tyron.code.util.ProjectUtils;
-
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.Executors;
-import java.util.function.IntFunction;
 
 import io.github.rosemoe.editor.interfaces.EditorEventListener;
 import io.github.rosemoe.editor.interfaces.EditorLanguage;
-import io.github.rosemoe.editor.text.Content;
 import io.github.rosemoe.editor.widget.CodeEditor;
 import io.github.rosemoe.editor.widget.schemes.SchemeDarcula;
 

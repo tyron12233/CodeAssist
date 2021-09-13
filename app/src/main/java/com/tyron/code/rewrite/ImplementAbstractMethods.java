@@ -5,6 +5,7 @@ import android.util.Log;
 import com.google.common.base.Strings;
 import com.tyron.code.completion.CompileTask;
 import com.tyron.code.completion.CompilerProvider;
+import com.tyron.code.completion.JavaCompilerService;
 import com.tyron.code.completion.ParseTask;
 import com.tyron.code.completion.provider.FindHelper;
 import com.tyron.code.model.Position;
@@ -43,7 +44,15 @@ public class ImplementAbstractMethods implements Rewrite {
 
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
+        if (!compiler.isReady()) {
+            return Collections.emptyMap();
+        }
+
         Path file = compiler.findTypeDeclaration(mClassName);
+        if (file == JavaCompilerService.NOT_FOUND) {
+            return Collections.emptyMap();
+        }
+
         StringJoiner insertText = new StringJoiner("\n");
         try (CompileTask task = compiler.compile(file)) {
             Elements elements = task.task.getElements();

@@ -11,7 +11,9 @@ import java.util.Set;
 import org.openjdk.javax.tools.JavaFileObject;
 
 public interface CompilerProvider {
-    
+
+    boolean isReady();
+
     Set<String> imports();
     
     List<String> publicTopLevelTypes();

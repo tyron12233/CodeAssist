@@ -349,11 +349,13 @@ public class JavaCompilerService implements CompilerProvider {
      */
     @Override
     public CompileTask compile(Path... files) {
-        List<JavaFileObject> sources = new ArrayList<>();
-        for (Path f : files) {
-            sources.add(new SourceFileObject(f));
+        synchronized (mCachedCompileLock) {
+            List<JavaFileObject> sources = new ArrayList<>();
+            for (Path f : files) {
+                sources.add(new SourceFileObject(f));
+            }
+            return compile(sources);
         }
-        return compile(sources);
     }
 
     /**
@@ -364,8 +366,14 @@ public class JavaCompilerService implements CompilerProvider {
      */
     @Override
     public CompileTask compile(Collection<? extends JavaFileObject> sources) {
-        CompileBatch compile = compileBatch(sources);
-		return new CompileTask(compile.task, compile.roots, diagnostics, compile::close);
+        synchronized (mCachedCompileLock) {
+            CompileBatch compile = compileBatch(sources);
+            return new CompileTask(compile.task, compile.roots, diagnostics, compile::close);
+        }
+    }
+
+    public boolean isReady() {
+        return cachedCompile.closed;
     }
 
 }
