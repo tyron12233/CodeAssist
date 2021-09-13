@@ -1,25 +1,44 @@
 package com.tyron.code.ui.editor.language.xml;
 
+import android.os.Handler;
+import android.util.Log;
+
+import com.tyron.code.compiler.Task;
+import com.tyron.code.compiler.incremental.resource.IncrementalAapt2Task;
+import com.tyron.code.model.DiagnosticWrapper;
+import com.tyron.code.model.Project;
+import com.tyron.code.parser.FileManager;
+import com.tyron.code.service.ILogger;
+import com.tyron.code.util.ProjectUtils;
+import com.tyron.code.util.exception.CompilationFailedException;
+
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Token;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.concurrent.Executors;
 
 import io.github.rosemoe.editor.interfaces.CodeAnalyzer;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
 import io.github.rosemoe.editor.text.TextAnalyzer;
+import io.github.rosemoe.editor.widget.CodeEditor;
 import io.github.rosemoe.editor.widget.EditorColorScheme;
 
 public class XMLAnalyzer implements CodeAnalyzer {
-	
-	public XMLAnalyzer() {
-		
+
+	private final CodeEditor mEditor;
+
+	public XMLAnalyzer(CodeEditor codeEditor) {
+		mEditor = codeEditor;
 	}
 	
 	@Override
 	public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
+
+		compile();
+
 		try {
 			CodePointCharStream stream = CharStreams.fromReader(new StringReader(content.toString()));
 			XMLLexer lexer = new XMLLexer(stream);
@@ -61,4 +80,63 @@ public class XMLAnalyzer implements CodeAnalyzer {
 		}
 	}
 
+	private final Handler handler = new Handler();
+	long delay = 1000L;
+	long lastTime;
+
+	private void compile() {
+		handler.removeCallbacks(runnable);
+		lastTime = System.currentTimeMillis();
+		handler.postDelayed(runnable, delay);
+	}
+
+	CompileRunnable runnable = new CompileRunnable();
+
+	private class CompileRunnable implements Runnable {
+		@Override
+		public void run() {
+			Log.d("AAPT2", "Compiling");
+			if (System.currentTimeMillis() < (lastTime - 500)) {
+				return;
+			}
+
+			Executors.newSingleThreadExecutor().execute(() -> {
+				boolean isResource = ProjectUtils.isResourceXMLFile(mEditor.getCurrentFile());
+
+				if (isResource) {
+					Project project = FileManager.getInstance().getCurrentProject();
+					if (project != null) {
+						Task task = new IncrementalAapt2Task();
+						try {
+							task.prepare(project, new ILogger() {
+								@Override
+								public void info(DiagnosticWrapper wrapper) {
+
+								}
+
+								@Override
+								public void debug(DiagnosticWrapper wrapper) {
+
+								}
+
+								@Override
+								public void warning(DiagnosticWrapper wrapper) {
+
+								}
+
+								@Override
+								public void error(DiagnosticWrapper wrapper) {
+
+								}
+							});
+							task.run();
+						} catch (IOException | CompilationFailedException e) {
+							e.printStackTrace();
+						}
+
+					}
+				}
+			});
+		}
+	}
 }

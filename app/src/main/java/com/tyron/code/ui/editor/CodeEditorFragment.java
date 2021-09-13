@@ -12,24 +12,31 @@ import android.widget.LinearLayout;
 import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.action.CodeActionProvider;
+import com.tyron.code.completion.CompileTask;
+import com.tyron.code.completion.JavaCompilerService;
 import com.tyron.code.completion.SourceFileObject;
 import com.tyron.code.completion.provider.CompletionEngine;
 import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;
+import com.tyron.code.model.Project;
 import com.tyron.code.model.Range;
 import com.tyron.code.model.TextEdit;
 import com.tyron.code.parser.FileManager;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaAnalyzer;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
+import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
+import com.tyron.code.ui.main.MainViewModel;
+import com.tyron.code.util.ProjectUtils;
 
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
@@ -41,6 +48,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Executors;
 import java.util.function.IntFunction;
 
 import io.github.rosemoe.editor.interfaces.EditorEventListener;
@@ -58,6 +66,7 @@ public class CodeEditorFragment extends Fragment {
 
     private EditorLanguage mLanguage;
     private File mCurrentFile = new File("");
+    private MainViewModel mMainViewModel;
 
     public static CodeEditorFragment newInstance(File file) {
         CodeEditorFragment fragment = new CodeEditorFragment();
@@ -73,6 +82,7 @@ public class CodeEditorFragment extends Fragment {
 
         assert getArguments() != null;
         mCurrentFile = new File(getArguments().getString("path", ""));
+        mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     }
 
 	@Override
@@ -80,6 +90,23 @@ public class CodeEditorFragment extends Fragment {
 		super.onPause();
 		
 		mEditor.hideAutoCompleteWindow();
+//        if (mLanguage instanceof LanguageXML) {
+//            Project project = FileManager.getInstance().getCurrentProject();
+//            if (mCurrentFile != null && project != null && ProjectUtils.isResourceXMLFile(mCurrentFile)) {
+//                File resourceFile = project.getRJavaFiles().get(project.getPackageName());
+//                if (resourceFile != null && resourceFile.exists()) {
+//                    mMainViewModel.setIndexing(true);
+//                    mMainViewModel.setCurrentState("Indexing R.java");
+//                    Executors.newSingleThreadExecutor().submit(() -> {
+//                        JavaCompilerService service = CompletionEngine.getInstance().getCompiler();
+//                        try (CompileTask task = service.compile(resourceFile.toPath())) {
+//                           mMainViewModel.isIndexing().postValue(false);
+//                           mMainViewModel.getCurrentState().postValue(null);
+//                        }
+//                    });
+//                }
+//            }
+//        }
 	}
 
     @Override

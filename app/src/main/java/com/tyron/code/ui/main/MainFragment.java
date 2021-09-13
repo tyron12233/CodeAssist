@@ -138,7 +138,8 @@ public class MainFragment extends Fragment {
         mFilesViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         mFilesViewModel.getFiles().observe(getViewLifecycleOwner(), mAdapter::submitList);
         mFilesViewModel.currentPosition.observe(getViewLifecycleOwner(), mPager::setCurrentItem);
-
+        mFilesViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE));
+        mFilesViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
         mProjectManager = new ProjectManager(logViewModel);
         return mRoot;
     }
@@ -450,8 +451,7 @@ public class MainFragment extends Fragment {
             return;
         }
 
-        mProgressBar.setVisibility(View.VISIBLE);
-        mToolbar.setTitle(proj.mRoot.getName());
+        mFilesViewModel.setIndexing(true);
 
         mProjectManager.openProject(proj, downloadLibs, new ProjectManager.TaskListener() {
             @Override
@@ -459,7 +459,7 @@ public class MainFragment extends Fragment {
                 if (getActivity() == null) {
                     return;
                 }
-                requireActivity().runOnUiThread(() -> mToolbar.setSubtitle(message));
+                requireActivity().runOnUiThread(() -> mFilesViewModel.setCurrentState(message));
             }
 
             @Override
@@ -472,9 +472,8 @@ public class MainFragment extends Fragment {
                     if (mToolbar == null || mProgressBar == null) {
                         return;
                     }
-
-                    mToolbar.setSubtitle(null);
-                    mProgressBar.setVisibility(View.GONE);
+                    mFilesViewModel.setIndexing(false);
+                    mFilesViewModel.setCurrentState(null);
                     if (!success) {
                         if (mBehavior.getState() != BottomSheetBehavior.STATE_EXPANDED) {
                             mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);

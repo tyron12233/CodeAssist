@@ -1,6 +1,7 @@
 package com.tyron.code.ui.main;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
@@ -11,9 +12,47 @@ import java.util.List;
 
 public class MainViewModel extends ViewModel {
 
+    /**
+     * The files currently opened in the editor
+     */
     private MutableLiveData<List<File>> mFiles;
 
+    /**
+     * Whether the current completion engine is indexing
+     */
+    private MutableLiveData<Boolean> mIndexing;
+
+    /**
+     * The text shown on the subtitle of the toolbar
+     */
+    private MutableLiveData<String> mCurrentState;
+
+    /**
+     * The current position of the CodeEditor
+     */
     public final MutableLiveData<Integer> currentPosition = new MutableLiveData<>(0);
+
+    public MutableLiveData<String> getCurrentState() {
+        if (mCurrentState == null) {
+            mCurrentState = new MutableLiveData<>(null);
+        }
+        return mCurrentState;
+    }
+
+    public void setCurrentState(@Nullable String message) {
+        mCurrentState.setValue(message);
+    }
+
+    public MutableLiveData<Boolean> isIndexing() {
+        if (mIndexing == null) {
+            mIndexing = new MutableLiveData<>(false);
+        }
+        return mIndexing;
+    }
+
+    public void setIndexing(boolean indexing) {
+        mIndexing.setValue(indexing);
+    }
 
     public LiveData<List<File>> getFiles() {
         if (mFiles == null) {

@@ -1,5 +1,6 @@
 package com.tyron.code.util;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.io.File;
@@ -73,5 +74,25 @@ public class ProjectUtils {
         }
 
         return path.replace("/", ".");
+    }
+
+    public static boolean isResourceXMLFile(@NonNull File file) {
+        if (!file.getName().endsWith(".xml")) {
+            return false;
+        }
+        File resourceFolder = file;
+        for (int i = 0; i < 2; i++) {
+            File parentFile = resourceFolder.getParentFile();
+            if (parentFile == null) {
+                resourceFolder = null;
+                break;
+            } else {
+                resourceFolder = parentFile;
+            }
+        }
+
+        if (resourceFolder == null) {
+            return false;
+        } else return resourceFolder.isDirectory() && resourceFolder.getName().equals("res");
     }
 }

@@ -13,6 +13,6 @@ public class XML implements Language {
 	
 	@Override
 	public EditorLanguage get(CodeEditor editor) {
-		return new LanguageXML();
+		return new LanguageXML(editor);
 	}
 }

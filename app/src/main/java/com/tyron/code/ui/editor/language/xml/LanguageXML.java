@@ -8,11 +8,16 @@ import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.editor.interfaces.CodeAnalyzer;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
 import io.github.rosemoe.editor.text.TextAnalyzer;
+import io.github.rosemoe.editor.widget.CodeEditor;
 import io.github.rosemoe.editor.widget.SymbolPairMatch;
 import io.github.rosemoe.editor.interfaces.NewlineHandler;
 
 public class LanguageXML implements EditorLanguage {
 
+	private final CodeEditor mEditor;
+	public LanguageXML(CodeEditor codeEditor) {
+		mEditor = codeEditor;
+	}
 	@Override
 	public boolean isAutoCompleteChar(char ch) {
 		return false;
@@ -36,7 +41,7 @@ public class LanguageXML implements EditorLanguage {
 
 	@Override
 	public CodeAnalyzer getAnalyzer() {
-		return new XMLAnalyzer();
+		return new XMLAnalyzer(mEditor);
 	}
 
 	@Override
