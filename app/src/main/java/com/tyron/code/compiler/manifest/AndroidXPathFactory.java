@@ -3,10 +3,10 @@ package com.tyron.code.compiler.manifest;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-import javax.xml.XMLConstants;
-import javax.xml.namespace.NamespaceContext;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathFactory;
+import org.openjdk.javax.xml.XMLConstants;
+import org.openjdk.javax.xml.namespace.NamespaceContext;
+import org.openjdk.javax.xml.xpath.XPath;
+import org.openjdk.javax.xml.xpath.XPathFactory;
 /**
  * XPath factory with automatic support for the android name space.
  */

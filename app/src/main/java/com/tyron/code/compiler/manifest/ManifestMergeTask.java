@@ -18,10 +18,12 @@ import java.util.jar.Manifest;
 
 public class ManifestMergeTask extends Task {
 
-    private ManifestMerger mMerger;
+    private ManifestMerger2 mMerger;
     private File mOutputFile;
     private File mMainManifest;
     private File[] mLibraryManifestFiles;
+
+    private ILogger mLogger;
 
     @Override
     public String getName() {
@@ -30,7 +32,7 @@ public class ManifestMergeTask extends Task {
 
     @Override
     public void prepare(Project project, ILogger logger) throws IOException {
-        mMerger = new ManifestMerger(MergerLog.wrapSdkLog(logger), null);
+        mLogger = logger;
 
         mOutputFile = new File(project.getBuildDirectory(), "bin");
         if (!mOutputFile.exists()) {
@@ -81,10 +83,14 @@ public class ManifestMergeTask extends Task {
             return;
         }
 
-        boolean success = mMerger.process(mOutputFile, mMainManifest, mLibraryManifestFiles, null, null);
+        ManifestMerger2.Invoker invoker = ManifestMerger2.newMerger(mMainManifest,
+                mLogger, ManifestMerger2.MergeType.APPLICATION)
+                .addLibraryManifests(mLibraryManifestFiles);
 
-        if (!success) {
-            throw new CompilationFailedException("Failed to merge manifests");
+        try {
+            MergingReport report = invoker.merge();
+        } catch (ManifestMerger2.MergeFailureException e) {
+            throw new CompilationFailedException(e);
         }
 
         replaceApplicationId(mOutputFile);

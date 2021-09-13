@@ -36,7 +36,7 @@ import java.util.Map;
 import java.util.Set;
 
 import javax.annotation.concurrent.Immutable;
-import javax.xml.parsers.ParserConfigurationException;
+import org.openjdk.javax.xml.parsers.ParserConfigurationException;
 
 /**
  * Contains all actions taken during a merging invocation.
