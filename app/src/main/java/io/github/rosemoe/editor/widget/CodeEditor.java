@@ -4037,17 +4037,28 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         }
     }
     
-    private Handler completionHandler = new Handler(Looper.getMainLooper());
+    private final Handler completionHandler = new Handler(Looper.getMainLooper());
+    private final CompletionRunnable mCompletionRunnable = new CompletionRunnable();
+    private final long mCompletionDelay = 350L;
+    private long lastTime = 0;
+
     private class CompletionRunnable implements Runnable {
         
         private String prefix;
         
-        public CompletionRunnable(String prefix) {
+        public CompletionRunnable() {
+
+        }
+
+        public void setPrefix(String prefix) {
             this.prefix = prefix;
         }
         
         @Override
         public void run() {
+            if (System.currentTimeMillis() < (lastTime - mCompletionDelay)) {
+                return;
+            }
             mCompletionWindow.setPrefix(prefix);
         }   
    }
@@ -4087,12 +4098,16 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
                 if (end > endColumn) {
                     String line = content.getLineString(endLine);
                     String prefix = line.substring(endColumn, end);
-                    completionHandler.removeCallbacksAndMessages(null);
-                    completionHandler.postDelayed(new CompletionRunnable(prefix), 100);
+                    completionHandler.removeCallbacks(mCompletionRunnable);
+                    lastTime = System.currentTimeMillis();
+                    mCompletionRunnable.setPrefix(prefix);
+                    completionHandler.postDelayed(mCompletionRunnable, mCompletionDelay);
                 } else {
+                    completionHandler.removeCallbacks(mCompletionRunnable);
                     postHideCompletionWindow();
                 }
             } else {
+                completionHandler.removeCallbacks(mCompletionRunnable);
                 postHideCompletionWindow();
             }
             if (mCompletionWindow.isShowing()) {
