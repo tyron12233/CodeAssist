@@ -3,11 +3,35 @@ package com.tyron.code.service;
 import androidx.annotation.Nullable;
 
 import com.tyron.code.model.DiagnosticWrapper;
+import com.tyron.code.ui.editor.log.LogViewModel;
 
 import java.util.Locale;
 
 public interface ILogger {
 
+    public static ILogger wrap(LogViewModel logViewModel) {
+        return new ILogger() {
+            @Override
+            public void info(DiagnosticWrapper wrapper) {
+
+            }
+
+            @Override
+            public void debug(DiagnosticWrapper wrapper) {
+                logViewModel.d(LogViewModel.BUILD_LOG, wrapper);
+            }
+
+            @Override
+            public void warning(DiagnosticWrapper wrapper) {
+                logViewModel.w(LogViewModel.BUILD_LOG, wrapper);
+            }
+
+            @Override
+            public void error(DiagnosticWrapper wrapper) {
+                logViewModel.e(LogViewModel.BUILD_LOG, wrapper);
+            }
+        };
+    }
     void info(DiagnosticWrapper wrapper);
 
     void debug(DiagnosticWrapper wrapper);
