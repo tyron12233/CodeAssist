@@ -1,16 +1,8 @@
 package com.tyron.code.ui.editor.language.xml;
 
-import android.util.Log;
-
-import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
-import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.Token;
-import org.antlr.v4.runtime.tree.ParseTree;
-import org.antlr.v4.runtime.tree.ParseTreeWalker;
-import org.antlr.v4.runtime.tree.TerminalNode;
-import org.apache.commons.io.input.CharSequenceInputStream;
 
 import java.io.IOException;
 import java.io.StringReader;
