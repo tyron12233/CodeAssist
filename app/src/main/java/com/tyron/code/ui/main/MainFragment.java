@@ -372,6 +372,12 @@ public class MainFragment extends Fragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        requireActivity().unbindService(mServiceConnection);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
 
         Project current = FileManager.getInstance().getCurrentProject();
         if (current != null) {
@@ -390,7 +396,6 @@ public class MainFragment extends Fragment {
             editor.apply();
         }
 
-        requireActivity().unbindService(mServiceConnection);
     }
 
     @Override
