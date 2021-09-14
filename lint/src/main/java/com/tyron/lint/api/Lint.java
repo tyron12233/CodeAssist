@@ -7,6 +7,7 @@ import com.tyron.build.model.Project;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.lint.JavaVisitor;
 import com.tyron.lint.checks.JavaPerformanceDetector;
+import com.tyron.lint.checks.SharedPrefsDetector;
 import com.tyron.lint.client.Configuration;
 import com.tyron.lint.client.IssueRegistry;
 import com.tyron.lint.client.LintClient;
@@ -30,6 +31,7 @@ public class Lint {
         mDetectors = new ArrayList<>();
 
         registerDetector(new JavaPerformanceDetector());
+        registerDetector(new SharedPrefsDetector());
     }
 
     public void scanFile(File file) {
@@ -38,7 +40,8 @@ public class Lint {
             @Override
             public List<Issue> getIssues() {
                 return Arrays.asList(
-                        JavaPerformanceDetector.PAINT_ALLOC
+                        JavaPerformanceDetector.PAINT_ALLOC,
+                        SharedPrefsDetector.ISSUE
                 );
             }
         }, mClient);

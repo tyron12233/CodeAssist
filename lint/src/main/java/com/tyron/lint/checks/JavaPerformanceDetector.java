@@ -145,6 +145,20 @@ public class JavaPerformanceDetector extends Detector implements Detector.JavaSc
                             reportAllocation(node);
                         }
                     }
+                } else if (methodName.startsWith("decode")) {
+                    String operand = ((IdentifierTree) ((MemberSelectTree) node.getMethodSelect()).getExpression()).getName().toString();
+                    if (operand.equals("BitmapFactory")
+                        || operand.equals("android.graphics.BitmapFactory")) {
+                        if (isLazilyInitialized(node)) {
+                            reportAllocation(node);
+                        }
+                    }
+                } else if (methodName.equals("getClipBounds")) {
+                    if (node.getArguments().isEmpty()) {
+                        mContext.report(PAINT_ALLOC, node, mContext.getLocation(node), "Avoid object allocations during draw operations: Use " +
+                                "`Canvas.getClipBounds(Rect)` instead of `Canvas.getClipBounds()` " +
+                                "which allocates a temporary `Rect`");
+                    }
                 }
             }
             return super.visitMethodInvocation(node, unused);

@@ -13,6 +13,8 @@ import com.tyron.lint.api.JavaContext;
 import com.tyron.lint.api.JavaVoidVisitor;
 
 import org.openjdk.source.tree.AnnotationTree;
+import org.openjdk.source.tree.ExpressionTree;
+import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
@@ -32,6 +34,8 @@ public class JavaVisitor {
     private final List<VisitingDetector> mAllDetectors;
     private final Map<Class<? extends Tree>, List<VisitingDetector>> mTreeTypeDetectors =
             new HashMap<>(16);
+    private final Map<String, List<VisitingDetector>> mMethodDetectors =
+            new HashMap<>(16);
 
     public JavaVisitor(JavaCompilerService compiler, @NonNull List<Detector> detectors) {
         mCompiler = compiler;
@@ -45,6 +49,14 @@ public class JavaVisitor {
             if (treeTypes != null) {
                 for (Class<? extends Tree> tree : treeTypes) {
                     List<VisitingDetector> list = mTreeTypeDetectors.computeIfAbsent(tree, k -> new ArrayList<>(SAME_TYPE_COUNT));
+                    list.add(v);
+                }
+            }
+
+            List<String> names = detector.getApplicableMethodNames();
+            if (names != null) {
+                for (String name : names) {
+                    List<VisitingDetector> list = mMethodDetectors.computeIfAbsent(name, k -> new ArrayList<>(SAME_TYPE_COUNT));
                     list.add(v);
                 }
             }
@@ -62,7 +74,10 @@ public class JavaVisitor {
                     v.setContext(context);
                 }
 
-                if (!mTreeTypeDetectors.isEmpty()) {
+                if (!mMethodDetectors.isEmpty()) {
+                    JavaVoidVisitor visitor = new DelegatingJavaVisitor(context);
+                    compilationUnit.accept(visitor, null);
+                } else if (!mTreeTypeDetectors.isEmpty()) {
                     JavaVoidVisitor visitor = new DispatchVisitor();
                     compilationUnit.accept(visitor, null);
                 }
@@ -133,7 +148,7 @@ public class JavaVisitor {
                     v.getVisitor().visitMethodInvocation(methodInvocationTree, unused);
                 }
             }
-            return null;
+            return super.visitMethodInvocation(methodInvocationTree, unused);
         }
 
         @Override
@@ -144,7 +159,46 @@ public class JavaVisitor {
                     v.getVisitor().visitMethod(methodTree, unused);
                 }
             }
-            return null;
+            return super.visitMethod(methodTree, unused);
+        }
+    }
+
+    /** Performs common AST searches for method calls and R-type-field references.
+     * Note that this is a specialized form of the {@link DispatchVisitor}. */
+    private class DelegatingJavaVisitor extends DispatchVisitor {
+        private final JavaContext mContext;
+        private final boolean mVisitResources;
+        private final boolean mVisitMethods;
+        private final boolean mVisitConstructors;
+
+        public DelegatingJavaVisitor(JavaContext context) {
+            mContext = context;
+
+            mVisitMethods = !mMethodDetectors.isEmpty();
+            mVisitConstructors = false; //!mConstructorDetectors.isEmpty();
+            mVisitResources = false; //!mResourceFieldDetectors.isEmpty();
+        }
+
+        @Override
+        public Void visitMemberSelect(MemberSelectTree memberSelectTree, Void unused) {
+            if (mVisitResources) {
+                // TODO: Complete
+            }
+            return super.visitMemberSelect(memberSelectTree, unused);
+        }
+
+        @Override
+        public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
+            if (mVisitMethods) {
+                String methodName = JavaContext.getMethodName(node);
+                List<VisitingDetector> list = mMethodDetectors.get(methodName);
+                if (list != null) {
+                    for (VisitingDetector v : list) {
+                        v.getJavaScanner().visitMethod(mContext, v.getVisitor(), node);
+                    }
+                }
+            }
+            return super.visitMethodInvocation(node, unused);
         }
     }
 }

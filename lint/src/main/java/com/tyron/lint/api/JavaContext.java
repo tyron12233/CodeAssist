@@ -1,5 +1,7 @@
 package com.tyron.lint.api;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -11,10 +13,14 @@ import com.tyron.lint.client.LintDriver;
 
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.ExpressionTree;
+import org.openjdk.source.tree.IdentifierTree;
+import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.tree.JCTree;
 
 import java.io.File;
 
@@ -59,9 +65,15 @@ public class JavaContext extends Context {
 
     public static String getMethodName(@NonNull Tree call) {
         if (call instanceof MethodInvocationTree) {
-            return ((ExecutableElement)call).getSimpleName().toString();
+            ExpressionTree expressionTree = ((MethodInvocationTree) call).getMethodSelect();
+            if (expressionTree instanceof IdentifierTree) {
+                return ((IdentifierTree) expressionTree).getName().toString();
+            } else if (expressionTree instanceof MemberSelectTree) {
+                return ((MemberSelectTree) expressionTree).getIdentifier().toString();
+            }
         } else {
             return null;
         }
+        return null;
     }
 }
