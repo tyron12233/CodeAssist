@@ -1,20 +1,13 @@
 package com.tyron.resolver;
 
-import com.android.tools.r8.v.b.P;
 import com.tyron.code.ApplicationLoader;
-import com.tyron.code.parser.FileManager;
-import com.tyron.resolver.exception.DuplicateDependencyException;
+import com.tyron.build.parser.FileManager;
 import com.tyron.resolver.model.Dependency;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-import java.util.ArrayList;
 import java.io.InputStream;
 import java.net.URL;
 import java.io.IOException;
@@ -23,12 +16,10 @@ import com.tyron.resolver.parser.POMParser;
 import java.util.Collections;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.util.Map;
 import java.util.Set;
-import java.util.HashSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import android.os.Handler;

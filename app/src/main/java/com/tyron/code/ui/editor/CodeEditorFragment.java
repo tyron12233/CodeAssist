@@ -23,7 +23,7 @@ import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;
 import com.tyron.code.model.Range;
 import com.tyron.code.model.TextEdit;
-import com.tyron.code.parser.FileManager;
+import com.tyron.build.parser.FileManager;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;

@@ -13,23 +13,22 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import com.tyron.build.model.SourceFileObject;
 import com.tyron.code.Docs;
-import com.tyron.code.compiler.java.CompileBatch;
-import com.tyron.code.compiler.java.ReusableCompiler;
+
 import java.util.Map;
 import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.tyron.code.parser.FileManager;
+import com.tyron.build.parser.FileManager;
 import com.tyron.code.util.Cache;
-import com.tyron.code.util.StringSearch;
+import com.tyron.common.util.StringSearch;
 
 import android.annotation.SuppressLint;
 import android.util.Log;
 
 import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.FileObject;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.javax.tools.StandardLocation;
 import org.openjdk.source.tree.CompilationUnitTree;

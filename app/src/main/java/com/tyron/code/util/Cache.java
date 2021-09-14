@@ -1,7 +1,5 @@
 package com.tyron.code.util;
 
-import com.tyron.code.parser.FileManager;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;

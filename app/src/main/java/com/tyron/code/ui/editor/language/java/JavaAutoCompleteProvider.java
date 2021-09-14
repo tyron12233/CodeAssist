@@ -4,10 +4,10 @@ import android.content.SharedPreferences;
 
 import androidx.preference.PreferenceManager;
 
-import com.tyron.code.compiler.java.CompileBatch;
+import com.tyron.code.completion.CompileBatch;
 import com.tyron.code.completion.provider.CompletionEngine;
 import com.tyron.code.model.CompletionList;
-import com.tyron.code.parser.FileManager;
+import com.tyron.build.parser.FileManager;
 
 import java.util.ArrayList;
 import java.util.Collections;

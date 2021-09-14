@@ -5,12 +5,12 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.build.model.Project;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.completion.CompileTask;
 import com.tyron.code.completion.JavaCompilerService;
 import com.tyron.code.model.CompletionList;
-import com.tyron.code.model.Project;
-import com.tyron.code.parser.FileManager;
+import com.tyron.build.parser.FileManager;
 
 import java.io.File;
 import java.util.Collections;

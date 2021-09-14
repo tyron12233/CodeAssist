@@ -5,6 +5,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.widget.Toast;
 
+import com.tyron.build.BuildModule;
+
 public class ApplicationLoader extends Application {
     
     public static Context applicationContext;
@@ -15,6 +17,7 @@ public class ApplicationLoader extends Application {
         super.onCreate();
         
         applicationContext = this;
+        BuildModule.initialize(applicationContext);
     }
     
     public static void showToast(String message) {

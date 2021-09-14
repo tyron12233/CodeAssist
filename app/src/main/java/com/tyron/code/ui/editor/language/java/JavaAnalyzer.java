@@ -7,9 +7,9 @@ import androidx.preference.PreferenceManager;
 
 import com.tyron.code.completion.CompileTask;
 import com.tyron.code.completion.JavaCompilerService;
-import com.tyron.code.completion.SourceFileObject;
+import com.tyron.build.model.SourceFileObject;
 import com.tyron.code.completion.provider.CompletionEngine;
-import com.tyron.code.parser.FileManager;
+import com.tyron.build.parser.FileManager;
 
 import io.github.rosemoe.editor.struct.Span;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;

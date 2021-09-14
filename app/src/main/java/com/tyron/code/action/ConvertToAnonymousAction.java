@@ -5,15 +5,15 @@ import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;
 
 import org.openjdk.source.tree.LambdaExpressionTree;
-import org.openjdk.source.tree.Tree;
+import org.openjdk.source.util.TreePath;
 
 import java.util.Collections;
 
 public class ConvertToAnonymousAction extends IAction {
 
     @Override
-    public boolean isApplicable(Tree tree) {
-        return tree instanceof LambdaExpressionTree;
+    public boolean isApplicable(TreePath tree, CompileTask task) {
+        return tree.getLeaf() instanceof LambdaExpressionTree;
     }
 
     @Override

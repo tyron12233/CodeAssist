@@ -21,12 +21,10 @@
 
 package com.sun.org.apache.xpath.internal.jaxp;
 
-import com.sun.org.apache.xpath.internal.*;
 import org.openjdk.javax.xml.transform.TransformerException;
 
 import com.sun.org.apache.xpath.internal.objects.XObject;
 import com.sun.org.apache.xml.internal.dtm.DTM;
-import com.sun.org.apache.xml.internal.utils.PrefixResolver;
 import com.sun.org.apache.xpath.internal.res.XPATHErrorResources;
 import com.sun.org.apache.xalan.internal.res.XSLMessages;
 import com.sun.org.apache.xalan.internal.utils.FactoryImpl;
@@ -38,11 +36,9 @@ import org.openjdk.javax.xml.xpath.XPathExpressionException;
 import org.openjdk.javax.xml.xpath.XPathConstants;
 import org.openjdk.javax.xml.xpath.XPathFunctionResolver;
 import org.openjdk.javax.xml.xpath.XPathVariableResolver;
-import org.openjdk.javax.xml.xpath.XPathConstants;
 
 import org.w3c.dom.Node;
 import org.w3c.dom.Document;
-import org.w3c.dom.DOMImplementation;
 import org.w3c.dom.traversal.NodeIterator;
 import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
 import org.openjdk.javax.xml.parsers.DocumentBuilder;

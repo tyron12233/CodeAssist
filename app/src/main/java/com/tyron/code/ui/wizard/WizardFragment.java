@@ -31,12 +31,12 @@ import com.google.android.material.transition.MaterialFadeThrough;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.model.Project;
-import com.tyron.code.parser.FileManager;
+import com.tyron.build.model.Project;
+import com.tyron.build.parser.FileManager;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.wizard.adapter.WizardTemplateAdapter;
 import com.tyron.code.util.AndroidUtilities;
-import com.tyron.code.util.Decompress;
+import com.tyron.common.util.Decompress;
 import com.tyron.code.util.FileUtils;
 
 import java.io.File;

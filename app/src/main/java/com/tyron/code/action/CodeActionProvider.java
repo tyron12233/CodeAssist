@@ -56,15 +56,27 @@ public class CodeActionProvider {
     }
 
     public List<CodeActionList> codeActionsForCursor(Path file, long cursor) {
+
+        if (true) {
+            return Collections.emptyList();
+        }
         List<CodeActionList> codeActionList = new ArrayList<>();
 
-        Tree currentTree = null;
+        List<IAction> applicableActions = new ArrayList<>();
         Diagnostic<? extends JavaFileObject> diagnostic;
         TreeMap<String, Rewrite> overrideMethods = new TreeMap<>();
         try (CompileTask task = mCompiler.compile(file)) {
             diagnostic = getDiagnostic(task, cursor);
             overrideMethods.putAll(getOverrideInheritedMethods(task, file, cursor));
-            currentTree = new FindCurrentTree(task.task).scan(task.root(), cursor);
+            TreePath currentPath = new FindCurrentPath(task.task).scan(task.root(), cursor);
+            if (currentPath != null) {
+                Log.d(null, "Current path: " + currentPath.getLeaf().getKind().toString());
+                for (IAction action : getActions()) {
+                    if (action.isApplicable(currentPath, task)) {
+                        applicableActions.add(action);
+                    }
+                }
+            }
         }
         if (diagnostic != null) {
             codeActionList.add(getDiagnosticActions(file, diagnostic));
@@ -75,12 +87,9 @@ public class CodeActionProvider {
         overrideAction.setActions(getActionsFromRewrites(overrideMethods));
         codeActionList.add(overrideAction);
 
-        if (currentTree != null) {
-            for (IAction action : getActions()) {
-                if (action.isApplicable(currentTree)) {
-                    codeActionList.add(action.get(null));
-                }
-            }
+
+        for (IAction action : applicableActions) {
+           codeActionList.add(action.get(null));
         }
 
         return codeActionList;
@@ -357,7 +366,8 @@ public class CodeActionProvider {
 
     private List<IAction> getActions() {
         return Arrays.asList(
-                new ConvertToAnonymousAction()
+                new ConvertToAnonymousAction(),
+                new ConvertToLambdaAction()
         );
     }
 

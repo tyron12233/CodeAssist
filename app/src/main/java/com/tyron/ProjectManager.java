@@ -1,10 +1,10 @@
 package com.tyron;
 
+import com.tyron.build.log.LogViewModel;
+import com.tyron.build.model.Project;
 import com.tyron.code.completion.provider.CompletionEngine;
-import com.tyron.code.model.Project;
-import com.tyron.code.parser.FileManager;
+import com.tyron.build.parser.FileManager;
 import com.tyron.code.template.CodeTemplate;
-import com.tyron.code.ui.editor.log.LogViewModel;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.resolver.DependencyDownloader;
 import com.tyron.resolver.DependencyResolver;

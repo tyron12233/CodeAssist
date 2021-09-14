@@ -1,7 +1,7 @@
 package com.tyron.code;
 
 import com.tyron.code.completion.SourceFileManager;
-import com.tyron.code.util.Decompress;
+import com.tyron.common.util.Decompress;
 
 import java.io.File;
 import java.io.IOException;

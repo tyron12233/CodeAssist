@@ -3,14 +3,14 @@ package com.tyron.code.ui.editor.language.xml;
 import android.os.Handler;
 import android.util.Log;
 
-import com.tyron.code.compiler.Task;
-import com.tyron.code.compiler.incremental.resource.IncrementalAapt2Task;
-import com.tyron.code.model.DiagnosticWrapper;
-import com.tyron.code.model.Project;
-import com.tyron.code.parser.FileManager;
-import com.tyron.code.service.ILogger;
+import com.tyron.build.compiler.Task;
+import com.tyron.build.compiler.incremental.resource.IncrementalAapt2Task;
+import com.tyron.build.model.DiagnosticWrapper;
+import com.tyron.build.model.Project;
+import com.tyron.build.parser.FileManager;
+import com.tyron.build.log.ILogger;
 import com.tyron.code.util.ProjectUtils;
-import com.tyron.code.util.exception.CompilationFailedException;
+import com.tyron.build.exception.CompilationFailedException;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;

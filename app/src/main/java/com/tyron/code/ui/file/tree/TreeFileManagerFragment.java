@@ -1,13 +1,8 @@
 package com.tyron.code.ui.file.tree;
 
 import android.os.Bundle;
-import android.view.ActionProvider;
 import android.view.ContextMenu;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
-import android.view.MotionEvent;
 import android.view.SubMenu;
 import android.view.View;
 import android.view.ViewGroup;
@@ -24,9 +19,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.ProjectManager;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.parser.FileManager;
-import com.tyron.code.template.CodeTemplate;
-import com.tyron.code.template.java.JavaClassTemplate;
+import com.tyron.build.parser.FileManager;
 import com.tyron.code.ui.file.CreateClassDialogFragment;
 import com.tyron.code.ui.file.tree.binder.TreeBinder;
 import com.tyron.code.ui.file.tree.model.TreeFile;
@@ -34,9 +27,6 @@ import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ProjectUtils;
-import com.tyron.code.util.StringSearch;
-
-import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;

@@ -6,26 +6,11 @@ import com.tyron.code.completion.CompileTask;
 import com.tyron.code.completion.CompilerProvider;
 import com.tyron.code.completion.CustomActions;
 import com.tyron.code.completion.ParseTask;
-import com.tyron.code.completion.SourceFileObject;
+import com.tyron.build.model.SourceFileObject;
 import com.tyron.code.model.CompletionItem;
 import com.tyron.code.model.CompletionList;
 import com.tyron.code.ui.editor.drawable.CircleDrawable;
-import com.tyron.code.util.StringSearch;
-
-import java.io.File;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Predicate;
+import com.tyron.common.util.StringSearch;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
@@ -53,6 +38,21 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.tree.JCTree;
+
+import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Main entry point for getting completions
@@ -140,7 +140,7 @@ public class CompletionProvider {
 		StringBuilder contents;
 		try {
             contents = new PruneMethodBodies(task.task).scan(task.root, index);
-            int end = endOfLine(contents, (int) index);
+            int end = StringSearch.endOfLine(contents, (int) index);
             contents.insert(end, ';');
         } catch (IndexOutOfBoundsException ignore) {
             return new CompletionList();
@@ -214,15 +214,6 @@ public class CompletionProvider {
             }
         }
         return false;
-    }
-
-    public static int endOfLine(CharSequence contents, int cursor) {
-        while (cursor < contents.length()) {
-            char c = contents.charAt(cursor);
-            if (c == '\r' || c == '\n') break;
-            cursor++;
-        }
-        return cursor;
     }
 
     private String partialIdentifier(String contents, int end) {

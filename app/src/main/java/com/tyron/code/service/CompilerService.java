@@ -7,19 +7,18 @@ import android.content.Intent;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
-import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
+import com.tyron.build.log.ILogger;
+import com.tyron.build.model.DiagnosticWrapper;
+import com.tyron.build.model.Project;
 import com.tyron.code.R;
-import com.tyron.code.compiler.ApkBuilder;
-import com.tyron.code.model.DiagnosticWrapper;
-import com.tyron.code.model.Project;
-import com.tyron.code.parser.FileManager;
+import com.tyron.build.compiler.ApkBuilder;
+import com.tyron.build.parser.FileManager;
 import com.tyron.code.util.ApkInstaller;
 
 import java.io.File;

@@ -19,7 +19,7 @@ import org.openjdk.javax.lang.model.util.Elements;
 
 public class ScopeHelper {
     // TODO is this still necessary? Test speed. We could get rid of the extra static-imports step.
-    static List<Scope> fastScopes(Scope start) {
+    public static List<Scope> fastScopes(Scope start) {
         List<Scope> scopes = new ArrayList<>();
         for (Scope s = start; s != null; s = s.getEnclosingScope()) {
             scopes.add(s);
@@ -33,7 +33,7 @@ public class ScopeHelper {
     }
 
     @SuppressLint("NewApi")
-    static List<Element> scopeMembers(CompileTask task, Scope inner, Predicate<CharSequence> filter) {
+    public static List<Element> scopeMembers(CompileTask task, Scope inner, Predicate<CharSequence> filter) {
         Trees trees = Trees.instance(task.task);
         Elements elements = task.task.getElements();
         boolean isStatic = false;

@@ -3,8 +3,10 @@ package com.tyron.code.completion;
 import android.text.TextUtils;
 
 import org.openjdk.tools.javac.api.JavacTool;
-import com.tyron.code.parser.FileManager;
-import com.tyron.code.util.StringSearch;
+
+import com.tyron.build.model.SourceFileObject;
+import com.tyron.build.parser.FileManager;
+import com.tyron.common.util.StringSearch;
 
 
 import java.io.File;

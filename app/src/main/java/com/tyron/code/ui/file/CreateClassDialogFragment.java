@@ -21,7 +21,7 @@ import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.template.java.AbstractTemplate;
 import com.tyron.code.template.java.InterfaceTemplate;
 import com.tyron.code.template.java.JavaClassTemplate;
-import com.tyron.code.util.SingleTextWatcher;
+import com.tyron.common.util.SingleTextWatcher;
 
 import org.openjdk.javax.lang.model.SourceVersion;
 

@@ -9,7 +9,7 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import java.util.ArrayList;
 
-import com.tyron.code.parser.FileManager;
+import com.tyron.build.parser.FileManager;
 import com.tyron.resolver.model.Dependency;
 import java.util.Collections;
 

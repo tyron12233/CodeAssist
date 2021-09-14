@@ -1,1 +1,4 @@
 include ':app'
+include ':lint'
+include ':build-logic'
+include ':common'

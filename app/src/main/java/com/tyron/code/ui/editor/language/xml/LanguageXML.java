@@ -1,13 +1,11 @@
 package com.tyron.code.ui.editor.language.xml;
-import com.tyron.code.compiler.manifest.xml.XmlFormatPreferences;
-import com.tyron.code.compiler.manifest.xml.XmlFormatStyle;
-import com.tyron.code.compiler.manifest.xml.XmlPrettyPrinter;
+import com.tyron.build.compiler.manifest.xml.XmlFormatPreferences;
+import com.tyron.build.compiler.manifest.xml.XmlFormatStyle;
+import com.tyron.build.compiler.manifest.xml.XmlPrettyPrinter;
 
 import io.github.rosemoe.editor.interfaces.EditorLanguage;
 import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.editor.interfaces.CodeAnalyzer;
-import io.github.rosemoe.editor.text.TextAnalyzeResult;
-import io.github.rosemoe.editor.text.TextAnalyzer;
 import io.github.rosemoe.editor.widget.CodeEditor;
 import io.github.rosemoe.editor.widget.SymbolPairMatch;
 import io.github.rosemoe.editor.interfaces.NewlineHandler;

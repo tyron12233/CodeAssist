@@ -1,14 +1,12 @@
 package com.tyron.code.ui.wizard;
 
 
-import com.google.gson.Gson;
-import com.tyron.code.parser.FileManager;
+import com.tyron.build.parser.FileManager;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.util.HashMap;
 
 public class WizardTemplate {
 
