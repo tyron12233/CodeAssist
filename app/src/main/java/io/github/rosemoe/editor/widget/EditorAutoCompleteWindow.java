@@ -36,7 +36,7 @@ import io.github.rosemoe.editor.text.TextAnalyzeResult;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.provider.CompletionProvider;
-import com.tyron.code.completion.ParseTask;
+import com.tyron.completion.ParseTask;
 import com.tyron.code.rewrite.AddImport;
 import java.util.Map;
 import java.io.File;
@@ -45,7 +45,7 @@ import android.util.Log;
 import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.code.ui.editor.CompletionItemAdapter;
 import androidx.recyclerview.widget.LinearLayoutManager;
-import com.tyron.code.completion.Parser;
+import com.tyron.completion.Parser;
 import android.view.ViewGroup;
 import com.tyron.code.util.AndroidUtilities;
 /**

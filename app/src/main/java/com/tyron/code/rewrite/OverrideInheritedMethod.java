@@ -1,10 +1,10 @@
 package com.tyron.code.rewrite;
 
 import com.google.common.base.Strings;
-import com.tyron.code.completion.CompileTask;
-import com.tyron.code.completion.CompilerProvider;
-import com.tyron.code.completion.FindTypeDeclarationAt;
-import com.tyron.code.completion.ParseTask;
+import com.tyron.completion.CompileTask;
+import com.tyron.completion.CompilerProvider;
+import com.tyron.completion.FindTypeDeclarationAt;
+import com.tyron.completion.ParseTask;
 import com.tyron.completion.provider.FindHelper;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;

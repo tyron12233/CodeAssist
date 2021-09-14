@@ -1,6 +1,6 @@
 package com.tyron.code.rewrite;
 
-import com.tyron.code.completion.CompilerProvider;
+import com.tyron.completion.CompilerProvider;
 import com.tyron.completion.model.TextEdit;
 
 import java.nio.file.Path;

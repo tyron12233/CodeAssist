@@ -2,7 +2,7 @@ package com.tyron.code.action;
 
 import android.util.Log;
 
-import com.tyron.code.completion.CompileTask;
+import com.tyron.completion.CompileTask;
 import com.tyron.completion.provider.ScopeHelper;
 import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;

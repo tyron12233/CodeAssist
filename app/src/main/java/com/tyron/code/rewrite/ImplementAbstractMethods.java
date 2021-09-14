@@ -3,10 +3,10 @@ package com.tyron.code.rewrite;
 import android.util.Log;
 
 import com.google.common.base.Strings;
-import com.tyron.code.completion.CompileTask;
-import com.tyron.code.completion.CompilerProvider;
-import com.tyron.code.completion.JavaCompilerService;
-import com.tyron.code.completion.ParseTask;
+import com.tyron.completion.CompileTask;
+import com.tyron.completion.CompilerProvider;
+import com.tyron.completion.JavaCompilerService;
+import com.tyron.completion.ParseTask;
 import com.tyron.completion.provider.FindHelper;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;

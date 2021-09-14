@@ -2,9 +2,9 @@ package com.tyron.code.action;
 
 import android.util.Log;
 
-import com.tyron.code.completion.CompileTask;
-import com.tyron.code.completion.CompilerProvider;
-import com.tyron.code.completion.FindTypeDeclarationAt;
+import com.tyron.completion.CompileTask;
+import com.tyron.completion.CompilerProvider;
+import com.tyron.completion.FindTypeDeclarationAt;
 import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;
 import com.tyron.completion.model.Position;

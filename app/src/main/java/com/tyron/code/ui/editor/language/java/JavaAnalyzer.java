@@ -5,8 +5,8 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
-import com.tyron.code.completion.CompileTask;
-import com.tyron.code.completion.JavaCompilerService;
+import com.tyron.completion.CompileTask;
+import com.tyron.completion.JavaCompilerService;
 import com.tyron.build.model.SourceFileObject;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.build.parser.FileManager;

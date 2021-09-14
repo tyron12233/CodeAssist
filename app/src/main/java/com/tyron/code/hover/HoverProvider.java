@@ -5,10 +5,10 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.DocTrees;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
-import com.tyron.code.completion.CompileTask;
-import com.tyron.code.completion.CompilerProvider;
+import com.tyron.completion.CompileTask;
+import com.tyron.completion.CompilerProvider;
 import com.tyron.completion.provider.FindHelper;
-import com.tyron.code.completion.ParseTask;
+import com.tyron.completion.ParseTask;
 
 import java.nio.file.Path;
 import java.util.ArrayList;

@@ -1,6 +1,6 @@
 package com.tyron.code.action;
 
-import com.tyron.code.completion.CompileTask;
+import com.tyron.completion.CompileTask;
 import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;
 
