@@ -15,7 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.ui.editor.drawable.CircleDrawable;
+import com.tyron.completion.drawable.CircleDrawable;
 
 import java.util.ArrayList;
 import java.util.List;

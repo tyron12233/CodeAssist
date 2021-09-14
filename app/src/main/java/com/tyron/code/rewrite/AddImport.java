@@ -1,12 +1,11 @@
 package com.tyron.code.rewrite;
-import android.annotation.SuppressLint;
 
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
 
 import com.tyron.code.completion.CompilerProvider;
-import com.tyron.code.model.Position;
+import com.tyron.completion.model.Position;
 import com.tyron.code.completion.ParseTask;
 
 import java.nio.file.Path;
@@ -14,8 +13,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import com.tyron.code.model.Range;
-import com.tyron.code.model.TextEdit;
+import com.tyron.completion.model.Range;
+import com.tyron.completion.model.TextEdit;
 
 import org.openjdk.source.tree.ImportTree;
 

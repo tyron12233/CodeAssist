@@ -2,10 +2,9 @@ package com.tyron.lint.api;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.code.completion.CompileTask;
+import com.tyron.completion.CompileTask;
 
 import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.Tree;
 

@@ -7,9 +7,9 @@ import com.tyron.code.completion.CompilerProvider;
 import com.tyron.code.completion.FindTypeDeclarationAt;
 import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;
-import com.tyron.code.model.Position;
-import com.tyron.code.model.Range;
-import com.tyron.code.model.TextEdit;
+import com.tyron.completion.model.Position;
+import com.tyron.completion.model.Range;
+import com.tyron.completion.model.TextEdit;
 import com.tyron.code.rewrite.AddImport;
 import com.tyron.code.rewrite.ImplementAbstractMethods;
 import com.tyron.code.rewrite.OverrideInheritedMethod;
@@ -58,6 +58,7 @@ public class CodeActionProvider {
     public List<CodeActionList> codeActionsForCursor(Path file, long cursor) {
 
         if (true) {
+            Lint lint;
             return Collections.emptyList();
         }
         List<CodeActionList> codeActionList = new ArrayList<>();

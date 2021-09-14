@@ -33,9 +33,9 @@ import io.github.rosemoe.editor.text.CharPosition;
 import io.github.rosemoe.editor.text.Cursor;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
 
-import com.tyron.code.model.Range;
-import com.tyron.code.model.TextEdit;
-import com.tyron.code.completion.provider.CompletionProvider;
+import com.tyron.completion.model.Range;
+import com.tyron.completion.model.TextEdit;
+import com.tyron.completion.provider.CompletionProvider;
 import com.tyron.code.completion.ParseTask;
 import com.tyron.code.rewrite.AddImport;
 import java.util.Map;
@@ -292,7 +292,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                 }
             }
 			
-            if (item.item.action == com.tyron.code.model.CompletionItem.Kind.IMPORT) {
+            if (item.item.action == com.tyron.completion.model.CompletionItem.Kind.IMPORT) {
                 Parser parser = Parser.parseFile(mEditor.getCurrentFile().toPath());
                 ParseTask task = new ParseTask(parser.task, parser.root);
                 Log.d("PackageName", task.root.getPackageName().toString());

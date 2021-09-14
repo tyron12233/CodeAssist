@@ -1,10 +1,8 @@
 package com.tyron.code.rewrite;
 
-import androidx.annotation.Nullable;
-
-import com.tyron.code.model.Position;
-import com.tyron.code.model.Range;
-import com.tyron.code.model.TextEdit;
+import com.tyron.completion.model.Position;
+import com.tyron.completion.model.Range;
+import com.tyron.completion.model.TextEdit;
 
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;

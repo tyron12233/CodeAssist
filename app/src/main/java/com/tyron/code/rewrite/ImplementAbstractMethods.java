@@ -7,10 +7,10 @@ import com.tyron.code.completion.CompileTask;
 import com.tyron.code.completion.CompilerProvider;
 import com.tyron.code.completion.JavaCompilerService;
 import com.tyron.code.completion.ParseTask;
-import com.tyron.code.completion.provider.FindHelper;
-import com.tyron.code.model.Position;
-import com.tyron.code.model.Range;
-import com.tyron.code.model.TextEdit;
+import com.tyron.completion.provider.FindHelper;
+import com.tyron.completion.model.Position;
+import com.tyron.completion.model.Range;
+import com.tyron.completion.model.TextEdit;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
@@ -19,13 +19,11 @@ import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.TypeElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
 import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.Trees;
 
 import java.nio.file.Path;

@@ -5,10 +5,10 @@ import com.tyron.code.completion.CompileTask;
 import com.tyron.code.completion.CompilerProvider;
 import com.tyron.code.completion.FindTypeDeclarationAt;
 import com.tyron.code.completion.ParseTask;
-import com.tyron.code.completion.provider.FindHelper;
-import com.tyron.code.model.Position;
-import com.tyron.code.model.Range;
-import com.tyron.code.model.TextEdit;
+import com.tyron.completion.provider.FindHelper;
+import com.tyron.completion.model.Position;
+import com.tyron.completion.model.Range;
+import com.tyron.completion.model.TextEdit;
 
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.TypeElement;

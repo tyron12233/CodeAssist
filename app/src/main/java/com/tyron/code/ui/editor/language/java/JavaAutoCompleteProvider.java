@@ -4,10 +4,10 @@ import android.content.SharedPreferences;
 
 import androidx.preference.PreferenceManager;
 
-import com.tyron.code.completion.CompileBatch;
-import com.tyron.code.completion.provider.CompletionEngine;
-import com.tyron.code.model.CompletionList;
+import com.tyron.completion.model.CompletionList;
 import com.tyron.build.parser.FileManager;
+import com.tyron.completion.CompileBatch;
+import com.tyron.completion.provider.CompletionEngine;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -48,7 +48,7 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
 
 		List<CompletionItem> result = new ArrayList<>();
 
-        for (com.tyron.code.model.CompletionItem item : list.items) {
+        for (com.tyron.completion.model.CompletionItem item : list.items) {
             result.add(new CompletionItem(item));
         }
 

@@ -2,7 +2,7 @@ package com.tyron;
 
 import com.tyron.build.log.LogViewModel;
 import com.tyron.build.model.Project;
-import com.tyron.code.completion.provider.CompletionEngine;
+import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.build.parser.FileManager;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.util.ProjectUtils;

@@ -2,10 +2,9 @@ package com.tyron.lint;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.code.completion.CompileTask;
-import com.tyron.code.completion.CompilerProvider;
-import com.tyron.code.completion.JavaCompilerService;
-import com.tyron.code.service.CompilerService;
+import com.tyron.completion.CompileTask;
+import com.tyron.completion.CompilerProvider;
+import com.tyron.completion.JavaCompilerService;
 import com.tyron.lint.api.Detector;
 import com.tyron.lint.api.Detector.JavaScanner;
 import com.tyron.lint.api.JavaContext;

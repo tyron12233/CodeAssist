@@ -20,8 +20,6 @@ import android.graphics.drawable.Drawable;
 import androidx.annotation.Nullable;
 
 import java.util.Comparator;
-import com.tyron.code.model.TextEdit;
-import java.util.List;
 
 /**
  * The class used to save auto complete result items
@@ -58,9 +56,9 @@ public class CompletionItem {
      */
     public int cursorOffset;
     
-    public com.tyron.code.model.CompletionItem item;
+    public com.tyron.completion.model.CompletionItem item;
     
-    public CompletionItem(com.tyron.code.model.CompletionItem item) {
+    public CompletionItem(com.tyron.completion.model.CompletionItem item) {
         this.item = item;
         this.label = item.label;
         this.commit = item.commitText;

@@ -1,7 +1,6 @@
 package com.tyron.lint.api;
 
-import com.tyron.code.completion.CompilerProvider;
-import com.tyron.code.completion.JavaCompilerService;
+import com.tyron.completion.JavaCompilerService;
 import com.tyron.lint.JavaVisitor;
 import com.tyron.lint.checks.JavaPerformanceDetector;
 
