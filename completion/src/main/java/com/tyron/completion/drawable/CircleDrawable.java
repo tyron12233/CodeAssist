@@ -1,9 +1,11 @@
 package com.tyron.completion.drawable;
+import android.graphics.PixelFormat;
 import android.graphics.drawable.Drawable;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
-import com.tyron.code.util.AndroidUtilities;
+
+import com.tyron.completion.CompletionModule;
 
 public class CircleDrawable extends Drawable {
     
@@ -51,7 +53,7 @@ public class CircleDrawable extends Drawable {
         mTextPaint = new Paint();
         mTextPaint.setColor(0xffffffff);
         mTextPaint.setAntiAlias(true);
-        mTextPaint.setTextSize(AndroidUtilities.dp(14));
+        mTextPaint.setTextSize(dp(14));
         mTextPaint.setTextAlign(Paint.Align.CENTER);
     }
     
@@ -84,7 +86,12 @@ public class CircleDrawable extends Drawable {
 
     @Override
     public int getOpacity() {
-        return 0;
+        return PixelFormat.OPAQUE;
+    }
+
+    private static float dp(int px) {
+        return Math.round(CompletionModule.getContext()
+                .getResources().getDisplayMetrics().density * px);
     }
 
 }

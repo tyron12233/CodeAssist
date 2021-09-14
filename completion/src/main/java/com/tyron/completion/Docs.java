@@ -1,4 +1,4 @@
-package com.tyron.code;
+package com.tyron.completion;
 
 import com.tyron.completion.SourceFileManager;
 import com.tyron.common.util.Decompress;
@@ -57,14 +57,14 @@ public class Docs {
     // we could let the user download it later.
     private static File findAndroidSources() throws IOException {
         File sourcePath = new File(
-                ApplicationLoader.applicationContext.getFilesDir(),
+                CompletionModule.getContext().getFilesDir(),
                 "docs/android-sources.jar"
         );
         if (!sourcePath.exists()) {
             if (!sourcePath.getParentFile().mkdirs()) {
                 throw new IOException("Couldn't create directory for android sources");
             }
-            Decompress.unzipFromAssets(ApplicationLoader.applicationContext,
+            Decompress.unzipFromAssets(CompletionModule.getContext(),
                     "android-sources.zip", sourcePath.getParent());
         }
 

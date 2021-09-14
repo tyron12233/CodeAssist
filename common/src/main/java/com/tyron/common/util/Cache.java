@@ -1,4 +1,4 @@
-package com.tyron.code.util;
+package com.tyron.common.util;
 
 import java.io.IOException;
 import java.nio.file.Files;

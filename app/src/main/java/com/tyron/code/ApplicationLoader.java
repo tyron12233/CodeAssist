@@ -6,6 +6,7 @@ import android.os.Looper;
 import android.widget.Toast;
 
 import com.tyron.build.BuildModule;
+import com.tyron.completion.CompletionModule;
 
 public class ApplicationLoader extends Application {
     
@@ -17,6 +18,7 @@ public class ApplicationLoader extends Application {
         super.onCreate();
         
         applicationContext = this;
+        CompletionModule.initialize(applicationContext);
         BuildModule.initialize(applicationContext);
     }
     

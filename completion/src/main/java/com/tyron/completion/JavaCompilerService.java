@@ -14,7 +14,6 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.tyron.build.model.SourceFileObject;
-import com.tyron.code.Docs;
 
 import java.util.Map;
 import java.util.HashMap;
@@ -22,7 +21,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.tyron.build.parser.FileManager;
-import com.tyron.code.util.Cache;
+import com.tyron.common.util.Cache;
 import com.tyron.common.util.StringSearch;
 
 import android.annotation.SuppressLint;

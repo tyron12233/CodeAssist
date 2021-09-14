@@ -8,12 +8,12 @@ public abstract class Detector {
 
     public interface JavaScanner {
 
-        JavaVoidVisitor getVisitor();
+        JavaVoidVisitor getVisitor(JavaContext context);
 
         List<Class<? extends Tree>> getApplicableTypes();
     }
 
-    public JavaVoidVisitor getVisitor() {
+    public JavaVoidVisitor getVisitor(JavaContext context) {
         return null;
     }
 

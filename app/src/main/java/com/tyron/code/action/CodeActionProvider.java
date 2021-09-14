@@ -2,11 +2,17 @@ package com.tyron.code.action;
 
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.tyron.build.parser.FileManager;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.CompilerProvider;
 import com.tyron.completion.FindTypeDeclarationAt;
 import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;
+import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -14,6 +20,13 @@ import com.tyron.code.rewrite.AddImport;
 import com.tyron.code.rewrite.ImplementAbstractMethods;
 import com.tyron.code.rewrite.OverrideInheritedMethod;
 import com.tyron.code.rewrite.Rewrite;
+import com.tyron.lint.api.Context;
+import com.tyron.lint.api.Issue;
+import com.tyron.lint.api.Lint;
+import com.tyron.lint.api.Location;
+import com.tyron.lint.api.Severity;
+import com.tyron.lint.api.TextFormat;
+import com.tyron.lint.client.LintClient;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
@@ -58,7 +71,13 @@ public class CodeActionProvider {
     public List<CodeActionList> codeActionsForCursor(Path file, long cursor) {
 
         if (true) {
-            Lint lint;
+            Lint lint = new Lint((JavaCompilerService) mCompiler, FileManager.getInstance().getCurrentProject(), new LintClient() {
+                @Override
+                public void report(@NonNull Context context, @NonNull Issue issue, @NonNull Severity severity, @Nullable Location location, @NonNull String message, @NonNull TextFormat format) {
+                    ApplicationLoader.showToast(severity.getName() + ": " + issue.getExplanation(format));
+                }
+            });
+            lint.scanFile(file.toFile());
             return Collections.emptyList();
         }
         List<CodeActionList> codeActionList = new ArrayList<>();

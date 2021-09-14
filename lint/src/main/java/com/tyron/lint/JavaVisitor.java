@@ -1,5 +1,7 @@
 package com.tyron.lint;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 
 import com.tyron.completion.CompileTask;
@@ -15,6 +17,7 @@ import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.TreeVisitor;
+import org.openjdk.tools.javac.tree.JCTree;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,11 +44,7 @@ public class JavaVisitor {
             List<Class<? extends Tree>> treeTypes = detector.getApplicableTypes();
             if (treeTypes != null) {
                 for (Class<? extends Tree> tree : treeTypes) {
-                    List<VisitingDetector> list = mTreeTypeDetectors.get(tree);
-                    if (list == null) {
-                        list = new ArrayList<>(SAME_TYPE_COUNT);
-                        mTreeTypeDetectors.put(tree, list);
-                    }
+                    List<VisitingDetector> list = mTreeTypeDetectors.computeIfAbsent(tree, k -> new ArrayList<>(SAME_TYPE_COUNT));
                     list.add(v);
                 }
             }
@@ -105,7 +104,7 @@ public class JavaVisitor {
         @NonNull
         JavaVoidVisitor getVisitor() {
             if (mVisitor == null) {
-                mVisitor = mDetector.getVisitor();
+                mVisitor = mDetector.getVisitor(mContext);
             }
             return mVisitor;
         }
