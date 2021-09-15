@@ -660,7 +660,7 @@ public class MainFragment extends Fragment {
 
         @Override
         public long getItemId(int position) {
-            if (position > data.size()) {
+            if (data.isEmpty() || position > data.size()) {
                 return -1;
             }
             return data.get(position).getAbsolutePath().hashCode();
