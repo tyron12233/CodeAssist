@@ -5,11 +5,15 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
+import com.tyron.code.lint.DefaultLintClient;
+import com.tyron.code.lint.LintIssue;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.builder.parser.FileManager;
+import com.tyron.lint.api.DefaultPosition;
+import com.tyron.lint.api.Severity;
 
 import io.github.rosemoe.editor.struct.Span;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
@@ -38,15 +42,19 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
     private final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
     private final CodeEditor mEditor;
+    private final DefaultLintClient mClient;
 
     private final SharedPreferences mPreferences;
 
     public JavaAnalyzer(CodeEditor editor) {
         mEditor = editor;
         mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
+        mClient = new DefaultLintClient(FileManager.getInstance().getCurrentProject());
     }
     @Override
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
+        mClient.scan(mEditor.getCurrentFile());
+
         StringBuilder text = content instanceof StringBuilder ? (StringBuilder) content : new StringBuilder(content);
         JavaTextTokenizer tokenizer = new JavaTextTokenizer(text);
         tokenizer.setCalculateLineColumn(false);
@@ -64,7 +72,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
         // do not compile the file if it not yet closed as it will cause issues when
         // compiling multiple files at the same time
-        if (mPreferences.getBoolean("code_editor_error_highlight", true) && service.cachedCompile.closed) {
+        if (mPreferences.getBoolean("code_editor_error_highlight", true) && service.isReady()) {
             FileManager.writeFile(mEditor.getCurrentFile(), mEditor.getText().toString());
             try (CompileTask task = service.compile(
                     List.of(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
@@ -88,6 +96,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             int thisIndex = tokenizer.getIndex();
             int thisLength = tokenizer.getTokenLength();
 
+            Span currentSpan = null;
             switch (token) {
                 case WHITESPACE:
                 case NEWLINE:
@@ -100,7 +109,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
                     //The previous so this will be the annotation's type name
                     if (previous == Tokens.AT) {
-                        colors.addIfNeeded(line, column, EditorColorScheme.ANNOTATION);
+                        currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.ANNOTATION);
                         break;
                     }
                     //Here we have to get next token to see if it is function
@@ -109,7 +118,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     Tokens next = tokenizer.directNextToken();
                     //The next is LPAREN,so this is function name or type name
                     if (next == Tokens.LPAREN) {
-                        colors.addIfNeeded(line, column, EditorColorScheme.FUNCTION_NAME);
+                        currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.FUNCTION_NAME);
                         tokenizer.pushBack(tokenizer.getTokenLength());
                         break;
                     }
@@ -117,13 +126,13 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     tokenizer.pushBack(tokenizer.getTokenLength());
                     //This is a class definition
 
-                    colors.addIfNeeded(line, column, EditorColorScheme.TEXT_NORMAL);
+                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.TEXT_NORMAL);
                     break;
                 case CHARACTER_LITERAL:
                 case STRING:
                 case FLOATING_POINT_LITERAL:
                 case INTEGER_LITERAL:
-                    colors.addIfNeeded(line, column, EditorColorScheme.LITERAL);
+                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.LITERAL);
                     break;
                 case INT:
                 case LONG:
@@ -134,7 +143,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 case DOUBLE:
                 case SHORT:
                 case VOID:
-                    colors.addIfNeeded(line, column, EditorColorScheme.KEYWORD);
+                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.KEYWORD);
                     break;
                 case ABSTRACT:
                 case ASSERT:
@@ -180,10 +189,10 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 case TRUE:
                 case FALSE:
                 case NULL:
-                    colors.addIfNeeded(line, column, EditorColorScheme.KEYWORD);
+                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.KEYWORD);
                     break;
                 case LBRACE: {
-                    colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
+                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
                     if (stack.isEmpty()) {
                         if (currSwitch > maxSwitch) {
                             maxSwitch = currSwitch;
@@ -198,7 +207,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     break;
                 }
                 case RBRACE: {
-                    colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
+                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
                     if (!stack.isEmpty()) {
                         BlockLine block = stack.pop();
                         block.endLine = line;
@@ -211,23 +220,38 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
                 case LINE_COMMENT:
                 case LONG_COMMENT:
-                    colors.addIfNeeded(line, column, EditorColorScheme.COMMENT);
+                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.COMMENT);
                     break;
                 default:
                     if (token == Tokens.LBRACK || (token == Tokens.RBRACK && previous == Tokens.LBRACK)) {
-                        colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
+                        currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
                         break;
                     }
-                    colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
+                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
             }
 
             for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics) {
                 if (diagnostic.getStartPosition() <= thisIndex && thisIndex <= diagnostic.getEndPosition()) {
-                    Span span = Span.obtain(column, EditorColorScheme.COMMENT);
-                    span.setUnderlineColor(diagnostic.getKind() == Diagnostic.Kind.ERROR ? 0xffFF0000 : 0xFFffff00);
-                    colors.add(line, span);
+                    if (currentSpan == null) {
+                        currentSpan = Span.obtain(column, EditorColorScheme.TEXT_NORMAL);
+                        colors.addIfNeeded(line, currentSpan);
+                    }
+                    currentSpan.setUnderlineColor(diagnostic.getKind() == Diagnostic.Kind.ERROR ? 0xffFF0000 : 0xFFffff00);
+                }
+            }
 
-                    Log.d(diagnostic.getKind().toString(), diagnostic.getMessage(Locale.getDefault()));
+            for (LintIssue issue : mClient.getReportedIssues()) {
+                if (issue.getLocation().getStart() == null || issue.getLocation().getEnd() == null) {
+                    continue;
+                }
+                DefaultPosition startPos = (DefaultPosition) issue.getLocation().getStart();
+                DefaultPosition endPos = (DefaultPosition) issue.getLocation().getEnd();
+                if (currentSpan == null) {
+                    currentSpan = Span.obtain(column, EditorColorScheme.TEXT_NORMAL);
+                    colors.addIfNeeded(line, currentSpan);
+                }
+                if (startPos.getOffset() <= thisIndex && thisIndex < endPos.getOffset()) {
+                    currentSpan.setUnderlineColor(issue.getSeverity() == Severity.ERROR ? 0xffFF0000 : 0xFFFFFF00);
                 }
             }
 

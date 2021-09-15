@@ -371,6 +371,9 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
     public boolean isReady() {
+        if (cachedCompile == null) {
+            return true;
+        }
         return cachedCompile.closed;
     }
 
