@@ -11,6 +11,7 @@ import com.tyron.builder.parser.FileManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.completion.provider.CompletionEngine;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
@@ -104,6 +105,9 @@ public class XMLAnalyzer implements CodeAnalyzer {
 				boolean isResource = ProjectUtils.isResourceXMLFile(mEditor.getCurrentFile());
 
 				if (isResource) {
+					if (CompletionEngine.getInstance().isIndexing()) {
+						return;
+					}
 					Project project = FileManager.getInstance().getCurrentProject();
 					if (project != null) {
 						Task task = new IncrementalAapt2Task();
