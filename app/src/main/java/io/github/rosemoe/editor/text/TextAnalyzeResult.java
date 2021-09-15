@@ -51,11 +51,20 @@ public class TextAnalyzeResult {
      * @param column   Column
      * @param colorId  Type
      */
-    public void addIfNeeded(int spanLine, int column, int colorId) {
+    public Span addIfNeeded(int spanLine, int column, int colorId) {
         if (mLast != null && mLast.colorId == colorId) {
+            return mLast;
+        }
+        Span span = Span.obtain(column, colorId);
+        add(spanLine, span);
+        return span;
+    }
+
+    public void addIfNeeded(int line, Span span) {
+        if (mLast != null && mLast.colorId == span.colorId) {
             return;
         }
-        add(spanLine, Span.obtain(column, colorId));
+        add(line, span);
     }
 
     /**
