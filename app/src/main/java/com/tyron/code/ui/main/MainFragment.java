@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -553,6 +554,10 @@ public class MainFragment extends Fragment {
                     File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
                     requireActivity().runOnUiThread(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()));
                 }
+
+                if (getActivity() != null) {
+                    requireActivity().unbindService(this);
+                }
             }));
             mBinder.getCompilerService().compile();
         }
@@ -577,7 +582,7 @@ public class MainFragment extends Fragment {
 
         requireActivity().startService(new Intent(requireContext(), CompilerService.class));
         requireActivity().bindService(new Intent(requireContext(), CompilerService.class),
-                mServiceConnection, Context.BIND_AUTO_CREATE);
+                mServiceConnection, Context.BIND_IMPORTANT);
     }
 
 
