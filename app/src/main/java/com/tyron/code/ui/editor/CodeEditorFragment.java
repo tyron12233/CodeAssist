@@ -180,7 +180,6 @@ public class CodeEditorFragment extends Fragment {
                 int cursorStart = mEditor.getCursor().getLeft();
                 int cursorEnd = mEditor.getCursor().getRight();
 
-                Log.d(null, "diagnostics size: " + ((JavaAnalyzer) mLanguage.getAnalyzer()).getDiagnostics().size());
                 for (DiagnosticWrapper wrapper : ((JavaAnalyzer) mLanguage.getAnalyzer()).getDiagnostics()) {
                     if (wrapper.getStartPosition() <= cursorStart && cursorEnd < wrapper.getEndPosition()) {
                         ApplicationLoader.showToast(((LintIssue) wrapper.getExtra()).getIssue().getExplanation(TextFormat.RAW));

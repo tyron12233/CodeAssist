@@ -30,7 +30,7 @@ public class FindMethodDeclarationAt extends TreeScanner<MethodTree, Long> {
         }
         
         if (mPos.getStartPosition(mCompilationUnit, methodTree) <= find && find < mPos.getEndPosition(mCompilationUnit, methodTree)) {
-            return smaller;
+            return methodTree;
         }
 
         return null;

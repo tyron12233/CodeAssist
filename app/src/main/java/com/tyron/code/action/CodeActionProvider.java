@@ -146,10 +146,7 @@ public class CodeActionProvider {
         if (isInMethod(task, cursor)) {
             return Collections.emptyMap();
         }
-        MethodTree methodTree = new FindMethodDeclarationAt(task.task).scan(task.root(), cursor);
-        if (methodTree != null) {
-            return Collections.emptyMap();
-        }
+
         TreeMap<String, Rewrite> actions = new TreeMap<>();
         Trees trees = Trees.instance(task.task);
         ClassTree classTree = new FindTypeDeclarationAt(task.task).scan(task.root(), cursor);
