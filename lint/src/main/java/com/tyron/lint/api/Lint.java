@@ -1,11 +1,14 @@
 package com.tyron.lint.api;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.builder.model.Project;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.lint.JavaVisitor;
+import com.tyron.lint.checks.CallSuperDetector;
 import com.tyron.lint.checks.JavaPerformanceDetector;
 import com.tyron.lint.checks.SharedPrefsDetector;
 import com.tyron.lint.client.Configuration;
@@ -14,6 +17,8 @@ import com.tyron.lint.client.LintClient;
 import com.tyron.lint.client.LintDriver;
 
 import java.io.File;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -32,16 +37,19 @@ public class Lint {
 
         registerDetector(new JavaPerformanceDetector());
         registerDetector(new SharedPrefsDetector());
+        registerDetector(new CallSuperDetector());
     }
 
     public void scanFile(File file) {
+        Instant start = Instant.now();
         LintDriver driver = new LintDriver(new IssueRegistry() {
             @NonNull
             @Override
             public List<Issue> getIssues() {
                 return Arrays.asList(
                         JavaPerformanceDetector.PAINT_ALLOC,
-                        SharedPrefsDetector.ISSUE
+                        SharedPrefsDetector.ISSUE,
+                        CallSuperDetector.ISSUE
                 );
             }
         }, mClient);
@@ -58,6 +66,8 @@ public class Lint {
         });
         JavaVisitor visitor = new JavaVisitor(mCompiler, mDetectors);
         visitor.visitFile(context);
+
+        Log.d("Lint", "Scanning took " + Duration.between(start, Instant.now()).toMillis() + " ms");
     }
 
     public void registerDetector(Detector detector) {

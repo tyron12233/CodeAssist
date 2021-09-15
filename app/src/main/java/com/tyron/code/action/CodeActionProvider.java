@@ -74,7 +74,7 @@ public class CodeActionProvider {
             Lint lint = new Lint((JavaCompilerService) mCompiler, FileManager.getInstance().getCurrentProject(), new LintClient() {
                 @Override
                 public void report(@NonNull Context context, @NonNull Issue issue, @NonNull Severity severity, @Nullable Location location, @NonNull String message, @NonNull TextFormat format) {
-                    ApplicationLoader.showToast(severity.getName() + ": " + issue.getExplanation(format));
+                    ApplicationLoader.showToast(severity.getName() + ": " + issue.getBriefDescription(format));
                 }
             });
             lint.scanFile(file.toFile());

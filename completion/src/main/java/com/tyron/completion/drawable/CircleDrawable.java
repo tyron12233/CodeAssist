@@ -21,8 +21,8 @@ public class CircleDrawable extends Drawable {
 		LocalVariable("V", 0xffcc7832);
         
         
-        private int color;
-        private String prefix;
+        private final int color;
+        private final String prefix;
         
         Kind(String prefix, int color) {
             this.prefix = prefix;
@@ -38,10 +38,10 @@ public class CircleDrawable extends Drawable {
         }
     }
     
-    private Paint mPaint;
-    private Paint mTextPaint;
+    private final Paint mPaint;
+    private final Paint mTextPaint;
     
-    private Kind mKind;
+    private final Kind mKind;
     
     public CircleDrawable(Kind kind) {
         mKind = kind;
