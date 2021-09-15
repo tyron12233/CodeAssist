@@ -182,7 +182,13 @@ public class CodeEditorFragment extends Fragment {
 
                 for (DiagnosticWrapper wrapper : ((JavaAnalyzer) mLanguage.getAnalyzer()).getDiagnostics()) {
                     if (wrapper.getStartPosition() <= cursorStart && cursorEnd < wrapper.getEndPosition()) {
-                        ApplicationLoader.showToast(((LintIssue) wrapper.getExtra()).getIssue().getExplanation(TextFormat.RAW));
+                        LintIssue issue = (LintIssue) wrapper.getExtra();
+                        new MaterialAlertDialogBuilder(requireContext())
+                                .setTitle(issue.getIssue().getId())
+                                .setMessage("Severity: " + issue.getSeverity().getDescription() + "\n" +
+                                        "" + issue.getIssue().getExplanation(TextFormat.TEXT))
+                                .setPositiveButton("OK", null)
+                                .show();
                     }
                 }
                 final Path current = mEditor.getCurrentFile().toPath();
