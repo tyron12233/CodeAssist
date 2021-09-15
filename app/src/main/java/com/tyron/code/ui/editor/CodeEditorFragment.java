@@ -30,7 +30,11 @@ import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.main.MainViewModel;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -119,7 +123,14 @@ public class CodeEditorFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
         
         if (mCurrentFile.exists()) {
-           mEditor.setText(FileManager.readFile(mCurrentFile));
+           String contents = "";
+
+            try {
+                contents = FileUtils.readFileToString(mCurrentFile, Charset.defaultCharset());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            mEditor.setText(contents);
         }
 
         mEditor.setEventListener(new EditorEventListener() {
@@ -219,6 +230,12 @@ public class CodeEditorFragment extends Fragment {
     public void format() {
         if (mEditor != null) {
             mEditor.formatCodeAsync();
+        }
+    }
+
+    public void analyze() {
+        if (mEditor != null) {
+            mEditor.analyze();
         }
     }
 }
