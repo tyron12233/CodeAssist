@@ -18,7 +18,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.ViewPager;
 
 import com.google.android.material.tabs.TabLayout;
-import com.tyron.build.log.LogViewModel;
+import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;

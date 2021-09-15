@@ -2,7 +2,7 @@ package com.tyron.completion;
 
 import android.util.Log;
 
-import com.tyron.build.model.SourceFileObject;
+import com.tyron.builder.model.SourceFileObject;
 
 import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.ClassTree;

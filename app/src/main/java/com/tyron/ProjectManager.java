@@ -1,9 +1,9 @@
 package com.tyron;
 
-import com.tyron.build.log.LogViewModel;
-import com.tyron.build.model.Project;
+import com.tyron.builder.log.LogViewModel;
+import com.tyron.builder.model.Project;
 import com.tyron.completion.provider.CompletionEngine;
-import com.tyron.build.parser.FileManager;
+import com.tyron.builder.parser.FileManager;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.resolver.DependencyDownloader;

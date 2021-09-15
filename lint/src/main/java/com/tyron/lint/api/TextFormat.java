@@ -2,8 +2,8 @@ package com.tyron.lint.api;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.build.util.SdkUtils;
-import com.tyron.build.util.XmlUtils;
+import com.tyron.builder.util.SdkUtils;
+import com.tyron.builder.util.XmlUtils;
 
 
 /**

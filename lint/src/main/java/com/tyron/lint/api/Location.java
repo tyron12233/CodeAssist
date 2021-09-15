@@ -3,8 +3,7 @@ package com.tyron.lint.api;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.build.compiler.incremental.resource.ResourceFile;
-import com.tyron.build.compiler.manifest.blame.SourcePosition;
+import com.tyron.builder.compiler.manifest.blame.SourcePosition;
 import com.tyron.completion.model.Position;
 
 import java.io.File;

@@ -1,13 +1,11 @@
 package com.tyron.lint.api;
 
-import static com.tyron.build.compiler.manifest.SdkConstants.DOT_GRADLE;
-
-import android.util.Log;
+import static com.tyron.builder.compiler.manifest.SdkConstants.DOT_GRADLE;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.build.model.Project;
+import com.tyron.builder.model.Project;
 import com.tyron.lint.client.Configuration;
 import com.tyron.lint.client.LintDriver;
 

@@ -6,7 +6,7 @@ import com.tyron.completion.CompileTask;
 import com.tyron.completion.CompilerProvider;
 import com.tyron.completion.CustomActions;
 import com.tyron.completion.ParseTask;
-import com.tyron.build.model.SourceFileObject;
+import com.tyron.builder.model.SourceFileObject;
 import com.tyron.common.util.StringSearch;
 import com.tyron.completion.drawable.CircleDrawable;
 import com.tyron.completion.model.CompletionItem;

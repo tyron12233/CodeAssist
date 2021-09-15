@@ -3,7 +3,7 @@ package com.tyron.lint.api;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.build.model.Project;
+import com.tyron.builder.model.Project;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.lint.JavaVisitor;
 import com.tyron.lint.checks.JavaPerformanceDetector;

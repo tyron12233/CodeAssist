@@ -7,10 +7,10 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.build.model.Project;
+import com.tyron.builder.model.Project;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
-import com.tyron.build.parser.FileManager;
+import com.tyron.builder.parser.FileManager;
 import com.tyron.completion.model.CompletionList;
 
 import java.io.File;

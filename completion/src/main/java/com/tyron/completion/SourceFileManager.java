@@ -4,8 +4,8 @@ import android.text.TextUtils;
 
 import org.openjdk.tools.javac.api.JavacTool;
 
-import com.tyron.build.model.SourceFileObject;
-import com.tyron.build.parser.FileManager;
+import com.tyron.builder.model.SourceFileObject;
+import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.StringSearch;
 
 

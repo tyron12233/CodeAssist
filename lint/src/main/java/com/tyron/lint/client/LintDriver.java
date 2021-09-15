@@ -1,13 +1,11 @@
 package com.tyron.lint.client;
 
-import static com.tyron.build.compiler.manifest.SdkConstants.SUPPRESS_ALL;
-
-import android.util.Log;
+import static com.tyron.builder.compiler.manifest.SdkConstants.SUPPRESS_ALL;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.build.model.Project;
+import com.tyron.builder.model.Project;
 import com.tyron.lint.api.Context;
 import com.tyron.lint.api.Detector;
 import com.tyron.lint.api.Issue;
@@ -18,7 +16,6 @@ import com.tyron.lint.api.Severity;
 import com.tyron.lint.api.TextFormat;
 
 import org.openjdk.source.tree.AnnotationTree;
-import org.openjdk.source.tree.ArrayTypeTree;
 import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.LiteralTree;
@@ -26,7 +23,6 @@ import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.ModifiersTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
-import org.openjdk.tools.javac.tree.JCTree;
 
 import java.util.EnumSet;
 import java.util.List;

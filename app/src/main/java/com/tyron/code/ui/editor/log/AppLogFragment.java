@@ -19,8 +19,8 @@ import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
-import com.tyron.build.log.LogViewModel;
-import com.tyron.build.model.DiagnosticWrapper;
+import com.tyron.builder.log.LogViewModel;
+import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.R;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;

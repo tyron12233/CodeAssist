@@ -13,12 +13,12 @@ import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
-import com.tyron.build.log.ILogger;
-import com.tyron.build.model.DiagnosticWrapper;
-import com.tyron.build.model.Project;
+import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.model.Project;
 import com.tyron.code.R;
-import com.tyron.build.compiler.ApkBuilder;
-import com.tyron.build.parser.FileManager;
+import com.tyron.builder.compiler.ApkBuilder;
+import com.tyron.builder.parser.FileManager;
 import com.tyron.code.util.ApkInstaller;
 
 import java.io.File;

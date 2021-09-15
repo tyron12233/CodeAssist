@@ -1,7 +1,7 @@
 package com.tyron.code.ui.editor.language.xml;
-import com.tyron.build.compiler.manifest.xml.XmlFormatPreferences;
-import com.tyron.build.compiler.manifest.xml.XmlFormatStyle;
-import com.tyron.build.compiler.manifest.xml.XmlPrettyPrinter;
+import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
+import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
+import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 
 import io.github.rosemoe.editor.interfaces.EditorLanguage;
 import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;

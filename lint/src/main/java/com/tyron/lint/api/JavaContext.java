@@ -1,17 +1,13 @@
 package com.tyron.lint.api;
 
-import android.util.Log;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.build.compiler.manifest.blame.SourcePosition;
-import com.tyron.build.model.Project;
+import com.tyron.builder.model.Project;
 import com.tyron.completion.CompileTask;
 import com.tyron.lint.client.Configuration;
 import com.tyron.lint.client.LintDriver;
 
-import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.IdentifierTree;
@@ -20,7 +16,6 @@ import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.tree.JCTree;
 
 import java.io.File;
 

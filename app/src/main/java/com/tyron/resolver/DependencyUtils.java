@@ -1,6 +1,6 @@
 package com.tyron.resolver;
 
-import com.tyron.build.parser.FileManager;
+import com.tyron.builder.parser.FileManager;
 import com.tyron.resolver.model.Dependency;
 
 import java.io.File;

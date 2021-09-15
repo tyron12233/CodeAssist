@@ -5,7 +5,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.widget.Toast;
 
-import com.tyron.build.BuildModule;
+import com.tyron.builder.BuildModule;
 import com.tyron.completion.CompletionModule;
 
 public class ApplicationLoader extends Application {
