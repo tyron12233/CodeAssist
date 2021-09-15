@@ -1,5 +1,7 @@
 package com.tyron.code.lint;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -41,6 +43,7 @@ public class DefaultLintClient extends LintClient {
     @Override
     public void report(@NonNull Context context, @NonNull Issue issue, @NonNull Severity severity, @Nullable Location location, @NonNull String message, @NonNull TextFormat format) {
         if (location != null) {
+            Log.d("default lint client", "adding issue: " + issue.getId());
             mIssues.add(new LintIssue(issue, severity, location));
         }
     }

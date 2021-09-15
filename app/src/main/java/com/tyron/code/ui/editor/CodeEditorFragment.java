@@ -2,6 +2,7 @@ package com.tyron.code.ui.editor;
 
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,8 +17,12 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.action.CodeActionProvider;
+import com.tyron.code.lint.LintIssue;
+import com.tyron.code.ui.editor.language.java.JavaAnalyzer;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;
@@ -29,6 +34,7 @@ import com.tyron.code.ui.editor.language.java.JavaLanguage;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.main.MainViewModel;
+import com.tyron.lint.api.TextFormat;
 
 import org.apache.commons.io.FileUtils;
 
@@ -156,12 +162,12 @@ public class CodeEditorFragment extends Fragment {
 
             @Override
             public void afterDelete(CodeEditor editor, CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence deletedContent) {
-
+                FileManager.writeFile(mCurrentFile, String.valueOf(content));
             }
 
             @Override
             public void afterInsert(CodeEditor editor, CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence insertedContent) {
-
+                FileManager.writeFile(mCurrentFile, String.valueOf(content));
             }
 
             @Override
@@ -171,11 +177,21 @@ public class CodeEditorFragment extends Fragment {
         });
         mEditor.setOnLongPressListener((start, end, event) -> {
             if (mLanguage instanceof JavaLanguage) {
+                int cursorStart = mEditor.getCursor().getLeft();
+                int cursorEnd = mEditor.getCursor().getRight();
+
+                Log.d(null, "diagnostics size: " + ((JavaAnalyzer) mLanguage.getAnalyzer()).getDiagnostics().size());
+                for (DiagnosticWrapper wrapper : ((JavaAnalyzer) mLanguage.getAnalyzer()).getDiagnostics()) {
+                    if (wrapper.getStartPosition() <= cursorStart && cursorEnd < wrapper.getEndPosition()) {
+                        ApplicationLoader.showToast(((LintIssue) wrapper.getExtra()).getIssue().getExplanation(TextFormat.RAW));
+                    }
+                }
                 final Path current = mEditor.getCurrentFile().toPath();
                 List<CodeActionList> actions = new CodeActionProvider(CompletionEngine.getInstance().getCompiler())
                         .codeActionsForCursor(current, mEditor.getCursor().getLeft());
 
                 mEditor.setOnCreateContextMenuListener((menu, view1, info) -> {
+
                     for (final CodeActionList action : actions) {
                         if (action.getActions().isEmpty()) {
                             continue;

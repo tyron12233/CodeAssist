@@ -105,7 +105,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 				boolean isResource = ProjectUtils.isResourceXMLFile(mEditor.getCurrentFile());
 
 				if (isResource) {
-					if (CompletionEngine.getInstance().isIndexing()) {
+					if (CompletionEngine.isIndexing()) {
 						return;
 					}
 					Project project = FileManager.getInstance().getCurrentProject();

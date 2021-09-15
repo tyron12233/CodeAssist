@@ -31,7 +31,7 @@ public class CompletionEngine {
 	}
 	
 	private JavaCompilerService mProvider;
-	private boolean mIndexing;
+	private static boolean mIndexing;
 	
 	private CompletionEngine() {
 		getCompiler();
@@ -54,11 +54,11 @@ public class CompletionEngine {
 	/**
 	 * Disable subsequent completions
 	 */
-	public void setIndexing(boolean val) {
+	public static void setIndexing(boolean val) {
 		mIndexing = val;
 	}
 
-	public boolean isIndexing() {
+	public static boolean isIndexing() {
 		return mIndexing;
 	}
 
@@ -69,6 +69,7 @@ public class CompletionEngine {
 		setIndexing(true);
 		project.clear();
 
+		project.getLibraries();
 		JavaCompilerService compiler = getCompiler();
 		Set<File> filesToIndex = new HashSet<>(project.getJavaFiles().values());
 		filesToIndex.addAll(project.getRJavaFiles().values());
@@ -85,7 +86,7 @@ public class CompletionEngine {
 	}
 
 	@NonNull
-	public synchronized CompletionList complete(File file, long cursor) {
+	public CompletionList complete(File file, long cursor) {
 		// Do not request for completion if we're indexing
 		if (mIndexing) {
 			return CompletionList.EMPTY;

@@ -372,12 +372,11 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
     public boolean isReady() {
-        if (cachedCompile == null) {
-            return true;
-        }
-
         if (CompletionEngine.getInstance().isIndexing()) {
             return false;
+        }
+        if (cachedCompile == null) {
+            return true;
         }
         return cachedCompile.closed;
     }

@@ -58,6 +58,7 @@ import com.tyron.code.ui.settings.SettingsActivity;
 import com.tyron.code.ui.wizard.WizardFragment;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ApkInstaller;
+import com.tyron.completion.provider.CompletionEngine;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -469,6 +470,7 @@ public class MainFragment extends Fragment {
         }
 
         mFilesViewModel.setIndexing(true);
+        CompletionEngine.setIndexing(true);
 
         mProjectManager.openProject(proj, downloadLibs, new ProjectManager.TaskListener() {
             @Override

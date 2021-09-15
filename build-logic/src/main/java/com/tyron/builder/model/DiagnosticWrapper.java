@@ -20,6 +20,9 @@ public class DiagnosticWrapper implements Diagnostic<File> {
     private long columnNumber;
     
     private String message;
+
+    /** Extra information for this diagnostic */
+    private Object mExtra;
     
     public DiagnosticWrapper() {
 
@@ -119,5 +122,13 @@ public class DiagnosticWrapper implements Diagnostic<File> {
 
     public void setColumnNumber(long columnNumber) {
         this.columnNumber = columnNumber;
+    }
+
+    public Object getExtra() {
+        return mExtra;
+    }
+
+    public void setExtra(Object mExtra) {
+        this.mExtra = mExtra;
     }
 }

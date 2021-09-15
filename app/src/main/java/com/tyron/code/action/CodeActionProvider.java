@@ -69,17 +69,6 @@ public class CodeActionProvider {
     }
 
     public List<CodeActionList> codeActionsForCursor(Path file, long cursor) {
-
-        if (true) {
-            Lint lint = new Lint((JavaCompilerService) mCompiler, FileManager.getInstance().getCurrentProject(), new LintClient() {
-                @Override
-                public void report(@NonNull Context context, @NonNull Issue issue, @NonNull Severity severity, @Nullable Location location, @NonNull String message, @NonNull TextFormat format) {
-                    ApplicationLoader.showToast(severity.getName() + ": " + issue.getBriefDescription(format));
-                }
-            });
-            lint.scanFile(file.toFile());
-            return Collections.emptyList();
-        }
         List<CodeActionList> codeActionList = new ArrayList<>();
 
         List<IAction> applicableActions = new ArrayList<>();
@@ -88,15 +77,6 @@ public class CodeActionProvider {
         try (CompileTask task = mCompiler.compile(file)) {
             diagnostic = getDiagnostic(task, cursor);
             overrideMethods.putAll(getOverrideInheritedMethods(task, file, cursor));
-            TreePath currentPath = new FindCurrentPath(task.task).scan(task.root(), cursor);
-            if (currentPath != null) {
-                Log.d(null, "Current path: " + currentPath.getLeaf().getKind().toString());
-                for (IAction action : getActions()) {
-                    if (action.isApplicable(currentPath, task)) {
-                        applicableActions.add(action);
-                    }
-                }
-            }
         }
         if (diagnostic != null) {
             codeActionList.add(getDiagnosticActions(file, diagnostic));
@@ -106,11 +86,6 @@ public class CodeActionProvider {
         overrideAction.setTitle("Override inherited methods");
         overrideAction.setActions(getActionsFromRewrites(overrideMethods));
         codeActionList.add(overrideAction);
-
-
-        for (IAction action : applicableActions) {
-           codeActionList.add(action.get(null));
-        }
 
         return codeActionList;
     }
