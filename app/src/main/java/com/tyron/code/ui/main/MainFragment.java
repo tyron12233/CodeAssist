@@ -180,10 +180,10 @@ public class MainFragment extends Fragment {
         mTabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabUnselected(TabLayout.Tab p1) {
-                CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager()
+                Fragment fragment = getChildFragmentManager()
                         .findFragmentByTag("f" + mAdapter.getItemId(p1.getPosition()));
-                if (fragment != null) {
-                    fragment.save();
+                if (fragment instanceof CodeEditorFragment) {
+                    ((CodeEditorFragment) fragment).save();
                 }
             }
 
@@ -218,10 +218,10 @@ public class MainFragment extends Fragment {
 
             @Override
             public void onTabSelected(TabLayout.Tab p1) {
-                CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager()
+                Fragment fragment = getChildFragmentManager()
                         .findFragmentByTag("f" + mAdapter.getItemId(p1.getPosition()));
-                if (fragment != null) {
-                    fragment.analyze();
+                if (fragment instanceof CodeEditorFragment) {
+                    ((CodeEditorFragment) fragment).analyze();
                 }
             }
         });
@@ -486,15 +486,18 @@ public class MainFragment extends Fragment {
                 }
 
                 requireActivity().runOnUiThread(() -> {
-                    if (mToolbar == null || mProgressBar == null) {
-                        return;
-                    }
                     mFilesViewModel.setIndexing(false);
                     mFilesViewModel.setCurrentState(null);
                     if (!success) {
                         if (mBehavior.getState() != BottomSheetBehavior.STATE_EXPANDED) {
                             mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
                         }
+                    }
+                    int pos = mPager.getCurrentItem();
+                    Fragment fragment = getChildFragmentManager()
+                            .findFragmentByTag("f" + mAdapter.getItemId(pos));
+                    if (fragment instanceof CodeEditorFragment) {
+                        ((CodeEditorFragment) fragment).analyze();
                     }
                 });
             }
