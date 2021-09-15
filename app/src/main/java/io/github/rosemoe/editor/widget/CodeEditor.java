@@ -589,9 +589,9 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         }
         mSpanner = new TextAnalyzer(lang.getAnalyzer());
         mSpanner.setCallback(this);
-        if (mText != null) {
-            mSpanner.analyze(mText);
-        }
+//        if (mText != null) {
+//            mSpanner.analyze(mText);
+//        }
         if (mCompletionWindow != null) {
             mCompletionWindow.hide();
             mCompletionWindow.setProvider(lang.getAutoCompleteProvider());
@@ -3346,6 +3346,12 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         return mText;
     }
 
+    public void analyze() {
+        if (mSpanner != null) {
+            mSpanner.analyze(getText());
+        }
+    }
+
     /**
      * Sets the text to be displayed.
      *
@@ -3378,7 +3384,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
 
         TextAnalyzeResult colors = mSpanner.getResult();
         colors.getSpanMap().clear();
-        mSpanner.analyze(getText());
+        //mSpanner.analyze(getText());
 
         requestLayout();
 
