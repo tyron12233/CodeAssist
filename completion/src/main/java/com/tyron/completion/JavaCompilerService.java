@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.Cache;
 import com.tyron.common.util.StringSearch;
+import com.tyron.completion.provider.CompletionEngine;
 
 import android.annotation.SuppressLint;
 import android.util.Log;
@@ -373,6 +374,10 @@ public class JavaCompilerService implements CompilerProvider {
     public boolean isReady() {
         if (cachedCompile == null) {
             return true;
+        }
+
+        if (CompletionEngine.getInstance().isIndexing()) {
+            return false;
         }
         return cachedCompile.closed;
     }

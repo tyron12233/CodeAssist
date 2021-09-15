@@ -218,7 +218,11 @@ public class MainFragment extends Fragment {
 
             @Override
             public void onTabSelected(TabLayout.Tab p1) {
-
+                CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager()
+                        .findFragmentByTag("f" + mAdapter.getItemId(p1.getPosition()));
+                if (fragment != null) {
+                    fragment.analyze();
+                }
             }
         });
         mTabLayout.setVisibility(View.GONE);
