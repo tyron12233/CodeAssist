@@ -221,9 +221,6 @@ public class CodeActionProvider {
                 case "compiler.err.cant.resolve":
                 case "compiler.err.cant.resolve.location":
                     CharSequence simpleName = diagnostic.getArgs()[1].toString();
-                    if (simpleName.toString().contains(".")) {
-                        simpleName = simpleName.toString().split("\\.")[0];
-                    }
                     TreeMap<String, Rewrite> allImports = new TreeMap<>();
                     Log.d(null, "simple name: " + simpleName);
                     for (String qualifiedName : mCompiler.publicTopLevelTypes()) {

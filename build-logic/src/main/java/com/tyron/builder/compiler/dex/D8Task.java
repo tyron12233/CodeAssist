@@ -33,10 +33,9 @@ public class D8Task extends Task {
 
 	private static final String TAG = D8Task.class.getSimpleName();
 
-	private final DiagnosticsHandler diagnosticsHandler = new DiagnosticHandler();
-
-	private ILogger logViewModel;
-	private Project mProject;
+	protected final DiagnosticsHandler diagnosticsHandler = new DiagnosticHandler();
+	protected ILogger logViewModel;
+	protected Project mProject;
 
 	@Override
 	public String getName() {
@@ -87,7 +86,7 @@ public class D8Task extends Task {
 	 * Ensures that all libraries of the project has been dex-ed
 	 * @throws com.android.tools.r8.CompilationFailedException if the compilation has failed
 	 */
-	private void ensureDexedLibraries() throws com.android.tools.r8.CompilationFailedException {
+	protected void ensureDexedLibraries() throws com.android.tools.r8.CompilationFailedException {
 		Set<File> libraries = mProject.getLibraries();
 
 		Log.d(TAG, "Dexing libraries");
@@ -148,7 +147,7 @@ public class D8Task extends Task {
 		return dexes;
 	}
 
-	private List<Path> getClassFiles(File root) {
+	public static List<Path> getClassFiles(File root) {
 		List<Path> paths = new ArrayList<>();
 
 		File[] files = root.listFiles();
@@ -157,14 +156,16 @@ public class D8Task extends Task {
 				if (file.isDirectory()) {
 					paths.addAll(getClassFiles(file));
 				} else {
-					paths.add(file.toPath());
+					if (file.getName().endsWith(".class")) {
+						paths.add(file.toPath());
+					}
 				}
 			}
 		}
 		return paths;
 	}
 
-	private class DiagnosticHandler implements DiagnosticsHandler {
+	public class DiagnosticHandler implements DiagnosticsHandler {
 		@Override
 		public void error(Diagnostic diagnostic) {
 			logViewModel.error(wrap(diagnostic));
