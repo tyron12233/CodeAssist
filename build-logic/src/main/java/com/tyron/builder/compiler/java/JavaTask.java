@@ -21,8 +21,10 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.DiagnosticListener;
@@ -121,12 +123,12 @@ public class JavaTask extends Task {
         Log.d("JavaCompiler", "Compilation took: " + (System.currentTimeMillis() - startTime) + " ms");
     }
 
-    private List<File> getJavaFiles(File dir) {
-        List<File> javaFiles = new ArrayList<>();
+    public static Set<File> getJavaFiles(File dir) {
+        Set<File> javaFiles = new HashSet<>();
 
         File[] files = dir.listFiles();
         if (files == null) {
-            return Collections.emptyList();
+            return Collections.emptySet();
         }
 
         for (File file : files) {

@@ -8,12 +8,13 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** Cache maps a file + an arbitrary key to a value. When the file is modified, the mapping expires. */
 public class Cache<K, V> {
-    private static class Key<K> {
-        final Path file;
-        final K key;
+    public static class Key<K> {
+        public final Path file;
+        public final K key;
 
         Key(Path file, K key) {
             this.file = file;
@@ -42,7 +43,7 @@ public class Cache<K, V> {
         }
     }
 
-    private final Map<Key, Value> map = new HashMap<>();
+    private final Map<Key<K>, Value> map = new HashMap<>();
 
     public boolean has(Path file, K k) {
         return !needs(file, k);
@@ -65,6 +66,18 @@ public class Cache<K, V> {
         return value.created.isBefore(modified.toInstant());
     }
 
+    @SafeVarargs
+    public final void remove(Path file, K... keys) {
+        for (K k : keys) {
+            Key<K> key = new Key<>(file, k);
+            map.remove(key);
+        }
+    }
+
+    public Set<Key<K>> getKeys() {
+        return map.keySet();
+    }
+
     public void load(Path file, K k, V v) {
         // TODO limit total size of cache
         Key<K> key = new Key<>(file, k);
@@ -77,6 +90,6 @@ public class Cache<K, V> {
         if (!map.containsKey(key)) {
             throw new IllegalArgumentException(k + " is not in map " + map);
         }
-        return map.get(key).value;
+        return (V) map.get(key).value;
     }
 }
