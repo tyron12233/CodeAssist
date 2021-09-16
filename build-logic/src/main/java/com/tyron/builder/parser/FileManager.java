@@ -6,6 +6,7 @@ import androidx.annotation.NonNull;
 
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.model.Project;
+import com.tyron.common.util.Cache;
 import com.tyron.common.util.Decompress;
 import com.tyron.common.util.StringSearch;
 import org.apache.commons.io.FileUtils;
@@ -59,6 +60,14 @@ public class FileManager {
     private final Map<String, File> classFiles = new HashMap<>();
     private final Map<String, File> javaFiles = new HashMap<>();
 
+    /**
+     * Cache of java class files, keys can contain Dex files, Java class files and the values are
+     * the files corresponding to it
+     */
+    private Cache<String, List<File>> classCache = new Cache<>();
+    private Cache<String, List<File>> mDexCache = new Cache<>();
+    private Cache<Void, Void> mSymbolCache = new Cache<>();
+
     public List<File> list(String packageName) {
         List<File> list = new ArrayList<>();
         for (String file : javaFiles.keySet()) {
@@ -67,6 +76,18 @@ public class FileManager {
             }
         }
         return list;
+    }
+
+    public Cache<String, List<File>> getClassCache() {
+        return classCache;
+    }
+
+    public Cache<String, List<File>> getDexCache() {
+        return mDexCache;
+    }
+
+    public Cache<Void, Void> getSymbolCache() {
+        return mSymbolCache;
     }
 
     public void addJavaFile(File javaFile) {
@@ -115,6 +136,11 @@ public class FileManager {
         mCurrentProject = project;
         classFiles.clear();
         javaFiles.clear();
+        if (mCurrentProject != project) {
+            classCache = new Cache<>();
+            mDexCache = new Cache<>();
+            mSymbolCache = new Cache<>();
+        }
         
         try {
             putJar(getAndroidJar());
@@ -187,7 +213,8 @@ public class FileManager {
     public void save(final File file, final String contents) {
         service.submit(() -> writeFile(file, contents));
     }
-    
+
+    @Deprecated
     public static String readFile(File file) {
         createNewFile(file);
 
