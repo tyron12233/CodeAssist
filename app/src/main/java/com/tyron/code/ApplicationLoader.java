@@ -5,6 +5,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.widget.Toast;
 
+import com.developer.crashx.config.CrashConfig;
 import com.tyron.builder.BuildModule;
 import com.tyron.completion.CompletionModule;
 
@@ -20,6 +21,14 @@ public class ApplicationLoader extends Application {
         applicationContext = this;
         CompletionModule.initialize(applicationContext);
         BuildModule.initialize(applicationContext);
+        CrashConfig.Builder.create()
+                .backgroundMode(CrashConfig.BACKGROUND_MODE_SHOW_CUSTOM)
+                .enabled(true)
+                .showErrorDetails(true)
+                .showRestartButton(true)
+                .logErrorOnRestart(true)
+                .trackActivities(true)
+                .apply();
     }
     
     public static void showToast(String message) {
