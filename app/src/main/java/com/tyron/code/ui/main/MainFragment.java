@@ -377,9 +377,6 @@ public class MainFragment extends Fragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (mBinder != null) {
-            requireActivity().unbindService(mServiceConnection);
-        }
     }
 
     @Override
@@ -560,11 +557,13 @@ public class MainFragment extends Fragment {
                     }
                 }
                 if (success && getActivity() != null) {
+                    logger.debug(message);
                     File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
                     requireActivity().runOnUiThread(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()));
                 }
 
                 if (getActivity() != null) {
+                    mBinder = null;
                     requireActivity().unbindService(this);
                 }
             }));

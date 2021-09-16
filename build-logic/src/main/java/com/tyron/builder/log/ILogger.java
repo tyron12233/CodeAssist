@@ -2,6 +2,8 @@ package com.tyron.builder.log;
 
 import com.tyron.builder.model.DiagnosticWrapper;
 
+import org.openjdk.javax.tools.Diagnostic;
+
 public interface ILogger {
 
     public static ILogger wrap(LogViewModel logViewModel) {
@@ -46,11 +48,15 @@ public interface ILogger {
     }
 
     default void warning(String message) {
-        warning(wrap(message));
+        DiagnosticWrapper wrapped = wrap(message);
+        wrapped.setKind(Diagnostic.Kind.WARNING);
+        warning(wrapped);
     }
 
     default void error(String message) {
-       error(wrap(message));
+       DiagnosticWrapper wrapped = wrap(message);
+       wrapped.setKind(Diagnostic.Kind.ERROR);
+       error(wrapped);
     }
 
     default void verbose(String message) {

@@ -1,12 +1,20 @@
 package com.tyron.code;
 
 import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.builder.parser.FileManager;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.util.AndroidUtilities;
+import com.tyron.layoutpreview.PreviewContext;
+import com.tyron.layoutpreview.PreviewLayoutInflater;
+import com.tyron.layoutpreview.PreviewLoader;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.DependencyUtils;
 import com.tyron.resolver.ResolveTask;
@@ -30,6 +38,21 @@ public class MainActivity extends AppCompatActivity {
                     .replace(R.id.fragment_container, new MainFragment(), "main_fragment") //FileManagerFragment.newInstance(new File("/sdcard")))
                     .commit();
         }
+
+//        PreviewLoader loader = new PreviewLoader(this);
+//        findViewById(android.R.id.content)
+//                .postDelayed(() -> {
+//                    loader.addAssetPath(FileManager.getInstance().getCurrentProject().getBuildDirectory() + "/bin/signed.apk");
+//                    PreviewContext context = loader.getPreviewContext();
+//                    context.setTheme(context.getResources().getIdentifier("Theme_MyApplication", "style", "com.tyron.preview"));
+//                    context.setTheme(getTheme());
+//                    int main = context.getResources().getIdentifier("activity_main", "layout", "com.tyron.preview");
+//
+//                    View view = new PreviewLayoutInflater(context).inflate(main, null, false);
+//                    new MaterialAlertDialogBuilder(this)
+//                            .setView(view)
+//                            .show();
+//                }, 700);
     }
 	
 	@Override

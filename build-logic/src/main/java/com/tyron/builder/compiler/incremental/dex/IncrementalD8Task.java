@@ -87,6 +87,11 @@ public class IncrementalD8Task extends Task {
         try {
             ensureDexedLibraries();
 
+            if (mFilesToCompile.isEmpty()) {
+                mLogger.info("Skipping dex compilation, Files are up to date");
+                return;
+            }
+
             D8Command command =D8Command.builder()
                     .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
                     .addProgramFiles(mFilesToCompile)
