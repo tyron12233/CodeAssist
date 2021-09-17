@@ -48,10 +48,10 @@ public class LibraryChecker {
             try {
                 if (lib.getName().endsWith(".jar")) {
                     copyIfNeeded(lib);
-                    files.add(lib.getName().substring(0, lib.getName().lastIndexOf(".")));
+                    files.add(lib.getName().substring(0, lib.getName().lastIndexOf(".")).replace(":", "!!"));
                 } else if (lib.getName().endsWith(".aar")) {
                     copyAarIfNeeded(lib);
-                    files.add(lib.getName().substring(0, lib.getName().lastIndexOf(".")));
+                    files.add(lib.getName().substring(0, lib.getName().lastIndexOf(".")).replace(":", "!!"));
                 }
             } catch (IOException e) {
                 Log.e(TAG, e.getMessage());
@@ -63,7 +63,7 @@ public class LibraryChecker {
         File[] libraries = mLibsDir.listFiles();
         if (libraries != null) {
             for (File library : libraries) {
-                if (!files.contains(library.getName())) {
+                if (!files.contains(library.getName().replace(":", "!!"))) {
                     Log.d(TAG, "Library " + library.getName() + " has been removed.");
                     FileManager.deleteDir(library);
                 }
@@ -74,7 +74,9 @@ public class LibraryChecker {
 
     private void copyIfNeeded(File file) throws IOException {
         String nameNoExt = file.getName().substring(0, file.getName().lastIndexOf("."));
-        File check = new File(mLibsDir, nameNoExt + "/classes.jar");
+        String nameNoSep = nameNoExt.replace(":", "!!");
+
+        File check = new File(mLibsDir, nameNoSep + "/classes.jar");
         if (check.exists()) {
             if (check.length() == file.length()) {
                 return;
@@ -86,24 +88,26 @@ public class LibraryChecker {
             throw new IOException("Unable to access parent file of " + check.getName());
         }
         if (!check.getParentFile().mkdirs()) {
-            throw new IOException("Couldn't create directories for " + nameNoExt);
+            throw new IOException("Couldn't create directories for " + nameNoSep);
         }
         if (!check.createNewFile()) {
-            throw new IOException("Couldn't create the jar file for " + nameNoExt);
+            throw new IOException("Couldn't create the jar file for " + nameNoSep);
         }
         copy(file, check);
     }
 
     private void copyAarIfNeeded(File aar) throws IOException {
         String nameNoExt = aar.getName().substring(0, aar.getName().lastIndexOf("."));
-        File check = new File(mLibsDir, nameNoExt);
+        String nameNoSep = nameNoExt.replace(":", "!!");
+
+        File check = new File(mLibsDir, nameNoSep);
         if (check.exists()) {
             return;
         }
 
         Log.d(TAG, "Copying aar file " + aar.getName());
         if (!check.mkdirs()) {
-            throw new IOException("Couldn't create directories for " + nameNoExt);
+            throw new IOException("Couldn't create directories for " + nameNoSep);
         }
         Decompress.unzip(aar.getAbsolutePath(), check.getAbsolutePath());
     }

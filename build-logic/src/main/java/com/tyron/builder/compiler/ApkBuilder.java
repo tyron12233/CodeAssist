@@ -8,6 +8,7 @@ import com.tyron.builder.compiler.apk.SignTask;
 import com.tyron.builder.compiler.dex.D8Task;
 import com.tyron.builder.compiler.incremental.dex.IncrementalD8Task;
 import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
+import com.tyron.builder.compiler.incremental.kotlin.IncrementalKotlinCompiler;
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.compiler.java.JavaTask;
 import com.tyron.builder.compiler.manifest.ManifestMergeTask;
@@ -87,6 +88,7 @@ public class ApkBuilder {
                 new ManifestMergeTask(),
                 new IncrementalAapt2Task(),
                 new MergeSymbolsTask(),
+                new IncrementalKotlinCompiler(),
                 new IncrementalJavaTask(),
                 new IncrementalD8Task(),
                 new PackageTask(),

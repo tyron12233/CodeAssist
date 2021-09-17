@@ -109,7 +109,7 @@ public class Actions {
      * @param logger logger to log to at INFO level.
      */
     void log(ILogger logger) {
-        logger.verbose(getLogs());
+        logger.debug(getLogs());
     }
 
     /**

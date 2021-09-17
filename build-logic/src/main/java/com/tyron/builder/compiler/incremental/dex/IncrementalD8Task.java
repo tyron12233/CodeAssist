@@ -23,9 +23,7 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -41,6 +39,7 @@ public class IncrementalD8Task extends Task {
     protected final DiagnosticsHandler diagnosticsHandler = new DiagnosticHandler();
     private List<Path> mClassFiles;
     private List<Path> mFilesToCompile;
+
     private Cache<String, List<File>> mDexCache;
     private ILogger mLogger;
     private Project mProject;
@@ -86,13 +85,7 @@ public class IncrementalD8Task extends Task {
     public void run() throws IOException, CompilationFailedException {
         try {
             ensureDexedLibraries();
-
-            if (mFilesToCompile.isEmpty()) {
-                mLogger.info("Skipping dex compilation, Files are up to date");
-                return;
-            }
-
-            D8Command command =D8Command.builder()
+            D8Command command =D8Command.builder(diagnosticsHandler)
                     .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
                     .addProgramFiles(mFilesToCompile)
                     .addLibraryFiles(getLibraryFiles())
@@ -117,18 +110,17 @@ public class IncrementalD8Task extends Task {
         mLogger.debug("Merging dex files");
 
         File output = new File(mProject.getBuildDirectory(), "bin");
-
-        D8Command command = D8Command.builder()
-                .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
-                .addLibraryFiles(getLibraryFiles())
-                .addProgramFiles(getLibraryDexes())
-                .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
-                .setMinApiLevel(mProject.getMinSdk())
-                .setMode(CompilationMode.DEBUG)
-                .setOutput(output.toPath(), OutputMode.DexIndexed)
-                .setIntermediate(true)
-                .build();
-        D8.run(command);
+            D8Command command = D8Command.builder(diagnosticsHandler)
+                    .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                    .addLibraryFiles(getLibraryFiles())
+                    .addProgramFiles(getLibraryDexes())
+                    .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
+                    .setMinApiLevel(mProject.getMinSdk())
+                    .setMode(CompilationMode.DEBUG)
+                    .setOutput(output.toPath(), OutputMode.DexIndexed)
+                    .setIntermediate(true)
+                    .build();
+            D8.run(command);
 
     }
 

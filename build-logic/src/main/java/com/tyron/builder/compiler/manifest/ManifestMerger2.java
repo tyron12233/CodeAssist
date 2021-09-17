@@ -128,7 +128,7 @@ public class ManifestMerger2 {
         // merge in lower priority documents.
         Optional<XmlDocument> xmlDocumentOptional = Optional.absent();
         for (File inputFile : mFlavorsAndBuildTypeFiles) {
-            mLogger.info(String.format("Merging flavors and build manifest %s \n", inputFile.getPath()));
+            mLogger.debug(String.format("Merging flavors and build manifest %s \n", inputFile.getPath()));
             LoadedManifestInfo overlayDocument = load(
                     new ManifestInfo(null, inputFile, XmlDocument.Type.OVERLAY,
                             Optional.of(mainPackageAttribute.get().getValue())),
@@ -184,7 +184,7 @@ public class ManifestMerger2 {
             }
         }
 
-        mLogger.info(String.format("Merging main manifest %s\n", mManifestFile.getPath()));
+        mLogger.debug(String.format("Merging main manifest %s\n", mManifestFile.getPath()));
         xmlDocumentOptional =
                 merge(xmlDocumentOptional, loadedMainManifestInfo, mergingReportBuilder);
 
@@ -204,7 +204,7 @@ public class ManifestMerger2 {
             }
         }
         for (LoadedManifestInfo libraryDocument : loadedLibraryDocuments) {
-            mLogger.verbose("Merging library manifest " + libraryDocument.getLocation());
+            mLogger.debug("Merging library manifest " + libraryDocument.getLocation());
             xmlDocumentOptional = merge(
                     xmlDocumentOptional, libraryDocument, mergingReportBuilder);
             if (!xmlDocumentOptional.isPresent()) {
