@@ -1,9 +1,12 @@
 package com.tyron.code.ui.editor.language;
 
-import com.tyron.code.ui.editor.language.java.JAVA;
-import com.tyron.code.ui.editor.language.xml.XML;
+import com.tyron.code.ui.editor.language.java.Java;
+import com.tyron.code.ui.editor.language.kotlin.Kotlin;
+import com.tyron.code.ui.editor.language.xml.Xml;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -29,11 +32,10 @@ public class LanguageManager {
 	
 	private void initLanguages() {
 		mLanguages.addAll(
-			Set.of(
-				new XML(),
-				new JAVA()
-			)
-		);
+			Arrays.asList(
+				new Xml(),
+				new Java(),
+				new Kotlin()));
 	}
 
 	public boolean supports(File file) {
