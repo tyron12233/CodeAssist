@@ -3,9 +3,11 @@ package com.tyron.code.ui.editor.language.kotlin;
 import android.graphics.Color;
 import android.util.Log;
 
+import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.TokenSource;
 
 import java.util.Stack;
 
@@ -28,6 +30,7 @@ public class KotlinAnalyzer implements CodeAnalyzer {
             int maxSwitch = 1, currSwitch = 0;
             int lastLine = 0;
             int line, column;
+            Token previous = UnknownToken.INSTANCE;
             Token token = null;
 
             while (delegate.shouldAnalyze()) {
@@ -80,11 +83,21 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                     case KotlinLexer.INFIX:
                     case KotlinLexer.AS:
                     case KotlinLexer.INLINE:
+                    case KotlinLexer.SUPER:
+                    case KotlinLexer.GET:
+                    case KotlinLexer.THIS:
+                    case KotlinLexer.INIT:
+                    case KotlinLexer.OBJECT:
                         colors.addIfNeeded(line, column, EditorColorScheme.KEYWORD);
                         break;
                     case KotlinLexer.Identifier:
                         colors.addIfNeeded(line, column, EditorColorScheme.IDENTIFIER_NAME);
                         break;
+                    case KotlinLexer.QUOTE_CLOSE:
+                    case KotlinLexer.QUOTE_OPEN:
+                    case KotlinLexer.LineStrText:
+                    case KotlinLexer.LineStrExprStart:
+                    case KotlinLexer.MultiLineStrText:
                     case KotlinLexer.MultiLineString:
                     case KotlinLexer.LineString:
                     case KotlinLexer.StringExpression:
@@ -107,7 +120,8 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                         }
                         colors.addIfNeeded(line, span);
                         break;
-                    case KotlinLexer.ANNOTATION:
+                    case KotlinLexer.AT:
+                    case KotlinLexer.LabelReference:
                         colors.addIfNeeded(line, column, EditorColorScheme.ANNOTATION);
                         break;
                     case KotlinLexer.LCURL:
@@ -135,7 +149,11 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                         break;
                     default:
                         colors.addIfNeeded(line, column, EditorColorScheme.TEXT_NORMAL);
+                        break;
+                }
 
+                if (token.getType() != KotlinLexer.WS && token.getType() != KotlinLexer.NL) {
+                    previous = token;
                 }
             }
             colors.determine(lastLine);
@@ -147,5 +165,60 @@ public class KotlinAnalyzer implements CodeAnalyzer {
             }
             colors.setSuppressSwitch(maxSwitch + 10);
         } catch (Exception ignore) {}
+    }
+
+    private static class UnknownToken implements Token {
+
+        public static UnknownToken INSTANCE = new UnknownToken();
+
+        @Override
+        public String getText() {
+            return "";
+        }
+
+        @Override
+        public int getType() {
+            return -1;
+        }
+
+        @Override
+        public int getLine() {
+            return 0;
+        }
+
+        @Override
+        public int getCharPositionInLine() {
+            return 0;
+        }
+
+        @Override
+        public int getChannel() {
+            return 0;
+        }
+
+        @Override
+        public int getTokenIndex() {
+            return 0;
+        }
+
+        @Override
+        public int getStartIndex() {
+            return 0;
+        }
+
+        @Override
+        public int getStopIndex() {
+            return 0;
+        }
+
+        @Override
+        public TokenSource getTokenSource() {
+            return null;
+        }
+
+        @Override
+        public CharStream getInputStream() {
+            return null;
+        }
     }
 }
