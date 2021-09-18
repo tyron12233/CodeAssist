@@ -1,5 +1,6 @@
 package com.tyron.code.ui.editor.language.xml;
 
+import android.graphics.Color;
 import android.os.Handler;
 import android.util.Log;
 
@@ -22,6 +23,7 @@ import java.io.StringReader;
 import java.util.concurrent.Executors;
 
 import io.github.rosemoe.editor.interfaces.CodeAnalyzer;
+import io.github.rosemoe.editor.struct.Span;
 import io.github.rosemoe.editor.text.TextAnalyzeResult;
 import io.github.rosemoe.editor.text.TextAnalyzer;
 import io.github.rosemoe.editor.widget.CodeEditor;
@@ -68,11 +70,23 @@ public class XMLAnalyzer implements CodeAnalyzer {
 						colors.addIfNeeded(line, column, EditorColorScheme.IDENTIFIER_NAME);
 						break;
 					case XMLLexer.EQUALS:
+						Span span1 = colors.addIfNeeded(line,column, EditorColorScheme.OPERATOR);
+						span1.setUnderlineColor(Color.TRANSPARENT);
+						break;
 					case XMLLexer.STRING:
 						colors.addIfNeeded(line,column, EditorColorScheme.LITERAL);
+//						String text = token.getText();
+//						if (text.startsWith("\"#")) {
+//							try {
+//								span.setUnderlineColor(Color.parseColor(text.substring(1, text.length() - 1)));
+//							} catch (Exception ignore) {}
+//						}
 						break;
+					case XMLLexer.SEA_WS:
+					case XMLLexer.S:
 					default:
-						colors.addIfNeeded(line, column, EditorColorScheme.TEXT_NORMAL);
+						Span s = Span.obtain(column, EditorColorScheme.TEXT_NORMAL);
+						colors.addIfNeeded(line, s);
 				}
 			}
 			colors.determine(lastLine);

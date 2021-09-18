@@ -4,7 +4,7 @@ import io.github.rosemoe.editor.interfaces.EditorLanguage;
 import io.github.rosemoe.editor.widget.CodeEditor;
 import java.io.File;
 
-public class JAVA implements Language {
+public class Java implements Language {
 	
 	@Override
 	public boolean isApplicable(File ext) {
