@@ -108,13 +108,17 @@ public class IncrementalJavaTask extends Task {
                 Locale.getDefault(),
                 Charset.defaultCharset()
         );
+
+        List<File> classpath = new ArrayList<>(FileManager.getInstance().getLibraries());
+        classpath.add(mOutputDir);
+
         try {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singletonList(mOutputDir));
             standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, Arrays.asList(
                     FileManager.getInstance().getAndroidJar(),
                     FileManager.getInstance().getLambdaStubs()
             ));
-            standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, FileManager.getInstance().getLibraries());
+            standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, classpath);
             standardJavaFileManager.setLocation(StandardLocation.SOURCE_PATH, mJavaFiles);
         } catch (IOException e) {
             throw new CompilationFailedException(e);

@@ -1,6 +1,8 @@
 package com.tyron.code;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 
@@ -9,6 +11,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.PsiTest;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.util.AndroidUtilities;
@@ -38,6 +41,9 @@ public class MainActivity extends AppCompatActivity {
                     .replace(R.id.fragment_container, new MainFragment(), "main_fragment") //FileManagerFragment.newInstance(new File("/sdcard")))
                     .commit();
         }
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    PsiTest test = new PsiTest();
+                }, 2000);
 
 //        PreviewLoader loader = new PreviewLoader(this);
 //        findViewById(android.R.id.content)
