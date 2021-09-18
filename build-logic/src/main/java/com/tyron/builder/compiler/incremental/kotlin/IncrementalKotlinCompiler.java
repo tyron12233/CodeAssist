@@ -67,7 +67,7 @@ public class IncrementalKotlinCompiler extends Task {
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-        if (mFilesToCompile.isEmpty()) {
+        if (mFilesToCompile.stream().noneMatch(file -> file.getName().endsWith(".kt"))) {
             mLogger.info("No kotlin source files, Skipping compilation.");
             return;
         }
