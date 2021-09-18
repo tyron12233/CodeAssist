@@ -1,5 +1,6 @@
 package com.tyron.code.ui.editor.log;
 
+import android.graphics.Color;
 import android.os.Bundle;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -115,12 +116,16 @@ public class AppLogFragment extends Fragment {
     private int getColor(Diagnostic.Kind kind) {
         switch (kind) {
             case ERROR: return 0xffcf6679;
-            case WARNING: return 0xffFFFF00;
+            case WARNING: return Color.YELLOW;
+            case NOTE: return Color.BLUE;
             default: return 0xffFFFFFF;
         }
     }
 
     private void addClickableFile(SpannableStringBuilder sb, final DiagnosticWrapper diagnostic) {
+        if (diagnostic.getSource() == null || !diagnostic.getSource().exists()) {
+            return;
+        }
         ClickableSpan span = new ClickableSpan() {
             @Override
             public void onClick(@NonNull View view) {
