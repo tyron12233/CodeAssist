@@ -104,6 +104,15 @@ public class CodeEditorFragment extends Fragment {
 	}
 
     @Override
+    public void onStart() {
+        super.onStart();
+
+        if (!CompletionEngine.isIndexing()) {
+            mEditor.analyze();;
+        }
+    }
+
+    @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
 
