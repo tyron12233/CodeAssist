@@ -52,6 +52,7 @@ public class IncrementalKotlinCompiler extends Task {
         mProject = project;
         mLogger = logger;
         mFilesToCompile = new ArrayList<>(getSourceFiles(project.getJavaDirectory()));
+        mFilesToCompile.addAll(project.getRJavaFiles().values());
 
         mKotlinHome = new File(BuildModule.getContext().getFilesDir(), "kotlin-home");
         if (!mKotlinHome.exists() && !mKotlinHome.mkdirs()) {
@@ -73,7 +74,6 @@ public class IncrementalKotlinCompiler extends Task {
         List<File> classpath = new ArrayList<>();
         classpath.add(FileManager.getInstance().getAndroidJar());
         classpath.add(FileManager.getInstance().getLambdaStubs());
-        classpath.addAll(mProject.getRJavaFiles().values());
         classpath.addAll(mProject.getLibraries());
 
         List<String> arguments = new ArrayList<>();
