@@ -65,12 +65,12 @@ public class KotlinLanguage implements EditorLanguage {
 
     @Override
     public boolean useTab() {
-        return false;
+        return true;
     }
 
     @Override
     public CharSequence format(CharSequence text) {
-        return null;
+        return text;
     }
 
     @Override
