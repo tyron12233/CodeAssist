@@ -18,10 +18,6 @@ import android.view.ViewStub;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-
-import com.google.android.material.appbar.AppBarLayout;
-import com.google.android.material.internal.ThemeEnforcement;
-
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -72,10 +68,6 @@ public class PreviewLayoutInflater extends LayoutInflater {
             } catch (ClassNotFoundException e) {
                 // In this case we want to let the base class take a crack
                 // at it.
-            }
-
-            if (name.equals(AppBarLayout.class.getName())) {
-                return new AppBarLayout(getContext() ,attrs);
             }
         }
         return super.onCreateView(name, attrs);
