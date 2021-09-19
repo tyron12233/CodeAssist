@@ -54,7 +54,7 @@ public class PreviewTask {
 
             PreviewClassLoader classLoader = PreviewClassLoader.newInstance(mLibraryDexes, mainDex);
             PreviewLoader loader = new PreviewLoader(context);
-            loader.initialize(classLoader);
+            loader.initialize();
             loader.addAssetPath(mApkRes.getAbsolutePath());
             mLibraryRes.forEach(file -> loader.addAssetPath(file.getAbsolutePath()));
 

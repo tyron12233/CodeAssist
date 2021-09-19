@@ -10,7 +10,6 @@ import android.content.res.loader.ResourcesLoader;
 import android.util.DisplayMetrics;
 import android.util.Log;
 
-import androidx.appcompat.content.res.AppCompatResources;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
