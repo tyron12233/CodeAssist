@@ -41,9 +41,6 @@ public class MainActivity extends AppCompatActivity {
                     .replace(R.id.fragment_container, new MainFragment(), "main_fragment") //FileManagerFragment.newInstance(new File("/sdcard")))
                     .commit();
         }
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    PsiTest test = new PsiTest();
-                }, 2000);
 
 //        PreviewLoader loader = new PreviewLoader(this);
 //        findViewById(android.R.id.content)

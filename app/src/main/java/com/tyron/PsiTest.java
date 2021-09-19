@@ -13,8 +13,11 @@ import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys;
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity;
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation;
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector;
+import org.jetbrains.kotlin.cli.jvm.compiler.CliBindingTrace;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
+import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM;
+import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVMKt;
 import org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt;
 import org.jetbrains.kotlin.com.intellij.core.CoreProjectEnvironment;
 import org.jetbrains.kotlin.com.intellij.core.JavaCoreApplicationEnvironment;
@@ -39,20 +42,35 @@ import org.jetbrains.kotlin.config.LanguageVersion;
 import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl;
 import org.jetbrains.kotlin.config.Services;
+import org.jetbrains.kotlin.container.ComponentProvider;
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil;
 import org.jetbrains.kotlin.psi.KtClass;
+import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.psi.KtPsiFactory;
+import org.jetbrains.kotlin.resolve.LazyTopDownAnalyzer;
+import org.jetbrains.kotlin.resolve.TopDownAnalysisMode;
+import org.jetbrains.kotlin.resolve.calls.context.ResolutionContext;
+import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo;
 import org.jetbrains.kotlin.resolve.jvm.KotlinJavaPsiFacade;
+import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory;
+import org.jetbrains.kotlin.resolve.lazy.declarations.FileBasedDeclarationProviderFactory;
+import org.jetbrains.kotlin.storage.LockBasedStorageManager;
+import org.jetbrains.kotlin.storage.StorageManager;
+import org.jetbrains.kotlin.types.expressions.ExpressionTypingContext;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import kotlin.jvm.JvmClassMappingKt;
+import kotlin.jvm.functions.Function2;
 
 public class PsiTest {
     KotlinCoreEnvironment environment;
@@ -81,9 +99,8 @@ public class PsiTest {
 
 
         environment.addKotlinSourceRoots(Collections.singletonList(new File(project.getJavaDirectory(), "androidx/test/Test.kt")));
-
-        KtPsiFactory factory = new KtPsiFactory(environment.getProject(), true);
     }
+
 
     private static class LoggingMessageCollector implements MessageCollector {
 

@@ -95,4 +95,5 @@
 
     <string name="dialog_confirm_delete">Are you sure you want to delete %1$s?</string>
     <string name="dialog_delete">Delete</string>
+    <string name="menu_preview_layout">Preview Layout</string>
 </resources>

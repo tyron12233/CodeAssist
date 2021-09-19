@@ -1,5 +1,6 @@
 package com.tyron.builder.model;
 
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.tyron.builder.BuildModule;
@@ -71,7 +72,7 @@ public class Project {
     }
 
     public String getPackageName() {
-        if (packageName == null) {
+        if (TextUtils.isEmpty(packageName)) {
             loadPackageName();
         }
         return packageName;

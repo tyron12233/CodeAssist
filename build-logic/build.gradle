@@ -39,7 +39,7 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
 
     implementation 'com.android.tools:sdklib:25.3.0'
-    implementation 'com.android.tools:r8:2.2.64'
+    api 'com.android.tools:r8:2.2.64'
 
     api 'com.github.marschall:zipfilesystem-standalone:1.0.1'
 

@@ -4,6 +4,16 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
+import android.util.Log;
+
+import net.bytebuddy.ByteBuddy;
+import net.bytebuddy.description.method.MethodDescription;
+import net.bytebuddy.implementation.MethodCall;
+import net.bytebuddy.matcher.ElementMatcher;
+
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 
 /**
  * A custom context that replaces resources into a custom one loaded through a compiled file
@@ -14,6 +24,9 @@ public class PreviewContext extends ContextWrapper {
     private Resources.Theme mTheme;
     private int mThemeResource;
     private AssetManager mAssetManager;
+    private ClassLoader mClassLoader;
+
+
 
     public PreviewContext(Context base) {
         super(base);
@@ -43,9 +56,17 @@ public class PreviewContext extends ContextWrapper {
         mAssetManager = assetManger;
     }
 
+    public void setClassLoader(ClassLoader loader) {
+        mClassLoader = loader;
+    }
+
     @Override
     public ClassLoader getClassLoader() {
-        return getBaseContext().getClassLoader();
+        if (mClassLoader == null) {
+            return getBaseContext().getClassLoader();
+        } else {
+            return mClassLoader;
+        }
     }
 
     @Override

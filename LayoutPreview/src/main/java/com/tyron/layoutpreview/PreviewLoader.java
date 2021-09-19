@@ -1,12 +1,16 @@
 package com.tyron.layoutpreview;
 
 import android.annotation.SuppressLint;
+import android.app.Application;
 import android.content.Context;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.content.res.loader.ResourcesLoader;
 import android.util.DisplayMetrics;
 import android.util.Log;
+
+import androidx.appcompat.content.res.AppCompatResources;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -22,39 +26,42 @@ public class PreviewLoader {
 
     public PreviewLoader(Context context) {
         mContext = context;
-        try {
-            initialize();
-        } catch (Exception exception) {
-            Log.d("PreviewLoader", exception.getMessage());
-        }
+
     }
 
 
     @SuppressLint("PrivateApi")
-    private void initialize() throws Exception {
+    public void initialize() throws Exception {
         mAssetManager = AssetManager.class.newInstance();
-
-        Class<?> resourcesImpl = Class.forName("android.content.res.ResourcesImpl");
-        Class<?> displayAdjustments = Class.forName("android.view.DisplayAdjustments");
 
         mResources = new Resources(mAssetManager, Resources.getSystem().getDisplayMetrics(), Resources.getSystem().getConfiguration());
 
         mPreviewContext = new PreviewContext(mContext);
         mPreviewContext.setResources(mResources);
         mPreviewContext.setAssetManger(mAssetManager);
+
     }
+
 
     public void addAssetPath(String path) {
         try {
             Method assetPath = AssetManager.class.getMethod("addAssetPath", String.class);
             assetPath.invoke(mAssetManager, path);
-        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignore) {
-            Log.d(TAG, ignore.getMessage());
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+            Log.d(TAG, e.getMessage());
         }
     }
 
     public PreviewContext getPreviewContext() {
         return mPreviewContext;
+    }
+
+    public Resources getResources() {
+        return mResources;
+    }
+
+    public AssetManager getAssetManager() {
+        return mAssetManager;
     }
 
     public void test() {

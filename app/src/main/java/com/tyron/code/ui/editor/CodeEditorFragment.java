@@ -1,14 +1,21 @@
 package com.tyron.code.ui.editor;
 
+import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.SharedPreferences;
+import android.content.res.Resources;
+import android.graphics.Rect;
 import android.os.Bundle;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
@@ -23,6 +30,7 @@ import com.tyron.code.R;
 import com.tyron.code.action.CodeActionProvider;
 import com.tyron.code.lint.LintIssue;
 import com.tyron.code.ui.editor.language.java.JavaAnalyzer;
+import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;
@@ -42,8 +50,11 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 
 import io.github.rosemoe.editor.interfaces.EditorEventListener;
 import io.github.rosemoe.editor.interfaces.EditorLanguage;
@@ -267,5 +278,43 @@ public class CodeEditorFragment extends Fragment {
         if (mEditor != null) {
             mEditor.analyze();
         }
+    }
+
+    public void preview() {
+
+        final FrameLayout container = new FrameLayout(requireContext());
+            if (mEditor != null && mLanguage instanceof LanguageXML) {
+                Executors.newSingleThreadExecutor().execute(() -> {
+                    try {
+                    Instant start = Instant.now();
+                    View view = ((LanguageXML) mLanguage).showPreview(requireContext(), container);
+                    requireActivity().runOnUiThread(() -> {
+                        
+
+                        Toast.makeText(requireContext(), "PreviewTask took: " + Duration.between(start, Instant.now()).toMillis() + " ms.", Toast.LENGTH_SHORT).show();
+                        if (view != null) {
+
+//                            Dialog dialog = new AlertDialog.Builder(requireContext(), android.R.style.Theme_Dialog)
+//                                    .setView(container)
+//                                    .show();
+//                            int height = dialog.getWindow().getAttributes().height;
+//                            int width = dialog.getWindow().getAttributes().width;
+
+                            DisplayMetrics displayMetrics = requireActivity().getResources().getDisplayMetrics();
+
+                            container.setLayoutParams(new FrameLayout.LayoutParams(displayMetrics.widthPixels, displayMetrics.heightPixels));
+                            container.addView(view);
+
+                            requireActivity().setContentView(container);
+                        }
+                    });
+
+                } catch (RuntimeException e) {
+                        Log.e("LayoutPreview", "Unable to inflate layout", e);
+                    //pplicationLoader.showToast("Unable to show preview, make sure that your xml file is correct");
+                }
+                });
+            }
+
     }
 }

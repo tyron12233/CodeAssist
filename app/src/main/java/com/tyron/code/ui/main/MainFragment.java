@@ -58,6 +58,7 @@ import com.tyron.code.ui.settings.SettingsActivity;
 import com.tyron.code.ui.wizard.WizardFragment;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ApkInstaller;
+import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.provider.CompletionEngine;
 
 import java.io.File;
@@ -67,6 +68,8 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class MainFragment extends Fragment {
+
+    private static final int TOOLBAR_PREVIEW_LAYOUT_ID = 19;
 
     private ProjectManager mProjectManager;
     private LogViewModel logViewModel;
@@ -240,9 +243,15 @@ public class MainFragment extends Fragment {
             @Override
             public void onPageSelected(int position) {
                 mFilesViewModel.updateCurrentPosition(position);
+
+                File current = mFilesViewModel.getCurrentFile();
+                mToolbar.getMenu().findItem(R.id.menu_preview_layout)
+                        .setVisible(current != null && ProjectUtils.isResourceXMLFile(current));
             }
         });
         mToolbar.setOnMenuItemClickListener(item -> {
+
+
             if (item.getItemId() == R.id.debug_create) {
 
                 WizardFragment fragment = new WizardFragment();
@@ -295,6 +304,14 @@ public class MainFragment extends Fragment {
                 intent.setClass(requireActivity(), SettingsActivity.class);
                 startActivity(intent);
                 return true;
+            } else if (item.getItemId() == R.id.menu_preview_layout) {
+                File currentFile = mFilesViewModel.getCurrentFile();
+                if (currentFile != null) {
+                    Fragment fragment = getChildFragmentManager().findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
+                    if (fragment instanceof CodeEditorFragment) {
+                        ((CodeEditorFragment) fragment).preview();
+                    }
+                 }
             }
 
             return false;
