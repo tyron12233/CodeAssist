@@ -41,21 +41,6 @@ public class MainActivity extends AppCompatActivity {
                     .replace(R.id.fragment_container, new MainFragment(), "main_fragment") //FileManagerFragment.newInstance(new File("/sdcard")))
                     .commit();
         }
-
-//        PreviewLoader loader = new PreviewLoader(this);
-//        findViewById(android.R.id.content)
-//                .postDelayed(() -> {
-//                    loader.addAssetPath(FileManager.getInstance().getCurrentProject().getBuildDirectory() + "/bin/signed.apk");
-//                    PreviewContext context = loader.getPreviewContext();
-//                    context.setTheme(context.getResources().getIdentifier("Theme_MyApplication", "style", "com.tyron.preview"));
-//                    context.setTheme(getTheme());
-//                    int main = context.getResources().getIdentifier("activity_main", "layout", "com.tyron.preview");
-//
-//                    View view = new PreviewLayoutInflater(context).inflate(main, null, false);
-//                    new MaterialAlertDialogBuilder(this)
-//                            .setView(view)
-//                            .show();
-//                }, 700);
     }
 	
 	@Override

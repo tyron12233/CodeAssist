@@ -35,12 +35,12 @@ public class KotlinLanguage implements EditorLanguage {
 
     @Override
     public AutoCompleteProvider getAutoCompleteProvider() {
-        return (prefix, isInCodeBlock, colors, line) -> Collections.emptyList();
+        return new KotlinAutoCompleteProvider(mEditor);
     }
 
     @Override
     public boolean isAutoCompleteChar(char ch) {
-        return false;
+        return true;
     }
 
     @Override

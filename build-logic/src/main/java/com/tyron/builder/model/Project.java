@@ -27,6 +27,7 @@ public class Project {
     public final File mRoot;
     
     public Map<String, File> javaFiles = new HashMap<>();
+    private Map<String, File> kotlinFiles = new HashMap<>();
     public List<String> jarFiles = new ArrayList<>();
 
     private final Set<File> libraries = new HashSet<>();
@@ -45,8 +46,29 @@ public class Project {
         mRoot = root;
         
         findJavaFiles(new File(root, "app/src/main/java"));
+        findKotlinFiles(new File(root, "app/src/main/java"));
     }
-    
+
+    private void findKotlinFiles(File file) {
+        File[] files = file.listFiles();
+
+        if (files != null) {
+            for (File child : files) {
+                if (child.isDirectory()) {
+                    findKotlinFiles(child);
+                } else {
+                    if (child.getName().endsWith(".kt")) {
+                        String packageName = StringSearch.packageName(child);
+                        if (packageName.isEmpty()) {
+                            Log.d("Error package empty", child.getAbsolutePath());
+                        } else {
+                                javaFiles.put(packageName + "." + child.getName().replace(".kt", ""), child);
+                        }
+                    }
+                }
+            }
+        }
+    }
     private void findJavaFiles(File file) {
         File[] files = file.listFiles();
         
@@ -87,6 +109,13 @@ public class Project {
             findJavaFiles(getJavaDirectory());
         }
         return javaFiles;
+    }
+
+    public Map<String, File> getKotlinFiles() {
+        if (kotlinFiles.isEmpty()) {
+            findKotlinFiles(getJavaDirectory());
+        }
+        return kotlinFiles;
     }
 
     private void searchRJavaFiles(File root) {

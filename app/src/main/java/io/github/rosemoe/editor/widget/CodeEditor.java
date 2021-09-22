@@ -4045,7 +4045,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     
     private final Handler completionHandler = new Handler(Looper.getMainLooper());
     private final CompletionRunnable mCompletionRunnable = new CompletionRunnable();
-    private final long mCompletionDelay = 350L;
+    private final long mCompletionDelay = 100L;
     private long lastTime = 0;
 
     private class CompletionRunnable implements Runnable {
