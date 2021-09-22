@@ -2,6 +2,7 @@ package com.tyron.kotlin_completion.completion
 
 import android.util.Log
 import com.tyron.common.util.StringSearch
+import com.tyron.completion.drawable.CircleDrawable
 import com.tyron.completion.model.CompletionItem
 import com.tyron.completion.model.CompletionList
 import com.tyron.kotlin_completion.CompiledFile
@@ -62,8 +63,31 @@ private fun keywordCompletionItems(partial: String): Sequence<CompletionItem> =
         .filter { StringSearch.matchesPartialName(it, partial) }
         .map { CompletionItem().apply {
             label = it
-          //  kind = CompletionItemKind.Keyword
+            iconKind = CircleDrawable.Kind.Keyword
         } }
+
+fun functionInsertText(desc: FunctionDescriptor, snippetsEnabled: Boolean, name: String): String {
+    return if (snippetsEnabled) {
+        val parameters = desc.valueParameters
+        val hasTrailingLambda = RenderCompletionItem.isFunctionType(parameters.lastOrNull()?.type)
+
+        if (hasTrailingLambda) {
+            val parenthesizedParams = parameters.dropLast(1).ifEmpty { null }?.let { "(${valueParametersSnippet(it)})" } ?: ""
+            "$name$parenthesizedParams { \${${parameters.size}:${parameters.last().name}} }"
+        } else {
+            "$name(${valueParametersSnippet(parameters)})"
+        }
+    } else {
+        name
+    }
+}
+
+
+private fun valueParametersSnippet(parameters: List<ValueParameterDescriptor>) = parameters
+    .asSequence()
+    .filterNot { it.declaresDefaultValue() }
+    .mapIndexed { index, vpd -> "\${${index + 1}:${vpd.name}}" }
+    .joinToString()
 
 private fun elementCompletionItems(file: CompiledFile, cursor: Int, partial: String): ElementCompletionItems {
     val surroundingElement = completableElement(file, cursor) ?: return ElementCompletionItems(emptySequence(), true, null)
@@ -95,9 +119,10 @@ private fun completionItem(d: DeclarationDescriptor, surroundingElement: KtEleme
     if (isNotStaticJavaMethod(d) && (isGetter(d) || isSetter(d))) {
         val name = extractPropertyName(d)
 
-        result.detail += " (from ${result.label})"
-        result.label = name
+        result.label += " (from ${result.label})"
+        //result.label = name
         result.commitText = name
+        result.cursorOffset = result.label.length;
       //  result.filterText = name
     }
 
