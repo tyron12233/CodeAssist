@@ -70,6 +70,10 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                     case KotlinLexer.SEALED:
                     case KotlinLexer.PACKAGE:
                     case KotlinLexer.IMPORT:
+                    case KotlinLexer.RETURN:
+                    case KotlinLexer.INNER:
+                    case KotlinLexer.REIFIED:
+                    case KotlinLexer.BY:
                     case KotlinLexer.ABSTRACT:
                     case KotlinLexer.CATCH:
                     case KotlinLexer.THROW:
@@ -85,6 +89,7 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                     case KotlinLexer.INLINE:
                     case KotlinLexer.SUPER:
                     case KotlinLexer.GET:
+                    case KotlinLexer.NullLiteral:
                     case KotlinLexer.THIS:
                     case KotlinLexer.INIT:
                     case KotlinLexer.OBJECT:
