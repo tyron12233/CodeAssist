@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.config.Services;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -80,6 +81,7 @@ public class IncrementalKotlinCompiler extends Task {
         Collections.addAll(arguments, "-cp", classpath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)));
         Collections.addAll(arguments, mFilesToCompile.stream().map(File::getAbsolutePath).toArray(String[]::new));
 
+
         try {
             K2JVMCompiler compiler = new K2JVMCompiler();
             K2JVMCompilerArguments args = new K2JVMCompilerArguments();
@@ -92,6 +94,7 @@ public class IncrementalKotlinCompiler extends Task {
             args.setNoStdlib(true);
             args.setKotlinHome(mKotlinHome.getAbsolutePath());
             args.setDestination(mClassOutput.getAbsolutePath());
+            args.setPluginClasspaths(getPlugins().stream().map(File::getAbsolutePath).toArray(String[]::new));
             compiler.exec(mCollector, Services.EMPTY, args);
         } catch (Exception e) {
             throw new CompilationFailedException(e);
@@ -233,5 +236,17 @@ public class IncrementalKotlinCompiler extends Task {
         }
 
         return files;
+    }
+
+    private List<File> getPlugins() {
+        File pluginDir = new File(mProject.getBuildDirectory(), "plugins");
+        File[] children = pluginDir.listFiles(c -> c.getName().endsWith(".jar"));
+
+        if (children == null) {
+            return Collections.emptyList();
+        }
+
+        return new ArrayList<>(Arrays.asList(children));
+
     }
 }
