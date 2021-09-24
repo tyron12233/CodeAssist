@@ -92,7 +92,6 @@ public class ManifestMergeTask extends Task {
         try {
             MergingReport report = invoker.merge();
             if (report.getResult().isError()) {
-                report.log(mLogger);
                 throw new CompilationFailedException(report.getReportString());
             }
             if (report.getMergedDocument().isPresent()) {
