@@ -82,8 +82,8 @@ public class JavaVisitor {
                     compilationUnit.accept(visitor, null);
                 }
             }
-        } catch (RuntimeException e) {
-            e.printStackTrace();
+        } catch (Throwable ignore) {
+
         }
     }
 
