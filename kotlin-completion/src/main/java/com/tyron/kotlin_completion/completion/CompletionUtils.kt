@@ -3,9 +3,10 @@ package com.tyron.kotlin_completion.completion
 import android.util.Log
 import com.tyron.common.util.StringSearch
 import com.tyron.completion.drawable.CircleDrawable
-import com.tyron.completion.model.CompletionItem
-import com.tyron.completion.model.CompletionList
+import com.tyron.completion.model.*
 import com.tyron.kotlin_completion.CompiledFile
+import com.tyron.kotlin_completion.index.Symbol
+import com.tyron.kotlin_completion.index.SymbolIndex
 import com.tyron.kotlin_completion.util.PsiUtils
 import com.tyron.kotlin_completion.util.containsCharactersInOrder
 import com.tyron.kotlin_completion.util.stringDistance
@@ -35,13 +36,13 @@ inline fun<reified Find> PsiElement.findParent() =
 const val MIN_SORT_LENGTH = 3
 const val MAX_COMPLETION_ITEMS = 50
 
-fun completions(file: CompiledFile, cursor: Int, partial: String): CompletionList {
+fun completions(file: CompiledFile, cursor: Int, index: SymbolIndex, partial: String): CompletionList {
     val (elementItems, isExhaustive, receiver) = elementCompletionItems(file, cursor, partial)
     val elementItemList = elementItems.toList()
     val elementItemLabels = elementItemList.mapNotNull { it.label }.toSet()
     val items = (
             elementItemList.asSequence()
-                    //+ (if (!isExhaustive) indexCompletionItems(file, cursor, receiver, index, partial).filter { it.label !in elementItemLabels } else emptySequence())
+                    + (if (!isExhaustive) indexCompletionItems(file, cursor, receiver, index, partial).filter { it.label !in elementItemLabels } else emptySequence())
                     + (if (elementItemList.isEmpty()) keywordCompletionItems(partial) else emptySequence())
             )
 
@@ -56,6 +57,70 @@ fun completions(file: CompiledFile, cursor: Int, partial: String): CompletionLis
     list.isIncomplete = isIncomplete
     return list
 }
+
+private fun indexCompletionItems(file: CompiledFile, cursor: Int, receiver: KtExpression?, index: SymbolIndex, partial: String): Sequence<CompletionItem> {
+    val parsedFile = file.parse;
+    val imports = parsedFile.importDirectives;
+
+    val wildCardPackages = imports
+        .mapNotNull { it.importPath }
+        .filter { it.isAllUnder }
+        .map { it.fqName }
+        .toSet()
+
+    val importNames = imports
+        .mapNotNull { it.importedFqName?.shortName() }
+        .toSet()
+    val receiverType= receiver?.let { expr -> file.scopeAtPoint(cursor)?.let { file.typeOfExpression(expr, it) } }
+    val receiverTypeName = if (receiverType?.constructor?.declarationDescriptor == null) null else
+        PsiUtils.getFqNameSafe(receiverType.constructor.declarationDescriptor)
+
+    return index
+        .query(partial, receiverTypeName, limit = MAX_COMPLETION_ITEMS)
+        .asSequence()
+        .filter { it.kind != Symbol.Kind.MODULE }
+        .filter {
+            it.visibility == Symbol.Visibility.PUBLIC
+                    || it.visibility == Symbol.Visibility.PROTECTED
+                    || it.visibility == Symbol.Visibility.INTERNAL
+        }
+        .map { CompletionItem().apply {
+            label = it.fqName.shortName().toString()
+            commitText = label
+            cursorOffset = label.length
+            iconKind = when (it.kind) {
+                Symbol.Kind.CLASS -> CircleDrawable.Kind.Class
+                Symbol.Kind.INTERFACE -> CircleDrawable.Kind.Interface
+                Symbol.Kind.FUNCTION -> CircleDrawable.Kind.Method
+                Symbol.Kind.VARIABLE -> CircleDrawable.Kind.LocalVariable
+                Symbol.Kind.FIELD -> CircleDrawable.Kind.Filed
+                else -> CircleDrawable.Kind.Method
+            }
+            detail = "(import from ${it.fqName.parent()})"
+            val pos = findImportInsertionPosition(parsedFile, it.fqName)
+            val prefix = if (importNames.isEmpty()) "\n\n" else "\n"
+            additionalTextEdits = listOf(TextEdit(Range(pos, pos), "${prefix}import ${it.fqName}"))
+        } }
+
+}
+
+private fun findImportInsertionPosition(parsedFile: KtFile, fqName: FqName): Position =
+    (closestImport(parsedFile.importDirectives, fqName) as? KtElement ?: parsedFile.packageDirective as? KtElement)
+        ?.let(com.tyron.kotlin_completion.position.Position::location)
+        ?.range
+        ?.end
+        ?: Position(0, 0)
+
+
+private fun closestImport(imports: List<KtImportDirective>, fqName: FqName): KtImportDirective? =
+    imports
+        .asReversed()
+        .maxByOrNull { it.importedFqName?.let { matchingPrefixLength(it, fqName) } ?: 0 }
+
+private fun matchingPrefixLength(left: FqName, right: FqName): Int =
+    left.pathSegments().asSequence().zip(right.pathSegments().asSequence())
+        .takeWhile { it.first == it.second }
+        .count()
 
 private fun keywordCompletionItems(partial: String): Sequence<CompletionItem> =
     (KtTokens.SOFT_KEYWORDS.getTypes() + KtTokens.KEYWORDS.types).asSequence()
@@ -114,15 +179,14 @@ private fun completionItem(d: DeclarationDescriptor, surroundingElement: KtEleme
             && surroundingElement !is KtImportDirective
     val result = d.accept(RenderCompletionItem(renderWithSnippets), null)
 
-    result.label = methodSignature.find(result.label)?.groupValues?.get(1) ?: result.label
+    result.label = methodSignature.find(result.detail)?.groupValues?.get(1) ?: result.label
 
     if (isNotStaticJavaMethod(d) && (isGetter(d) || isSetter(d))) {
         val name = extractPropertyName(d)
 
-        result.label += " (from ${result.label})"
-        //result.label = name
+        result.detail += " (from ${result.label})"
+        result.label = name
         result.commitText = name
-        result.cursorOffset = result.label.length;
       //  result.filterText = name
     }
 
@@ -135,6 +199,8 @@ private fun completionItem(d: DeclarationDescriptor, surroundingElement: KtEleme
     if (file.lineAfter(PsiUtils.getEndOffset(surroundingElement)).startsWith("(") && matchCall != null) {
         result.commitText = matchCall.groups[1]!!.value
     }
+
+    result.cursorOffset = result.commitText.length;
 
     return result
 }

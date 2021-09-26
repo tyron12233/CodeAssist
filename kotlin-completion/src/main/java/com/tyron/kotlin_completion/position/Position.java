@@ -1,14 +1,20 @@
 package com.tyron.kotlin_completion.position;
 
 import com.tyron.completion.model.Range;
+import com.tyron.kotlin_completion.model.Location;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
 import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange;
+import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.psi.psiUtil.PsiUtilsKt;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
 
+import kotlin.io.path.PathsKt;
 import kotlin.text.StringsKt;
 
 public class Position {
@@ -88,6 +94,21 @@ public class Position {
         }
 
         return new com.tyron.completion.model.Position(line, c);
+    }
+
+    public static Location location(PsiElement expr) {
+        String content;
+        try {
+            content = expr.getContainingFile().getText();
+        } catch (NullPointerException e) {
+            content = null;
+        }
+        String file = new File(expr.getContainingFile().getOriginalFile().getViewProvider().getVirtualFile().getPath())
+                .toURI().toString();
+        if (content == null) {
+            return null;
+        }
+        return new Location(file, range(content, expr.getTextRange()));
     }
     public static Range range(String content, TextRange range) {
         try {

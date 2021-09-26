@@ -6,6 +6,7 @@ import com.tyron.common.util.StringSearch;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.CompiledFile;
+import com.tyron.kotlin_completion.index.SymbolIndex;
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
@@ -30,9 +31,9 @@ import kotlin.text.StringsKt;
 
 public class Completions {
 
-    public CompletionList completions(CompiledFile file, int cursor) {
+    public CompletionList completions(CompiledFile file, int cursor, SymbolIndex index) {
         String partial = findPartialIdentifier(file, cursor);
-        return CompletionUtilsKt.completions(file, cursor, partial);
+        return CompletionUtilsKt.completions(file, cursor, index, partial);
     }
 
     private String findPartialIdentifier(CompiledFile file, int cursor) {

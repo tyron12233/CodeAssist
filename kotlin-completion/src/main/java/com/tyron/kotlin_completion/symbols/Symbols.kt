@@ -11,6 +11,8 @@ private fun documentSymbols(file: KtFile) : List<DocumentSymbol> {
     return doDocumentSymbols(file)
 }
 
+
+
 private fun doDocumentSymbols(element: PsiElement) : List<DocumentSymbol>{
     val children = element.children.flatMap(::doDocumentSymbols)
 

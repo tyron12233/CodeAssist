@@ -44,6 +44,11 @@ public class SourcePath {
     public SourcePath(CompilerClassPath classPath) {
         cp = classPath;
     }
+
+    public SymbolIndex getIndex() {
+        return index;
+    }
+
     private class SourceFile {
 
         private final URI uri;

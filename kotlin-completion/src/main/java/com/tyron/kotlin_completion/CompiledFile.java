@@ -246,4 +246,8 @@ public class CompiledFile {
     public BindingContext getCompile() {
         return mCompile;
     }
+
+    public KtFile getParse() {
+        return mParse;
+    }
 }

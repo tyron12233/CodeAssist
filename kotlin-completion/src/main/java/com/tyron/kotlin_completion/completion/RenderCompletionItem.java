@@ -23,12 +23,21 @@ import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor;
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor;
 import org.jetbrains.kotlin.descriptors.VariableDescriptor;
 import org.jetbrains.kotlin.descriptors.impl.DeclarationDescriptorImpl;
+import org.jetbrains.kotlin.renderer.ClassifierNamePolicy;
+import org.jetbrains.kotlin.renderer.DescriptorRenderer;
+import org.jetbrains.kotlin.renderer.DescriptorRendererOptions;
+import org.jetbrains.kotlin.renderer.ParameterNameRenderingPolicy;
+import org.jetbrains.kotlin.types.ErrorUtils;
 import org.jetbrains.kotlin.types.KotlinType;
+import org.jetbrains.kotlin.types.UnresolvedType;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
+import kotlin.Unit;
 import kotlin.collections.ArraysKt;
+import kotlin.jvm.functions.Function1;
 import kotlin.sequences.Sequence;
 import kotlin.sequences.SequencesKt;
 import kotlin.text.Regex;
@@ -38,13 +47,28 @@ public class RenderCompletionItem implements DeclarationDescriptorVisitor<Comple
     private final boolean snippetsEnabled;
     private final CompletionItem result = new CompletionItem();
 
+    DescriptorRenderer DECL_RENDERER = DescriptorRenderer.Companion.withOptions(it -> {
+        it.setWithDefinedIn(false);
+        it.setModifiers(Collections.emptySet());
+        it.setClassifierNamePolicy(ClassifierNamePolicy.SHORT.INSTANCE);
+        it.setParameterNameRenderingPolicy(ParameterNameRenderingPolicy.ONLY_NON_SYNTHESIZED);
+        it.setTypeNormalizer(kotlinType -> {
+            if (kotlinType instanceof UnresolvedType) {
+                return ErrorUtils.createErrorTypeWithCustomDebugName(((UnresolvedType) kotlinType).getPresentableName());
+            }
+            return kotlinType;
+        });
+        return Unit.INSTANCE;
+    });
+
     public RenderCompletionItem(boolean snippetsEnabled) {
         this.snippetsEnabled = snippetsEnabled;
     }
 
     private void setDefaults(DeclarationDescriptor d) {
         result.label = label(d);
-        result.commitText = result.label;
+        result.commitText = escape(label(d));
+        result.detail = DECL_RENDERER.render(d);
     }
 
     private String functionInsertText(FunctionDescriptor d) {
