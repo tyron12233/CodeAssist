@@ -108,15 +108,12 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         setContentView(layout);
 
         mAdapter = new CompletionItemAdapter();
-        mAdapter.setOnItemClickListener(new CompletionItemAdapter.OnClickListener() {
-                @Override
-                public void onClick(int position) {
-                    try {
-                        select(position);
-                    } catch (Exception e) {
-                        Toast.makeText(mEditor.getContext(), Log.getStackTraceString(e), Toast.LENGTH_SHORT).show();
-                    }
-                }
+        mAdapter.setOnItemClickListener(position -> {
+            try {
+                select(position);
+            } catch (Exception e) {
+                Toast.makeText(mEditor.getContext(), Log.getStackTraceString(e), Toast.LENGTH_SHORT).show();
+            }
         });
         mLayoutManager = new LinearLayoutManager(mEditor.getContext());
         mListView = new RecyclerView(mEditor.getContext()) {
@@ -283,12 +280,18 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             // cursor.onCommitText(item.commit); will be invoked automatically if item.commit isn't multiline
             cursor.onCommitMultilineText(item.commit);
 			
-            if (item.cursorOffset != item.commit.length()) {
+            if (item.commit != null && item.cursorOffset != item.commit.length()) {
                 int delta = (item.commit.length() - item.cursorOffset);
                 if (delta != 0) {
                     int newSel = Math.max(mEditor.getCursor().getLeft() - delta, 0);
                     CharPosition charPosition = mEditor.getCursor().getIndexer().getCharPosition(newSel);
                     mEditor.setSelection(charPosition.line, charPosition.column);
+                }
+            }
+
+            if (item.item.additionalTextEdits != null) {
+                for (TextEdit edit : item.item.additionalTextEdits) {
+                    applyTextEdit(edit);
                 }
             }
 			
@@ -307,17 +310,21 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                     AddImport imp = new AddImport(new File(""), item.item.data);
                     Map<File, TextEdit> edits = imp.getText(task);
                     TextEdit edit = edits.values().iterator().next();
-
-                    Range range = edit.range;
-
-                    if (range.start.equals(range.end)) {
-                        mEditor.getText().insert(range.start.line, range.start.column, edit.newText);
-                    }
+                    applyTextEdit(edit);
                 }
             }
             mCancelShowUp = false;
         }
         mEditor.postHideCompletionWindow();
+    }
+
+    // only applies for single line edits
+    private void applyTextEdit(TextEdit edit) {
+        Range range = edit.range;
+
+        if (range.start.equals(range.end)) {
+            mEditor.getText().insert(range.start.line, range.start.column, edit.newText);
+        }
     }
 
     /**
