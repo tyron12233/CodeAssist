@@ -2,6 +2,7 @@ package com.tyron.code.ui.editor.language.kotlin;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
+import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil;
 
 import java.util.Collections;
 import java.util.List;
@@ -10,6 +11,7 @@ import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.editor.interfaces.CodeAnalyzer;
 import io.github.rosemoe.editor.interfaces.EditorLanguage;
 import io.github.rosemoe.editor.interfaces.NewlineHandler;
+import io.github.rosemoe.editor.langs.internal.MyCharacter;
 import io.github.rosemoe.editor.langs.java.JavaTextTokenizer;
 import io.github.rosemoe.editor.langs.java.Tokens;
 import io.github.rosemoe.editor.struct.CompletionItem;
@@ -40,7 +42,7 @@ public class KotlinLanguage implements EditorLanguage {
 
     @Override
     public boolean isAutoCompleteChar(char ch) {
-        return true;
+        return ch == '.' || MyCharacter.isJavaIdentifierPart(ch);
     }
 
     @Override
