@@ -142,7 +142,7 @@ public class SourcePath {
                 if (!indexInitialized) {
                     indexInitialized = true;
                     ModuleDescriptor module = (ModuleDescriptor) container.resolve(ModuleDescriptor.class).getValue();
-                    index.refresh(module);
+                    index.refresh(module, false);
                 }
             });
         }

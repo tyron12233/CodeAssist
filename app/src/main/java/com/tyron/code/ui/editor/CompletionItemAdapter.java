@@ -30,7 +30,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
     }
 
     public interface OnLongClickListener {
-        void onLongClick(int position);
+        void onLongClick(View view, int position);
     }
 
     private String partial;
@@ -64,7 +64,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
 
             if (pos != RecyclerView.NO_POSITION) {
                 if (longClickListener != null) {
-                    longClickListener.onLongClick(pos);
+                    longClickListener.onLongClick(holder.itemView,pos);
                 }
             }
             return true;
@@ -146,6 +146,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
         public void bind(CompletionItem item, boolean selected) {
             mLabel.setText(item.label);
             mDesc.setText(item.desc);
+            mDesc.setTooltipText(item.desc);
 
             if (partial != null && partial.length() > 0) {
                 if (item.label.startsWith(partial)) {

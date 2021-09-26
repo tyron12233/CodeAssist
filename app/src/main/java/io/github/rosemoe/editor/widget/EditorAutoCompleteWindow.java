@@ -19,6 +19,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
+import android.view.ContextMenu;
 import android.view.View;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
@@ -42,6 +43,8 @@ import java.util.Map;
 import java.io.File;
 
 import android.util.Log;
+
+import androidx.appcompat.widget.TooltipCompat;
 import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.code.ui.editor.CompletionItemAdapter;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -115,6 +118,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                 Toast.makeText(mEditor.getContext(), Log.getStackTraceString(e), Toast.LENGTH_SHORT).show();
             }
         });
+
         mLayoutManager = new LinearLayoutManager(mEditor.getContext());
         mListView = new RecyclerView(mEditor.getContext()) {
 			@Override

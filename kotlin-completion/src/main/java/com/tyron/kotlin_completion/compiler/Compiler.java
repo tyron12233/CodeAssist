@@ -4,12 +4,14 @@ import android.util.Log;
 
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
+import org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileSystem;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFileFactory;
+import org.jetbrains.kotlin.com.intellij.psi.PsiJavaFile;
 import org.jetbrains.kotlin.config.CompilerConfiguration;
 import org.jetbrains.kotlin.container.ComponentProvider;
 import org.jetbrains.kotlin.idea.KotlinLanguage;
@@ -76,6 +78,10 @@ public class Compiler implements Closeable {
         return (KtFile) createPsiFile(content, file, KotlinLanguage.INSTANCE, kind);
     }
 
+    public PsiJavaFile createJavaFile(String content, Path file, CompletionKind kind) {
+        return (PsiJavaFile) createPsiFile(content, file, JavaLanguage.INSTANCE, kind);
+    }
+
     public PsiFileFactory psiFileFactoryFor(CompletionKind kind) {
         return PsiFileFactory.getInstance(mDefaultCompileEnvironment.getEnvironment().getProject());
     }
@@ -85,6 +91,18 @@ public class Compiler implements Closeable {
     }
 
     public Pair<BindingContext, ComponentProvider> compileKtFiles(Collection<? extends KtFile> files, Collection<KtFile> sourcePath, CompletionKind kind) {
+        mCompileLock.lock();
+        try {
+            Pair<ComponentProvider, BindingTraceContext> pair = mDefaultCompileEnvironment.createContainer(sourcePath);
+            ((LazyTopDownAnalyzer) pair.first.resolve(LazyTopDownAnalyzer.class).getValue()).analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files, DataFlowInfo.Companion.getEMPTY(), null);
+            return Pair.create(pair.second.getBindingContext(), pair.first);
+        } finally {
+            mCompileLock.unlock();
+        }
+    }
+
+
+    public Pair<BindingContext, ComponentProvider> compileJavaFiles(Collection<? extends PsiJavaFile> files, Collection<KtFile> sourcePath, CompletionKind kind) {
         mCompileLock.lock();
         try {
             Pair<ComponentProvider, BindingTraceContext> pair = mDefaultCompileEnvironment.createContainer(sourcePath);

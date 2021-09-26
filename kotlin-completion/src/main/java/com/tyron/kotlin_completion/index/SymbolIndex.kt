@@ -39,25 +39,28 @@ class SymbolIndex {
        }
     }
 
-    fun refresh(module: ModuleDescriptor) {
+    fun refresh(module: ModuleDescriptor, forced: Boolean = false) {
         val started = System.currentTimeMillis()
         Log.d("SymbolIndex", "Updating symbol index...");
 
         try {
             transaction(db) {
-                Symbols.deleteAll()
-
+                if (forced) {
+                    Symbols.deleteAll()
+                }
                 for (descriptor in allDescriptors(module)) {
                     val descriptorFqn = PsiUtils.getFqNameSafe(descriptor)
                     val extensionReceiverFqn = descriptor.accept(ExtractSymbolExtensionReceiverType, Unit)
 
                     if (canStoreFqName(descriptorFqn) && (extensionReceiverFqn?.let { canStoreFqName(it) } != false)) {
-                        for (fqn in listOf(descriptorFqn, extensionReceiverFqn).filterNotNull()) {
+
+                        for (fqn in listOfNotNull(descriptorFqn, extensionReceiverFqn)) {
                             FqNames.replace {
                                 it[fqName] = fqn.toString()
                                 it[shortName] = fqn.shortName().toString()
                             }
                         }
+
 
                         Symbols.replace {
                             it[fqName] = descriptorFqn.toString()

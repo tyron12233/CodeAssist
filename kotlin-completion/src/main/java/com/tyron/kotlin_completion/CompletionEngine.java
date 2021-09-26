@@ -55,6 +55,8 @@ public class CompletionEngine {
 
     public CompletionList complete(File file, String contents, int cursor) {
         Pair<CompiledFile, Integer> pair = recover(file, contents, Recompile.NEVER, cursor);
+
+
         return new Completions().completions(pair.first, cursor, sp.getIndex());
     }
 }
