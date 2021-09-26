@@ -4,11 +4,14 @@ import android.util.Log;
 
 import com.tyron.builder.parser.FileManager;
 import com.tyron.kotlin_completion.compiler.CompletionKind;
+import com.tyron.kotlin_completion.index.SymbolIndex;
+import com.tyron.kotlin_completion.util.AsyncExecutor;
 
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
 import org.jetbrains.kotlin.container.ComponentProvider;
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.BindingTrace;
@@ -35,6 +38,8 @@ public class SourcePath {
     private final CompilerClassPath cp;
     private final Map<URI, SourceFile> files = new HashMap<>();
     private final ReentrantLock parsedDataWriteLock = new ReentrantLock();
+    private final AsyncExecutor indexAsync = new AsyncExecutor();
+    private final SymbolIndex index = new SymbolIndex();
 
     public SourcePath(CompilerClassPath classPath) {
         cp = classPath;
@@ -53,6 +58,7 @@ public class SourcePath {
 
         private final String extension;
         private final CompletionKind kind = CompletionKind.DEFAULT;
+        private boolean indexInitialized;
 
         public SourceFile(URI uri, String content) {
             this(uri, content, Paths.get(uri), null, null, null, null, null, false);
@@ -123,7 +129,17 @@ public class SourcePath {
             } finally {
                 parsedDataWriteLock.unlock();
             }
-           // initializeIndexAsyncIfNeeded();
+            initializeIndexAsyncIfNeeded(compiledcontainer);
+        }
+
+        private void initializeIndexAsyncIfNeeded(ComponentProvider container) {
+            indexAsync.execute(() -> {
+                if (!indexInitialized) {
+                    indexInitialized = true;
+                    ModuleDescriptor module = (ModuleDescriptor) container.resolve(ModuleDescriptor.class).getValue();
+                    index.refresh(module);
+                }
+            });
         }
 
         public CompiledFile prepareCompiledFile() {

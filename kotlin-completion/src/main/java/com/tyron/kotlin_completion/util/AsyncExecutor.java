@@ -13,7 +13,7 @@ public class AsyncExecutor {
 
     private final ExecutorService workerThread = Executors.newSingleThreadExecutor();
 
-    private void execute(Runnable task) {
+    public void execute(Runnable task) {
         CompletableFuture.runAsync(task);
     }
 
