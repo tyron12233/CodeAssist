@@ -1,5 +1,7 @@
 package com.tyron.kotlin_completion;
 
+import android.util.Log;
+
 import com.tyron.kotlin_completion.compiler.CompletionKind;
 import com.tyron.kotlin_completion.position.Position;
 import com.tyron.kotlin_completion.util.PsiUtils;
@@ -10,9 +12,6 @@ import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
 import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
-import org.jetbrains.kotlin.com.intellij.psi.impl.PsiImplUtil;
-import org.jetbrains.kotlin.com.intellij.psi.util.PsiClassUtil;
-import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtil;
 import org.jetbrains.kotlin.container.ComponentProvider;
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
 import org.jetbrains.kotlin.lexer.KtTokens;
@@ -21,26 +20,22 @@ import org.jetbrains.kotlin.psi.KtClass;
 import org.jetbrains.kotlin.psi.KtDeclaration;
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression;
 import org.jetbrains.kotlin.psi.KtElement;
-import org.jetbrains.kotlin.psi.KtElementKt;
-import org.jetbrains.kotlin.psi.KtElementUtilsKt;
 import org.jetbrains.kotlin.psi.KtExpression;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.psi.KtParameter;
 import org.jetbrains.kotlin.psi.KtReferenceExpression;
 import org.jetbrains.kotlin.psi.KtSafeQualifiedExpression;
-import org.jetbrains.kotlin.psi.psiUtil.KtPsiUtilKt;
 import org.jetbrains.kotlin.psi.psiUtil.PsiUtilsKt;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope;
 import org.jetbrains.kotlin.types.KotlinType;
 
+import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.Map;
 
-import kotlin.collections.ArraysKt;
 import kotlin.collections.MapsKt;
-import kotlin.jvm.functions.Function1;
 import kotlin.sequences.Sequence;
 import kotlin.sequences.SequencesKt;
 import kotlin.text.StringsKt;
@@ -85,6 +80,7 @@ public class CompiledFile {
     public KotlinType typeOfExpression(KtExpression expression, LexicalScope scopeWithImports) {
         return bindingContextOf(expression, scopeWithImports).getType(expression);
     }
+
     public BindingContext bindingContextOf(KtExpression expression, LexicalScope scopeWithImports) {
         return mClassPath.getCompiler().compileKtExpression(expression, scopeWithImports, mSourcePath).getFirst();
     }
@@ -119,7 +115,7 @@ public class CompiledFile {
     public KtExpression expandForReference(int cursor, KtExpression surroundingExpr) {
         PsiElement parent = surroundingExpr.getParent();
 
-        if (parent instanceof  KtDotQualifiedExpression || parent instanceof KtSafeQualifiedExpression || parent instanceof KtCallExpression) {
+        if (parent instanceof KtDotQualifiedExpression || parent instanceof KtSafeQualifiedExpression || parent instanceof KtCallExpression) {
             KtExpression ktExpression = expandForReference(cursor, (KtExpression) parent);
             if (ktExpression != null) {
                 return ktExpression;
@@ -130,7 +126,7 @@ public class CompiledFile {
 
 
     private KtExpression expandForType(int cursor, KtExpression surroundingExpr) {
-        KtDotQualifiedExpression  dotParent = (KtDotQualifiedExpression) surroundingExpr.getParent();
+        KtDotQualifiedExpression dotParent = (KtDotQualifiedExpression) surroundingExpr.getParent();
         if (dotParent != null && dotParent.getSelectorExpression().getTextRange().contains(cursor)) {
             return expandForType(cursor, dotParent);
         }
@@ -138,59 +134,7 @@ public class CompiledFile {
     }
 
     public KtElement parseAtPoint(int cursor, boolean asReference) {
-        int oldCursor = oldOffset(cursor);
-        Pair<TextRange, TextRange> pair = Position.changedRegion(mParse.getText(), mContent);
-        TextRange oldChanged;
-        if (pair == null || pair.getFirst() == null) {
-            oldChanged = new TextRange(cursor, cursor);
-        } else {
-            oldChanged = pair.getFirst();
-        }
-
-        PsiElement psi = mParse.findElementAt(oldCursor);
-        if (psi == null) {
-            return null;
-        }
-        Sequence<PsiElement> parentsWithSelf = PsiUtilsKt.getParentsWithSelf(psi);
-        Sequence<KtDeclaration> ktDeclarationSequence = SequencesKt.filterIsInstance(parentsWithSelf, KtDeclaration.class);
-        KtElement ktDec = SequencesKt.firstOrNull(ktDeclarationSequence, ktDeclaration -> ktDeclaration.getTextRange().contains(oldChanged));
-        if (ktDec == null) {
-            ktDec = mParse;
-        }
-
-        Pair<String, Integer> pair1 = contentAndOffsetFromElement(psi, ktDec, asReference);
-        String padOffset = Strings.repeat(" ", pair1.getSecond());
-        PsiFile recompile = mClassPath.getCompiler().createKtFile(padOffset + pair1.first, Paths.get("dummy.virtual.kt"), CompletionKind.DEFAULT);
-        return PsiUtils.findParent(recompile.findElementAt(cursor), KtElement.class);
-    }
-
-    private Pair<String, Integer> contentAndOffsetFromElement(PsiElement psi, KtElement parent, boolean asReference) {
-        String surroundingContent;
-        int offset = 0;
-
-        if (asReference) {
-            if (parent instanceof KtClass && psi.getNode().getElementType() == KtTokens.IDENTIFIER) {
-                String prefix = "val x: ";
-                surroundingContent = prefix + psi.getText();
-                offset = psi.getTextRange().getStartOffset() - prefix.length();
-
-                return Pair.create(surroundingContent, offset);
-            }
-        }
-
-        TextRange recoveryRange = parent.getTextRange();
-
-        surroundingContent = mContent.substring(recoveryRange.getStartOffset(), mContent.length() - (mParse.getText().length() - recoveryRange.getEndOffset()));
-        offset = recoveryRange.getStartOffset();
-
-        if (asReference) {
-            if (!(parent instanceof KtParameter) || ((KtParameter) parent).hasValOrVar()) {
-                String prefix = "val ";
-                surroundingContent = prefix + surroundingContent;
-                offset -= prefix.length();
-            }
-        }
-        return Pair.create(surroundingContent, offset);
+        return CompiledFileUtilKt.parseAtPoint(mClassPath, cursor, oldOffset(cursor), mContent, mParse, asReference);
     }
 
     public String lineBefore(int cursor) {
@@ -237,6 +181,19 @@ public class CompiledFile {
         }
 
         return mParse.getText().length() - (mContent.length() - cursor);
+    }
+
+    public String describeRange(TextRange range, boolean oldContent) {
+        try {
+            String c = oldContent ? mParse.getText() : mContent;
+            com.tyron.completion.model.Position start = Position.position(c, range.getStartOffset());
+            com.tyron.completion.model.Position end = Position.position(c, range.getEndOffset());
+            String file = mParse.getVirtualFile().getName();
+
+            return file + " " + start.line + ":" + (start.column + 1) + "-" + (end.line + 1) + ":" + (end.column + 1);
+        } catch (IOException e) {
+            return "Unknown range: " + range;
+        }
     }
 
     public ComponentProvider getContainer() {

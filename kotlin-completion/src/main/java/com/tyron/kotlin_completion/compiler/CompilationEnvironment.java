@@ -53,6 +53,8 @@ public class CompilationEnvironment implements Closeable {
         mJavaSourcePath = javaSourcePath;
         mClassPath = classPath;
 
+        UtilKt.setIdeaIoUseFallback();
+
         mEnvironment = KotlinCoreEnvironment.createForProduction(mDisposable,
                 getConfiguration(), EnvironmentConfigFiles.JVM_CONFIG_FILES);
         mParser = new KtPsiFactory(mEnvironment.getProject());
@@ -94,12 +96,15 @@ public class CompilationEnvironment implements Closeable {
         return configuration;
     }
 
+    private FileBasedDeclarationProviderFactory mFactory;
+
     @SuppressWarnings("unchecked")
     public Pair<ComponentProvider, BindingTraceContext> createContainer(Collection<KtFile> sourcePath) {
         CliBindingTrace trace = new CliBindingTrace();
         ComponentProvider container = TopDownAnalyzerFacadeForJVM.INSTANCE.createContainer(mEnvironment.getProject(),
                 sourcePath, trace, mEnvironment.getConfiguration(), mEnvironment::createPackagePartProvider,
-                (storageManager, ktFiles) -> new FileBasedDeclarationProviderFactory(storageManager, (Collection<KtFile>) ktFiles),
+                (storageManager, ktFiles) ->
+                  new FileBasedDeclarationProviderFactory(storageManager, (Collection<KtFile>) ktFiles),
                 CompilerEnvironment.INSTANCE, TopDownAnalyzerFacadeForJVM.INSTANCE.newModuleSearchScope(mEnvironment.getProject(), mEnvironment.getSourceFiles()),
                 Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(), Collections.emptyMap());
         return Pair.create(container, trace);

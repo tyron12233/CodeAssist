@@ -10,6 +10,8 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import java.lang.IllegalStateException
+import java.time.Duration
+import java.time.Instant
 import kotlin.sequences.Sequence
 
 private const val MAX_FQNAME_LENGTH = 255
@@ -80,16 +82,25 @@ class SymbolIndex {
         }
     }
 
-    fun query(prefix: String, receiverType: FqName? = null, limit: Int = 20): List<Symbol> = transaction(db) {
-        (Symbols innerJoin FqNames)
-            .select { FqNames.shortName.like("$prefix%") and (Symbols.extensionReceiverType eq receiverType?.toString()) }
-            .limit(limit)
-            .map { Symbol(
-                fqName =  FqName(it[Symbols.fqName]),
-                kind = Symbol.Kind.fromRaw(it[Symbols.kind]),
-                visibility = Symbol.Visibility.fromRaw(it[Symbols.visibility]),
-                extensionReceiverType = it[Symbols.extensionReceiverType]?.let(::FqName)
-            )}
+    fun query(prefix: String, receiverType: FqName? = null, limit: Int = 20): List<Symbol> {
+        val start = Instant.now()
+        try {
+            return transaction(db) {
+                (Symbols innerJoin FqNames)
+                    .select { FqNames.shortName.like("$prefix%") and (Symbols.extensionReceiverType eq receiverType?.toString()) }
+                    .limit(limit)
+                    .map {
+                        Symbol(
+                            fqName = FqName(it[Symbols.fqName]),
+                            kind = Symbol.Kind.fromRaw(it[Symbols.kind]),
+                            visibility = Symbol.Visibility.fromRaw(it[Symbols.visibility]),
+                            extensionReceiverType = it[Symbols.extensionReceiverType]?.let(::FqName)
+                        )
+                    }
+            }
+        } finally {
+            Log.d("SymbolIndex", "Query took " + Duration.between(start, Instant.now()).toMillis() + " ms")
+        }
     }
 
     private fun canStoreFqName(fqName: FqName) =

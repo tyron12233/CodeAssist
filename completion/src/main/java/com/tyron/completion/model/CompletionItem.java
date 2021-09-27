@@ -29,7 +29,7 @@ public class CompletionItem {
     
     public List<TextEdit> additionalTextEdits;
     
-	public String data;
+	public String data = "";
 	
     public CompletionItem() {
         

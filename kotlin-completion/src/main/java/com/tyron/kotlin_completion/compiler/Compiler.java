@@ -92,11 +92,14 @@ public class Compiler implements Closeable {
 
     public Pair<BindingContext, ComponentProvider> compileKtFiles(Collection<? extends KtFile> files, Collection<KtFile> sourcePath, CompletionKind kind) {
         mCompileLock.lock();
+        Instant start = Instant.now();
+
         try {
             Pair<ComponentProvider, BindingTraceContext> pair = mDefaultCompileEnvironment.createContainer(sourcePath);
             ((LazyTopDownAnalyzer) pair.first.resolve(LazyTopDownAnalyzer.class).getValue()).analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files, DataFlowInfo.Companion.getEMPTY(), null);
             return Pair.create(pair.second.getBindingContext(), pair.first);
         } finally {
+            Log.d("KotlinCompiler", "Compilation took " + Duration.between(start, Instant.now()).toMillis() + " ms");
             mCompileLock.unlock();
         }
     }

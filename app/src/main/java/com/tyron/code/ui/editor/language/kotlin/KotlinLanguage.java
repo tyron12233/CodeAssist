@@ -27,7 +27,7 @@ public class KotlinLanguage implements EditorLanguage {
     public KotlinLanguage(CodeEditor editor) {
         mEditor = editor;
 
-        mAnalyzer = new KotlinAnalyzer(editor);
+        mAnalyzer = new KotlinAnalyzer();
     }
 
     @Override

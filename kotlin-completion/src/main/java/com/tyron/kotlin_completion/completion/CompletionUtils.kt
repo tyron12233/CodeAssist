@@ -1,7 +1,6 @@
 package com.tyron.kotlin_completion.completion
 
 import android.util.Log
-import com.tyron.common.util.StringSearch
 import com.tyron.completion.drawable.CircleDrawable
 import com.tyron.completion.model.*
 import com.tyron.kotlin_completion.CompiledFile
@@ -22,90 +21,134 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.DescriptorUtils.isExtension
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.HierarchicalScope
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
+import java.time.Duration
+import java.time.Instant
 
-inline fun<reified Find> PsiElement.findParent() =
+inline fun <reified Find> PsiElement.findParent() =
     PsiUtils.getParentsWithSelf(this).filterIsInstance<Find>().firstOrNull()
 
 const val MIN_SORT_LENGTH = 3
 const val MAX_COMPLETION_ITEMS = 50
 
-fun completions(file: CompiledFile, cursor: Int, index: SymbolIndex, partial: String): CompletionList {
+fun completions(
+    file: CompiledFile,
+    cursor: Int,
+    index: SymbolIndex,
+    partial: String
+): CompletionList {
     val (elementItems, isExhaustive, receiver) = elementCompletionItems(file, cursor, partial)
     val elementItemList = elementItems.toList()
     val elementItemLabels = elementItemList.mapNotNull { it.label }.toSet()
-    val items = (
-            elementItemList.asSequence()
-                    + (if (!isExhaustive) indexCompletionItems(file, cursor, receiver, index, partial).filter { it.label !in elementItemLabels } else emptySequence())
-                    + (if (elementItemList.isEmpty()) keywordCompletionItems(partial) else emptySequence())
-            )
+
+    val items = (elementItemList.asSequence()
+                        + (if (!isExhaustive) indexCompletionItems(
+                    file,
+                    cursor,
+                    receiver,
+                    index,
+                    partial
+                ).filter { it.label !in elementItemLabels } else emptySequence())
+                        + (if (elementItemList.isEmpty()) keywordCompletionItems(partial) else emptySequence())
+                )
+
+    val start = Instant.now();
 
     val itemList = items
         .take(MAX_COMPLETION_ITEMS)
         .toList()
-        //.onEachIndexed { i, item -> item.data = i.toString().padStart(2, '0') }
+        .onEachIndexed { i, item -> item.data = i.toString().padStart(2, '0') }
     val isIncomplete = itemList.size >= MAX_COMPLETION_ITEMS || elementItemList.isEmpty()
 
     val list = CompletionList()
     list.items = itemList
     list.isIncomplete = isIncomplete
+
+    Log.d(
+        "Completions",
+        "Merging completions took " + Duration.between(start, Instant.now()).toMillis() + " ms"
+    )
     return list
 }
 
-private fun indexCompletionItems(file: CompiledFile, cursor: Int, receiver: KtExpression?, index: SymbolIndex, partial: String): Sequence<CompletionItem> {
-    val parsedFile = file.parse;
-    val imports = parsedFile.importDirectives;
+private fun indexCompletionItems(
+    file: CompiledFile,
+    cursor: Int,
+    receiver: KtExpression?,
+    index: SymbolIndex,
+    partial: String
+): Sequence<CompletionItem> {
+    val start = Instant.now();
 
-    val wildCardPackages = imports
-        .mapNotNull { it.importPath }
-        .filter { it.isAllUnder }
-        .map { it.fqName }
-        .toSet()
+    try {
+        val parsedFile = file.parse;
+        val imports = parsedFile.importDirectives;
 
-    val importNames = imports
-        .mapNotNull { it.importedFqName?.shortName() }
-        .toSet()
-    val receiverType= receiver?.let { expr -> file.scopeAtPoint(cursor)?.let { file.typeOfExpression(expr, it) } }
-    val receiverTypeName = if (receiverType?.constructor?.declarationDescriptor == null) null else
-        PsiUtils.getFqNameSafe(receiverType.constructor.declarationDescriptor)
+        val wildCardPackages = imports
+            .mapNotNull { it.importPath }
+            .filter { it.isAllUnder }
+            .map { it.fqName }
+            .toSet()
 
-    return index
-        .query(partial, receiverTypeName, limit = MAX_COMPLETION_ITEMS)
-        .asSequence()
-        .filter { it.kind != Symbol.Kind.MODULE }
-        .filter {
-            it.visibility == Symbol.Visibility.PUBLIC
-                    || it.visibility == Symbol.Visibility.PROTECTED
-                    || it.visibility == Symbol.Visibility.INTERNAL
-        }
-        .map { CompletionItem().apply {
-            label = it.fqName.shortName().toString()
-            commitText = label
-            cursorOffset = label.length
-            iconKind = when (it.kind) {
-                Symbol.Kind.CLASS -> CircleDrawable.Kind.Class
-                Symbol.Kind.INTERFACE -> CircleDrawable.Kind.Interface
-                Symbol.Kind.FUNCTION -> CircleDrawable.Kind.Method
-                Symbol.Kind.VARIABLE -> CircleDrawable.Kind.LocalVariable
-                Symbol.Kind.FIELD -> CircleDrawable.Kind.Filed
-                else -> CircleDrawable.Kind.Method
+        val importNames = imports
+            .mapNotNull { it.importedFqName?.shortName() }
+            .toSet()
+        val receiverType =
+            receiver?.let { expr ->
+                file.scopeAtPoint(cursor)?.let { file.typeOfExpression(expr, it) }
             }
-            detail = "(import from ${it.fqName.parent()})"
-            val pos = findImportInsertionPosition(parsedFile, it.fqName)
-            val prefix = if (importNames.isEmpty()) "\n\n" else "\n"
-            additionalTextEdits = listOf(TextEdit(Range(pos, pos), "${prefix}import ${it.fqName}"))
-        } }
+        val receiverTypeName =
+            if (receiverType?.constructor?.declarationDescriptor == null) null else
+                PsiUtils.getFqNameSafe(receiverType.constructor.declarationDescriptor)
+
+        return index
+            .query(partial, receiverTypeName, limit = MAX_COMPLETION_ITEMS)
+            .asSequence()
+            .filter { it.kind != Symbol.Kind.MODULE }
+            .filter { it.fqName.shortName() !in importNames && it.fqName.parent() !in wildCardPackages }
+            .filter {
+                it.visibility == Symbol.Visibility.PUBLIC
+                        || it.visibility == Symbol.Visibility.PROTECTED
+                        || it.visibility == Symbol.Visibility.INTERNAL
+            }
+            .map {
+                CompletionItem().apply {
+                    label = it.fqName.shortName().toString()
+                    commitText = label
+                    cursorOffset = label.length
+                    iconKind = when (it.kind) {
+                        Symbol.Kind.CLASS -> CircleDrawable.Kind.Class
+                        Symbol.Kind.INTERFACE -> CircleDrawable.Kind.Interface
+                        Symbol.Kind.FUNCTION -> CircleDrawable.Kind.Method
+                        Symbol.Kind.VARIABLE -> CircleDrawable.Kind.LocalVariable
+                        Symbol.Kind.FIELD -> CircleDrawable.Kind.Filed
+                        else -> CircleDrawable.Kind.Method
+                    }
+                    detail = "(import from ${it.fqName.parent()})"
+                    val pos = findImportInsertionPosition(parsedFile, it.fqName)
+                    val prefix = if (importNames.isEmpty()) "\n\n" else "\n"
+                    additionalTextEdits =
+                        listOf(TextEdit(Range(pos, pos), "${prefix}import ${it.fqName}"))
+                }
+            }
+
+    } finally {
+        Log.d(
+            "IndexCompletions",
+            "IndexCompletions took " + Duration.between(start, Instant.now()).toMillis() + " ms"
+        )
+    }
 
 }
 
 private fun findImportInsertionPosition(parsedFile: KtFile, fqName: FqName): Position =
-    (closestImport(parsedFile.importDirectives, fqName) as? KtElement ?: parsedFile.packageDirective as? KtElement)
+    (closestImport(parsedFile.importDirectives, fqName) as? KtElement
+        ?: parsedFile.packageDirective as? KtElement)
         ?.let(com.tyron.kotlin_completion.position.Position::location)
         ?.range
         ?.end
@@ -122,14 +165,28 @@ private fun matchingPrefixLength(left: FqName, right: FqName): Int =
         .takeWhile { it.first == it.second }
         .count()
 
-private fun keywordCompletionItems(partial: String): Sequence<CompletionItem> =
-    (KtTokens.SOFT_KEYWORDS.getTypes() + KtTokens.KEYWORDS.types).asSequence()
-        .mapNotNull { (it as? KtKeywordToken)?.value }
-        .filter { StringSearch.matchesPartialName(it, partial) }
-        .map { CompletionItem().apply {
-            label = it
-            iconKind = CircleDrawable.Kind.Keyword
-        } }
+/** Finds keyword completions starting with the given partial identifier. */
+private fun keywordCompletionItems(partial: String): Sequence<CompletionItem> {
+    val start = Instant.now();
+    try {
+        return (KtTokens.SOFT_KEYWORDS.getTypes() + KtTokens.KEYWORDS.getTypes()).asSequence()
+            .mapNotNull { (it as? KtKeywordToken)?.value }
+            .filter { it.startsWith(partial) }
+            .map {
+                CompletionItem().apply {
+                    label = it
+                    iconKind = CircleDrawable.Kind.Keyword
+                    commitText = label
+                    cursorOffset = label.length
+                }
+            }
+    } finally {
+        Log.d(
+            "KeywordCompletions",
+            "KeywordCompletion took " + Duration.between(start, Instant.now()) + " ms"
+        )
+    }
+}
 
 fun functionInsertText(desc: FunctionDescriptor, snippetsEnabled: Boolean, name: String): String {
     return if (snippetsEnabled) {
@@ -137,7 +194,9 @@ fun functionInsertText(desc: FunctionDescriptor, snippetsEnabled: Boolean, name:
         val hasTrailingLambda = RenderCompletionItem.isFunctionType(parameters.lastOrNull()?.type)
 
         if (hasTrailingLambda) {
-            val parenthesizedParams = parameters.dropLast(1).ifEmpty { null }?.let { "(${valueParametersSnippet(it)})" } ?: ""
+            val parenthesizedParams =
+                parameters.dropLast(1).ifEmpty { null }?.let { "(${valueParametersSnippet(it)})" }
+                    ?: ""
             "$name$parenthesizedParams { \${${parameters.size}:${parameters.last().name}} }"
         } else {
             "$name(${valueParametersSnippet(parameters)})"
@@ -154,12 +213,29 @@ private fun valueParametersSnippet(parameters: List<ValueParameterDescriptor>) =
     .mapIndexed { index, vpd -> "\${${index + 1}:${vpd.name}}" }
     .joinToString()
 
-private fun elementCompletionItems(file: CompiledFile, cursor: Int, partial: String): ElementCompletionItems {
-    val surroundingElement = completableElement(file, cursor) ?: return ElementCompletionItems(emptySequence(), true, null)
+private fun elementCompletionItems(
+    file: CompiledFile,
+    cursor: Int,
+    partial: String
+): ElementCompletionItems {
+    val start = Instant.now()
+
+    val surroundingElement = completableElement(file, cursor) ?: return ElementCompletionItems(
+        emptySequence(),
+        true,
+        null
+    )
     val completions = elementCompletions(file, cursor, surroundingElement)
 
-    val matchesName = completions.filter { containsCharactersInOrder(name(it), partial, caseSensitive = false) }
-    val sorted = matchesName.takeIf { partial.length >= MIN_SORT_LENGTH }?.sortedBy { stringDistance(name(it), partial) }
+    val matchesName = completions.filter {
+        containsCharactersInOrder(
+            name(it),
+            partial,
+            caseSensitive = false
+        )
+    }
+    val sorted = matchesName.takeIf { partial.length >= MIN_SORT_LENGTH }
+        ?.sortedBy { stringDistance(name(it), partial) }
         ?: matchesName.sortedBy { if (name(it).startsWith(partial)) 0 else 1 }
     val visible = sorted.filter(isVisible(file, cursor))
 
@@ -168,13 +244,26 @@ private fun elementCompletionItems(file: CompiledFile, cursor: Int, partial: Str
             && surroundingElement !is KtQualifiedExpression
     val receiver = (surroundingElement as? KtQualifiedExpression)?.receiverExpression
 
-    return ElementCompletionItems(visible.map { completionItem(it, surroundingElement, file) }, isExhaustive, receiver)
+    Log.d(
+        "Completions",
+        "ElementCompletions took " + Duration.between(start, Instant.now()).toMillis() + " ms"
+    )
+    return ElementCompletionItems(
+        visible.map { completionItem(it, surroundingElement, file) },
+        isExhaustive,
+        receiver
+    )
 }
 
 private val callPattern = Regex("(.*)\\((?:\\$\\d+)?\\)(?:\\$0)?")
-private val methodSignature = Regex("""(?:fun|constructor) (?:<(?:[a-zA-Z?f\!\: ]+)(?:, [A-Z])*> )?([a-zA-Z]+\(.*\))""")
+private val methodSignature =
+    Regex("""(?:fun|constructor) (?:<(?:[a-zA-Z?f\!\: ]+)(?:, [A-Z])*> )?([a-zA-Z]+\(.*\))""")
 
-private fun completionItem(d: DeclarationDescriptor, surroundingElement: KtElement, file: CompiledFile): CompletionItem {
+private fun completionItem(
+    d: DeclarationDescriptor,
+    surroundingElement: KtElement,
+    file: CompiledFile
+): CompletionItem {
     val renderWithSnippets = surroundingElement !is KtCallableReferenceExpression
             && surroundingElement !is KtImportDirective
     val result = d.accept(RenderCompletionItem(renderWithSnippets), null)
@@ -187,16 +276,18 @@ private fun completionItem(d: DeclarationDescriptor, surroundingElement: KtEleme
         result.detail += " (from ${result.label})"
         result.label = name
         result.commitText = name
-      //  result.filterText = name
+        //  result.filterText = name
     }
 
     if (KotlinBuiltIns.isDeprecated(d)) {
-       // result.tags = listOf(CompletionItemTag.Deprecated)
+        // result.tags = listOf(CompletionItemTag.Deprecated)
     }
 
     val matchCall = callPattern.matchEntire(result.commitText)
 
-    if (file.lineAfter(PsiUtils.getEndOffset(surroundingElement)).startsWith("(") && matchCall != null) {
+    if (file.lineAfter(PsiUtils.getEndOffset(surroundingElement))
+            .startsWith("(") && matchCall != null
+    ) {
         result.commitText = matchCall.groups[1]!!.value
     }
 
@@ -245,10 +336,11 @@ fun isVisible(file: CompiledFile, cursor: Int): (DeclarationDescriptor) -> Boole
     val from = PsiUtils.getParentsWithSelf(el)
         .mapNotNull { file.compile[BindingContext.DECLARATION_TO_DESCRIPTOR, it] }
         .firstOrNull() ?: return { true }
+
     fun check(target: DeclarationDescriptor): Boolean {
         val visible = isDeclarationVisible(target, from)
 
-       // if (!visible) logHidden(target, from)
+        // if (!visible) logHidden(target, from)
 
         return visible
     }
@@ -258,12 +350,18 @@ fun isVisible(file: CompiledFile, cursor: Int): (DeclarationDescriptor) -> Boole
 
 // We can't use the implementations in Visibilities because they don't work with our type of incremental compilation
 // Instead, we implement our own "liberal" visibility checker that defaults to visible when in doubt
-private fun isDeclarationVisible(target: DeclarationDescriptor, from: DeclarationDescriptor): Boolean =
+private fun isDeclarationVisible(
+    target: DeclarationDescriptor,
+    from: DeclarationDescriptor
+): Boolean =
     PsiUtils.getParentsWithSelf(target)
         .filterIsInstance<DeclarationDescriptorWithVisibility>()
         .none { isNotVisible(it, from) }
 
-fun isNotVisible(target: DeclarationDescriptorWithVisibility, from: DeclarationDescriptor): Boolean {
+fun isNotVisible(
+    target: DeclarationDescriptorWithVisibility,
+    from: DeclarationDescriptor
+): Boolean {
     when (target.visibility.delegate) {
         Visibilities.Private, Visibilities.PrivateToThis -> {
             if (DescriptorUtils.isTopLevelDeclaration(target))
@@ -287,14 +385,16 @@ fun sameFile(target: DeclarationDescriptor, from: DeclarationDescriptor): Boolea
 }
 
 fun sameParent(target: DeclarationDescriptor, from: DeclarationDescriptor): Boolean {
-    val targetParent = PsiUtils.getParentsWithSelf(target).mapNotNull(::isParentClass).firstOrNull() ?: return true
+    val targetParent =
+        PsiUtils.getParentsWithSelf(target).mapNotNull(::isParentClass).firstOrNull() ?: return true
     val fromParents = PsiUtils.getParentsWithSelf(from).mapNotNull(::isParentClass).toList()
 
     return fromParents.any { PsiUtils.getFqNameSafe(it) == PsiUtils.getFqNameSafe(targetParent) }
 }
 
 fun subclassParent(target: DeclarationDescriptor, from: DeclarationDescriptor): Boolean {
-    val targetParent = PsiUtils.getParentsWithSelf(target).mapNotNull(::isParentClass).firstOrNull() ?: return true
+    val targetParent =
+        PsiUtils.getParentsWithSelf(target).mapNotNull(::isParentClass).firstOrNull() ?: return true
     val fromParents = PsiUtils.getParentsWithSelf(from).mapNotNull(::isParentClass).toList()
 
     if (fromParents.isEmpty()) return true
@@ -302,9 +402,12 @@ fun subclassParent(target: DeclarationDescriptor, from: DeclarationDescriptor): 
 }
 
 private fun isExtensionFor(type: KotlinType, extensionFunction: CallableDescriptor): Boolean {
-    val receiverType = PsiUtils.replaceArgumentsWithStarProjections(extensionFunction.extensionReceiverParameter?.type) ?: return false
+    val receiverType =
+        PsiUtils.replaceArgumentsWithStarProjections(extensionFunction.extensionReceiverParameter?.type)
+            ?: return false
     return KotlinTypeChecker.DEFAULT.isSubtypeOf(type, receiverType)
-            || (TypeUtils.getTypeParameterDescriptorOrNull(receiverType)?.isGenericExtensionFor(type) ?: false)
+            || (TypeUtils.getTypeParameterDescriptorOrNull(receiverType)
+        ?.isGenericExtensionFor(type) ?: false)
 }
 
 private fun TypeParameterDescriptor.isGenericExtensionFor(type: KotlinType): Boolean =
@@ -336,13 +439,19 @@ fun completableElement(file: CompiledFile, cursor: Int): KtElement? {
         ?: el as? KtNameReferenceExpression
 }
 
-fun elementCompletions(file: CompiledFile, cursor: Int, surroundingElement: KtElement): Sequence<DeclarationDescriptor> {
+fun elementCompletions(
+    file: CompiledFile,
+    cursor: Int,
+    surroundingElement: KtElement
+): Sequence<DeclarationDescriptor> {
     return when (surroundingElement) {
         // import x.y.?
         is KtImportDirective -> {
             Log.d("ElementCompletions", "Completing import: " + surroundingElement.text)
-            val module = file.container.resolve(ModuleDescriptor::class.java)?.getValue() as ModuleDescriptor
-            val match = Regex("import ((\\w+\\.)*)[\\w*]*").matchEntire(surroundingElement.text) ?: return emptySequence()
+            val module =
+                file.container.resolve(ModuleDescriptor::class.java)?.getValue() as ModuleDescriptor
+            val match = Regex("import ((\\w+\\.)*)[\\w*]*").matchEntire(surroundingElement.text)
+                ?: return emptySequence()
             val parentDot = if (match.groupValues[1].isNotBlank()) match.groupValues[1] else "."
             val parent = parentDot.substring(0, parentDot.length - 1)
             //LOG.debug("Looking for members of package '{}'", parent)
@@ -352,26 +461,33 @@ fun elementCompletions(file: CompiledFile, cursor: Int, surroundingElement: KtEl
         // package x.y.?
         is KtPackageDirective -> {
             Log.d("ElementCompletions", "Completing package directive " + surroundingElement.text)
-            val module = file.container.resolve(ModuleDescriptor::class.java)?.getValue() as ModuleDescriptor
+            val module =
+                file.container.resolve(ModuleDescriptor::class.java)?.getValue() as ModuleDescriptor
             val match = Regex("package ((\\w+\\.)*)[\\w*]*").matchEntire(surroundingElement.text)
                 ?: return emptySequence()
             val parentDot = if (match.groupValues[1].isNotBlank()) match.groupValues[1] else "."
             val parent = parentDot.substring(0, parentDot.length - 1)
             Log.d("ElementCompletions", "Looking for members of " + parent)
             val parentPackage = module.getPackage(FqName.fromSegments(parent.split('.')))
-            parentPackage.memberScope.getContributedDescriptors(DescriptorKindFilter.PACKAGES).asSequence()
+            parentPackage.memberScope.getContributedDescriptors(DescriptorKindFilter.PACKAGES)
+                .asSequence()
 
         }
         // :?
         is KtTypeElement -> {
             // : Outer.?
             if (surroundingElement is KtUserType && surroundingElement.qualifier != null) {
-                val referenceTarget = file.referenceAtPoint(PsiUtils.getStartOffset(surroundingElement.qualifier!!))?.second
+                val referenceTarget =
+                    file.referenceAtPoint(PsiUtils.getStartOffset(surroundingElement.qualifier!!))?.second
                 if (referenceTarget is ClassDescriptor) {
-                    Log.d("ElementCompletions", "Completing members of " + PsiUtils.getFqNameSafe(referenceTarget))
-                    return referenceTarget.unsubstitutedInnerClassesScope.getContributedDescriptors().asSequence()
+                    Log.d(
+                        "ElementCompletions",
+                        "Completing members of " + PsiUtils.getFqNameSafe(referenceTarget)
+                    )
+                    return referenceTarget.unsubstitutedInnerClassesScope.getContributedDescriptors()
+                        .asSequence()
                 } else {
-                  //  LOG.warn("No type reference in '{}'", surroundingElement.text)
+                    //  LOG.warn("No type reference in '{}'", surroundingElement.text)
                     return emptySequence()
                 }
             } else {
@@ -385,7 +501,12 @@ fun elementCompletions(file: CompiledFile, cursor: Int, surroundingElement: KtEl
         // .?
         is KtQualifiedExpression -> {
 //            LOG.info("Completing member expression '{}'", surroundingElement.text)
-              completeMembers(file, cursor, surroundingElement.receiverExpression, surroundingElement is KtSafeQualifiedExpression)
+            completeMembers(
+                file,
+                cursor,
+                surroundingElement.receiverExpression,
+                surroundingElement is KtSafeQualifiedExpression
+            )
         }
         is KtCallableReferenceExpression -> {
             // something::?
@@ -395,25 +516,35 @@ fun elementCompletions(file: CompiledFile, cursor: Int, surroundingElement: KtEl
             }
             // ::?
             else {
-               // LOG.info("Completing function reference '{}'", surroundingElement.text)
-                val scope = file.scopeAtPoint(PsiUtils.getStartOffset(surroundingElement)) ?: return emptySequence()
+                // LOG.info("Completing function reference '{}'", surroundingElement.text)
+                val scope = file.scopeAtPoint(PsiUtils.getStartOffset(surroundingElement))
+                    ?: return emptySequence()
                 identifiers(scope)
             }
         }
         // ?
         is KtNameReferenceExpression -> {
             //LOG.info("Completing identifier '{}'", surroundingElement.text)
-            val scope = file.scopeAtPoint(PsiUtils.getStartOffset(surroundingElement)) ?: return emptySequence()
+            val scope = file.scopeAtPoint(PsiUtils.getStartOffset(surroundingElement))
+                ?: return emptySequence()
             identifiers(scope)
         }
         else -> {
-            Log.d("ElementCompletions", surroundingElement::class.simpleName + " " + surroundingElement.text  + " didn't look like a type, a member, or an identifier")
+            Log.d(
+                "ElementCompletions",
+                surroundingElement::class.simpleName + " " + surroundingElement.text + " didn't look like a type, a member, or an identifier"
+            )
             emptySequence()
         }
     }
 }
 
-private fun completeMembers(file: CompiledFile, cursor: Int, receiverExpr: KtExpression, unwrapNullable: Boolean = false): Sequence<DeclarationDescriptor> {
+private fun completeMembers(
+    file: CompiledFile,
+    cursor: Int,
+    receiverExpr: KtExpression,
+    unwrapNullable: Boolean = false
+): Sequence<DeclarationDescriptor> {
     // thingWithType.?
     var descriptors = emptySequence<DeclarationDescriptor>()
     file.scopeAtPoint(cursor)?.let { lexicalScope ->
@@ -421,13 +552,14 @@ private fun completeMembers(file: CompiledFile, cursor: Int, receiverExpr: KtExp
             val receiverType = if (unwrapNullable) try {
                 TypeUtils.makeNotNullable(expressionType)
             } catch (e: Exception) {
-              //  LOG.printStackTrace(e)
+                //  LOG.printStackTrace(e)
                 expressionType
             } else expressionType
 
-           // LOG.debug("Completing members of instance '{}'", receiverType)
+            // LOG.debug("Completing members of instance '{}'", receiverType)
             val members = receiverType.memberScope.getContributedDescriptors().asSequence()
-            val extensions = extensionFunctions(lexicalScope).filter { isExtensionFor(receiverType, it) }
+            val extensions =
+                extensionFunctions(lexicalScope).filter { isExtensionFor(receiverType, it) }
             descriptors = members + extensions
 
             if (!isCompanionOfEnum(receiverType)) {
@@ -439,9 +571,10 @@ private fun completeMembers(file: CompiledFile, cursor: Int, receiverExpr: KtExp
     // JavaClass.?
     val referenceTarget = file.referenceAtPoint(PsiUtils.getEndOffset(receiverExpr) - 1)?.second
     if (referenceTarget is ClassDescriptor) {
-       // LOG.debug("Completing static members of '{}'", referenceTarget.fqNameSafe)
+        // LOG.debug("Completing static members of '{}'", referenceTarget.fqNameSafe)
         val statics = referenceTarget.staticScope.getContributedDescriptors().asSequence()
-        val classes = referenceTarget.unsubstitutedInnerClassesScope.getContributedDescriptors().asSequence()
+        val classes =
+            referenceTarget.unsubstitutedInnerClassesScope.getContributedDescriptors().asSequence()
         return descriptors + statics + classes
     }
 
@@ -461,7 +594,8 @@ private fun isCompanionOfEnum(kotlinType: KotlinType): Boolean {
 fun scopeChainTypes(scope: LexicalScope): Sequence<DeclarationDescriptor> =
     PsiUtils.getParentsWithSelf(scope).flatMap(::scopeTypes)
 
-private val TYPES_FILTER = DescriptorKindFilter(DescriptorKindFilter.NON_SINGLETON_CLASSIFIERS_MASK or DescriptorKindFilter.TYPE_ALIASES_MASK)
+private val TYPES_FILTER =
+    DescriptorKindFilter(DescriptorKindFilter.NON_SINGLETON_CLASSIFIERS_MASK or DescriptorKindFilter.TYPE_ALIASES_MASK)
 
 private fun scopeTypes(scope: HierarchicalScope): Sequence<DeclarationDescriptor> =
     scope.getContributedDescriptors(TYPES_FILTER).asSequence()

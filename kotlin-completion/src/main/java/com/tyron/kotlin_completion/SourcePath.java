@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.com.intellij.lang.Language;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
 import org.jetbrains.kotlin.container.ComponentProvider;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
+import org.jetbrains.kotlin.idea.KotlinLanguage;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.BindingTrace;
@@ -65,8 +66,11 @@ public class SourcePath {
         private final CompletionKind kind = CompletionKind.DEFAULT;
         private boolean indexInitialized;
 
-        public SourceFile(URI uri, String content) {
-            this(uri, content, Paths.get(uri), null, null, null, null, null, false);
+        public SourceFile(URI uri, String content, Language language, boolean isTemporary) {
+            this(uri, content, Paths.get(uri), null, null, null, null, language, isTemporary);
+        }
+        public SourceFile(URI uri, String content, Language language) {
+            this(uri, content, Paths.get(uri), null, null, null, null, language, false);
         }
 
         private SourceFile(URI uri, String content, Path path, KtFile parsed, KtFile compiledFile, BindingContext compiledContext, ComponentProvider compiledcontainer, Language language, boolean isTemporary) {
@@ -175,14 +179,27 @@ public class SourcePath {
 
         Log.d(TAG, "Putting contents of " + file.getName());
         if (temp) {
-
+            Log.d(TAG, "Adding temporary file");
         }
 
         if (files.containsKey(file.toURI())) {
             sourceFile(file).put(content);
         } else {
-            files.put(file.toURI(), new SourceFile(file.toURI(), content));
+            files.put(file.toURI(), new SourceFile(file.toURI(), content, KotlinLanguage.INSTANCE, temp));
         }
+    }
+
+    public boolean deleteIfTemporary(File uri) {
+        if (sourceFile(uri).isTemporary) {
+            delete(uri);
+            return true;
+        }
+
+        return false;
+    }
+
+    public void delete(File file) {
+        files.remove(file.toURI());
     }
 
     public CompiledFile currentVersion(File file) {
@@ -204,7 +221,7 @@ public class SourcePath {
             } catch (IOException e) {
                 string = "";
             }
-            put(file, string, false);
+            put(file, string, true);
         }
         return files.get(file.toURI());
     }
