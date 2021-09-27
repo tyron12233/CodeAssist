@@ -61,14 +61,12 @@ public class CircleDrawable extends Drawable {
     public void draw(Canvas canvas) {
         float width = getBounds().right;
         float height = getBounds().bottom;
-        
+
+        canvas.drawRect(0, 0, width, height, mPaint);
+
         canvas.save();
-        
         canvas.translate(width / 2f, height / 2f);
-        canvas.drawCircle(0, 0, width / 2f, mPaint);
-             
         float textCenter = (-(mTextPaint.descent() + mTextPaint.ascent()) / 2f);
-        
         canvas.drawText(mKind.getValue(), 0, textCenter, mTextPaint);
         canvas.restore();
         
@@ -76,7 +74,7 @@ public class CircleDrawable extends Drawable {
 
     @Override
     public void setAlpha(int p1) {
-
+        throw new UnsupportedOperationException("setAlpha is not supported on CircleDrawable");
     }
 
     @Override

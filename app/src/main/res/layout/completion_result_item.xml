@@ -1,45 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-	android:layout_width="fill_parent"
-	android:layout_height="wrap_content"
-	android:gravity="center_vertical"
-	android:orientation="horizontal"
-	android:paddingStart="4dp"
-	android:paddingEnd="4dp"
-	android:paddingTop="4dp"
-	android:paddingBottom="4dp">
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="4dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="4dp"
+    android:paddingBottom="4dp">
 
-	<ImageView
-		android:id="@+id/result_item_image"
-		android:layout_width="24dp"
-		android:layout_height="24dp"
-		android:layout_marginStart="4dp"
-		android:layout_marginEnd="4dp" />
+    <ImageView
+        android:id="@+id/result_item_image"
+        android:layout_width="35dp"
+        android:layout_height="35dp"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp" />
 
-	<TextView
-		android:id="@+id/result_item_label"
-		android:layout_width="wrap_content"
-		android:layout_height="wrap_content"
-		android:fontFamily="@font/mono_font"
-		android:layout_marginStart="4dp"
-		android:singleLine="true"
-		android:text="THIS IS A REALLY LONG TEXT THAT SHOULS"
-		android:textColor="#FFFEFEFE"
-		android:textSize="14sp" />
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
 
-	<TextView
-		android:id="@+id/result_item_desc"
-		android:layout_width="wrap_content"
-		android:layout_height="wrap_content"
-		android:layout_gravity="center_vertical"
-		android:layout_marginEnd="8dp"
-		android:layout_marginStart="4dp"
-		android:fontFamily="@font/mono_font"
-		android:singleLine="true"
-		android:ellipsize="end"
-		android:text="Small Text"
-		android:textColor="#808080"
-		android:textSize="12sp" />
+        <TextView
+            android:id="@+id/result_item_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:fontFamily="@font/mono_font"
+            android:singleLine="true"
+            android:textColor="#FFFEFEFE"
+            android:textSize="12sp"
+            tools:text="listOf(element: T)"/>
+
+        <TextView
+            android:id="@+id/result_item_desc"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="8dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/mono_font"
+            android:singleLine="true"
+            android:textColor="#808080"
+            android:textSize="11sp"
+            tools:text="inline fun &lt;T&gt; listOf(element: T)"/>
+
+    </LinearLayout>
 
 </LinearLayout>
 
