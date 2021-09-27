@@ -52,8 +52,13 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                     case KotlinLexer.SUB:
                     case KotlinLexer.MULT:
                     case KotlinLexer.DIV:
+                    case KotlinLexer.ELVIS:
                         colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
                         break;
+                    case KotlinLexer.INTERNAL:
+                    case KotlinLexer.IF:
+                    case KotlinLexer.ELSE:
+                    case KotlinLexer.IS:
                     case KotlinLexer.FUN:
                     case KotlinLexer.SUSPEND:
                     case KotlinLexer.OVERRIDE:
@@ -89,7 +94,6 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                     case KotlinLexer.INLINE:
                     case KotlinLexer.SUPER:
                     case KotlinLexer.GET:
-                    case KotlinLexer.NullLiteral:
                     case KotlinLexer.THIS:
                     case KotlinLexer.INIT:
                     case KotlinLexer.OBJECT:
