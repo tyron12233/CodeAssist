@@ -2,6 +2,8 @@ package com.tyron.builder.compiler.incremental.java;
 
 import android.util.Log;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.java.JavaTask;
 import com.tyron.builder.exception.CompilationFailedException;
@@ -158,6 +160,11 @@ public class IncrementalJavaTask extends Task {
         if (!task.call()) {
             throw new CompilationFailedException("Compilation failed. Check diagnostics for more information.");
         }
+    }
+
+    @VisibleForTesting
+    public List<File> getCompiledFiles() {
+        return mFilesToCompile;
     }
 
     private File findClassFile(String packageName) {

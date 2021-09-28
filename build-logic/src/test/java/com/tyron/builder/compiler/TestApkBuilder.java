@@ -1,14 +1,18 @@
 package com.tyron.builder.compiler;
 
+import com.tyron.builder.BuildModule;
 import com.tyron.builder.TestProject;
 import com.tyron.builder.model.Project;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 
 import static com.google.common.truth.Truth.assertThat;
+
+import androidx.test.core.app.ApplicationProvider;
 
 @RunWith(RobolectricTestRunner.class)
 public class TestApkBuilder {
@@ -20,15 +24,12 @@ public class TestApkBuilder {
 
     @Before
     public void setup() {
+        BuildModule.initialize(ApplicationProvider.getApplicationContext());
         mProject = new TestProject(PROJECT_NAME).getProject();
-
-        mApkBuilder = new ApkBuilder(StdLogger.INSTANCE, mProject);
     }
 
     @Test
     public void testBuild() {
-        mApkBuilder.build((success, message) -> {
-            assertThat(success).isTrue();
-        });
+
     }
 }

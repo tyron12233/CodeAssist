@@ -4,6 +4,8 @@ package com.tyron.builder.compiler.java;
 import android.annotation.SuppressLint;
 import android.util.Log;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.tools.javac.api.JavacTool;
 
@@ -36,6 +38,7 @@ public class JavaTask extends Task {
 
     private ILogger logViewModel;
     private Project mProject;
+    private List<File> mCompiledFiles;
 
     @Override
     public String getName() {
@@ -72,6 +75,7 @@ public class JavaTask extends Task {
         mProject.clear();
         List<File> javaFiles = new ArrayList<>(mProject.getJavaFiles().values());
         javaFiles.addAll(getJavaFiles(new File(mProject.getBuildDirectory(), "gen")));
+        mCompiledFiles = new ArrayList<>();
 
         DiagnosticListener<JavaFileObject> diagnosticCollector = diagnostic -> {
             switch (diagnostic.getKind()) {
@@ -104,6 +108,7 @@ public class JavaTask extends Task {
 
         List<JavaFileObject> javaFileObjects = new ArrayList<>();
         for (File file : javaFiles) {
+            mCompiledFiles.add(file);
             javaFileObjects.add(new SourceFileObject(file.toPath()));
         }
 
@@ -123,6 +128,13 @@ public class JavaTask extends Task {
         Log.d("JavaCompiler", "Compilation took: " + (System.currentTimeMillis() - startTime) + " ms");
     }
 
+    /**
+     * Returns a list of files that are processed by the compiler
+     */
+    @VisibleForTesting
+    public List<File> getCompiledFiles() {
+        return mCompiledFiles;
+    }
     public static Set<File> getJavaFiles(File dir) {
         Set<File> javaFiles = new HashSet<>();
 

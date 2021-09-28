@@ -337,6 +337,7 @@ public class FileManager {
     }
 
     public File getAndroidJar() {
+
         File jarFile = new File(BuildModule.getContext()
                                 .getFilesDir(), "rt.jar");
         if (!jarFile.exists()) {
