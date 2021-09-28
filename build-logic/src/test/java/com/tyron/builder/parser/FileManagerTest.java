@@ -1,11 +1,10 @@
 package com.tyron.builder.parser;
 
 import org.junit.Test;
-import static org.junit.Assert.*;
 
-import com.tyron.builder.BaseProjectTest;
+import com.tyron.builder.TestProject;
 
-public class FileManagerTest extends BaseProjectTest {
+public class FileManagerTest {
 
     @Test
     public void listTest() {

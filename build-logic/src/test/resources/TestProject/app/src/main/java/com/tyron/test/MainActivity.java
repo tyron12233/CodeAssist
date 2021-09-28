@@ -1,4 +1,4 @@
-package $packagename;
+package com.tyron.test;
 
 import androidx.appcompat.app.AppCompatActivity;
 
