@@ -23,6 +23,10 @@ The steps of building using APK Builder are:
 - **The libraries in `app/lib-apkbuilder` are for use with APK Builder only**
 - **Make sure you disable kotlin option before running.**
 
+## Contributing
+- Pull request must have a short description as a title and a more detailed one in the description
+- Feature additions must include Unit/Instrumentation tests. This is for future stability of the app and modules.
+
 # Special thanks
 - Rosemoe/CodeEditor 
 - JavaNIDE
