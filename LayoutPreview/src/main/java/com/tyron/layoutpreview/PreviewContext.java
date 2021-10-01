@@ -6,11 +6,6 @@ import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.util.Log;
 
-import net.bytebuddy.ByteBuddy;
-import net.bytebuddy.description.method.MethodDescription;
-import net.bytebuddy.implementation.MethodCall;
-import net.bytebuddy.matcher.ElementMatcher;
-
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
