@@ -13,7 +13,6 @@ import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonReader;
-import com.tyron.layoutpreview.convert.ConvertException;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 
 import java.io.StringReader;

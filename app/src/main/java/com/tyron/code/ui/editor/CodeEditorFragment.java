@@ -1,17 +1,12 @@
 package com.tyron.code.ui.editor;
 
-import android.app.AlertDialog;
-import android.app.Dialog;
 import android.content.SharedPreferences;
-import android.content.res.Resources;
-import android.graphics.Rect;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -25,23 +20,23 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.parser.FileManager;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.action.CodeActionProvider;
 import com.tyron.code.lint.LintIssue;
-import com.tyron.code.ui.editor.language.java.JavaAnalyzer;
-import com.tyron.code.ui.editor.language.xml.LanguageXML;
-import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.code.model.CodeAction;
 import com.tyron.code.model.CodeActionList;
-import com.tyron.completion.model.Range;
-import com.tyron.completion.model.TextEdit;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.code.ui.editor.language.LanguageManager;
+import com.tyron.code.ui.editor.language.java.JavaAnalyzer;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
+import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.main.MainViewModel;
+import com.tyron.completion.model.Range;
+import com.tyron.completion.model.TextEdit;
+import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.lint.api.TextFormat;
 
 import org.apache.commons.io.FileUtils;
@@ -79,7 +74,7 @@ public class CodeEditorFragment extends Fragment {
         fragment.setArguments(args);
         return fragment;
     }
-    
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -89,9 +84,9 @@ public class CodeEditorFragment extends Fragment {
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     }
 
-	@Override
-	public void onPause() {
-		super.onPause();
+    @Override
+    public void onPause() {
+        super.onPause();
 
         mEditor.getTextActionPresenter().onExit();
         mEditor.hideAutoCompleteWindow();
@@ -112,14 +107,15 @@ public class CodeEditorFragment extends Fragment {
 //                }
 //            }
 //        }
-	}
+    }
 
     @Override
     public void onStart() {
         super.onStart();
 
         if (!CompletionEngine.isIndexing()) {
-            mEditor.analyze();;
+            mEditor.analyze();
+            ;
         }
     }
 
@@ -129,7 +125,7 @@ public class CodeEditorFragment extends Fragment {
 
         mRoot = (LinearLayout) inflater.inflate(R.layout.code_editor_fragment, container, false);
         mContent = mRoot.findViewById(R.id.content);
-        
+
         mEditor = new CodeEditor(requireActivity());
         mEditor.setEditorLanguage(mLanguage = LanguageManager.getInstance().get(mEditor, mCurrentFile));
         mEditor.setColorScheme(new SchemeDarcula());
@@ -147,9 +143,9 @@ public class CodeEditorFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        
+
         if (mCurrentFile.exists()) {
-           String contents = "";
+            String contents = "";
 
             try {
                 contents = FileUtils.readFileToString(mCurrentFile, Charset.defaultCharset());
@@ -225,7 +221,7 @@ public class CodeEditorFragment extends Fragment {
                             FileManager.writeFile(mEditor.getCurrentFile(), mEditor.getText().toString());
                             new MaterialAlertDialogBuilder(requireContext())
                                     .setTitle(action.getTitle())
-                                    .setItems(action.getActions().stream().map(CodeAction::getTitle).toArray(String[]:: new), ((dialogInterface, i) -> {
+                                    .setItems(action.getActions().stream().map(CodeAction::getTitle).toArray(String[]::new), ((dialogInterface, i) -> {
                                         CodeAction codeAction = action.getActions().get(i);
                                         Map<Path, List<TextEdit>> rewrites = codeAction.getEdits();
                                         List<TextEdit> edits = rewrites.values().iterator().next();
@@ -246,9 +242,9 @@ public class CodeEditorFragment extends Fragment {
             }
         });
     }
-    
+
     public void save() {
-        if(mCurrentFile.exists()) {
+        if (mCurrentFile.exists()) {
             FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
         }
     }
@@ -283,13 +279,13 @@ public class CodeEditorFragment extends Fragment {
     public void preview() {
 
         final FrameLayout container = new FrameLayout(requireContext());
-            if (mEditor != null && mLanguage instanceof LanguageXML) {
-                Executors.newSingleThreadExecutor().execute(() -> {
-                    try {
+        if (mEditor != null && mLanguage instanceof LanguageXML) {
+            Executors.newSingleThreadExecutor().execute(() -> {
+                try {
                     Instant start = Instant.now();
                     View view = ((LanguageXML) mLanguage).showPreview(requireContext(), container);
                     requireActivity().runOnUiThread(() -> {
-                        
+
 
                         Toast.makeText(requireContext(), "PreviewTask took: " + Duration.between(start, Instant.now()).toMillis() + " ms.", Toast.LENGTH_SHORT).show();
                         if (view != null) {
@@ -309,12 +305,17 @@ public class CodeEditorFragment extends Fragment {
                         }
                     });
 
-                } catch (RuntimeException e) {
-                        Log.e("LayoutPreview", "Unable to inflate layout", e);
-                    //pplicationLoader.showToast("Unable to show preview, make sure that your xml file is correct");
+                } catch (Exception e) {
+                    requireActivity().runOnUiThread(() -> {
+                        new MaterialAlertDialogBuilder(requireContext())
+                                .setTitle("Unable to preview")
+                                .setMessage(e.getMessage())
+                                .setPositiveButton(android.R.string.ok, null)
+                                .show();
+                    });
                 }
-                });
-            }
+            });
+        }
 
     }
 }
