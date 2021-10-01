@@ -22,6 +22,7 @@ public class XmlToJsonConverter {
     public static final String INTEGER_PREFIX = "@integer/";
     public static final String ID_NEW_PREFIX = "@+id/";
     public static final String ID_PREFIX = "@id/";
+    public static final String ANDROID_NS_PREFIX = "android";
 
     private final Set<String> mAttributesToSkip = new HashSet<>(Arrays.asList("xmlns:tools", "tools:context", "xmlns:tools", "xmlns:android", "style"));
 
@@ -91,6 +92,9 @@ public class XmlToJsonConverter {
         }
 
         String tag = parser.getName();
+        if (tag.startsWith(ANDROID_NS_PREFIX)) {
+            tag = tag.substring(ANDROID_NS_PREFIX.length() + 1); // android:
+        }
         json.addProperty("type", tag);
 
         for (Pair<String, String> attribute : attributes) {
