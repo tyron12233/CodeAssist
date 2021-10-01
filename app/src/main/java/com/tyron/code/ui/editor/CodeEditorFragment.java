@@ -13,6 +13,7 @@ import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -285,23 +286,18 @@ public class CodeEditorFragment extends Fragment {
                     Instant start = Instant.now();
                     View view = ((LanguageXML) mLanguage).showPreview(requireContext(), container);
                     requireActivity().runOnUiThread(() -> {
-
-
                         Toast.makeText(requireContext(), "PreviewTask took: " + Duration.between(start, Instant.now()).toMillis() + " ms.", Toast.LENGTH_SHORT).show();
                         if (view != null) {
 
-//                            Dialog dialog = new AlertDialog.Builder(requireContext(), android.R.style.Theme_Dialog)
-//                                    .setView(container)
-//                                    .show();
-//                            int height = dialog.getWindow().getAttributes().height;
-//                            int width = dialog.getWindow().getAttributes().width;
-
                             DisplayMetrics displayMetrics = requireActivity().getResources().getDisplayMetrics();
 
-                            container.setLayoutParams(new FrameLayout.LayoutParams(displayMetrics.widthPixels, displayMetrics.heightPixels));
-                            container.addView(view);
+                            FrameLayout root = new FrameLayout(requireContext());
+                            root.addView(view);
+                            container.addView(root, new ViewGroup.LayoutParams((int) (displayMetrics.widthPixels * .90), (int) (displayMetrics.heightPixels * .90)));
 
-                            requireActivity().setContentView(container);
+                            new AlertDialog.Builder(requireContext())
+                                    .setView(container)
+                                    .show();
                         }
                     });
 
