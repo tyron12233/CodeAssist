@@ -39,7 +39,7 @@ public class PreviewLayoutInflater {
                     .convert(xml);
             return inflate(object);
         } catch (Exception e) {
-            throw new InflateException("Unable to inflate layout", e);
+            throw new InflateException("Unable to inflate layout: " + e.getMessage());
         }
     }
 
@@ -54,7 +54,7 @@ public class PreviewLayoutInflater {
                     .LAYOUT_TYPE_ADAPTER
                     .read(new JsonReader(new StringReader(object.toString()))));
         } catch (Exception e) {
-            throw new InflateException("Unable to inflate layout", e);
+            throw new InflateException("Unable to inflate layout: " + e.getMessage());
         }
     }
 
