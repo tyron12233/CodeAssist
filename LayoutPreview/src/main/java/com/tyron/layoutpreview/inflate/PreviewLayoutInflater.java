@@ -14,8 +14,11 @@ import com.flipkart.android.proteus.value.ObjectValue;
 import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonReader;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
+import com.tyron.layoutpreview.model.CustomView;
+import com.tyron.layoutpreview.parser.CustomViewParser;
 
 import java.io.StringReader;
+import java.util.Collections;
 
 public class PreviewLayoutInflater {
 
@@ -26,11 +29,20 @@ public class PreviewLayoutInflater {
     public PreviewLayoutInflater(Context base) {
         mBaseContext = base;
         mProteus = new ProteusBuilder()
+                .register(new CustomViewParser(getTestView()))
                 .build();
         mContext = mProteus.createContextBuilder(base)
                 .build();
 
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
+    }
+
+    private CustomView getTestView() {
+        CustomView view = new CustomView();
+        view.setType("com.tyron.TestView");
+        view.setParentType("View");
+        view.setAttributes(Collections.emptyList());
+        return view;
     }
 
     public ProteusView inflate(String xml) throws InflateException {
