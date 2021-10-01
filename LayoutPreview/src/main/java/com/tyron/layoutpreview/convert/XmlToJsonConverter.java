@@ -5,7 +5,6 @@ import android.util.Pair;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
-import org.json.JSONObject;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
@@ -30,6 +29,14 @@ public class XmlToJsonConverter {
 
     }
 
+    /**
+     * Main entry point for the converter
+     * @param contents The xml string to parse
+     * @return The JsonObject parsed from XML
+     * @throws IOException if an error has occurred while reading the string content
+     * @throws XmlPullParserException if the XML content is malformed
+     * @throws ConvertException if the XML cannot be converted to JSON
+     */
     public JsonObject convert(String contents) throws IOException, XmlPullParserException, ConvertException {
         XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
         parser.setInput(new StringReader(contents));
@@ -40,7 +47,7 @@ public class XmlToJsonConverter {
 
     private JsonObject convert(XmlPullParser parser) throws IOException, XmlPullParserException, ConvertException {
 
-        JsonObject json = parseXml(parser);
+        JsonObject json = parseXmlElement(parser);
 
         JsonArray children = new JsonArray();
         List<JsonObject> parsedChildren = rConvert(parser);
@@ -52,6 +59,10 @@ public class XmlToJsonConverter {
         return json;
     }
 
+    /**
+     * Used to get the children of the current xml, it is then added to the {@code children}
+     * attribute of the parent
+     */
     public List<JsonObject> rConvert(XmlPullParser parser) throws IOException, XmlPullParserException, ConvertException {
         List<JsonObject> children = new ArrayList<>();
         final int depth = parser.getDepth();
@@ -69,7 +80,10 @@ public class XmlToJsonConverter {
         return children;
     }
 
-    private JsonObject parseXml(XmlPullParser parser) {
+    /**
+     * Parses the current xml element at the position with its attributes and type
+     */
+    private JsonObject parseXmlElement(XmlPullParser parser) {
         JsonObject json = new JsonObject();
         List<Pair<String, String>> attributes = new ArrayList<>();
         for (int i = 0; i < parser.getAttributeCount(); i++) {
