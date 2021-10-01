@@ -37,7 +37,7 @@ dependencies {
 
     implementation project(path: ':build-logic')
     implementation project(path: ':kotlinc')
-    implementation 'com.github.flipkart-incubator.proteus:gson-adapter:5.0.1'
+    implementation 'androidx.annotation:annotation:1.2.0'
     implementation 'com.google.code.gson:gson:2.8.8'
 
     api 'com.github.flipkart-incubator.proteus:proteus-core:5.0.1'

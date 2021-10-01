@@ -1,5 +1,7 @@
 package com.tyron.layoutpreview.parser;
 
+import android.graphics.Color;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -19,7 +21,7 @@ import com.tyron.layoutpreview.view.CustomViewWrapper;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
-public class CustomViewParser extends ViewTypeParser<CustomViewWrapper> {
+public class CustomViewParser extends ViewTypeParser<View> {
 
     private CustomView mCustomView;
 
@@ -55,23 +57,42 @@ public class CustomViewParser extends ViewTypeParser<CustomViewWrapper> {
 
 
             if (xmlParameter.equals(String.class.getName())) {
-                addAttributeProcessor(name, new StringAttributeProcessor<CustomViewWrapper>() {
+                addAttributeProcessor(name, new StringAttributeProcessor<View>() {
                     @Override
-                    public void setString(CustomViewWrapper view, String value) {
-                       Method method = getMethod(view.getAsView().getClass(), name, parametersClass);
+                    public void setString(View view, String value) {
+                       Method method = getMethod(view.getClass(), name, parametersClass);
                        if (method != null) {
                             Object[] objects = new Object[parameters.length];
                             objects[attribute.getXmlParameterOffset()] = value;
 
-                           try {
-                               method.invoke(view.getAsView(), objects);
-                           } catch (IllegalAccessException | InvocationTargetException e) {
-                               e.printStackTrace();
-                           }
+                            invokeValue(view, method, objects);
                        }
                     }
                 });
+            } else if (xmlParameter.equals(Integer.class.getName())) {
+                addAttributeProcessor(name, new StringAttributeProcessor<View>() {
+                    @Override
+                    public void setString(View view, String string) {
+                        int value = 0;
+                        try {
+                            value = Color.parseColor(string);
+                        } catch (Exception e) {
+                            value = Integer.parseInt(string);
+                        }
+                        Object[] objects = new Object[parameters.length];
+                        objects[attribute.getXmlParameterOffset()] = value;
+                        invokeValue(view, getMethod(view.getClass(), name, parametersClass), objects);
+                    }
+                });
             }
+        }
+    }
+
+    private void invokeValue(Object object, Method method, Object[] values) {
+        try {
+            method.invoke(object, values);
+        } catch (Exception e) {
+            Log.w("CustomView", "Unable to set attribute " + Log.getStackTraceString(e));
         }
     }
 
@@ -100,15 +121,20 @@ public class CustomViewParser extends ViewTypeParser<CustomViewWrapper> {
     }
 
     /**
-     * Converts an array of fully qualifed names to objects
+     * Converts an array of fully qualified names to objects
      * @return null if an error has occurred
      */
     private Class<?>[] getParameters(String[] parameters) {
         Class<?>[] params = new Class<?>[parameters.length];
         for (int i = 0; i < parameters.length; i++) {
+            if (int.class.getName().equals(parameters[i])) {
+                params[i] = int.class;
+                continue;
+            }
             try {
                 params[i] = Class.forName(parameters[i]);
             } catch (ClassNotFoundException e) {
+                Log.w("CustomView", "Unable to find class " + parameters[i]);
                 return null;
             }
         }

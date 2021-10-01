@@ -5,6 +5,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.widget.Toast;
 
+import androidx.cardview.widget.CardView;
+
 import com.developer.crashx.config.CrashConfig;
 import com.tyron.builder.BuildModule;
 import com.tyron.completion.CompletionModule;
@@ -17,7 +19,6 @@ public class ApplicationLoader extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        
         applicationContext = this;
         CompletionModule.initialize(applicationContext);
         BuildModule.initialize(applicationContext);
