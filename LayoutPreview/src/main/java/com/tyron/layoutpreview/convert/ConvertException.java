@@ -8,4 +8,8 @@ public class ConvertException extends Exception {
     public ConvertException(String message) {
         super(message);
     }
+
+    public ConvertException(String message, Throwable e) {
+        super(message, e);
+    }
 }
