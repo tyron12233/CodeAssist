@@ -77,7 +77,6 @@ public class PreviewLayoutInflater {
                 .build();
 
         Attribute rightToRight = Attribute.builder()
-                .setLayoutParams(true)
                 .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
                 .addFormat(Format.REFERENCE)
                 .addFormat(Format.ENUM)

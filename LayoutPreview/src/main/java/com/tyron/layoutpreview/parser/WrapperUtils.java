@@ -1,13 +1,19 @@
 package com.tyron.layoutpreview.parser;
 
+import android.content.res.ColorStateList;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
+import com.flipkart.android.proteus.processor.ColorResourceProcessor;
+import com.flipkart.android.proteus.processor.DimensionAttributeProcessor;
 import com.flipkart.android.proteus.processor.EnumProcessor;
+import com.flipkart.android.proteus.processor.NumberAttributeProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
 import com.tyron.layoutpreview.model.Attribute;
 import com.tyron.layoutpreview.model.Format;
@@ -17,6 +23,47 @@ import java.lang.reflect.Method;
 import java.util.List;
 
 public class WrapperUtils {
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static void addProcessors(ViewTypeParser processor, Attribute attribute, Method method, Object[] objects) {
+        String name = attribute.getXmlName();
+        int offset = attribute.getXmlParameterOffset();
+
+        if (attribute.getFormats().contains(Format.COLOR)) {
+            processor.addAttributeProcessor(name, new ColorResourceProcessor<View>() {
+                @Override
+                public void setColor(View view, int color) {
+                    objects[offset] = color;
+                    invokeMethod(view, method, objects);
+                }
+
+                @Override
+                public void setColor(View view, ColorStateList colors) {
+
+                }
+            });
+        } else if (isNumberFormat(attribute.getFormats())) {
+            processor.addAttributeProcessor(name, new NumberAttributeProcessor<View>() {
+                @Override
+                public void setNumber(View view, @NonNull Number value) {
+                    if (attribute.getFormats().contains(Format.FLOAT))  {
+                        objects[offset] = value.floatValue();
+                    } else {
+                        objects[offset] = value.intValue();
+                    }
+                    invokeMethod(view, method, objects);
+                }
+            });
+        } else if (attribute.getFormats().contains(Format.DIMENSION)) {
+            processor.addAttributeProcessor(name, new DimensionAttributeProcessor<View>() {
+                @Override
+                public void setDimension(View view, float dimension) {
+                    objects[offset] = dimension;
+                    invokeMethod(view, method, objects);
+                }
+            });
+        }
+    }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static void addEnumProcessors(ViewTypeParser processor, Attribute attribute, Method method, Object[] params) {
@@ -40,6 +87,20 @@ public class WrapperUtils {
         }
     }
 
+    /**
+     * Checks whether the attribute format is applicable to numbers
+     */
+    private static boolean isNumberFormat(List<Format> formats) {
+        if (formats.contains(Format.INTEGER)) {
+            return true;
+        }
+        return formats.contains(Format.FLOAT);
+    }
+
+    /**
+     * If the attribute is a layout params attribute, it will try to set the field of the LayoutParams class otherwhise,
+     * it will search for the method in the class
+     */
     private static void set(Attribute attribute, View view, Class<?>[] classParams, Object[] params) {
         if (attribute.isLayoutParams()) {
             if (view.getLayoutParams().getClass().getName().equals(attribute.getLayoutParamsClass())) {

@@ -32,6 +32,7 @@ import com.tyron.layoutpreview.view.CustomViewWrapper;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
 
 public class CustomViewParser extends ViewTypeParser<View> {
@@ -85,46 +86,15 @@ public class CustomViewParser extends ViewTypeParser<View> {
 
             Method method = getMethod(clazz, methodName, parametersClass);
             if (method == null) {
-                Log.w("CustomViewParser", "Unable to find method " + methodName + " parameters: " + parametersClass);
+                Log.w("CustomViewParser", "Unable to find method " + methodName + " parameters: " + Arrays.toString(parametersClass));
                 continue;
             }
-            AttributeProcessor<View> processor = null;
 
             if (attribute.getFormats().size() == 1 && !attribute.getFormats().contains(Format.ENUM)) {
-                if (attribute.getFormats().contains(Format.COLOR)) {
-                    addAttributeProcessor(name, new ColorResourceProcessor<View>() {
-                        @Override
-                        public void setColor(View view, int color) {
-                            objects[offset] = color;
-                            invokeMethod(view, method, objects);
-                        }
 
-                        @Override
-                        public void setColor(View view, ColorStateList colors) {
-
-                        }
-                    });
-                }
             } else if (attribute.getFormats().contains(Format.ENUM)) {
                 addEnumProcessors(this, attribute, method, objects);
             }
          }
     }
-
-    private AttributeProcessor<View> getLayoutParamsProcessor(Attribute attribute) {
-       if (attribute.getFormats().contains(Format.REFERENCE)) {
-           return new StringAttributeProcessor<View>() {
-               @Override
-               public void setString(View view, String value) {
-                   ProteusContext context = (ProteusContext) view.getContext();
-                   int id = context.getInflater().getUniqueViewId(value);
-
-               }
-           };
-       }
-       return null;
-    }
-
-
-
 }

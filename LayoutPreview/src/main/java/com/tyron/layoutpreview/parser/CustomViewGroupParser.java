@@ -1,6 +1,7 @@
 package com.tyron.layoutpreview.parser;
 
 import static com.tyron.layoutpreview.parser.WrapperUtils.addEnumProcessors;
+import static com.tyron.layoutpreview.parser.WrapperUtils.addProcessors;
 import static com.tyron.layoutpreview.parser.WrapperUtils.getMethod;
 import static com.tyron.layoutpreview.parser.WrapperUtils.getParameters;
 import static com.tyron.layoutpreview.parser.WrapperUtils.invokeMethod;
@@ -86,30 +87,15 @@ public class CustomViewGroupParser extends ViewTypeParser<ViewGroup> {
         }
 
         for (Attribute attribute : mCustomView.getAttributes()) {
-            String name = attribute.getXmlName();
             String methodName = attribute.getMethodName();
             String[] parameters = attribute.getParameters();
-            int offset = attribute.getXmlParameterOffset();
-            String xmlParameter = parameters[offset];
             Class<?>[] parametersClass = getParameters(parameters);
             Object[] objects = new Object[parameters.length];
 
             Method method = getMethod(clazz, methodName, parametersClass);
 
             if (attribute.getFormats().size() == 1 && !attribute.getFormats().contains(Format.ENUM)) {
-                if (attribute.getFormats().contains(Format.COLOR)) {
-                    addAttributeProcessor(name, new ColorResourceProcessor<ViewGroup>() {
-                        @Override
-                        public void setColor(ViewGroup view, int color) {
-
-                        }
-
-                        @Override
-                        public void setColor(ViewGroup view, ColorStateList colors) {
-
-                        }
-                    });
-                }
+                addProcessors(this, attribute, method, objects);
             } else if (attribute.getFormats().contains(Format.ENUM)) {
                 addEnumProcessors(this, attribute, method, objects);
             }
