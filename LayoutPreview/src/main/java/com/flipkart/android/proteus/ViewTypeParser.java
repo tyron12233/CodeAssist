@@ -245,7 +245,7 @@ public abstract class ViewTypeParser<V extends View> {
    * @param name
    * @param processor
    */
-  protected void addAttributeProcessor(String name, AttributeProcessor<V> processor) {
+  public void addAttributeProcessor(String name, AttributeProcessor<V> processor) {
     addAttributeProcessor(processor);
     attributes.put(name, new AttributeSet.Attribute(getAttributeId(processors.length - 1), processor));
   }
@@ -286,7 +286,6 @@ public abstract class ViewTypeParser<V extends View> {
 
   private void initializeAttributeSet(@NonNull ViewGroup parent) {
     sParser = parent.getResources().getLayout(R.layout.layout_params_hack);
-    //noinspection StatementWithEmptyBody
     try {
       //noinspection StatementWithEmptyBody
       while (sParser.nextToken() != XmlPullParser.START_TAG) {

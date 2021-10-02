@@ -17,6 +17,7 @@
 package com.flipkart.android.proteus.parser.custom;
 
 import android.os.Build;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -41,6 +42,9 @@ import com.flipkart.android.proteus.value.Resource;
 import com.flipkart.android.proteus.value.StyleResource;
 import com.flipkart.android.proteus.value.Value;
 import com.flipkart.android.proteus.view.ProteusAspectRatioFrameLayout;
+import com.tyron.layoutpreview.parser.CustomViewGroupParser;
+import com.tyron.layoutpreview.view.CustomViewGroupWrapper;
+import com.tyron.layoutpreview.view.CustomViewWrapper;
 
 import java.util.Iterator;
 
@@ -147,11 +151,15 @@ public class ViewGroupParser<T extends ViewGroup> extends ViewTypeParser<T> {
 
   @Override
   public boolean handleChildren(T view, Value children) {
-    ProteusView proteusView = ((ProteusView) view);
-    ProteusView.Manager viewManager = proteusView.getViewManager();
-    ProteusLayoutInflater layoutInflater = viewManager.getContext().getInflater();
-    ObjectValue data = viewManager.getDataContext().getData();
-    int dataIndex = viewManager.getDataContext().getIndex();
+    ProteusContext context = (ProteusContext) view.getContext();
+    ProteusLayoutInflater layoutInflater = context.getInflater();
+    ObjectValue data = new ObjectValue();
+    int dataIndex = -1;
+
+    if (view instanceof ProteusView) {
+      data = ((ProteusView) view).getViewManager().getDataContext().getData();
+      dataIndex = ((ProteusView) view).getViewManager().getDataContext().getIndex();
+    }
 
     if (children.isArray()) {
       ProteusView child;
@@ -163,7 +171,8 @@ public class ViewGroupParser<T extends ViewGroup> extends ViewTypeParser<T> {
           throw new ProteusInflateException("attribute  'children' must be an array of 'Layout' objects");
         }
         child = layoutInflater.inflate(element.getAsLayout(), data, view, dataIndex);
-        addView(proteusView, child);
+
+       addView(view, child.getAsView());
       }
     }
 
@@ -226,6 +235,22 @@ public class ViewGroupParser<T extends ViewGroup> extends ViewTypeParser<T> {
   public boolean addView(ProteusView parent, ProteusView view) {
     if (parent instanceof ViewGroup) {
       ((ViewGroup) parent).addView(view.getAsView());
+      return true;
+    }
+    return false;
+  }
+
+  public boolean addView(ProteusView parent, View view) {
+    if (parent instanceof ViewGroup) {
+      ((ViewGroup) parent).addView(view);
+      return true;
+    }
+    return false;
+  }
+
+  public boolean addView(View parent, View view) {
+    if (parent instanceof ViewGroup) {
+      ((ViewGroup) parent).addView(view);
       return true;
     }
     return false;

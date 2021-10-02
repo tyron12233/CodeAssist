@@ -6,6 +6,7 @@ import android.util.Pair;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.cardview.widget.CardView;
+import androidx.constraintlayout.widget.ConstraintLayout;
 
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
@@ -99,7 +100,9 @@ public class PsiTest implements Closeable {
     KotlinCoreEnvironment environment;
     Disposable disposable;
 
+    ConstraintLayout.LayoutParams layout;
     {
+
         UtilKt.setIdeaIoUseFallback();
 
         disposable = Disposer.newDisposable();

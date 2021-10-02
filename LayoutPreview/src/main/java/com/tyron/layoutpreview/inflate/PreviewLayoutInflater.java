@@ -20,6 +20,8 @@ import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
 import com.tyron.layoutpreview.model.Attribute;
 import com.tyron.layoutpreview.model.CustomView;
+import com.tyron.layoutpreview.model.Format;
+import com.tyron.layoutpreview.parser.CustomViewGroupParser;
 import com.tyron.layoutpreview.parser.CustomViewParser;
 import com.tyron.layoutpreview.view.UnknownView;
 
@@ -49,12 +51,44 @@ public class PreviewLayoutInflater {
         mBaseContext = base;
         mProteus = new ProteusBuilder()
                 .register(new CustomViewParser(getTestView()))
+                .register(new CustomViewGroupParser(getConstraint()))
                 .build();
         mContext = mProteus.createContextBuilder(base)
                 .setCallback(mCallback)
                 .build();
 
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
+    }
+
+    private CustomView getConstraint() {
+        CustomView view = new CustomView();
+        view.setType("androidx.constraintlayout.widget.ConstraintLayout");
+        view.setParentType("ViewGroup");
+
+        Attribute leftToLeft = Attribute.builder()
+                .setLayoutParams(true)
+                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
+                .addFormat(Format.REFERENCE)
+                .addFormat(Format.ENUM)
+                .setEnumValues(Collections.singletonMap("parent", 0))
+                .setXmlName("app:layout_constraintLeft_toLeftOf")
+                .setMethodName("leftToLeft")
+                .setParameters(int.class)
+                .build();
+
+        Attribute rightToRight = Attribute.builder()
+                .setLayoutParams(true)
+                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
+                .addFormat(Format.REFERENCE)
+                .addFormat(Format.ENUM)
+                .setEnumValues(Collections.singletonMap("parent", 0))
+                .setXmlName("app:layout_constraintRight_toRightOf")
+                .setMethodName("rightToRight")
+                .setParameters(int.class)
+                .build();
+
+        view.setAttributes(Arrays.asList(leftToLeft, rightToRight));
+        return view;
     }
 
     private CustomView getTestView() {
@@ -66,11 +100,13 @@ public class PreviewLayoutInflater {
                 .setMethodName("setCardBackgroundColor")
                 .setXmlName("app:cardBackgroundColor")
                 .setParameters(int.class)
+                .addFormat(Format.COLOR)
                 .build();
 
         Attribute cornerRadius = Attribute.builder()
                 .setMethodName("setRadius")
                 .setXmlName("app:cardCornerRadius")
+                .addFormat(Format.DIMENSION)
                 .setParameters(float.class)
                 .setDimension(true)
                 .build();
