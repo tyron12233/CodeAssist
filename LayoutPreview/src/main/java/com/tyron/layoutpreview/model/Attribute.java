@@ -1,6 +1,10 @@
 package com.tyron.layoutpreview.model;
 
+
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 public class Attribute {
 
@@ -35,7 +39,22 @@ public class Attribute {
      */
     private int xmlParameterOffset;
 
+    /**
+     * Use {@link Format} instead
+     */
+    @Deprecated
     private boolean isDimension;
+
+    private String layoutParamsClass;
+
+    /**
+     * Determines whether this attribute should be applied on a LayoutParams class or not
+     */
+    private boolean isLayoutParams;
+
+    private List<Format> formats;
+
+    private Map<String, Integer> enumValues;
 
     public Attribute() {
 
@@ -81,6 +100,38 @@ public class Attribute {
         isDimension = dimension;
     }
 
+    public boolean isLayoutParams() {
+        return isLayoutParams;
+    }
+
+    public void setLayoutParams(boolean layoutParams) {
+        isLayoutParams = layoutParams;
+    }
+
+    public String getLayoutParamsClass() {
+        return layoutParamsClass;
+    }
+
+    public void setLayoutParamsClass(String layoutParamsClass) {
+        this.layoutParamsClass = layoutParamsClass;
+    }
+
+    public Map<String, Integer> getEnumValues() {
+        return enumValues;
+    }
+
+    public void setEnumValues(Map<String, Integer> enumValues) {
+        this.enumValues = enumValues;
+    }
+
+    public List<Format> getFormats() {
+        return formats;
+    }
+
+    public void setFormats(List<Format> formats) {
+        this.formats = formats;
+    }
+
     /**
      * Builder class to help constructing an Attribute
      */
@@ -91,6 +142,10 @@ public class Attribute {
         private int xmlOffset;
         private String methodName;
         private boolean isDimension;
+        private String layoutParamsClass;
+        private boolean isLayoutParams;
+        private final List<Format> formats = new ArrayList<>();
+        private Map<String, Integer> enumValues;
 
         /**
          * use {@link Attribute#builder()}
@@ -132,6 +187,27 @@ public class Attribute {
             return this;
         }
 
+        public Builder setLayoutParamsClass(String name) {
+            this.layoutParamsClass = name;
+            this.isLayoutParams = true;
+            return this;
+        }
+
+        public Builder setLayoutParams(boolean value) {
+            this.isLayoutParams = value;
+            return this;
+        }
+
+        public Builder addFormat(Format format) {
+            formats.add(format);
+            return this;
+        }
+
+        public Builder setEnumValues(Map<String, Integer> values) {
+            enumValues = values;
+            return this;
+        }
+
         public Attribute build() {
             Attribute attribute = new Attribute();
             attribute.setXmlParameterOffset(xmlOffset);
@@ -139,6 +215,10 @@ public class Attribute {
             attribute.setXmlName(xmlName);
             attribute.setMethodName(methodName);
             attribute.setDimension(isDimension);
+            attribute.setLayoutParams(isLayoutParams);
+            attribute.setLayoutParamsClass(layoutParamsClass);
+            attribute.setFormats(formats);
+            attribute.setEnumValues(enumValues);
             return attribute;
         }
     }
