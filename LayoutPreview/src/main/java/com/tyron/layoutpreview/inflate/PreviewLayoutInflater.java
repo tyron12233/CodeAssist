@@ -86,7 +86,27 @@ public class PreviewLayoutInflater {
                 .setParameters(int.class)
                 .build();
 
-        view.setAttributes(Arrays.asList(leftToLeft, rightToRight));
+        Attribute rightToLeft = Attribute.builder()
+                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
+                .addFormat(Format.REFERENCE)
+                .addFormat(Format.ENUM)
+                .setEnumValues(Collections.singletonMap("parent", 0))
+                .setXmlName("app:layout_constraintRight_toLeftOf")
+                .setMethodName("rightToLeft")
+                .setParameters(int.class)
+                .build();
+
+        Attribute leftToRight = Attribute.builder()
+                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
+                .addFormat(Format.REFERENCE)
+                .addFormat(Format.ENUM)
+                .setEnumValues(Collections.singletonMap("parent", 0))
+                .setXmlName("app:layout_constraintLeft_toRightOf")
+                .setMethodName("leftToRight")
+                .setParameters(int.class)
+                .build();
+
+        view.setAttributes(Arrays.asList(leftToLeft, rightToRight, rightToLeft, leftToRight));
         return view;
     }
 
