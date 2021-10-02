@@ -88,15 +88,15 @@ public class WrapperUtils {
         List<Format> formats = attribute.getFormats();
         int offset = attribute.getXmlParameterOffset();
         if (formats.contains(Format.ENUM) && formats.contains(Format.REFERENCE)) {
-            processor.addAttributeProcessor(attribute.getXmlName(), new EnumProcessor<ViewGroup>(attribute.getEnumValues()) {
+            processor.addAttributeProcessor(attribute.getXmlName(), new EnumProcessor<View>(attribute.getEnumValues()) {
                 @Override
-                public void apply(ViewGroup view, int value) {
+                public void apply(View   view, int value) {
                     params[offset] = value;
                     set(attribute, view, getParameters(attribute.getParameters()), params);
                 }
 
                 @Override
-                public void applyOther(ViewGroup view, String value) {
+                public void applyOther(View view, String value) {
                     params[offset] = (((ProteusContext) view.getContext())).getInflater()
                             .getUniqueViewId(value.replace("@+id/", "".replace("@id/", "")));
                     set(attribute, view, getParameters(attribute.getParameters()), params);

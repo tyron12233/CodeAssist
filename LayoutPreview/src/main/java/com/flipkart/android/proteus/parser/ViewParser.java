@@ -393,10 +393,9 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
     addAttributeProcessor(Attributes.View.Id, new StringAttributeProcessor<V>() {
       @Override
       public void setString(final V view, String value) {
-        if (view instanceof ProteusView) {
-          view.setId(((ProteusView) view).getViewManager().getContext().getInflater().getUniqueViewId(value));
+        if (view.getContext() instanceof ProteusContext) {
+          view.setId(((ProteusContext) view.getContext()).getInflater().getUniqueViewId(value));
         }
-
         // set view id resource name
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
           final String resourceName = value;

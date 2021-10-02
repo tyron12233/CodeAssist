@@ -60,6 +60,7 @@ public class PreviewLayoutInflater {
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
     }
 
+    // for testing only
     private CustomView getConstraint() {
         CustomView view = new CustomView();
         view.setType("androidx.constraintlayout.widget.ConstraintLayout");
@@ -106,7 +107,49 @@ public class PreviewLayoutInflater {
                 .setParameters(int.class)
                 .build();
 
-        view.setAttributes(Arrays.asList(leftToLeft, rightToRight, rightToLeft, leftToRight));
+        Attribute topToTop = Attribute.builder()
+                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
+                .addFormat(Format.REFERENCE)
+                .addFormat(Format.ENUM)
+                .setEnumValues(Collections.singletonMap("parent", 0))
+                .setXmlName("app:layout_constraintTop_toTopOf")
+                .setMethodName("topToTop")
+                .setParameters(int.class)
+                .build();
+
+        Attribute topToBottom = Attribute.builder()
+                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
+                .addFormat(Format.REFERENCE)
+                .addFormat(Format.ENUM)
+                .setEnumValues(Collections.singletonMap("parent", 0))
+                .setXmlName("app:layout_constraintTop_toBottomOf")
+                .setMethodName("topToBottom")
+                .setParameters(int.class)
+                .build();
+
+        Attribute bottomToTop = Attribute.builder()
+                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
+                .addFormat(Format.REFERENCE)
+                .addFormat(Format.ENUM)
+                .setEnumValues(Collections.singletonMap("parent", 0))
+                .setXmlName("app:layout_constraintBottom_toTopOf")
+                .setMethodName("bottomToTop")
+                .setParameters(int.class)
+                .build();
+
+        Attribute bottomToBottom = Attribute.builder()
+                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
+                .addFormat(Format.REFERENCE)
+                .addFormat(Format.ENUM)
+                .setEnumValues(Collections.singletonMap("parent", 0))
+                .setXmlName("app:layout_constraintBottom_toBottomOf")
+                .setMethodName("bottomToBottom")
+                .setParameters(int.class)
+                .build();
+
+
+        view.setAttributes(Arrays.asList(leftToLeft, rightToRight, rightToLeft, leftToRight,
+                topToTop, topToBottom, bottomToTop, bottomToBottom));
         return view;
     }
 
