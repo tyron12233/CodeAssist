@@ -5,6 +5,7 @@ import android.util.Pair;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.cardview.widget.CardView;
 
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;

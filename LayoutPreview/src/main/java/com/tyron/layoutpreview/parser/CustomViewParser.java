@@ -12,6 +12,8 @@ import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
+import com.flipkart.android.proteus.processor.DimensionAttributeProcessor;
+import com.flipkart.android.proteus.processor.NumberAttributeProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
@@ -58,36 +60,59 @@ public class CustomViewParser extends ViewTypeParser<View> {
             Object[] objects = new Object[parameters.length];
 
             AttributeProcessor<View> processor = null;
-            switch (xmlParameter) {
-                case "java.lang.String":
-                    processor = new StringAttributeProcessor<View>() {
-                        @Override
-                        public void setString(View view, String value) {
-                            Method method = getMethod(view.getClass(), methodName,
-                                    parametersClass);
-                            objects[attribute.getXmlParameterOffset()] = value;
-                            invokeMethod(view, method, objects);
-                        }
-                    };
-                    break;
-                case "int":
-                case "java.lang.Integer":
-                    processor = new StringAttributeProcessor<View>() {
-                        @Override
-                        public void setString(View view, String string) {
-                            int value;
-                            try {
-                                value = Color.parseColor(string);
-                            } catch (IllegalArgumentException e) {
-                                value = Integer.parseInt(string);
+
+            if (attribute.isDimension()) {
+                processor = new DimensionAttributeProcessor<View>() {
+                    @Override
+                    public void setDimension(View view, float dimension) {
+                        objects[attribute.getXmlParameterOffset()] = dimension;
+                        invokeMethod(view, getMethod(view.getClass(), methodName, parametersClass), objects);
+                    }
+                };
+            } else {
+                switch (xmlParameter) {
+                    case "java.lang.String":
+                        processor = new StringAttributeProcessor<View>() {
+                            @Override
+                            public void setString(View view, String value) {
+                                Method method = getMethod(view.getClass(), methodName,
+                                        parametersClass);
+                                objects[attribute.getXmlParameterOffset()] = value;
+                                invokeMethod(view, method, objects);
                             }
-                            objects[attribute.getXmlParameterOffset()] = value;
-                            invokeMethod(view,
-                                    getMethod(view.getClass(), methodName, parametersClass),
-                                    objects);
-                        }
-                    };
-                    break;
+                        };
+                        break;
+                    case "int":
+                    case "java.lang.Integer":
+                        processor = new StringAttributeProcessor<View>() {
+                            @Override
+                            public void setString(View view, String string) {
+                                int value;
+                                try {
+                                    value = Color.parseColor(string);
+                                } catch (IllegalArgumentException e) {
+                                    value = Integer.parseInt(string);
+                                }
+                                objects[attribute.getXmlParameterOffset()] = value;
+                                invokeMethod(view,
+                                        getMethod(view.getClass(), methodName, parametersClass),
+                                        objects);
+                            }
+                        };
+                        break;
+                    case "float":
+                    case "java.lang.Float":
+                        processor = new NumberAttributeProcessor<View>() {
+                            @Override
+                            public void setNumber(View view, @NonNull Number value) {
+                                objects[attribute.getXmlParameterOffset()] = value.floatValue();
+                                invokeMethod(view,
+                                        getMethod(view.getClass(), methodName, parametersClass),
+                                        objects);
+                            }
+                        };
+                        break;
+                }
             }
 
             if (processor != null) {
@@ -128,17 +153,23 @@ public class CustomViewParser extends ViewTypeParser<View> {
         return method;
     }
 
-    /**
+    private final Class<?>[] mPrimitives = new Class<?>[] {int.class, short.class, long.class, float.class, byte.class, double.class, char.class};
+    /*
      * Converts an array of fully qualified names to objects
      * @return null if an error has occurred
      */
     private Class<?>[] getParameters(String[] parameters) {
         Class<?>[] params = new Class<?>[parameters.length];
-        for (int i = 0; i < parameters.length; i++) {
-            if (int.class.getName().equals(parameters[i])) {
-                params[i] = int.class;
-                continue;
+        outer: for (int i = 0; i < parameters.length; i++) {
+
+            // Try first if this class is a primitive class
+            for (Class<?> primitive : mPrimitives) {
+                if (primitive.getName().equals(parameters[i])) {
+                    params[i] = primitive;
+                    continue outer;
+                }
             }
+
             try {
                 params[i] = Class.forName(parameters[i]);
             } catch (ClassNotFoundException e) {
@@ -148,4 +179,5 @@ public class CustomViewParser extends ViewTypeParser<View> {
         }
         return params;
     }
+
 }

@@ -24,6 +24,7 @@ import com.tyron.layoutpreview.parser.CustomViewParser;
 import com.tyron.layoutpreview.view.UnknownView;
 
 import java.io.StringReader;
+import java.util.Arrays;
 import java.util.Collections;
 
 public class PreviewLayoutInflater {
@@ -60,12 +61,21 @@ public class PreviewLayoutInflater {
         CustomView view = new CustomView();
         view.setType("androidx.cardview.widget.CardView");
         view.setParentType("FrameLayout");
-        Attribute attribute = new Attribute();
-        attribute.setMethodName("setCardBackgroundColor");
-        attribute.setParameters(new String[]{int.class.getName()});
-        attribute.setXmlParameterOffset(0);
-        attribute.setXmlName("app:cardBackgroundColor");
-        view.setAttributes(Collections.singletonList(attribute));
+
+        Attribute attribute = Attribute.builder()
+                .setMethodName("setCardBackgroundColor")
+                .setXmlName("app:cardBackgroundColor")
+                .setParameters(int.class)
+                .build();
+
+        Attribute cornerRadius = Attribute.builder()
+                .setMethodName("setRadius")
+                .setXmlName("app:cardCornerRadius")
+                .setParameters(float.class)
+                .setDimension(true)
+                .build();
+
+        view.setAttributes(Arrays.asList(attribute, cornerRadius));
         return view;
     }
 
