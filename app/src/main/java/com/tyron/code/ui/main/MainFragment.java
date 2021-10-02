@@ -10,7 +10,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -43,13 +42,13 @@ import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.ProjectManager;
+import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
-import com.tyron.code.ApplicationLoader;
-import com.tyron.code.R;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.R;
 import com.tyron.code.service.CompilerService;
-import com.tyron.builder.log.ILogger;
 import com.tyron.code.ui.editor.BottomEditorFragment;
 import com.tyron.code.ui.editor.CodeEditorFragment;
 import com.tyron.code.ui.editor.language.LanguageManager;
@@ -151,7 +150,7 @@ public class MainFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        
+
         mToolbar.setNavigationOnClickListener(v -> {
             if (mRoot.isDrawerOpen(GravityCompat.START)) {
                 mRoot.closeDrawer(GravityCompat.START, true);
@@ -311,7 +310,7 @@ public class MainFragment extends Fragment {
                     if (fragment instanceof CodeEditorFragment) {
                         ((CodeEditorFragment) fragment).preview();
                     }
-                 }
+                }
             }
 
             return false;
@@ -365,30 +364,27 @@ public class MainFragment extends Fragment {
             mToolbar.setTitle(FileManager.getInstance().getCurrentProject().mRoot.getName());
         }
 
-        if (savedInstanceState != null) {
-            Project project = new Project(new File(savedInstanceState.getString("current_project", "")));
-            openProject(project, false);
-        } else {
-            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
-            String lastProjectString = preferences.getString("last_opened_project", null);
-            if (lastProjectString != null) {
-                Project project = new Project(new File(lastProjectString));
-                if (project.isValidProject()) {
-                    openProject(project);
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        String lastProjectString = preferences.getString("last_opened_project", null);
+        if (lastProjectString != null) {
+            Project project = new Project(new File(lastProjectString));
+            if (project.isValidProject()) {
+                openProject(project);
 
-                    String openedFiles = preferences.getString("last_opened_files", null);
-                    if (openedFiles != null) {
-                        List<String> openedFilesList = new Gson().fromJson(openedFiles, new TypeToken<ArrayList<String>>(){}.getType());
-                        if (openedFilesList != null) {
-                            mFilesViewModel.setFiles(openedFilesList.stream()
-                                    .map(File::new).collect(Collectors.toList()));
-                        }
+                String openedFiles = preferences.getString("last_opened_files", null);
+                if (openedFiles != null) {
+                    List<String> openedFilesList = new Gson().fromJson(openedFiles, new TypeToken<ArrayList<String>>() {
+                    }.getType());
+                    if (openedFilesList != null) {
+                        mFilesViewModel.setFiles(openedFilesList.stream()
+                                .map(File::new).collect(Collectors.toList()));
                     }
-                } else {
-                    ApplicationLoader.showToast("Unable to open last project.");
                 }
+            } else {
+                ApplicationLoader.showToast("Unable to open last project.");
             }
         }
+
     }
 
     @Override
@@ -466,10 +462,11 @@ public class MainFragment extends Fragment {
 
     /**
      * Tries to open a file into the editor
+     *
      * @param file file to open
      */
     public void openFile(File file) {
-       openFile(file, 0, 0);
+        openFile(file, 0, 0);
     }
 
     public void openProject(Project project) {
@@ -549,6 +546,7 @@ public class MainFragment extends Fragment {
             }
         }
     }
+
     private CompilerService.CompilerBinder mBinder;
     private final ServiceConnection mServiceConnection = new ServiceConnection() {
         @Override
@@ -609,7 +607,6 @@ public class MainFragment extends Fragment {
         requireActivity().bindService(new Intent(requireContext(), CompilerService.class),
                 mServiceConnection, Context.BIND_IMPORTANT);
     }
-
 
 
     private class PageAdapter extends FragmentStateAdapter {
