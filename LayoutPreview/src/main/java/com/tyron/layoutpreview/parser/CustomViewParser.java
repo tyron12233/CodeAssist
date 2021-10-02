@@ -91,7 +91,7 @@ public class CustomViewParser extends ViewTypeParser<View> {
             }
 
             if (attribute.getFormats().size() == 1 && !attribute.getFormats().contains(Format.ENUM)) {
-
+                WrapperUtils.addProcessors(this, attribute, method, objects);
             } else if (attribute.getFormats().contains(Format.ENUM)) {
                 addEnumProcessors(this, attribute, method, objects);
             }
