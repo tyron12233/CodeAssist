@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
+import com.flipkart.android.proteus.processor.BooleanAttributeProcessor;
 import com.flipkart.android.proteus.processor.ColorResourceProcessor;
 import com.flipkart.android.proteus.processor.DimensionAttributeProcessor;
 import com.flipkart.android.proteus.processor.EnumProcessor;
@@ -59,6 +60,22 @@ public class WrapperUtils {
                 @Override
                 public void setDimension(View view, float dimension) {
                     objects[offset] = dimension;
+                    invokeMethod(view, method, objects);
+                }
+            });
+        } else if (attribute.getFormats().contains(Format.BOOLEAN)) {
+            processor.addAttributeProcessor(name, new BooleanAttributeProcessor() {
+                @Override
+                public void setBoolean(View view, boolean value) {
+                    objects[offset] = value;
+                    invokeMethod(view, method, objects);
+                }
+            });
+        } else if (attribute.getFormats().contains(Format.STRING)) {
+            processor.addAttributeProcessor(name, new StringAttributeProcessor() {
+                @Override
+                public void setString(View view, String value) {
+                    objects[offset] = value;
                     invokeMethod(view, method, objects);
                 }
             });
