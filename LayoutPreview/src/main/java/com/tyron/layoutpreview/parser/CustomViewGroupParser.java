@@ -5,8 +5,8 @@ import static com.tyron.layoutpreview.parser.WrapperUtils.getMethod;
 import static com.tyron.layoutpreview.parser.WrapperUtils.getParameters;
 import static com.tyron.layoutpreview.parser.WrapperUtils.invokeMethod;
 
+import android.content.Context;
 import android.content.res.ColorStateList;
-import android.graphics.Color;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,26 +19,25 @@ import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.processor.ColorResourceProcessor;
-import com.flipkart.android.proteus.processor.DimensionAttributeProcessor;
 import com.flipkart.android.proteus.processor.EnumProcessor;
-import com.flipkart.android.proteus.processor.NumberAttributeProcessor;
-import com.flipkart.android.proteus.processor.StringAttributeProcessor;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.tyron.layoutpreview.model.Attribute;
 import com.tyron.layoutpreview.model.CustomView;
 import com.tyron.layoutpreview.model.Format;
+import com.tyron.layoutpreview.view.CustomViewGroupWrapper;
 import com.tyron.layoutpreview.view.CustomViewWrapper;
+import com.tyron.layoutpreview.view.UnknownView;
 
-import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
 
-public class CustomViewParser extends ViewTypeParser<View> {
+public class CustomViewGroupParser extends ViewTypeParser<ViewGroup> {
 
-    private CustomView mCustomView;
+    private final CustomView mCustomView;
 
-    public CustomViewParser(CustomView customView) {
+    public CustomViewGroupParser(CustomView customView) {
         mCustomView = customView;
     }
 
@@ -57,7 +56,19 @@ public class CustomViewParser extends ViewTypeParser<View> {
     @NonNull
     @Override
     public ProteusView createView(@NonNull ProteusContext context, @NonNull Layout layout, @NonNull ObjectValue data, @Nullable ViewGroup parent, int dataIndex) {
-        return new CustomViewWrapper(context, mCustomView);
+        View view = null;
+        try {
+            Class<?> clazz = Class.forName(mCustomView.getType());
+            view = (View) clazz.getConstructor(Context.class)
+                    .newInstance(context);
+        } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InstantiationException | InvocationTargetException e) {
+            e.printStackTrace();
+        }
+
+        if (view == null) {
+            return new UnknownView(context, layout.type);
+        }
+        return new CustomViewGroupWrapper(context, (ViewGroup) view);
     }
 
     @Override
@@ -84,23 +95,17 @@ public class CustomViewParser extends ViewTypeParser<View> {
             Object[] objects = new Object[parameters.length];
 
             Method method = getMethod(clazz, methodName, parametersClass);
-            if (method == null) {
-                Log.w("CustomViewParser", "Unable to find method " + methodName + " parameters: " + parametersClass);
-                continue;
-            }
-            AttributeProcessor<View> processor = null;
 
             if (attribute.getFormats().size() == 1 && !attribute.getFormats().contains(Format.ENUM)) {
                 if (attribute.getFormats().contains(Format.COLOR)) {
-                    addAttributeProcessor(name, new ColorResourceProcessor<View>() {
+                    addAttributeProcessor(name, new ColorResourceProcessor<ViewGroup>() {
                         @Override
-                        public void setColor(View view, int color) {
-                            objects[offset] = color;
-                            invokeMethod(view, method, objects);
+                        public void setColor(ViewGroup view, int color) {
+
                         }
 
                         @Override
-                        public void setColor(View view, ColorStateList colors) {
+                        public void setColor(ViewGroup view, ColorStateList colors) {
 
                         }
                     });
@@ -108,23 +113,7 @@ public class CustomViewParser extends ViewTypeParser<View> {
             } else if (attribute.getFormats().contains(Format.ENUM)) {
                 addEnumProcessors(this, attribute, method, objects);
             }
-         }
+        }
     }
-
-    private AttributeProcessor<View> getLayoutParamsProcessor(Attribute attribute) {
-       if (attribute.getFormats().contains(Format.REFERENCE)) {
-           return new StringAttributeProcessor<View>() {
-               @Override
-               public void setString(View view, String value) {
-                   ProteusContext context = (ProteusContext) view.getContext();
-                   int id = context.getInflater().getUniqueViewId(value);
-
-               }
-           };
-       }
-       return null;
-    }
-
-
 
 }
