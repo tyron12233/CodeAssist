@@ -31,7 +31,6 @@ public class PreviewLayoutInflater {
     private final Context mBaseContext;
     private final Proteus mProteus;
     private final ProteusContext mContext;
-    private final CustomProteusInflater mInflater;
 
     private final ProteusLayoutInflater.Callback mCallback = new ProteusLayoutInflater.Callback() {
         @Override
@@ -53,8 +52,6 @@ public class PreviewLayoutInflater {
         mContext = mProteus.createContextBuilder(base)
                 .setCallback(mCallback)
                 .build();
-
-        mInflater = new CustomProteusInflater(mContext, new SimpleIdGenerator());
 
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
     }
@@ -98,6 +95,6 @@ public class PreviewLayoutInflater {
     }
 
     public ProteusView inflate(Layout layout) {
-        return mInflater.inflate(layout, new ObjectValue());
+        return mContext.getInflater().inflate(layout, new ObjectValue());
     }
 }

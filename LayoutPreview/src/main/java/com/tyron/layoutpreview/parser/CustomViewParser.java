@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
+import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
@@ -18,7 +19,6 @@ import com.tyron.layoutpreview.model.Attribute;
 import com.tyron.layoutpreview.model.CustomView;
 import com.tyron.layoutpreview.view.CustomViewWrapper;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 public class CustomViewParser extends ViewTypeParser<View> {
@@ -51,44 +51,52 @@ public class CustomViewParser extends ViewTypeParser<View> {
     protected void addAttributeProcessors() {
         for (Attribute attribute : mCustomView.getAttributes()) {
             String name = attribute.getXmlName();
+            String methodName = attribute.getMethodName();
             String[] parameters = attribute.getParameters();
             String xmlParameter = parameters[attribute.getXmlParameterOffset()];
             Class<?>[] parametersClass = getParameters(parameters);
+            Object[] objects = new Object[parameters.length];
 
-
-            if (xmlParameter.equals(String.class.getName())) {
-                addAttributeProcessor(name, new StringAttributeProcessor<View>() {
-                    @Override
-                    public void setString(View view, String value) {
-                       Method method = getMethod(view.getClass(), name, parametersClass);
-                       if (method != null) {
-                            Object[] objects = new Object[parameters.length];
+            AttributeProcessor<View> processor = null;
+            switch (xmlParameter) {
+                case "java.lang.String":
+                    processor = new StringAttributeProcessor<View>() {
+                        @Override
+                        public void setString(View view, String value) {
+                            Method method = getMethod(view.getClass(), methodName,
+                                    parametersClass);
                             objects[attribute.getXmlParameterOffset()] = value;
-
-                            invokeValue(view, method, objects);
-                       }
-                    }
-                });
-            } else if (xmlParameter.equals(Integer.class.getName())) {
-                addAttributeProcessor(name, new StringAttributeProcessor<View>() {
-                    @Override
-                    public void setString(View view, String string) {
-                        int value = 0;
-                        try {
-                            value = Color.parseColor(string);
-                        } catch (Exception e) {
-                            value = Integer.parseInt(string);
+                            invokeMethod(view, method, objects);
                         }
-                        Object[] objects = new Object[parameters.length];
-                        objects[attribute.getXmlParameterOffset()] = value;
-                        invokeValue(view, getMethod(view.getClass(), name, parametersClass), objects);
-                    }
-                });
+                    };
+                    break;
+                case "int":
+                case "java.lang.Integer":
+                    processor = new StringAttributeProcessor<View>() {
+                        @Override
+                        public void setString(View view, String string) {
+                            int value;
+                            try {
+                                value = Color.parseColor(string);
+                            } catch (IllegalArgumentException e) {
+                                value = Integer.parseInt(string);
+                            }
+                            objects[attribute.getXmlParameterOffset()] = value;
+                            invokeMethod(view,
+                                    getMethod(view.getClass(), methodName, parametersClass),
+                                    objects);
+                        }
+                    };
+                    break;
+            }
+
+            if (processor != null) {
+                addAttributeProcessor(name, processor);
             }
         }
     }
 
-    private void invokeValue(Object object, Method method, Object[] values) {
+    private void invokeMethod(Object object, Method method, Object[] values) {
         try {
             method.invoke(object, values);
         } catch (Exception e) {

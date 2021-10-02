@@ -39,6 +39,4 @@ dependencies {
     implementation project(path: ':kotlinc')
     implementation 'androidx.annotation:annotation:1.2.0'
     implementation 'com.google.code.gson:gson:2.8.8'
-
-    api 'com.github.flipkart-incubator.proteus:proteus-core:5.0.1'
 }
