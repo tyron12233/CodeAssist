@@ -56,7 +56,7 @@ public class ProjectManager {
                 try {
                     downloader.download(dependencies);
                 } catch (IOException e) {
-
+                    mLogger.w(LogViewModel.BUILD_LOG, "Unable to download dependencies: " + e.getMessage());
                 }
             }
 
