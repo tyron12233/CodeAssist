@@ -23,6 +23,7 @@ import android.util.LruCache;
 import com.flipkart.android.proteus.Function;
 import com.flipkart.android.proteus.FunctionManager;
 import com.flipkart.android.proteus.ProteusConstants;
+import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.toolbox.Result;
 import com.flipkart.android.proteus.toolbox.SimpleArrayIterator;
@@ -93,7 +94,7 @@ public abstract class Binding extends Value {
    * @param context the {@link Context} of the caller.
    * @param manager the {@link FunctionManager} to evaluate function bindings.
    */
-  public static Binding valueOf(@NonNull final String value, Context context, FunctionManager manager) {
+  public static Binding valueOf(@NonNull final String value, ProteusContext context, FunctionManager manager) {
     Matcher matcher = BINDING_PATTERN.matcher(value);
     if (matcher.find()) {
       if (matcher.group(3) != null) { // It is data binding
@@ -117,12 +118,12 @@ public abstract class Binding extends Value {
    * @return the evaluated {@link Value}.
    */
   @NonNull
-  public abstract Value evaluate(Context context, Value data, int index);
+  public abstract Value evaluate(ProteusContext context, Value data, int index);
 
   /**
    * Returns a {@code String} representation of this {@code Binding}.
    * This string can be parsed back into a {@code Binding} object using
-   * the {@link #valueOf(String, Context, FunctionManager)} function.
+   * the  function.
    *
    * @return a string representation of this {@code Binding}.
    */
@@ -393,7 +394,7 @@ public abstract class Binding extends Value {
 
     @NonNull
     @Override
-    public Value evaluate(Context context, Value data, int index) {
+    public Value evaluate(ProteusContext context, Value data, int index) {
       Result result = resolve(tokens, data, index);
       return result.isSuccess() ? result.value : Null.INSTANCE;
     }
@@ -463,7 +464,7 @@ public abstract class Binding extends Value {
       return new FunctionBinding(function, arguments);
     }
 
-    private static Value[] resolve(Context context, Value[] in, Value data, int index) {
+    private static Value[] resolve(ProteusContext context, Value[] in, Value data, int index) {
 
       //noinspection ConstantConditions because we want it to crash, it is an illegal state anyway
       Value[] out = new Value[in.length];
@@ -480,7 +481,7 @@ public abstract class Binding extends Value {
 
     @NonNull
     @Override
-    public Value evaluate(Context context, Value data, int index) {
+    public Value evaluate(ProteusContext context, Value data, int index) {
       Value[] arguments = resolve(context, this.arguments, data, index);
       try {
         return this.function.call(context, data, index, arguments);

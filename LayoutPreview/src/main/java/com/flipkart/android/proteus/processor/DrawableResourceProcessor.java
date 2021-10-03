@@ -86,7 +86,7 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
         });
       }
     } else {
-      process(view, precompile(value, view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
+      process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
     }
   }
 
@@ -120,7 +120,7 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
   public abstract void setDrawable(V view, Drawable drawable);
 
   @Override
-  public Value compile(@Nullable Value value, Context context) {
+  public Value compile(@Nullable Value value, ProteusContext context) {
     return staticCompile(value, context);
   }
 }

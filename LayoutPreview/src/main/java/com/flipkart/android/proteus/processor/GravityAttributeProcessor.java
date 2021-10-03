@@ -20,6 +20,7 @@ import android.content.Context;
 import android.content.res.TypedArray;
 import android.view.View;
 
+import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.parser.ParseHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Primitive;
@@ -89,7 +90,7 @@ public abstract class GravityAttributeProcessor<V extends View> extends Attribut
   public abstract void setGravity(V view, @Gravity int gravity);
 
   @Override
-  public Value compile(@Nullable Value value, Context context) {
+  public Value compile(@Nullable Value value, ProteusContext context) {
     if (null == value) {
       return NO_GRAVITY;
     }

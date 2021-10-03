@@ -21,6 +21,7 @@ import android.content.res.TypedArray;
 import android.view.View;
 
 import com.flipkart.android.proteus.ProteusConstants;
+import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Resource;
 import com.flipkart.android.proteus.value.StyleResource;
@@ -49,7 +50,7 @@ public abstract class StringAttributeProcessor<V extends View> extends Attribute
 
   @Override
   public void handleResource(V view, Resource resource) {
-    String string = resource.getString(view.getContext());
+    String string = resource.getString((ProteusContext) view.getContext());
     setString(view, null == string ? ProteusConstants.EMPTY : string);
   }
 
@@ -71,7 +72,7 @@ public abstract class StringAttributeProcessor<V extends View> extends Attribute
   public abstract void setString(V view, String value);
 
   @Override
-  public Value compile(@Nullable Value value, Context context) {
+  public Value compile(@Nullable Value value, ProteusContext context) {
     if (null == value || value.isNull()) {
       return ProteusConstants.EMPTY_STRING;
     }

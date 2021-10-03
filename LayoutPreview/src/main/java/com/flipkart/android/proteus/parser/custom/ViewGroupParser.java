@@ -194,7 +194,7 @@ public class ViewGroupParser<T extends ViewGroup> extends ViewTypeParser<T> {
       throw new ProteusInflateException("'collection' and 'layout' are mandatory for attribute:'children'");
     }
 
-    Value dataset = collection.getAsBinding().evaluate(view.getContext(), dataContext.getData(), dataContext.getIndex());
+    Value dataset = collection.getAsBinding().evaluate((ProteusContext) view.getContext(), dataContext.getData(), dataContext.getIndex());
     if (dataset.isNull()) {
       return;
     }

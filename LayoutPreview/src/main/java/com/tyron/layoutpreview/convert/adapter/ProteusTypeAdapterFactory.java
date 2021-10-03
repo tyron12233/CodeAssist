@@ -5,6 +5,7 @@ import android.content.Context;
 import com.flipkart.android.proteus.FunctionManager;
 import com.flipkart.android.proteus.Proteus;
 import com.flipkart.android.proteus.ProteusConstants;
+import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.value.Array;
@@ -44,7 +45,7 @@ public class ProteusTypeAdapterFactory implements TypeAdapterFactory {
 
     public static final ProteusInstanceHolder PROTEUS_INSTANCE_HOLDER = new ProteusInstanceHolder();
 
-    Context context;
+    ProteusContext context;
 
     /**
      *
@@ -339,7 +340,7 @@ public class ProteusTypeAdapterFactory implements TypeAdapterFactory {
     /**
      * @param context
      */
-    public ProteusTypeAdapterFactory(Context context) {
+    public ProteusTypeAdapterFactory(ProteusContext context) {
         this.context = context;
         DefaultModule.create().register(this);
     }
@@ -383,11 +384,11 @@ public class ProteusTypeAdapterFactory implements TypeAdapterFactory {
         return map.get(type);
     }
 
-    public Context getContext() {
+    public ProteusContext getContext() {
         return context;
     }
 
-    static Value compileString(Context context, String string) {
+    static Value compileString(ProteusContext context, String string) {
         if (Binding.isBindingValue(string)) {
             return Binding.valueOf(string, context, PROTEUS_INSTANCE_HOLDER.getProteus().functions);
         } else {

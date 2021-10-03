@@ -23,6 +23,8 @@ import java.util.Map;
 
 import androidx.annotation.NonNull;
 
+import com.flipkart.android.proteus.ProteusContext;
+
 /**
  * NestedBinding
  *
@@ -55,7 +57,7 @@ public class NestedBinding extends Binding {
 
   @NonNull
   @Override
-  public Value evaluate(Context context, Value data, int index) {
+  public Value evaluate(ProteusContext context, Value data, int index) {
     return evaluate(context, value, data, index);
   }
 
@@ -65,7 +67,7 @@ public class NestedBinding extends Binding {
     return getClass().getName() + "@" + Integer.toHexString(hashCode());
   }
 
-  private Value evaluate(Context context, Binding binding, Value data, int index) {
+  private Value evaluate(ProteusContext context, Binding binding, Value data, int index) {
     return binding.getAsBinding().evaluate(context, data, index);
   }
 

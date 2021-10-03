@@ -72,7 +72,7 @@ public abstract class DimensionAttributeProcessor<T extends View> extends Attrib
     if (value.isDimension()) {
       setDimension(view, value.getAsDimension().apply(view.getContext()));
     } else if (value.isPrimitive()) {
-      process(view, precompile(value, view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
+      process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
     }
   }
 
@@ -100,7 +100,7 @@ public abstract class DimensionAttributeProcessor<T extends View> extends Attrib
   public abstract void setDimension(T view, float dimension);
 
   @Override
-  public Value compile(@Nullable Value value, Context context) {
+  public Value compile(@Nullable Value value, ProteusContext context) {
     return staticCompile(value, context);
   }
 

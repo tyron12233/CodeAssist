@@ -358,7 +358,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
           // noinspection ResourceType
           view.setVisibility(value.getAsInt());
         } else {
-          process(view, precompile(value, view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
+          process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
         }
       }
 
@@ -384,7 +384,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
 
       @Override
-      public Value compile(@Nullable Value value, Context context) {
+      public Value compile(@Nullable Value value, ProteusContext context) {
         int visibility = ParseHelper.parseVisibility(value);
         return ParseHelper.getVisibility(visibility);
       }

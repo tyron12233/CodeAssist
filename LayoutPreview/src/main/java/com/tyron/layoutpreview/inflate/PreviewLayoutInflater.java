@@ -5,6 +5,8 @@ import android.util.Log;
 import android.view.InflateException;
 import android.view.View;
 
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.Proteus;
 import com.flipkart.android.proteus.ProteusBuilder;
 import com.flipkart.android.proteus.ProteusContext;
@@ -18,6 +20,7 @@ import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
 import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonReader;
+import com.tyron.layoutpreview.StringManager;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
 import com.tyron.layoutpreview.model.Attribute;
@@ -30,6 +33,7 @@ import com.tyron.layoutpreview.view.UnknownView;
 import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Map;
 
 public class PreviewLayoutInflater {
 
@@ -57,6 +61,13 @@ public class PreviewLayoutInflater {
         }
     };
 
+    private final StringManager mStringManager = new StringManager() {
+        @Override
+        public Map<String, Value> getStrings(@Nullable String tag) {
+            return null;
+        }
+    };
+
     public PreviewLayoutInflater(Context base) {
         mBaseContext = base;
         mProteus = new ProteusBuilder()
@@ -65,6 +76,7 @@ public class PreviewLayoutInflater {
                 .build();
         mContext = mProteus.createContextBuilder(base)
                 .setCallback(mCallback)
+                .setStringManager(mStringManager)
                 .build();
 
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);

@@ -21,6 +21,7 @@ import android.view.View;
 
 import com.flipkart.android.proteus.DataContext;
 import com.flipkart.android.proteus.FunctionManager;
+import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Binding;
@@ -39,7 +40,7 @@ import androidx.annotation.Nullable;
  */
 public abstract class AttributeProcessor<V extends View> {
 
-  public static Value evaluate(final Context context, final Value input, final Value data, final int index) {
+  public static Value evaluate(final ProteusContext context, final Value input, final Value data, final int index) {
     final Value[] output = new Value[1];
 
     AttributeProcessor processor = new AttributeProcessor<View>() {
@@ -77,7 +78,7 @@ public abstract class AttributeProcessor<V extends View> {
   }
 
   @Nullable
-  public static Value staticPreCompile(Primitive value, Context context, FunctionManager manager) {
+  public static Value staticPreCompile(Primitive value, ProteusContext context, FunctionManager manager) {
     String string = value.getAsString();
     if (Binding.isBindingValue(string)) {
       return Binding.valueOf(string, context, manager);
@@ -92,7 +93,7 @@ public abstract class AttributeProcessor<V extends View> {
   }
 
   @Nullable
-  public static Value staticPreCompile(ObjectValue object, Context context, FunctionManager manager) {
+  public static Value staticPreCompile(ObjectValue object, ProteusContext context, FunctionManager manager) {
     Value binding = object.get(NestedBinding.NESTED_BINDING_KEY);
     if (null != binding) {
       return NestedBinding.valueOf(binding);
@@ -129,7 +130,7 @@ public abstract class AttributeProcessor<V extends View> {
 
   public void handleBinding(V view, Binding value) {
     DataContext dataContext = ((ProteusView) view).getViewManager().getDataContext();
-    Value resolved = evaluate(value, view.getContext(), dataContext.getData(), dataContext.getIndex());
+    Value resolved = evaluate(value, (ProteusContext) view.getContext(), dataContext.getData(), dataContext.getIndex());
     handleValue(view, resolved);
   }
 
@@ -141,16 +142,16 @@ public abstract class AttributeProcessor<V extends View> {
 
   public abstract void handleStyleResource(V view, StyleResource style);
 
-  public Value precompile(Value value, Context context, FunctionManager manager) {
+  public Value precompile(Value value, ProteusContext context, FunctionManager manager) {
     Value compiled = staticPreCompile(value, context, manager);
     return null != compiled ? compiled : compile(value, context);
   }
 
-  public Value compile(@Nullable Value value, Context context) {
+  public Value compile(@Nullable Value value, ProteusContext context) {
     return value;
   }
 
-  protected Value evaluate(Binding binding, Context context, Value data, int index) {
+  protected Value evaluate(Binding binding, ProteusContext context, Value data, int index) {
     return binding.evaluate(context, data, index);
   }
 }
