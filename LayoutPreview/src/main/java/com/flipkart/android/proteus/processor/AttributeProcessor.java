@@ -102,7 +102,7 @@ public abstract class AttributeProcessor<V extends View> {
   }
 
   @Nullable
-  public static Value staticPreCompile(Value value, Context context, FunctionManager manager) {
+  public static Value staticPreCompile(Value value, ProteusContext context, FunctionManager manager) {
     Value compiled = null;
     if (value.isPrimitive()) {
       compiled = staticPreCompile(value.getAsPrimitive(), context, manager);

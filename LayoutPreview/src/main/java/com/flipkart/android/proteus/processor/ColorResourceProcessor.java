@@ -50,7 +50,7 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
     return result[0];
   }
 
-  public static Value staticCompile(@Nullable Value value, Context context) {
+  public static Value staticCompile(@Nullable Value value, ProteusContext context) {
     if (null == value) {
       return Color.Int.BLACK;
     }

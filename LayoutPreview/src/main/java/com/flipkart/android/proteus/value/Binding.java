@@ -445,7 +445,7 @@ public abstract class Binding extends Value {
       this.function = function;
     }
 
-    public static FunctionBinding valueOf(@NonNull String name, @NonNull String args, Context context, @NonNull FunctionManager manager) {
+    public static FunctionBinding valueOf(@NonNull String name, @NonNull String args, ProteusContext context, @NonNull FunctionManager manager) {
       Function function = manager.get(name);
       String[] tokens = FUNCTION_ARGS_DELIMITER.split(args);
       Value[] arguments = new Value[tokens.length];

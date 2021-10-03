@@ -53,7 +53,7 @@ public abstract class DimensionAttributeProcessor<T extends View> extends Attrib
     return result[0];
   }
 
-  public static Value staticCompile(@Nullable Value value, Context context) {
+  public static Value staticCompile(@Nullable Value value, ProteusContext context) {
     if (null == value || !value.isPrimitive()) {
       return Dimension.ZERO;
     }

@@ -53,7 +53,7 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
     return d[0];
   }
 
-  public static Value staticCompile(@Nullable Value value, Context context) {
+  public static Value staticCompile(@Nullable Value value, ProteusContext context) {
     if (null == value) {
       return DrawableValue.ColorValue.BLACK;
     }
@@ -79,7 +79,7 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
       if (null != d) {
         ProteusContext context = (ProteusContext) view.getContext();
         ProteusLayoutInflater.ImageLoader loader = context.getLoader();
-        d.apply(view, view.getContext(), loader, drawable -> {
+        d.apply(view, context, loader, drawable -> {
           if (null != drawable) {
             setDrawable(view, drawable);
           }

@@ -16,7 +16,7 @@
 
 package com.flipkart.android.proteus.value;
 
-import android.content.Context;
+import com.flipkart.android.proteus.ProteusContext;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.Matrix;
@@ -33,6 +33,7 @@ import android.util.DisplayMetrics;
 import android.util.Pair;
 import android.view.View;
 
+import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusLayoutInflater;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.exceptions.ProteusInflateException;
@@ -73,7 +74,7 @@ public abstract class DrawableValue extends Value {
   private static final String TYPE_STROKE = "stroke";
 
   @Nullable
-  public static DrawableValue valueOf(String value, Context context) {
+  public static DrawableValue valueOf(String value, ProteusContext context) {
     if (Color.isColor(value)) {
       return ColorValue.valueOf(value);
     } else {
@@ -82,7 +83,7 @@ public abstract class DrawableValue extends Value {
   }
 
   @Nullable
-  public static DrawableValue valueOf(ObjectValue value, Context context) {
+  public static DrawableValue valueOf(ObjectValue value, ProteusContext context) {
     String type = value.getAsString(TYPE);
     //noinspection ConstantConditions
     switch (type) {
@@ -102,7 +103,7 @@ public abstract class DrawableValue extends Value {
   }
 
   @NonNull
-  public static Drawable convertBitmapToDrawable(Bitmap original, Context context) {
+  public static Drawable convertBitmapToDrawable(Bitmap original, ProteusContext context) {
 
     DisplayMetrics displayMetrics = context.getResources().getDisplayMetrics();
     int width = original.getWidth();
@@ -118,7 +119,7 @@ public abstract class DrawableValue extends Value {
     return new BitmapDrawable(context.getResources(), resizedBitmap);
   }
 
-  public abstract void apply(View view, Context context, ProteusLayoutInflater.ImageLoader loader, Callback callback);
+  public abstract void apply(View view, ProteusContext context, ProteusLayoutInflater.ImageLoader loader, Callback callback);
 
   @Override
   public Value copy() {
@@ -143,12 +144,12 @@ public abstract class DrawableValue extends Value {
       return new ColorValue(Color.valueOf(value));
     }
 
-    public static ColorValue valueOf(Value value, Context context) {
+    public static ColorValue valueOf(Value value, ProteusContext context) {
       return new ColorValue(ColorResourceProcessor.staticCompile(value, context));
     }
 
     @Override
-    public void apply(View view, Context context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
+    public void apply(View view, ProteusContext context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
       Drawable drawable = new ColorDrawable(ColorResourceProcessor.evaluate(color, view).color);
       callback.apply(drawable);
     }
@@ -173,7 +174,7 @@ public abstract class DrawableValue extends Value {
     @Nullable
     private final DrawableElement[] elements;
 
-    private ShapeValue(ObjectValue value, Context context) {
+    private ShapeValue(ObjectValue value, ProteusContext context) {
       this.shape = getShape(value.getAsString(SHAPE));
 
       Gradient gradient = null;
@@ -227,7 +228,7 @@ public abstract class DrawableValue extends Value {
       this.elements = elements;
     }
 
-    public static ShapeValue valueOf(ObjectValue value, Context context) {
+    public static ShapeValue valueOf(ObjectValue value, ProteusContext context) {
       return new ShapeValue(value, context);
     }
 
@@ -252,7 +253,7 @@ public abstract class DrawableValue extends Value {
     }
 
     @Override
-    public void apply(View view, Context context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
+    public void apply(View view, ProteusContext context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
       GradientDrawable drawable = null != gradient ? gradient.init(view) : new GradientDrawable();
       if (-1 != shape) {
         drawable.setShape(shape);
@@ -274,7 +275,7 @@ public abstract class DrawableValue extends Value {
     private final int[] ids;
     private final Value[] layers;
 
-    private LayerListValue(Array layers, Context context) {
+    private LayerListValue(Array layers, ProteusContext context) {
       this.ids = new int[layers.size()];
       this.layers = new Value[layers.size()];
       Pair<Integer, Value> pair;
@@ -293,7 +294,7 @@ public abstract class DrawableValue extends Value {
       this.layers = layers;
     }
 
-    public static LayerListValue valueOf(Array layers, Context context) {
+    public static LayerListValue valueOf(Array layers, ProteusContext context) {
       return new LayerListValue(layers, context);
     }
 
@@ -301,7 +302,7 @@ public abstract class DrawableValue extends Value {
       return new LayerListValue(ids, layers);
     }
 
-    public static Pair<Integer, Value> parseLayer(ObjectValue layer, Context context) {
+    public static Pair<Integer, Value> parseLayer(ObjectValue layer, ProteusContext context) {
       String id = layer.getAsString(ID_STR);
       int resId = View.NO_ID;
       if (id != null) {
@@ -313,7 +314,7 @@ public abstract class DrawableValue extends Value {
     }
 
     @Override
-    public void apply(View view, Context context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
+    public void apply(View view, ProteusContext context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
       final Drawable[] drawables = new Drawable[layers.length];
       int index = 0;
       for (Value layer : layers) {
@@ -366,7 +367,7 @@ public abstract class DrawableValue extends Value {
       this.values = values;
     }
 
-    private StateListValue(Array states, Context context) {
+    private StateListValue(Array states, ProteusContext context) {
       this.states = new int[states.size()][];
       this.values = new Value[states.size()];
       Iterator<Value> iterator = states.iterator();
@@ -384,12 +385,12 @@ public abstract class DrawableValue extends Value {
       return new StateListValue(states, values);
     }
 
-    public static StateListValue valueOf(Array states, Context context) {
+    public static StateListValue valueOf(Array states, ProteusContext context) {
       return new StateListValue(states, context);
     }
 
     @NonNull
-    private static Pair<int[], Value> parseState(ObjectValue value, Context context) {
+    private static Pair<int[], Value> parseState(ObjectValue value, ProteusContext context) {
       Value drawable = DrawableResourceProcessor.staticCompile(value.get(DRAWABLE_STR), context);
       int[] states = new int[value.getAsObject().entrySet().size() - 1];
       int index = 0;
@@ -407,7 +408,7 @@ public abstract class DrawableValue extends Value {
     }
 
     @Override
-    public void apply(View view, Context context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
+    public void apply(View view, ProteusContext context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
       final StateListDrawable stateListDrawable = new StateListDrawable();
       int size = states.length;
       for (int i = 0; i < size; i++) {
@@ -425,7 +426,7 @@ public abstract class DrawableValue extends Value {
 
     private final Level[] levels;
 
-    private LevelListValue(Array levels, Context context) {
+    private LevelListValue(Array levels, ProteusContext context) {
       this.levels = new Level[levels.size()];
       int index = 0;
       Iterator<Value> iterator = levels.iterator();
@@ -439,7 +440,7 @@ public abstract class DrawableValue extends Value {
       this.levels = levels;
     }
 
-    public static LevelListValue valueOf(Array layers, Context context) {
+    public static LevelListValue valueOf(Array layers, ProteusContext context) {
       return new LevelListValue(layers, context);
     }
 
@@ -448,7 +449,7 @@ public abstract class DrawableValue extends Value {
     }
 
     @Override
-    public void apply(View view, Context context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
+    public void apply(View view, ProteusContext context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
       final LevelListDrawable levelListDrawable = new LevelListDrawable();
       for (Level level : levels) {
         level.apply(view, levelListDrawable);
@@ -470,7 +471,7 @@ public abstract class DrawableValue extends Value {
       @NonNull
       public final Value drawable;
 
-      Level(ObjectValue value, Context context) {
+      Level(ObjectValue value, ProteusContext context) {
 
         //noinspection ConstantConditions
         minLevel = value.getAsInteger(MIN_LEVEL);
@@ -488,7 +489,7 @@ public abstract class DrawableValue extends Value {
       }
 
       @NonNull
-      public static Level valueOf(int minLevel, int maxLevel, @NonNull Value drawable, Context context) {
+      public static Level valueOf(int minLevel, int maxLevel, @NonNull Value drawable, ProteusContext context) {
         return new Level(minLevel, maxLevel, DrawableResourceProcessor.staticCompile(drawable, context));
       }
 
@@ -524,7 +525,7 @@ public abstract class DrawableValue extends Value {
       this.defaultBackground = defaultBackground;
     }
 
-    private RippleValue(ObjectValue object, Context context) {
+    private RippleValue(ObjectValue object, ProteusContext context) {
       color = object.get(COLOR);
       mask = DrawableResourceProcessor.staticCompile(object.get(MASK), context);
       content = DrawableResourceProcessor.staticCompile(object.get(CONTENT), context);
@@ -535,12 +536,12 @@ public abstract class DrawableValue extends Value {
       return new RippleValue(color, mask, content, defaultBackground);
     }
 
-    public static RippleValue valueOf(ObjectValue value, Context context) {
+    public static RippleValue valueOf(ObjectValue value, ProteusContext context) {
       return new RippleValue(value, context);
     }
 
     @Override
-    public void apply(View view, Context context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
+    public void apply(View view, ProteusContext context, ProteusLayoutInflater.ImageLoader loader, Callback callback) {
       ColorStateList colorStateList;
       Drawable contentDrawable = null;
       Drawable maskDrawable = null;
@@ -602,7 +603,7 @@ public abstract class DrawableValue extends Value {
     }
 
     @Override
-    public void apply(final View view, Context context, ProteusLayoutInflater.ImageLoader loader, final Callback callback) {
+    public void apply(final View view, ProteusContext context, ProteusLayoutInflater.ImageLoader loader, final Callback callback) {
       loader.getBitmap(view, url, new AsyncCallback() {
         @Override
         protected void apply(@NonNull Drawable drawable) {
@@ -611,7 +612,7 @@ public abstract class DrawableValue extends Value {
 
         @Override
         protected void apply(@NonNull Bitmap bitmap) {
-          callback.apply(convertBitmapToDrawable(bitmap, view.getContext()));
+          callback.apply(convertBitmapToDrawable(bitmap, context));
         }
       });
     }
@@ -674,7 +675,7 @@ public abstract class DrawableValue extends Value {
     @Nullable
     public final Boolean useLevel;
 
-    private Gradient(ObjectValue gradient, Context context) {
+    private Gradient(ObjectValue gradient, ProteusContext context) {
       angle = gradient.getAsInteger(ANGLE);
       centerX = gradient.getAsFloat(CENTER_X);
       centerY = gradient.getAsFloat(CENTER_Y);
@@ -714,7 +715,7 @@ public abstract class DrawableValue extends Value {
       useLevel = gradient.getAsBoolean(USE_LEVEL);
     }
 
-    public static Gradient valueOf(ObjectValue value, Context context) {
+    public static Gradient valueOf(ObjectValue value, ProteusContext context) {
       return new Gradient(value, context);
     }
 
@@ -825,7 +826,7 @@ public abstract class DrawableValue extends Value {
     @Nullable
     private final Value bottomRightRadius;
 
-    private Corners(ObjectValue corner, Context context) {
+    private Corners(ObjectValue corner, ProteusContext context) {
       radius = DimensionAttributeProcessor.staticCompile(corner.get(RADIUS), context);
       topLeftRadius = DimensionAttributeProcessor.staticCompile(corner.get(TOP_LEFT_RADIUS), context);
       topRightRadius = DimensionAttributeProcessor.staticCompile(corner.get(TOP_RIGHT_RADIUS), context);
@@ -833,7 +834,7 @@ public abstract class DrawableValue extends Value {
       bottomRightRadius = DimensionAttributeProcessor.staticCompile(corner.get(BOTTOM_RIGHT_RADIUS), context);
     }
 
-    public static Corners valueOf(ObjectValue corner, Context context) {
+    public static Corners valueOf(ObjectValue corner, ProteusContext context) {
       return new Corners(corner, context);
     }
 
@@ -866,11 +867,11 @@ public abstract class DrawableValue extends Value {
 
     private final Value color;
 
-    private Solid(ObjectValue value, Context context) {
+    private Solid(ObjectValue value, ProteusContext context) {
       color = ColorResourceProcessor.staticCompile(value.get(COLOR), context);
     }
 
-    public static Solid valueOf(ObjectValue value, Context context) {
+    public static Solid valueOf(ObjectValue value, ProteusContext context) {
       return new Solid(value, context);
     }
 
@@ -893,12 +894,12 @@ public abstract class DrawableValue extends Value {
     private final Value width;
     private final Value height;
 
-    private Size(ObjectValue value, Context context) {
+    private Size(ObjectValue value, ProteusContext context) {
       width = DimensionAttributeProcessor.staticCompile(value.get(WIDTH), context);
       height = DimensionAttributeProcessor.staticCompile(value.get(HEIGHT), context);
     }
 
-    public static Size valueOf(ObjectValue value, Context context) {
+    public static Size valueOf(ObjectValue value, ProteusContext context) {
       return new Size(value, context);
     }
 
@@ -920,14 +921,14 @@ public abstract class DrawableValue extends Value {
     public final Value dashWidth;
     public final Value dashGap;
 
-    private Stroke(ObjectValue stroke, Context context) {
+    private Stroke(ObjectValue stroke, ProteusContext context) {
       width = DimensionAttributeProcessor.staticCompile(stroke.get(WIDTH), context);
       color = ColorResourceProcessor.staticCompile(stroke.get(COLOR), context);
       dashWidth = DimensionAttributeProcessor.staticCompile(stroke.get(DASH_WIDTH), context);
       dashGap = DimensionAttributeProcessor.staticCompile(stroke.get(DASH_GAP), context);
     }
 
-    public static Stroke valueOf(ObjectValue stroke, Context context) {
+    public static Stroke valueOf(ObjectValue stroke, ProteusContext context) {
       return new Stroke(stroke, context);
     }
 
