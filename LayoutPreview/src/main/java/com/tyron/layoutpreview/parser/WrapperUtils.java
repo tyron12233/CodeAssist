@@ -116,7 +116,7 @@ public class WrapperUtils {
                 @Override
                 public void applyOther(View view, String value) {
                     params[offset] = (((ProteusContext) view.getContext())).getInflater()
-                            .getUniqueViewId(value.replace("@+id/", "".replace("@id/", "")));
+                            .getUniqueViewId(value);
                     set(attribute, view, getParameters(attribute.getParameters()), params);
                 }
             });
