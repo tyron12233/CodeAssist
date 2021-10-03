@@ -19,7 +19,9 @@ import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.tyron.builder.model.Project;
 import com.tyron.layoutpreview.ResourceManager;
@@ -33,11 +35,17 @@ import com.tyron.layoutpreview.model.Format;
 import com.tyron.layoutpreview.parser.CustomViewGroupParser;
 import com.tyron.layoutpreview.parser.CustomViewParser;
 import com.tyron.layoutpreview.view.UnknownView;
+import com.tyron.layoutpreview.view.UnknownViewGroup;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.InputStreamReader;
 import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class PreviewLayoutInflater {
@@ -49,7 +57,19 @@ public class PreviewLayoutInflater {
     private final ProteusLayoutInflater.Callback mCallback = new ProteusLayoutInflater.Callback() {
         @Override
         public ProteusView onUnknownViewType(ProteusContext context, ViewGroup parent, String type, Layout layout, ObjectValue data, int index) {
-            UnknownView view = new UnknownView(context, type);
+
+            ProteusView view;
+            Value children = null;
+            // this View has a children, use a ViewGroup so the children can be laid out as well.
+            if (layout.extras != null && layout.extras.get("children") != null) {
+                view = new UnknownViewGroup(context, type);
+
+                // remove the children attribute since we don't know how to place them
+                children = layout.extras.get("children");
+                layout.extras.remove("children");
+            } else {
+                view = new UnknownView(context, type);
+            }
 
             // since we don't know what this view is, we can only apply attributes for an android.view.View
             ViewTypeParser<View> viewParser = context.getParser("android.view.View");
@@ -62,18 +82,23 @@ public class PreviewLayoutInflater {
                     int id = viewParser.getAttributeId(name);
                     if (id != -1) {
                         // try first on the view attribute handers
-                        viewParser.handleAttribute(view, id, entry.getValue());
+                        viewParser.handleAttribute(view.getAsView(), id, entry.getValue());
                     } else {
                         // use the parent parser in case this view has layout params attributes
                         if (parent != null) {
                             ViewTypeParser<View> parentParser = context.getParser(parent.getClass().getName());
                             if (parentParser != null) {
-                                parentParser.handleAttribute(view, parentParser.getAttributeId(name), entry.getValue());
+                                parentParser.handleAttribute(view.getAsView(), parentParser.getAttributeId(name), entry.getValue());
                             }
                         }
                     }
                 });
+
+                if (children != null) {
+                    layout.extras.add("children", children);
+                }
             }
+
             return view;
         }
 
@@ -87,10 +112,9 @@ public class PreviewLayoutInflater {
 
     public PreviewLayoutInflater(Context base, Project project) {
         mBaseContext = base;
-        mProteus = new ProteusBuilder()
-                .register(new CustomViewParser(getTestView()))
-                .register(new CustomViewGroupParser(getConstraint()))
-                .build();
+        ProteusBuilder builder = new ProteusBuilder();
+        registerCustomViews(builder, project);
+        mProteus = builder.build();
 
         ResourceManager resourceManager = new ResourceManager(project.getResourceDirectory());
         mStringManager.setStrings(resourceManager.getStrings());
@@ -105,123 +129,6 @@ public class PreviewLayoutInflater {
 
     public StringManager getStringManager() {
         return mStringManager;
-    }
-
-    // for testing only
-    private CustomView getConstraint() {
-        CustomView view = new CustomView();
-        view.setType("androidx.constraintlayout.widget.ConstraintLayout");
-        view.setParentType("android.view.ViewGroup");
-
-        Attribute leftToLeft = Attribute.builder()
-                .setLayoutParams(true)
-                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
-                .addFormat(Format.REFERENCE)
-                .addFormat(Format.ENUM)
-                .setEnumValues(Collections.singletonMap("parent", 0))
-                .setXmlName("app:layout_constraintLeft_toLeftOf")
-                .setMethodName("leftToLeft")
-                .setParameters(int.class)
-                .build();
-
-        Attribute rightToRight = Attribute.builder()
-                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
-                .addFormat(Format.REFERENCE)
-                .addFormat(Format.ENUM)
-                .setEnumValues(Collections.singletonMap("parent", 0))
-                .setXmlName("app:layout_constraintRight_toRightOf")
-                .setMethodName("rightToRight")
-                .setParameters(int.class)
-                .build();
-
-        Attribute rightToLeft = Attribute.builder()
-                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
-                .addFormat(Format.REFERENCE)
-                .addFormat(Format.ENUM)
-                .setEnumValues(Collections.singletonMap("parent", 0))
-                .setXmlName("app:layout_constraintRight_toLeftOf")
-                .setMethodName("rightToLeft")
-                .setParameters(int.class)
-                .build();
-
-        Attribute leftToRight = Attribute.builder()
-                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
-                .addFormat(Format.REFERENCE)
-                .addFormat(Format.ENUM)
-                .setEnumValues(Collections.singletonMap("parent", 0))
-                .setXmlName("app:layout_constraintLeft_toRightOf")
-                .setMethodName("leftToRight")
-                .setParameters(int.class)
-                .build();
-
-        Attribute topToTop = Attribute.builder()
-                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
-                .addFormat(Format.REFERENCE)
-                .addFormat(Format.ENUM)
-                .setEnumValues(Collections.singletonMap("parent", 0))
-                .setXmlName("app:layout_constraintTop_toTopOf")
-                .setMethodName("topToTop")
-                .setParameters(int.class)
-                .build();
-
-        Attribute topToBottom = Attribute.builder()
-                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
-                .addFormat(Format.REFERENCE)
-                .addFormat(Format.ENUM)
-                .setEnumValues(Collections.singletonMap("parent", 0))
-                .setXmlName("app:layout_constraintTop_toBottomOf")
-                .setMethodName("topToBottom")
-                .setParameters(int.class)
-                .build();
-
-        Attribute bottomToTop = Attribute.builder()
-                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
-                .addFormat(Format.REFERENCE)
-                .addFormat(Format.ENUM)
-                .setEnumValues(Collections.singletonMap("parent", 0))
-                .setXmlName("app:layout_constraintBottom_toTopOf")
-                .setMethodName("bottomToTop")
-                .setParameters(int.class)
-                .build();
-
-        Attribute bottomToBottom = Attribute.builder()
-                .setLayoutParamsClass("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams")
-                .addFormat(Format.REFERENCE)
-                .addFormat(Format.ENUM)
-                .setEnumValues(Collections.singletonMap("parent", 0))
-                .setXmlName("app:layout_constraintBottom_toBottomOf")
-                .setMethodName("bottomToBottom")
-                .setParameters(int.class)
-                .build();
-
-
-        view.setAttributes(Arrays.asList(leftToLeft, rightToRight, rightToLeft, leftToRight,
-                topToTop, topToBottom, bottomToTop, bottomToBottom));
-        return view;
-    }
-
-    private CustomView getTestView() {
-        CustomView view = new CustomView();
-        view.setType("androidx.cardview.widget.CardView");
-        view.setParentType("android.widget.FrameLayout");
-
-        Attribute attribute = Attribute.builder()
-                .setMethodName("setCardBackgroundColor")
-                .setXmlName("app:cardBackgroundColor")
-                .setParameters(int.class)
-                .addFormat(Format.COLOR)
-                .build();
-
-        Attribute cornerRadius = Attribute.builder()
-                .setMethodName("setRadius")
-                .setXmlName("app:cardCornerRadius")
-                .addFormat(Format.DIMENSION)
-                .setParameters(float.class)
-                .setDimension(true)
-                .build();
-
-        view.setAttributes(Arrays.asList(attribute, cornerRadius));
-        return view;
     }
 
     public ProteusView inflate(String xml) throws InflateException {
@@ -251,5 +158,37 @@ public class PreviewLayoutInflater {
 
     public ProteusView inflate(Layout layout) {
         return mContext.getInflater().inflate(layout, new ObjectValue());
+    }
+
+    public void registerCustomViews(ProteusBuilder builder, Project project) {
+        File customViewsDir = new File(project.getBuildDirectory(), "custom_views");
+        if (!customViewsDir.exists() && !customViewsDir.mkdirs()) {
+            return;
+        }
+
+        File[] jsonFiles = customViewsDir.listFiles(c -> c.getName().endsWith(".json"));
+        if (jsonFiles == null) {
+            return;
+        }
+
+        for (File jsonFile : jsonFiles) {
+            try {
+                List<CustomView> customViews = new Gson().fromJson(new InputStreamReader(new FileInputStream(jsonFile)),
+                        new TypeToken<List<CustomView>>(){}.getType());
+
+                if (customViews != null) {
+                    customViews.forEach(it -> {
+                        if (it.isViewGroup()) {
+                            builder.register(new CustomViewGroupParser(it));
+                        } else {
+                            builder.register(new CustomViewParser(it));
+                        }
+                    });
+                }
+            } catch (FileNotFoundException ignore) {
+
+            }
+
+        }
     }
 }
