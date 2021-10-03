@@ -100,7 +100,12 @@ public class WrapperUtils {
     public static void addEnumProcessors(ViewTypeParser processor, Attribute attribute, Method method, Object[] params) {
         List<Format> formats = attribute.getFormats();
         int offset = attribute.getXmlParameterOffset();
-        if (formats.contains(Format.ENUM) && formats.contains(Format.REFERENCE)) {
+
+        if (!formats.contains(Format.ENUM)) {
+            throw new IllegalArgumentException("Can't add processors on an attribute that's not an enum attribute");
+        }
+
+        if (formats.contains(Format.REFERENCE)) {
             processor.addAttributeProcessor(attribute.getXmlName(), new EnumProcessor<View>(attribute.getEnumValues()) {
                 @Override
                 public void apply(View   view, int value) {
