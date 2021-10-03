@@ -101,8 +101,8 @@ public class PsiTest implements Closeable {
     Disposable disposable;
 
     ConstraintLayout.LayoutParams layout;
+    ConstraintLayout constraintLayout;
     {
-
         UtilKt.setIdeaIoUseFallback();
 
         disposable = Disposer.newDisposable();

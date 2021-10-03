@@ -16,7 +16,9 @@ import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.StringReader;
 import java.util.Collections;
@@ -46,16 +48,18 @@ public class ResourceStringParser {
 
         HashMap<String, Value> strings = new HashMap<>();
         for (File file : xmlFiles) {
-            strings.putAll(parseStringXml(file));
+            try {
+                strings.putAll(parseStringXml(new FileInputStream(file)));
+            } catch (FileNotFoundException ignore) {}
         }
 
         return strings;
     }
 
-    public Map<String, Value> parseStringXml(File xml) {
+    public Map<String, Value> parseStringXml(InputStream xml) {
         try {
             XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
-            parser.setInput(new InputStreamReader(new FileInputStream(xml)));
+            parser.setInput(new InputStreamReader(xml));
             advanceToRootNode(parser);
 
             HashMap<String, Value> strings = new HashMap<>();

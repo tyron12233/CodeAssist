@@ -1,0 +1,402 @@
+[
+  {
+    "type": "androidx.constraintlayout.widget.ConstraintLayout",
+    "parentType": "android.view.ViewGroup",
+    "attributes": [
+      {
+        "methodName": "leftToLeft",
+        "xmlName": "app:layout_constraintLeft_toLeftOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "rightToRight",
+        "xmlName": "app:layout_constraintRight_toRightOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "rightToLeft",
+        "xmlName": "app:layout_constraintRight_toLeftOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "leftToRight",
+        "xmlName": "app:layout_constraintLeft_toRightOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "topToTop",
+        "xmlName": "app:layout_constraintTop_toTopOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "topToBottom",
+        "xmlName": "app:layout_constraintTop_toBottomOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "bottomToTop",
+        "xmlName": "app:layout_constraintBottom_toTopOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "bottomToBottom",
+        "xmlName": "app:layout_constraintBottom_toBottomOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "startToStart",
+        "xmlName": "app:layout_constraintStart_toStartOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "startToEnd",
+        "xmlName": "app:layout_constraintStart_toEndOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "endToEnd",
+        "xmlName": "app:layout_constraintEnd_toEndOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "endToStart",
+        "xmlName": "app:layout_constraintEnd_toStartOf",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "REFERENCE",
+          "ENUM"
+        ],
+        "enumValues": {
+          "parent": 0
+        }
+      },
+      {
+        "methodName": "goneLeftMargin",
+        "xmlName": "app:layout_goneMarginLeft",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "DIMENSION"
+        ]
+      },
+      {
+        "methodName": "goneRightMargin",
+        "xmlName": "app:layout_goneMarginRight",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "DIMENSION"
+        ]
+      },
+      {
+        "methodName": "goneTopMargin",
+        "xmlName": "app:layout_goneMarginTop",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "DIMENSION"
+        ]
+      },
+      {
+        "methodName": "goneBottomMargin",
+        "xmlName": "app:layout_goneMarginBottom",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "DIMENSION"
+        ]
+      },
+      {
+        "methodName": "goneStartMargin",
+        "xmlName": "app:layout_goneMarginStart",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "DIMENSION"
+        ]
+      },
+      {
+        "methodName": "goneEndMargin",
+        "xmlName": "app:layout_goneMarginStart",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "DIMENSION"
+        ]
+      },
+      {
+        "methodName": "horizontalBias",
+        "xmlName": "app:layout_constraintHorizontal_bias",
+        "parameters": [
+          "float"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "FLOAT"
+        ]
+      },
+      {
+        "methodName": "verticalBias",
+        "xmlName": "app:layout_constraintVertical_bias",
+        "parameters": [
+          "float"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "FLOAT"
+        ]
+      },
+      {
+        "methodName": "horizontalChainStyle",
+        "xmlName": "app:layout_constraintHorizontal_chainStyle",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "ENUM"
+        ],
+        "enumValues": {
+          "spread_inside": 1,
+          "spread": 0,
+          "packed": 2
+        }
+      },
+      {
+        "methodName": "verticalChainStyle",
+        "xmlName": "app:layout_constraintVertical_chainStyle",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "ENUM"
+        ],
+        "enumValues": {
+          "spread_inside": 1,
+          "spread": 0,
+          "packed": 2
+        }
+      },
+      {
+        "methodName": "baselineMargin",
+        "xmlName": "app:layout_marginBaseline",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "DIMENSION"
+        ]
+      },
+      {
+        "methodName": "goneBaselineMargin",
+        "xmlName": "app:layout_marginBaseline",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "layoutParamsClass": "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+        "isLayoutParams": true,
+        "formats": [
+          "DIMENSION"
+        ]
+      }
+    ]
+  }
+]
