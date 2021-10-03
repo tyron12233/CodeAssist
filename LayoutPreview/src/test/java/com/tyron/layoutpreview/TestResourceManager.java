@@ -1,5 +1,7 @@
 package com.tyron.layoutpreview;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import android.util.AttributeSet;
 import android.util.Xml;
 
@@ -14,8 +16,10 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @RunWith(RobolectricTestRunner.class)
@@ -122,10 +126,11 @@ public class TestResourceManager {
             "</resources>\n";
 
     @Test
-    public void test() throws Exception {
-        ResourceStringParser parser = new ResourceStringParser(TEST_XML);
-        Map<String, Map<String, Value>> strings = parser.getStrings();
-        System.out.println(strings);
+    public void test() {
+        ResourceStringParser parser = new ResourceStringParser(null);
+        Map<String, Value> stringValueMap = parser.parseStringXml(new ByteArrayInputStream(TEST_XML.getBytes(StandardCharsets.UTF_8)));
+        assertThat(stringValueMap).isNotNull();
+        assertThat(stringValueMap).isNotEmpty();
     }
 
 }

@@ -80,6 +80,19 @@ public class WrapperUtils {
                     invokeMethod(view, method, objects);
                 }
             });
+        }  else if (attribute.getFormats().contains(Format.ENUM)) {
+            processor.addAttributeProcessor(name, new EnumProcessor(attribute.getEnumValues()) {
+                @Override
+                public void apply(View view, int value) {
+                    objects[offset] = value;
+                    invokeMethod(view, method, objects);
+                }
+
+                @Override
+                public void applyOther(View view, String value) {
+
+                }
+            });
         }
     }
 
