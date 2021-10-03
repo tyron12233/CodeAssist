@@ -21,9 +21,12 @@ import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
 import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonReader;
+import com.tyron.builder.model.Project;
+import com.tyron.layoutpreview.ResourceManager;
 import com.tyron.layoutpreview.StringManager;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
+import com.tyron.layoutpreview.manager.ResourceStringManager;
 import com.tyron.layoutpreview.model.Attribute;
 import com.tyron.layoutpreview.model.CustomView;
 import com.tyron.layoutpreview.model.Format;
@@ -34,6 +37,7 @@ import com.tyron.layoutpreview.view.UnknownView;
 import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 public class PreviewLayoutInflater {
@@ -47,7 +51,7 @@ public class PreviewLayoutInflater {
         public ProteusView onUnknownViewType(ProteusContext context, ViewGroup parent, String type, Layout layout, ObjectValue data, int index) {
             UnknownView view = new UnknownView(context, type);
 
-            // since we don't know what this view is, we can only apply attributes for a View
+            // since we don't know what this view is, we can only apply attributes for an android.view.View
             ViewTypeParser<View> viewParser = context.getParser("android.view.View");
             if (viewParser != null && layout != null && layout.extras != null) {
 
@@ -79,25 +83,28 @@ public class PreviewLayoutInflater {
         }
     };
 
-    private final StringManager mStringManager = new StringManager() {
-        @Override
-        public Map<String, Value> getStrings(@Nullable String tag) {
-            return null;
-        }
-    };
+    private final ResourceStringManager mStringManager = new ResourceStringManager();
 
-    public PreviewLayoutInflater(Context base) {
+    public PreviewLayoutInflater(Context base, Project project) {
         mBaseContext = base;
         mProteus = new ProteusBuilder()
                 .register(new CustomViewParser(getTestView()))
                 .register(new CustomViewGroupParser(getConstraint()))
                 .build();
+
+        ResourceManager resourceManager = new ResourceManager(project.getResourceDirectory());
+        mStringManager.setStrings(resourceManager.getStrings());
+
         mContext = mProteus.createContextBuilder(base)
                 .setCallback(mCallback)
                 .setStringManager(mStringManager)
                 .build();
 
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
+    }
+
+    public StringManager getStringManager() {
+        return mStringManager;
     }
 
     // for testing only

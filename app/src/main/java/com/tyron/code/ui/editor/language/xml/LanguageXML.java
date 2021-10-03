@@ -60,7 +60,7 @@ public class LanguageXML implements EditorLanguage {
 		}
 
 		String xmlString = FileUtils.readFileToString(currentFile, Charset.defaultCharset());
-		PreviewLayoutInflater inflater = new PreviewLayoutInflater(context);
+		PreviewLayoutInflater inflater = new PreviewLayoutInflater(context, FileManager.getInstance().getCurrentProject());
 		ProteusView inflatedView = inflater.inflate(xmlString);
 
 		return inflatedView.getAsView();

@@ -222,7 +222,7 @@ public class Resource extends Value {
         String value;
         if (name != null) {
             Value string = context.getProteusResources()
-                    .getString(name);
+                    .getString(name.replace(RESOURCE_PREFIX_STRING, ""));
             value = null != string ? string.getAsString() : null;
         } else {
             value = getString(resId, context);

@@ -11,6 +11,7 @@ import android.util.Xml;
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Value;
 import com.tyron.layoutpreview.convert.ConvertException;
+import com.tyron.layoutpreview.resource.ResourceStringParser;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -34,19 +35,10 @@ public class ResourceManager {
         mResourceDir = resourceDir;
     }
 
-    private Map<String, Value> getDefaultStrings() {
-        File valuesFolder = new File(mResourceDir, "values");
-        if (!valuesFolder.exists()) {
-            return Collections.emptyMap();
-        }
 
-        File[] xmlFiles = valuesFolder.listFiles(c -> c.getName().endsWith(".xml"));
-        if (xmlFiles == null) {
-            return Collections.emptyMap();
-        }
-
-        Map<String, Value> strings = new HashMap<>();
-        return strings;
+    public Map<String, Map<String, Value>> getStrings() {
+        ResourceStringParser parser = new ResourceStringParser(mResourceDir);
+        return parser.getStrings();
     }
 
 }
