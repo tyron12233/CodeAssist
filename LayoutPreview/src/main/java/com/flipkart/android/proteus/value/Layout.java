@@ -35,7 +35,7 @@ import androidx.annotation.Nullable;
 public class Layout extends Value {
 
   @NonNull
-  public final String type;
+  public String type;
 
   @Nullable
   public final List<Attribute> attributes;

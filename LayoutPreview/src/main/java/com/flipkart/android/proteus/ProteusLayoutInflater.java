@@ -106,7 +106,7 @@ public interface ProteusLayoutInflater {
    * @return The {@link ViewTypeParser} associated to the specified view type
    */
   @Nullable
-  ViewTypeParser getParser(@NonNull String type);
+  ViewTypeParser getParser(@NonNull Layout type);
 
   /**
    * Give the View ID for this string. This will generally be given by the instance of ID Generator

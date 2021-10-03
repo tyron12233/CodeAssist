@@ -47,14 +47,20 @@ public class PreviewLayoutInflater {
         public ProteusView onUnknownViewType(ProteusContext context, ViewGroup parent, String type, Layout layout, ObjectValue data, int index) {
             UnknownView view = new UnknownView(context, type);
 
-            ViewTypeParser<View> viewParser = context.getParser("View");
+            // since we don't know what this view is, we can only apply attributes for a View
+            ViewTypeParser<View> viewParser = context.getParser("android.view.View");
             if (viewParser != null && layout != null && layout.extras != null) {
+
+                // create layout params for this view
+                viewParser.onAfterCreateView(view, parent, -1);
                 layout.extras.entrySet().forEach(entry -> {
                     String name = entry.getKey();
                     int id = viewParser.getAttributeId(name);
                     if (id != -1) {
+                        // try first on the view attribute handers
                         viewParser.handleAttribute(view, id, entry.getValue());
                     } else {
+                        // use the parent parser in case this view has layout params attributes
                         if (parent != null) {
                             ViewTypeParser<View> parentParser = context.getParser(parent.getClass().getName());
                             if (parentParser != null) {
@@ -98,7 +104,7 @@ public class PreviewLayoutInflater {
     private CustomView getConstraint() {
         CustomView view = new CustomView();
         view.setType("androidx.constraintlayout.widget.ConstraintLayout");
-        view.setParentType("ViewGroup");
+        view.setParentType("android.view.ViewGroup");
 
         Attribute leftToLeft = Attribute.builder()
                 .setLayoutParams(true)
@@ -190,7 +196,7 @@ public class PreviewLayoutInflater {
     private CustomView getTestView() {
         CustomView view = new CustomView();
         view.setType("androidx.cardview.widget.CardView");
-        view.setParentType("FrameLayout");
+        view.setParentType("android.widget.FrameLayout");
 
         Attribute attribute = Attribute.builder()
                 .setMethodName("setCardBackgroundColor")

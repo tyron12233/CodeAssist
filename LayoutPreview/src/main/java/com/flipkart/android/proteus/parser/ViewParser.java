@@ -468,7 +468,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
         ProteusContext context = viewManager.getContext();
         Layout layout = viewManager.getLayout();
 
-        ViewTypeParser handler = context.getInflater().getParser(layout.type);
+        ViewTypeParser handler = context.getInflater().getParser(layout);
 
         String[] styleSet = value.split(ProteusConstants.STYLE_DELIMITER);
         for (String styleName : styleSet) {

@@ -26,6 +26,13 @@ public class XmlToJsonConverter {
 
     private final Set<String> mAttributesToSkip = new HashSet<>(Arrays.asList("xmlns:tools", "tools:context", "xmlns:tools", "xmlns:android", "style"));
 
+    private final String[] ANDROID_WIDGET = new String[] {"TextView", "Button", "ImageView",
+            "ImageButton", "LinearLayout", "FrameLayout", "AbsoluteLayout", "RelativeLayout", "ListView",
+            "ScrollView", "HorizontalScrollView", "CheckBox", "RatingBar", "ProgressBar", "HorizontalProgressBar",
+            "EditText", "AbsListView"};
+
+    private final String[] ANDROID_VIEW = new String[] {"View", "ViewGroup"};
+
     public XmlToJsonConverter() {
 
     }
@@ -92,6 +99,23 @@ public class XmlToJsonConverter {
         }
 
         String tag = parser.getName();
+        if (!tag.contains(".")) {
+            for (String widget : ANDROID_WIDGET) {
+                if (widget.equals(tag)) {
+                    tag = "android.widget." + tag;
+                    break;
+                }
+            }
+        }
+        if (!tag.contains(".")) {
+            for (String view : ANDROID_VIEW) {
+                if (view.equals(tag)) {
+                    tag = "android.view." + tag;
+                    break;
+                }
+            }
+        }
+
         json.addProperty("type", tag);
 
         for (Pair<String, String> attribute : attributes) {

@@ -30,6 +30,7 @@ import com.flipkart.android.proteus.value.Value;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * A layout builder which can parse json to construct an android view out of it. It uses the
@@ -40,8 +41,6 @@ import java.util.Map;
 public class SimpleLayoutInflater implements ProteusLayoutInflater {
 
     private static final String TAG = "SimpleLayoutInflater";
-
-    private static final String[] sClassPrefix = new String[] {"android.widget", "android.view", "android.webkit"};
 
     @NonNull
     protected final ProteusContext context;
@@ -57,16 +56,8 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
     @SuppressWarnings("rawtypes")
     @Override
     @Nullable
-    public ViewTypeParser getParser(@NonNull String type) {
-        if (!type.contains(".")) {
-            for (String prefix : sClassPrefix) {
-                ViewTypeParser<? extends View> parser = context.getParser(prefix + "." + type);
-                if (parser != null) {
-                    return parser;
-                }
-            }
-        }
-        return context.getParser(type);
+    public ViewTypeParser getParser(@NonNull Layout type) {
+        return context.getParser(type.type);
     }
 
     @NonNull
@@ -76,7 +67,7 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
         /*
          * Get the the view type parser for this layout type
          */
-        final ViewTypeParser parser = getParser(layout.type);
+        final ViewTypeParser parser = getParser(layout);
         if (parser == null) {
             /*
              * If parser is not registered ask the application land for the view
@@ -231,10 +222,8 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
 
     private String getType(View view) {
         String name = view.getClass().getName();
-        if (name.startsWith("android.widget")) {
-            name = name.replace("android.widget.", "");
-        } else if (name.startsWith("android.view")) {
-            name = name.replace("android.view.", "");
+        if (name.contains("Proteus")) {
+            name = Objects.requireNonNull(view.getClass().getSuperclass()).getName();
         }
         return name;
     }
