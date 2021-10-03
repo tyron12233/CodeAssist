@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 import android.view.InflateException;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
 
@@ -43,13 +44,24 @@ public class PreviewLayoutInflater {
 
     private final ProteusLayoutInflater.Callback mCallback = new ProteusLayoutInflater.Callback() {
         @Override
-        public ProteusView onUnknownViewType(ProteusContext context, String type, Layout layout, ObjectValue data, int index) {
+        public ProteusView onUnknownViewType(ProteusContext context, ViewGroup parent, String type, Layout layout, ObjectValue data, int index) {
             UnknownView view = new UnknownView(context, type);
 
             ViewTypeParser<View> viewParser = context.getParser("View");
-            if (viewParser != null && layout != null && layout.attributes != null) {
-                layout.attributes.forEach(attribute -> {
-                    viewParser.handleAttribute(view, attribute.id, attribute.value);
+            if (viewParser != null && layout != null && layout.extras != null) {
+                layout.extras.entrySet().forEach(entry -> {
+                    String name = entry.getKey();
+                    int id = viewParser.getAttributeId(name);
+                    if (id != -1) {
+                        viewParser.handleAttribute(view, id, entry.getValue());
+                    } else {
+                        if (parent != null) {
+                            ViewTypeParser<View> parentParser = context.getParser(parent.getClass().getName());
+                            if (parentParser != null) {
+                                parentParser.handleAttribute(view, parentParser.getAttributeId(name), entry.getValue());
+                            }
+                        }
+                    }
                 });
             }
             return view;

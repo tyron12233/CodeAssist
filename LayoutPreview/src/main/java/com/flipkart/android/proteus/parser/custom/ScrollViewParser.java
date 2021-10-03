@@ -40,13 +40,13 @@ public class ScrollViewParser<T extends ScrollView> extends ViewTypeParser<T> {
   @NonNull
   @Override
   public String getType() {
-    return "ScrollView";
+    return "android.widget.ScrollView";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "FrameLayout";
+    return "android.widget.FrameLayout";
   }
 
   @NonNull

@@ -40,13 +40,13 @@ public class RelativeLayoutParser<T extends RelativeLayout> extends ViewTypePars
   @NonNull
   @Override
   public String getType() {
-    return "RelativeLayout";
+    return "android.widget.RelativeLayout";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "ViewGroup";
+    return "android.view.ViewGroup";
   }
 
   @NonNull

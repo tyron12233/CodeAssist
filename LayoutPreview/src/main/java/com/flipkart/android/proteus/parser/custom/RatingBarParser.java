@@ -44,13 +44,13 @@ public class RatingBarParser<T extends FixedRatingBar> extends ViewTypeParser<T>
   @NonNull
   @Override
   public String getType() {
-    return "RatingBar";
+    return "android.widget.RatingBar";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "View";
+    return "android.view.View";
   }
 
   @NonNull

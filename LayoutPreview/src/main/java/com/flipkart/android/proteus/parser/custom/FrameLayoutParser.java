@@ -41,13 +41,13 @@ public class FrameLayoutParser<T extends AspectRatioFrameLayout> extends ViewTyp
   @NonNull
   @Override
   public String getType() {
-    return "FrameLayout";
+    return "android.widget.FrameLayout";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "ViewGroup";
+    return "android.view.ViewGroup";
   }
 
   @NonNull

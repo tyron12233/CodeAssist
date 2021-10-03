@@ -97,7 +97,10 @@ public class ProteusContext extends ContextWrapper {
 
   @Nullable
   public <T extends View> ViewTypeParser<T> getParser(String type) {
-    return resources.getParsers().get(type);
+    if (resources.getParsers().containsKey(type)) {
+      return resources.getParsers().get(type);
+    }
+    return null;
   }
 
   @NonNull

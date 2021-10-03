@@ -57,13 +57,13 @@ public class ProgressBarParser<T extends ProgressBar> extends ViewTypeParser<T> 
   @NonNull
   @Override
   public String getType() {
-    return "ProgressBar";
+    return "android.widget.ProgressBar";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "View";
+    return "android.view.View";
   }
 
   @NonNull

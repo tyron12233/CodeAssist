@@ -38,13 +38,13 @@ public class ButtonParser<T extends Button> extends ViewTypeParser<T> {
   @NonNull
   @Override
   public String getType() {
-    return "Button";
+    return "android.widget.Button";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "TextView";
+    return "android.widget.TextView";
   }
 
   @NonNull

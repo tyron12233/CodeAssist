@@ -43,13 +43,13 @@ public class ImageViewParser<T extends ImageView> extends ViewTypeParser<T> {
   @NonNull
   @Override
   public String getType() {
-    return "ImageView";
+    return "android.widget.ImageView";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "View";
+    return "android.view.View";
   }
 
   @NonNull

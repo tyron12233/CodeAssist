@@ -52,13 +52,13 @@ public class TextViewParser<T extends TextView> extends ViewTypeParser<T> {
   @NonNull
   @Override
   public String getType() {
-    return "TextView";
+    return "android.widget.TextView";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "View";
+    return "android.view.View";
   }
 
   @NonNull

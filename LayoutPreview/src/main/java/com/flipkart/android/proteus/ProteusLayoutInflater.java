@@ -143,7 +143,7 @@ public interface ProteusLayoutInflater {
      * @return The native view to be returned
      */
     @NonNull
-    ProteusView onUnknownViewType(ProteusContext context, String type, Layout layout, ObjectValue data, int index);
+    ProteusView onUnknownViewType(ProteusContext context, ViewGroup parent, String type, Layout layout, ObjectValue data, int index);
 
     /**
      * This callback is called when any user interaction occurs on a view

@@ -38,13 +38,13 @@ public class EditTextParser<T extends EditText> extends ViewTypeParser<T> {
   @NonNull
   @Override
   public String getType() {
-    return "EditText";
+    return "android.widget.EditText";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "TextView";
+    return "android.widget.TextView";
   }
 
   @NonNull

@@ -39,13 +39,13 @@ public class HorizontalProgressBarParser<T extends HorizontalProgressBar> extend
   @NonNull
   @Override
   public String getType() {
-    return "HorizontalProgressBar";
+    return "android.widget.HorizontalProgressBar";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "ProgressBar";
+    return "android.widget.ProgressBar";
   }
 
   @NonNull

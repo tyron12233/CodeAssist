@@ -72,7 +72,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
   @NonNull
   @Override
   public String getType() {
-    return "View";
+    return "android.view.View";
   }
 
   @Nullable

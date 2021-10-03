@@ -51,7 +51,7 @@ public class IncludeParser<V extends View> extends ViewTypeParser<V> {
   @Nullable
   @Override
   public String getParentType() {
-    return "View";
+    return "android.view.View";
   }
 
   @NonNull

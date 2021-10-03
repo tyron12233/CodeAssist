@@ -39,13 +39,13 @@ public class WebViewParser<T extends WebView> extends ViewTypeParser<T> {
   @NonNull
   @Override
   public String getType() {
-    return "WebView";
+    return "android.webkit.WebView";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "View";
+    return "android.view.View";
   }
 
   @NonNull

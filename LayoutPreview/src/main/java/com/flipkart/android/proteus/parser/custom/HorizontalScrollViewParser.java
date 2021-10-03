@@ -42,13 +42,13 @@ public class HorizontalScrollViewParser<T extends HorizontalScrollView> extends 
   @NonNull
   @Override
   public String getType() {
-    return "HorizontalScrollView";
+    return "android.widget.HorizontalScrollView";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "FrameLayout";
+    return "android.widget.FrameLayout";
   }
 
   @NonNull

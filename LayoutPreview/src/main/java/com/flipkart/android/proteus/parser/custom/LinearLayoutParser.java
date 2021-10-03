@@ -46,13 +46,13 @@ public class LinearLayoutParser<T extends LinearLayout> extends ViewTypeParser<T
   @NonNull
   @Override
   public String getType() {
-    return "LinearLayout";
+    return "android.widget.LinearLayout";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "ViewGroup";
+    return "android.view.ViewGroup";
   }
 
   @NonNull

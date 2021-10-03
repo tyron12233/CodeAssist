@@ -37,13 +37,13 @@ public class ImageButtonParser<T extends ImageButton> extends ViewTypeParser<T> 
   @NonNull
   @Override
   public String getType() {
-    return "ImageButton";
+    return "android.widget.ImageButton";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "ImageView";
+    return "android.widget.ImageView";
   }
 
   @NonNull

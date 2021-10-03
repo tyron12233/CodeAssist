@@ -41,13 +41,13 @@ public class CheckBoxParser<T extends CheckBox> extends ViewTypeParser<T> {
   @NonNull
   @Override
   public String getType() {
-    return "CheckBox";
+    return "android.widget.CheckBox";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "Button";
+    return "android.widget.Button";
   }
 
   @NonNull

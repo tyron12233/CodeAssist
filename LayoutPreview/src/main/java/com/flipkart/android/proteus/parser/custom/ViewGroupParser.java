@@ -59,13 +59,13 @@ public class ViewGroupParser<T extends ViewGroup> extends ViewTypeParser<T> {
   @NonNull
   @Override
   public String getType() {
-    return "ViewGroup";
+    return "android.view.ViewGroup";
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "View";
+    return "android.view.View";
   }
 
   @NonNull

@@ -41,6 +41,8 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
 
     private static final String TAG = "SimpleLayoutInflater";
 
+    private static final String[] sClassPrefix = new String[] {"android.widget", "android.view", "android.webkit"};
+
     @NonNull
     protected final ProteusContext context;
 
@@ -52,9 +54,18 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
         this.idGenerator = idGenerator;
     }
 
+    @SuppressWarnings("rawtypes")
     @Override
     @Nullable
     public ViewTypeParser getParser(@NonNull String type) {
+        if (!type.contains(".")) {
+            for (String prefix : sClassPrefix) {
+                ViewTypeParser<? extends View> parser = context.getParser(prefix + "." + type);
+                if (parser != null) {
+                    return parser;
+                }
+            }
+        }
         return context.getParser(type);
     }
 
@@ -70,7 +81,7 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
             /*
              * If parser is not registered ask the application land for the view
              */
-            return onUnknownViewEncountered(layout.type, layout, data, dataIndex);
+            return onUnknownViewEncountered(layout.type, parent, layout, data, dataIndex);
         }
 
         /*
@@ -181,12 +192,12 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
     }
 
     @NonNull
-    protected ProteusView onUnknownViewEncountered(String type, Layout layout, ObjectValue data, int dataIndex) {
+    protected ProteusView onUnknownViewEncountered(String type, ViewGroup parent, Layout layout, ObjectValue data, int dataIndex) {
         if (ProteusConstants.isLoggingEnabled()) {
             Log.d(TAG, "No ViewTypeParser for: " + type);
         }
         if (context.getCallback() != null) {
-            ProteusView view = context.getCallback().onUnknownViewType(context, type, layout, data, dataIndex);
+            ProteusView view = context.getCallback().onUnknownViewType(context, parent, type, layout, data, dataIndex);
             //noinspection ConstantConditions because we need to throw a ProteusInflateException specifically
             if (view == null) {
                 throw new ProteusInflateException("inflater Callback#onUnknownViewType() must not return null");
