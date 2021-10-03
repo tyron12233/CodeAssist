@@ -1,0 +1,35 @@
+[
+  {
+    "type": "androidx.cardview.widget.CardView",
+    "parentType": "android.widget.FrameLayout",
+    "isViewGroup": true,
+    "attributes": [
+      {
+        "methodName": "setCardBackgroundColor",
+        "xmlName": "app:cardBackgroundColor",
+        "parameters": [
+          "int"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "isLayoutParams": false,
+        "formats": [
+          "COLOR"
+        ]
+      },
+      {
+        "methodName": "setRadius",
+        "xmlName": "app:cardCornerRadius",
+        "parameters": [
+          "float"
+        ],
+        "xmlParameterOffset": 0,
+        "isDimension": false,
+        "isLayoutParams": false,
+        "formats": [
+          "DIMENSION"
+        ]
+      }
+    ]
+  }
+]

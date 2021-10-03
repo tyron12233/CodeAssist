@@ -143,13 +143,13 @@ public abstract class AbstractCustomViewTest {
         if (!outputFile.exists() && !outputFile.createNewFile()) {
             throw new IOException("Unable to create output file");
         }
-        File file = new File("/");
-        System.out.println(file.getAbsolutePath() + " FILE");
         String jsonString = new GsonBuilder()
                 .setPrettyPrinting()
                 .create()
                 .toJson(getCustomViews(), new TypeToken<List<CustomView>>(){}.getType());
         FileUtil.writeToFile(outputFile, jsonString);
+
+        System.out.println("Generated file to " + outputFile.getAbsolutePath());
     }
 
     public static String resolveBasePath() {

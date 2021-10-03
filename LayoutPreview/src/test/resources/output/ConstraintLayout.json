@@ -2,6 +2,7 @@
   {
     "type": "androidx.constraintlayout.widget.ConstraintLayout",
     "parentType": "android.view.ViewGroup",
+    "isViewGroup": true,
     "attributes": [
       {
         "methodName": "leftToLeft",
@@ -346,8 +347,8 @@
         ],
         "enumValues": {
           "spread_inside": 1,
-          "spread": 0,
-          "packed": 2
+          "packed": 2,
+          "spread": 0
         }
       },
       {
@@ -365,8 +366,8 @@
         ],
         "enumValues": {
           "spread_inside": 1,
-          "spread": 0,
-          "packed": 2
+          "packed": 2,
+          "spread": 0
         }
       },
       {
