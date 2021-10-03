@@ -1,32 +1,11 @@
 package com.tyron.code;
 
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.view.LayoutInflater;
-import android.view.View;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.tyron.PsiTest;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.code.ui.main.MainFragment;
-import com.tyron.code.util.AndroidUtilities;
-import com.tyron.layoutpreview.PreviewContext;
-import com.tyron.layoutpreview.PreviewLayoutInflater;
-import com.tyron.layoutpreview.PreviewLoader;
-import com.tyron.resolver.DependencyResolver;
-import com.tyron.resolver.DependencyUtils;
-import com.tyron.resolver.ResolveTask;
-import com.tyron.resolver.model.Dependency;
-
-import java.io.File;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
     @Override

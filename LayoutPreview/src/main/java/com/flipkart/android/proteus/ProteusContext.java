@@ -22,6 +22,7 @@ import android.view.View;
 
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Value;
+import com.tyron.layoutpreview.StringManager;
 
 import java.util.Map;
 
@@ -137,6 +138,8 @@ public class ProteusContext extends ContextWrapper {
     @Nullable
     private StyleManager styleManager;
 
+    private StringManager stringManager;
+
     Builder(@NonNull Context context, @NonNull Map<String, ViewTypeParser> parsers, @NonNull FunctionManager functionManager) {
       this.base = context;
       this.parsers = parsers;
@@ -163,8 +166,14 @@ public class ProteusContext extends ContextWrapper {
       return this;
     }
 
+    public Builder setStringManager(StringManager stringManager) {
+      this.stringManager = stringManager;
+      return this;
+    }
+
     public ProteusContext build() {
-      ProteusResources resources = new ProteusResources(parsers, layoutManager, functionManager, styleManager);
+      ProteusResources resources = new ProteusResources(parsers, layoutManager,
+              functionManager, styleManager, stringManager);
       return new ProteusContext(base, resources, loader, callback);
     }
 

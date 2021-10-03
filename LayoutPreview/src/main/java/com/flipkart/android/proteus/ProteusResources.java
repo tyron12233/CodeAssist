@@ -18,7 +18,9 @@ package com.flipkart.android.proteus;
 
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Value;
+import com.tyron.layoutpreview.StringManager;
 
+import java.util.Locale;
 import java.util.Map;
 
 import androidx.annotation.NonNull;
@@ -44,12 +46,16 @@ public class ProteusResources {
   @Nullable
   private final StyleManager styleManager;
 
+  private final StringManager stringManager;
+
   ProteusResources(@NonNull Map<String, ViewTypeParser> parsers, @Nullable LayoutManager layoutManager,
-                   @NonNull FunctionManager functionManager, @Nullable StyleManager styleManager) {
+                   @NonNull FunctionManager functionManager, @Nullable StyleManager styleManager,
+                   StringManager stringManager) {
     this.parsers = parsers;
     this.layoutManager = layoutManager;
     this.functionManager = functionManager;
     this.styleManager = styleManager;
+    this.stringManager = stringManager;
   }
 
   @NonNull
@@ -65,6 +71,10 @@ public class ProteusResources {
   @Nullable
   public Layout getLayout(@NonNull String name) {
     return null != layoutManager ? layoutManager.get(name) : null;
+  }
+
+  public Value getString(String name) {
+    return null != stringManager ? stringManager.get(name, Locale.getDefault()) : null;
   }
 
   @NonNull
