@@ -27,6 +27,8 @@ public class CustomView {
      */
     private String parentType;
 
+    private boolean isViewGroup;
+
     /**
      * List of attributes supported by this view, will be used later to set to set the attribtues
      * based on xml value
@@ -76,5 +78,13 @@ public class CustomView {
 
     public String getType() {
         return type;
+    }
+
+    public boolean isViewGroup() {
+        return isViewGroup;
+    }
+
+    public void setViewGroup(boolean viewGroup) {
+        isViewGroup = viewGroup;
     }
 }

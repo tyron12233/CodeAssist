@@ -48,6 +48,7 @@ public class GenerateConstraintLayout extends AbstractCustomViewTest {
         CustomView view = new CustomView();
         view.setType("androidx.constraintlayout.widget.ConstraintLayout");
         view.setParentType("android.view.ViewGroup");
+        view.setViewGroup(true);
 
         Attribute leftToLeft = Attribute.builder()
                 .setLayoutParams(true)
