@@ -29,7 +29,12 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Class for testing and generation of CustomViews
+ * Class for testing CustomViews
+ *
+ * This class also handles generation of the json files, the output directory is located
+ * at {@code app/src/test/resources/output}
+ *
+ * This will be used as the main tool for creating custom views for the LayoutPreview
  */
 @RunWith(RobolectricTestRunner.class)
 public abstract class AbstractCustomViewTest {
