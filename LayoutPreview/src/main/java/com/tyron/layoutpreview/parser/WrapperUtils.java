@@ -119,7 +119,6 @@ public class WrapperUtils {
      * If the attribute is a layout params attribute, it will try to set the field of the LayoutParams class otherwhise,
      * it will search for the method in the class
      */
-    @VisibleForTesting
     public static void set(Attribute attribute, View view, Class<?>[] classParams, Object[] params) {
         if (attribute.isLayoutParams()) {
             if (view.getLayoutParams().getClass().getName().equals(attribute.getLayoutParamsClass())) {

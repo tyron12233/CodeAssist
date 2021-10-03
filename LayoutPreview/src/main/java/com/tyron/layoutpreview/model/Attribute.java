@@ -1,6 +1,12 @@
 package com.tyron.layoutpreview.model;
 
 
+import android.view.View;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+import com.tyron.layoutpreview.parser.WrapperUtils;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -10,6 +16,16 @@ public class Attribute {
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    /**
+     * Convenience method to create an attribute class from a JSON String
+     * @param json Input JSON
+     * @return Attribute class
+     * @throws JsonSyntaxException if JSON input is malformed
+     */
+    public static Attribute fromJson(String json) throws JsonSyntaxException {
+        return new Gson().fromJson(json, Attribute.class);
     }
 
     /**
@@ -130,6 +146,13 @@ public class Attribute {
 
     public void setFormats(List<Format> formats) {
         this.formats = formats;
+    }
+
+    /**
+     * Apply this attribute to the given view
+     */
+    public void apply(View view, Object[] values) {
+        WrapperUtils.set(this, view, WrapperUtils.getParameters(parameters), values);
     }
 
     /**

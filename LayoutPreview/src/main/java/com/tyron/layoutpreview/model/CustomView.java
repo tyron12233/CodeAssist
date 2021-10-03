@@ -2,12 +2,19 @@ package com.tyron.layoutpreview.model;
 
 import android.view.View;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+
 import java.util.List;
 
 /**
  * Class used to represent custom views to the proteus layout inflater
  */
 public class CustomView {
+
+    public static CustomView fromJson(String json) throws JsonSyntaxException {
+        return new Gson().fromJson(json, CustomView.class);
+    }
 
     /** The fully qualified name of this view */
     private String type;
@@ -38,6 +45,13 @@ public class CustomView {
     public Class<? extends View> getViewClass(ClassLoader classLoader) throws ClassNotFoundException {
         Class<?> clazz = Class.forName(type, false, classLoader);
         return clazz.asSubclass(View.class);
+    }
+
+    /**
+     * Get the JSON representation of this class
+     */
+    public String toJsonString() {
+        return new Gson().toJson(this, CustomView.class);
     }
 
     public List<Attribute> getAttributes() {
