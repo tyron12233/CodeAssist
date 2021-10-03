@@ -9,6 +9,8 @@ import androidx.lifecycle.ViewModel;
 
 import com.tyron.builder.model.DiagnosticWrapper;
 
+import org.openjdk.javax.tools.Diagnostic;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -55,6 +57,20 @@ public class LogViewModel extends ViewModel {
         add(id, diagnosticWrapper);
     }
 
+    public void w(int id, String message) {
+        add(id, wrap(message, Diagnostic.Kind.WARNING));
+    }
+
+    public void e(int id, String message) {
+        add(id, wrap(message, Diagnostic.Kind.ERROR));
+    }
+
+    private DiagnosticWrapper wrap(String message, Diagnostic.Kind kind) {
+        DiagnosticWrapper wrapper = new DiagnosticWrapper();
+        wrapper.setMessage(message);
+        wrapper.setKind(kind);
+        return wrapper;
+    }
 
     /**
      * Convenience method to add a diagnostic to a ViewModel
