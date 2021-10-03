@@ -157,8 +157,10 @@ public class ViewGroupParser<T extends ViewGroup> extends ViewTypeParser<T> {
     int dataIndex = -1;
 
     if (view instanceof ProteusView) {
-      data = ((ProteusView) view).getViewManager().getDataContext().getData();
-      dataIndex = ((ProteusView) view).getViewManager().getDataContext().getIndex();
+      if (((ProteusView) view).getViewManager() != null) {
+        data = ((ProteusView) view).getViewManager().getDataContext().getData();
+        dataIndex = ((ProteusView) view).getViewManager().getDataContext().getIndex();
+      }
     }
 
     if (children.isArray()) {
