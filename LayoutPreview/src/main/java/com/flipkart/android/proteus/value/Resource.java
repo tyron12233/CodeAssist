@@ -21,6 +21,7 @@ import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.text.TextUtils;
 import android.util.LruCache;
 
 import androidx.annotation.NonNull;
@@ -227,7 +228,8 @@ public class Resource extends Value {
         } else {
             value = getString(resId, context);
         }
-        return value;
+
+        return value == null ? name : value;
     }
 
     @Nullable
