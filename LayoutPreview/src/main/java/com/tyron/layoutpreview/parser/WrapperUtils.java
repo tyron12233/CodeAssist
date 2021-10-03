@@ -53,7 +53,7 @@ public class WrapperUtils {
                     } else {
                         objects[offset] = value.intValue();
                     }
-                    invokeMethod(view, method, objects);
+                    set(attribute, view, getParameters(attribute.getParameters()), objects);
                 }
             });
         } else if (attribute.getFormats().contains(Format.DIMENSION)) {
@@ -61,7 +61,7 @@ public class WrapperUtils {
                 @Override
                 public void setDimension(View view, float dimension) {
                     objects[offset] = dimension;
-                    invokeMethod(view, method, objects);
+                    set(attribute, view, getParameters(attribute.getParameters()), objects);
                 }
             });
         } else if (attribute.getFormats().contains(Format.BOOLEAN)) {
@@ -69,7 +69,7 @@ public class WrapperUtils {
                 @Override
                 public void setBoolean(View view, boolean value) {
                     objects[offset] = value;
-                    invokeMethod(view, method, objects);
+                    set(attribute, view, getParameters(attribute.getParameters()), objects);
                 }
             });
         } else if (attribute.getFormats().contains(Format.STRING)) {
@@ -77,7 +77,7 @@ public class WrapperUtils {
                 @Override
                 public void setString(View view, String value) {
                     objects[offset] = value;
-                    invokeMethod(view, method, objects);
+                    set(attribute, view, getParameters(attribute.getParameters()), objects);
                 }
             });
         }  else if (attribute.getFormats().contains(Format.ENUM)) {
@@ -85,7 +85,7 @@ public class WrapperUtils {
                 @Override
                 public void apply(View view, int value) {
                     objects[offset] = value;
-                    invokeMethod(view, method, objects);
+                    set(attribute, view, getParameters(attribute.getParameters()), objects);
                 }
 
                 @Override
