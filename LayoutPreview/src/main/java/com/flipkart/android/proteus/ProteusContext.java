@@ -18,6 +18,7 @@ package com.flipkart.android.proteus;
 
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.view.View;
 
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Value;
@@ -94,7 +95,7 @@ public class ProteusContext extends ContextWrapper {
   }
 
   @Nullable
-  public ViewTypeParser getParser(String type) {
+  public <T extends View> ViewTypeParser<T> getParser(String type) {
     return resources.getParsers().get(type);
   }
 

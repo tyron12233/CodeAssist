@@ -3,6 +3,7 @@ package com.tyron.layoutpreview.inflate;
 import android.content.Context;
 import android.util.Log;
 import android.view.InflateException;
+import android.view.View;
 
 import com.flipkart.android.proteus.Proteus;
 import com.flipkart.android.proteus.ProteusBuilder;
@@ -11,6 +12,7 @@ import com.flipkart.android.proteus.ProteusLayoutInflater;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.SimpleIdGenerator;
 import com.flipkart.android.proteus.SimpleLayoutInflater;
+import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
@@ -38,7 +40,15 @@ public class PreviewLayoutInflater {
     private final ProteusLayoutInflater.Callback mCallback = new ProteusLayoutInflater.Callback() {
         @Override
         public ProteusView onUnknownViewType(ProteusContext context, String type, Layout layout, ObjectValue data, int index) {
-            return new UnknownView(context, type);
+            UnknownView view = new UnknownView(context, type);
+
+            ViewTypeParser<View> viewParser = context.getParser("View");
+            if (viewParser != null && layout != null && layout.attributes != null) {
+                layout.attributes.forEach(attribute -> {
+                    viewParser.handleAttribute(view, attribute.id, attribute.value);
+                });
+            }
+            return view;
         }
 
         @Override
