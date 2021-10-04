@@ -27,6 +27,7 @@ import io.github.rosemoe.editor.langs.java.JavaCodeAnalyzer;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -80,16 +81,17 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         diagnostics.clear();
         mLintDiagnostics.clear();
 
-        if (getClient() != null) {
-            getClient().scan(mEditor.getCurrentFile());
+        DefaultLintClient client = getClient();
+        if (client!= null) {
+            client.scan(mEditor.getCurrentFile());
 
-            for (LintIssue issue : getClient().getReportedIssues()) {
+            for (LintIssue issue : client.getReportedIssues()) {
                 if (issue.getLocation().getStart() == null || issue.getLocation().getEnd() == null) {
                     continue;
                 }
 
                 Position startPos = issue.getLocation().getStart();
-                Position endPos = (DefaultPosition) issue.getLocation().getEnd();
+                Position endPos = issue.getLocation().getEnd();
                 int startOffset = mEditor.getText().getCharIndex(startPos.line, startPos.column);
                 int endOffset = mEditor.getText().getCharIndex(endPos.line, endPos.column);
                 DiagnosticWrapper wrapper = new DiagnosticWrapper();
@@ -129,9 +131,14 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
             JavaCompilerService service = CompletionEngine.getInstance().getCompiler();
             if (service.isReady()) {
-                try (CompileTask task = service.compile(
-                        List.of(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
-                    diagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
+                try {
+                    try (CompileTask task = service.compile(
+                            List.of(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
+                        diagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
+                    }
+                } catch (RuntimeException e) {
+                    Log.e("JavaAnalyzer", "Failed compiling the file", e);
+                    service.close();
                 }
             }
         }
@@ -299,7 +306,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
             }
 
-            for (LintIssue issue : new ArrayList<>(getClient().getReportedIssues())) {
+            for (LintIssue issue : new ArrayList<>(client != null ? client.getReportedIssues() : Collections.emptyList())) {
                 if (issue.getLocation().getStart() == null || issue.getLocation().getEnd() == null) {
                     continue;
                 }
@@ -330,7 +337,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                         currentSpan.setUnderlineColor(Color.TRANSPARENT);
                         issueStack.pop();
 
-                        getClient().getReportedIssues().remove(last);
+                        client.getReportedIssues().remove(last);
                     } else {
                         currentSpan.setUnderlineColor(last.getSeverity() == Severity.ERROR ? 0xffFF0000 : 0xFFFFFF00);
                     }

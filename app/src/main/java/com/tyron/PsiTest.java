@@ -5,14 +5,11 @@ import android.util.Pair;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.cardview.widget.CardView;
 import androidx.constraintlayout.widget.ConstraintLayout;
 
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 
-import org.apache.commons.io.FileUtils;
-import org.jetbrains.kotlin.asJava.elements.KtLightField;
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys;
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity;
@@ -22,25 +19,18 @@ import org.jetbrains.kotlin.cli.jvm.compiler.CliBindingTrace;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM;
-import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVMKt;
-import org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt;
-import org.jetbrains.kotlin.com.intellij.core.CoreProjectEnvironment;
-import org.jetbrains.kotlin.com.intellij.core.JavaCoreApplicationEnvironment;
+import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
 import org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileSystem;
-import org.jetbrains.kotlin.com.intellij.psi.JavaPsiFacade;
-import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
+import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFileFactory;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaFile;
-import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope;
-import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtil;
 import org.jetbrains.kotlin.config.ApiVersion;
 import org.jetbrains.kotlin.config.CommonConfigurationKeys;
 import org.jetbrains.kotlin.config.CompilerConfiguration;
@@ -49,53 +39,30 @@ import org.jetbrains.kotlin.config.LanguageFeature;
 import org.jetbrains.kotlin.config.LanguageVersion;
 import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl;
-import org.jetbrains.kotlin.config.Services;
 import org.jetbrains.kotlin.container.ComponentProvider;
-import org.jetbrains.kotlin.diagnostics.Diagnostic;
-import org.jetbrains.kotlin.diagnostics.rendering.DiagnosticParameterRenderer;
-import org.jetbrains.kotlin.diagnostics.rendering.DiagnosticRenderer;
-import org.jetbrains.kotlin.diagnostics.rendering.DiagnosticRendererUtilKt;
 import org.jetbrains.kotlin.idea.KotlinLanguage;
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil;
-import org.jetbrains.kotlin.psi.KtClass;
 import org.jetbrains.kotlin.psi.KtFile;
-import org.jetbrains.kotlin.psi.KtPsiFactory;
+import org.jetbrains.kotlin.psi.psiUtil.PsiUtilsKt;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.BindingTraceContext;
 import org.jetbrains.kotlin.resolve.CompilerEnvironment;
 import org.jetbrains.kotlin.resolve.LazyTopDownAnalyzer;
 import org.jetbrains.kotlin.resolve.TopDownAnalysisMode;
-import org.jetbrains.kotlin.resolve.calls.context.ResolutionContext;
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo;
-import org.jetbrains.kotlin.resolve.calls.tower.ImplicitsExtensionsResolutionFilter;
-import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics;
-import org.jetbrains.kotlin.resolve.jvm.KotlinJavaPsiFacade;
-import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory;
 import org.jetbrains.kotlin.resolve.lazy.declarations.FileBasedDeclarationProviderFactory;
-import org.jetbrains.kotlin.storage.LockBasedStorageManager;
-import org.jetbrains.kotlin.storage.StorageManager;
-import org.jetbrains.kotlin.types.expressions.ExpressionTypingContext;
-import org.openjdk.javax.annotation.processing.Completion;
-import org.openjdk.tools.javac.parser.JavaTokenizer;
 
 import java.io.Closeable;
 import java.io.File;
-import java.io.IOException;
-import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
-import kotlin.jvm.JvmClassMappingKt;
-import kotlin.jvm.functions.Function2;
-
+@SuppressWarnings("all")
 public class PsiTest implements Closeable {
     KotlinCoreEnvironment environment;
     Disposable disposable;
@@ -121,12 +88,22 @@ public class PsiTest implements Closeable {
         configuration.put(JVMConfigurationKeys.NO_JDK, true);
 
         Project project = FileManager.getInstance().getCurrentProject();
-        org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt.addJvmClasspathRoot(configuration, project.getJavaDirectory());
+//        org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt.addJvmClasspathRoot(configuration, project.getJavaDirectory());
         environment = KotlinCoreEnvironment.createForProduction(disposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES);
-        environment.addKotlinSourceRoots(Collections.singletonList(new File(project.getJavaDirectory(), "androidx/test/Test.kt")));
+//        environment.addKotlinSourceRoots(Collections.singletonList(new File(project.getJavaDirectory(), "androidx/test/Test.kt")));
+//
+//        Compiler compiler = new Compiler();
+//        Pair<BindingContext, ComponentProvider> provider = compiler.compileKtFiles(environment.getSourceFiles(), environment.getSourceFiles(), CompletionKind.DEFAULT);
+//        new JavaCoreProjectEnvironment(disposable, environment.getProjectEnvironment().getEnvironment());
 
-        Compiler compiler = new Compiler();
-        Pair<BindingContext, ComponentProvider> provider = compiler.compileKtFiles(environment.getSourceFiles(), environment.getSourceFiles(), CompletionKind.DEFAULT);
+        PsiJavaFile psiJavaFile = (PsiJavaFile) PsiFileFactory.getInstance(environment.getProject()).createFileFromText(JavaLanguage.INSTANCE, "package test; public class Main {" +
+                "public static void main(String[] args) {" +
+                "" +
+                "}" +
+                "}");
+        for (PsiElement child : psiJavaFile.getChildren()) {
+
+        }
     }
 
     public Pair<ComponentProvider, BindingTraceContext> createContainer(Collection<KtFile> sourcePath) {
@@ -138,7 +115,6 @@ public class PsiTest implements Closeable {
                 Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(), Collections.emptyMap());
         return Pair.create(container, trace);
     }
-
     @Override
     public void close() {
         Disposer.dispose(disposable);
@@ -191,10 +167,13 @@ public class PsiTest implements Closeable {
             }
         }
     }
+
+
     private static class LoggingMessageCollector implements MessageCollector {
 
         @Override
         public void clear() {
+
         }
 
         @Override

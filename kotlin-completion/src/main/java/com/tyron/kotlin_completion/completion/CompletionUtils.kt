@@ -47,15 +47,15 @@ fun completions(
     val elementItemLabels = elementItemList.mapNotNull { it.label }.toSet()
 
     val items = (elementItemList.asSequence()
-                        + (if (!isExhaustive) indexCompletionItems(
-                    file,
-                    cursor,
-                    receiver,
-                    index,
-                    partial
-                ).filter { it.label !in elementItemLabels } else emptySequence())
-                        + (if (elementItemList.isEmpty()) keywordCompletionItems(partial) else emptySequence())
-                )
+            + (if (!isExhaustive) indexCompletionItems(
+        file,
+        cursor,
+        receiver,
+        index,
+        partial
+    ).filter { it.label !in elementItemLabels } else emptySequence())
+            + (if (elementItemList.isEmpty()) keywordCompletionItems(partial) else emptySequence())
+            )
 
     val start = Instant.now();
 
@@ -84,66 +84,63 @@ private fun indexCompletionItems(
     partial: String
 ): Sequence<CompletionItem> {
     val start = Instant.now();
+    val parsedFile = file.parse;
+    val imports = parsedFile.importDirectives;
 
-    try {
-        val parsedFile = file.parse;
-        val imports = parsedFile.importDirectives;
+    val wildCardPackages = imports
+        .mapNotNull { it.importPath }
+        .filter { it.isAllUnder }
+        .map { it.fqName }
+        .toSet()
 
-        val wildCardPackages = imports
-            .mapNotNull { it.importPath }
-            .filter { it.isAllUnder }
-            .map { it.fqName }
-            .toSet()
+    val importNames = imports
+        .mapNotNull { it.importedFqName?.shortName() }
+        .toSet()
+    val receiverType =
+        receiver?.let { expr ->
+            file.scopeAtPoint(cursor)?.let { file.typeOfExpression(expr, it) }
+        }
+    val receiverTypeName =
+        if (receiverType?.constructor?.declarationDescriptor == null) null else
+            PsiUtils.getFqNameSafe(receiverType.constructor.declarationDescriptor)
 
-        val importNames = imports
-            .mapNotNull { it.importedFqName?.shortName() }
-            .toSet()
-        val receiverType =
-            receiver?.let { expr ->
-                file.scopeAtPoint(cursor)?.let { file.typeOfExpression(expr, it) }
-            }
-        val receiverTypeName =
-            if (receiverType?.constructor?.declarationDescriptor == null) null else
-                PsiUtils.getFqNameSafe(receiverType.constructor.declarationDescriptor)
-
-        return index
-            .query(partial, receiverTypeName, limit = MAX_COMPLETION_ITEMS)
-            .asSequence()
-            .filter { it.kind != Symbol.Kind.MODULE }
-            .filter { it.fqName.shortName() !in importNames && it.fqName.parent() !in wildCardPackages }
-            .filter {
-                it.visibility == Symbol.Visibility.PUBLIC
-                        || it.visibility == Symbol.Visibility.PROTECTED
-                        || it.visibility == Symbol.Visibility.INTERNAL
-            }
-            .map {
-                CompletionItem().apply {
-                    label = it.fqName.shortName().toString()
-                    commitText = label
-                    cursorOffset = label.length
-                    iconKind = when (it.kind) {
-                        Symbol.Kind.CLASS -> CircleDrawable.Kind.Class
-                        Symbol.Kind.INTERFACE -> CircleDrawable.Kind.Interface
-                        Symbol.Kind.FUNCTION -> CircleDrawable.Kind.Method
-                        Symbol.Kind.VARIABLE -> CircleDrawable.Kind.LocalVariable
-                        Symbol.Kind.FIELD -> CircleDrawable.Kind.Filed
-                        else -> CircleDrawable.Kind.Method
-                    }
-                    detail = "(import from ${it.fqName.parent()})"
-                    val pos = findImportInsertionPosition(parsedFile, it.fqName)
-                    val prefix = if (importNames.isEmpty()) "\n\n" else "\n"
-                    additionalTextEdits =
-                        listOf(TextEdit(Range(pos, pos), "${prefix}import ${it.fqName}"))
+    val result =  index
+        .query(partial, receiverTypeName, limit = MAX_COMPLETION_ITEMS)
+        .asSequence()
+        .filter { it.kind != Symbol.Kind.MODULE }
+        .filter { it.fqName.shortName() !in importNames && it.fqName.parent() !in wildCardPackages }
+        .filter {
+            it.visibility == Symbol.Visibility.PUBLIC
+                    || it.visibility == Symbol.Visibility.PROTECTED
+                    || it.visibility == Symbol.Visibility.INTERNAL
+        }
+        .map {
+            CompletionItem().apply {
+                label = it.fqName.shortName().toString()
+                commitText = label
+                cursorOffset = label.length
+                iconKind = when (it.kind) {
+                    Symbol.Kind.CLASS -> CircleDrawable.Kind.Class
+                    Symbol.Kind.INTERFACE -> CircleDrawable.Kind.Interface
+                    Symbol.Kind.FUNCTION -> CircleDrawable.Kind.Method
+                    Symbol.Kind.VARIABLE -> CircleDrawable.Kind.LocalVariable
+                    Symbol.Kind.FIELD -> CircleDrawable.Kind.Filed
+                    else -> CircleDrawable.Kind.Method
                 }
+                detail = "(import from ${it.fqName.parent()})"
+//                val pos = findImportInsertionPosition(parsedFile, it.fqName)
+//                val prefix = if (importNames.isEmpty()) "\n\n" else "\n"
+//                additionalTextEdits =
+//                    listOf(TextEdit(Range(pos, pos), "${prefix}import ${it.fqName}"))
             }
+        }
 
-    } finally {
-        Log.d(
-            "IndexCompletions",
-            "IndexCompletions took " + Duration.between(start, Instant.now()).toMillis() + " ms"
-        )
-    }
+    Log.d(
+        "IndexCompletions",
+        "IndexCompletions took " + Duration.between(start, Instant.now()).toMillis() + " ms"
+    )
 
+    return result;
 }
 
 private fun findImportInsertionPosition(parsedFile: KtFile, fqName: FqName): Position =
@@ -219,40 +216,42 @@ private fun elementCompletionItems(
     partial: String
 ): ElementCompletionItems {
     val start = Instant.now()
+    try {
+        val surroundingElement = completableElement(file, cursor) ?: return ElementCompletionItems(
+            emptySequence(),
+            true,
+            null
+        )
+        val completions = elementCompletions(file, cursor, surroundingElement)
 
-    val surroundingElement = completableElement(file, cursor) ?: return ElementCompletionItems(
-        emptySequence(),
-        true,
-        null
-    )
-    val completions = elementCompletions(file, cursor, surroundingElement)
+        val matchesName = completions.filter {
+            containsCharactersInOrder(
+                name(it),
+                partial,
+                caseSensitive = false
+            )
+        }
+        val sorted = matchesName.takeIf { partial.length >= MIN_SORT_LENGTH }
+            ?.sortedBy { stringDistance(name(it), partial) }
+            ?: matchesName.sortedBy { if (name(it).startsWith(partial)) 0 else 1 }
+        val visible = sorted.filter(isVisible(file, cursor))
 
-    val matchesName = completions.filter {
-        containsCharactersInOrder(
-            name(it),
-            partial,
-            caseSensitive = false
+        val isExhaustive = surroundingElement !is KtNameReferenceExpression
+                && surroundingElement !is KtTypeElement
+                && surroundingElement !is KtQualifiedExpression
+        val receiver = (surroundingElement as? KtQualifiedExpression)?.receiverExpression
+
+        return ElementCompletionItems(
+            visible.map { completionItem(it, surroundingElement, file) },
+            isExhaustive,
+            receiver
+        )
+    } finally {
+        Log.d(
+            "Completions",
+            "ElementCompletions took " + Duration.between(start, Instant.now()).toMillis() + " ms"
         )
     }
-    val sorted = matchesName.takeIf { partial.length >= MIN_SORT_LENGTH }
-        ?.sortedBy { stringDistance(name(it), partial) }
-        ?: matchesName.sortedBy { if (name(it).startsWith(partial)) 0 else 1 }
-    val visible = sorted.filter(isVisible(file, cursor))
-
-    val isExhaustive = surroundingElement !is KtNameReferenceExpression
-            && surroundingElement !is KtTypeElement
-            && surroundingElement !is KtQualifiedExpression
-    val receiver = (surroundingElement as? KtQualifiedExpression)?.receiverExpression
-
-    Log.d(
-        "Completions",
-        "ElementCompletions took " + Duration.between(start, Instant.now()).toMillis() + " ms"
-    )
-    return ElementCompletionItems(
-        visible.map { completionItem(it, surroundingElement, file) },
-        isExhaustive,
-        receiver
-    )
 }
 
 private val callPattern = Regex("(.*)\\((?:\\$\\d+)?\\)(?:\\$0)?")

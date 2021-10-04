@@ -83,7 +83,7 @@ public class JavaVisitor {
                 }
             }
         } catch (Throwable ignore) {
-
+            ((JavaCompilerService) mCompiler).close();
         }
     }
 

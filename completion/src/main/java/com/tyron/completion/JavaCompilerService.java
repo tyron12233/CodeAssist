@@ -1,5 +1,20 @@
 package com.tyron.completion;
 
+import android.annotation.SuppressLint;
+import android.util.Log;
+
+import com.tyron.builder.model.SourceFileObject;
+import com.tyron.builder.parser.FileManager;
+import com.tyron.common.util.Cache;
+import com.tyron.common.util.StringSearch;
+import com.tyron.completion.provider.CompletionEngine;
+
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.StandardLocation;
+import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.tools.javac.file.PathFileObject;
+
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -9,30 +24,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
-import com.tyron.builder.model.SourceFileObject;
-
-import java.util.Map;
-import java.util.HashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import com.tyron.builder.parser.FileManager;
-import com.tyron.common.util.Cache;
-import com.tyron.common.util.StringSearch;
-import com.tyron.completion.provider.CompletionEngine;
-
-import android.annotation.SuppressLint;
-import android.util.Log;
-
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.StandardLocation;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.tools.javac.file.PathFileObject;
 
 public class JavaCompilerService implements CompilerProvider {
 
@@ -40,19 +39,21 @@ public class JavaCompilerService implements CompilerProvider {
 
     public final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
 
-	public final Set<File> classPath, docPath;
-	public final Set<String> addExports;
-	public final ReusableCompiler compiler = new ReusableCompiler();
-	private final Docs docs;
+    public final Set<File> classPath, docPath;
+    public final Set<String> addExports;
+    public final ReusableCompiler compiler = new ReusableCompiler();
+    private final Docs docs;
+
+    private final ReentrantLock mLock = new ReentrantLock();
 
     public JavaCompilerService(Set<File> classPath, Set<File> docPath, Set<String> addExports) {
 
-		this.classPath = Collections.unmodifiableSet(classPath);
-		this.docPath = Collections.unmodifiableSet(docPath);
-		this.addExports = Collections.unmodifiableSet(addExports);
+        this.classPath = Collections.unmodifiableSet(classPath);
+        this.docPath = Collections.unmodifiableSet(docPath);
+        this.addExports = Collections.unmodifiableSet(addExports);
 
-		this.fileManager = new SourceFileManager();
-		this.docs = new Docs(docPath);
+        this.fileManager = new SourceFileManager();
+        this.docs = new Docs(docPath);
 
         try {
             fileManager.setLocation(StandardLocation.CLASS_PATH, classPath);
@@ -66,12 +67,13 @@ public class JavaCompilerService implements CompilerProvider {
 
     }
 
-	public CompileBatch cachedCompile;
+    public CompileBatch cachedCompile;
     private final Object mCachedCompileLock = new Object();
-	private final Map<JavaFileObject, Long> cachedModified = new HashMap<>();
+    private final Map<JavaFileObject, Long> cachedModified = new HashMap<>();
 
     /**
      * Checks whether this list has been compiled before
+     *
      * @param sources list of java files to compile
      * @return true if there's a valid cache for it, false otherwise
      */
@@ -114,8 +116,8 @@ public class JavaCompilerService implements CompilerProvider {
         Set<Path> addFiles = firstAttempt.needsAdditionalSources();
         if (addFiles.isEmpty()) return firstAttempt;
         // If the compiler needs additional source files that contain package-private files
-		//  LOG.info("...need to recompile with " + addFiles);
-	    Log.d("JavaCompilerService", "Need to recompile with " + addFiles);
+        //  LOG.info("...need to recompile with " + addFiles);
+        Log.d("JavaCompilerService", "Need to recompile with " + addFiles);
         firstAttempt.close();
         firstAttempt.borrow.close();
         List<JavaFileObject> moreSources = new ArrayList<>(sources);
@@ -127,18 +129,19 @@ public class JavaCompilerService implements CompilerProvider {
 
     /**
      * Creates a compile batch only if it has not been compiled before
+     *
      * @param sources Files to compile
      * @return CompileBatch for this compilation
      */
     private CompileBatch compileBatch(Collection<? extends JavaFileObject> sources) {
-       synchronized (mCachedCompileLock) {
-           if (needsCompile(sources)) {
-               loadCompile(sources);
-           } else {
-               Log.d("JavaCompilerService", "Using cached compile");
-           }
-           return cachedCompile;
-       }
+
+        if (needsCompile(sources)) {
+            loadCompile(sources);
+        } else {
+            Log.d("JavaCompilerService", "Using cached compile");
+        }
+        return cachedCompile;
+
     }
 
 
@@ -151,9 +154,9 @@ public class JavaCompilerService implements CompilerProvider {
     @Override
     public List<String> publicTopLevelTypes() {
         List<String> classes = new ArrayList<>();
-		classes.addAll(FileManager.getInstance().all());
-		classes.addAll(Collections.emptyList());
-		return classes;
+        classes.addAll(FileManager.getInstance().all());
+        classes.addAll(Collections.emptyList());
+        return classes;
     }
 
     @Override
@@ -168,6 +171,7 @@ public class JavaCompilerService implements CompilerProvider {
 
     /**
      * Finds all the occurrences of a class in javadocs, and source files
+     *
      * @param className fully qualified name of the class
      * @return Optional of type JavaFileObject that may be empty if the file is not found
      */
@@ -189,6 +193,7 @@ public class JavaCompilerService implements CompilerProvider {
 
     /**
      * Searches the javadoc file manager if it contains the classes with javadoc
+     *
      * @param className the fully qualified name of the class
      * @return optional of type JavaFileObject, may be empty if it doesn't exist
      */
@@ -322,6 +327,7 @@ public class JavaCompilerService implements CompilerProvider {
 
     /**
      * Convenience method for parsing a path
+     *
      * @param file Path of java file to compile
      * @return ParseTask for this compilation
      */
@@ -332,6 +338,7 @@ public class JavaCompilerService implements CompilerProvider {
 
     /**
      * Parses a single java file without analysing and parsing other files
+     *
      * @param file Java file to parse
      * @return ParseTask for this compilation
      */
@@ -343,32 +350,38 @@ public class JavaCompilerService implements CompilerProvider {
     /**
      * Convenience method to compile a list of paths, this just wraps them in a
      * SourceFileObject and calls {@link JavaCompilerService#compile(Collection)}
+     *
      * @param files list of java paths to compile
      * @return a CompileTask for this compilation
      */
     @Override
     public CompileTask compile(Path... files) {
-        synchronized (mCachedCompileLock) {
-            List<JavaFileObject> sources = new ArrayList<>();
-            for (Path f : files) {
-                sources.add(new SourceFileObject(f));
-            }
-            return compile(sources);
+        List<JavaFileObject> sources = new ArrayList<>();
+        for (Path f : files) {
+            sources.add(new SourceFileObject(f));
         }
+        return compile(sources);
     }
 
     /**
      * Compiles a list of {@link JavaFileObject} not all of them needs no be compiled if
      * they have been compiled before
+     *
      * @param sources list of java sources
      * @return a CompileTask for this compilation
      */
     @Override
     public CompileTask compile(Collection<? extends JavaFileObject> sources) {
-        synchronized (mCachedCompileLock) {
-            CompileBatch compile = compileBatch(sources);
-            return new CompileTask(compile.task, compile.roots, diagnostics, compile::close);
+        mLock.lock();
+        CompileBatch compile = compileBatch(sources);
+        return new CompileTask(compile.task, compile.roots, diagnostics, this::close);
+    }
+
+    public void close() {
+        if (!cachedCompile.closed) {
+            cachedCompile.close();
         }
+        mLock.unlock();
     }
 
     public boolean isReady() {
