@@ -2,6 +2,7 @@ package com.tyron.lint.checks;
 
 import android.util.Log;
 
+import com.android.tools.r8.v.b.P;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Sets.SetView;
 import com.tyron.lint.api.Category;
@@ -134,8 +135,12 @@ public class JavaPerformanceDetector extends Detector implements Detector.JavaSc
         @Override
         public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
             if (mFlagAllocations && node.getMethodSelect() != null) {
-                MemberSelectTree tree = (MemberSelectTree) node.getMethodSelect();
-                String methodName = tree.getIdentifier().toString();
+                String methodName;
+                if (node.getMethodSelect() instanceof MemberSelectTree) {
+                    methodName = ((MemberSelectTree) node.getMethodSelect()).getIdentifier().toString();
+                } else {
+                    methodName = ((IdentifierTree) node.getMethodSelect()).getName().toString();
+                }
                 if (methodName.equals("createBitmap")                              //$NON-NLS-1$
                         || methodName.equals("createScaledBitmap")) {
                     String operand = ((IdentifierTree) ((MemberSelectTree) node.getMethodSelect()).getExpression()).getName().toString();

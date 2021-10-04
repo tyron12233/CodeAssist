@@ -14,6 +14,7 @@ import com.tyron.lint.api.JavaVoidVisitor;
 
 import org.openjdk.source.tree.AnnotationTree;
 import org.openjdk.source.tree.ExpressionTree;
+import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
@@ -82,7 +83,8 @@ public class JavaVisitor {
                     compilationUnit.accept(visitor, null);
                 }
             }
-        } catch (Throwable ignore) {
+        } catch (Throwable e) {
+            Log.e("Lint", "Failed to analyze file", e);
             ((JavaCompilerService) mCompiler).close();
         }
     }
@@ -161,6 +163,17 @@ public class JavaVisitor {
             }
             return super.visitMethod(methodTree, unused);
         }
+
+        @Override
+        public Void visitIdentifier(IdentifierTree identifierTree, Void unused) {
+            List<VisitingDetector> list = mTreeTypeDetectors.get(IdentifierTree.class);
+            if (list != null) {
+                for (VisitingDetector v : list) {
+                    v.getVisitor().visitIdentifier(identifierTree, unused);
+                }
+            }
+            return super.visitIdentifier(identifierTree, unused);
+        }
     }
 
     /** Performs common AST searches for method calls and R-type-field references.
@@ -177,6 +190,11 @@ public class JavaVisitor {
             mVisitMethods = !mMethodDetectors.isEmpty();
             mVisitConstructors = false; //!mConstructorDetectors.isEmpty();
             mVisitResources = false; //!mResourceFieldDetectors.isEmpty();
+        }
+
+        @Override
+        public Void visitIdentifier(IdentifierTree identifierTree, Void unused) {
+            return super.visitIdentifier(identifierTree, unused);
         }
 
         @Override
