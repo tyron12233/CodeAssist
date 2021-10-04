@@ -11,6 +11,7 @@ import com.tyron.completion.provider.CompletionEngine;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;

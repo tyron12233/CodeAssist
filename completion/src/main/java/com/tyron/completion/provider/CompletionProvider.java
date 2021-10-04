@@ -1,5 +1,6 @@
 package com.tyron.completion.provider;
 
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.tyron.completion.CompileTask;
@@ -46,6 +47,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -125,6 +127,8 @@ public class CompletionProvider {
         "double",
     };
 
+    private static final String[] sPrioritizedPackages = new String[]{"java.util", "java.lang", "android.view", "android.widget"};
+
     //private final JavaParser parser;
 	private final CompilerProvider compiler;
 
@@ -146,6 +150,21 @@ public class CompletionProvider {
             return new CompletionList();
         }
 		CompletionList list = compileAndComplete(file, contents.toString(), index);
+		list.items.sort((item, item1) -> {
+            for (String priority : sPrioritizedPackages) {
+                if (item.detail.startsWith(priority) && !item1.detail.startsWith(priority)) {
+                    return -1;
+                } else if (item1.detail.startsWith(priority) && !item.detail.startsWith(priority)) {
+                    return 1;
+                }
+            }
+
+            if (TextUtils.isEmpty(item.detail)) {
+                return String.CASE_INSENSITIVE_ORDER.compare(item.detail, item1.detail);
+            } else {
+                return String.CASE_INSENSITIVE_ORDER.compare(item.label, item1.label);
+            }
+        });
 		//addTopLevelSnippets(task, list);
 		return list;
 	}
@@ -310,7 +329,7 @@ public class CompletionProvider {
         boolean isStatic = trees.getElement(path) instanceof TypeElement;
         Scope scope = trees.getScope(path);
         TypeMirror type = trees.getTypeMirror(path);
-        //  Log.d("Completion on MemberSelect", "type: " + type.getKind() + " " + type.getClass().getName());
+
         if (type instanceof ArrayType) {
             return completeArrayMemberSelect(isStatic);
         } else if (type instanceof TypeVariable) {
@@ -351,7 +370,6 @@ public class CompletionProvider {
             if (member.getKind() == ElementKind.CONSTRUCTOR) continue;
             if (!StringSearch.matchesPartialName(member.getSimpleName(), partial) && !partial.endsWith(".")) continue;
             if (!trees.isAccessible(scope, member, type)) continue;
-            Log.d("DeclaredTypeCompletion", "member name: " + member.getSimpleName());
             if (isStatic != member.getModifiers().contains(Modifier.STATIC)) continue;
             if (member.getKind() == ElementKind.METHOD) {
                 putMethod((ExecutableElement) member, methods);
@@ -381,8 +399,6 @@ public class CompletionProvider {
         List<CompletionItem> list = new ArrayList<>();
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         Scope scope = trees.getScope(path);
-
-        Log.d("IDENTIFIER PATH", path.getParentPath().getLeaf().getKind().toString());
 
         Predicate<CharSequence> filter = p1 -> StringSearch.matchesPartialName(String.valueOf(p1), partial);
 
