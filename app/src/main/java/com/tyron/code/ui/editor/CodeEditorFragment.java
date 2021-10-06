@@ -89,8 +89,7 @@ public class CodeEditorFragment extends Fragment {
     public void onPause() {
         super.onPause();
 
-        mEditor.getTextActionPresenter().onExit();
-        mEditor.hideAutoCompleteWindow();
+        hideEditorWindows();
 //        if (mLanguage instanceof LanguageXML) {
 //            Project project = FileManager.getInstance().getCurrentProject();
 //            if (mCurrentFile != null && project != null && ProjectUtils.isResourceXMLFile(mCurrentFile)) {
@@ -108,6 +107,11 @@ public class CodeEditorFragment extends Fragment {
 //                }
 //            }
 //        }
+    }
+
+    public void hideEditorWindows() {
+        mEditor.getTextActionPresenter().onExit();
+        mEditor.hideAutoCompleteWindow();
     }
 
     @Override

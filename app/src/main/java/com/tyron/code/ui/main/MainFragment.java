@@ -161,7 +161,13 @@ public class MainFragment extends Fragment {
         mRoot.addDrawerListener(new DrawerLayout.DrawerListener() {
             @Override
             public void onDrawerSlide(@NonNull View p1, float p) {
-
+                File currentFile = mFilesViewModel.getCurrentFile();
+                if (currentFile != null) {
+                    Fragment fragment = getChildFragmentManager().findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
+                    if (fragment instanceof CodeEditorFragment) {
+                        ((CodeEditorFragment) fragment).hideEditorWindows();
+                    }
+                }
             }
 
             @Override
