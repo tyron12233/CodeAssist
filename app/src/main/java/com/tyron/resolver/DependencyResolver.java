@@ -1,9 +1,12 @@
 package com.tyron.resolver;
 
+import com.google.common.base.Charsets;
+import com.google.common.io.CharStreams;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.resolver.model.Dependency;
 
 import java.io.File;
+import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -129,9 +132,16 @@ public class DependencyResolver {
 
         long start = System.currentTimeMillis();
 
+        String contents = null;
+        try {
+            contents = CharStreams.toString(new InputStreamReader(is, Charsets.UTF_8));
+        } catch (IOException ignore) {
+
+        }
+
         POMParser parser = new POMParser();
         try {
-            for (Dependency dep : parser.parse(is)) {
+            for (Dependency dep : parser.parse(contents)) {
                 // skip test dependencies as its not important for now
                 if (dep.getScope() != null && dep.getScope().equals("test")) {
                     continue;
@@ -143,12 +153,38 @@ public class DependencyResolver {
         }
 
         mResolvedLibraries.put(parent, parent.getVersion());
+        try {
+            saveToCache(contents, parent);
+        } catch (IOException e) {
+            Log.w(TAG, "Unable to save dependency to cache: ", e);
+        }
 
         Log.d(TAG, "Resolved " + parent + " took: " + (System.currentTimeMillis() - start));
 
         try {
             is.close();
-        } catch (IOException ignored) {}
+        } catch (IOException ignored) {
+
+        }
+    }
+
+    private void saveToCache(String contents, Dependency dependency) throws IOException {
+        File pomCacheDir = new File(ApplicationLoader.applicationContext.getCacheDir(), "pom");
+
+        if (!pomCacheDir.exists()) {
+            if (!pomCacheDir.mkdir()) {
+                throw new IOException("Failed to create cache directory for pom file");
+            }
+        }
+
+        File file = new File(pomCacheDir, dependency.toString() + ".pom");
+        if (!file.exists()) {
+            if (!file.createNewFile()) {
+                throw new IOException("Failed to create cache pom file " + file.getName());
+            }
+        }
+
+        FileUtils.writeStringToFile(file, contents, Charsets.UTF_8);
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.tyron.resolver.parser;
 
 import java.io.File;
+import java.io.StringReader;
 import java.util.List;
 import java.io.InputStream;
 import java.io.IOException;
@@ -29,6 +30,19 @@ public class POMParser {
         XmlPullParser parser = Xml.newPullParser();
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
         parser.setInput(in, null);
+        parser.nextTag();
+
+        return readProject(parser);
+    }
+
+    public List<Dependency> parse(String in) throws IOException, XmlPullParserException {
+        if (in == null) {
+            return Collections.emptyList();
+        }
+
+        XmlPullParser parser = Xml.newPullParser();
+        parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
+        parser.setInput(new StringReader(in));
         parser.nextTag();
         return readProject(parser);
     }
