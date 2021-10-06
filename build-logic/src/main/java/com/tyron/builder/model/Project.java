@@ -39,6 +39,7 @@ public class Project {
 
     private String packageName;
     private File mAssetsDir;
+    private File mNativeLibsDir;
 
     /**
      * Creates a project object from specified root
@@ -50,6 +51,7 @@ public class Project {
         findKotlinFiles(new File(root, "app/src/main/java"));
 
         mAssetsDir = new File(root, "app/src/main/assets");
+        mNativeLibsDir = new File(root, "app/src/main/jniLibs");
     }
 
     private void findKotlinFiles(File file) {
@@ -259,7 +261,11 @@ public class Project {
         return new File(mRoot, "app/src/main/AndroidManifest.xml");
     }
 
-    public File getAssetsDir() {
+    public File getAssetsDirectory() {
         return mAssetsDir;
+    }
+
+    public File getNativeLibsDirectory() {
+        return mNativeLibsDir;
     }
 }

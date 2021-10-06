@@ -79,6 +79,10 @@ public class PackageTask extends Task {
                 builder.addResourcesFromJar(library);
             }
 
+            if (mProject.getNativeLibsDirectory().exists()) {
+                builder.addNativeLibraries(mProject.getNativeLibsDirectory());
+            }
+
 
             builder.setDebugMode(true);
             builder.sealApk();

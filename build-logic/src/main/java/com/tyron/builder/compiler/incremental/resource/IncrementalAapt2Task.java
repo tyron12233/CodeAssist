@@ -204,9 +204,9 @@ public class IncrementalAapt2Task extends Task {
         }
         args.add(file.getAbsolutePath());
 
-        if (mProject.getAssetsDir().exists()) {
+        if (mProject.getAssetsDirectory().exists()) {
             args.add("-A");
-            args.add(mProject.getAssetsDir().getAbsolutePath());
+            args.add(mProject.getAssetsDirectory().getAbsolutePath());
         }
 
         BinaryExecutor exec = new BinaryExecutor();
