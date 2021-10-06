@@ -11,6 +11,7 @@ import com.tyron.lint.JavaVisitor;
 import com.tyron.lint.checks.CallSuperDetector;
 import com.tyron.lint.checks.JavaPerformanceDetector;
 import com.tyron.lint.checks.SharedPrefsDetector;
+import com.tyron.lint.checks.ToastDetector;
 import com.tyron.lint.client.Configuration;
 import com.tyron.lint.client.IssueRegistry;
 import com.tyron.lint.client.LintClient;
@@ -49,7 +50,8 @@ public class Lint {
                 return Arrays.asList(
                         JavaPerformanceDetector.PAINT_ALLOC,
                         SharedPrefsDetector.ISSUE,
-                        CallSuperDetector.ISSUE
+                        CallSuperDetector.ISSUE,
+                        ToastDetector.ISSUE
                 );
             }
         }, mClient);

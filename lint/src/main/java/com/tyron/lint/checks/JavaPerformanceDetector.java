@@ -120,7 +120,7 @@ public class JavaPerformanceDetector extends Detector implements Detector.JavaSc
                 while (method != null) {
                     if (method instanceof MethodTree) {
                         break;
-                    }Log.d(null, "" + method);
+                    }
                     method = trees.getPath(mContext.getCompilationUnit(), method).getParentPath().getLeaf();
                 }
 
