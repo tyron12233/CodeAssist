@@ -138,6 +138,7 @@ public class TreeFileManagerFragment extends Fragment {
         popupMenu.getMenu().add("Copy path")
                 .setOnMenuItemClickListener(menuItem -> {
                     AndroidUtilities.copyToClipboard(currentFile.getAbsolutePath(), true);
+
                     return true;
                 });
 
