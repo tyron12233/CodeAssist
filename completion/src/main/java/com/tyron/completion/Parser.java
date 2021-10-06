@@ -1,9 +1,15 @@
 package com.tyron.completion;
 
+import android.annotation.SuppressLint;
 import android.util.Log;
 
 import com.tyron.builder.model.SourceFileObject;
 
+import org.openjdk.javax.lang.model.element.Modifier;
+import org.openjdk.javax.lang.model.element.Name;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaCompiler;
+import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
@@ -22,28 +28,26 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.Name;
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaCompiler;
-import org.openjdk.javax.tools.JavaFileObject;
-
 public class Parser {
-    
+
     private static final JavaCompiler COMPILER = JavacTool.create();
     private static final SourceFileManager FILE_MANAGER = new SourceFileManager();
 
-		/** Create a task that compiles a single file */
-		private static JavacTask singleFileTask(JavaFileObject file) {
-			return (JavacTask)
-			COMPILER.getTask(null, FILE_MANAGER, Parser::ignoreError, List.of(), List.of(), List.of(file));
-		}
-			
-    
+    /**
+     * Create a task that compiles a single file
+     */
+    @SuppressLint("NewApi")
+    private static JavacTask singleFileTask(JavaFileObject file) {
+        return (JavacTask)
+                COMPILER.getTask(null, FILE_MANAGER, Parser::ignoreError, Collections.emptyList(), Collections.emptyList(), Collections.singletonList(file));
+    }
+
+
     public final JavaFileObject file;
     public final String contents;
     public final JavacTask task;
@@ -65,7 +69,7 @@ public class Parser {
         }
         this.trees = Trees.instance(task);
     }
-    
+
     public static Parser parseFile(Path file) {
         return parseJavaFileObject(new SourceFileObject(file));
     }
@@ -94,27 +98,27 @@ public class Parser {
         }
         return cachedParse;
     }
-	
-	public Set<Name> packagePrivateClasses() {
-		Set<Name> result = new HashSet<>();
-		for (Tree t : root.getTypeDecls()) {
-			if (t instanceof ClassTree) {
-				ClassTree c = (ClassTree) t;
-				boolean isPublic = c.getModifiers().getFlags().contains(Modifier.PUBLIC);
-				if (isPublic) {
-					result.add(c.getSimpleName());
-				}
-			}
-		}
-		return result;
-	}
-    
+
+    public Set<Name> packagePrivateClasses() {
+        Set<Name> result = new HashSet<>();
+        for (Tree t : root.getTypeDecls()) {
+            if (t instanceof ClassTree) {
+                ClassTree c = (ClassTree) t;
+                boolean isPublic = c.getModifiers().getFlags().contains(Modifier.PUBLIC);
+                if (isPublic) {
+                    result.add(c.getSimpleName());
+                }
+            }
+        }
+        return result;
+    }
+
     private static String prune(
-        final CompilationUnitTree root,
-        final SourcePositions pos,
-        final StringBuilder buffer,
-        final long[] offsets,
-        final boolean eraseAfterCursor) {
+            final CompilationUnitTree root,
+            final SourcePositions pos,
+            final StringBuilder buffer,
+            final long[] offsets,
+            final boolean eraseAfterCursor) {
         class Scan extends TreeScanner<Void, Void> {
             boolean erasedAfterCursor = !eraseAfterCursor;
 
@@ -147,7 +151,7 @@ public class Parser {
                 }
                 if (last == -1) {
                     throw new RuntimeException(
-                        String.format("No cursor in %s is between %d and %d", offsets, start, end));
+                            String.format("No cursor in %s is between %d and %d", offsets, start, end));
                 }
                 return last;
             }
@@ -242,8 +246,8 @@ public class Parser {
         long[] cursors = {cursor};
         return prune(root, pos, buffer, cursors, true);
     }
-	
-	private static void ignoreError(Diagnostic<? extends JavaFileObject> __) {
+
+    private static void ignoreError(Diagnostic<? extends JavaFileObject> __) {
         // Too noisy, this only comes up in parse tasks which tend to be less important
         // LOG.warning(err.getMessage(Locale.getDefault()));
     }

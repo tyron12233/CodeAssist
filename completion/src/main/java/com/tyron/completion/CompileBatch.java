@@ -2,6 +2,7 @@ package com.tyron.completion;
 
 import android.util.Log;
 
+import org.apache.commons.io.FileUtils;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.Trees;
@@ -11,6 +12,7 @@ import com.tyron.common.util.StringSearch;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -72,14 +74,21 @@ public class CompileBatch implements AutoCloseable {
         // Check for "class not found errors" that refer to package private classes
         Set<Path> addFiles = new HashSet<>();
         for (Diagnostic<? extends JavaFileObject> err : parent.diagnostics) {
-            if (!err.getCode().equals("compiler.err.cant.resolve.location")) continue;
-            if (!isValidFileRange(err)) continue;
-            String className = errorText(err);
+            if (!err.getCode().equals("compiler.err.cant.resolve.location")) {
+                continue;
+            }
+            if (!isValidFileRange(err)) {
+                continue;
+            }
+            String className;
+            try {
+                className = errorText(err);
+            } catch (IOException e) {
+                continue;
+            }
             String packageName = packageName(err);
-			Log.d("CompileBatch", "Searching for class: " + className + " package name: " + packageName);
             Path location = findPackagePrivateClass(packageName, className);
             if (location != FILE_NOT_FOUND) {
-				Log.d("CompileBatch", "Found additional source: " + location);
                 addFiles.add(location);
             }
         }
@@ -88,9 +97,9 @@ public class CompileBatch implements AutoCloseable {
         return addFiles;
     }
 
-    private String errorText(Diagnostic<? extends JavaFileObject> err) {
+    private String errorText(Diagnostic<? extends JavaFileObject> err) throws IOException {
         Path file = Paths.get(err.getSource().toUri());
-        String contents = FileManager.readFile(file.toFile());
+        String contents = FileUtils.readFileToString(file.toFile(), Charset.defaultCharset());
         int begin = (int) err.getStartPosition();
         int end = (int) err.getEndPosition();
         return contents.substring(begin, end);
@@ -129,7 +138,7 @@ public class CompileBatch implements AutoCloseable {
 		JavaCompilerService parent, Collection<? extends JavaFileObject> sources) {
         parent.diagnostics.clear();
         List<String> options = options(parent.classPath, parent.addExports);
-        return parent.compiler.getTask(parent.fileManager, parent.diagnostics::add, options, List.of(), sources);
+        return parent.compiler.getTask(parent.fileManager, parent.diagnostics::add, options, Collections.emptyList(), sources);
     }
 
     /** Combine source path or class path entries using the system separator, for example ':' in unix */
