@@ -185,7 +185,7 @@ public class TreeViewAdapter<D> extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (treeNode.isExpanded()) {
             expandNode(treeNode);
 
-            // expand recursively
+            // expand folders recursively
             if (!treeNode.isLeaf() && treeNode.getChildren().size() == 1) {
                 TreeNode<D> subNode = treeNode.getChildren().get(0);
 
