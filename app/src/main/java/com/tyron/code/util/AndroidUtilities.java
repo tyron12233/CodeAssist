@@ -1,12 +1,17 @@
 package com.tyron.code.util;
+
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
-import com.tyron.code.ApplicationLoader;
-import android.view.ViewGroup;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
+
+import com.tyron.code.ApplicationLoader;
 
 @SuppressWarnings("unused")
 public class AndroidUtilities {
@@ -39,6 +44,20 @@ public class AndroidUtilities {
 		} catch (Exception e) {
 			Log.d("AndroidUtilities", "Failed to close keyboard " + e.getMessage());
 		}
+	}
+
+	public static void copyToClipboard(String text) {
+		ClipboardManager clipboard = (ClipboardManager) ApplicationLoader.applicationContext
+				.getSystemService(Context.CLIPBOARD_SERVICE);
+
+		ClipData clip = ClipData.newPlainText("", text); // is label important?
+		clipboard.setPrimaryClip(clip);
+	}
+
+	public static void copyToClipboard(String text, boolean showToast) {
+		copyToClipboard(text);
+
+		if (showToast) ApplicationLoader.showToast("Copied \"" + text + "\" to clipboard");
 	}
 	
 	public static int getHeight(ViewGroup viewGroup) {
