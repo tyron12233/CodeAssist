@@ -8,6 +8,7 @@ import java.io.IOException;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.model.Project;
 
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.ArrayList;
@@ -18,6 +19,8 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.BinaryExecutor;
+
+import org.apache.commons.io.FileUtils;
 
 public class AAPT2Compiler {
 
@@ -204,8 +207,17 @@ public class AAPT2Compiler {
 		return builder.toString();
 	}
 
+	/**
+	 * Retrieves the package name of a manifest (.xml) file
+	 * @return null if an exception occurred or cannot be determined.
+	 */
 	public static String getPackageName(File library) {
-		String manifestString = FileManager.readFile(library);
+		String manifestString;
+		try {
+			manifestString = FileUtils.readFileToString(library, Charset.defaultCharset());
+		} catch (IOException e) {
+			return null;
+		}
 		Matcher matcher = MANIFEST_PACKAGE.matcher(manifestString);
 		if (matcher.find()) {
 			return matcher.group(4);

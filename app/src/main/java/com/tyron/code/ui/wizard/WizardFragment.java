@@ -41,6 +41,7 @@ import com.tyron.code.util.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -360,7 +361,12 @@ public class WizardFragment extends Fragment {
      * @param file Input file
      */
     private void replacePlaceholder(File file) {
-        String string = FileManager.readFile(file);
+        String string;
+        try {
+            string = org.apache.commons.io.FileUtils.readFileToString(file, Charset.defaultCharset());
+        } catch (IOException e) {
+            return;
+        }
         String targetSdk = "31";
         String minSdk = mMinSdkText.getText().toString()
                 .substring("API".length() + 1, "API".length() + 3); // at least 2 digits

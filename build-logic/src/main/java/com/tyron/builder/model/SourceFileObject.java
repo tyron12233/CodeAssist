@@ -8,10 +8,12 @@ import com.tyron.builder.parser.FileManager;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 
+import org.apache.commons.io.FileUtils;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.javax.tools.SimpleJavaFileObject;
 
@@ -38,7 +40,11 @@ public class SourceFileObject extends SimpleJavaFileObject {
 		if (mContents != null) {
 			return mContents;
 		}
-		return FileManager.readFile(mFile.toFile());
+		try {
+			return FileUtils.readFileToString(mFile.toFile(), Charset.defaultCharset());
+		} catch (IOException e) {
+			return null;
+		}
 	}
 	
 	@Override

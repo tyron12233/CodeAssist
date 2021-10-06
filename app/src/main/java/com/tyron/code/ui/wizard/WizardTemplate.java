@@ -3,10 +3,13 @@ package com.tyron.code.ui.wizard;
 
 import com.tyron.builder.parser.FileManager;
 
+import org.apache.commons.io.FileUtils;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.Charset;
 
 public class WizardTemplate {
 
@@ -26,13 +29,13 @@ public class WizardTemplate {
 
         WizardTemplate template = new WizardTemplate();
         try {
-            JSONObject jsonObject = new JSONObject(FileManager.readFile(infoFile));
+            JSONObject jsonObject = new JSONObject(FileUtils.readFileToString(infoFile, Charset.defaultCharset()));
             template.setMinSdk(jsonObject.getInt("minSdk"));
             template.setName(jsonObject.getString("name"));
             template.setPath(parent.getAbsolutePath());
 
             return template;
-        } catch (JSONException e) {
+        } catch (JSONException | IOException e) {
             return null;
         }
     }

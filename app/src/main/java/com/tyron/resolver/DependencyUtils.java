@@ -3,7 +3,10 @@ package com.tyron.resolver;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.resolver.model.Dependency;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.File;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -20,7 +23,7 @@ public class DependencyUtils {
      * @return Library dependencies
      */
     public  static List<Dependency> parseGradle(File file) throws Exception {
-        String readString = FileManager.readFile(file);
+        String readString = FileUtils.readFileToString(file, Charset.defaultCharset());
         // remove all comments
         readString = readString.replaceAll("\\s*//.*", "");
         Matcher matcher = GRADLE_IMPL.matcher(readString);

@@ -152,14 +152,18 @@ public class FileManager {
         
         try {
             putJar(getAndroidJar());
-        } catch (IOException ignore) {}
+        } catch (IOException ignore) {
+
+        }
         
         javaFiles.putAll(project.getJavaFiles());
         
         for (File file : project.getLibraries()) {
             try {
                 putJar(file);
-            } catch (IOException ignore) {}
+            } catch (IOException ignore) {
+
+            }
         }
     }
     
@@ -172,10 +176,11 @@ public class FileManager {
     }
     
     public Set<String> classpath() {
-        Set<String> classpaths = new HashSet<>();
-        classpaths.addAll(javaFiles.keySet());
-        classpaths.addAll(Collections.emptySet());
-        return classpaths;
+        Set<String> classpath = new HashSet<>();
+        classpath.addAll(javaFiles.keySet());
+        classpath.addAll(mCurrentProject.getRJavaFiles().keySet());
+        classpath.addAll(Collections.emptySet());
+        return classpath;
     }
 
     public Set<File> fileClasspath() {
