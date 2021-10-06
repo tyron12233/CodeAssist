@@ -113,17 +113,25 @@ public class FileManager {
      * @return The files that are deleted
      */
     public List<File> deleteDirectory(File directory) throws IOException {
+        List<File> javaFiles = rDelete(directory);
+        FileUtils.deleteDirectory(directory);
+
+        return javaFiles;
+    }
+
+    private List<File> rDelete(File directory) throws IOException {
         List<File> javaFiles = findFilesWithExtension(directory, ".java");
         for (File file : javaFiles) {
+            if (file.isDirectory()) {
+                javaFiles.addAll(rDelete(file));
+                continue;
+            }
             String packageName = StringSearch.packageName(file);
             if (packageName != null) {
                 this.javaFiles.remove(packageName);
                 FileUtils.delete(file);
             }
         }
-
-        FileUtils.deleteDirectory(directory);
-
         return javaFiles;
     }
 
