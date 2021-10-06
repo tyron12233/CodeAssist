@@ -13,6 +13,8 @@ import com.tyron.builder.exception.CompilationFailedException;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,6 +32,7 @@ public class PackageTask extends Task {
     private File mApk;
 
     private Project mProject;
+    private ILogger mLogger;
 
     @Override
     public String getName() {
@@ -39,6 +42,8 @@ public class PackageTask extends Task {
     @Override
     public void prepare(Project project, ILogger logger) throws IOException {
         mProject = project;
+        mLogger = logger;
+
         File mBinDir = new File(project.getBuildDirectory(), "bin");
 
         mApk = new File(mBinDir, "generated.apk");
@@ -69,7 +74,20 @@ public class PackageTask extends Task {
                     mGeneratedRes.getAbsolutePath(),
                     mDexFile.getAbsolutePath(),
                     null,
-                    null);
+                    new PrintStream(new OutputStream() {
+
+                        private String buffer;
+
+                        @Override
+                        public void write(int i) {
+                            if (i == '\n') {
+                                mLogger.debug(buffer);
+                                buffer = "";
+                            } else {
+                                buffer += i;
+                            }
+                        }
+                    }));
 
             for (File extraDex : mDexFiles) {
                 builder.addFile(extraDex, Uri.parse(extraDex.getAbsolutePath()).getLastPathSegment());
@@ -82,7 +100,6 @@ public class PackageTask extends Task {
             if (mProject.getNativeLibsDirectory().exists()) {
                 builder.addNativeLibraries(mProject.getNativeLibsDirectory());
             }
-
 
             builder.setDebugMode(true);
             builder.sealApk();
