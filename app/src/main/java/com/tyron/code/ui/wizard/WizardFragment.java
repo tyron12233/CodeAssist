@@ -437,6 +437,10 @@ public class WizardFragment extends Fragment {
             return false;
         }
 
+        if (TextUtils.isEmpty(mMinSdkText.getText())) {
+            return false;
+        }
+
         return mCurrentTemplate != null;
     }
 
