@@ -29,6 +29,8 @@ public class PackageTask extends Task {
     /** The output apk file */
     private File mApk;
 
+    private Project mProject;
+
     @Override
     public String getName() {
         return "Package";
@@ -36,6 +38,7 @@ public class PackageTask extends Task {
 
     @Override
     public void prepare(Project project, ILogger logger) throws IOException {
+        mProject = project;
         File mBinDir = new File(project.getBuildDirectory(), "bin");
 
         mApk = new File(mBinDir, "generated.apk");
@@ -75,6 +78,8 @@ public class PackageTask extends Task {
             for (File library : mLibraries) {
                 builder.addResourcesFromJar(library);
             }
+
+
             builder.setDebugMode(true);
             builder.sealApk();
         } catch (ApkCreationException | SealedApkException | DuplicateFileException e) {

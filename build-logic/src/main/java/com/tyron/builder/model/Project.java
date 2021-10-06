@@ -38,6 +38,7 @@ public class Project {
     private final int targetSdk = 31;
 
     private String packageName;
+    private File mAssetsDir;
 
     /**
      * Creates a project object from specified root
@@ -47,6 +48,8 @@ public class Project {
         
         findJavaFiles(new File(root, "app/src/main/java"));
         findKotlinFiles(new File(root, "app/src/main/java"));
+
+        mAssetsDir = new File(root, "app/src/main/assets");
     }
 
     private void findKotlinFiles(File file) {
@@ -254,5 +257,9 @@ public class Project {
 
     public File getManifestFile() {
         return new File(mRoot, "app/src/main/AndroidManifest.xml");
+    }
+
+    public File getAssetsDir() {
+        return mAssetsDir;
     }
 }
