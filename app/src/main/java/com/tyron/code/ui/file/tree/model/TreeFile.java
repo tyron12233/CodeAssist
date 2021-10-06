@@ -1,12 +1,8 @@
 package com.tyron.code.ui.file.tree.model;
 
-import com.tyron.code.R;
-
 import java.io.File;
 
-import tellh.com.recyclertreeview_lib.LayoutItemType;
-
-public class TreeFile implements LayoutItemType {
+public class TreeFile {
 
     public static TreeFile fromFile(File file) {
         return new TreeFile(file);
@@ -22,8 +18,4 @@ public class TreeFile implements LayoutItemType {
         return mFile;
     }
 
-    @Override
-    public int getLayoutId() {
-        return R.layout.file_manager_item;
-    }
 }
