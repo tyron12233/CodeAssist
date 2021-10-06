@@ -66,7 +66,7 @@ public class CreateClassDialogFragment extends DialogFragment {
         builder.setPositiveButton(R.string.create_class_dialog_positive, ((dialogInterface, i) -> {
             if (mListener != null) {
 
-                String name = String.valueOf(mClassNameEditText.getText());
+                String name = String.valueOf(classTypeTextView.getText());
                 CodeTemplate template = mTemplates.stream()
                         .filter(temp -> temp.getName().equals(name))
                         .findAny()
