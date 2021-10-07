@@ -65,6 +65,9 @@ public class TreeFileManagerFragment extends Fragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         FrameLayout root = new FrameLayout(requireContext());
+        root.setLayoutParams(
+                new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT));
 
         treeView = new TreeView<>(
                 requireContext(), TreeNode.root(getNodes())
@@ -99,8 +102,9 @@ public class TreeFileManagerFragment extends Fragment {
 
     /**
      * Add menus to the current PopupMenu based on the current {@link TreeNode}
+     *
      * @param popupMenu The PopupMenu to add to
-     * @param node The current TreeNode in the file tree
+     * @param node      The current TreeNode in the file tree
      */
     // TODO: simplify
     private void addMenus(PopupMenu popupMenu, TreeNode<TreeFile> node) {
@@ -184,6 +188,7 @@ public class TreeFileManagerFragment extends Fragment {
     /**
      * Gets the parent directory of a node, if the node is already a directory then
      * it is returned
+     *
      * @param node the node to search
      * @return parent directory or itself if its already a directory
      */
@@ -198,6 +203,7 @@ public class TreeFileManagerFragment extends Fragment {
 
     /**
      * Sets the tree to be rooted at this file, calls refresh() after
+     *
      * @param file root file of the tree
      */
     public void setRoot(File file) {
