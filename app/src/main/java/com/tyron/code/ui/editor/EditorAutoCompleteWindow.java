@@ -14,7 +14,7 @@ import android.widget.Toast;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.tyron.code.rewrite.AddImport;
+import com.tyron.completion.rewrite.AddImport;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.completion.ParseTask;
 import com.tyron.completion.Parser;
@@ -369,7 +369,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                 return;
             }
 
-            mAdapter.attachAttributes(this, results);
+            //mAdapter.attachAttributes(this, results);
             mListView.scrollToPosition(0);
             mCurrent = 0;
             mAdapter.setSelection(0);

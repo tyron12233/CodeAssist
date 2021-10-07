@@ -19,7 +19,6 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
-import android.view.ContextMenu;
 import android.view.View;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
@@ -38,13 +37,12 @@ import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.provider.CompletionProvider;
 import com.tyron.completion.ParseTask;
-import com.tyron.code.rewrite.AddImport;
+import com.tyron.completion.rewrite.AddImport;
 import java.util.Map;
 import java.io.File;
 
 import android.util.Log;
 
-import androidx.appcompat.widget.TooltipCompat;
 import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.code.ui.editor.CompletionItemAdapter;
 import androidx.recyclerview.widget.LinearLayoutManager;
