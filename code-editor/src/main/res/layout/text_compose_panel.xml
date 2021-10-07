@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  ~    CodeEditor - the awesome code editor for Android
+  ~    Copyright (C) 2020-2021  Rosemoe
+  ~
+  ~     This library is free software; you can redistribute it and/or
+  ~     modify it under the terms of the GNU Lesser General Public
+  ~     License as published by the Free Software Foundation; either
+  ~     version 2.1 of the License, or (at your option) any later version.
+  ~
+  ~     This library is distributed in the hope that it will be useful,
+  ~     but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  ~     Lesser General Public License for more details.
+  ~
+  ~     You should have received a copy of the GNU Lesser General Public
+  ~     License along with this library; if not, write to the Free Software
+  ~     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+  ~     USA
+  ~
+  ~     Please contact Rosemoe by email 2073412493@qq.com if you need
+  ~     additional information or have any questions
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
+
+<LinearLayout
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	android:layout_width="wrap_content"
+	android:layout_height="match_parent"
+	android:orientation="horizontal"
+	android:gravity="center_vertical">
+
+	<HorizontalScrollView
+		android:layout_height="match_parent"
+		android:layout_width="wrap_content">
+
+		<LinearLayout
+			android:layout_height="match_parent"
+			android:layout_width="wrap_content"
+			android:orientation="horizontal"
+			android:gravity="center_vertical">
+
+			<Button
+				style="?android:attr/buttonBarButtonStyle"
+				android:layout_height="wrap_content"
+				android:layout_width="wrap_content"
+				android:text="@string/selectAll"
+				android:textColor="#FF000000"
+				android:textSize="12sp"
+				android:id="@+id/panel_btn_select_all"/>
+
+			<Button
+				style="?android:attr/buttonBarButtonStyle"
+				android:layout_height="wrap_content"
+				android:layout_width="wrap_content"
+				android:text="@string/copy"
+				android:textColor="#FF000000"
+				android:textSize="12sp"
+				android:id="@+id/panel_btn_copy"/>
+
+			<Button
+				style="?android:attr/buttonBarButtonStyle"
+				android:layout_height="wrap_content"
+				android:layout_width="wrap_content"
+				android:text="@string/paste"
+				android:textColor="#FF000000"
+				android:textSize="12sp"
+				android:id="@+id/panel_btn_paste"/>
+
+			<Button
+				style="?android:attr/buttonBarButtonStyle"
+				android:layout_height="wrap_content"
+				android:layout_width="wrap_content"
+				android:text="@string/cut"
+				android:textColor="#FF000000"
+				android:textSize="12sp"
+				android:id="@+id/panel_btn_cut"/>
+
+		</LinearLayout>
+
+	</HorizontalScrollView>
+
+</LinearLayout>
+

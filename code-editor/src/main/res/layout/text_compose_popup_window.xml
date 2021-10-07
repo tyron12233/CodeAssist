@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?><!--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  ~    CodeEditor - the awesome code editor for Android
+  ~    Copyright (C) 2020-2021  Rosemoe
+  ~
+  ~     This library is free software; you can redistribute it and/or
+  ~     modify it under the terms of the GNU Lesser General Public
+  ~     License as published by the Free Software Foundation; either
+  ~     version 2.1 of the License, or (at your option) any later version.
+  ~
+  ~     This library is distributed in the hope that it will be useful,
+  ~     but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  ~     Lesser General Public License for more details.
+  ~
+  ~     You should have received a copy of the GNU Lesser General Public
+  ~     License along with this library; if not, write to the Free Software
+  ~     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+  ~     USA
+  ~
+  ~     Please contact Rosemoe by email 2073412493@qq.com if you need
+  ~     additional information or have any questions
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/text_compose_panel"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@android:color/white"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/tcpw_material_button_select_all"
+        style="@style/TextButton.IconOnly"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/selectAll"
+        android:textColor="@color/textActionNameColor"
+        android:textSize="10sp"
+        app:icon="@drawable/round_select_all_20"
+        app:iconGravity="textTop"
+        app:iconPadding="8dp"
+        app:iconTint="@color/textActionNameColor"
+        app:shapeAppearanceOverlay="@style/ButtonBar.IconOnly.Left" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/tcpw_material_button_copy"
+        style="@style/TextButton.IconOnly"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/copy"
+        android:textColor="@color/textActionNameColor"
+        android:textSize="10sp"
+        app:icon="@drawable/round_content_copy_20"
+        app:iconGravity="textTop"
+        app:iconPadding="8dp"
+        app:iconTint="@color/textActionNameColor"
+        app:shapeAppearanceOverlay="@style/ButtonBar.IconOnly.Middle" />
+
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/tcpw_material_button_paste"
+        style="@style/TextButton.IconOnly"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/paste"
+        android:textColor="@color/textActionNameColor"
+        android:textSize="10sp"
+        app:icon="@drawable/round_content_paste_20"
+        app:iconGravity="textTop"
+        app:iconPadding="8dp"
+        app:iconTint="@color/textActionNameColor"
+        app:shapeAppearanceOverlay="@style/ButtonBar.IconOnly.Middle" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/tcpw_material_button_cut"
+        style="@style/TextButton.IconOnly"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/cut"
+        android:textColor="@color/textActionNameColor"
+        android:textSize="10sp"
+        app:icon="@drawable/round_content_cut_20"
+        app:iconGravity="textTop"
+        app:iconPadding="8dp"
+        app:iconTint="@color/textActionNameColor"
+        app:shapeAppearanceOverlay="@style/ButtonBar.IconOnly.Middle" />
+
+
+    <View
+        style="@style/VerticalDivider"
+        android:layout_height="36dp"
+        android:layout_gravity="center" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/tcpw_material_button_save_to_project"
+        style="@style/TextButton.IconOnly"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/more"
+        android:textColor="@color/textActionNameColor"
+        android:textSize="10sp"
+        app:icon="@drawable/ic_more_vert_black_20dp"
+        app:iconGravity="textTop"
+        app:iconPadding="8dp"
+        app:iconTint="@color/textActionNameColor"
+        app:shapeAppearanceOverlay="@style/ButtonBar.IconOnly.Right" />
+
+
+</LinearLayout>
