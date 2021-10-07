@@ -229,10 +229,12 @@ public class FileManager {
     }
 
     public Set<File> fileClasspath() {
-        Set<File> classpath = new HashSet<>();
-        classpath.addAll(javaFiles.values());
-        classpath.addAll(mCurrentProject.getLibraries());
-        classpath.addAll(mCurrentProject.getRJavaFiles().values());
+        Set<File> classpath = new HashSet<>(javaFiles.values());
+
+        if (mCurrentProject != null) {
+            classpath.addAll(mCurrentProject.getLibraries());
+            classpath.addAll(mCurrentProject.getRJavaFiles().values());
+        }
         return classpath;
     }
     
@@ -240,7 +242,10 @@ public class FileManager {
         List<String> files = new ArrayList<>();
         files.addAll(javaFiles.keySet());
         files.addAll(classFiles.keySet());
-        files.addAll(mCurrentProject.getRJavaFiles().keySet());
+
+        if (mCurrentProject != null) {
+            files.addAll(mCurrentProject.getRJavaFiles().keySet());
+        }
         return files;
     }
 
