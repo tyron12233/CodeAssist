@@ -27,6 +27,7 @@ import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.AndroidUtilities;
+import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.util.StringSearch;
 
 import java.io.File;
@@ -107,32 +108,36 @@ public class TreeFileManagerFragment extends Fragment {
 
         if (currentFile.isDirectory()) {
             SubMenu newSubMenu = popupMenu.getMenu().addSubMenu("New");
-            newSubMenu.add("Java class")
-                    .setOnMenuItemClickListener(menuItem -> {
-                        CreateClassDialogFragment fragment = new CreateClassDialogFragment();
-                        fragment.show(getChildFragmentManager(), "create_class_fragment");
 
-                        fragment.setOnClassCreatedListener((className, template) -> {
+            // Only show the new java file menu if its under app/src/main/java
+            if (ProjectUtils.getPackageName(getDirectory(node)) != null) {
+                newSubMenu.add("Java class")
+                        .setOnMenuItemClickListener(menuItem -> {
+                            CreateClassDialogFragment fragment = new CreateClassDialogFragment();
+                            fragment.show(getChildFragmentManager(), "create_class_fragment");
 
-                            File directory = getDirectory(node);
-                            try {
-                                File createdFile = ProjectManager.createClass(directory, className, template);
-                                TreeNode<TreeFile> newNode = new TreeNode<>(
-                                        TreeFile.fromFile(createdFile),
-                                        node.getLevel() + 1
-                                );
+                            fragment.setOnClassCreatedListener((className, template) -> {
 
-                                treeView.addNode(node, newNode);
-                                treeView.refreshTreeView();
+                                File directory = getDirectory(node);
+                                try {
+                                    File createdFile = ProjectManager.createClass(directory, className, template);
+                                    TreeNode<TreeFile> newNode = new TreeNode<>(
+                                            TreeFile.fromFile(createdFile),
+                                            node.getLevel() + 1
+                                    );
 
-                                mMainViewModel.addFile(createdFile);
-                                FileManager.getInstance().addJavaFile(createdFile);
-                            } catch (IOException e) {
-                                ApplicationLoader.showToast("Unable to create class: " + e.getMessage());
-                            }
+                                    treeView.addNode(node, newNode);
+                                    treeView.refreshTreeView();
+
+                                    mMainViewModel.addFile(createdFile);
+                                    FileManager.getInstance().addJavaFile(createdFile);
+                                } catch (IOException e) {
+                                    ApplicationLoader.showToast("Unable to create class: " + e.getMessage());
+                                }
+                            });
+                            return true;
                         });
-                        return true;
-                    });
+            }
         }
 
         popupMenu.getMenu().add("Copy path")
