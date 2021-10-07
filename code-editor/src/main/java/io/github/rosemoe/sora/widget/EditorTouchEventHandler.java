@@ -539,6 +539,10 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
 
     @Override
     public void onLongPress(MotionEvent e) {
+        onLongPress(e, false);
+    }
+
+    public void onLongPress(MotionEvent e, boolean doubleTap) {
         if (mEditor.mTextActionPresenter instanceof TextActionPopupWindow) {
             handleLongPressForModifiedTextAction(e);
             return;
@@ -564,12 +568,13 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
 
         // The default behavior is it will select text anyways which we don't want in our case
 
-        Cursor cursor = mEditor.getCursor();
+        mEditor.setSelectionRegion(line, startColumn, line, endColumn);
         if (mEditor.mTextActionPresenter instanceof EditorTextActionWindow) {
             EditorTextActionWindow window = ((EditorTextActionWindow) mEditor.mTextActionPresenter);
-            window.onSelectedTextLongClicked(e);
+            if (!doubleTap) {
+                window.onSelectedTextLongClicked(e);
+            }
         }
-        mEditor.setSelectionRegion(line, startColumn, line, endColumn);
     }
 
     public void onLongPressOld(MotionEvent e) {
@@ -796,7 +801,7 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
 
     @Override
     public boolean onDoubleTap(MotionEvent e) {
-        onLongPress(e);
+        onLongPress(e, true);
         return true;
     }
 

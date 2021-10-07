@@ -206,7 +206,8 @@ class EditorTextActionWindow extends EditorBasePopupWindow implements View.OnCli
     public void onSelectedTextLongClicked(MotionEvent e) {
         OnLongPressListener listener = mEditor.getOnLongPressListener();
         if (listener != null) {
-            Cursor cursor = mEditor.getCursor();listener.onLongPress(cursor.getLeft(), cursor.getRight(), e);
+            Cursor cursor = mEditor.getCursor();
+            listener.onLongPress(cursor.getLeft(), cursor.getRight(), e);
         }
     }
 }
