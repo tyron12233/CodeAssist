@@ -1,4 +1,4 @@
-package com.tyron.code.rewrite;
+package com.tyron.completion.rewrite;
 
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;

@@ -1,8 +1,6 @@
-package com.tyron.code.model;
+package com.tyron.completion.model;
 
 import androidx.annotation.NonNull;
-
-import com.tyron.completion.model.TextEdit;
 
 import java.nio.file.Path;
 import java.util.List;

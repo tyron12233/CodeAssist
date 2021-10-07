@@ -1,4 +1,4 @@
-package com.tyron.code.rewrite;
+package com.tyron.completion.rewrite;
 
 import com.tyron.completion.CompilerProvider;
 import com.tyron.completion.model.TextEdit;

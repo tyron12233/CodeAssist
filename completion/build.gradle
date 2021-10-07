@@ -36,7 +36,7 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
 
     implementation 'androidx.annotation:annotation:1.2.0'
-
-    implementation project(path: ':build-logic')
     implementation project(path: ':common')
+
+    api project(path: ':build-logic')
 }

@@ -19,13 +19,12 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.code.R;
-import com.tyron.code.action.CodeActionProvider;
+import com.tyron.completion.action.CodeActionProvider;
 import com.tyron.code.lint.LintIssue;
-import com.tyron.code.model.CodeAction;
-import com.tyron.code.model.CodeActionList;
+import com.tyron.completion.model.CodeAction;
+import com.tyron.completion.model.CodeActionList;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaAnalyzer;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;

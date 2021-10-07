@@ -1,4 +1,4 @@
-package com.tyron.code.hover;
+package com.tyron.completion.hover;
 
 import java.util.StringJoiner;
 import java.util.stream.Collectors;

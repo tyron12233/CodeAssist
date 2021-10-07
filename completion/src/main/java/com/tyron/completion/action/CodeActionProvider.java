@@ -1,32 +1,19 @@
-package com.tyron.code.action;
+package com.tyron.completion.action;
 
 import android.util.Log;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
-import com.tyron.builder.parser.FileManager;
-import com.tyron.code.ApplicationLoader;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.CompilerProvider;
 import com.tyron.completion.FindTypeDeclarationAt;
-import com.tyron.code.model.CodeAction;
-import com.tyron.code.model.CodeActionList;
-import com.tyron.completion.JavaCompilerService;
+import com.tyron.completion.model.CodeAction;
+import com.tyron.completion.model.CodeActionList;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
-import com.tyron.code.rewrite.AddImport;
-import com.tyron.code.rewrite.ImplementAbstractMethods;
-import com.tyron.code.rewrite.OverrideInheritedMethod;
-import com.tyron.code.rewrite.Rewrite;
-import com.tyron.lint.api.Context;
-import com.tyron.lint.api.Issue;
-import com.tyron.lint.api.Lint;
-import com.tyron.lint.api.Location;
-import com.tyron.lint.api.Severity;
-import com.tyron.lint.api.TextFormat;
-import com.tyron.lint.client.LintClient;
+import com.tyron.completion.rewrite.AddImport;
+import com.tyron.completion.rewrite.ImplementAbstractMethods;
+import com.tyron.completion.rewrite.OverrideInheritedMethod;
+import com.tyron.completion.rewrite.Rewrite;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;

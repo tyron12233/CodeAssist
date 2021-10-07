@@ -1,10 +1,8 @@
-package com.tyron.code.action;
+package com.tyron.completion.action;
 
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.LambdaExpressionTree;
-import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
-import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;

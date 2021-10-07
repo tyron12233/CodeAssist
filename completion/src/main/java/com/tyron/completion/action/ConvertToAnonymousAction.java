@@ -1,8 +1,8 @@
-package com.tyron.code.action;
+package com.tyron.completion.action;
 
 import com.tyron.completion.CompileTask;
-import com.tyron.code.model.CodeAction;
-import com.tyron.code.model.CodeActionList;
+import com.tyron.completion.model.CodeAction;
+import com.tyron.completion.model.CodeActionList;
 
 import org.openjdk.source.tree.LambdaExpressionTree;
 import org.openjdk.source.util.TreePath;

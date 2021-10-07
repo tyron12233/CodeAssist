@@ -1,11 +1,10 @@
-package com.tyron.code.action;
+package com.tyron.completion.action;
 
 import android.util.Log;
 
 import com.tyron.completion.CompileTask;
-import com.tyron.completion.provider.ScopeHelper;
-import com.tyron.code.model.CodeAction;
-import com.tyron.code.model.CodeActionList;
+import com.tyron.completion.model.CodeAction;
+import com.tyron.completion.model.CodeActionList;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;

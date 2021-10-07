@@ -1,5 +1,6 @@
 package com.tyron.code.ui.editor;
 
+import android.os.Build;
 import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.style.ForegroundColorSpan;
@@ -10,17 +11,18 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.tyron.code.ApplicationLoader;
-import com.tyron.code.R;
 import com.tyron.completion.drawable.CircleDrawable;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import io.github.rosemoe.sora.R;
 import io.github.rosemoe.sora.data.CompletionItem;
+import io.github.rosemoe.sora.widget.EditorAutoCompleteWindow;
 
 public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAdapter.ViewHolder> {
 
@@ -142,6 +144,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
             mIcon = view.findViewById(R.id.result_item_image);
         }
 
+        @RequiresApi(api = Build.VERSION_CODES.O)
         public void bind(CompletionItem item, boolean selected) {
             mLabel.setText(item.label);
             mDesc.setText(item.desc);
@@ -150,7 +153,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
             if (partial != null && partial.length() > 0) {
                 if (item.label.startsWith(partial)) {
                     ForegroundColorSpan span = new ForegroundColorSpan(
-                            ContextCompat.getColor(ApplicationLoader.applicationContext, R.color.colorAccent));
+                            0xFFCC7832);
 
                     SpannableString spannableString = new SpannableString(item.label);
                     spannableString.setSpan(span, 0, partial.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);

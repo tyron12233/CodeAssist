@@ -1,4 +1,4 @@
-package com.tyron.code.model;
+package com.tyron.completion.model;
 
 import java.util.List;
 

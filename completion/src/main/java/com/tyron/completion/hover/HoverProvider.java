@@ -1,4 +1,4 @@
-package com.tyron.code.hover;
+package com.tyron.completion.hover;
 
 import org.openjdk.source.doctree.DocCommentTree;
 import org.openjdk.source.tree.Tree;

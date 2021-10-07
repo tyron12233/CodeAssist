@@ -1,4 +1,4 @@
-package com.tyron.code.rewrite;
+package com.tyron.completion.rewrite;
 
 import com.google.common.base.Strings;
 import com.tyron.completion.CompileTask;
