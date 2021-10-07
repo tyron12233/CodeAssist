@@ -44,7 +44,7 @@ public class JavaCompilerService implements CompilerProvider {
     public final ReusableCompiler compiler = new ReusableCompiler();
     private final Docs docs;
 
-    private final ReentrantLock mLock = new ReentrantLock();
+    public final ReentrantLock mLock = new ReentrantLock();
 
     public JavaCompilerService(Set<File> classPath, Set<File> docPath, Set<String> addExports) {
 

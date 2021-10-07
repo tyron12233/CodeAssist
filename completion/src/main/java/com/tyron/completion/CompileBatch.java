@@ -117,7 +117,9 @@ public class CompileBatch implements AutoCloseable {
         // on large files
 
         for (File file : FileManager.getInstance().list(packageName)) {
-			Log.d("CompileBatch", "Parsing file: " + file.getName());
+			if (!file.exists()) {
+			    continue;
+            }
             Parser parse = Parser.parseFile(file.toPath());
             for (Name candidate : parse.packagePrivateClasses()) {
 				Log.d("CompileBatch", "Candidate: " + candidate);

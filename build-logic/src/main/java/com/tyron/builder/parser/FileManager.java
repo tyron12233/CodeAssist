@@ -97,6 +97,7 @@ public class FileManager {
 
     public List<File> list(String packageName) {
         List<File> list = new ArrayList<>();
+
         for (String file : javaFiles.keySet()) {
             String name = file;
             if (file.endsWith(".")) {
@@ -104,6 +105,18 @@ public class FileManager {
             }
             if (name.substring(0, name.lastIndexOf(".")).equals(packageName)) {
                 list.add(javaFiles.get(file));
+            }
+        }
+
+        if (mCurrentProject != null) {
+            for (String file : mCurrentProject.getRJavaFiles().keySet()) {
+                String name = file;
+                if (file.endsWith(".")) {
+                    name = file.substring(0, file.length() - 1);
+                }
+                if (name.substring(0, name.lastIndexOf(".")).equals(packageName)) {
+                    list.add(mCurrentProject.getRJavaFiles().get(file));
+                }
             }
         }
         return list;

@@ -22,6 +22,8 @@ import java.util.concurrent.locks.ReentrantLock;
 public class CompletionEngine {
     private static final String TAG = CompletionEngine.class.getSimpleName();
 
+    private final Set<File> mCachedPaths = new HashSet<>();
+
     public static CompletionEngine Instance = null;
 
     public static CompletionEngine getInstance() {
@@ -40,18 +42,41 @@ public class CompletionEngine {
 
     @NonNull
     public JavaCompilerService getCompiler() {
-        if (mProvider != null) {
-            return mProvider;
-        }
 
-        mProvider = new JavaCompilerService(
-                FileManager.getInstance().fileClasspath(),
-                Collections.emptySet(),
-                Collections.emptySet()
-        );
-        return mProvider;
+        Set<File> paths = FileManager.getInstance().fileClasspath();
+
+       if (changed(mCachedPaths, paths) || mProvider == null) {
+           mProvider = new JavaCompilerService(paths,
+                   Collections.emptySet(), Collections.emptySet());
+
+           mCachedPaths.clear();
+           mCachedPaths.addAll(paths);
+
+           Log.d(TAG, "Class path changed, creating a new compiler");
+       }
+
+       return mProvider;
     }
 
+    private boolean changed(Set<File> oldFiles, Set<File> newFiles) {
+        if (oldFiles.size() != newFiles.size()) {
+            return true;
+        }
+
+        for (File oldFile : oldFiles) {
+            if (!newFiles.contains(oldFile)) {
+                return true;
+            }
+        }
+
+        for (File newFile : newFiles) {
+            if (!oldFiles.contains(newFile)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /**
      * Disable subsequent completions
      */
@@ -69,13 +94,14 @@ public class CompletionEngine {
     public void index(Project project, Runnable callback) {
         setIndexing(true);
         project.clear();
-
         project.getLibraries();
         JavaCompilerService compiler = getCompiler();
         Set<File> filesToIndex = new HashSet<>(project.getJavaFiles().values());
         filesToIndex.addAll(project.getRJavaFiles().values());
-
         for (File file : filesToIndex) {
+            if (file == null || !file.exists()) {
+                continue;
+            }
             try (CompileTask task = compiler.compile(file.toPath())) {
                 Log.d(getClass().getSimpleName(), file.getName() + " compiled successfully");
             }
@@ -94,7 +120,7 @@ public class CompletionEngine {
         }
 
         try {
-            return new CompletionProvider(mProvider).complete(file, cursor);
+            return new CompletionProvider(getCompiler()).complete(file, cursor);
         } catch (RuntimeException | AssertionError e) {
             Log.d(TAG, "Completion failed: " + Log.getStackTraceString(e) + " Clearing cache.");
             mProvider = null;

@@ -166,6 +166,8 @@ public class TreeFileManagerFragment extends Fragment {
 
                 String packageName = StringSearch.packageName(file);
                 if (packageName != null) {
+                    packageName += "." + file.getName()
+                            .substring(0, file.getName().lastIndexOf("."));
                     FileManager.getInstance().removeJavaFile(packageName);
                 }
             }
