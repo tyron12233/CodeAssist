@@ -1,8 +1,10 @@
 package com.tyron.builder.parser;
 
+import android.content.Context;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.model.Project;
@@ -41,21 +43,8 @@ public class FileManager {
     private static FileManager INSTANCE = null;
     private final ExecutorService service = Executors.newFixedThreadPool(4);
 
-    public static FileManager getInstance() {
-        if (INSTANCE == null) {
-            INSTANCE = new FileManager();
-        }
-        return INSTANCE;
-    }
-
-    FileManager() {
-        try {
-            putJar(getAndroidJar());
-        } catch (IOException ignore) {}
-    }
-    
     private Project mCurrentProject;
-    
+
     // Map of compiled (.class) files with their fully qualified name as key
     private final Map<String, File> classFiles = new HashMap<>();
     private final Map<String, File> javaFiles = new HashMap<>();
@@ -68,10 +57,52 @@ public class FileManager {
     private Cache<String, List<File>> mDexCache = new Cache<>();
     private Cache<Void, Void> mSymbolCache = new Cache<>();
 
+    private File mAndroidJar;
+    private File mLambdaStubs;
+
+    public static FileManager getInstance() {
+        if (INSTANCE == null) {
+            INSTANCE = new FileManager();
+        }
+        return INSTANCE;
+    }
+
+    @VisibleForTesting
+    public static FileManager getInstance(File androidJar, File lambdaStubs) {
+        if (INSTANCE == null) {
+            INSTANCE = new FileManager(androidJar, lambdaStubs);
+        }
+        return INSTANCE;
+    }
+
+    FileManager() {
+        try {
+            putJar(getAndroidJar());
+        } catch (IOException ignore) {
+
+        }
+    }
+
+    @VisibleForTesting
+    public FileManager(File androidJar, File lambdaStubs) {
+        mAndroidJar = androidJar;
+        mLambdaStubs = lambdaStubs;
+
+        try {
+            putJar(androidJar);
+        } catch (IOException ignore) {
+
+        }
+    }
+
     public List<File> list(String packageName) {
         List<File> list = new ArrayList<>();
         for (String file : javaFiles.keySet()) {
-            if (file.substring(0, file.lastIndexOf(".")).equals(packageName)) {
+            String name = file;
+            if (file.endsWith(".")) {
+                name = file.substring(0, file.length() - 1);
+            }
+            if (name.substring(0, name.lastIndexOf(".")).equals(packageName)) {
                 list.add(javaFiles.get(file));
             }
         }
@@ -92,8 +123,9 @@ public class FileManager {
 
     public void addJavaFile(File javaFile) {
         String packageName = StringSearch.packageName(javaFile);
-
         if (packageName != null) {
+            packageName += "." + javaFile.getName()
+                    .substring(0, javaFile.getName().lastIndexOf("."));
             javaFiles.put(packageName, javaFile);
         }
     }
@@ -349,24 +381,38 @@ public class FileManager {
         return bufferedReader(file);
     }
 
-    public File getAndroidJar() {
+    @VisibleForTesting
+    public void setAndroidJar(File androidJar) {
+        mAndroidJar = androidJar;
+    }
 
-        File jarFile = new File(BuildModule.getContext()
-                                .getFilesDir(), "rt.jar");
-        if (!jarFile.exists()) {
-            Decompress.unzipFromAssets(BuildModule.getContext(),
-                    "rt.zip",
-                    jarFile.getParentFile().getAbsolutePath());
+    public File getAndroidJar() {
+        if (mAndroidJar == null) {
+            Context context = BuildModule.getContext();
+            if (context == null) {
+                return null;
+            }
+
+            mAndroidJar = new File(context
+                    .getFilesDir(), "rt.jar");
+            if (!mAndroidJar.exists()) {
+                Decompress.unzipFromAssets(BuildModule.getContext(),
+                        "rt.zip",
+                        mAndroidJar.getParentFile().getAbsolutePath());
+            }
         }
-        return jarFile;
+
+        return mAndroidJar;
     }
     
     public File getLambdaStubs() {
-        File lambdaStubs = new File(BuildModule.getContext().getFilesDir(), "core-lambda-stubs.jar");
-        
-        if (!lambdaStubs.exists()) {
-            Decompress.unzipFromAssets(BuildModule.getContext(), "lambda-stubs.zip", lambdaStubs.getParentFile().getAbsolutePath());
+        if (mLambdaStubs == null) {
+            mLambdaStubs = new File(BuildModule.getContext().getFilesDir(), "core-lambda-stubs.jar");
+
+            if (!mLambdaStubs.exists()) {
+                Decompress.unzipFromAssets(BuildModule.getContext(), "lambda-stubs.zip", mLambdaStubs.getParentFile().getAbsolutePath());
+            }
         }
-        return lambdaStubs;
+        return mLambdaStubs;
     }
 }

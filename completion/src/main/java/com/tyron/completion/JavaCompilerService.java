@@ -54,17 +54,6 @@ public class JavaCompilerService implements CompilerProvider {
 
         this.fileManager = new SourceFileManager();
         this.docs = new Docs(docPath);
-
-        try {
-            fileManager.setLocation(StandardLocation.CLASS_PATH, classPath);
-            fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, Arrays.asList(
-                    FileManager.getInstance().getAndroidJar(),
-                    FileManager.getInstance().getLambdaStubs()
-            ));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
     }
 
     public CompileBatch cachedCompile;

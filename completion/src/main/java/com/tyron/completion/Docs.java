@@ -1,5 +1,7 @@
 package com.tyron.completion;
 
+import android.content.Context;
+
 import com.tyron.completion.SourceFileManager;
 import com.tyron.common.util.Decompress;
 
@@ -53,9 +55,15 @@ public class Docs {
         return cacheAndroidSources;
     }
 
+    private static final File EMPTY = new File("");
+
     // TODO: im gonna bundle the java docs sources in the app assets for now
     // we could let the user download it later.
     private static File findAndroidSources() throws IOException {
+        Context context = CompletionModule.getContext();
+        if (context == null) {
+            return EMPTY;
+        }
         File sourcePath = new File(
                 CompletionModule.getContext().getFilesDir(),
                 "docs/android-sources.jar"
