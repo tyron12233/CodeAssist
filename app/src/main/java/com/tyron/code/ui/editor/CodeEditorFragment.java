@@ -128,7 +128,6 @@ public class CodeEditorFragment extends Fragment {
 
         if (!CompletionEngine.isIndexing()) {
             mEditor.analyze();
-            ;
         }
     }
 
