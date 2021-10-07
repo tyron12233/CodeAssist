@@ -7,14 +7,12 @@ import com.android.sdklib.build.ApkCreationException;
 import com.android.sdklib.build.DuplicateFileException;
 import com.android.sdklib.build.SealedApkException;
 import com.tyron.builder.compiler.Task;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.log.ILogger;
 import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.Project;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -74,20 +72,7 @@ public class PackageTask extends Task {
                     mGeneratedRes.getAbsolutePath(),
                     mDexFile.getAbsolutePath(),
                     null,
-                    new PrintStream(new OutputStream() {
-
-                        private String buffer;
-
-                        @Override
-                        public void write(int i) {
-                            if (i == '\n') {
-                                mLogger.debug(buffer);
-                                buffer = "";
-                            } else {
-                                buffer += i;
-                            }
-                        }
-                    }));
+                    null);
 
             for (File extraDex : mDexFiles) {
                 builder.addFile(extraDex, Uri.parse(extraDex.getAbsolutePath()).getLastPathSegment());
