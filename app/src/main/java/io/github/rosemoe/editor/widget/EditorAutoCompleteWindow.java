@@ -268,7 +268,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      */
     @SuppressLint("NewApi")
     public void select(int pos) {
-        CompletionItem item = mAdapter.getItem(pos);
+        CompletionItem item = null;
         Cursor cursor = mEditor.getCursor();
         if (!cursor.isSelected()) {
             mCancelShowUp = true;
@@ -388,7 +388,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                 return;
             }
 			
-			mAdapter.attachAttributes(this, results);
+		//	mAdapter.attachAttributes(this, results);
             mListView.scrollToPosition(0);
             mCurrent = 0;
             mAdapter.setSelection(0);

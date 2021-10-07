@@ -7,44 +7,39 @@ import android.util.Log;
 import androidx.preference.PreferenceManager;
 
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.model.SourceFileObject;
+import com.tyron.builder.parser.FileManager;
 import com.tyron.code.lint.DefaultLintClient;
 import com.tyron.code.lint.LintIssue;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
-import com.tyron.builder.model.SourceFileObject;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.provider.CompletionEngine;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.lint.api.DefaultPosition;
-import com.tyron.lint.api.Issue;
 import com.tyron.lint.api.Severity;
 import com.tyron.lint.api.TextFormat;
 
-import io.github.rosemoe.editor.struct.Span;
-import io.github.rosemoe.editor.text.TextAnalyzeResult;
-import io.github.rosemoe.editor.text.TextAnalyzer;
-import io.github.rosemoe.editor.langs.java.JavaCodeAnalyzer;
+import org.openjdk.javax.tools.Diagnostic;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.ArrayList;
-
-import io.github.rosemoe.editor.widget.CodeEditor;
-import io.github.rosemoe.editor.widget.EditorColorScheme;
-import io.github.rosemoe.editor.langs.java.Tokens;
-import io.github.rosemoe.editor.text.LineNumberCalculator;
-import io.github.rosemoe.editor.langs.java.JavaTextTokenizer;
-import io.github.rosemoe.editor.struct.BlockLine;
-import io.github.rosemoe.editor.struct.NavigationItem;
-
-import java.util.Locale;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
+import io.github.rosemoe.editor.langs.java.JavaTextTokenizer;
+import io.github.rosemoe.editor.langs.java.Tokens;
+import io.github.rosemoe.sora.data.BlockLine;
+import io.github.rosemoe.sora.data.NavigationItem;
+import io.github.rosemoe.sora.data.Span;
+import io.github.rosemoe.sora.langs.java.JavaCodeAnalyzer;
+import io.github.rosemoe.sora.text.LineNumberCalculator;
+import io.github.rosemoe.sora.text.TextAnalyzeResult;
+import io.github.rosemoe.sora.text.TextAnalyzer;
+import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.EditorColorScheme;
 
 public class JavaAnalyzer extends JavaCodeAnalyzer {
 
@@ -73,7 +68,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         }
         return mClient;
     }
-    @Override
+
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
 
         Instant startTime = Instant.now();

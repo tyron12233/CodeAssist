@@ -11,12 +11,12 @@ import org.antlr.v4.runtime.TokenSource;
 
 import java.util.Stack;
 
-import io.github.rosemoe.editor.interfaces.CodeAnalyzer;
-import io.github.rosemoe.editor.struct.BlockLine;
-import io.github.rosemoe.editor.struct.Span;
-import io.github.rosemoe.editor.text.TextAnalyzeResult;
-import io.github.rosemoe.editor.text.TextAnalyzer;
-import io.github.rosemoe.editor.widget.EditorColorScheme;
+import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
+import io.github.rosemoe.sora.data.BlockLine;
+import io.github.rosemoe.sora.data.Span;
+import io.github.rosemoe.sora.text.TextAnalyzeResult;
+import io.github.rosemoe.sora.text.TextAnalyzer;
+import io.github.rosemoe.sora.widget.EditorColorScheme;
 
 public class KotlinAnalyzer implements CodeAnalyzer {
 

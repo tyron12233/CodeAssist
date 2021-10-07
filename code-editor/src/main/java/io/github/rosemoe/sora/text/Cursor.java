@@ -22,12 +22,16 @@
  */
 package io.github.rosemoe.sora.text;
 
+import android.annotation.SuppressLint;
 import android.util.Log;
 
 import io.github.rosemoe.sora.interfaces.EditorLanguage;
 import io.github.rosemoe.sora.util.IntPair;
 
 import static io.github.rosemoe.sora.text.TextUtils.isEmoji;
+
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 /**
  * @author Rose
@@ -282,6 +286,35 @@ public final class Cursor {
             }
             mContent.insert(getLeftLine(), getLeftColumn(), text);
         }
+    }
+
+    /**
+     * Insert/commit multiline text with respect to current indentation
+     *
+     * @param text Multiline text to insert
+     */
+    @SuppressLint("NewApi")
+    public void onCommitMultilineText(String text) {
+        if (isSelected()) return;
+
+        if (text == null || text.isEmpty()) return;
+
+        if (!text.contains("\n")) {
+            onCommitText(text);
+            return;
+        }
+
+        String currentLine = mContent.getLine(getLeftLine()).toString();
+        String currentIndent = currentLine.trim().isEmpty()
+                ? currentLine // for the case where the whole line is just whitespace(s)
+                : currentLine.substring(0, currentLine.indexOf(currentLine.trim()));
+
+        String textToInsert = Arrays.stream(text.split("\\n"))
+                .map(s -> currentIndent + s)
+                .collect(Collectors.joining("\n"))
+                .substring(currentIndent.length()); // delete the extra indent on the first line that we insert the text
+
+        mContent.insert(getLeftLine(), getLeftColumn(), textToInsert);
     }
 
     /**

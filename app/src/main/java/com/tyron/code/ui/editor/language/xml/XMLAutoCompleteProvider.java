@@ -1,9 +1,9 @@
 package com.tyron.code.ui.editor.language.xml;
 
-import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.editor.text.TextAnalyzeResult;
+import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
+import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import java.util.List;
-import io.github.rosemoe.editor.struct.CompletionItem;
+import io.github.rosemoe.sora.data.CompletionItem;
 import java.util.Collections;
 
 public class XMLAutoCompleteProvider implements AutoCompleteProvider {
@@ -13,8 +13,7 @@ public class XMLAutoCompleteProvider implements AutoCompleteProvider {
 	}
 
 	@Override
-	public List<CompletionItem> getAutoCompleteItems(String prefix, boolean isInCodeBlock, TextAnalyzeResult colors, int line) {
+	public List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) {
 		return Collections.emptyList();
 	}
-
 }

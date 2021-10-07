@@ -6,12 +6,11 @@ import com.tyron.code.ui.editor.language.xml.Xml;
 
 import java.io.File;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import io.github.rosemoe.editor.interfaces.EditorLanguage;
-import io.github.rosemoe.editor.widget.CodeEditor;
+import io.github.rosemoe.sora.interfaces.EditorLanguage;
+import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class LanguageManager {
 	

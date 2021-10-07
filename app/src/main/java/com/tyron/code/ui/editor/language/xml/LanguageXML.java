@@ -8,7 +8,6 @@ import com.flipkart.android.proteus.ProteusView;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
-import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.layoutpreview.convert.ConvertException;
@@ -19,17 +18,13 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
 
-import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.editor.interfaces.CodeAnalyzer;
-import io.github.rosemoe.editor.interfaces.EditorLanguage;
-import io.github.rosemoe.editor.interfaces.NewlineHandler;
-import io.github.rosemoe.editor.widget.CodeEditor;
-import io.github.rosemoe.editor.widget.SymbolPairMatch;
+import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
+import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
+import io.github.rosemoe.sora.interfaces.EditorLanguage;
+import io.github.rosemoe.sora.interfaces.NewlineHandler;
+import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.SymbolPairMatch;
 
 public class LanguageXML implements EditorLanguage {
 

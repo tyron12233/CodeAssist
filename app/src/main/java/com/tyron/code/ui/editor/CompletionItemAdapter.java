@@ -20,8 +20,7 @@ import com.tyron.completion.drawable.CircleDrawable;
 import java.util.ArrayList;
 import java.util.List;
 
-import io.github.rosemoe.editor.struct.CompletionItem;
-import io.github.rosemoe.editor.widget.EditorAutoCompleteWindow;
+import io.github.rosemoe.sora.data.CompletionItem;
 
 public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAdapter.ViewHolder> {
 

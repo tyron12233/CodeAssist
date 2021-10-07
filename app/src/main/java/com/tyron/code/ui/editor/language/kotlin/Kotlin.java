@@ -4,8 +4,8 @@ import com.tyron.code.ui.editor.language.Language;
 
 import java.io.File;
 
-import io.github.rosemoe.editor.interfaces.EditorLanguage;
-import io.github.rosemoe.editor.widget.CodeEditor;
+import io.github.rosemoe.sora.interfaces.EditorLanguage;
+import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class Kotlin implements Language {
     @Override

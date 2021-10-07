@@ -61,6 +61,16 @@ public class CompletionItem {
      */
     public int cursorOffset;
 
+    public com.tyron.completion.model.CompletionItem item;
+
+    public CompletionItem(com.tyron.completion.model.CompletionItem item) {
+        this.item = item;
+        this.label = item.label;
+        this.commit = item.commitText;
+        this.desc = item.detail;
+        this.cursorOffset = item.cursorOffset;
+    }
+
     public CompletionItem(String str, String desc) {
         this(str, desc, (Drawable) null);
     }

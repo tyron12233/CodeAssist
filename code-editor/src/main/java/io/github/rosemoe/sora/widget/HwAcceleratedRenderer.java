@@ -29,6 +29,7 @@ import android.graphics.RenderNode;
 import androidx.annotation.RequiresApi;
 
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -100,8 +101,8 @@ class HwAcceleratedRenderer implements ContentListener {
         //Simply compares hash code
         cache.forEach((node) -> {
             try {
-                var olds = old.get(node.line);
-                var news = updated.get(node.line);
+                List<Span> olds = old.get(node.line);
+                List<Span> news = updated.get(node.line);
                 if (!node.needsRecord() && (olds.size() != news.size() || olds.hashCode() != news.hashCode())) {
                     node.isDirty = true;
                 }
@@ -112,24 +113,24 @@ class HwAcceleratedRenderer implements ContentListener {
     }
 
     public TextRenderNode getNode(int line) {
-        var size = cache.size();
+        int size = cache.size();
         for (int i = 0; i < size; i++) {
-            var node = cache.get(i);
+            TextRenderNode node = cache.get(i);
             if (node.line == line) {
                 cache.remove(i);
                 cache.add(0, node);
                 return node;
             }
         }
-        var node = new TextRenderNode(line);
+        TextRenderNode node = new TextRenderNode(line);
         cache.add(0, node);
         return node;
     }
 
     public void keepCurrentInDisplay(int start, int end) {
-        var itr = cache.iterator();
+        Iterator<TextRenderNode> itr = cache.iterator();
         while (itr.hasNext()) {
-            var node = itr.next();
+            TextRenderNode node = itr.next();
             if (node.line < start || node.line > end) {
                 itr.remove();
             }
@@ -140,9 +141,9 @@ class HwAcceleratedRenderer implements ContentListener {
         if (!canvas.isHardwareAccelerated()) {
             throw new UnsupportedOperationException("Only hardware-accelerated canvas can be used");
         }
-        var spanMap = editor.getTextAnalyzeResult().getSpanMap();
+        List<List<Span>> spanMap = editor.getTextAnalyzeResult().getSpanMap();
         // It's safe to use row directly because the mode is non-wordwrap
-        var node = getNode(line);
+        TextRenderNode node = getNode(line);
         if (node.needsRecord()) {
             List<Span> spans = null;
             if (line < spanMap.size() && line >= 0) {

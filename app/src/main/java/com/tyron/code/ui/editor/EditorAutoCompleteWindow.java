@@ -35,6 +35,7 @@ import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.EditorBasePopupWindow;
 import io.github.rosemoe.sora.widget.EditorColorScheme;
+import io.github.rosemoe.sora.widget.EditorCompletionAdapter;
 
 public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     private final static String TIP = "Refreshing...";

@@ -14,11 +14,11 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.editor.struct.CompletionItem;
-import io.github.rosemoe.editor.text.Cursor;
-import io.github.rosemoe.editor.text.TextAnalyzeResult;
-import io.github.rosemoe.editor.widget.CodeEditor;
+import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
+import io.github.rosemoe.sora.data.CompletionItem;
+import io.github.rosemoe.sora.text.Cursor;
+import io.github.rosemoe.sora.text.TextAnalyzeResult;
+import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class JavaAutoCompleteProvider implements AutoCompleteProvider {
     
@@ -30,24 +30,25 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
         mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
     }
 
+
     @Override
-    public List<CompletionItem> getAutoCompleteItems(String partial, boolean endsWithParen, TextAnalyzeResult prev, int line) {
+    public List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) {
         FileManager.getInstance().save(mEditor.getCurrentFile(), mEditor.getText().toString());
 
         if (!mPreferences.getBoolean("code_editor_completion", true)) {
             return Collections.emptyList();
         }
 
-		Cursor cursor = mEditor.getCursor();
+        Cursor cursor = mEditor.getCursor();
 
-		// The previous call hasn't finished
-		CompileBatch batch = CompletionEngine.getInstance().getCompiler().cachedCompile;
-		if (batch != null && !batch.closed) {
-			return Collections.emptyList();
-		}
-		CompletionList list = CompletionEngine.getInstance().complete(mEditor.getCurrentFile(), cursor.getLeft());
+        // The previous call hasn't finished
+        CompileBatch batch = CompletionEngine.getInstance().getCompiler().cachedCompile;
+        if (batch != null && !batch.closed) {
+            return Collections.emptyList();
+        }
+        CompletionList list = CompletionEngine.getInstance().complete(mEditor.getCurrentFile(), cursor.getLeft());
 
-		List<CompletionItem> result = new ArrayList<>();
+        List<CompletionItem> result = new ArrayList<>();
 
         for (com.tyron.completion.model.CompletionItem item : list.items) {
             result.add(new CompletionItem(item));
@@ -55,5 +56,4 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
 
         return result;
     }
-
 }

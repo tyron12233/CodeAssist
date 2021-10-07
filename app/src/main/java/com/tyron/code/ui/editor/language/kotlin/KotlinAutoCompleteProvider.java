@@ -7,10 +7,10 @@ import com.tyron.kotlin_completion.CompletionEngine;
 import java.util.ArrayList;
 import java.util.List;
 
-import io.github.rosemoe.editor.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.editor.struct.CompletionItem;
-import io.github.rosemoe.editor.text.TextAnalyzeResult;
-import io.github.rosemoe.editor.widget.CodeEditor;
+import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
+import io.github.rosemoe.sora.data.CompletionItem;
+import io.github.rosemoe.sora.text.TextAnalyzeResult;
+import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
 
@@ -22,8 +22,7 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
     }
 
     @Override
-    public List<CompletionItem> getAutoCompleteItems(String prefix, boolean isInCodeBlock, TextAnalyzeResult colors, int line) {
-
+    public List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) {
         if (com.tyron.completion.provider.CompletionEngine.isIndexing()) {
             return null;
         }

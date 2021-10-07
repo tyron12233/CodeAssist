@@ -73,6 +73,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.annotation.RequiresApi;
 
+import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -87,6 +88,7 @@ import io.github.rosemoe.sora.interfaces.EditorLanguage;
 import io.github.rosemoe.sora.interfaces.EditorTextActionPresenter;
 import io.github.rosemoe.sora.interfaces.ExternalRenderer;
 import io.github.rosemoe.sora.interfaces.NewlineHandler;
+import io.github.rosemoe.sora.interfaces.OnLongPressListener;
 import io.github.rosemoe.sora.langs.EmptyLanguage;
 import io.github.rosemoe.sora.data.BlockLine;
 import io.github.rosemoe.sora.data.Span;
@@ -278,6 +280,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     private BufferedDrawPoints mDrawPoints;
     private HwAcceleratedRenderer mRenderer;
     KeyMetaStates mKeyMetaStates = new KeyMetaStates(this);
+    private File mCurrentFile;
 
     public CodeEditor(Context context) {
         this(context, null);
@@ -294,6 +297,30 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     public CodeEditor(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
         initialize();
+    }
+
+    public File getCurrentFile() {
+        return mCurrentFile;
+    }
+
+    public void setCurrentFile(File file) {
+        mCurrentFile = file;
+    }
+
+    public void analyze() {
+        if (mSpanner != null) {
+            mSpanner.analyze(getText());
+        }
+    }
+
+    private OnLongPressListener mLongPressListener;
+
+    public OnLongPressListener getOnLongPressListener() {
+        return mLongPressListener;
+    }
+
+    public void setOnLongPressListener(OnLongPressListener listener) {
+        mLongPressListener = listener;
     }
 
     /**
@@ -328,7 +355,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     /**
      * Hide completion window later
      */
-    protected void postHideCompletionWindow() {
+    public void postHideCompletionWindow() {
         // Avoid meaningless calls
         if (!mCompletionWindow.isShowing()) {
             return;

@@ -3,8 +3,8 @@ package com.tyron.code.ui.editor.shortcuts.action;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 
-import io.github.rosemoe.editor.text.Cursor;
-import io.github.rosemoe.editor.widget.CodeEditor;
+import io.github.rosemoe.sora.text.Cursor;
+import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class TextInsertAction implements ShortcutAction {
 

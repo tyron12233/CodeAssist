@@ -22,12 +22,12 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.concurrent.Executors;
 
-import io.github.rosemoe.editor.interfaces.CodeAnalyzer;
-import io.github.rosemoe.editor.struct.Span;
-import io.github.rosemoe.editor.text.TextAnalyzeResult;
-import io.github.rosemoe.editor.text.TextAnalyzer;
-import io.github.rosemoe.editor.widget.CodeEditor;
-import io.github.rosemoe.editor.widget.EditorColorScheme;
+import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
+import io.github.rosemoe.sora.data.Span;
+import io.github.rosemoe.sora.text.TextAnalyzeResult;
+import io.github.rosemoe.sora.text.TextAnalyzer;
+import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.EditorColorScheme;
 
 public class XMLAnalyzer implements CodeAnalyzer {
 

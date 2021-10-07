@@ -3,7 +3,6 @@ package com.tyron.code.ui.editor;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,7 +21,6 @@ import androidx.preference.PreferenceManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.parser.FileManager;
-import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.action.CodeActionProvider;
 import com.tyron.code.lint.LintIssue;
@@ -52,10 +50,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 
-import io.github.rosemoe.editor.interfaces.EditorEventListener;
-import io.github.rosemoe.editor.interfaces.EditorLanguage;
-import io.github.rosemoe.editor.widget.CodeEditor;
-import io.github.rosemoe.editor.widget.schemes.SchemeDarcula;
+import io.github.rosemoe.sora.interfaces.EditorEventListener;
+import io.github.rosemoe.sora.interfaces.EditorLanguage;
+import io.github.rosemoe.sora.text.Cursor;
+import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class CodeEditorFragment extends Fragment {
@@ -168,8 +167,9 @@ public class CodeEditorFragment extends Fragment {
         }
 
         mEditor.setEventListener(new EditorEventListener() {
+
             @Override
-            public boolean onRequestFormat(CodeEditor editor, boolean async) {
+            public boolean onRequestFormat(@NonNull CodeEditor editor) {
                 return false;
             }
 
@@ -200,6 +200,11 @@ public class CodeEditorFragment extends Fragment {
 
             @Override
             public void beforeReplace(CodeEditor editor, CharSequence content) {
+
+            }
+
+            @Override
+            public void onSelectionChanged(@NonNull CodeEditor editor, @NonNull Cursor cursor) {
 
             }
         });
