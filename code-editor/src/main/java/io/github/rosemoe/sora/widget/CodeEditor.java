@@ -522,7 +522,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         setLigatureEnabled(false);
         setInterceptParentHorizontalScrollIfNeeded(false);
         setTypefaceText(Typeface.DEFAULT);
-        mPaintOther.setStrokeWidth(getDpUnit() * 1.8f);
+        mPaintOther.setStrokeWidth(getDpUnit() * 2.5f);
         mPaintOther.setStrokeCap(Paint.Cap.ROUND);
         // Issue #41 View being highlighted when focused on Android 11
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1173,8 +1173,8 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
 
     @RequiresApi(29)
     protected void updateBoringLineDisplayList(RenderNode renderNode, int line, List<Span> spans) {
-        final float waveLength = getDpUnit() * 18;
-        final float amplitude = getDpUnit() * 4;
+        final float waveLength = getDpUnit() * 8;
+        final float amplitude = getDpUnit() * 2;
         prepareLine(line);
         int columnCount = getText().getColumnCount(line);
         float widthLine = measureText(mBuffer, 0, columnCount);
@@ -1310,8 +1310,8 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
      * @param postDrawCursor      Cursors to be drawn later
      */
     protected void drawRows(Canvas canvas, float offset, LongArrayList postDrawLineNumbers, List<CursorPaintAction> postDrawCursor, LongArrayList postDrawCurrentLines, MutableInt requiredFirstLn) {
-        final float waveLength = getDpUnit() * 18;
-        final float amplitude = getDpUnit() * 4;
+        final float waveLength = getDpUnit() * 8;
+        final float amplitude = getDpUnit() * 2;
         RowIterator rowIterator = mLayout.obtainRowIterator(getFirstVisibleRow());
         List<Span> temporaryEmptySpans = null;
         List<List<Span>> spanMap = mSpanner.getResult().getSpanMap();
