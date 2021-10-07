@@ -80,8 +80,7 @@ public class CodeEditorFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        assert getArguments() != null;
-        mCurrentFile = new File(getArguments().getString("path", ""));
+        mCurrentFile = new File(requireArguments().getString("path", ""));
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     }
 
@@ -107,6 +106,15 @@ public class CodeEditorFragment extends Fragment {
 //                }
 //            }
 //        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+
+        if (!CompletionEngine.isIndexing()) {
+            mEditor.analyze();
+        }
     }
 
     public void hideEditorWindows() {
