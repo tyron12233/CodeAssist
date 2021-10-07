@@ -279,11 +279,10 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             if (item.item.action == com.tyron.completion.model.CompletionItem.Kind.IMPORT) {
                 Parser parser = Parser.parseFile(mEditor.getCurrentFile().toPath());
                 ParseTask task = new ParseTask(parser.task, parser.root);
-                Log.d("PackageName", task.root.getPackageName().toString());
 
                 boolean samePackage = false;
                 if (!item.item.data.contains(".") //it's either in the same class or it's already imported
-                        || task.root.getPackageName().toString().equals(getAfterLastDot(item.item.data))) {
+                        || task.root.getPackageName().toString().equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
                     samePackage = true;
                 }
 
