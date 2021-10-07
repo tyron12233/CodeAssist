@@ -16,6 +16,7 @@ import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.lint.api.DefaultPosition;
+import com.tyron.lint.api.Location;
 import com.tyron.lint.api.Severity;
 import com.tyron.lint.api.TextFormat;
 
@@ -24,8 +25,10 @@ import org.openjdk.javax.tools.Diagnostic;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
@@ -35,6 +38,7 @@ import io.github.rosemoe.sora.data.BlockLine;
 import io.github.rosemoe.sora.data.NavigationItem;
 import io.github.rosemoe.sora.data.Span;
 import io.github.rosemoe.sora.langs.java.JavaCodeAnalyzer;
+import io.github.rosemoe.sora.text.Indexer;
 import io.github.rosemoe.sora.text.LineNumberCalculator;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.text.TextAnalyzer;
@@ -46,7 +50,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     private static final String TAG = JavaAnalyzer.class.getSimpleName();
 
     private final List<DiagnosticWrapper> diagnostics = new ArrayList<>();
-    private final List<DiagnosticWrapper> mLintDiagnostics = new ArrayList<>();
+    private final List<LintIssue> mLintDiagnostics = new ArrayList<>();
 
     private final CodeEditor mEditor;
     private DefaultLintClient mClient;
@@ -85,25 +89,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     continue;
                 }
 
-                Position startPos = issue.getLocation().getStart();
-                Position endPos = issue.getLocation().getEnd();
-                int startOffset = mEditor.getText().getCharIndex(startPos.line, startPos.column);
-                int endOffset = mEditor.getText().getCharIndex(endPos.line, endPos.column);
-                DiagnosticWrapper wrapper = new DiagnosticWrapper();
-                wrapper.setSource(issue.getLocation().getFile());
-                wrapper.setStartPosition(startOffset);
-                wrapper.setEndPosition(endOffset);
-                wrapper.setMessage(issue.getIssue().getExplanation(TextFormat.RAW));
-                wrapper.setLineNumber(startPos.line);
-                wrapper.setColumnNumber(startPos.column);
-                wrapper.setExtra(issue);
-                switch (issue.getSeverity()) {
-                    case ERROR : wrapper.setKind(Diagnostic.Kind.ERROR); break;
-                    case WARNING: wrapper.setKind(Diagnostic.Kind.WARNING); break;
-                    case INFORMATIONAL: wrapper.setExtra(Diagnostic.Kind.NOTE); break;
-                    default: wrapper.setKind(Diagnostic.Kind.OTHER);
-                }
-                mLintDiagnostics.add(wrapper);
+                mLintDiagnostics.add(issue);
             }
         }
 
@@ -128,7 +114,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             if (service.isReady()) {
                 try {
                     try (CompileTask task = service.compile(
-                            List.of(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
+                            Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
                         diagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
                     }
                 } catch (RuntimeException e) {
@@ -291,53 +277,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
             }
 
-            for (DiagnosticWrapper diagnostic : diagnostics) {
-                if (diagnostic.getStartPosition() <= thisIndex && thisIndex <= diagnostic.getEndPosition()) {
-                    if (currentSpan == null) {
-                        currentSpan = Span.obtain(column, EditorColorScheme.TEXT_NORMAL);
-                        colors.addIfNeeded(line, currentSpan);
-                    }
-                    currentSpan.setUnderlineColor(diagnostic.getKind() == Diagnostic.Kind.ERROR ? 0xffFF0000 : 0xFFffff00);
-                }
-            }
-
-            for (LintIssue issue : new ArrayList<>(client != null ? client.getReportedIssues() : Collections.emptyList())) {
-                if (issue.getLocation().getStart() == null || issue.getLocation().getEnd() == null) {
-                    continue;
-                }
-                Position startPos = issue.getLocation().getStart();
-                Position endPos = (DefaultPosition) issue.getLocation().getEnd();
-                int startOffset = mEditor.getText().getCharIndex(startPos.line, startPos.column);
-                int endOffset = mEditor.getText().getCharIndex(endPos.line, endPos.column);
-
-
-                if (startOffset <= thisIndex && thisIndex < endOffset) {
-                    if (currentSpan != null) {
-                        currentSpan = Span.obtain(column, currentSpan.colorId);
-                    } else {
-                        currentSpan = Span.obtain(column, EditorColorScheme.TEXT_NORMAL);
-                    }
-                    currentSpan.setUnderlineColor(issue.getSeverity() == Severity.ERROR ? 0xffFF0000 : 0xFFFFFF00);
-                    colors.add(line, currentSpan);
-                    issueStack.push(issue);
-                }
-
-                if (!issueStack.isEmpty()) {
-                    LintIssue last = issueStack.peek();
-                    Position start = last.getLocation().getStart();
-                    Position end = (DefaultPosition) last.getLocation().getEnd();
-                    int startOff = mEditor.getText().getCharIndex(start.line, start.column);
-                    int endOff = mEditor.getText().getCharIndex(end.line, end.column);
-                    if (startOff <= thisIndex && thisIndex > endOff) {
-                        currentSpan.setUnderlineColor(Color.TRANSPARENT);
-                        issueStack.pop();
-
-                        client.getReportedIssues().remove(last);
-                    } else {
-                        currentSpan.setUnderlineColor(last.getSeverity() == Severity.ERROR ? 0xffFF0000 : 0xFFFFFF00);
-                    }
-                }
-            }
 
 
             first = false;
@@ -357,11 +296,29 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         colors.setSuppressSwitch(maxSwitch + 10);
         colors.setNavigation(labels);
 
+        diagnostics.forEach(it -> {
+            Indexer indexer = mEditor.getText().getIndexer();
+            int startLine = indexer.getCharLine((int) it.getStartPosition());
+            int endLine = indexer.getCharLine((int) it.getEndPosition());
+            int startColumn = indexer.getCharColumn((int) it.getStartPosition());
+            int endColumn = indexer.getCharColumn((int) it.getEndPosition());
+
+            int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
+            colors.markProblemRegion(flag, startLine, startColumn, endLine, endColumn);
+        });
+
+        mLintDiagnostics.forEach(it -> {
+            int flag = it.getSeverity() == Severity.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING ;
+            Position start = it.getLocation().getStart();
+            Position end = it.getLocation().getEnd();
+            colors.markProblemRegion(flag, Objects.requireNonNull(start).line, start.column, Objects.requireNonNull(end).line, end.column);
+        });
+
         Log.d(TAG, "Analysis took " + Duration.between(startTime, Instant.now()).toMillis() + " ms");
     }
 
 
     public List<DiagnosticWrapper> getDiagnostics() {
-        return mLintDiagnostics;
+        return diagnostics;
     }
 }
