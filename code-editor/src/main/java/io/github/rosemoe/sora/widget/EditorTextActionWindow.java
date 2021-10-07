@@ -33,6 +33,8 @@ import android.widget.Button;
 
 import io.github.rosemoe.sora.R;
 import io.github.rosemoe.sora.interfaces.EditorTextActionPresenter;
+import io.github.rosemoe.sora.interfaces.OnLongPressListener;
+import io.github.rosemoe.sora.text.Cursor;
 
 /**
  * This will show when selecting text
@@ -200,5 +202,12 @@ class EditorTextActionWindow extends EditorBasePopupWindow implements View.OnCli
         hide();
     }
 
+
+    public void onSelectedTextLongClicked(MotionEvent e) {
+        OnLongPressListener listener = mEditor.getOnLongPressListener();
+        if (listener != null) {
+            Cursor cursor = mEditor.getCursor();listener.onLongPress(cursor.getLeft(), cursor.getRight(), e);
+        }
+    }
 }
 

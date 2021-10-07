@@ -318,7 +318,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     }
 
 
-    public List<DiagnosticWrapper> getDiagnostics() {
-        return diagnostics;
+    public List<LintIssue> getDiagnostics() {
+        return mLintDiagnostics;
     }
 }

@@ -598,7 +598,6 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
         Cursor cursor = mEditor.getCursor();
         if (overrideChecks || (startLine == cursor.getLeftLine() && startColumn == cursor.getLeftColumn()
             && endLine == cursor.getRightLine() && endColumn == cursor.getRightColumn())) {
-            Log.d(TAG, "WILL SHOW ACTIONS");
             if (mEditor.mTextActionPresenter instanceof EditorTextActionWindow) {
                 EditorTextActionWindow window = ((EditorTextActionWindow) mEditor.mTextActionPresenter);
                 window.onSelectedTextLongClicked(e);

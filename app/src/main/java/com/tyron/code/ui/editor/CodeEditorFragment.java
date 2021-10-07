@@ -52,6 +52,7 @@ import java.util.concurrent.Executors;
 
 import io.github.rosemoe.sora.interfaces.EditorEventListener;
 import io.github.rosemoe.sora.interfaces.EditorLanguage;
+import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
@@ -213,9 +214,10 @@ public class CodeEditorFragment extends Fragment {
                 int cursorStart = mEditor.getCursor().getLeft();
                 int cursorEnd = mEditor.getCursor().getRight();
 
-                for (DiagnosticWrapper wrapper : ((JavaAnalyzer) mLanguage.getAnalyzer()).getDiagnostics()) {
-                    if (wrapper.getStartPosition() <= cursorStart && cursorEnd < wrapper.getEndPosition()) {
-                        LintIssue issue = (LintIssue) wrapper.getExtra();
+                for (LintIssue issue : ((JavaAnalyzer) mLanguage.getAnalyzer()).getDiagnostics()) {
+                    CharPosition issueStart = mEditor.getText().getIndexer().getCharPosition(issue.getLocation().getStart().line, issue.getLocation().getStart().column);
+                    CharPosition issueEnd = mEditor.getText().getIndexer().getCharPosition(issue.getLocation().getEnd().line, issue.getLocation().getEnd().column);
+                    if (issueStart.index <= cursorStart && cursorEnd < issueEnd.index) {
                         new MaterialAlertDialogBuilder(requireContext())
                                 .setTitle(issue.getIssue().getId())
                                 .setMessage("Severity: " + issue.getSeverity().getDescription() + "\n" +

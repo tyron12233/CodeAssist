@@ -31,6 +31,7 @@ import android.view.ScaleGestureDetector;
 import android.widget.OverScroller;
 
 import io.github.rosemoe.sora.interfaces.EditorTextActionPresenter;
+import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.util.IntPair;
 
 /**
@@ -538,6 +539,40 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
 
     @Override
     public void onLongPress(MotionEvent e) {
+        if (mEditor.mTextActionPresenter instanceof TextActionPopupWindow) {
+            handleLongPressForModifiedTextAction(e);
+            return;
+        }
+
+        if (e.getPointerCount() != 1) {
+            return;
+        }
+
+        long res = mEditor.getPointPositionOnScreen(e.getX(), e.getY());
+        int line = IntPair.getFirst(res);
+        int column = IntPair.getSecond(res);
+        //Find word edges
+        int startColumn = column;
+        while (startColumn > 0 && isIdentifierPart(mEditor.getText().charAt(line, startColumn - 1))) {
+            startColumn--;
+        }
+        int maxColumn = mEditor.getText().getColumnCount(line);
+        int endColumn = column;
+        while (endColumn < maxColumn && isIdentifierPart(mEditor.getText().charAt(line, endColumn))) {
+            endColumn++;
+        }
+
+        // The default behavior is it will select text anyways which we don't want in our case
+
+        Cursor cursor = mEditor.getCursor();
+        if (mEditor.mTextActionPresenter instanceof EditorTextActionWindow) {
+            EditorTextActionWindow window = ((EditorTextActionWindow) mEditor.mTextActionPresenter);
+            window.onSelectedTextLongClicked(e);
+        }
+        mEditor.setSelectionRegion(line, startColumn, line, endColumn);
+    }
+
+    public void onLongPressOld(MotionEvent e) {
         if (mEditor.mTextActionPresenter instanceof TextActionPopupWindow) {
             handleLongPressForModifiedTextAction(e);
             return;
