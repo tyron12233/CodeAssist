@@ -296,23 +296,29 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         colors.setSuppressSwitch(maxSwitch + 10);
         colors.setNavigation(labels);
 
-        diagnostics.forEach(it -> {
-            Indexer indexer = mEditor.getText().getIndexer();
-            int startLine = indexer.getCharLine((int) it.getStartPosition());
-            int endLine = indexer.getCharLine((int) it.getEndPosition());
-            int startColumn = indexer.getCharColumn((int) it.getStartPosition());
-            int endColumn = indexer.getCharColumn((int) it.getEndPosition());
+        // Work around to CodeEditor's bug
+        // this prevents the analyzer to stop working while the user types
+        try {
+            diagnostics.forEach(it -> {
+                Indexer indexer = mEditor.getText().getIndexer();
+                int startLine = indexer.getCharLine((int) it.getStartPosition());
+                int endLine = indexer.getCharLine((int) it.getEndPosition());
+                int startColumn = indexer.getCharColumn((int) it.getStartPosition());
+                int endColumn = indexer.getCharColumn((int) it.getEndPosition());
 
-            int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
-            colors.markProblemRegion(flag, startLine, startColumn, endLine, endColumn);
-        });
+                int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
+                colors.markProblemRegion(flag, startLine, startColumn, endLine, endColumn);
+            });
 
-        mLintDiagnostics.forEach(it -> {
-            int flag = it.getSeverity() == Severity.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING ;
-            Position start = it.getLocation().getStart();
-            Position end = it.getLocation().getEnd();
-            colors.markProblemRegion(flag, Objects.requireNonNull(start).line, start.column, Objects.requireNonNull(end).line, end.column);
-        });
+            mLintDiagnostics.forEach(it -> {
+                int flag = it.getSeverity() == Severity.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
+                Position start = it.getLocation().getStart();
+                Position end = it.getLocation().getEnd();
+                colors.markProblemRegion(flag, Objects.requireNonNull(start).line, start.column, Objects.requireNonNull(end).line, end.column);
+            });
+        } catch (IndexOutOfBoundsException e) {
+            Log.w(TAG, "Unable to mark problem region", e);
+        }
 
         Log.d(TAG, "Analysis took " + Duration.between(startTime, Instant.now()).toMillis() + " ms");
     }
