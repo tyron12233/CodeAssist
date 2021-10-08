@@ -154,6 +154,11 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         super.show();
     }
 
+    @Override
+    public void hide() {
+        super.hide();
+    }
+
     public Context getContext() {
         return mEditor.getContext();
     }
@@ -349,16 +354,12 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      * @param requestTime The time that this thread starts
      */
     private void displayResults(final List<CompletionItem> results, long requestTime) {
-        if (mRequestTime != requestTime) {
-            return;
-        }
-
         if (mLastPrefix.equals(selectedItem)) {
             selectedItem = "";
             return;
         }
 
-        mEditor.post(() -> {
+        mListView.post(() -> {
             setLoading(false);
             if (results == null || results.isEmpty()) {
                 hide();
@@ -372,8 +373,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
 
             if (!isShowing()) {
                 show();
+                update();
             }
-            update();
         });
     }
 
@@ -409,6 +410,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             }
         }
     }
+
 
     private String getAfterLastDot(String str) {
         if (str == null) {

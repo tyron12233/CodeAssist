@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -334,6 +335,14 @@ public class JavaCompilerService implements CompilerProvider {
     @Override
     public ParseTask parse(JavaFileObject file) {
         return cachedParse(file);
+    }
+
+    public ParseTask parse(Path file, String contents) {
+        SourceFileObject sourceFileObject = new SourceFileObject(file, contents, Instant.now());
+        Parser parser = Parser.parseJavaFileObject(sourceFileObject);
+        parseCache.load(file, file.toFile().getName(),
+                new ParseTask(parser.task, parser.root));
+        return parseCache.get(file, file.toFile().getName());
     }
 
     /**

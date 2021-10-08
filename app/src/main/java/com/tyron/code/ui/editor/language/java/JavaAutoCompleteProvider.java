@@ -40,13 +40,7 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
         }
 
         Cursor cursor = mEditor.getCursor();
-
-        // The previous call hasn't finished
-        CompileBatch batch = CompletionEngine.getInstance().getCompiler().cachedCompile;
-        if (batch != null && !batch.closed) {
-            return Collections.emptyList();
-        }
-        CompletionList list = CompletionEngine.getInstance().complete(mEditor.getCurrentFile(), cursor.getLeft());
+        CompletionList list = CompletionEngine.getInstance().complete(mEditor.getCurrentFile(), String.valueOf(mEditor.getText()), cursor.getLeft());
 
         List<CompletionItem> result = new ArrayList<>();
 

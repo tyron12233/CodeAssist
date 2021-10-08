@@ -116,14 +116,14 @@ public class CompletionEngine {
     }
 
     @NonNull
-    public CompletionList complete(File file, long cursor) {
+    public CompletionList complete(File file, String contents, long cursor) {
         // Do not request for completion if we're indexing
         if (mIndexing) {
             return CompletionList.EMPTY;
         }
 
         try {
-            return new CompletionProvider(getCompiler()).complete(file, cursor);
+            return new CompletionProvider(getCompiler()).complete(file, contents, cursor);
         } catch (RuntimeException | AssertionError e) {
             Log.d(TAG, "Completion failed: " + Log.getStackTraceString(e) + " Clearing cache.");
             mProvider = null;
