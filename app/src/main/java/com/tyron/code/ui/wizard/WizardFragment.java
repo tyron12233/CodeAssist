@@ -307,6 +307,7 @@ public class WizardFragment extends Fragment {
                     createProject();
                 } else {
                     requireActivity().runOnUiThread(this::showDetailsView);
+                    return;
                 }
             } catch (IOException e) {
                 requireActivity().runOnUiThread(() -> {
@@ -466,6 +467,7 @@ public class WizardFragment extends Fragment {
     }
 
     private void showDetailsView() {
+        mLoadingLayout.setVisibility(View.GONE);
         mWizardDetailsView.setVisibility(View.GONE);
 
         MaterialSharedAxis sharedAxis = new MaterialSharedAxis(MaterialSharedAxis.X, true);
