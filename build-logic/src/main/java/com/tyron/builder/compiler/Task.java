@@ -20,7 +20,7 @@ public abstract class Task {
      * Called before run() to give the subclass information about the project
      * @throws IOException if an exception occurred during a file operation
      */
-    public abstract void prepare(Project project, ILogger logger) throws IOException;
+    public abstract void prepare(Project project, ILogger logger, BuildType type) throws IOException;
 
     /**
      * Called by the {@link ApkBuilder} to perform the task needed to do by this subclass

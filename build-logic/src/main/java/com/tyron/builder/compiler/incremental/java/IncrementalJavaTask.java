@@ -4,6 +4,7 @@ import android.util.Log;
 
 import androidx.annotation.VisibleForTesting;
 
+import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.java.JavaTask;
 import com.tyron.builder.exception.CompilationFailedException;
@@ -22,9 +23,7 @@ import org.openjdk.javax.tools.StandardLocation;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TaskEvent;
 import org.openjdk.source.util.TaskListener;
-import org.openjdk.tools.javac.api.ClientCodeWrapper;
 import org.openjdk.tools.javac.api.JavacTool;
-import org.openjdk.tools.javac.tree.JCTree;
 
 import java.io.File;
 import java.io.IOException;
@@ -53,7 +52,7 @@ public class IncrementalJavaTask extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger) throws IOException {
+    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
         mLogger = logger;
 
         mOutputDir = new File(project.getBuildDirectory(), "bin/classes");
@@ -92,6 +91,8 @@ public class IncrementalJavaTask extends Task {
         if (mFilesToCompile.isEmpty()) {
             return;
         }
+
+        mLogger.debug("Compiling java files");
 
         DiagnosticListener<JavaFileObject> diagnosticCollector = diagnostic -> {
             switch (diagnostic.getKind()) {

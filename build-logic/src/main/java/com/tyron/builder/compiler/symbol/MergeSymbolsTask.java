@@ -5,6 +5,7 @@ import android.util.Log;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
+import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.resource.AAPT2Compiler;
 import com.tyron.builder.model.Project;
@@ -39,7 +40,7 @@ public class MergeSymbolsTask extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger) throws IOException {
+    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
         mProject = project;
         mLogger = logger;
         mSymbolOutputDir = new File(project.getBuildDirectory(), "gen");

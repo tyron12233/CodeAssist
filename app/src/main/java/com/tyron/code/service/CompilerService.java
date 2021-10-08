@@ -13,6 +13,7 @@ import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
+import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
@@ -144,7 +145,7 @@ public class CompilerService extends Service {
         return mBinder;
     }
 
-    public void compile() {
+    public void compile(BuildType type) {
         mProject = FileManager.getInstance().getCurrentProject();
 
 
@@ -161,7 +162,7 @@ public class CompilerService extends Service {
 
         ApkBuilder apkBuilder = new ApkBuilder(logger, mProject);
         apkBuilder.setTaskListener(this::updateNotification);
-        apkBuilder.build((success, message) -> {
+        apkBuilder.build(type, (success, message) -> {
             if (onResultListener != null) {
                 onResultListener.onComplete(success, message);
             }

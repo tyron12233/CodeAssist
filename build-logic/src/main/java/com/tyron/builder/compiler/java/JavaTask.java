@@ -9,6 +9,7 @@ import androidx.annotation.VisibleForTesting;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.tools.javac.api.JavacTool;
 
+import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
@@ -46,7 +47,7 @@ public class JavaTask extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger) throws IOException {
+    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
         mProject = project;
         logViewModel = logger;
     }

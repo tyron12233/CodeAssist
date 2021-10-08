@@ -96,4 +96,6 @@
     <string name="dialog_confirm_delete">Are you sure you want to delete %1$s?</string>
     <string name="dialog_delete">Delete</string>
     <string name="menu_preview_layout">Preview Layout</string>
+    <string name="action_menu_build_release">Build release APK</string>
+    <string name="action_menu_build_debug">Build debug APK</string>
 </resources>

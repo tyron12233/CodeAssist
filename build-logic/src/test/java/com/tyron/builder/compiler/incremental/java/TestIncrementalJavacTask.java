@@ -7,8 +7,6 @@ import androidx.test.core.app.ApplicationProvider;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.TestProject;
 import com.tyron.builder.compiler.StdLogger;
-import com.tyron.builder.compiler.Task;
-import com.tyron.builder.compiler.java.JavaTask;
 import com.tyron.builder.model.Project;
 
 import org.junit.Before;
@@ -46,7 +44,7 @@ public class TestIncrementalJavacTask {
     public void testCompile() throws Exception {
 
         IncrementalJavaTask task = new IncrementalJavaTask();
-        task.prepare(mProject, StdLogger.INSTANCE);
+        task.prepare(mProject, StdLogger.INSTANCE, );
         task.run();
 
         testIncrementalCompilation();
@@ -57,7 +55,7 @@ public class TestIncrementalJavacTask {
         IncrementalJavaTask task = new IncrementalJavaTask();
 
         File testClass = mTestProject.javaFile("com.tyron.test", "Test", TEST_CLASS);
-        task.prepare(mProject, StdLogger.INSTANCE);
+        task.prepare(mProject, StdLogger.INSTANCE, );
         task.run();
 
         System.out.println(task.getCompiledFiles());

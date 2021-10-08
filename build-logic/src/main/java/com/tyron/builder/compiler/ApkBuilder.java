@@ -5,12 +5,10 @@ import android.os.Looper;
 
 import com.tyron.builder.compiler.apk.PackageTask;
 import com.tyron.builder.compiler.apk.SignTask;
-import com.tyron.builder.compiler.dex.D8Task;
 import com.tyron.builder.compiler.incremental.dex.IncrementalD8Task;
 import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
 import com.tyron.builder.compiler.incremental.kotlin.IncrementalKotlinCompiler;
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
-import com.tyron.builder.compiler.java.JavaTask;
 import com.tyron.builder.compiler.manifest.ManifestMergeTask;
 import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
 import com.tyron.builder.model.Project;
@@ -53,11 +51,11 @@ public class ApkBuilder {
         mTaskListener = listener;
     }
 
-    public void build(OnResultListener listener) {
+    public void build(BuildType type, OnResultListener listener) {
         service.execute(() -> {
             try {
                 long initialStart = System.currentTimeMillis();
-                doBuild();
+                doBuild(type);
 
                 post(() -> listener.onComplete(true, "Build success. Took " + (System.currentTimeMillis() - initialStart) + " ms"));
             } catch (IOException | CompilationFailedException e) {
@@ -73,12 +71,12 @@ public class ApkBuilder {
     }
 
     // TODO: run tasks in parallel if applicable
-    private void doBuild() throws IOException, CompilationFailedException {
+    private void doBuild(BuildType type) throws IOException, CompilationFailedException {
         List<Task> tasks = getTasks();
 
         for (Task task : tasks) {
             post(() -> mTaskListener.onTaskStarted(task.getName(), "Task started."));
-            task.prepare(mProject, log);
+            task.prepare(mProject, log, type);
             task.run();
         }
     }

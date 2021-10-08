@@ -1,5 +1,6 @@
 package com.tyron.builder.compiler.incremental.dex;
 
+import android.os.Build;
 import android.util.Log;
 
 import com.android.tools.r8.CompilationMode;
@@ -9,6 +10,7 @@ import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
+import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.dex.D8Task;
 import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
@@ -45,15 +47,19 @@ public class IncrementalD8Task extends Task {
     private Project mProject;
     private Path mOutputPath;
 
+    private BuildType mBuildType;
+
+
     @Override
     public String getName() {
         return TAG;
     }
 
     @Override
-    public void prepare(Project project, ILogger logger) throws IOException {
+    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
         mProject = project;
         mLogger = logger;
+        mBuildType = type;
         mDexCache = FileManager.getInstance().getDexCache();
 
         File output = new File(project.getBuildDirectory(), "intermediate/classes");
@@ -83,9 +89,42 @@ public class IncrementalD8Task extends Task {
 
     @Override
     public void run() throws IOException, CompilationFailedException {
+        if (mBuildType == BuildType.RELEASE) {
+            doRelease();
+        } else if (mBuildType == BuildType.DEBUG) {
+            doDebug();
+        }
+    }
+
+    private void doRelease() throws CompilationFailedException {
         try {
             ensureDexedLibraries();
-            D8Command command =D8Command.builder(diagnosticsHandler)
+            D8Command command = D8Command.builder(diagnosticsHandler)
+                    .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                    .addProgramFiles(mFilesToCompile)
+                    .addLibraryFiles(getLibraryFiles())
+                    .setMinApiLevel(mProject.getMinSdk())
+                    .setMode(CompilationMode.RELEASE)
+                    .setIntermediate(true)
+                    .setOutput(mOutputPath, OutputMode.DexFilePerClass)
+                    .build();
+            D8.run(command);
+
+            for (Path file : mFilesToCompile) {
+                mDexCache.load(file, "dex", Collections.singletonList(getDexFile(file.toFile())));
+            }
+
+            merge();
+        } catch (com.android.tools.r8.CompilationFailedException e) {
+            throw new CompilationFailedException(e);
+        }
+    }
+
+    private void doDebug() throws CompilationFailedException {
+        try {
+            ensureDexedLibraries();
+
+            D8Command command = D8Command.builder(diagnosticsHandler)
                     .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
                     .addProgramFiles(mFilesToCompile)
                     .addLibraryFiles(getLibraryFiles())
@@ -100,7 +139,21 @@ public class IncrementalD8Task extends Task {
                 mDexCache.load(file, "dex", Collections.singletonList(getDexFile(file.toFile())));
             }
 
-            merge();
+            D8Command.Builder builder = D8Command.builder(diagnosticsHandler)
+                    .addLibraryFiles(getLibraryFiles())
+                    .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                    .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
+                    .setMinApiLevel(mProject.getMinSdk());
+
+            if (mProject.getTargetSdk() == Build.VERSION.SDK_INT) {
+                builder.setDisableDesugaring(true);
+            }
+            File output = new File(mProject.getBuildDirectory(), "bin");
+            builder.setMode(CompilationMode.DEBUG);
+            builder.setOutput(output.toPath(), OutputMode.DexIndexed);
+            builder.setIntermediate(true);
+            D8.run(builder.build());
+
         } catch (com.android.tools.r8.CompilationFailedException e) {
             throw new CompilationFailedException(e);
         }

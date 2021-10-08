@@ -42,6 +42,7 @@ import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.ProjectManager;
+import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.Project;
@@ -293,8 +294,10 @@ public class MainFragment extends Fragment {
                     project.clear();
                     openProject(project, true);
                 }
-            } else if (item.getItemId() == R.id.action_run) {
-                compile();
+            } else if(item.getItemId() == R.id.action_build_debug) {
+                compile(BuildType.DEBUG);
+            } else if (item.getItemId() == R.id.action_build_release) {
+                compile(BuildType.RELEASE);
             } else if (item.getItemId() == R.id.action_format) {
                 File file = mAdapter.getItem(mPager.getCurrentItem());
                 if (file != null) {
@@ -553,6 +556,7 @@ public class MainFragment extends Fragment {
         }
     }
 
+    private BuildType mBuildType;
     private CompilerService.CompilerBinder mBinder;
     private final ServiceConnection mServiceConnection = new ServiceConnection() {
         @Override
@@ -580,7 +584,7 @@ public class MainFragment extends Fragment {
                 if (success && getActivity() != null) {
                     logger.debug(message);
                     File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
-                    requireActivity().runOnUiThread(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()));
+                    mProgressBar.postDelayed(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()), 300);
                 }
 
                 if (getActivity() != null) {
@@ -588,7 +592,10 @@ public class MainFragment extends Fragment {
                     requireActivity().unbindService(this);
                 }
             }));
-            mBinder.getCompilerService().compile();
+
+            if (mBuildType != null) {
+                mBinder.getCompilerService().compile(mBuildType);
+            }
         }
 
         @Override
@@ -602,7 +609,8 @@ public class MainFragment extends Fragment {
         }
     };
 
-    private void compile() {
+    private void compile(BuildType type) {
+        mBuildType = type;
         saveAll();
 
         mFilesViewModel.setCurrentState("Compiling");

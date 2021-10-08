@@ -3,6 +3,7 @@ package com.tyron.builder.compiler.incremental.resource;
 import android.util.Log;
 
 import com.tyron.builder.BuildModule;
+import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
@@ -36,7 +37,7 @@ public class IncrementalAapt2Task extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger) throws IOException {
+    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
         mProject = project;
         mLogger = logger;
     }

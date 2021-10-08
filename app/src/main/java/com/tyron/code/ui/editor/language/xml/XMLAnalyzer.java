@@ -4,6 +4,7 @@ import android.graphics.Color;
 import android.os.Handler;
 import android.util.Log;
 
+import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -146,7 +147,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 								public void error(DiagnosticWrapper wrapper) {
 
 								}
-							});
+							}, BuildType.DEBUG);
 							task.run();
 						} catch (IOException | CompilationFailedException e) {
 							e.printStackTrace();

@@ -9,6 +9,7 @@ import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
+import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
@@ -43,7 +44,7 @@ public class D8Task extends Task {
 	}
 
 	@Override
-	public void prepare(Project project, ILogger logger) throws IOException {
+	public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
 		mProject = project;
 		logViewModel = logger;
 	}
