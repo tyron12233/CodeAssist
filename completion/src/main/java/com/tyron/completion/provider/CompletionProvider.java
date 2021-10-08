@@ -283,9 +283,6 @@ public class CompletionProvider {
             keywords = METHOD_BODY_KEYWORDS;
         }
         for (String k : keywords) {
-            if (k.equals("class") && !partial.startsWith("class")) {
-                continue;
-            }
             if (StringSearch.matchesPartialName(k, partial)) {
                 list.items.add(keyword(k));
             }
@@ -391,11 +388,17 @@ public class CompletionProvider {
             list.addAll(method(overloads, !endsWithParen));
         }
         if (isStatic) {
-            list.add(keyword("class"));
+            if (StringSearch.matchesPartialName("class", partial)) {
+                list.add(keyword("class"));
+            }
         }
         if (isStatic && isEnclosingClass(type, scope)) {
-            list.add(keyword("this"));
-            list.add(keyword("super"));
+            if (StringSearch.matchesPartialName("this", partial)) {
+                list.add(keyword("this"));
+            }
+            if (StringSearch.matchesPartialName("super", partial)) {
+                list.add(keyword("super"));
+            }
         }
 
         CompletionList cl = new CompletionList();
