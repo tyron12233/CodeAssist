@@ -6,6 +6,7 @@ import android.util.Log;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.CompilerProvider;
 import com.tyron.completion.CustomActions;
+import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.ParseTask;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.common.util.StringSearch;
@@ -130,27 +131,33 @@ public class CompletionProvider {
     private static final String[] sPrioritizedPackages = new String[]{"java.util", "java.lang", "android.view", "android.widget"};
 
     //private final JavaParser parser;
-	private final CompilerProvider compiler;
+	private final JavaCompilerService compiler;
 
     private static final int MAX_COMPLETION_ITEMS = 50;
 
-    public CompletionProvider(CompilerProvider compiler) {
+    public CompletionProvider(JavaCompilerService compiler) {
         this.compiler = compiler;
     }
 
-	public CompletionList complete(File file, long index) {
-		ParseTask task = compiler.parse(Paths.get(file.getAbsolutePath()));
+	public CompletionList complete(File file, String fileContents, long index) {
+		ParseTask task = compiler.parse(file.toPath(), fileContents);
 
 		StringBuilder contents;
 		try {
             contents = new PruneMethodBodies(task.task).scan(task.root, index);
             int end = StringSearch.endOfLine(contents, (int) index);
             contents.insert(end, ';');
-        } catch (IndexOutOfBoundsException ignore) {
+        } catch (IndexOutOfBoundsException e) {
+		    Log.w(TAG, "Unable to insert semicolon at the end of line, skipping completion", e);
             return new CompletionList();
         }
 		CompletionList list = compileAndComplete(file, contents.toString(), index);
 		list.items.sort((item, item1) -> {
+		    // workaround for class keyword always at the first completion for now.
+		    if (item.label.equals("class") || item1.label.equals("class")) {
+		        return 1;
+            }
+
             for (String priority : sPrioritizedPackages) {
                 if (item.detail.startsWith(priority) && !item1.detail.startsWith(priority)) {
                     return -1;
@@ -175,7 +182,7 @@ public class CompletionProvider {
 		String partial = partialIdentifier(contents, (int) cursor);
 		boolean endsWithParen = endsWithParen(contents, (int) cursor);
 		//noinspection
-		try (CompileTask task = compiler.compile(List.of(source))) {
+		try (CompileTask task = compiler.compile(Collections.singletonList(source))) {
 			Log.d(TAG, "Compiled in: " + Duration.between(start, Instant.now()).toMillis() + "ms");
 			TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
 			switch (path.getLeaf().getKind()) {
@@ -276,6 +283,9 @@ public class CompletionProvider {
             keywords = METHOD_BODY_KEYWORDS;
         }
         for (String k : keywords) {
+            if (k.equals("class") && !partial.startsWith("class")) {
+                continue;
+            }
             if (StringSearch.matchesPartialName(k, partial)) {
                 list.items.add(keyword(k));
             }
