@@ -354,6 +354,9 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      * @param requestTime The time that this thread starts
      */
     private void displayResults(final List<CompletionItem> results, long requestTime) {
+        if (mRequestTime != requestTime) {
+            return;
+        }
         if (mLastPrefix.equals(selectedItem)) {
             selectedItem = "";
             return;

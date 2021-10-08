@@ -179,17 +179,20 @@ public class CompileBatch implements AutoCloseable {
         Collections.addAll(list, "-proc:none");
         // You would think we could do -Xlint:all,
         // but some lints trigger fatal errors in the presence of parse errors
+//        Collections.addAll(
+//			list,
+//			"-Xlint:cast",
+//			"-Xlint:deprecation",
+//			"-Xlint:empty",
+//			"-Xlint:fallthrough",
+//			"-Xlint:finally",
+//			"-Xlint:path",
+//			"-Xlint:unchecked",
+//			"-Xlint:varargs",
+//			"-Xlint:static");
         Collections.addAll(
-			list,
-			"-Xlint:cast",
-			"-Xlint:deprecation",
-			"-Xlint:empty",
-			"-Xlint:fallthrough",
-			"-Xlint:finally",
-			"-Xlint:path",
-			"-Xlint:unchecked",
-			"-Xlint:varargs",
-			"-Xlint:static");
+                list,
+                "-Xlint:all");
         for (String export : addExports) {
             list.add("--add-exports");
             list.add(export + "=ALL-UNNAMED");
