@@ -137,18 +137,18 @@ public class CompileBatch implements AutoCloseable {
     private Path findPackagePrivateClass(String packageName, String className) {
         // This is too expensive, parsing each file causing completions to slow down
         // on large files
-
-        for (File file : FileManager.getInstance().list(packageName)) {
-			if (!file.exists()) {
-			    continue;
-            }
-            Parser parse = Parser.parseFile(file.toPath());
-            for (Name candidate : parse.packagePrivateClasses()) {
-                if (candidate.contentEquals(className)) {
-                    return file.toPath();
-                }
-            }
-        }
+//
+//        for (File file : FileManager.getInstance().list(packageName)) {
+//			if (!file.exists()) {
+//			    continue;
+//            }
+//            Parser parse = Parser.parseFile(file.toPath());
+//            for (Name candidate : parse.packagePrivateClasses()) {
+//                if (candidate.contentEquals(className)) {
+//                    return file.toPath();
+//                }
+//            }
+//        }
         return FILE_NOT_FOUND;
     }
 
@@ -179,20 +179,18 @@ public class CompileBatch implements AutoCloseable {
         Collections.addAll(list, "-proc:none");
         // You would think we could do -Xlint:all,
         // but some lints trigger fatal errors in the presence of parse errors
-//        Collections.addAll(
-//			list,
-//			"-Xlint:cast",
-//			"-Xlint:deprecation",
-//			"-Xlint:empty",
-//			"-Xlint:fallthrough",
-//			"-Xlint:finally",
-//			"-Xlint:path",
-//			"-Xlint:unchecked",
-//			"-Xlint:varargs",
-//			"-Xlint:static");
         Collections.addAll(
-                list,
-                "-Xlint:all");
+			list,
+			"-Xlint:cast",
+			"-Xlint:deprecation",
+			"-Xlint:empty",
+			"-Xlint:fallthrough",
+			"-Xlint:finally",
+			"-Xlint:path",
+			"-Xlint:unchecked",
+			"-Xlint:varargs",
+			"-Xlint:static");
+
         for (String export : addExports) {
             list.add("--add-exports");
             list.add(export + "=ALL-UNNAMED");

@@ -39,6 +39,10 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
             return Collections.emptyList();
         }
 
+        if (!CompletionEngine.getInstance().getCompiler().isReady()) {
+            return Collections.emptyList();
+        }
+
         Cursor cursor = mEditor.getCursor();
         CompletionList list = CompletionEngine.getInstance().complete(mEditor.getCurrentFile(), String.valueOf(mEditor.getText()), cursor.getLeft());
 

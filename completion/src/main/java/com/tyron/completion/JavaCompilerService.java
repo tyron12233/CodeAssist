@@ -287,11 +287,11 @@ public class JavaCompilerService implements CompilerProvider {
     private Cache<String, ParseTask> parseCache = new Cache<>();
 
     private ParseTask cachedParse(Path file) {
-        if (parseCache.needs(file, null)) {
+        if (parseCache.needs(file, file.toFile().getName())) {
             Parser parser = Parser.parseFile(file);
-            parseCache.load(file, null, new ParseTask(parser.task, parser.root));
+            parseCache.load(file, file.toFile().getName(), new ParseTask(parser.task, parser.root));
         }
-        return parseCache.get(file, null);
+        return parseCache.get(file, file.toFile().getName());
     }
 
     private ParseTask cachedParse(JavaFileObject file) {
@@ -338,11 +338,9 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
     public ParseTask parse(Path file, String contents) {
-        SourceFileObject sourceFileObject = new SourceFileObject(file, contents, Instant.now());
-        Parser parser = Parser.parseJavaFileObject(sourceFileObject);
-        parseCache.load(file, file.toFile().getName(),
-                new ParseTask(parser.task, parser.root));
-        return parseCache.get(file, file.toFile().getName());
+        SourceFileObject object = new SourceFileObject(file, contents, Instant.now());
+        Parser parser = Parser.parseJavaFileObject(object);
+        return new ParseTask(parser.task, parser.root);
     }
 
     /**
