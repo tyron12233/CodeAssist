@@ -109,8 +109,13 @@ public class CompileBatch implements AutoCloseable {
 
         if (err instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
             JCDiagnostic diagnostic = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) err).d;
-            Log.d("dasdasdYOOOOOOOOO", diagnostic.getArgs()[1].toString());
+            String className = String.valueOf(diagnostic.getArgs()[1]);
+            if (!className.equals("null")) {
+                return className;
+            }
         }
+        // fallback to parsing the file
+
         Path file = Paths.get(err.getSource().toUri());
         String contents = FileUtils.readFileToString(file.toFile(), Charset.defaultCharset());
         int begin = (int) err.getStartPosition();
