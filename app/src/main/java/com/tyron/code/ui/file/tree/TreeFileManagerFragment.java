@@ -219,13 +219,16 @@ public class TreeFileManagerFragment extends Fragment {
 
     private List<TreeNode<TreeFile>> getNodes() {
         List<TreeNode<TreeFile>> nodes = new ArrayList<>();
+        if (mRootFile == null) {
+            return nodes;
+        }
 
         TreeNode<TreeFile> root = new TreeNode<>(
                 TreeFile.fromFile(mRootFile), 0
         );
-        File[] childs = mRootFile.listFiles();
-        if (childs != null) {
-            for (File file : childs) {
+        File[] children = mRootFile.listFiles();
+        if (children != null) {
+            for (File file : children) {
                 addNode(root, file, 1);
             }
         }
