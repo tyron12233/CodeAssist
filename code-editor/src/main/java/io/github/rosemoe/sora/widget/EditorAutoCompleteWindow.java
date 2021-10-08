@@ -26,6 +26,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import io.github.rosemoe.sora.data.CompletionItem;
 import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
@@ -203,7 +204,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      * Move selection down
      */
     public void moveDown() {
-        if (mCurrent + 1 >= mListView.getAdapter().getItemCount()) {
+        if (mCurrent + 1 >= Objects.requireNonNull(mListView.getAdapter()).getItemCount()) {
             return;
         }
         mCurrent++;
@@ -258,16 +259,14 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - length, cursor.getLeftLine(), cursor.getLeftColumn());
 
             selectedItem = item.commit;
-            // cursor.onCommitText(item.commit); will be invoked automatically if item.commit isn't multiline
+            // will be invoked automatically if item.commit isn't multiline
             cursor.onCommitMultilineText(item.commit);
 
             if (item.commit != null && item.cursorOffset != item.commit.length()) {
                 int delta = (item.commit.length() - item.cursorOffset);
-                if (delta != 0) {
-                    int newSel = Math.max(mEditor.getCursor().getLeft() - delta, 0);
-                    CharPosition charPosition = mEditor.getCursor().getIndexer().getCharPosition(newSel);
-                    mEditor.setSelection(charPosition.line, charPosition.column);
-                }
+                int newSel = Math.max(mEditor.getCursor().getLeft() - delta, 0);
+                CharPosition charPosition = mEditor.getCursor().getIndexer().getCharPosition(newSel);
+                mEditor.setSelection(charPosition.line, charPosition.column);
             }
 
             if (item.item.additionalTextEdits != null) {
