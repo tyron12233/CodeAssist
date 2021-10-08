@@ -31,6 +31,7 @@ import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
 import org.openjdk.tools.javac.util.DiagnosticSource;
+import org.openjdk.tools.javac.util.JCDiagnostic;
 
 
 @SuppressWarnings("NewApi")
@@ -105,6 +106,11 @@ public class CompileBatch implements AutoCloseable {
     }
 
     private String errorText(Diagnostic<? extends JavaFileObject> err) throws IOException {
+
+        if (err instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
+            JCDiagnostic diagnostic = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) err).d;
+            Log.d("dasdasdYOOOOOOOOO", diagnostic.getArgs()[1].toString());
+        }
         Path file = Paths.get(err.getSource().toUri());
         String contents = FileUtils.readFileToString(file.toFile(), Charset.defaultCharset());
         int begin = (int) err.getStartPosition();
@@ -133,7 +139,6 @@ public class CompileBatch implements AutoCloseable {
             }
             Parser parse = Parser.parseFile(file.toPath());
             for (Name candidate : parse.packagePrivateClasses()) {
-				Log.d("CompileBatch", "Candidate: " + candidate);
                 if (candidate.contentEquals(className)) {
                     return file.toPath();
                 }

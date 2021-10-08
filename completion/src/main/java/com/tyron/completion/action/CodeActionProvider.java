@@ -308,6 +308,16 @@ public class CodeActionProvider {
         return new Range(new Position(startLine, startColumn), new Position(endLine, endColumn));
     }
 
+    private MethodPtr findMethod(CompileTask task, Range range) {
+        Trees trees = Trees.instance(task.task);
+        long position = task.root().getLineMap().getPosition(range.start.line + 1, range.start.column + 1);
+        Tree tree = new FindMethodDeclarationAt(task.task).scan(task.root(), position);
+        TreePath path = trees.getPath(task.root(), tree);
+        ExecutableElement method = (ExecutableElement) trees.getElement(path);
+        return new MethodPtr(task.task, method);
+    }
+
+
     private static class MethodPtr {
         String className, methodName;
         String[] erasedParameterTypes;

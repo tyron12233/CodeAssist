@@ -100,6 +100,11 @@ public class TreeFileManagerFragment extends Fragment {
 
     }
 
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+    }
+
     /**
      * Add menus to the current PopupMenu based on the current {@link TreeNode}
      *

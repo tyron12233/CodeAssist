@@ -20,6 +20,7 @@ import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.TreeVisitor;
+import org.openjdk.source.tree.VariableTree;
 import org.openjdk.tools.javac.tree.JCTree;
 
 import java.util.ArrayList;
@@ -136,6 +137,18 @@ public class JavaVisitor {
             if (list != null) {
                 for (VisitingDetector v : list) {
                     v.getVisitor().visitAnnotation(annotationTree, unused);
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitVariable(VariableTree variableTree, Void unused) {
+            List<VisitingDetector> list =
+                    mTreeTypeDetectors.get(VariableTree.class);
+            if (list != null) {
+                for (VisitingDetector v : list) {
+                    v.getVisitor().visitVariable(variableTree, unused);
                 }
             }
             return null;

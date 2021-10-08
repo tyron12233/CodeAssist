@@ -12,6 +12,7 @@ import com.tyron.lint.checks.CallSuperDetector;
 import com.tyron.lint.checks.JavaPerformanceDetector;
 import com.tyron.lint.checks.SharedPrefsDetector;
 import com.tyron.lint.checks.ToastDetector;
+import com.tyron.lint.checks.UnusedDetector;
 import com.tyron.lint.client.Configuration;
 import com.tyron.lint.client.IssueRegistry;
 import com.tyron.lint.client.LintClient;
