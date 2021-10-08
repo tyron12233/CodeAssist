@@ -95,9 +95,9 @@ public class CompileBatch implements AutoCloseable {
             }
 
             String packageName = packageName(err);
-            Path location = findPackagePrivateClass(packageName, className);
-            if (location != FILE_NOT_FOUND) {
-                addFiles.add(location);
+            File javaFile = FileManager.getInstance().getJavaFile(packageName);
+            if (javaFile != null) {
+                addFiles.add(javaFile.toPath());
             }
         }
 

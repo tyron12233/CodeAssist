@@ -95,6 +95,10 @@ public class FileManager {
         }
     }
 
+    public File getJavaFile(String className) {
+        return javaFiles.get(className);
+    }
+
     public List<File> list(String packageName) {
         List<File> list = new ArrayList<>();
 
