@@ -16,6 +16,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -28,6 +29,8 @@ import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.tools.javac.api.ClientCodeWrapper;
+import org.openjdk.tools.javac.util.DiagnosticSource;
 
 
 @SuppressWarnings("NewApi")
@@ -86,6 +89,10 @@ public class CompileBatch implements AutoCloseable {
             } catch (IOException e) {
                 continue;
             }
+            if (className == null) {
+                continue;
+            }
+
             String packageName = packageName(err);
             Path location = findPackagePrivateClass(packageName, className);
             if (location != FILE_NOT_FOUND) {
@@ -102,6 +109,10 @@ public class CompileBatch implements AutoCloseable {
         String contents = FileUtils.readFileToString(file.toFile(), Charset.defaultCharset());
         int begin = (int) err.getStartPosition();
         int end = (int) err.getEndPosition();
+        if (begin < 0 || end > contents.length()) {
+            Log.w("CompileBatch", "Diagnostic position does not match with the contents");
+            return null;
+        }
         return contents.substring(begin, end);
     }
 
@@ -152,7 +163,7 @@ public class CompileBatch implements AutoCloseable {
         List<String> list = new ArrayList<>();
 
         Collections.addAll(list, "-cp", joinPath(classPath));
-        Collections.addAll(list, "-bootclasspath", joinPath(List.of(FileManager.getInstance().getAndroidJar(), FileManager.getInstance().getLambdaStubs())));
+        Collections.addAll(list, "-bootclasspath", joinPath(Arrays.asList(FileManager.getInstance().getAndroidJar(), FileManager.getInstance().getLambdaStubs())));
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
         //Collections.addAll(list, "-verbose");
         Collections.addAll(list, "-proc:none");
