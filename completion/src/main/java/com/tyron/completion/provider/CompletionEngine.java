@@ -94,18 +94,21 @@ public class CompletionEngine {
     public void index(Project project, Runnable callback) {
         setIndexing(true);
         project.clear();
+        project.getJavaFiles();
+        project.getKotlinFiles();
+        project.getRJavaFiles();
         project.getLibraries();
-        JavaCompilerService compiler = getCompiler();
-        Set<File> filesToIndex = new HashSet<>(project.getJavaFiles().values());
-        filesToIndex.addAll(project.getRJavaFiles().values());
-        for (File file : filesToIndex) {
-            if (file == null || !file.exists()) {
-                continue;
-            }
-            try (CompileTask task = compiler.compile(file.toPath())) {
-                Log.d(getClass().getSimpleName(), file.getName() + " compiled successfully");
-            }
-        }
+//        JavaCompilerService compiler = getCompiler();
+//        Set<File> filesToIndex = new HashSet<>(project.getJavaFiles().values());
+//        filesToIndex.addAll(project.getRJavaFiles().values());
+//        for (File file : filesToIndex) {
+//            if (file == null || !file.exists()) {
+//                continue;
+//            }
+//            try (CompileTask task = compiler.compile(file.toPath())) {
+//                Log.d(getClass().getSimpleName(), file.getName() + " compiled successfully");
+//            }
+//        }
         setIndexing(false);
         if (callback != null) {
             handler.post(callback);
