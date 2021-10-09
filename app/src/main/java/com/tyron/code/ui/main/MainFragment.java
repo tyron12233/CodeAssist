@@ -256,8 +256,6 @@ public class MainFragment extends Fragment {
             }
         });
         mToolbar.setOnMenuItemClickListener(item -> {
-
-
             if (item.getItemId() == R.id.debug_create) {
 
                 WizardFragment fragment = new WizardFragment();

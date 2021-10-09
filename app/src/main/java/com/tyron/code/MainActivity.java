@@ -17,7 +17,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (getSupportFragmentManager().findFragmentByTag("main_fragment") == null) {
             getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, new MainFragment(), "main_fragment") //FileManagerFragment.newInstance(new File("/sdcard")))
+                    .replace(R.id.fragment_container, new MainFragment(), "main_fragment")
                     .commit();
         }
     }

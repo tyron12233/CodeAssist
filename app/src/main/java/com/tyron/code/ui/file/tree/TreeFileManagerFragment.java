@@ -231,6 +231,8 @@ public class TreeFileManagerFragment extends Fragment {
         TreeNode<TreeFile> root = new TreeNode<>(
                 TreeFile.fromFile(mRootFile), 0
         );
+        root.setExpanded(true);
+
         File[] children = mRootFile.listFiles();
         if (children != null) {
             for (File file : children) {
