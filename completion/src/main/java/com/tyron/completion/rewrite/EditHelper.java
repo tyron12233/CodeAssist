@@ -89,7 +89,7 @@ public class EditHelper {
 
             String body;
             if (method.getParameters().size() == 0) {
-                return "super." + method.getSimpleName() + "();";
+                body = "super." + method.getSimpleName() + "();";
             } else {
                 String names;
                 if (source != null) {

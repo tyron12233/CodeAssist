@@ -76,9 +76,10 @@ public class OverrideInheritedMethod implements Rewrite {
             if (tabCount == 0) {
                 tabCount = 1;
             }
+            String tabs = Strings.repeat("\t", tabCount);
 
-            text = text.replace("\n", "\n" + Strings.repeat("\t", tabCount));
-            text = text + "\n\n";
+            text = tabs + text.replace("\n", "\n" + tabs)
+                    + "\n\n";
             return text;
         }
     }
