@@ -2,6 +2,7 @@ package com.tyron.builder.compiler;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import com.tyron.builder.compiler.apk.PackageTask;
 import com.tyron.builder.compiler.apk.SignTask;
@@ -60,7 +61,7 @@ public class ApkBuilder {
 
                 post(() -> listener.onComplete(true, "Build success. Took " + (System.currentTimeMillis() - initialStart) + " ms"));
             } catch (IOException | CompilationFailedException e) {
-                post(() -> listener.onComplete(false, e.getMessage()));
+                post(() -> listener.onComplete(false, Log.getStackTraceString(e)));
             }
         });
     }
