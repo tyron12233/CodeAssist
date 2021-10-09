@@ -80,7 +80,7 @@ public class PackageTask extends Task {
     @Override
     public void run() throws IOException, CompilationFailedException {
 
-        int dexCount = 0;
+        int dexCount = 1;
         try {
             ApkBuilder builder = new ApkBuilder(
                     mApk.getAbsolutePath(),
