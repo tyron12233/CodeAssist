@@ -58,7 +58,7 @@ public class CleanTask extends Task {
             if (FileManager.getInstance().list(path).isEmpty() && !FileManager.getInstance().containsClass(packageName)) {
                 if (file.delete()) {
                     mLogger.debug("Deleted class file " + file.getName());
-                }
+                };
             }
         }
     }

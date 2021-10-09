@@ -171,7 +171,6 @@ public class CompilerService extends Service {
             stopForeground(true);
 
             if (!success) {
-                logger.error(message);
                 updateNotification(projectName, "Compilation failed");
             } else {
                 Intent intent = new Intent(Intent.ACTION_VIEW);

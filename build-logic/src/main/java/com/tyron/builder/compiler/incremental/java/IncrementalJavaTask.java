@@ -20,10 +20,7 @@ import org.openjdk.javax.tools.DiagnosticListener;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.javax.tools.StandardJavaFileManager;
 import org.openjdk.javax.tools.StandardLocation;
-import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.TaskEvent;
-import org.openjdk.source.util.TaskListener;
 import org.openjdk.tools.javac.api.JavacTool;
 
 import java.io.File;
@@ -33,9 +30,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 public class IncrementalJavaTask extends Task {
 
@@ -140,6 +139,8 @@ public class IncrementalJavaTask extends Task {
                 javaFileObjects
         );
 
+        HashMap<String, List<File>> compiledFiles = new HashMap<>();
+
         try {
             task.parse();
             task.analyze();
@@ -160,9 +161,38 @@ public class IncrementalJavaTask extends Task {
                     if (!file.exists()) {
                         file = new File(classPath.replace("src/main/java", "build/gen"));
                     }
+
+                    if (!compiledFiles.containsKey(file.getAbsolutePath())) {
+                        ArrayList<File> list = new ArrayList<>();
+                        list.add(classFile);
+                        compiledFiles.put(file.getAbsolutePath(), list);
+                    } else {
+                        Objects.requireNonNull(compiledFiles.get(file.getAbsolutePath()))
+                                .add(classFile);
+                    }
                     mClassCache.load(file.toPath(), "class", Collections.singletonList(classFile));
                 }
             }
+
+            compiledFiles.forEach((key, values) -> {
+                File sourceFile = new File(key);
+                String name = sourceFile.getName()
+                        .replace(".java","");
+                File first = values.iterator().next();
+                File parent = first.getParentFile();
+                if (parent != null) {
+                    File[] children = parent.listFiles(c -> c.getName().startsWith(name) && c.getName().contains("$"));
+                    if (children != null) {
+                        for (File file : children) {
+                            if (!values.contains(file)) {
+                                if (file.delete()) {
+                                    Log.d("asdasdkasd", "deleted file " + file.getAbsolutePath());
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         } catch (Exception e) {
             throw new CompilationFailedException(e);
         }
@@ -192,6 +222,8 @@ public class IncrementalJavaTask extends Task {
                 }
             }
         }
-        FileUtils.delete(classFile);
+        if (classFile.exists()) {
+            FileUtils.delete(classFile);
+        }
     }
 }
