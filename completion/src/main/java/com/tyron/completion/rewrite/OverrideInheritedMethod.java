@@ -3,6 +3,7 @@ package com.tyron.completion.rewrite;
 import com.google.common.base.Strings;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.CompilerProvider;
+import com.tyron.completion.FindNewTypeDeclarationAt;
 import com.tyron.completion.FindTypeDeclarationAt;
 import com.tyron.completion.ParseTask;
 import com.tyron.completion.provider.FindHelper;
@@ -73,9 +74,7 @@ public class OverrideInheritedMethod implements Rewrite {
             }
 
             int tabCount = indent / 4;
-            if (tabCount == 0) {
-                tabCount = 1;
-            }
+
             String tabs = Strings.repeat("\t", tabCount);
 
             text = tabs + text.replace("\n", "\n" + tabs)

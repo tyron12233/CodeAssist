@@ -10,28 +10,21 @@ import org.openjdk.source.util.Trees;
 
 public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
     private final SourcePositions pos;
+    private final JavacTask task;
     private CompilationUnitTree root;
+    private long cursor;
 
     public FindTypeDeclarationAt(JavacTask task) {
+        this.task = task;
         pos = Trees.instance(task).getSourcePositions();
     }
 
     @Override
     public ClassTree visitCompilationUnit(CompilationUnitTree t, Long find) {
         root = t;
+        cursor = find;
         return super.visitCompilationUnit(t, find);
     }
-
-    @Override
-    public ClassTree visitNewClass(NewClassTree t, Long find) {
-        long start = pos.getStartPosition(root, t.getClassBody());
-        long end = pos.getEndPosition(root, t.getClassBody());
-        if (pos.getStartPosition(root, t.getClassBody()) <= find && find <= pos.getEndPosition(root, t.getClassBody())) {
-            return t.getClassBody();
-        }
-        return super.visitNewClass(t, find);
-    }
-
 
     @Override
     public ClassTree visitClass(ClassTree t, Long find) {
@@ -40,7 +33,12 @@ public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
             return smaller;
         }
         if (pos.getStartPosition(root, t) <= find && find < pos.getEndPosition(root, t)) {
-            return t;
+            ClassTree evenSmaller = new FindNewTypeDeclarationAt(task).scan(t, find);
+            if (evenSmaller != null) {
+                return evenSmaller;
+            } else {
+                return t;
+            }
         }
         return null;
     }

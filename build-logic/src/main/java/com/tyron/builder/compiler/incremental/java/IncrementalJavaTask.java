@@ -84,6 +84,8 @@ public class IncrementalJavaTask extends Task {
 
     }
 
+    private boolean mHasErrors = false;
+
     @Override
     public void run() throws IOException, CompilationFailedException {
         if (mFilesToCompile.isEmpty()) {
@@ -95,6 +97,7 @@ public class IncrementalJavaTask extends Task {
         DiagnosticListener<JavaFileObject> diagnosticCollector = diagnostic -> {
             switch (diagnostic.getKind()) {
                 case ERROR:
+                    mHasErrors = true;
                     mLogger.error(new DiagnosticWrapper(diagnostic));
                     break;
                 case WARNING:
@@ -193,8 +196,12 @@ public class IncrementalJavaTask extends Task {
                     }
                 }
             });
-        } catch (Exception e) {
+        } catch(Exception e) {
             throw new CompilationFailedException(e);
+        }
+
+        if (mHasErrors) {
+            throw new CompilationFailedException("Compilation failed, check logs for more details");
         }
     }
 

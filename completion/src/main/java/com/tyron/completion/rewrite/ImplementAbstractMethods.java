@@ -5,6 +5,7 @@ import android.util.Log;
 import com.google.common.base.Strings;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.CompilerProvider;
+import com.tyron.completion.FindNewTypeDeclarationAt;
 import com.tyron.completion.FindTypeDeclarationAt;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.ParseTask;
@@ -66,7 +67,7 @@ public class ImplementAbstractMethods implements Rewrite {
         } else {
             className = className.substring("<anonymous ".length(),
                     className.length() - 1);
-            className = className.substring(0, className.lastIndexOf('$'));
+            className = className.substring(0, className.indexOf(   '$'));
             mClassFile = className;
             mClassName = args[2].toString();
             mPosition = diagnostic.getStartPosition();
@@ -95,6 +96,9 @@ public class ImplementAbstractMethods implements Rewrite {
             ClassTree thisTree = trees.getTree(thisClass);
             if (mPosition != 0) {
                 thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), mPosition);
+                if (thisTree == null) {
+                    thisTree = new FindNewTypeDeclarationAt(task.task).scan(task.root(), mPosition);
+                }
             }
             int indent = EditHelper.indent(task.task, task.root(), thisTree);
 
@@ -110,9 +114,13 @@ public class ImplementAbstractMethods implements Rewrite {
 
                     int tabCount;
                     if ((indent / 4) == 0) {
-                        tabCount = 1;
+                        tabCount = 2;
                     } else {
                         tabCount = indent / 4;
+                    }
+
+                    if (mPosition != 0) {
+                        tabCount -= 2;
                     }
 
                     String tabs = Strings.repeat("\t", tabCount);
