@@ -63,7 +63,8 @@ public class Cache<K, V> {
             modified = FileTime.from(Instant.now());
         }
         // TODO remove all keys associated with file when file changes
-        return value.created.isBefore(modified.toInstant());
+        boolean before = value.created.isBefore(modified.toInstant());
+        return before;
     }
 
     @SafeVarargs

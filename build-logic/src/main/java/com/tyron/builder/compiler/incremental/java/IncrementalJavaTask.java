@@ -69,13 +69,10 @@ public class IncrementalJavaTask extends Task {
         mJavaFiles.addAll(JavaTask.getJavaFiles(new File(project.getBuildDirectory(), "gen")));
 
         for (Cache.Key<String> key : new HashSet<>(mClassCache.getKeys())) {
-            for (File file : mClassCache.get(key.file, key.key)) {
-                if (!mJavaFiles.contains(key.file.toFile())) {
-                    if (file.delete()) {
-                        Log.d(TAG, "Found deleted java file, removing " + key.file.toFile().getName() + " on the cache.");
-                    }
-                    mClassCache.remove(key.file, "class", "dex");
-                }
+            if (!mJavaFiles.contains(key.file.toFile())) {
+                File file = mClassCache.get(key.file, "class").iterator().next();
+                deleteAllFiles(file, ".class");
+                mClassCache.remove(key.file, "class", "dex");
             }
         }
 
@@ -152,7 +149,18 @@ public class IncrementalJavaTask extends Task {
                 File classFile = new File(path);
                 if (classFile.exists()) {
                     Log.d(TAG, "Adding class file " + classFile.getName() + " to cache");
-                    mClassCache.load(classFile.toPath(), "class", Collections.singletonList(classFile));
+                    String classPath = classFile.getAbsolutePath()
+                            .replace("build/bin/classes/", "src/main/java/")
+                            .replace(".class", ".java");
+                    if (classPath.contains("$")) {
+                        classPath = classPath.substring(0, classPath.lastIndexOf('$'))
+                                + ".java";
+                    }
+                    File file = new File(classPath);
+                    if (!file.exists()) {
+                        file = new File(classPath.replace("src/main/java", "build/gen"));
+                    }
+                    mClassCache.load(file.toPath(), "class", Collections.singletonList(classFile));
                 }
             }
         } catch (Exception e) {
