@@ -8,9 +8,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Table;
 import com.google.common.io.Files;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
+import java.io.StringWriter;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -55,14 +59,18 @@ public class SymbolWriter {
         for (String folder : folders) {
             file = new File(file, folder);
         }
-        if (!file.exists() && !file.mkdirs()) {
-            throw new IOException("Unable to create resource directories for " + file);
+        boolean newFile = false;
+        if (!file.exists()) {
+            newFile = true;
+            if (!file.mkdirs()) {
+                throw new IOException("Unable to create resource directories for " + file);
+            }
         }
         file = new File(file, "R.java");
 
-        BufferedWriter writer = null;
+        StringWriter writer = null;
         try {
-            writer = Files.newWriter(file, Charsets.UTF_8);
+            writer = new StringWriter();
 
             writer.write("/* AUTO-GENERATED FILE. DO NOT MODIFY. \n");
             writer.write(" *\n");
@@ -110,6 +118,15 @@ public class SymbolWriter {
             }
 
             writer.write("}\n");
+
+            if (newFile) {
+                FileUtils.writeStringToFile(file, writer.toString(), Charset.defaultCharset());
+            } else {
+                String oldContents = FileUtils.readFileToString(file, Charset.defaultCharset());
+                if (!oldContents.equals(writer.toString())) {
+                    FileUtils.writeStringToFile(file, writer.toString(), Charset.defaultCharset());
+                }
+            }
         } finally {
             try {
                 if (writer != null) {
