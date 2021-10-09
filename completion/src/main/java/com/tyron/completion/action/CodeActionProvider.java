@@ -196,10 +196,8 @@ public class CodeActionProvider {
     }
 
     public Map<String, Rewrite> quickFixes(Path file, Diagnostic<? extends JavaFileObject> d) {
-        Log.d(null, "Class name: " + d.getClass().toString());
         if (d instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
             JCDiagnostic diagnostic = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) d).d;
-            Log.d(null, "code: " + diagnostic.getCode());
             switch (d.getCode()) {
                 case "compiler.err.does.not.override.abstract":
                     Rewrite implementAbstracts = new ImplementAbstractMethods(diagnostic);
@@ -208,7 +206,6 @@ public class CodeActionProvider {
                 case "compiler.err.cant.resolve.location":
                     CharSequence simpleName = diagnostic.getArgs()[1].toString();
                     TreeMap<String, Rewrite> allImports = new TreeMap<>();
-                    Log.d(null, "simple name: " + simpleName);
                     for (String qualifiedName : mCompiler.publicTopLevelTypes()) {
                         if (qualifiedName.endsWith("." + simpleName)) {
                             String title = "Import " + qualifiedName;

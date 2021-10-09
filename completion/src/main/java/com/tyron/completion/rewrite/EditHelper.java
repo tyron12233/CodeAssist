@@ -61,7 +61,7 @@ public class EditHelper {
     public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, MethodTree source) {
         StringBuilder buf = new StringBuilder();
         // TODO leading \n is extra, but needed for indent replaceAll trick
-        buf.append("\n@Override\n");
+        buf.append("@Override\n");
         if (method.getModifiers().contains(Modifier.PUBLIC)) {
             buf.append("public ");
         }
@@ -188,15 +188,6 @@ public class EditHelper {
         LineMap lines = root.getLineMap();
         long startClass = pos.getStartPosition(root, leaf);
         long startLine = lines.getStartPosition(lines.getLineNumber(startClass));
-        return (int) (startClass - startLine);
-    }
-
-    static int indent(JavacTask task, CompilationUnitTree root, ClassTree leaf, long line) {
-        SourcePositions pos = Trees.instance(task).getSourcePositions();
-        LineMap lines = root.getLineMap();
-        long startClass = pos.getStartPosition(root, leaf);
-        long startLine = lines.getStartPosition(lines.getLineNumber(startClass));
-        startLine += line;
         return (int) (startClass - startLine);
     }
 

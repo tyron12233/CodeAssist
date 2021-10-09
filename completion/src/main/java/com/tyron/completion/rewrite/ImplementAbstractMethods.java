@@ -107,8 +107,17 @@ public class ImplementAbstractMethods implements Rewrite {
                         continue;
                     }
                     ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType, method);
+
+                    int tabCount;
+                    if ((indent / 4) == 0) {
+                        tabCount = 1;
+                    } else {
+                        tabCount = indent / 4;
+                    }
+
+                    String tabs = Strings.repeat("\t", tabCount);
                     String text = EditHelper.printMethod(method, parameterizedType, source);
-                    text = text.replace("\n", "\n" + Strings.repeat(" ", indent));
+                    text = tabs + text.replace("\n", "\n" + tabs);
                     insertText.add(text);
                 }
             }
@@ -129,12 +138,5 @@ public class ImplementAbstractMethods implements Rewrite {
         if (!sourceFile.isPresent()) return null;
         ParseTask parse = compiler.parse(sourceFile.get());
         return FindHelper.findMethod(parse, superClassName, methodName, erasedParameterTypes);
-    }
-
-    {
-
-    }
-    private abstract class Test{
-         void main() {}
     }
 }
