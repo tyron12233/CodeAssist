@@ -9,6 +9,7 @@ import com.tyron.builder.compiler.incremental.dex.IncrementalD8Task;
 import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
 import com.tyron.builder.compiler.incremental.kotlin.IncrementalKotlinCompiler;
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
+import com.tyron.builder.compiler.log.InjectLoggerTask;
 import com.tyron.builder.compiler.manifest.ManifestMergeTask;
 import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
 import com.tyron.builder.model.Project;
@@ -83,9 +84,11 @@ public class ApkBuilder {
 
     private List<Task> getTasks() {
         return Arrays.asList(
+                new CleanTask(),
                 new ManifestMergeTask(),
                 new IncrementalAapt2Task(),
                 new MergeSymbolsTask(),
+                new InjectLoggerTask(),
                 new IncrementalKotlinCompiler(),
                 new IncrementalJavaTask(),
                 new IncrementalD8Task(),

@@ -107,7 +107,7 @@ public class FileManager {
             if (file.endsWith(".")) {
                 name = file.substring(0, file.length() - 1);
             }
-            if (name.substring(0, name.lastIndexOf(".")).equals(packageName)) {
+            if (name.substring(0, name.lastIndexOf(".")).equals(packageName) || name.equals(packageName)) {
                 list.add(javaFiles.get(file));
             }
         }
@@ -118,7 +118,7 @@ public class FileManager {
                 if (file.endsWith(".")) {
                     name = file.substring(0, file.length() - 1);
                 }
-                if (name.substring(0, name.lastIndexOf(".")).equals(packageName)) {
+                if (name.substring(0, name.lastIndexOf(".")).equals(packageName) || name.equals(packageName)) {
                     list.add(mCurrentProject.getRJavaFiles().get(file));
                 }
             }
@@ -251,6 +251,10 @@ public class FileManager {
             files.addAll(mCurrentProject.getRJavaFiles().keySet());
         }
         return files;
+    }
+
+    public boolean containsClass(String fullyQualifiedName) {
+        return classFiles.containsKey(fullyQualifiedName);
     }
 
     private void putJar(File file) throws IOException {

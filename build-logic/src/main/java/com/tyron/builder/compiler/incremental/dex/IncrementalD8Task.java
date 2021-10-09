@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
 
 public class IncrementalD8Task extends Task {
 
-    private static final String TAG = IncrementalJavaTask.class.getSimpleName();
+    private static final String TAG = IncrementalD8Task.class.getSimpleName();
 
     protected final DiagnosticsHandler diagnosticsHandler = new DiagnosticHandler();
     private List<Path> mClassFiles;
@@ -71,12 +71,13 @@ public class IncrementalD8Task extends Task {
         mFilesToCompile = new ArrayList<>();
         mClassFiles = new ArrayList<>(D8Task.getClassFiles(new File(project.getBuildDirectory(), "bin/classes")));
         for (Cache.Key<String> key : new HashSet<>(mDexCache.getKeys())) {
-            if (!mClassFiles.contains(key.file)) {
-                Log.d(TAG, "Found deleted class file, removing " + key.file.toFile().getName() + " on the cache.");
-                for (File file : mDexCache.get(key.file, key.key)) {
-                    deleteAllFiles(file,".dex");
+            for (File file : mDexCache.get(key.file, key.key)) {
+                if (!mClassFiles.contains(key.file)) {
+                    if (file.delete()) {
+                        Log.d(TAG, "Found deleted class file, removing " + key.file.toFile().getName() + " on the cache.");
+                    }
+                    mDexCache.remove(key.file, "dex");
                 }
-                mDexCache.remove(key.file, "dex");
             }
         }
 
@@ -163,21 +164,21 @@ public class IncrementalD8Task extends Task {
         mLogger.debug("Merging dex files");
 
         File output = new File(mProject.getBuildDirectory(), "bin");
-            D8Command command = D8Command.builder(diagnosticsHandler)
-                    .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
-                    .addLibraryFiles(getLibraryFiles())
-                    .addProgramFiles(getLibraryDexes())
-                    .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
-                    .setMinApiLevel(mProject.getMinSdk())
-                    .setMode(CompilationMode.DEBUG)
-                    .setOutput(output.toPath(), OutputMode.DexIndexed)
-                    .setIntermediate(true)
-                    .build();
-            D8.run(command);
+        D8Command command = D8Command.builder(diagnosticsHandler)
+                .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                .addLibraryFiles(getLibraryFiles())
+                .addProgramFiles(getLibraryDexes())
+                .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
+                .setMinApiLevel(mProject.getMinSdk())
+                .setMode(CompilationMode.DEBUG)
+                .setOutput(output.toPath(), OutputMode.DexIndexed)
+                .setIntermediate(true)
+                .build();
+        D8.run(command);
 
     }
 
-    private	 List<Path> getLibraryDexes() {
+    private List<Path> getLibraryDexes() {
         List<Path> dexes = new ArrayList<>();
         for (File file : mProject.getLibraries()) {
             File parent = file.getParentFile();
@@ -193,14 +194,20 @@ public class IncrementalD8Task extends Task {
 
     private static final String INTERMEDIATE_DIR = "build/bin/classes/";
 
-    private File getDexFile(File sourceFile) {
-        String path = sourceFile.getAbsolutePath();
-        path = path.substring(path.indexOf(INTERMEDIATE_DIR));
+    private File getDexFile(File file) {
+        File output = new File(mProject.getBuildDirectory(), "bin/classes/");
+        String packageName = file.getAbsolutePath()
+                .replace(output.getAbsolutePath(), "")
+                .substring(1)
+                .replace(".class", ".dex");
 
-        return new File(mOutputPath.toFile(), path.replace(".class", ".dex"));
+        File intermediate = new File(mProject.getBuildDirectory(), "intermediate/classes");
+        return new File(intermediate, packageName);
     }
+
     /**
      * Ensures that all libraries of the project has been dex-ed
+     *
      * @throws com.android.tools.r8.CompilationFailedException if the compilation has failed
      */
     protected void ensureDexedLibraries() throws com.android.tools.r8.CompilationFailedException {
@@ -281,6 +288,7 @@ public class IncrementalD8Task extends Task {
         }
         return files;
     }
+
     public class DiagnosticHandler implements DiagnosticsHandler {
         @Override
         public void error(Diagnostic diagnostic) {

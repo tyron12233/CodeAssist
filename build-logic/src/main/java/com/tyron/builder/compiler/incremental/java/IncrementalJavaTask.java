@@ -20,6 +20,7 @@ import org.openjdk.javax.tools.DiagnosticListener;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.javax.tools.StandardJavaFileManager;
 import org.openjdk.javax.tools.StandardLocation;
+import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TaskEvent;
 import org.openjdk.source.util.TaskListener;
@@ -68,12 +69,13 @@ public class IncrementalJavaTask extends Task {
         mJavaFiles.addAll(JavaTask.getJavaFiles(new File(project.getBuildDirectory(), "gen")));
 
         for (Cache.Key<String> key : new HashSet<>(mClassCache.getKeys())) {
-            if (!mJavaFiles.contains(key.file.toFile())) {
-                Log.d(TAG, "Found deleted java file, removing " + key.file.toFile().getName() + " on the cache.");
-                for (File file : mClassCache.get(key.file, key.key)) {
-                    deleteAllFiles(file, key.key.equals("class") ? ".class" : ".dex");
+            for (File file : mClassCache.get(key.file, key.key)) {
+                if (!mJavaFiles.contains(key.file.toFile())) {
+                    if (file.delete()) {
+                        Log.d(TAG, "Found deleted java file, removing " + key.file.toFile().getName() + " on the cache.");
+                    }
+                    mClassCache.remove(key.file, "class", "dex");
                 }
-                mClassCache.remove(key.file, "class", "dex");
             }
         }
 
@@ -141,25 +143,20 @@ public class IncrementalJavaTask extends Task {
                 javaFileObjects
         );
 
-        task.setTaskListener(new TaskListener() {
-            @Override
-            public void finished(TaskEvent taskEvent) {
-                if (taskEvent.getKind() == TaskEvent.Kind.GENERATE) {
-                    File source = new File(taskEvent.getSourceFile().toUri());
-                    String packageName = taskEvent.getTypeElement().getQualifiedName().toString();
-                    if (!packageName.isEmpty()) {
-                        File classFile = findClassFile(packageName);
-                        if (classFile.exists()) {
-                            Log.d(TAG, "Found class file " + classFile.getName());
-                            mClassCache.load(source.toPath(), "class", Collections.singletonList(classFile));
-                        }
-                    }
+        try {
+            task.parse();
+            task.analyze();
+            Iterable<? extends JavaFileObject> generate = task.generate();
+            for (JavaFileObject fileObject : generate) {
+                String path = fileObject.getName();
+                File classFile = new File(path);
+                if (classFile.exists()) {
+                    Log.d(TAG, "Adding class file " + classFile.getName() + " to cache");
+                    mClassCache.load(classFile.toPath(), "class", Collections.singletonList(classFile));
                 }
             }
-        });
-
-        if (!task.call()) {
-            throw new CompilationFailedException("Compilation failed. Check diagnostics for more information.");
+        } catch (Exception e) {
+            throw new CompilationFailedException(e);
         }
     }
 
@@ -173,8 +170,6 @@ public class IncrementalJavaTask extends Task {
                 .concat(".class");
         return new File(mOutputDir, path);
     }
-
-
 
     private void deleteAllFiles(File classFile, String ext) throws IOException {
         File parent = classFile.getParentFile();
