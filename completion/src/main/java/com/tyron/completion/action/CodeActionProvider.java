@@ -214,6 +214,30 @@ public class CodeActionProvider {
                         }
                     }
                     return allImports;
+                case "compiler.err.doesnt.exist":
+                    simpleName = diagnostic.getArgs()[0].toString();
+                    boolean isField = simpleName.toString()
+                            .contains(".");
+                    String searchName = simpleName.toString();
+                    if (isField) {
+                        searchName = searchName.substring(0,
+                                searchName.indexOf('.'));
+                    }
+                    allImports = new TreeMap<>();
+                    for (String qualifiedName : mCompiler.publicTopLevelTypes()) {
+
+                        if (qualifiedName.endsWith("." + searchName)) {
+                            if (isField) {
+                                qualifiedName = qualifiedName
+                                        .substring(0, qualifiedName.lastIndexOf('.'));
+                                qualifiedName += simpleName;
+                            }
+                            String title = "Import " + qualifiedName;
+                            Rewrite addImport = new AddImport(file.toFile(), qualifiedName);
+                            allImports.put(title, addImport);
+                        }
+                    }
+                    return allImports;
             }
 
         }

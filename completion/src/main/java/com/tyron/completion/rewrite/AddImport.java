@@ -24,10 +24,16 @@ public class AddImport implements Rewrite {
     
     private final String className;
     private final File currentFile;
-    
+    private final boolean isStatic;
+
     public AddImport(File currentFile, String className) {
+        this(currentFile, className, false);
+    }
+    
+    public AddImport(File currentFile, String className, boolean isStatic) {
         this.className = className;
         this.currentFile = currentFile;
+        this.isStatic = isStatic;
     }
 
     @Override
