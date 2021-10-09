@@ -42,6 +42,16 @@ public class FindHelper {
         return erasedParameterTypes;
     }
 
+    public static String[] erasedParameterTypes(ParseTask task, ExecutableElement method) {
+        Types types = task.task.getTypes();
+        String[] erasedParameterTypes = new String[method.getParameters().size()];
+        for (int i = 0; i < erasedParameterTypes.length; i++) {
+            TypeMirror p = method.getParameters().get(i).asType();
+            erasedParameterTypes[i] = types.erasure(p).toString();
+        }
+        return erasedParameterTypes;
+    }
+
     public static MethodTree findMethod(
             ParseTask task, String className, String methodName, String[] erasedParameterTypes) {
         ClassTree classTree = findType(task, className);

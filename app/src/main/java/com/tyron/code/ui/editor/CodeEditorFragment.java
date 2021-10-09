@@ -3,6 +3,7 @@ package com.tyron.code.ui.editor;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -174,32 +175,32 @@ public class CodeEditorFragment extends Fragment {
             }
 
             @Override
-            public boolean onFormatFail(CodeEditor editor, Throwable cause) {
+            public boolean onFormatFail(@NonNull CodeEditor editor, Throwable cause) {
                 return false;
             }
 
             @Override
-            public void onFormatSucceed(CodeEditor editor) {
+            public void onFormatSucceed(@NonNull CodeEditor editor) {
 
             }
 
             @Override
-            public void onNewTextSet(CodeEditor editor) {
+            public void onNewTextSet(@NonNull CodeEditor editor) {
 
             }
 
             @Override
-            public void afterDelete(CodeEditor editor, CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence deletedContent) {
+            public void afterDelete(@NonNull CodeEditor editor, @NonNull CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence deletedContent) {
                 FileManager.writeFile(mCurrentFile, String.valueOf(content));
             }
 
             @Override
-            public void afterInsert(CodeEditor editor, CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence insertedContent) {
+            public void afterInsert(@NonNull CodeEditor editor, @NonNull CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence insertedContent) {
                 FileManager.writeFile(mCurrentFile, String.valueOf(content));
             }
 
             @Override
-            public void beforeReplace(CodeEditor editor, CharSequence content) {
+            public void beforeReplace(@NonNull CodeEditor editor, @NonNull CharSequence content) {
 
             }
 

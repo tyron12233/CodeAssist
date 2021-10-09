@@ -8,21 +8,25 @@ import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.Name;
 import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.element.VariableElement;
 import org.openjdk.javax.lang.model.type.ArrayType;
 import org.openjdk.javax.lang.model.type.DeclaredType;
 import org.openjdk.javax.lang.model.type.ExecutableType;
+import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.LineMap;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
+import org.openjdk.source.tree.VariableTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
 
 import java.util.List;
 import java.util.StringJoiner;
+import java.util.stream.Collectors;
 
 public class EditHelper {
     final JavacTask task;
@@ -64,7 +68,9 @@ public class EditHelper {
         if (method.getModifiers().contains(Modifier.PROTECTED)) {
             buf.append("protected ");
         }
+
         buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(" ");
+
         buf.append(method.getSimpleName()).append("(");
         if (source == null) {
             buf.append(printParameters(parameterizedType, method));
@@ -72,9 +78,44 @@ public class EditHelper {
             buf.append(printParameters(parameterizedType, source));
         }
         buf.append(") {\n\t");
-        buf.append("throw new UnsupportedOperationException(\"TODO\");\n");
-        buf.append("}");
+        buf.append(printBody(method, source));
+        buf.append("\n}");
         return buf.toString();
+    }
+
+    private static String printBody(ExecutableElement method, MethodTree source) {
+        TypeMirror returnType = method.getReturnType();
+        if (!method.getModifiers().contains(Modifier.ABSTRACT)) {
+
+            String body;
+            if (method.getParameters().size() == 0) {
+                return "super." + method.getSimpleName() + "();";
+            } else {
+                String names;
+                if (source != null) {
+                    names = source.getParameters().stream().map(VariableTree::getName)
+                            .map(Name::toString).collect(Collectors.joining(", "));
+                } else {
+                    names = method.getParameters().stream().map(VariableElement::getSimpleName)
+                            .map(Name::toString).collect(Collectors.joining(", "));
+                }
+                body = "super." + method.getSimpleName() + "(" + names + ");";
+            }
+
+            return returnType.getKind() == TypeKind.VOID ? body : "return " + body;
+        }
+
+        switch (returnType.getKind()) {
+            case VOID: return "";
+            case SHORT:
+            case CHAR:
+            case FLOAT:
+            case BYTE:
+            case INT: return "return 0;";
+            case BOOLEAN: return "return false;";
+            default:
+                return "return null;";
+        }
     }
 
     /**
@@ -92,6 +133,7 @@ public class EditHelper {
         }
         return join.toString();
     }
+
 
     /**
      * Prints parameters with the default names eg. {@code arg0, arg1}
@@ -148,6 +190,16 @@ public class EditHelper {
         long startLine = lines.getStartPosition(lines.getLineNumber(startClass));
         return (int) (startClass - startLine);
     }
+
+    static int indent(JavacTask task, CompilationUnitTree root, ClassTree leaf, long line) {
+        SourcePositions pos = Trees.instance(task).getSourcePositions();
+        LineMap lines = root.getLineMap();
+        long startClass = pos.getStartPosition(root, leaf);
+        long startLine = lines.getStartPosition(lines.getLineNumber(startClass));
+        startLine += line;
+        return (int) (startClass - startLine);
+    }
+
 
     public static Position insertBefore(JavacTask task, CompilationUnitTree root, Tree member) {
         SourcePositions pos = Trees.instance(task).getSourcePositions();

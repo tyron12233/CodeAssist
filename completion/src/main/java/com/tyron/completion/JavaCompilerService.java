@@ -274,6 +274,17 @@ public class JavaCompilerService implements CompilerProvider {
         return file;
     }
 
+    public Optional<JavaFileObject> findPublicTypeDeclarationInJdk(String className) {
+        JavaFileObject source;
+        try {
+            source = fileManager.getJavaFileForInput(
+                    StandardLocation.PLATFORM_CLASS_PATH, className, JavaFileObject.Kind.CLASS);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return Optional.ofNullable(source);
+    }
+
     @Override
     public Path[] findTypeReferences(String className) {
         return null;
@@ -284,7 +295,7 @@ public class JavaCompilerService implements CompilerProvider {
         return null;
     }
 
-    private Cache<String, ParseTask> parseCache = new Cache<>();
+    private final Cache<String, ParseTask> parseCache = new Cache<>();
 
     private ParseTask cachedParse(Path file) {
         if (parseCache.needs(file, file.toFile().getName())) {
