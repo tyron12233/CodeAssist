@@ -100,7 +100,7 @@ public class ImplementAbstractMethods implements Rewrite {
                     thisTree = new FindNewTypeDeclarationAt(task.task).scan(task.root(), mPosition);
                 }
             }
-            int indent = EditHelper.indent(task.task, task.root(), thisTree);
+            int indent = EditHelper.indent(task.task, task.root(), thisTree) + 4;
 
             for (Element member : elements.getAllMembers(thisClass)) {
                 if (member.getKind() == ElementKind.METHOD && member.getModifiers().contains(Modifier.ABSTRACT)) {
@@ -112,16 +112,7 @@ public class ImplementAbstractMethods implements Rewrite {
                     }
                     ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType, method);
 
-                    int tabCount;
-                    if ((indent / 4) == 0) {
-                        tabCount = 2;
-                    } else {
-                        tabCount = indent / 4;
-                    }
-
-                    if (mPosition != 0) {
-                        tabCount -= 2;
-                    }
+                    int tabCount = indent / 4;
 
                     String tabs = Strings.repeat("\t", tabCount);
                     String text = EditHelper.printMethod(method, parameterizedType, source);

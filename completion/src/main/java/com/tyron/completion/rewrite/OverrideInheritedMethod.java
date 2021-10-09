@@ -62,7 +62,7 @@ public class OverrideInheritedMethod implements Rewrite {
             TreePath thisPath = trees.getPath(task.root(), thisTree);
             TypeElement thisClass = (TypeElement) trees.getElement(thisPath);
             ExecutableType parameterizedType = (ExecutableType) types.asMemberOf((DeclaredType) thisClass.asType(), superMethod);
-            int indent = EditHelper.indent(task.task, task.root(), thisTree);
+            int indent = EditHelper.indent(task.task, task.root(), thisTree) + 4;
             Optional<JavaFileObject> sourceFile = compiler.findAnywhere(superClassName);
             String text;
             if (sourceFile.isPresent()) {
