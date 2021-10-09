@@ -5,6 +5,7 @@ import android.util.Log;
 import com.google.common.base.Strings;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.CompilerProvider;
+import com.tyron.completion.FindTypeDeclarationAt;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.ParseTask;
 import com.tyron.completion.provider.FindHelper;
@@ -24,29 +25,62 @@ import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.MethodTree;
+import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.model.JavacElements;
+import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.StringJoiner;
 
 public class ImplementAbstractMethods implements Rewrite {
 
-    private final String mClassName;
+    private static final String TAG = ImplementAbstractMethods.class.getSimpleName();
 
-    public ImplementAbstractMethods(String className) {
+    private final String mClassName;
+    private final String mClassFile;
+    private final long mPosition;
+
+    public ImplementAbstractMethods(String className, String classFile, long lineStart) {
+        if (className.startsWith("<anonymous")) {
+            className = className.substring("<anonymous ".length(),
+                    className.length() - 1);
+        }
         mClassName = className;
+        mClassFile = classFile;
+        mPosition = 0;
+    }
+
+    public ImplementAbstractMethods(JCDiagnostic diagnostic) {
+        Object[] args = diagnostic.getArgs();
+        String className = args[0].toString();
+
+        if (!className.contains("<anonymous")) {
+            mClassName = className;
+            mClassFile = className;
+            mPosition = 0;
+        } else {
+            className = className.substring("<anonymous ".length(),
+                    className.length() - 1);
+            className = className.substring(0, className.lastIndexOf('$'));
+            mClassFile = className;
+            mClassName = args[2].toString();
+            mPosition = diagnostic.getStartPosition();
+        }
     }
 
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
         if (!compiler.isReady()) {
+            Log.w(TAG, "Compiler is in use, returning empty map");
             return Collections.emptyMap();
         }
 
-        Path file = compiler.findTypeDeclaration(mClassName);
+        Path file = compiler.findTypeDeclaration(mClassFile);
         if (file == JavaCompilerService.NOT_FOUND) {
             return Collections.emptyMap();
         }
@@ -59,7 +93,11 @@ public class ImplementAbstractMethods implements Rewrite {
             TypeElement thisClass = elements.getTypeElement(mClassName);
             DeclaredType thisType = (DeclaredType) thisClass.asType();
             ClassTree thisTree = trees.getTree(thisClass);
-            int indent = EditHelper.indent(task.task, task.root(), thisTree) + 4;
+            if (mPosition != 0) {
+                thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), mPosition);
+            }
+            int indent = EditHelper.indent(task.task, task.root(), thisTree);
+
             for (Element member : elements.getAllMembers(thisClass)) {
                 if (member.getKind() == ElementKind.METHOD && member.getModifiers().contains(Modifier.ABSTRACT)) {
                     ExecutableElement method = (ExecutableElement) member;
@@ -70,12 +108,13 @@ public class ImplementAbstractMethods implements Rewrite {
                     }
                     ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType, method);
                     String text = EditHelper.printMethod(method, parameterizedType, source);
-                    text = text.replaceAll("\n", "\n" + Strings.repeat(" ", indent));
+                    text = text.replace("\n", "\n" + Strings.repeat(" ", indent));
                     insertText.add(text);
                 }
             }
 
             Position insert = EditHelper.insertAtEndOfClass(task.task, task.root(), thisTree);
+
             TextEdit[] edits = {new TextEdit(new Range(insert, insert), insertText + "\n")};
             return Collections.singletonMap(file, edits);
         }
@@ -90,5 +129,12 @@ public class ImplementAbstractMethods implements Rewrite {
         if (!sourceFile.isPresent()) return null;
         ParseTask parse = compiler.parse(sourceFile.get());
         return FindHelper.findMethod(parse, superClassName, methodName, erasedParameterTypes);
+    }
+
+    {
+
+    }
+    private abstract class Test{
+         void main() {}
     }
 }

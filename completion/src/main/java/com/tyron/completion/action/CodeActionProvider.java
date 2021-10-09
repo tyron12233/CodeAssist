@@ -38,6 +38,7 @@ import org.openjdk.tools.javac.api.ClientCodeWrapper;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -201,9 +202,7 @@ public class CodeActionProvider {
             Log.d(null, "code: " + diagnostic.getCode());
             switch (d.getCode()) {
                 case "compiler.err.does.not.override.abstract":
-                    String missingAbstracts = diagnostic.getArgs()[0].toString();
-                    Log.d(null, "simple abstract name: " + missingAbstracts);
-                    Rewrite implementAbstracts = new ImplementAbstractMethods(missingAbstracts);
+                    Rewrite implementAbstracts = new ImplementAbstractMethods(diagnostic);
                     return Collections.singletonMap("Implement abstract methods", implementAbstracts);
                 case "compiler.err.cant.resolve":
                 case "compiler.err.cant.resolve.location":
