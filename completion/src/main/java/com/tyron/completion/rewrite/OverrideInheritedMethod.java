@@ -61,21 +61,25 @@ public class OverrideInheritedMethod implements Rewrite {
             TreePath thisPath = trees.getPath(task.root(), thisTree);
             TypeElement thisClass = (TypeElement) trees.getElement(thisPath);
             ExecutableType parameterizedType = (ExecutableType) types.asMemberOf((DeclaredType) thisClass.asType(), superMethod);
-            int indent = EditHelper.indent(task.task, task.root(), thisTree) + 4;
+            int indent = EditHelper.indent(task.task, task.root(), thisTree);
             Optional<JavaFileObject> sourceFile = compiler.findAnywhere(superClassName);
+            String text;
             if (sourceFile.isPresent()) {
                 ParseTask parse = compiler.parse(sourceFile.get());
                 MethodTree source = FindHelper.findMethod(parse, superClassName, methodName, erasedParameterTypes);
-                String text = EditHelper.printMethod(superMethod, parameterizedType, source);
-                text = text.replaceAll("\n", "\n" + Strings.repeat(" ", indent));
-                text = text + "\n\n";
-                return text;
+                text = EditHelper.printMethod(superMethod, parameterizedType, source);
             } else {
-                String text = EditHelper.printMethod(superMethod, parameterizedType, null);
-                text = text.replaceAll("\n", "\n" + Strings.repeat(" ", indent));
-                text = text + "\n\n";
-                return text;
+                text = EditHelper.printMethod(superMethod, parameterizedType, null);
             }
+
+            int tabCount = indent / 4;
+            if (tabCount == 0) {
+                tabCount = 1;
+            }
+
+            text = text.replace("\n", "\n" + Strings.repeat("\t", tabCount));
+            text = text + "\n\n";
+            return text;
         }
     }
 
