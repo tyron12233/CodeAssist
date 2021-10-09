@@ -264,16 +264,17 @@ public class CodeEditorFragment extends Fragment {
 
     public void save() {
         if (mCurrentFile.exists()) {
+            String oldContents = "";
             try {
-                String oldContents = FileUtils.readFileToString(mCurrentFile, Charset.defaultCharset());
-                if (oldContents.equals(mEditor.getText().toString())) {
-                    return;
-                }
-
-                FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
+                oldContents = FileUtils.readFileToString(mCurrentFile, Charset.defaultCharset());
             } catch (IOException e) {
                 e.printStackTrace();
             }
+            if (oldContents.equals(mEditor.getText().toString())) {
+                return;
+            }
+
+            FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
         }
     }
 
