@@ -60,7 +60,6 @@ public class EditHelper {
      */
     public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, MethodTree source) {
         StringBuilder buf = new StringBuilder();
-        // TODO leading \n is extra, but needed for indent replaceAll trick
         buf.append("@Override\n");
         if (method.getModifiers().contains(Modifier.PUBLIC)) {
             buf.append("public ");
