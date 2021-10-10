@@ -30,6 +30,8 @@ import com.flipkart.android.proteus.exceptions.ProteusInflateException;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
+import com.tyron.layoutpreview.view.UnknownView;
+import com.tyron.layoutpreview.view.UnknownViewGroup;
 
 /**
  * IncludeParser
@@ -70,13 +72,15 @@ public class IncludeParser<V extends View> extends ViewTypeParser<V> {
         String layoutName = type.getAsString();
         if (layoutName.startsWith("@layout/")) {
             layoutName = layoutName.substring("@layout/".length());
+            if (layoutName.equals(data.getAsString("layout_name"))) {
+                return new UnknownView(context, layoutName);
+            }
+
             Layout layout = context.getLayout(layoutName);
             if (null == layout) {
                 throw new ProteusInflateException("Layout '" + layoutName + "' not found");
             }
-            if (include == layout) {
-                throw new ProteusInflateException("Illegal self reference, cannot include own layout.");
-            }
+
             return context.getInflater().inflate(layout.merge(include), data, parent, dataIndex);
         } else {
             throw new ProteusInflateException("Unknown value: " + layoutName);

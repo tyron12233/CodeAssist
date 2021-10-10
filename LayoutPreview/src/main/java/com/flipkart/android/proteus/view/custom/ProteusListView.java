@@ -108,6 +108,11 @@ public class ProteusListView extends ListView implements ProteusView {
         @Override
         public View getView(int i, View view, ViewGroup viewGroup) {
             ProteusContext context = manager.getContext();
+
+            if (mLayoutPreviewName.equals(manager.getDataContext().getData().getAsString("layout_name"))) {
+                return new UnknownView(context, mLayoutPreviewName);
+            }
+
             Layout layout = context.getLayout(mLayoutPreviewName);
             if (layout == null) {
                 return new UnknownView(context, mLayoutPreviewName);

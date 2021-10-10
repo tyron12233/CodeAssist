@@ -16,6 +16,7 @@ import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
+import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Value;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -142,6 +143,12 @@ public class PreviewLayoutInflater {
 
     public StringManager getStringManager() {
         return mStringManager;
+    }
+
+    public ProteusView inflateLayout(String name) {
+        ObjectValue value = new ObjectValue();
+        value.add("layout_name", new Primitive(name));
+        return mContext.getInflater().inflate(name, value);
     }
 
     public ProteusView inflate(String xml) throws InflateException {
