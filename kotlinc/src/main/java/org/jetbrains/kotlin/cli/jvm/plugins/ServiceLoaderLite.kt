@@ -37,7 +37,7 @@ object ServiceLoaderLite {
         val classpath = classLoader.urLs.map {
             it.path
         }.joinToString(separator = File.pathSeparator)
-        val loader = DexClassLoader(classpath, null, null, this::class.java.classLoader)
+        val loader = DexClassLoader(classpath, "", "", this::class.java.classLoader)
 
         return loadImplementations(service, files, loader)
     }
@@ -46,7 +46,6 @@ object ServiceLoaderLite {
         val implementations = mutableListOf<Service>()
 
         for (className in findImplementations(service, files)) {
-            Log.d("TEST", "Loading class: {$className} size: {$classLoader.urLs}")
             val instance = Class.forName(className, false, classLoader).newInstance()
             implementations += service.cast(instance)
         }
