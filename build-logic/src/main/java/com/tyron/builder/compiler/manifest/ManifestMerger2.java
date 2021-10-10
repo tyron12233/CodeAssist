@@ -50,6 +50,12 @@ public class ManifestMerger2 {
     private final MergeType mMergeType;
     private final Optional<File> mReportFile;
 
+    private boolean mVerbose = false;
+
+    private void setVerbose(boolean verbose) {
+        mVerbose = verbose;
+    }
+
     private ManifestMerger2(
             @NonNull ILogger logger,
             @NonNull File mainManifestFile,
@@ -128,7 +134,9 @@ public class ManifestMerger2 {
         // merge in lower priority documents.
         Optional<XmlDocument> xmlDocumentOptional = Optional.absent();
         for (File inputFile : mFlavorsAndBuildTypeFiles) {
-            mLogger.debug(String.format("Merging flavors and build manifest %s \n", inputFile.getPath()));
+            if (mVerbose) {
+                mLogger.debug(String.format("Merging flavors and build manifest %s \n", inputFile.getPath()));
+            }
             LoadedManifestInfo overlayDocument = load(
                     new ManifestInfo(null, inputFile, XmlDocument.Type.OVERLAY,
                             Optional.of(mainPackageAttribute.get().getValue())),
@@ -184,7 +192,9 @@ public class ManifestMerger2 {
             }
         }
 
-        mLogger.debug(String.format("Merging main manifest %s\n", mManifestFile.getPath()));
+        if (mVerbose) {
+            mLogger.debug(String.format("Merging main manifest %s\n", mManifestFile.getPath()));
+        }
         xmlDocumentOptional =
                 merge(xmlDocumentOptional, loadedMainManifestInfo, mergingReportBuilder);
 
@@ -204,7 +214,9 @@ public class ManifestMerger2 {
             }
         }
         for (LoadedManifestInfo libraryDocument : loadedLibraryDocuments) {
-            mLogger.debug("Merging library manifest " + libraryDocument.getLocation());
+            if (mVerbose) {
+                mLogger.debug("Merging library manifest " + libraryDocument.getLocation());
+            }
             xmlDocumentOptional = merge(
                     xmlDocumentOptional, libraryDocument, mergingReportBuilder);
             if (!xmlDocumentOptional.isPresent()) {
@@ -463,7 +475,9 @@ public class ManifestMerger2 {
 
         ImmutableList.Builder<LoadedManifestInfo> loadedLibraryDocuments = ImmutableList.builder();
         for (Pair<String, File> libraryFile : mLibraryFiles) {
-            mLogger.verbose("Loading library manifest " + libraryFile.getSecond().getPath());
+            if (mVerbose) {
+                mLogger.verbose("Loading library manifest " + libraryFile.getSecond().getPath());
+            }
             ManifestInfo manifestInfo = new ManifestInfo(libraryFile.getFirst(),
                     libraryFile.getSecond(),
                     XmlDocument.Type.LIBRARY, Optional.<String>absent());
@@ -785,6 +799,9 @@ public class ManifestMerger2 {
         private final ImmutableList.Builder<Feature> mFeaturesBuilder =
                 new ImmutableList.Builder<Feature>();
         private final MergeType mMergeType;
+
+        private boolean mVerbose;
+
         @Nullable private File mReportFile;
 
         /**
@@ -795,6 +812,11 @@ public class ManifestMerger2 {
          */
         public Invoker setOverride(SystemProperty override, String value) {
             mSystemProperties.put(override, value);
+            return thisAsT();
+        }
+
+        public Invoker setVerbose(boolean val) {
+            mVerbose = val;
             return thisAsT();
         }
 
@@ -982,6 +1004,7 @@ public class ManifestMerger2 {
                             new MapBasedKeyBasedValueResolver<SystemProperty>(systemProperties),
                             mMergeType,
                             Optional.fromNullable(mReportFile));
+            manifestMerger.setVerbose(mVerbose);
             return manifestMerger.merge();
         }
 

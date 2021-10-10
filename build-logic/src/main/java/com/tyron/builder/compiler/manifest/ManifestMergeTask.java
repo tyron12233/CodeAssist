@@ -89,6 +89,7 @@ public class ManifestMergeTask extends Task {
                 mLogger, ManifestMerger2.MergeType.APPLICATION)
                 .addLibraryManifests(mLibraryManifestFiles);
         invoker.setOverride(ManifestMerger2.SystemProperty.PACKAGE, mPackageName);
+        invoker.setVerbose(false);
 
         try {
             MergingReport report = invoker.merge();
