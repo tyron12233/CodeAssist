@@ -49,6 +49,10 @@ public class Cache<K, V> {
         return !needs(file, k);
     }
 
+    public void clear() {
+        map.clear();
+    }
+
     public boolean needs(Path file, K k) {
         // If key is not in map, it needs to be loaded
         Key<K> key = new Key<>(file, k);
