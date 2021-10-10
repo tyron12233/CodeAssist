@@ -89,6 +89,13 @@ public class TextViewParser<T extends TextView> extends ViewTypeParser<T> {
       }
     });
 
+    addAttributeProcessor("tools:text", new StringAttributeProcessor<T>() {
+      @Override
+      public void setString(T view, String value) {
+        view.setText(value);
+      }
+    });
+
     addAttributeProcessor(Attributes.TextView.DrawablePadding, new DimensionAttributeProcessor<T>() {
       @Override
       public void setDimension(T view, float dimension) {
