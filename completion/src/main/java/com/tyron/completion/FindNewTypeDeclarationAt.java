@@ -11,20 +11,19 @@ import org.openjdk.source.util.Trees;
 public class FindNewTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
 
     private final SourcePositions pos;
-    private CompilationUnitTree root;
+    private final CompilationUnitTree root;
 
-    public FindNewTypeDeclarationAt(JavacTask task) {
-        pos = Trees.instance(task).getSourcePositions();
-    }
-
-    @Override
-    public ClassTree visitCompilationUnit(CompilationUnitTree t, Long find) {
-        root = t;
-        return super.visitCompilationUnit(t, find);
+    public FindNewTypeDeclarationAt(JavacTask task, CompilationUnitTree root) {
+        this.pos = Trees.instance(task).getSourcePositions();
+        this.root = root;
     }
 
     @Override
     public ClassTree visitNewClass(NewClassTree t, Long find) {
+
+        if (pos == null) {
+            return null;
+        }
 
         ClassTree smaller = super.visitNewClass(t, find);
         if (smaller != null) {

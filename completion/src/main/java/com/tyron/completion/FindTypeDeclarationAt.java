@@ -33,7 +33,7 @@ public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
             return smaller;
         }
         if (pos.getStartPosition(root, t) <= find && find < pos.getEndPosition(root, t)) {
-            ClassTree evenSmaller = new FindNewTypeDeclarationAt(task).scan(t, find);
+            ClassTree evenSmaller = new FindNewTypeDeclarationAt(task, root).scan(t, find);
             if (evenSmaller != null) {
                 return evenSmaller;
             } else {
