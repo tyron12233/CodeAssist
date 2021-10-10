@@ -74,6 +74,9 @@ public class IncludeParser<V extends View> extends ViewTypeParser<V> {
             if (null == layout) {
                 throw new ProteusInflateException("Layout '" + layoutName + "' not found");
             }
+            if (include == layout) {
+                throw new ProteusInflateException("Illegal self reference, cannot include own layout.");
+            }
             return context.getInflater().inflate(layout.merge(include), data, parent, dataIndex);
         } else {
             throw new ProteusInflateException("Unknown value: " + layoutName);
