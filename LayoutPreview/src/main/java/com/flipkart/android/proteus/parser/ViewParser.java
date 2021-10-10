@@ -26,6 +26,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.Animation;
 import android.widget.FrameLayout;
@@ -91,6 +92,22 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
   @Override
   protected void addAttributeProcessors() {
 
+    addAttributeProcessor("outlineProvider", new StringAttributeProcessor<V>() {
+      @Override
+      public void setString(V view, String value) {
+        switch (value) {
+          case "bounds":
+            view.setOutlineProvider(ViewOutlineProvider.BOUNDS);
+            break;
+          case "paddedBounds":
+            view.setOutlineProvider(ViewOutlineProvider.PADDED_BOUNDS);
+            break;
+          case "background":
+            view.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+            break;
+        }
+      }
+    });
     addAttributeProcessor(Attributes.View.Activated, new BooleanAttributeProcessor<V>() {
       @Override
       public void setBoolean(V view, boolean value) {
