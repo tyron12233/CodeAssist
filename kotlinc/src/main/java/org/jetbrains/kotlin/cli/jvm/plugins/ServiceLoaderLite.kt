@@ -34,9 +34,9 @@ object ServiceLoaderLite {
             }
         }
 
-        val classpath = classLoader.urLs.map {
+        val classpath = classLoader.urLs.joinToString(separator = File.pathSeparator) {
             it.path
-        }.joinToString(separator = File.pathSeparator)
+        }
         val loader = DexClassLoader(classpath, "", "", this::class.java.classLoader)
 
         return loadImplementations(service, files, loader)
