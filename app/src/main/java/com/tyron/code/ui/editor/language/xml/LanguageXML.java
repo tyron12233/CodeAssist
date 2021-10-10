@@ -55,6 +55,7 @@ public class LanguageXML implements EditorLanguage {
 		}
 
 		PreviewLayoutInflater inflater = new PreviewLayoutInflater(context, FileManager.getInstance().getCurrentProject());
+		inflater.parseResources();
 		ProteusView inflatedView = inflater.inflateLayout(currentFile.getName().substring(0,  currentFile.getName().lastIndexOf(".")));
 
 		return inflatedView.getAsView();

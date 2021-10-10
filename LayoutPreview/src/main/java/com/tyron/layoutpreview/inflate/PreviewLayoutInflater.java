@@ -48,6 +48,7 @@ public class PreviewLayoutInflater {
 
     private final Context mBaseContext;
     private final Proteus mProteus;
+    private final Project mProject;
     private ProteusContext mContext;
 
     private final ProteusLayoutInflater.Callback mCallback = new ProteusLayoutInflater.Callback() {
@@ -124,6 +125,7 @@ public class PreviewLayoutInflater {
         ProteusBuilder builder = new ProteusBuilder();
         registerCustomViews(builder, project);
         mProteus = builder.build();
+        mProject = project;
 
         mContext = mProteus.createContextBuilder(base)
                 .setCallback(mCallback)
@@ -132,13 +134,15 @@ public class PreviewLayoutInflater {
                 .setImageLoader(mImageLoader)
                 .setLayoutManager(mLayoutManager)
                 .build();
+        ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
+    }
 
-        ResourceManager resourceManager = new ResourceManager(mContext, project.getResourceDirectory());
+    public void parseResources() {
+        ResourceManager resourceManager = new ResourceManager(mContext, mProject.getResourceDirectory());
         mStringManager.setStrings(resourceManager.getStrings());
         mDrawableManager.setDrawables(resourceManager.getDrawables());
         mLayoutManager.setLayouts(resourceManager.getLayouts());
 
-        ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
     }
 
     public StringManager getStringManager() {
@@ -151,6 +155,7 @@ public class PreviewLayoutInflater {
         return mContext.getInflater().inflate(name, value);
     }
 
+    @Deprecated
     public ProteusView inflate(String xml) throws InflateException {
         try {
             JsonObject object = new XmlToJsonConverter()
@@ -166,6 +171,7 @@ public class PreviewLayoutInflater {
      * @param object The json object to inflate
      * @return The inflated view
      */
+    @Deprecated
     public ProteusView inflate(JsonObject object) {
         try {
             Value value = new ProteusTypeAdapterFactory(mContext)
