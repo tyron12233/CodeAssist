@@ -44,14 +44,22 @@ public class CleanTask extends Task {
     }
 
     private void cleanRelease() throws IOException {
+        mLogger.info("Release build, clearing intermediate cache");
+
         File binDirectory = new File(mProject.getBuildDirectory(), "bin");
-        FileUtils.delete(binDirectory);
+        if (binDirectory.exists()) {
+            FileUtils.deleteDirectory(binDirectory);
+        }
 
         File genDirectory = new File(mProject.getBuildDirectory(), "gen");
-        FileUtils.delete(genDirectory);
+        if (genDirectory.exists()) {
+            FileUtils.deleteDirectory(genDirectory);
+        }
 
         File intermediateDirectory = new File(mProject.getBuildDirectory(), "intermediate");
-        FileUtils.delete(intermediateDirectory);
+        if (intermediateDirectory.exists()) {
+            FileUtils.deleteDirectory(intermediateDirectory);
+        }
 
         FileManager.getInstance().getClassCache()
                 .clear();
@@ -99,8 +107,22 @@ public class CleanTask extends Task {
                     .substring(1)
                     .replace(".dex", "");
             String packageName = path;
-            if (path.contains("$")) {
-                path = path.substring(0, path.lastIndexOf("$"));
+
+            if (file.getName().startsWith("-$$")) {
+                String name = file.getName().replace(".dex", "");
+                int start = name.indexOf('$', 3) + 1;
+                int end = name.indexOf('$', start);
+                if (start == -1 || end == -1) {
+                    mLogger.warning("Unrecognized dex file: " + file.getName());
+                } else {
+
+                    String className = name.substring(start, end);
+                    path = path.substring(0, path.lastIndexOf('.')) + "." + className;
+                }
+            } else {
+                if (path.contains("$")) {
+                    path = path.substring(0, path.lastIndexOf("$"));
+                }
             }
 
             if (FileManager.getInstance().list(path).isEmpty() && !FileManager.getInstance().containsClass(packageName)) {
