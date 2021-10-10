@@ -2,8 +2,10 @@ package com.tyron.layoutpreview;
 
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.value.DrawableValue;
+import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Value;
 import com.tyron.layoutpreview.resource.ResourceDrawableParser;
+import com.tyron.layoutpreview.resource.ResourceLayoutParser;
 import com.tyron.layoutpreview.resource.ResourceStringParser;
 
 import java.io.File;
@@ -27,6 +29,11 @@ public class ResourceManager {
     public Map<String, DrawableValue> getDrawables() {
         ResourceDrawableParser parser = new ResourceDrawableParser(mContext, mResourceDir);
         return parser.getDefaultDrawables();
+    }
+
+    public Map<String, Layout> getLayouts() {
+        ResourceLayoutParser parser = new ResourceLayoutParser(mContext, mResourceDir);
+        return parser.getLayouts();
     }
 
 }

@@ -27,6 +27,7 @@ import com.tyron.layoutpreview.StringManager;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
 import com.tyron.layoutpreview.manager.ResourceDrawableManager;
+import com.tyron.layoutpreview.manager.ResourceLayoutManager;
 import com.tyron.layoutpreview.manager.ResourceStringManager;
 import com.tyron.layoutpreview.model.CustomView;
 import com.tyron.layoutpreview.parser.CustomViewGroupParser;
@@ -104,6 +105,8 @@ public class PreviewLayoutInflater {
 
     private final ResourceStringManager mStringManager = new ResourceStringManager();
     private final ResourceDrawableManager mDrawableManager = new ResourceDrawableManager();
+    private final ResourceLayoutManager mLayoutManager = new ResourceLayoutManager();
+
     private ProteusLayoutInflater.ImageLoader mImageLoader = (view, name, callback) -> {
         if (name.startsWith("@drawable")) {
             DrawableValue value = mDrawableManager.get(name.substring("@drawable".length() + 1));
@@ -126,11 +129,14 @@ public class PreviewLayoutInflater {
                 .setStringManager(mStringManager)
                 .setDrawableManager(mDrawableManager)
                 .setImageLoader(mImageLoader)
+                .setLayoutManager(mLayoutManager)
                 .build();
 
         ResourceManager resourceManager = new ResourceManager(mContext, project.getResourceDirectory());
         mStringManager.setStrings(resourceManager.getStrings());
         mDrawableManager.setDrawables(resourceManager.getDrawables());
+        mLayoutManager.setLayouts(resourceManager.getLayouts());
+
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
     }
 
