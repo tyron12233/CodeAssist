@@ -9,11 +9,12 @@ import androidx.annotation.Nullable;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
+import com.flipkart.android.proteus.processor.StringAttributeProcessor;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.view.custom.ProteusListView;
 
-public class ListViewParser<T extends ListView> extends ViewTypeParser<T> {
+public class ListViewParser<T extends ProteusListView> extends ViewTypeParser<T> {
 
     @NonNull
     @Override
@@ -35,6 +36,12 @@ public class ListViewParser<T extends ListView> extends ViewTypeParser<T> {
 
     @Override
     protected void addAttributeProcessors() {
-
+        addAttributeProcessor("tools:listitem", new StringAttributeProcessor<T>() {
+            @Override
+            public void setString(T view, String value) {
+                String layoutName = value.replace("@layout/", "");
+                view.setListItem(layoutName);
+            }
+        });
     }
 }

@@ -86,7 +86,7 @@ public class ProteusListView extends ListView implements ProteusView {
             if (mLayoutPreviewName == null) {
                 return 0;
             }
-            return 20;
+            return 12;
         }
 
         @Override
@@ -96,7 +96,7 @@ public class ProteusListView extends ListView implements ProteusView {
 
         @Override
         public long getItemId(int i) {
-            return 0;
+            return 1;
         }
 
         @Override
@@ -124,7 +124,7 @@ public class ProteusListView extends ListView implements ProteusView {
 
         @Override
         public int getViewTypeCount() {
-            return 0;
+            return 1;
         }
 
         @Override
