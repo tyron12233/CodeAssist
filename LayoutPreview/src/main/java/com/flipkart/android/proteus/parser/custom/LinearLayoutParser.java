@@ -19,6 +19,7 @@ package com.flipkart.android.proteus.parser.custom;
 import android.annotation.SuppressLint;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 
@@ -41,7 +42,7 @@ import androidx.annotation.Nullable;
 /**
  * Created by kiran.kumar on 12/05/14.
  */
-public class LinearLayoutParser<T extends LinearLayout> extends ViewTypeParser<T> {
+public class LinearLayoutParser<T extends View> extends ViewTypeParser<T> {
 
   @NonNull
   @Override
@@ -68,10 +69,12 @@ public class LinearLayoutParser<T extends LinearLayout> extends ViewTypeParser<T
     addAttributeProcessor(Attributes.LinearLayout.Orientation, new StringAttributeProcessor<T>() {
       @Override
       public void setString(T view, String value) {
-        if ("horizontal".equals(value)) {
-          view.setOrientation(ProteusLinearLayout.HORIZONTAL);
-        } else {
-          view.setOrientation(ProteusLinearLayout.VERTICAL);
+        if (view instanceof LinearLayout) {
+          if ("horizontal".equals(value)) {
+            ((LinearLayout) view).setOrientation(ProteusLinearLayout.HORIZONTAL);
+          } else {
+            ((LinearLayout) view).setOrientation(ProteusLinearLayout.VERTICAL);
+          }
         }
       }
     });
@@ -79,7 +82,9 @@ public class LinearLayoutParser<T extends LinearLayout> extends ViewTypeParser<T
     addAttributeProcessor(Attributes.View.Gravity, new GravityAttributeProcessor<T>() {
       @Override
       public void setGravity(T view, @Gravity int gravity) {
-        view.setGravity(gravity);
+        if (view instanceof LinearLayout) {
+          ((LinearLayout) view).setGravity(gravity);
+        }
       }
     });
 
@@ -87,9 +92,8 @@ public class LinearLayoutParser<T extends LinearLayout> extends ViewTypeParser<T
       @SuppressLint("NewApi")
       @Override
       public void setDrawable(T view, Drawable drawable) {
-
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.GINGERBREAD_MR1) {
-          view.setDividerDrawable(drawable);
+        if (view instanceof LinearLayout) {
+          ((LinearLayout) view).setDividerDrawable(drawable);
         }
       }
     });
@@ -98,8 +102,8 @@ public class LinearLayoutParser<T extends LinearLayout> extends ViewTypeParser<T
       @SuppressLint("NewApi")
       @Override
       public void setDimension(T view, float dimension) {
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.GINGERBREAD_MR1) {
-          view.setDividerPadding((int) dimension);
+        if (view instanceof LinearLayout) {
+          ((LinearLayout) view).setDividerPadding((int) dimension);
         }
       }
     });
@@ -109,10 +113,10 @@ public class LinearLayoutParser<T extends LinearLayout> extends ViewTypeParser<T
       @Override
       public void setString(T view, String value) {
 
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.GINGERBREAD_MR1) {
-          int dividerMode = ParseHelper.parseDividerMode(value);
-          // noinspection ResourceType
-          view.setShowDividers(dividerMode);
+        int dividerMode = ParseHelper.parseDividerMode(value);
+        // noinspection ResourceType
+        if (view instanceof LinearLayout) {
+          ((LinearLayout) view).setShowDividers(dividerMode);
         }
       }
     });
@@ -121,7 +125,9 @@ public class LinearLayoutParser<T extends LinearLayout> extends ViewTypeParser<T
       @SuppressLint("NewApi")
       @Override
       public void setString(T view, String value) {
-        view.setWeightSum(ParseHelper.parseFloat(value));
+        if (view instanceof LinearLayout) {
+          ((LinearLayout) view).setWeightSum(ParseHelper.parseFloat(value));
+        }
       }
     });
   }

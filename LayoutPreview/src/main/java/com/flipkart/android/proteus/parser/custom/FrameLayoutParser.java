@@ -16,6 +16,7 @@
 
 package com.flipkart.android.proteus.parser.custom;
 
+import android.view.View;
 import android.view.ViewGroup;
 
 import com.flipkart.android.proteus.ProteusContext;
@@ -36,7 +37,7 @@ import androidx.annotation.Nullable;
 /**
  * Created by kiran.kumar on 12/05/14.
  */
-public class FrameLayoutParser<T extends AspectRatioFrameLayout> extends ViewTypeParser<T> {
+public class FrameLayoutParser<T extends View> extends ViewTypeParser<T> {
 
   @NonNull
   @Override
@@ -63,15 +64,18 @@ public class FrameLayoutParser<T extends AspectRatioFrameLayout> extends ViewTyp
     addAttributeProcessor(Attributes.FrameLayout.HeightRatio, new StringAttributeProcessor<T>() {
       @Override
       public void setString(T view, String value) {
-        view.setAspectRatioHeight(ParseHelper.parseInt(value));
+        if (view instanceof AspectRatioFrameLayout) {
+          ((AspectRatioFrameLayout) view).setAspectRatioHeight(ParseHelper.parseInt(value));
+        }
 
       }
     });
     addAttributeProcessor(Attributes.FrameLayout.WidthRatio, new StringAttributeProcessor<T>() {
       @Override
       public void setString(T view, String value) {
-        view.setAspectRatioWidth(ParseHelper.parseInt(value));
-
+        if (view instanceof AspectRatioFrameLayout) {
+          ((AspectRatioFrameLayout) view).setAspectRatioWidth(ParseHelper.parseInt(value));
+        }
       }
     });
   }

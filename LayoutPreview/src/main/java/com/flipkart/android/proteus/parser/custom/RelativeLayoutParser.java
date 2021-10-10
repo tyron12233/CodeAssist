@@ -17,6 +17,7 @@
 package com.flipkart.android.proteus.parser.custom;
 
 
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.RelativeLayout;
 
@@ -35,7 +36,7 @@ import androidx.annotation.Nullable;
 /**
  * Created by kirankumar on 10/07/14.
  */
-public class RelativeLayoutParser<T extends RelativeLayout> extends ViewTypeParser<T> {
+public class RelativeLayoutParser<T extends View> extends ViewTypeParser<T> {
 
   @NonNull
   @Override
@@ -62,7 +63,9 @@ public class RelativeLayoutParser<T extends RelativeLayout> extends ViewTypePars
     addAttributeProcessor(Attributes.View.Gravity, new GravityAttributeProcessor<T>() {
       @Override
       public void setGravity(T view, @Gravity int gravity) {
-        view.setGravity(gravity);
+        if (view instanceof RelativeLayout) {
+          ((RelativeLayout) view).setGravity(gravity);
+        }
       }
     });
   }

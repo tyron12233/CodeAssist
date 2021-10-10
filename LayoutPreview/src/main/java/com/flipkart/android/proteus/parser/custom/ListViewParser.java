@@ -1,5 +1,6 @@
 package com.flipkart.android.proteus.parser.custom;
 
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ListView;
 
@@ -14,7 +15,7 @@ import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.view.custom.ProteusListView;
 
-public class ListViewParser<T extends ProteusListView> extends ViewTypeParser<T> {
+public class ListViewParser<T extends View> extends ViewTypeParser<T> {
 
     @NonNull
     @Override
@@ -40,7 +41,9 @@ public class ListViewParser<T extends ProteusListView> extends ViewTypeParser<T>
             @Override
             public void setString(T view, String value) {
                 String layoutName = value.replace("@layout/", "");
-                view.setListItem(layoutName);
+                if (view instanceof ProteusListView) {
+                    ((ProteusListView) view).setListItem(layoutName);
+                }
             }
         });
     }

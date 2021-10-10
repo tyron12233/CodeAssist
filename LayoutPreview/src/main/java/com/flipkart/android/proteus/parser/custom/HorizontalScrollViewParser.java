@@ -16,6 +16,7 @@
 
 package com.flipkart.android.proteus.parser.custom;
 
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.HorizontalScrollView;
 
@@ -36,7 +37,7 @@ import androidx.annotation.Nullable;
  * @author kiran.kumar
  * @author adityasharat
  */
-public class HorizontalScrollViewParser<T extends HorizontalScrollView> extends ViewTypeParser<T> {
+public class HorizontalScrollViewParser<T extends View> extends ViewTypeParser<T> {
 
 
   @NonNull
@@ -64,7 +65,9 @@ public class HorizontalScrollViewParser<T extends HorizontalScrollView> extends 
     addAttributeProcessor(Attributes.HorizontalScrollView.FillViewPort, new BooleanAttributeProcessor<T>() {
       @Override
       public void setBoolean(T view, boolean value) {
-        view.setFillViewport(value);
+        if (view instanceof HorizontalScrollView) {
+          ((HorizontalScrollView) view).setFillViewport(value);
+        }
       }
     });
     addAttributeProcessor(Attributes.ScrollView.Scrollbars, new StringAttributeProcessor<T>() {

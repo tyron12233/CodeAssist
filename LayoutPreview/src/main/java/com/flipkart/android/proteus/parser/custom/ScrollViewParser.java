@@ -17,6 +17,7 @@
 package com.flipkart.android.proteus.parser.custom;
 
 
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ScrollView;
 
@@ -35,7 +36,7 @@ import androidx.annotation.Nullable;
 /**
  * Created by kiran.kumar on 12/05/14.
  */
-public class ScrollViewParser<T extends ScrollView> extends ViewTypeParser<T> {
+public class ScrollViewParser<T extends View> extends ViewTypeParser<T> {
 
   @NonNull
   @Override
