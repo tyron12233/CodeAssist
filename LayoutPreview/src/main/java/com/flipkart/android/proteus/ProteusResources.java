@@ -16,15 +16,16 @@
 
 package com.flipkart.android.proteus;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Value;
 import com.tyron.layoutpreview.StringManager;
 
 import java.util.Locale;
 import java.util.Map;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 /**
  * ProteusResources
@@ -34,56 +35,63 @@ import androidx.annotation.Nullable;
 
 public class ProteusResources {
 
-  @NonNull
-  private final Map<String, ViewTypeParser> parsers;
+    @NonNull
+    private final Map<String, ViewTypeParser> parsers;
 
-  @Nullable
-  private final LayoutManager layoutManager;
+    @Nullable
+    private final LayoutManager layoutManager;
 
-  @NonNull
-  private final FunctionManager functionManager;
+    @NonNull
+    private final FunctionManager functionManager;
 
-  @Nullable
-  private final StyleManager styleManager;
+    @Nullable
+    private final StyleManager styleManager;
 
-  private final StringManager stringManager;
+    private final StringManager stringManager;
 
-  ProteusResources(@NonNull Map<String, ViewTypeParser> parsers, @Nullable LayoutManager layoutManager,
-                   @NonNull FunctionManager functionManager, @Nullable StyleManager styleManager,
-                   StringManager stringManager) {
-    this.parsers = parsers;
-    this.layoutManager = layoutManager;
-    this.functionManager = functionManager;
-    this.styleManager = styleManager;
-    this.stringManager = stringManager;
-  }
+    private final DrawableManager drawableManager;
 
-  @NonNull
-  public FunctionManager getFunctionManager() {
-    return this.functionManager;
-  }
+    ProteusResources(@NonNull Map<String, ViewTypeParser> parsers, @Nullable LayoutManager layoutManager,
+                     @NonNull FunctionManager functionManager, @Nullable StyleManager styleManager,
+                     StringManager stringManager, DrawableManager drawableManager) {
+        this.parsers = parsers;
+        this.layoutManager = layoutManager;
+        this.functionManager = functionManager;
+        this.styleManager = styleManager;
+        this.stringManager = stringManager;
+        this.drawableManager = drawableManager;
+    }
 
-  @NonNull
-  public Function getFunction(@NonNull String name) {
-    return functionManager.get(name);
-  }
+    @NonNull
+    public FunctionManager getFunctionManager() {
+        return this.functionManager;
+    }
 
-  @Nullable
-  public Layout getLayout(@NonNull String name) {
-    return null != layoutManager ? layoutManager.get(name) : null;
-  }
+    @NonNull
+    public Function getFunction(@NonNull String name) {
+        return functionManager.get(name);
+    }
 
-  public Value getString(String name) {
-    return null != stringManager ? stringManager.get(name, Locale.getDefault()) : null;
-  }
+    @Nullable
+    public Layout getLayout(@NonNull String name) {
+        return null != layoutManager ? layoutManager.get(name) : null;
+    }
 
-  @NonNull
-  public Map<String, ViewTypeParser> getParsers() {
-    return parsers;
-  }
+    public Value getString(String name) {
+        return null != stringManager ? stringManager.get(name, Locale.getDefault()) : null;
+    }
 
-  @Nullable
-  public Map<String, Value> getStyle(String name) {
-    return null != styleManager ? styleManager.get(name) : null;
-  }
+    public DrawableValue getDrawable(String name) {
+        return null != drawableManager ? drawableManager.get(name) : null;
+    }
+
+    @NonNull
+    public Map<String, ViewTypeParser> getParsers() {
+        return parsers;
+    }
+
+    @Nullable
+    public Map<String, Value> getStyle(String name) {
+        return null != styleManager ? styleManager.get(name) : null;
+    }
 }

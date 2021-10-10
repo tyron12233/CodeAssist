@@ -9,7 +9,11 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,6 +52,14 @@ public class XmlToJsonConverter {
     public JsonObject convert(String contents) throws IOException, XmlPullParserException, ConvertException {
         XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
         parser.setInput(new StringReader(contents));
+        advanceToRootNode(parser);
+
+        return convert(parser);
+    }
+
+    public JsonObject convert(File file ) throws IOException, XmlPullParserException, ConvertException {
+        XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
+        parser.setInput(new InputStreamReader(new FileInputStream(file)));
         advanceToRootNode(parser);
 
         return convert(parser);

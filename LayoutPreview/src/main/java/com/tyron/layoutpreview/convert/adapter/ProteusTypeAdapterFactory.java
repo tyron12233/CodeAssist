@@ -47,10 +47,8 @@ public class ProteusTypeAdapterFactory implements TypeAdapterFactory {
 
     ProteusContext context;
 
-    /**
-     *
-     */
-    public final TypeAdapter<Value> VALUE_TYPE_ADAPTER = new TypeAdapter<Value>() {
+    public class ValueTypeAdapter extends TypeAdapter<Value> {
+
         @Override
         public void write(JsonWriter out, Value value) throws IOException {
             throw new UnsupportedOperationException("Use ProteusTypeAdapterFactory.COMPILED_VALUE_TYPE_ADAPTER instead");
@@ -58,6 +56,10 @@ public class ProteusTypeAdapterFactory implements TypeAdapterFactory {
 
         @Override
         public Value read(JsonReader in) throws IOException {
+            return read(in, false);
+        }
+
+        public Value read(JsonReader in, boolean isObject) throws IOException {
             switch (in.peek()) {
                 case STRING:
                     return compileString(getContext(), in.nextString());
@@ -73,7 +75,7 @@ public class ProteusTypeAdapterFactory implements TypeAdapterFactory {
                     Array array = new Array();
                     in.beginArray();
                     while (in.hasNext()) {
-                        array.add(read(in));
+                        array.add(read(in, isObject));
                     }
                     in.endArray();
                     return array;
@@ -84,19 +86,23 @@ public class ProteusTypeAdapterFactory implements TypeAdapterFactory {
                         String name = in.nextName();
                         if (ProteusConstants.TYPE.equals(name) && JsonToken.STRING.equals(in.peek())) {
                             String type = in.nextString();
-                            if (PROTEUS_INSTANCE_HOLDER.isLayout(type)) {
-                                Layout layout = LAYOUT_TYPE_ADAPTER.read(type, PROTEUS_INSTANCE_HOLDER.getProteus(), in);
-                                in.endObject();
-                                return layout;
-                            } else {
+                            if (isObject) {
                                 object.add(name, compileString(getContext(), type));
+                            } else {
+                                if (PROTEUS_INSTANCE_HOLDER.isLayout(type)) {
+                                    Layout layout = LAYOUT_TYPE_ADAPTER.read(type, PROTEUS_INSTANCE_HOLDER.getProteus(), in);
+                                    in.endObject();
+                                    return layout;
+                                } else {
+                                    object.add(name, compileString(getContext(), type));
+                                }
                             }
                         } else {
                             object.add(name, read(in));
                         }
                     }
                     while (in.hasNext()) {
-                        object.add(in.nextName(), read(in));
+                        object.add(in.nextName(), read(in, isObject));
                     }
                     in.endObject();
                     return object;
@@ -108,7 +114,8 @@ public class ProteusTypeAdapterFactory implements TypeAdapterFactory {
                     throw new IllegalArgumentException();
             }
         }
-    }.nullSafe();
+    }
+    public final ValueTypeAdapter VALUE_TYPE_ADAPTER = new ValueTypeAdapter();
 
     /**
      *
@@ -138,7 +145,7 @@ public class ProteusTypeAdapterFactory implements TypeAdapterFactory {
 
         @Override
         public ObjectValue read(JsonReader in) throws IOException {
-            Value value = VALUE_TYPE_ADAPTER.read(in);
+            Value value = VALUE_TYPE_ADAPTER.read(in, true);
             return value != null && value.isObject() ? value.getAsObject() : null;
         }
     }.nullSafe();
@@ -421,6 +428,9 @@ public class ProteusTypeAdapterFactory implements TypeAdapterFactory {
         }
 
         public boolean isLayout(String type) {
+            if ("vector".equals(type)) {
+                return false;
+            }
             return null != proteus;
         }
     }

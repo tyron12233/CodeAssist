@@ -27,6 +27,7 @@ import com.flipkart.android.proteus.parser.custom.HorizontalScrollViewParser;
 import com.flipkart.android.proteus.parser.custom.ImageButtonParser;
 import com.flipkart.android.proteus.parser.custom.ImageViewParser;
 import com.flipkart.android.proteus.parser.custom.LinearLayoutParser;
+import com.flipkart.android.proteus.parser.custom.ListViewParser;
 import com.flipkart.android.proteus.parser.custom.ProgressBarParser;
 import com.flipkart.android.proteus.parser.custom.RatingBarParser;
 import com.flipkart.android.proteus.parser.custom.RelativeLayoutParser;
@@ -60,24 +61,25 @@ public class ProteusBuilder {
     public void registerWith(ProteusBuilder builder) {
 
       // register the default parsers
-      builder.register(new ViewParser());
-      builder.register(new IncludeParser());
-      builder.register(new ViewGroupParser());
-      builder.register(new RelativeLayoutParser());
-      builder.register(new LinearLayoutParser());
-      builder.register(new FrameLayoutParser());
-      builder.register(new ScrollViewParser());
-      builder.register(new HorizontalScrollViewParser());
-      builder.register(new ImageViewParser());
-      builder.register(new TextViewParser());
-      builder.register(new EditTextParser());
-      builder.register(new ButtonParser());
-      builder.register(new ImageButtonParser());
-      builder.register(new WebViewParser());
-      builder.register(new RatingBarParser());
-      builder.register(new CheckBoxParser());
-      builder.register(new ProgressBarParser());
-      builder.register(new HorizontalProgressBarParser());
+      builder.register(new ViewParser<>());
+      builder.register(new IncludeParser<>());
+      builder.register(new ViewGroupParser<>());
+      builder.register(new RelativeLayoutParser<>());
+      builder.register(new LinearLayoutParser<>());
+      builder.register(new FrameLayoutParser<>());
+      builder.register(new ScrollViewParser<>());
+      builder.register(new HorizontalScrollViewParser<>());
+      builder.register(new ImageViewParser<>());
+      builder.register(new TextViewParser<>());
+      builder.register(new EditTextParser<>());
+      builder.register(new ButtonParser<>());
+      builder.register(new ImageButtonParser<>());
+      builder.register(new WebViewParser<>());
+      builder.register(new RatingBarParser<>());
+      builder.register(new CheckBoxParser<>());
+      builder.register(new ProgressBarParser<>());
+      builder.register(new HorizontalProgressBarParser<>());
+      builder.register(new ListViewParser<>());
 
       // register the default functions
       builder.register(Function.DATE);

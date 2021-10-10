@@ -6,6 +6,7 @@ import android.util.Pair;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
@@ -68,10 +69,10 @@ public class PsiTest implements Closeable {
     Disposable disposable;
 
     ConstraintLayout.LayoutParams layout;
+
     ConstraintLayout constraintLayout;
     {
         UtilKt.setIdeaIoUseFallback();
-
         disposable = Disposer.newDisposable();
 
         HashMap<LanguageFeature, LanguageFeature.State> map = new HashMap<>();

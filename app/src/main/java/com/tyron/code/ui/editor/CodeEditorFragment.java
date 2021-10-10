@@ -333,7 +333,7 @@ public class CodeEditorFragment extends Fragment {
                     requireActivity().runOnUiThread(() -> {
                         new MaterialAlertDialogBuilder(requireContext())
                                 .setTitle("Unable to preview")
-                                .setMessage(e.getMessage())
+                                .setMessage(Log.getStackTraceString(e))
                                 .setPositiveButton(android.R.string.ok, null)
                                 .show();
                     });

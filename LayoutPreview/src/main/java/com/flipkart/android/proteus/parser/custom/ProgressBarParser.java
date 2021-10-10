@@ -112,7 +112,7 @@ public class ProgressBarParser<T extends ProgressBar> extends ViewTypeParser<T> 
 
       @Override
       public void handleResource(T view, Resource resource) {
-        Drawable d = resource.getDrawable(view.getContext());
+        Drawable d = resource.getDrawable((ProteusContext) view.getContext());
         view.setProgressDrawable(d);
       }
 

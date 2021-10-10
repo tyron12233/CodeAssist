@@ -20,14 +20,14 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.view.View;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Value;
 import com.tyron.layoutpreview.StringManager;
 
 import java.util.Map;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 /**
  * ProteusContext
@@ -37,148 +37,155 @@ import androidx.annotation.Nullable;
 
 public class ProteusContext extends ContextWrapper {
 
-  @NonNull
-  private final ProteusResources resources;
+    @NonNull
+    private final ProteusResources resources;
 
-  @Nullable
-  private final ProteusLayoutInflater.Callback callback;
+    @Nullable
+    private final ProteusLayoutInflater.Callback callback;
 
-  @Nullable
-  private final ProteusLayoutInflater.ImageLoader loader;
+    @Nullable
+    private final ProteusLayoutInflater.ImageLoader loader;
 
-  private ProteusLayoutInflater inflater;
+    private ProteusLayoutInflater inflater;
 
-  ProteusContext(Context base, @NonNull ProteusResources resources,
-                 @Nullable ProteusLayoutInflater.ImageLoader loader,
-                 @Nullable ProteusLayoutInflater.Callback callback) {
-    super(base);
-    this.callback = callback;
-    this.loader = loader;
-    this.resources = resources;
-  }
-
-  @Nullable
-  public ProteusLayoutInflater.Callback getCallback() {
-    return callback;
-  }
-
-  @NonNull
-  public FunctionManager getFunctionManager() {
-    return resources.getFunctionManager();
-  }
-
-  @NonNull
-  public Function getFunction(@NonNull String name) {
-    return resources.getFunction(name);
-  }
-
-  @Nullable
-  public Layout getLayout(@NonNull String name) {
-    return resources.getLayout(name);
-  }
-
-  @Nullable
-  public ProteusLayoutInflater.ImageLoader getLoader() {
-    return loader;
-  }
-
-  @NonNull
-  public ProteusLayoutInflater getInflater(@NonNull IdGenerator idGenerator) {
-    if (null == this.inflater) {
-      this.inflater = new SimpleLayoutInflater(this, idGenerator);
+    ProteusContext(Context base, @NonNull ProteusResources resources,
+                   @Nullable ProteusLayoutInflater.ImageLoader loader,
+                   @Nullable ProteusLayoutInflater.Callback callback) {
+        super(base);
+        this.callback = callback;
+        this.loader = loader;
+        this.resources = resources;
     }
-    return this.inflater;
-  }
 
-  @NonNull
-  public ProteusLayoutInflater getInflater() {
-    return getInflater(new SimpleIdGenerator());
-  }
-
-  @Nullable
-  public <T extends View> ViewTypeParser<T> getParser(String type) {
-    if (resources.getParsers().containsKey(type)) {
-      return resources.getParsers().get(type);
+    @Nullable
+    public ProteusLayoutInflater.Callback getCallback() {
+        return callback;
     }
-    return null;
-  }
-
-  @NonNull
-  public ProteusResources getProteusResources() {
-    return resources;
-  }
-
-  @Nullable
-  public Map<String, Value> getStyle(String name) {
-    return resources.getStyle(name);
-  }
-
-  /**
-   * Builder
-   *
-   * @author adityasharat
-   */
-  public static class Builder {
 
     @NonNull
-    private final Context base;
+    public FunctionManager getFunctionManager() {
+        return resources.getFunctionManager();
+    }
 
     @NonNull
-    private final FunctionManager functionManager;
+    public Function getFunction(@NonNull String name) {
+        return resources.getFunction(name);
+    }
+
+    @Nullable
+    public Layout getLayout(@NonNull String name) {
+        return resources.getLayout(name);
+    }
+
+    @Nullable
+    public ProteusLayoutInflater.ImageLoader getLoader() {
+        return loader;
+    }
 
     @NonNull
-    private final Map<String, ViewTypeParser> parsers;
+    public ProteusLayoutInflater getInflater(@NonNull IdGenerator idGenerator) {
+        if (null == this.inflater) {
+            this.inflater = new SimpleLayoutInflater(this, idGenerator);
+        }
+        return this.inflater;
+    }
+
+    @NonNull
+    public ProteusLayoutInflater getInflater() {
+        return getInflater(new SimpleIdGenerator());
+    }
 
     @Nullable
-    private ProteusLayoutInflater.ImageLoader loader;
+    public <T extends View> ViewTypeParser<T> getParser(String type) {
+        if (resources.getParsers().containsKey(type)) {
+            return resources.getParsers().get(type);
+        }
+        return null;
+    }
+
+    @NonNull
+    public ProteusResources getProteusResources() {
+        return resources;
+    }
 
     @Nullable
-    private ProteusLayoutInflater.Callback callback;
-
-    @Nullable
-    private LayoutManager layoutManager;
-
-    @Nullable
-    private StyleManager styleManager;
-
-    private StringManager stringManager;
-
-    Builder(@NonNull Context context, @NonNull Map<String, ViewTypeParser> parsers, @NonNull FunctionManager functionManager) {
-      this.base = context;
-      this.parsers = parsers;
-      this.functionManager = functionManager;
+    public Map<String, Value> getStyle(String name) {
+        return resources.getStyle(name);
     }
 
-    public Builder setImageLoader(@Nullable ProteusLayoutInflater.ImageLoader loader) {
-      this.loader = loader;
-      return this;
-    }
+    /**
+     * Builder
+     *
+     * @author adityasharat
+     */
+    public static class Builder {
 
-    public Builder setCallback(@Nullable ProteusLayoutInflater.Callback callback) {
-      this.callback = callback;
-      return this;
-    }
+        @NonNull
+        private final Context base;
 
-    public Builder setLayoutManager(@Nullable LayoutManager layoutManager) {
-      this.layoutManager = layoutManager;
-      return this;
-    }
+        @NonNull
+        private final FunctionManager functionManager;
 
-    public Builder setStyleManager(@Nullable StyleManager styleManager) {
-      this.styleManager = styleManager;
-      return this;
-    }
+        @NonNull
+        private final Map<String, ViewTypeParser> parsers;
 
-    public Builder setStringManager(StringManager stringManager) {
-      this.stringManager = stringManager;
-      return this;
-    }
+        @Nullable
+        private ProteusLayoutInflater.ImageLoader loader;
 
-    public ProteusContext build() {
-      ProteusResources resources = new ProteusResources(parsers, layoutManager,
-              functionManager, styleManager, stringManager);
-      return new ProteusContext(base, resources, loader, callback);
-    }
+        @Nullable
+        private ProteusLayoutInflater.Callback callback;
 
-  }
+        @Nullable
+        private LayoutManager layoutManager;
+
+        @Nullable
+        private StyleManager styleManager;
+
+        private StringManager stringManager;
+
+        private DrawableManager drawableManager;
+
+        Builder(@NonNull Context context, @NonNull Map<String, ViewTypeParser> parsers, @NonNull FunctionManager functionManager) {
+            this.base = context;
+            this.parsers = parsers;
+            this.functionManager = functionManager;
+        }
+
+        public Builder setImageLoader(@Nullable ProteusLayoutInflater.ImageLoader loader) {
+            this.loader = loader;
+            return this;
+        }
+
+        public Builder setCallback(@Nullable ProteusLayoutInflater.Callback callback) {
+            this.callback = callback;
+            return this;
+        }
+
+        public Builder setLayoutManager(@Nullable LayoutManager layoutManager) {
+            this.layoutManager = layoutManager;
+            return this;
+        }
+
+        public Builder setStyleManager(@Nullable StyleManager styleManager) {
+            this.styleManager = styleManager;
+            return this;
+        }
+
+        public Builder setStringManager(StringManager stringManager) {
+            this.stringManager = stringManager;
+            return this;
+        }
+
+        public Builder setDrawableManager(DrawableManager drawableManager) {
+            this.drawableManager = drawableManager;
+            return this;
+        }
+
+        public ProteusContext build() {
+            ProteusResources resources = new ProteusResources(parsers, layoutManager,
+                    functionManager, styleManager, stringManager, drawableManager);
+            return new ProteusContext(base, resources, loader, callback);
+        }
+
+    }
 }

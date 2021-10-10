@@ -1,21 +1,19 @@
 package com.tyron.layoutpreview.inflate;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.util.Log;
 import android.view.InflateException;
 import android.view.View;
 import android.view.ViewGroup;
-
-import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.Proteus;
 import com.flipkart.android.proteus.ProteusBuilder;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusLayoutInflater;
 import com.flipkart.android.proteus.ProteusView;
-import com.flipkart.android.proteus.SimpleIdGenerator;
-import com.flipkart.android.proteus.SimpleLayoutInflater;
 import com.flipkart.android.proteus.ViewTypeParser;
+import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
@@ -28,12 +26,12 @@ import com.tyron.layoutpreview.ResourceManager;
 import com.tyron.layoutpreview.StringManager;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
+import com.tyron.layoutpreview.manager.ResourceDrawableManager;
 import com.tyron.layoutpreview.manager.ResourceStringManager;
-import com.tyron.layoutpreview.model.Attribute;
 import com.tyron.layoutpreview.model.CustomView;
-import com.tyron.layoutpreview.model.Format;
 import com.tyron.layoutpreview.parser.CustomViewGroupParser;
 import com.tyron.layoutpreview.parser.CustomViewParser;
+import com.tyron.layoutpreview.resource.ResourceDrawableParser;
 import com.tyron.layoutpreview.view.UnknownView;
 import com.tyron.layoutpreview.view.UnknownViewGroup;
 
@@ -42,17 +40,13 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.InputStreamReader;
 import java.io.StringReader;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class PreviewLayoutInflater {
 
     private final Context mBaseContext;
     private final Proteus mProteus;
-    private final ProteusContext mContext;
+    private ProteusContext mContext;
 
     private final ProteusLayoutInflater.Callback mCallback = new ProteusLayoutInflater.Callback() {
         @Override
@@ -109,6 +103,17 @@ public class PreviewLayoutInflater {
     };
 
     private final ResourceStringManager mStringManager = new ResourceStringManager();
+    private final ResourceDrawableManager mDrawableManager = new ResourceDrawableManager();
+    private ProteusLayoutInflater.ImageLoader mImageLoader = (view, name, callback) -> {
+        if (name.startsWith("@drawable")) {
+            DrawableValue value = mDrawableManager.get(name.substring("@drawable".length() + 1));
+            if (value != null) {
+                value.apply(view, mContext, null, callback::setDrawable);
+            }
+        } else if (name.startsWith("@null")) {
+            callback.setDrawable(null);
+        }
+    };
 
     public PreviewLayoutInflater(Context base, Project project) {
         mBaseContext = base;
@@ -116,14 +121,16 @@ public class PreviewLayoutInflater {
         registerCustomViews(builder, project);
         mProteus = builder.build();
 
-        ResourceManager resourceManager = new ResourceManager(project.getResourceDirectory());
-        mStringManager.setStrings(resourceManager.getStrings());
-
         mContext = mProteus.createContextBuilder(base)
                 .setCallback(mCallback)
                 .setStringManager(mStringManager)
+                .setDrawableManager(mDrawableManager)
+                .setImageLoader(mImageLoader)
                 .build();
 
+        ResourceManager resourceManager = new ResourceManager(mContext, project.getResourceDirectory());
+        mStringManager.setStrings(resourceManager.getStrings());
+        mDrawableManager.setDrawables(resourceManager.getDrawables());
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
     }
 
@@ -149,7 +156,7 @@ public class PreviewLayoutInflater {
     public ProteusView inflate(JsonObject object) {
         try {
             Value value = new ProteusTypeAdapterFactory(mContext)
-                    .VALUE_TYPE_ADAPTER.read(new JsonReader(new StringReader(object.toString())));
+                    .VALUE_TYPE_ADAPTER.read(new JsonReader(new StringReader(object.toString())), false);
             return inflate(value.getAsLayout());
         } catch (Exception e) {
             throw new InflateException("Unable to inflate layout: " + Log.getStackTraceString(e));

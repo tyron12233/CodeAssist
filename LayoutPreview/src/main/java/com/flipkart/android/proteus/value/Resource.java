@@ -23,6 +23,7 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.text.TextUtils;
 import android.util.LruCache;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -203,8 +204,16 @@ public class Resource extends Value {
         return getColorStateList(resId, context);
     }
 
+    public DrawableValue getProteusDrawable(ProteusContext context) {
+        if (name != null) {
+            return context.getProteusResources()
+                    .getDrawable(name);
+        }
+        return null;
+    }
+
     @Nullable
-    public Drawable getDrawable(Context context) {
+    public Drawable getDrawable(ProteusContext context) {
         return getDrawable(resId, context);
     }
 

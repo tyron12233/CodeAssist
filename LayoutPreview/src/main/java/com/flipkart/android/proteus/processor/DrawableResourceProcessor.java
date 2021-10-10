@@ -92,9 +92,17 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
 
   @Override
   public void handleResource(V view, Resource resource) {
-    Drawable d = resource.getDrawable(view.getContext());
-    if (null != d) {
-      setDrawable(view, d);
+    ProteusContext context = (ProteusContext) view.getContext();
+    DrawableValue drawableValue = resource.getProteusDrawable(context);
+    if (drawableValue == null) {
+      Drawable d = resource.getDrawable(context);
+      if (null != d) {
+        setDrawable(view, d);
+      }
+    } else {
+      drawableValue.apply(view, context, context.getLoader(), drawable -> {
+        setDrawable(view, drawable);
+      });
     }
   }
 
