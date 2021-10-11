@@ -114,6 +114,7 @@ public class CleanTask extends Task {
                 int end = name.indexOf('$', start);
                 if (start == -1 || end == -1) {
                     mLogger.warning("Unrecognized dex file: " + file.getName());
+                    continue;
                 } else {
 
                     String className = name.substring(start, end);

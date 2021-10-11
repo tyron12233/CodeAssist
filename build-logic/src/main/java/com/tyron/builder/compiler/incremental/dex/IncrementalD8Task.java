@@ -10,6 +10,7 @@ import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
+import com.android.tools.r8.StringConsumer;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.dex.D8Task;
