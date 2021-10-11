@@ -9,6 +9,7 @@ import java.io.IOError
 import java.net.URLClassLoader
 import java.nio.file.FileSystemNotFoundException
 import java.nio.file.Paths
+import java.util.*
 import java.util.zip.ZipFile
 
 object ServiceLoaderLite {
@@ -46,8 +47,13 @@ object ServiceLoaderLite {
         val implementations = mutableListOf<Service>()
 
         for (className in findImplementations(service, files)) {
-            val instance = Class.forName(className, false, classLoader).newInstance()
-            implementations += service.cast(instance)
+            try {
+                val instance = classLoader.loadClass(className)
+                    .newInstance();
+                implementations += service.cast(instance)
+            } catch (e: ClassNotFoundException) {
+                throw ClassNotFoundException("Unable to find class $className in $files");
+            }
         }
 
         return implementations
@@ -70,7 +76,7 @@ object ServiceLoaderLite {
 
         return when {
             file.isDirectory -> findImplementationsInDirectory(classIdentifier, file)
-            file.isFile && file.extension.toLowerCase() == "jar" -> findImplementationsInJar(classIdentifier, file)
+            file.isFile && file.extension.lowercase(Locale.getDefault()) == "jar" -> findImplementationsInJar(classIdentifier, file)
             else -> emptySet()
         }
     }
