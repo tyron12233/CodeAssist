@@ -272,9 +272,10 @@ class WordwrapLayout extends AbstractLayout {
 
         final Row result;
         int currentRow;
+        final int initRow;
 
         WordwrapLayoutRowItr(int initialRow) {
-            currentRow = initialRow;
+            initRow = currentRow = initialRow;
             result = new Row();
         }
 
@@ -295,6 +296,11 @@ class WordwrapLayout extends AbstractLayout {
         @Override
         public boolean hasNext() {
             return currentRow >= 0 && currentRow < rowTable.size();
+        }
+
+        @Override
+        public void reset() {
+            currentRow = initRow;
         }
 
     }

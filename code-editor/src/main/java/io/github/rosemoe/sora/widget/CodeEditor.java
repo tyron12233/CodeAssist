@@ -520,6 +520,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         setAutoCompletionOnComposing(true);
         setAllowFullscreen(false);
         setLigatureEnabled(false);
+        setHardwareAcceleratedDrawAllowed(true);
         setInterceptParentHorizontalScrollIfNeeded(false);
         setTypefaceText(Typeface.DEFAULT);
         mPaintOther.setStrokeWidth(getDpUnit() * 2.5f);
@@ -1333,6 +1334,65 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             mRenderer.setExpectedCapacity(Math.max(getLastVisibleRow() - getFirstVisibleRow(), 30));
             mRenderer.keepCurrentInDisplay(getFirstVisibleRow(), getLastVisibleRow());
         }
+
+        // step 1 - draw background of rows
+        for (int row = getFirstVisibleRow(); row <= getLastVisibleRow(); row++) {
+            Row rowInf = rowIterator.next();
+            int line = rowInf.lineIndex;
+            int columnCount = mText.getColumnCount(line);
+            if (lastPreparedLine != line) {
+                computeMatchedPositions(line, matchedPositions);
+                prepareLine(line);
+                lastPreparedLine = line;
+            }
+
+            // Get visible region on line
+            float[] charPos = findFirstVisibleChar(offset, rowInf.startColumn, rowInf.endColumn, mBuffer);
+            int firstVisibleChar = (int) charPos[0];
+            int lastVisibleChar = firstVisibleChar;
+            float paintingOffset = charPos[1];
+            float temporaryOffset = paintingOffset;
+            while (temporaryOffset < getWidth() && lastVisibleChar < columnCount) {
+                char ch = mBuffer[lastVisibleChar];
+                if (isEmoji(ch) && lastVisibleChar + 1 < columnCount) {
+                    temporaryOffset += mFontCache.measureText(mBuffer, lastVisibleChar, lastVisibleChar + 2, mPaint);
+                    lastVisibleChar++;
+                } else {
+                    temporaryOffset += mFontCache.measureChar(mBuffer[lastVisibleChar], mPaint);
+                }
+                lastVisibleChar++;
+            }
+            lastVisibleChar = Math.min(lastVisibleChar, rowInf.endColumn);
+
+            // Draw current line background (or save)
+            if (line == currentLine) {
+                drawRowBackground(canvas, currentLineBgColor, row);
+                postDrawCurrentLines.add(row);
+            }
+
+            // Draw matched text background
+            if (!matchedPositions.isEmpty()) {
+                for (int position : matchedPositions) {
+                    drawRowRegionBackground(canvas, paintingOffset, row, firstVisibleChar, lastVisibleChar, position, position + mSearcher.mSearchText.length(), mColors.getColor(EditorColorScheme.MATCHED_TEXT_BACKGROUND));
+                }
+            }
+
+            // Draw selected text background
+            if (mCursor.isSelected() && line >= mCursor.getLeftLine() && line <= mCursor.getRightLine()) {
+                int selectionStart = 0;
+                int selectionEnd = columnCount;
+                if (line == mCursor.getLeftLine()) {
+                    selectionStart = mCursor.getLeftColumn();
+                }
+                if (line == mCursor.getRightLine()) {
+                    selectionEnd = mCursor.getRightColumn();
+                }
+                drawRowRegionBackground(canvas, paintingOffset, row, firstVisibleChar, lastVisibleChar, selectionStart, selectionEnd, mColors.getColor(EditorColorScheme.SELECTED_TEXT_BACKGROUND));
+            }
+        }
+        rowIterator.reset();
+
+        // Step 2 - Draw text and text decorations
         for (int row = getFirstVisibleRow(); row <= getLastVisibleRow() && rowIterator.hasNext(); row++) {
             Row rowInf = rowIterator.next();
             int line = rowInf.lineIndex;
@@ -1348,7 +1408,6 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             if (lastPreparedLine != line) {
                 lastPreparedLine = line;
                 prepareLine(line);
-                computeMatchedPositions(line, matchedPositions);
                 spanOffset = 0;
                 if (shouldInitializeNonPrintable()) {
                     long positions = findLeadingAndTrailingWhitespacePos(line);
@@ -1375,33 +1434,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             }
             lastVisibleChar = Math.min(lastVisibleChar, rowInf.endColumn);
 
-            // Draw matched text background
-            if (!matchedPositions.isEmpty()) {
-                for (int position : matchedPositions) {
-                    drawRowRegionBackground(canvas, paintingOffset, row, firstVisibleChar, lastVisibleChar, position, position + mSearcher.mSearchText.length(), mColors.getColor(EditorColorScheme.MATCHED_TEXT_BACKGROUND));
-                }
-            }
-
             float backupOffset = paintingOffset;
-
-            // Draw selected text background
-            if (mCursor.isSelected() && line >= mCursor.getLeftLine() && line <= mCursor.getRightLine()) {
-                int selectionStart = 0;
-                int selectionEnd = columnCount;
-                if (line == mCursor.getLeftLine()) {
-                    selectionStart = mCursor.getLeftColumn();
-                }
-                if (line == mCursor.getRightLine()) {
-                    selectionEnd = mCursor.getRightColumn();
-                }
-                drawRowRegionBackground(canvas, paintingOffset, row, firstVisibleChar, lastVisibleChar, selectionStart, selectionEnd, mColors.getColor(EditorColorScheme.SELECTED_TEXT_BACKGROUND));
-            }
-
-            // Draw current line background (or save)
-            if (line == currentLine) {
-                drawRowBackground(canvas, currentLineBgColor, row);
-                postDrawCurrentLines.add(row);
-            }
 
             // Draw text here
             if (!mHardwareAccAllowed || !canvas.isHardwareAccelerated() || isWordwrap() || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
@@ -1622,6 +1655,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
                 postDrawCursor.add(new CursorPaintAction(row, centerX, mEventHandler.shouldDrawInsertHandle() ? mInsertHandle : null, true));
             }
         }
+
         mPaintOther.setStrokeWidth(circleRadius * 2);
         mDrawPoints.commitPoints(canvas, mPaintOther);
     }

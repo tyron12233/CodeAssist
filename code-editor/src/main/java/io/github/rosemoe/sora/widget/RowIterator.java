@@ -51,4 +51,6 @@ interface RowIterator {
      */
     boolean hasNext();
 
+    void reset();
+
 }

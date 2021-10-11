@@ -150,9 +150,10 @@ class LineBreakLayout extends AbstractLayout {
 
         private final Row result;
         private int currentRow;
+        private final int initRow;
 
         LineBreakLayoutRowItr(int initialRow) {
-            currentRow = initialRow;
+            initRow = currentRow = initialRow;
             result = new Row();
             result.isLeadingRow = true;
             result.startColumn = 0;
@@ -173,6 +174,10 @@ class LineBreakLayout extends AbstractLayout {
             return currentRow >= 0 && currentRow < text.getLineCount();
         }
 
+        @Override
+        public void reset() {
+            currentRow = initRow;
+        }
     }
 
 }
