@@ -15,17 +15,16 @@ import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.provider.CompletionEngine;
-import com.tyron.lint.api.DefaultPosition;
-import com.tyron.lint.api.Location;
 import com.tyron.lint.api.Severity;
-import com.tyron.lint.api.TextFormat;
 
 import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.tools.javac.parser.JavaTokenizer;
+import org.openjdk.tools.javac.parser.JavacParser;
+import org.openjdk.tools.javac.parser.ScannerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -48,6 +47,8 @@ import io.github.rosemoe.sora.widget.EditorColorScheme;
 public class JavaAnalyzer extends JavaCodeAnalyzer {
 
     private static final String TAG = JavaAnalyzer.class.getSimpleName();
+    private static final Tokens[] sKeywordsBeforeFunctionName = new Tokens[]{Tokens.RETURN, Tokens.BREAK, Tokens.IF, Tokens.AND, Tokens.OR, Tokens.OREQ,
+            Tokens.OROR, Tokens.ANDAND, Tokens.ANDEQ, Tokens.RPAREN, Tokens.LBRACE, Tokens.NEW, Tokens.DOT};
 
     private final List<DiagnosticWrapper> diagnostics = new ArrayList<>();
     private final List<LintIssue> mLintDiagnostics = new ArrayList<>();
@@ -60,7 +61,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     public JavaAnalyzer(CodeEditor editor) {
         mEditor = editor;
         mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
-        mClient = new DefaultLintClient(FileManager.getInstance().getCurrentProject());
     }
 
     private DefaultLintClient getClient() {
@@ -78,20 +78,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         Instant startTime = Instant.now();
 
         diagnostics.clear();
-        mLintDiagnostics.clear();
-
-        DefaultLintClient client = getClient();
-        if (client!= null) {
-            client.scan(mEditor.getCurrentFile());
-
-            for (LintIssue issue : client.getReportedIssues()) {
-                if (issue.getLocation().getStart() == null || issue.getLocation().getEnd() == null) {
-                    continue;
-                }
-
-                mLintDiagnostics.add(issue);
-            }
-        }
 
         StringBuilder text = content instanceof StringBuilder ? (StringBuilder) content : new StringBuilder(content);
         JavaTextTokenizer tokenizer = new JavaTextTokenizer(text);
@@ -101,7 +87,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         LineNumberCalculator helper = new LineNumberCalculator(text);
 
         Stack<BlockLine> stack = new Stack<>();
-        Stack<LintIssue> issueStack = new Stack<>();
         List<NavigationItem> labels = new ArrayList<>();
         int maxSwitch = 1, currSwitch = 0;
 
@@ -123,10 +108,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
             }
         }
-
-        Span currentSpan = null;
-        int endIndex = -1;
-        int underlineColor = Color.TRANSPARENT;
 
         while (delegate.shouldAnalyze()) {
             try {
@@ -156,7 +137,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
                     //The previous so this will be the annotation's type name
                     if (previous == Tokens.AT) {
-                        currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.ANNOTATION);
+                        colors.addIfNeeded(line, column, EditorColorScheme.ANNOTATION);
                         break;
                     }
                     //Here we have to get next token to see if it is function
@@ -165,21 +146,30 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     Tokens next = tokenizer.directNextToken();
                     //The next is LPAREN,so this is function name or type name
                     if (next == Tokens.LPAREN) {
-                        currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.FUNCTION_NAME);
-                        tokenizer.pushBack(tokenizer.getTokenLength());
-                        break;
+                        boolean found = false;
+                        for (Tokens before : sKeywordsBeforeFunctionName) {
+                            if (before == previous) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            colors.addIfNeeded(line, column, EditorColorScheme.FUNCTION_NAME);
+                            tokenizer.pushBack(tokenizer.getTokenLength());
+                            break;
+                        }
                     }
                     //Push back the next token
                     tokenizer.pushBack(tokenizer.getTokenLength());
                     //This is a class definition
 
-                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.TEXT_NORMAL);
+                    colors.addIfNeeded(line, column, EditorColorScheme.TEXT_NORMAL);
                     break;
                 case CHARACTER_LITERAL:
                 case STRING:
                 case FLOATING_POINT_LITERAL:
                 case INTEGER_LITERAL:
-                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.LITERAL);
+                    colors.addIfNeeded(line, column, EditorColorScheme.LITERAL);
                     break;
                 case INT:
                 case LONG:
@@ -190,8 +180,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 case DOUBLE:
                 case SHORT:
                 case VOID:
-                        currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.KEYWORD);
-                    break;
                 case ABSTRACT:
                 case ASSERT:
                 case CLASS:
@@ -236,10 +224,11 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 case TRUE:
                 case FALSE:
                 case NULL:
-                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.KEYWORD);
+                case SEMICOLON:
+                    colors.addIfNeeded(line, column, EditorColorScheme.KEYWORD);
                     break;
                 case LBRACE: {
-                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
+                    colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
                     if (stack.isEmpty()) {
                         if (currSwitch > maxSwitch) {
                             maxSwitch = currSwitch;
@@ -254,7 +243,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     break;
                 }
                 case RBRACE: {
-                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
+                    colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
                     if (!stack.isEmpty()) {
                         BlockLine block = stack.pop();
                         block.endLine = line;
@@ -267,16 +256,15 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
                 case LINE_COMMENT:
                 case LONG_COMMENT:
-                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.COMMENT);
+                    colors.addIfNeeded(line, column, EditorColorScheme.COMMENT);
                     break;
                 default:
                     if (token == Tokens.LBRACK || (token == Tokens.RBRACK && previous == Tokens.LBRACK)) {
-                        currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
+                        colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
                         break;
                     }
-                    currentSpan = colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
+                    colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
             }
-
 
 
             first = false;

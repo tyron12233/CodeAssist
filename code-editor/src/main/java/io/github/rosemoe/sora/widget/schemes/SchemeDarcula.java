@@ -35,7 +35,7 @@ public class SchemeDarcula extends EditorColorScheme {
     public void applyDefault() {
         super.applyDefault();
         setColor(ANNOTATION, 0xffbbb529);
-        setColor(FUNCTION_NAME, 0xffffffff);
+        setColor(FUNCTION_NAME, 0xFFF0C56C);
         setColor(IDENTIFIER_NAME, 0xffffffff);
         setColor(IDENTIFIER_VAR, 0xff9876aa);
         setColor(LITERAL, 0xff6a8759);

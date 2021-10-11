@@ -104,8 +104,9 @@ public class CompletionEngine {
             if (file == null || !file.exists()) {
                 continue;
             }
+            //noinspection EmptyTryBlock
             try (CompileTask task = compiler.compile(file.toPath())) {
-                break;
+                // empty
             }
         }
         setIndexing(false);

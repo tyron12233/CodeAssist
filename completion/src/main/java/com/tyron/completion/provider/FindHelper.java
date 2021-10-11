@@ -17,6 +17,7 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.VariableTree;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -63,7 +64,7 @@ public class FindHelper {
             if (!isSameMethodType(method, erasedParameterTypes)) continue;
             return method;
         }
-        throw new RuntimeException("no method");
+        throw new RuntimeException("no method: " + methodName + " in: " + className + " with parameters: " + Arrays.toString(erasedParameterTypes));
     }
 
     public static VariableTree findField(ParseTask task, String className, String memberName) {
