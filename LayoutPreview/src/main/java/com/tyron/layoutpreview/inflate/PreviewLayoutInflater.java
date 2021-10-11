@@ -22,6 +22,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.tyron.builder.model.Project;
+import com.tyron.layout.appcompat.AppCompatModule;
 import com.tyron.layoutpreview.ResourceManager;
 import com.flipkart.android.proteus.StringManager;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
@@ -121,6 +122,7 @@ public class PreviewLayoutInflater {
     public PreviewLayoutInflater(Context base, Project project) {
         mBaseContext = base;
         ProteusBuilder builder = new ProteusBuilder();
+        builder.register(AppCompatModule.create());
         registerCustomViews(builder, project);
         mProteus = builder.build();
         mProject = project;
