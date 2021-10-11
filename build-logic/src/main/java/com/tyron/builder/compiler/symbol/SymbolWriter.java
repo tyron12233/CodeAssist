@@ -119,10 +119,15 @@ public class SymbolWriter {
 
             writer.write("}\n");
 
-            if (newFile) {
+            if (newFile || !file.exists()) {
                 FileUtils.writeStringToFile(file, writer.toString(), Charset.defaultCharset());
             } else {
-                String oldContents = FileUtils.readFileToString(file, Charset.defaultCharset());
+                String oldContents;
+                try {
+                    oldContents = FileUtils.readFileToString(file, Charset.defaultCharset());
+                } catch (IOException e) {
+                    oldContents = "";
+                }
                 if (!oldContents.equals(writer.toString())) {
                     FileUtils.writeStringToFile(file, writer.toString(), Charset.defaultCharset());
                 }
