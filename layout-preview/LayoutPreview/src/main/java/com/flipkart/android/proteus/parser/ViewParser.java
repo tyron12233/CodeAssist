@@ -340,9 +340,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
     addAttributeProcessor(Attributes.View.Elevation, new DimensionAttributeProcessor<V>() {
       @Override
       public void setDimension(V view, float dimension) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-          view.setElevation(dimension);
-        }
+        view.setElevation(dimension);
       }
     });
 
@@ -399,32 +397,28 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
           view.setId(((ProteusContext) view.getContext()).getInflater().getUniqueViewId(value));
         }
         // set view id resource name
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-          final String resourceName = value;
-          view.setAccessibilityDelegate(new View.AccessibilityDelegate() {
-            @Override
-            public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
-              super.onInitializeAccessibilityNodeInfo(host, info);
-              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-                String normalizedResourceName;
-                if (!TextUtils.isEmpty(resourceName)) {
-                  String id;
-                  if (resourceName.startsWith(ID_STRING_START_PATTERN)) {
-                    id = resourceName.substring(ID_STRING_START_PATTERN.length());
-                  } else if (resourceName.startsWith(ID_STRING_START_PATTERN1)) {
-                    id = resourceName.substring(ID_STRING_START_PATTERN1.length());
-                  } else {
-                    id = resourceName;
-                  }
-                  normalizedResourceName = view.getContext().getPackageName() + ID_STRING_NORMALIZED_PATTERN + id;
-                } else {
-                  normalizedResourceName = "";
-                }
-                info.setViewIdResourceName(normalizedResourceName);
+        final String resourceName = value;
+        view.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+          @Override
+          public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
+            super.onInitializeAccessibilityNodeInfo(host, info);
+            String normalizedResourceName;
+            if (!TextUtils.isEmpty(resourceName)) {
+              String id;
+              if (resourceName.startsWith(ID_STRING_START_PATTERN)) {
+                id = resourceName.substring(ID_STRING_START_PATTERN.length());
+              } else if (resourceName.startsWith(ID_STRING_START_PATTERN1)) {
+                id = resourceName.substring(ID_STRING_START_PATTERN1.length());
+              } else {
+                id = resourceName;
               }
+              normalizedResourceName = view.getContext().getPackageName() + ID_STRING_NORMALIZED_PATTERN + id;
+            } else {
+              normalizedResourceName = "";
             }
-          });
-        }
+            info.setViewIdResourceName(normalizedResourceName);
+          }
+        });
       }
     });
 

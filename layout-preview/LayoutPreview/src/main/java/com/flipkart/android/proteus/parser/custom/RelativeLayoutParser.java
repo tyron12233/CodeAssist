@@ -70,6 +70,7 @@ public class RelativeLayoutParser<T extends View> extends ViewTypeParser<T> {
       public void setGravity(T view, @Gravity int gravity) {
         if (view instanceof RelativeLayout) {
           ((RelativeLayout) view).setGravity(gravity);
+          ((RelativeLayout) view).
         }
       }
     });
