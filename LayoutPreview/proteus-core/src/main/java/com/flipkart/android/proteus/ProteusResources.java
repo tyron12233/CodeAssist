@@ -22,8 +22,6 @@ import androidx.annotation.Nullable;
 import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Value;
-import com.tyron.layoutpreview.StringManager;
-
 import java.util.Locale;
 import java.util.Map;
 

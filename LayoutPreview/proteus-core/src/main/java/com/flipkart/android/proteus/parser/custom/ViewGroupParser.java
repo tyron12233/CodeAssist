@@ -41,9 +41,6 @@ import com.flipkart.android.proteus.value.Resource;
 import com.flipkart.android.proteus.value.StyleResource;
 import com.flipkart.android.proteus.value.Value;
 import com.flipkart.android.proteus.view.ProteusAspectRatioFrameLayout;
-import com.tyron.layoutpreview.parser.CustomViewGroupParser;
-import com.tyron.layoutpreview.view.CustomViewGroupWrapper;
-import com.tyron.layoutpreview.view.CustomViewWrapper;
 
 import java.util.Iterator;
 

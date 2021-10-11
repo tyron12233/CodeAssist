@@ -30,8 +30,7 @@ import com.flipkart.android.proteus.exceptions.ProteusInflateException;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
-import com.tyron.layoutpreview.view.UnknownView;
-import com.tyron.layoutpreview.view.UnknownViewGroup;
+import com.flipkart.android.proteus.view.UnknownView;
 
 /**
  * IncludeParser

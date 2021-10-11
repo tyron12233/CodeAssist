@@ -33,8 +33,8 @@ import com.tyron.layoutpreview.manager.ResourceStringManager;
 import com.tyron.layoutpreview.model.CustomView;
 import com.tyron.layoutpreview.parser.CustomViewGroupParser;
 import com.tyron.layoutpreview.parser.CustomViewParser;
-import com.tyron.layoutpreview.view.UnknownView;
-import com.tyron.layoutpreview.view.UnknownViewGroup;
+import com.flipkart.android.proteus.view.UnknownView;
+import com.flipkart.android.proteus.view.UnknownViewGroup;
 
 import java.io.File;
 import java.io.FileInputStream;

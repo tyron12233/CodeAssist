@@ -15,7 +15,7 @@ import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
-import com.tyron.layoutpreview.view.UnknownView;
+import com.flipkart.android.proteus.view.UnknownView;
 
 public class ProteusListView extends ListView implements ProteusView {
 
@@ -110,12 +110,12 @@ public class ProteusListView extends ListView implements ProteusView {
             ProteusContext context = manager.getContext();
 
             if (mLayoutPreviewName.equals(manager.getDataContext().getData().getAsString("layout_name"))) {
-                return new UnknownView(context, mLayoutPreviewName);
+                return new UnknownView(context, "Unable to find layout: " + mLayoutPreviewName);
             }
 
             Layout layout = context.getLayout(mLayoutPreviewName);
             if (layout == null) {
-                return new UnknownView(context, mLayoutPreviewName);
+                return new UnknownView(context, "Unable to find layout: " + mLayoutPreviewName);
             }
             return context.getInflater()
                     .inflate(layout, new ObjectValue())

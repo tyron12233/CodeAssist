@@ -7,6 +7,7 @@ import android.view.View;
 import androidx.annotation.NonNull;
 
 import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.view.UnknownView;
 import com.tyron.layoutpreview.model.CustomView;
 
 import java.lang.reflect.InvocationTargetException;
@@ -27,7 +28,7 @@ public class CustomViewWrapper extends View implements ProteusView {
             mView = viewClass.getConstructor(Context.class)
                     .newInstance(context);
         } catch (ClassNotFoundException | NoSuchMethodException | InstantiationException | InvocationTargetException | IllegalAccessException e) {
-            mView = new UnknownView(context, mCustomView);
+            mView = new UnknownView(context, "Unknown view: " + mCustomView.getType());
         }
     }
 

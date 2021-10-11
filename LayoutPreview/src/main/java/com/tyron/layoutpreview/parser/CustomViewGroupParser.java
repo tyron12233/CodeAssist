@@ -16,16 +16,13 @@ import androidx.annotation.Nullable;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
-import com.flipkart.android.proteus.processor.AttributeProcessor;
-import com.flipkart.android.proteus.processor.ColorResourceProcessor;
-import com.flipkart.android.proteus.processor.EnumProcessor;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.tyron.layoutpreview.model.Attribute;
 import com.tyron.layoutpreview.model.CustomView;
 import com.tyron.layoutpreview.model.Format;
 import com.tyron.layoutpreview.view.CustomViewGroupWrapper;
-import com.tyron.layoutpreview.view.UnknownView;
+import com.flipkart.android.proteus.view.UnknownView;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -63,7 +60,7 @@ public class CustomViewGroupParser extends ViewTypeParser<ViewGroup> {
         }
 
         if (view == null) {
-            return new UnknownView(context, layout.type);
+            return new UnknownView(context, "Unknown view: layout.type");
         }
         return new CustomViewGroupWrapper(context, (ViewGroup) view);
     }

@@ -1,4 +1,4 @@
-package com.tyron.layoutpreview.view;
+package com.flipkart.android.proteus.view;
 
 import android.content.Context;
 import android.view.Gravity;

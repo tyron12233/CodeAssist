@@ -20,12 +20,12 @@ import android.content.res.XmlResourceParser;
 import android.view.View;
 import android.view.ViewGroup;
 
+import com.flipkart.android.proteus.R;
 import com.flipkart.android.proteus.managers.ViewManager;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
-import com.tyron.layoutpreview.R;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
