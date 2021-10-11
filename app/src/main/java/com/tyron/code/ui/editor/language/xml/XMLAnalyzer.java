@@ -68,6 +68,16 @@ public class XMLAnalyzer implements CodeAnalyzer {
 						colors.addIfNeeded(line, column, EditorColorScheme.COMMENT);
 						break;
 					case XMLLexer.Name:
+						if (previous != null && (previous.getType() == XMLLexer.OPEN || previous.getType() == XMLLexer.SLASH)) {
+							colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
+							break;
+						}
+						String attribute = token.getText();
+						if (attribute.contains(":")) {
+							colors.addIfNeeded(line, column, EditorColorScheme.ATTRIBUTE_NAME);
+							colors.addIfNeeded(line, column + attribute.indexOf(":"), EditorColorScheme.TEXT_NORMAL);
+							break;
+						}
 						colors.addIfNeeded(line, column, EditorColorScheme.IDENTIFIER_NAME);
 						break;
 					case XMLLexer.EQUALS:
@@ -75,19 +85,37 @@ public class XMLAnalyzer implements CodeAnalyzer {
 						span1.setUnderlineColor(Color.TRANSPARENT);
 						break;
 					case XMLLexer.STRING:
-						colors.addIfNeeded(line,column, EditorColorScheme.LITERAL);
-//						String text = token.getText();
-//						if (text.startsWith("\"#")) {
-//							try {
-//								span.setUnderlineColor(Color.parseColor(text.substring(1, text.length() - 1)));
-//							} catch (Exception ignore) {}
-//						}
+						String text = token.getText();
+						if (text.startsWith("\"#")) {
+							try {
+								int color = Color.parseColor(text.substring(1, text.length() - 1));
+								colors.addIfNeeded(line, Span.obtain(column, EditorColorScheme.LITERAL));
+								colors.add(line, Span.obtain(column + 1, EditorColorScheme.LITERAL))
+										.setUnderlineColor(color);
+								colors.add(line, Span.obtain( column + text.length() - 1, EditorColorScheme.LITERAL))
+										.setUnderlineColor(Color.TRANSPARENT);
+								colors.addIfNeeded(line, column + text.length(), EditorColorScheme.TEXT_NORMAL)
+										.setUnderlineColor(Color.TRANSPARENT);
+							} catch (Exception ignore) {}
+						} else {
+							colors.addIfNeeded(line,column, EditorColorScheme.LITERAL);
+						}
+						break;
+					case XMLLexer.OPEN:
+					case XMLLexer.CLOSE:
+					case XMLLexer.SLASH_CLOSE:
+						colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
 						break;
 					case XMLLexer.SEA_WS:
 					case XMLLexer.S:
 					default:
 						Span s = Span.obtain(column, EditorColorScheme.TEXT_NORMAL);
 						colors.addIfNeeded(line, s);
+						s.setUnderlineColor(Color.TRANSPARENT);
+				}
+
+				if (token.getType() != XMLLexer.SEA_WS) {
+					previous = token;
 				}
 			}
 			colors.determine(lastLine);
