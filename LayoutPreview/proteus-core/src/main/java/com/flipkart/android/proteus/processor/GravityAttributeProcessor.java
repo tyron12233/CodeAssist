@@ -16,7 +16,6 @@
 
 package com.flipkart.android.proteus.processor;
 
-import android.content.Context;
 import android.content.res.TypedArray;
 import android.view.View;
 

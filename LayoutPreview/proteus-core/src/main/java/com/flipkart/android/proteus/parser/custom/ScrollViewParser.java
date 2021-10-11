@@ -19,7 +19,6 @@ package com.flipkart.android.proteus.parser.custom;
 
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ScrollView;
 
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;

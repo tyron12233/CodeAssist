@@ -3,7 +3,7 @@ package com.tyron.layoutpreview.manager;
 import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.value.Value;
-import com.tyron.layoutpreview.StringManager;
+import com.flipkart.android.proteus.StringManager;
 
 import java.util.Map;
 

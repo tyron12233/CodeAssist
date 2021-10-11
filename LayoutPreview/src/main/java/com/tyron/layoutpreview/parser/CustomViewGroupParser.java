@@ -4,10 +4,8 @@ import static com.tyron.layoutpreview.parser.WrapperUtils.addEnumProcessors;
 import static com.tyron.layoutpreview.parser.WrapperUtils.addProcessors;
 import static com.tyron.layoutpreview.parser.WrapperUtils.getMethod;
 import static com.tyron.layoutpreview.parser.WrapperUtils.getParameters;
-import static com.tyron.layoutpreview.parser.WrapperUtils.invokeMethod;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,12 +25,10 @@ import com.tyron.layoutpreview.model.Attribute;
 import com.tyron.layoutpreview.model.CustomView;
 import com.tyron.layoutpreview.model.Format;
 import com.tyron.layoutpreview.view.CustomViewGroupWrapper;
-import com.tyron.layoutpreview.view.CustomViewWrapper;
 import com.tyron.layoutpreview.view.UnknownView;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.List;
 
 public class CustomViewGroupParser extends ViewTypeParser<ViewGroup> {
 

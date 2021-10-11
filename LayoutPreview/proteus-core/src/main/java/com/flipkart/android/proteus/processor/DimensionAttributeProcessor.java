@@ -17,12 +17,10 @@
 package com.flipkart.android.proteus.processor;
 
 
-import android.content.Context;
 import android.content.res.TypedArray;
 import android.view.View;
 
 import com.flipkart.android.proteus.ProteusContext;
-import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Dimension;
 import com.flipkart.android.proteus.value.Resource;
@@ -60,7 +58,7 @@ public abstract class DimensionAttributeProcessor<T extends View> extends Attrib
     if (value.isDimension()) {
       return value;
     }
-    Value precompiled = AttributeProcessor.staticPreCompile(value.getAsPrimitive(), context, null);
+    Value precompiled = staticPreCompile(value.getAsPrimitive(), context, null);
     if (null != precompiled) {
       return precompiled;
     }

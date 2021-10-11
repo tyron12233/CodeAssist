@@ -1,4 +1,4 @@
-package com.tyron.layoutpreview;
+package com.flipkart.android.proteus;
 
 import androidx.annotation.Nullable;
 

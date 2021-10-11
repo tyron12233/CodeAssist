@@ -4,9 +4,9 @@ import static com.google.common.truth.Truth.assertThat;
 
 import androidx.annotation.Nullable;
 
+import com.flipkart.android.proteus.StringManager;
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Value;
-import com.google.common.truth.Truth;
 
 import org.junit.Test;
 

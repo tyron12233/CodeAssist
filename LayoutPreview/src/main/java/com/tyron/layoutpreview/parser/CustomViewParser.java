@@ -3,10 +3,7 @@ package com.tyron.layoutpreview.parser;
 import static com.tyron.layoutpreview.parser.WrapperUtils.addEnumProcessors;
 import static com.tyron.layoutpreview.parser.WrapperUtils.getMethod;
 import static com.tyron.layoutpreview.parser.WrapperUtils.getParameters;
-import static com.tyron.layoutpreview.parser.WrapperUtils.invokeMethod;
 
-import android.content.res.ColorStateList;
-import android.graphics.Color;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -30,10 +27,8 @@ import com.tyron.layoutpreview.model.CustomView;
 import com.tyron.layoutpreview.model.Format;
 import com.tyron.layoutpreview.view.CustomViewWrapper;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
-import java.util.List;
 
 public class CustomViewParser extends ViewTypeParser<View> {
 

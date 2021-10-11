@@ -1,7 +1,6 @@
 package com.tyron.layoutpreview.inflate;
 
 import android.content.Context;
-import android.graphics.drawable.Drawable;
 import android.util.Log;
 import android.view.InflateException;
 import android.view.View;
@@ -24,7 +23,7 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.tyron.builder.model.Project;
 import com.tyron.layoutpreview.ResourceManager;
-import com.tyron.layoutpreview.StringManager;
+import com.flipkart.android.proteus.StringManager;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
 import com.tyron.layoutpreview.manager.ResourceDrawableManager;
@@ -33,7 +32,6 @@ import com.tyron.layoutpreview.manager.ResourceStringManager;
 import com.tyron.layoutpreview.model.CustomView;
 import com.tyron.layoutpreview.parser.CustomViewGroupParser;
 import com.tyron.layoutpreview.parser.CustomViewParser;
-import com.tyron.layoutpreview.resource.ResourceDrawableParser;
 import com.tyron.layoutpreview.view.UnknownView;
 import com.tyron.layoutpreview.view.UnknownViewGroup;
 

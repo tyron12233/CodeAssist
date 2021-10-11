@@ -16,63 +16,73 @@
 
 package com.flipkart.android.proteus.processor;
 
-import android.content.Context;
-import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 
 import com.flipkart.android.proteus.ProteusContext;
-import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.ProteusLayoutInflater;
 import com.flipkart.android.proteus.value.AttributeResource;
-import com.flipkart.android.proteus.value.Color;
+import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Resource;
 import com.flipkart.android.proteus.value.StyleResource;
 import com.flipkart.android.proteus.value.Value;
 
 import androidx.annotation.Nullable;
 
-public abstract class ColorResourceProcessor<V extends View> extends AttributeProcessor<V> {
+/**
+ * Use this as the base processor for references like @drawable or remote resources with http:// urls.
+ */
+public abstract class DrawableResourceProcessor<V extends View> extends AttributeProcessor<V> {
 
-  public static Color.Result evaluate(Value value, View view) {
-    final Color.Result[] result = new Color.Result[1];
-    ColorResourceProcessor<View> processor = new ColorResourceProcessor<View>() {
+  @Nullable
+  public static Drawable evaluate(Value value, View view) {
+    if (null == value) {
+      return null;
+    }
+    final Drawable[] d = new Drawable[1];
+    DrawableResourceProcessor<View> processor = new DrawableResourceProcessor<View>() {
       @Override
-      public void setColor(View view, int color) {
-        result[0] = Color.Result.color(color);
-      }
-
-      @Override
-      public void setColor(View view, ColorStateList colors) {
-        result[0] = Color.Result.colors(colors);
+      public void setDrawable(View view, Drawable drawable) {
+        d[0] = drawable;
       }
     };
     processor.process(view, value);
-    return result[0];
+    return d[0];
   }
 
   public static Value staticCompile(@Nullable Value value, ProteusContext context) {
     if (null == value) {
-      return Color.Int.BLACK;
+      return DrawableValue.ColorValue.BLACK;
     }
-    if (value.isColor()) {
+    if (value.isDrawable()) {
       return value;
-    } else if (value.isObject()) {
-      return Color.valueOf(value.getAsObject(), context);
     } else if (value.isPrimitive()) {
       Value precompiled = AttributeProcessor.staticPreCompile(value.getAsPrimitive(), context, null);
       if (null != precompiled) {
         return precompiled;
       }
-      return Color.valueOf(value.getAsString(), Color.Int.BLACK);
+      return DrawableValue.valueOf(value.getAsString(), context);
+    } else if (value.isObject()) {
+      return DrawableValue.valueOf(value.getAsObject(), context);
     } else {
-      return Color.Int.BLACK;
+      return DrawableValue.ColorValue.BLACK;
     }
   }
 
   @Override
   public void handleValue(final V view, Value value) {
-    if (value.isColor()) {
-      apply(view, value.getAsColor());
+    if (value.isDrawable()) {
+      DrawableValue d = value.getAsDrawable();
+      if (null != d) {
+        ProteusContext context = (ProteusContext) view.getContext();
+        ProteusLayoutInflater.ImageLoader loader = context.getLoader();
+        d.apply(view, context, loader, drawable -> {
+          if (null != drawable) {
+            setDrawable(view, drawable);
+          }
+        });
+      }
     } else {
       process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
     }
@@ -80,12 +90,17 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
 
   @Override
   public void handleResource(V view, Resource resource) {
-    ColorStateList colors = resource.getColorStateList(view.getContext());
-    if (null != colors) {
-      setColor(view, colors);
+    ProteusContext context = (ProteusContext) view.getContext();
+    DrawableValue drawableValue = resource.getProteusDrawable(context);
+    if (drawableValue == null) {
+      Drawable d = resource.getDrawable(context);
+      if (null != d) {
+        setDrawable(view, d);
+      }
     } else {
-      Integer color = resource.getColor(view.getContext());
-      setColor(view, null == color ? Color.Int.BLACK.value : color);
+      drawableValue.apply(view, context, context.getLoader(), drawable -> {
+        setDrawable(view, drawable);
+      });
     }
   }
 
@@ -102,26 +117,13 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
   }
 
   private void set(V view, TypedArray a) {
-    ColorStateList colors = a.getColorStateList(0);
-    if (null != colors) {
-      setColor(view, colors);
-    } else {
-      setColor(view, a.getColor(0, Color.Int.BLACK.value));
+    Drawable d = a.getDrawable(0);
+    if (null != d) {
+      setDrawable(view, d);
     }
   }
 
-  private void apply(V view, Color color) {
-    Color.Result result = color.apply(view.getContext());
-    if (null != result.colors) {
-      setColor(view, result.colors);
-    } else {
-      setColor(view, result.color);
-    }
-  }
-
-  public abstract void setColor(V view, int color);
-
-  public abstract void setColor(V view, ColorStateList colors);
+  public abstract void setDrawable(V view, Drawable drawable);
 
   @Override
   public Value compile(@Nullable Value value, ProteusContext context) {

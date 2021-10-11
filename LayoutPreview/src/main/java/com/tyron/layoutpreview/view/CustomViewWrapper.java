@@ -2,14 +2,9 @@ package com.tyron.layoutpreview.view;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.content.res.ColorStateList;
-import android.graphics.drawable.Drawable;
-import android.os.Build;
 import android.view.View;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 
 import com.flipkart.android.proteus.ProteusView;
 import com.tyron.layoutpreview.model.CustomView;

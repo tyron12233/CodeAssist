@@ -16,7 +16,6 @@
 
 package com.flipkart.android.proteus.processor;
 
-import android.content.Context;
 import android.view.View;
 
 import com.flipkart.android.proteus.DataContext;

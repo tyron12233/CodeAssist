@@ -2,7 +2,6 @@ package com.tyron.layoutpreview.drawable;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.drawable.BitmapDrawable;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -28,7 +27,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.StringReader;
-import java.util.Map;
 
 @RunWith(RobolectricTestRunner.class)
 public class TestVectorDrawable {

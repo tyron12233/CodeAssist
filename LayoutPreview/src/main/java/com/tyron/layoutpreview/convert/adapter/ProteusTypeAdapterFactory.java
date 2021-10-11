@@ -1,7 +1,5 @@
 package com.tyron.layoutpreview.convert.adapter;
 
-import android.content.Context;
-
 import com.flipkart.android.proteus.FunctionManager;
 import com.flipkart.android.proteus.Proteus;
 import com.flipkart.android.proteus.ProteusConstants;

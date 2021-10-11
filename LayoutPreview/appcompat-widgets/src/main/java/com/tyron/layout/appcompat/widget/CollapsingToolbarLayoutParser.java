@@ -21,7 +21,6 @@ import com.tyron.layout.appcompat.view.ProteusCollapsingToolbarLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.coordinatorlayout.widget.CoordinatorLayout;
 
 /**
  * CollapsingToolbarLayoutParser

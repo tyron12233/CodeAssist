@@ -6,7 +6,6 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.VisibleForTesting;
 
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ViewTypeParser;

@@ -2,23 +2,14 @@ package com.tyron.layoutpreview;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import android.util.AttributeSet;
-import android.util.Xml;
-
 import com.flipkart.android.proteus.value.Value;
-import com.tyron.layoutpreview.convert.ConvertException;
 import com.tyron.layoutpreview.resource.ResourceStringParser;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
