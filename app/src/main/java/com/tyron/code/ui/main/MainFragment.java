@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.os.Build;
@@ -106,6 +107,17 @@ public class MainFragment extends Fragment {
         super.onCreate(savedInstanceState);
 
         requireActivity().getOnBackPressedDispatcher().addCallback(this, onBackPressedCallback);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+
+        Intent intent = new Intent();
+        intent.setAction("com.tyron.code.Log");
+        intent.putExtra("ads", "das");
+        intent.setComponent(new ComponentName("com.tyron.code", "com.tyron.code.ui.editor.log.LogListener"));
+        requireActivity().sendBroadcast(intent);
     }
 
     @Override

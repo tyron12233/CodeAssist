@@ -29,6 +29,7 @@ import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.AndroidUtilities;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -116,24 +117,21 @@ public class BottomEditorFragment extends Fragment {
         mRowLayout.requestLayout();
     }
 
-    @SuppressLint("NewApi")
-    @SuppressWarnings("all") // List.of(...)
     private List<ShortcutItem> getShortcuts() {
-        List<String> strings = List.of("<", ">", ";", "{", "}", ":");
+        List<String> strings = Arrays.asList("<", ">", ";", "{", "}", ":");
         List<ShortcutItem> items = strings.stream()
                 .map(item -> {
                     ShortcutItem it = new ShortcutItem();
                     it.label = item;
                     it.kind = "textinsert";
-                    it.actions = List.of(new TextInsertAction());
+                    it.actions = Arrays.asList(new TextInsertAction());
                     return it;
                 }).collect(Collectors.toList());
-        List<String> arrows = List.of("→", "←", "↑", "↓");
         Collections.addAll(items,
-                new ShortcutItem(List.of(new CursorMoveAction(CursorMoveAction.Direction.UP, 1)),"↑", "cursormove"),
-                new ShortcutItem(List.of(new CursorMoveAction(CursorMoveAction.Direction.DOWN, 1)),"↓", "cursormove"),
-                new ShortcutItem(List.of(new CursorMoveAction(CursorMoveAction.Direction.LEFT, 1)),"←", "cursormove"),
-                new ShortcutItem(List.of(new CursorMoveAction(CursorMoveAction.Direction.RIGHT, 1)), "→", "cursormove")
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.UP, 1)),"↑", "cursormove"),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.DOWN, 1)),"↓", "cursormove"),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.LEFT, 1)),"←", "cursormove"),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.RIGHT, 1)), "→", "cursormove")
         );
 
         return items;
