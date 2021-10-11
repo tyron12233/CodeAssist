@@ -101,6 +101,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 							colors.addIfNeeded(line,column, EditorColorScheme.LITERAL);
 						}
 						break;
+					case XMLLexer.SLASH:
 					case XMLLexer.OPEN:
 					case XMLLexer.CLOSE:
 					case XMLLexer.SLASH_CLOSE:
