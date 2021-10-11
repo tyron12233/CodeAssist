@@ -118,37 +118,27 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
     addAttributeProcessor(Attributes.View.OnClick, new EventProcessor<V>() {
       @Override
       public void setOnEventListener(final V view, final Value value) {
-        view.setOnClickListener(new View.OnClickListener() {
-          @Override
-          public void onClick(View v) {
-            trigger(Attributes.View.OnClick, value, (ProteusView) view);
-          }
-        });
+        view.setOnClickListener(v -> trigger(Attributes.View.OnClick, value, (ProteusView) view));
       }
     });
 
     addAttributeProcessor(Attributes.View.OnLongClick, new EventProcessor<V>() {
       @Override
       public void setOnEventListener(final V view, final Value value) {
-        view.setOnLongClickListener(new View.OnLongClickListener() {
-          @Override
-          public boolean onLongClick(View v) {
-            trigger(Attributes.View.OnLongClick, value, (ProteusView) view);
-            return true;
-          }
+        view.setOnLongClickListener(v -> {
+          trigger(Attributes.View.OnLongClick, value, (ProteusView) view);
+          return true;
         });
       }
     });
 
     addAttributeProcessor(Attributes.View.OnTouch, new EventProcessor<V>() {
+      @SuppressLint("ClickableViewAccessibility")
       @Override
       public void setOnEventListener(final V view, final Value value) {
-        view.setOnTouchListener(new View.OnTouchListener() {
-          @Override
-          public boolean onTouch(View v, MotionEvent event) {
-            trigger(Attributes.View.OnTouch, value, (ProteusView) view);
-            return true;
-          }
+        view.setOnTouchListener((v, event) -> {
+          trigger(Attributes.View.OnTouch, value, (ProteusView) view);
+          return true;
         });
       }
     });
@@ -156,12 +146,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
     addAttributeProcessor(Attributes.View.Background, new DrawableResourceProcessor<V>() {
       @Override
       public void setDrawable(V view, Drawable drawable) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
-          //noinspection deprecation
-          view.setBackgroundDrawable(drawable);
-        } else {
-          view.setBackground(drawable);
-        }
+        view.setBackground(drawable);
       }
     });
 
@@ -491,7 +476,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
         for (String styleName : styleSet) {
           Map<String, Value> style = context.getStyle(styleName);
           if (null != style) {
-            process(context.getStyle(styleName), (ProteusView) view, (handler != null ? handler : ViewParser.this));
+            process(style, (ProteusView) view, (handler != null ? handler : ViewParser.this));
           }
         }
       }
@@ -507,9 +492,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
     addAttributeProcessor(Attributes.View.TransitionName, new StringAttributeProcessor<V>() {
       @Override
       public void setString(V view, String value) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-          view.setTransitionName(value);
-        }
+        view.setTransitionName(value);
       }
     });
 
@@ -563,50 +546,18 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
     });
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
-      addAttributeProcessor(Attributes.View.TextAlignment, new StringAttributeProcessor<V>() {
+    addAttributeProcessor(Attributes.View.TextAlignment, new StringAttributeProcessor<V>() {
+      @Override
+      public void setString(V view, String value) {
 
-        @SuppressLint("NewApi")
-        @Override
-        public void setString(V view, String value) {
-
-          Integer textAlignment = ParseHelper.parseTextAlignment(value);
-          if (null != textAlignment) {
-            //noinspection ResourceType
-            view.setTextAlignment(textAlignment);
-          }
+        Integer textAlignment = ParseHelper.parseTextAlignment(value);
+        if (null != textAlignment) {
+          //noinspection ResourceType
+          view.setTextAlignment(textAlignment);
         }
+      }
 
-      });
-    }
-
-    addAttributeProcessor(Attributes.View.Above, createRelativeLayoutRuleProcessor(RelativeLayout.ABOVE));
-    addAttributeProcessor(Attributes.View.AlignBaseline, createRelativeLayoutRuleProcessor(RelativeLayout.ALIGN_BASELINE));
-    addAttributeProcessor(Attributes.View.AlignBottom, createRelativeLayoutRuleProcessor(RelativeLayout.ALIGN_BOTTOM));
-    addAttributeProcessor(Attributes.View.AlignLeft, createRelativeLayoutRuleProcessor(RelativeLayout.ALIGN_LEFT));
-    addAttributeProcessor(Attributes.View.AlignRight, createRelativeLayoutRuleProcessor(RelativeLayout.ALIGN_RIGHT));
-    addAttributeProcessor(Attributes.View.AlignTop, createRelativeLayoutRuleProcessor(RelativeLayout.ALIGN_TOP));
-    addAttributeProcessor(Attributes.View.Below, createRelativeLayoutRuleProcessor(RelativeLayout.BELOW));
-    addAttributeProcessor(Attributes.View.ToLeftOf, createRelativeLayoutRuleProcessor(RelativeLayout.LEFT_OF));
-    addAttributeProcessor(Attributes.View.ToRightOf, createRelativeLayoutRuleProcessor(RelativeLayout.RIGHT_OF));
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
-      addAttributeProcessor(Attributes.View.AlignEnd, createRelativeLayoutRuleProcessor(RelativeLayout.ALIGN_END));
-      addAttributeProcessor(Attributes.View.AlignStart, createRelativeLayoutRuleProcessor(RelativeLayout.ALIGN_START));
-      addAttributeProcessor(Attributes.View.ToEndOf, createRelativeLayoutRuleProcessor(RelativeLayout.END_OF));
-      addAttributeProcessor(Attributes.View.ToStartOf, createRelativeLayoutRuleProcessor(RelativeLayout.START_OF));
-    }
-
-    addAttributeProcessor(Attributes.View.AlignParentTop, createRelativeLayoutBooleanRuleProcessor(RelativeLayout.ALIGN_PARENT_TOP));
-    addAttributeProcessor(Attributes.View.AlignParentRight, createRelativeLayoutBooleanRuleProcessor(RelativeLayout.ALIGN_PARENT_RIGHT));
-    addAttributeProcessor(Attributes.View.AlignParentBottom, createRelativeLayoutBooleanRuleProcessor(RelativeLayout.ALIGN_PARENT_BOTTOM));
-    addAttributeProcessor(Attributes.View.AlignParentLeft, createRelativeLayoutBooleanRuleProcessor(RelativeLayout.ALIGN_PARENT_LEFT));
-    addAttributeProcessor(Attributes.View.CenterHorizontal, createRelativeLayoutBooleanRuleProcessor(RelativeLayout.CENTER_HORIZONTAL));
-    addAttributeProcessor(Attributes.View.CenterVertical, createRelativeLayoutBooleanRuleProcessor(RelativeLayout.CENTER_VERTICAL));
-    addAttributeProcessor(Attributes.View.CenterInParent, createRelativeLayoutBooleanRuleProcessor(RelativeLayout.CENTER_IN_PARENT));
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
-      addAttributeProcessor(Attributes.View.AlignParentStart, createRelativeLayoutBooleanRuleProcessor(RelativeLayout.ALIGN_PARENT_START));
-      addAttributeProcessor(Attributes.View.AlignParentEnd, createRelativeLayoutBooleanRuleProcessor(RelativeLayout.ALIGN_PARENT_END));
-    }
+    });
   }
 
   @Override
@@ -617,27 +568,5 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
   @Override
   public boolean addView(ProteusView parent, ProteusView view) {
     return false;
-  }
-
-  private AttributeProcessor<V> createRelativeLayoutRuleProcessor(final int rule) {
-    return new StringAttributeProcessor<V>() {
-      @Override
-      public void setString(V view, String value) {
-        if (view instanceof ProteusView) {
-          int id = ((ProteusView) view).getViewManager().getContext().getInflater().getUniqueViewId(value);
-          ParseHelper.addRelativeLayoutRule(view, rule, id);
-        }
-      }
-    };
-  }
-
-  private AttributeProcessor<V> createRelativeLayoutBooleanRuleProcessor(final int rule) {
-    return new BooleanAttributeProcessor<V>() {
-      @Override
-      public void setBoolean(V view, boolean value) {
-        int trueOrFalse = ParseHelper.parseRelativeLayoutBoolean(value);
-        ParseHelper.addRelativeLayoutRule(view, rule, trueOrFalse);
-      }
-    };
   }
 }
