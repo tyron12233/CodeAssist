@@ -72,13 +72,10 @@ public class IncrementalD8Task extends Task {
         mFilesToCompile = new ArrayList<>();
         mClassFiles = new ArrayList<>(D8Task.getClassFiles(new File(project.getBuildDirectory(), "bin/classes")));
         for (Cache.Key<String> key : new HashSet<>(mDexCache.getKeys())) {
-            for (File file : mDexCache.get(key.file, key.key)) {
-                if (!mClassFiles.contains(key.file)) {
-                    if (file.delete()) {
-                        Log.d(TAG, "Found deleted class file, removing " + key.file.toFile().getName() + " on the cache.");
-                    }
-                    mDexCache.remove(key.file, "dex");
-                }
+            if (!mFilesToCompile.contains(key.file)) {
+                File file = mDexCache.get(key.file, "dex").iterator().next();
+                deleteAllFiles(file, ".dex");
+                mDexCache.remove(key.file, "dex");
             }
         }
 
@@ -147,13 +144,9 @@ public class IncrementalD8Task extends Task {
                     .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
                     .setMinApiLevel(mProject.getMinSdk());
 
-            if (mProject.getTargetSdk() == Build.VERSION.SDK_INT) {
-                builder.setDisableDesugaring(true);
-            }
             File output = new File(mProject.getBuildDirectory(), "bin");
             builder.setMode(CompilationMode.DEBUG);
             builder.setOutput(output.toPath(), OutputMode.DexIndexed);
-            builder.setIntermediate(true);
             D8.run(builder.build());
 
         } catch (com.android.tools.r8.CompilationFailedException e) {
@@ -203,7 +196,8 @@ public class IncrementalD8Task extends Task {
                 .replace(".class", ".dex");
 
         File intermediate = new File(mProject.getBuildDirectory(), "intermediate/classes");
-        return new File(intermediate, packageName);
+        File file1 = new File(intermediate, packageName);
+        return file1;
     }
 
     /**

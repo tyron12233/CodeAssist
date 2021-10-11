@@ -41,7 +41,7 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
 
-    api 'com.android.tools:r8:2.2.64'
+    api 'com.android.tools:r8:3.0.73'
     api 'com.github.marschall:zipfilesystem-standalone:1.0.1'
     api project(path: ':kotlinc')
     api files (

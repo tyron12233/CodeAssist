@@ -2,7 +2,6 @@ package com.tyron.lint.checks;
 
 import android.util.Log;
 
-import com.android.tools.r8.v.b.P;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Sets.SetView;
 import com.tyron.lint.api.Category;
