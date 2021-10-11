@@ -2929,6 +2929,16 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         return true;
     }
 
+    public synchronized boolean formatCodeAsync(int start, int end) {
+        if (mFormatThread != null || (mListener != null && mListener.onRequestFormat(this))) {
+            return false;
+        }
+        mFormatThread = new FormatThread(mText, mLanguage, this);
+        mFormatThread.setRange(start, end);
+        mFormatThread.start();
+        return true;
+    }
+
     /**
      * Get tab width
      *

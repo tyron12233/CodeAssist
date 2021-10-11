@@ -13,9 +13,15 @@ import io.github.rosemoe.sora.langs.java.Tokens;
 
 import android.util.Log;
 
+import com.google.common.collect.Range;
 import com.google.googlejavaformat.java.Formatter;
 import com.google.googlejavaformat.java.FormatterException;
 import com.google.googlejavaformat.java.JavaFormatterOptions;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 
 public class JavaLanguage implements EditorLanguage {
     
@@ -78,6 +84,23 @@ public class JavaLanguage implements EditorLanguage {
         } catch (FormatterException e) {
             Log.e("JavaFormatter", e.getMessage());
             return p1;
+        }
+    }
+
+    @Override
+    public CharSequence format(CharSequence contents, int start, int end) {
+        JavaFormatterOptions options = JavaFormatterOptions.builder()
+                .style(JavaFormatterOptions.Style.AOSP)
+                .build();
+        Formatter formatter = new Formatter(options);
+        Range<Integer> range = Range.closed(start, end);
+        Collection<Range<Integer>> ranges = new ArrayList<>();
+        ranges.add(range);
+        try {
+            return formatter.formatSource(contents.toString(), ranges);
+        } catch (FormatterException e) {
+            Log.d("Formatter", "Unable to format file", e);
+            return contents;
         }
     }
 

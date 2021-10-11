@@ -251,6 +251,11 @@ public class CodeEditorFragment extends Fragment {
                                             } else {
                                                 mEditor.getText().replace(range.start.line, range.start.column, range.end.line, range.end.column, edit.newText);
                                             }
+
+                                            int startFormat = mEditor.getText()
+                                                    .getCharIndex(range.start.line, range.start.column);
+                                            int endFormat = startFormat + edit.newText.length();
+                                            mEditor.formatCodeAsync(startFormat, endFormat);
                                         }
                                     })).show();
                             return true;

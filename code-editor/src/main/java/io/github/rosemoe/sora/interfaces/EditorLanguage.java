@@ -85,6 +85,10 @@ public interface EditorLanguage {
      */
     CharSequence format(CharSequence text);
 
+    default CharSequence format(CharSequence text, int start, int end) {
+        return format(text);
+    }
+
     /**
      * Returns language specified symbol pairs.
      * The method is called only once when the language is applied.

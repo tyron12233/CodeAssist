@@ -32,10 +32,18 @@ public class FormatThread extends Thread {
 
     private FormatResultReceiver mReceiver;
 
+    private int start = -1;
+    private int end = -1;
+
     public FormatThread(CharSequence text, EditorLanguage language, FormatResultReceiver receiver) {
         mText = text;
         mLanguage = language;
         mReceiver = receiver;
+    }
+
+    public void setRange(int start, int end) {
+        this.start = start;
+        this.end = end;
     }
 
     @Override
@@ -43,7 +51,11 @@ public class FormatThread extends Thread {
         CharSequence result = null;
         try {
             CharSequence chars = ((mText instanceof Content) ? (((Content) mText).toStringBuilder()) : new StringBuilder(mText));
-            result = mLanguage.format(chars);
+            if (start == -1 || end == -1) {
+                result = mLanguage.format(chars);
+            } else {
+                result = mLanguage.format(chars, start, end);
+            }
         } catch (Throwable e) {
             if (mReceiver != null) {
                 mReceiver.onFormatFail(e);

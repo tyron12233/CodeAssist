@@ -97,6 +97,9 @@ public class ImplementAbstractMethods implements Rewrite {
             if (mPosition != 0) {
                 thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), mPosition);
             }
+            if (thisTree == null) {
+                thisTree = new FindNewTypeDeclarationAt(task.task, task.root()).scan(task.root(), mPosition);
+            }
             int indent = EditHelper.indent(task.task, task.root(), thisTree) + 4;
 
             for (Element member : elements.getAllMembers(thisClass)) {

@@ -30,12 +30,12 @@ public class FindNewTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
             return smaller;
         }
 
-        if (pos.getStartPosition(root, t.getClassBody()) <= find && find <= pos.getEndPosition(root, t.getClassBody())) {
+        if (pos.getStartPosition(root, t.getClassBody()) <= find && find < pos.getEndPosition(root, t.getClassBody())) {
             return t.getClassBody();
         }
+
         return null;
     }
-
 
 
     @Override
