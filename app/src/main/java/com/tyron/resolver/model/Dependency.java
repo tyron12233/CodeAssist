@@ -81,6 +81,7 @@ public class Dependency {
 
     //androidx.compose.runtime:runtime:1.0.1
     //https://maven.google.com/androidx/compose/runtime/runtime/1.0.1/runtime-1.0.1.pom
+    //jitpack.io/com/github/stfalcon/stfalcon-imageviewer/1.0.1/
     public String getPomDownloadLink() {
         return getPath() + "/" + getFileName() + ".pom";
     }

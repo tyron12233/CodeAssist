@@ -34,7 +34,8 @@ public class DependencyResolver {
     private static final List<String> REPOS = Arrays.asList(
             "https://repo1.maven.org/maven2",
             "https://maven.google.com",
-            "https://jitpack.io"
+            "https://jitpack.io",
+            "https://jcenter.bintray.com/"
     );
     private final File mOutputDir;
     private final ExecutorService service = Executors.newFixedThreadPool(4);
