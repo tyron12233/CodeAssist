@@ -1,6 +1,7 @@
 package com.tyron.code.ui.editor.language.xml;
 
 import android.content.Context;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -13,6 +14,8 @@ import com.tyron.code.util.ProjectUtils;
 import com.tyron.layoutpreview.convert.ConvertException;
 import com.tyron.layoutpreview.inflate.PreviewLayoutInflater;
 
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.Token;
 import org.apache.commons.io.FileUtils;
 
 import java.io.File;
@@ -23,6 +26,7 @@ import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
 import io.github.rosemoe.sora.interfaces.EditorLanguage;
 import io.github.rosemoe.sora.interfaces.NewlineHandler;
+import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 
@@ -78,11 +82,45 @@ public class LanguageXML implements EditorLanguage {
 
 	@Override
 	public NewlineHandler[] getNewlineHandlers() {
-		return null;
+		return new NewlineHandler[]{new StartTagHandler()};
 	}
 
 	@Override
 	public int getIndentAdvance(String content) {
-		return 0;
+		XMLLexer lexer = new XMLLexer(CharStreams.fromString(content));
+		int advance = 0;
+		Token token;
+		while ((token = lexer.nextToken()) != null) {
+			if (token.getType() == XMLLexer.EOF) {
+				break;
+			}
+
+			if (token.getType() == XMLLexer.OPEN) {
+				advance++;
+			} else if (token.getType() == XMLLexer.SLASH_CLOSE) {
+				advance--;
+			}
+		}
+		advance = Math.max(0, advance);
+		return advance * 4;
+	}
+
+	private class StartTagHandler implements NewlineHandler {
+
+		@Override
+		public boolean matchesRequirement(String beforeText, String afterText) {
+			Log.d("StartTagHandler", "beforeText: " + beforeText + " afterText: " + afterText);
+			return beforeText.trim().startsWith("<");
+		}
+
+		@Override
+		public HandleResult handleNewline(String beforeText, String afterText, int tabSize) {
+			int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
+			String text;
+			StringBuilder sb = new StringBuilder()
+					.append("\n")
+					.append(text = TextUtils.createIndent(count + 4, tabSize, useTab()));
+			return new HandleResult(sb, 0);
+		}
 	}
 }
