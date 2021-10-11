@@ -33,7 +33,8 @@ public class DependencyResolver {
     private static final String TAG = DependencyResolver.class.getSimpleName();
     private static final List<String> REPOS = Arrays.asList(
             "https://repo1.maven.org/maven2",
-            "https://maven.google.com"
+            "https://maven.google.com",
+            "https://jitpack.io"
     );
     private final File mOutputDir;
     private final ExecutorService service = Executors.newFixedThreadPool(4);
