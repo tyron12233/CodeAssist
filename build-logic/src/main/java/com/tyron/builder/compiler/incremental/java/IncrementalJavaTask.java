@@ -157,7 +157,7 @@ public class IncrementalJavaTask extends Task {
                             .replace("build/bin/classes/", "src/main/java/")
                             .replace(".class", ".java");
                     if (classPath.contains("$")) {
-                        classPath = classPath.substring(0, classPath.lastIndexOf('$'))
+                        classPath = classPath.substring(0, classPath.indexOf('$'))
                                 + ".java";
                     }
                     File file = new File(classPath);
@@ -189,7 +189,7 @@ public class IncrementalJavaTask extends Task {
                         for (File file : children) {
                             if (!values.contains(file)) {
                                 if (file.delete()) {
-                                    Log.d("asdasdkasd", "deleted file " + file.getAbsolutePath());
+                                    mLogger.debug("Deleted file " + file.getAbsolutePath());
                                 }
                             }
                         }
