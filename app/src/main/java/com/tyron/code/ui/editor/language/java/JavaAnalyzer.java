@@ -48,7 +48,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
     private static final String TAG = JavaAnalyzer.class.getSimpleName();
     private static final Tokens[] sKeywordsBeforeFunctionName = new Tokens[]{Tokens.RETURN, Tokens.BREAK, Tokens.IF, Tokens.AND, Tokens.OR, Tokens.OREQ,
-            Tokens.OROR, Tokens.ANDAND, Tokens.ANDEQ, Tokens.RPAREN, Tokens.LBRACE, Tokens.NEW, Tokens.DOT};
+            Tokens.OROR, Tokens.ANDAND, Tokens.ANDEQ, Tokens.RPAREN, Tokens.LBRACE, Tokens.NEW, Tokens.DOT, Tokens.SEMICOLON};
 
     private final List<DiagnosticWrapper> diagnostics = new ArrayList<>();
     private final List<LintIssue> mLintDiagnostics = new ArrayList<>();
