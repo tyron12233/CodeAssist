@@ -84,7 +84,7 @@ public class TextAnalyzeResult {
      * @param spanLine The line position of span
      * @param span     The span
      */
-    public void add(int spanLine, Span span) {
+    public Span add(int spanLine, Span span) {
         int mapLine = mSpanMap.size() - 1;
         if (spanLine == mapLine) {
             mSpanMap.get(spanLine).add(span);
@@ -108,6 +108,7 @@ public class TextAnalyzeResult {
             throw new IllegalStateException("Invalid position");
         }
         mLast = span;
+        return span;
     }
 
     /**
