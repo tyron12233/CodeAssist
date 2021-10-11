@@ -1302,6 +1302,356 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         renderNode.endRecording();
     }
 
+    protected void drawRows(Canvas canvas, float offset, LongArrayList postDrawLineNumbers, List<CursorPaintAction> postDrawCursor, LongArrayList postDrawCurrentLines, MutableInt requiredFirstLn) {
+        final float waveLength = getDpUnit() * 8;
+        final float amplitude = getDpUnit() * 2;
+        RowIterator rowIterator = mLayout.obtainRowIterator(getFirstVisibleRow());
+        List<Span> temporaryEmptySpans = null;
+        List<List<Span>> spanMap = mSpanner.getResult().getSpanMap();
+        List<Integer> matchedPositions = new ArrayList<>();
+        int currentLine = mCursor.isSelected() ? -1 : mCursor.getLeftLine();
+        int currentLineBgColor = mColors.getColor(EditorColorScheme.CURRENT_LINE);
+        int lastPreparedLine = -1;
+        int spanOffset = 0;
+        int leadingWhitespaceEnd = 0;
+        int trailingWhitespaceStart = 0;
+        float circleRadius = 0f;
+        if (shouldInitializeNonPrintable()) {
+            float spaceWidth = mFontCache.measureChar(' ', mPaint);
+            float maxD = Math.min(getRowHeight(), spaceWidth);
+            maxD *= 0.18f;
+            circleRadius = maxD / 2;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !isWordwrap() && canvas.isHardwareAccelerated() && isHardwareAcceleratedDrawAllowed()) {
+            mRenderer.setExpectedCapacity(Math.max(getLastVisibleRow() - getFirstVisibleRow(), 30));
+            mRenderer.keepCurrentInDisplay(getFirstVisibleRow(), getLastVisibleRow());
+        }
+
+        // Step 1 - Draw background of rows
+        for (int row = getFirstVisibleRow(); row <= getLastVisibleRow() && rowIterator.hasNext(); row++) {
+            Row rowInf = rowIterator.next();
+            int line = rowInf.lineIndex;
+            int columnCount = mText.getColumnCount(line);
+            if (lastPreparedLine != line) {
+                computeMatchedPositions(line, matchedPositions);
+                prepareLine(line);
+                lastPreparedLine = line;
+            }
+
+            // Get visible region on line
+            float[] charPos = findFirstVisibleChar(offset, rowInf.startColumn, rowInf.endColumn, mBuffer);
+            int firstVisibleChar = (int) charPos[0];
+            int lastVisibleChar = firstVisibleChar;
+            float paintingOffset = charPos[1];
+            float temporaryOffset = paintingOffset;
+            while (temporaryOffset < getWidth() && lastVisibleChar < columnCount) {
+                char ch = mBuffer[lastVisibleChar];
+                if (isEmoji(ch) && lastVisibleChar + 1 < columnCount) {
+                    temporaryOffset += mFontCache.measureText(mBuffer, lastVisibleChar, lastVisibleChar + 2, mPaint);
+                    lastVisibleChar++;
+                } else {
+                    temporaryOffset += mFontCache.measureChar(mBuffer[lastVisibleChar], mPaint);
+                }
+                lastVisibleChar++;
+            }
+            lastVisibleChar = Math.min(lastVisibleChar, rowInf.endColumn);
+
+            // Draw current line background (or save)
+            if (line == currentLine) {
+                drawRowBackground(canvas, currentLineBgColor, row);
+                postDrawCurrentLines.add(row);
+            }
+
+            // Draw matched text background
+            if (!matchedPositions.isEmpty()) {
+                for (int position : matchedPositions) {
+                    drawRowRegionBackground(canvas, paintingOffset, row, firstVisibleChar, lastVisibleChar, position, position + mSearcher.mSearchText.length(), mColors.getColor(EditorColorScheme.MATCHED_TEXT_BACKGROUND));
+                }
+            }
+
+            // Draw selected text background
+            if (mCursor.isSelected() && line >= mCursor.getLeftLine() && line <= mCursor.getRightLine()) {
+                int selectionStart = 0;
+                int selectionEnd = columnCount;
+                if (line == mCursor.getLeftLine()) {
+                    selectionStart = mCursor.getLeftColumn();
+                }
+                if (line == mCursor.getRightLine()) {
+                    selectionEnd = mCursor.getRightColumn();
+                }
+                drawRowRegionBackground(canvas, paintingOffset, row, firstVisibleChar, lastVisibleChar, selectionStart, selectionEnd, mColors.getColor(EditorColorScheme.SELECTED_TEXT_BACKGROUND));
+            }
+        }
+        rowIterator.reset();
+
+        // Step 2 - Draw text and text decorations
+        for (int row = getFirstVisibleRow(); row <= getLastVisibleRow() && rowIterator.hasNext(); row++) {
+            Row rowInf = rowIterator.next();
+            int line = rowInf.lineIndex;
+            ContentLine contentLine = mText.getLine(line);
+            int columnCount = contentLine.length();
+            if (row == getFirstVisibleRow() && requiredFirstLn != null) {
+                requiredFirstLn.value = line;
+            } else if (rowInf.isLeadingRow) {
+                postDrawLineNumbers.add(IntPair.pack(line, row));
+            }
+
+            // Prepare data
+            if (lastPreparedLine != line) {
+                lastPreparedLine = line;
+                prepareLine(line);
+                spanOffset = 0;
+                if (shouldInitializeNonPrintable()) {
+                    long positions = findLeadingAndTrailingWhitespacePos(line);
+                    leadingWhitespaceEnd = IntPair.getFirst(positions);
+                    trailingWhitespaceStart = IntPair.getSecond(positions);
+                }
+            }
+
+            // Get visible region on line
+            float[] charPos = findFirstVisibleChar(offset, rowInf.startColumn, rowInf.endColumn, mBuffer);
+            int firstVisibleChar = (int) charPos[0];
+            int lastVisibleChar = firstVisibleChar;
+            float paintingOffset = charPos[1];
+            float temporaryOffset = paintingOffset;
+            while (temporaryOffset < getWidth() && lastVisibleChar < columnCount) {
+                char ch = mBuffer[lastVisibleChar];
+                if (isEmoji(ch) && lastVisibleChar + 1 < columnCount) {
+                    temporaryOffset += mFontCache.measureText(mBuffer, lastVisibleChar, lastVisibleChar + 2, mPaint);
+                    lastVisibleChar++;
+                } else {
+                    temporaryOffset += mFontCache.measureChar(mBuffer[lastVisibleChar], mPaint);
+                }
+                lastVisibleChar++;
+            }
+            lastVisibleChar = Math.min(lastVisibleChar, rowInf.endColumn);
+
+            float backupOffset = paintingOffset;
+
+            // Draw text here
+            if (!mHardwareAccAllowed || !canvas.isHardwareAccelerated() || isWordwrap() || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                // Get spans
+                List<Span> spans = null;
+                if (line < spanMap.size() && line >= 0) {
+                    spans = spanMap.get(line);
+                }
+                if (spans == null || spans.size() == 0) {
+                    if (temporaryEmptySpans == null) {
+                        temporaryEmptySpans = new LinkedList<>();
+                        temporaryEmptySpans.add(Span.obtain(0, EditorColorScheme.TEXT_NORMAL));
+                    }
+                    spans = temporaryEmptySpans;
+                }
+                // Seek for first span
+                float phi = 0f;
+                while (spanOffset + 1 < spans.size()) {
+                    if (spans.get(spanOffset + 1).column <= firstVisibleChar) {
+                        // Update phi
+                        Span span = spans.get(spanOffset);
+                        if (span.problemFlags > 0 && Integer.highestOneBit(span.problemFlags) != Span.FLAG_DEPRECATED) {
+                            float lineWidth;
+                            int spanEnd = Math.min(rowInf.endColumn, spans.get(spanOffset + 1).column);
+                            if (isWordwrap()) {
+                                lineWidth = measureText(mBuffer, Math.max(firstVisibleChar, span.column), spanEnd - Math.max(firstVisibleChar, span.column)) + phi;
+                            } else {
+                                lineWidth = measureText(mBuffer, span.column, spanEnd - span.column) + phi;
+                            }
+                            int waveCount = (int) Math.ceil(lineWidth / waveLength);
+                            phi = waveLength - (waveCount * waveLength - lineWidth);
+                        } else {
+                            phi = 0f;
+                        }
+                        spanOffset++;
+                    } else {
+                        break;
+                    }
+                }
+                Span span = spans.get(spanOffset);
+                // Draw by spans
+                while (lastVisibleChar > span.column) {
+                    int spanEnd = spanOffset + 1 >= spans.size() ? columnCount : spans.get(spanOffset + 1).column;
+                    spanEnd = Math.min(columnCount, spanEnd);
+                    int paintStart = Math.max(firstVisibleChar, span.column);
+                    if (paintStart >= columnCount) {
+                        break;
+                    }
+                    int paintEnd = Math.min(lastVisibleChar, spanEnd);
+                    if (paintStart > paintEnd) {
+                        break;
+                    }
+                    float width = measureText(mBuffer, paintStart, paintEnd - paintStart);
+                    ExternalRenderer renderer = span.renderer;
+
+                    // Invoke external renderer preDraw
+                    if (renderer != null && renderer.requirePreDraw()) {
+                        int saveCount = canvas.save();
+                        canvas.translate(paintingOffset, getRowTop(row) - getOffsetY());
+                        canvas.clipRect(0f, 0f, width, getRowHeight());
+                        try {
+                            renderer.draw(canvas, mPaint, mColors, true);
+                        } catch (Exception e) {
+                            Log.e(LOG_TAG, "Error while invoking external renderer", e);
+                        }
+                        canvas.restoreToCount(saveCount);
+                    }
+
+                    // Draw text
+                    drawRegionText(canvas, paintingOffset, getRowBaseline(row) - getOffsetY(), line, paintStart, paintEnd, columnCount, mColors.getColor(span.colorId));
+
+                    // Draw strikethrough
+                    if ((span.problemFlags & Span.FLAG_DEPRECATED) != 0) {
+                        mPaintOther.setColor(Color.BLACK);
+                        canvas.drawLine(paintingOffset, getRowTop(row) + getRowHeight() / 2f - getOffsetY(), paintingOffset + width, getRowTop(row) + getRowHeight() / 2f - getOffsetY(), mPaintOther);
+                    }
+
+                    // Draw underline
+                    if (span.underlineColor != 0) {
+                        mRect.bottom = getRowBottom(line) - getOffsetY() - mDpUnit * 1;
+                        mRect.top = mRect.bottom - getRowHeight() * 0.08f;
+                        mRect.left = paintingOffset;
+                        mRect.right = paintingOffset + width;
+                        drawColor(canvas, span.underlineColor, mRect);
+                    }
+
+                    // Draw issue curly underline
+                    if (span.problemFlags > 0 && Integer.highestOneBit(span.problemFlags) != Span.FLAG_DEPRECATED) {
+                        int color = 0;
+                        switch (Integer.highestOneBit(span.problemFlags)) {
+                            case Span.FLAG_ERROR:
+                                color = mColors.getColor(EditorColorScheme.PROBLEM_ERROR);
+                                break;
+                            case Span.FLAG_WARNING:
+                                color = mColors.getColor(EditorColorScheme.PROBLEM_WARNING);
+                                break;
+                            case Span.FLAG_TYPO:
+                                color = mColors.getColor(EditorColorScheme.PROBLEM_TYPO);
+                                break;
+                        }
+                        if (color != 0 && span.column >= 0 && spanEnd - span.column >= 0) {
+                            // Start and end X offset
+                            float startOffset;
+                            float lineWidth;
+                            if (isWordwrap()) {
+                                startOffset = measureTextRegionOffset() + measureText(mBuffer, firstVisibleChar, Math.max(0, span.column - firstVisibleChar)) - getOffsetX();
+                                lineWidth = measureText(mBuffer, Math.max(firstVisibleChar, span.column), spanEnd - Math.max(firstVisibleChar, span.column)) + phi;
+                            } else {
+                                startOffset = measureTextRegionOffset() + measureText(mBuffer, 0, span.column) - getOffsetX();
+                                lineWidth = measureText(mBuffer, span.column, spanEnd - span.column) + phi;
+                            }
+                            float centerY = getRowBottom(row) - getOffsetY();
+                            // Clip region due not to draw outside the horizontal region
+                            canvas.save();
+                            canvas.clipRect(startOffset, 0, startOffset + lineWidth, canvas.getHeight());
+                            canvas.translate(startOffset - phi, centerY);
+                            // Draw waves
+                            mPath.reset();
+                            mPath.moveTo(0, 0);
+                            int waveCount = (int) Math.ceil(lineWidth / waveLength);
+                            for (int i = 0; i < waveCount; i++) {
+                                mPath.quadTo(waveLength * i + waveLength / 4, amplitude, waveLength * i + waveLength / 2, 0);
+                                mPath.quadTo(waveLength * i + waveLength * 3 / 4, -amplitude, waveLength * i + waveLength, 0);
+                            }
+                            phi = waveLength - (waveCount * waveLength - lineWidth);
+                            // Draw path
+                            mPaint.setStrokeWidth(getDpUnit() * 1.8f);
+                            mPaintOther.setStyle(Paint.Style.STROKE);
+                            mPaintOther.setColor(color);
+                            canvas.drawPath(mPath, mPaintOther);
+                            canvas.restore();
+                        }
+                        mPaintOther.setStyle(Paint.Style.FILL);
+                    } else {
+                        phi = 0f;
+                    }
+
+                    // Invoke external renderer postDraw
+                    if (renderer != null && renderer.requirePostDraw()) {
+                        int saveCount = canvas.save();
+                        canvas.translate(paintingOffset, getRowTop(row) - getOffsetY());
+                        canvas.clipRect(0f, 0f, width, getRowHeight());
+                        try {
+                            renderer.draw(canvas, mPaint, mColors, false);
+                        } catch (Exception e) {
+                            Log.e(LOG_TAG, "Error while invoking external renderer", e);
+                        }
+                        canvas.restoreToCount(saveCount);
+                    }
+
+                    paintingOffset += width;
+
+                    if (paintEnd == lastVisibleChar) {
+                        break;
+                    }
+                    spanOffset++;
+                    if (spanOffset < spans.size()) {
+                        span = spans.get(spanOffset);
+                    } else {
+                        spanOffset--;
+                    }
+                }
+            } else {
+                paintingOffset = offset + mRenderer.drawLineHardwareAccelerated(canvas, line, offset);
+                lastVisibleChar = columnCount;
+            }
+
+            // Draw hard wrap
+            if (lastVisibleChar == columnCount && (mNonPrintableOptions & FLAG_DRAW_LINE_SEPARATOR) != 0) {
+                drawMiniGraph(canvas, paintingOffset, row, "↵");
+            }
+
+            // Recover the offset
+            paintingOffset = backupOffset;
+
+            // Draw non-printable characters
+            if (circleRadius != 0f && (leadingWhitespaceEnd != columnCount || (mNonPrintableOptions & FLAG_DRAW_WHITESPACE_FOR_EMPTY_LINE) != 0)) {
+                if ((mNonPrintableOptions & FLAG_DRAW_WHITESPACE_LEADING) != 0) {
+                    drawWhitespaces(canvas, paintingOffset, row, firstVisibleChar, lastVisibleChar, 0, leadingWhitespaceEnd, circleRadius);
+                }
+                if ((mNonPrintableOptions & FLAG_DRAW_WHITESPACE_INNER) != 0) {
+                    drawWhitespaces(canvas, paintingOffset, row, firstVisibleChar, lastVisibleChar, leadingWhitespaceEnd, trailingWhitespaceStart, circleRadius);
+                }
+                if ((mNonPrintableOptions & FLAG_DRAW_WHITESPACE_TRAILING) != 0) {
+                    drawWhitespaces(canvas, paintingOffset, row, firstVisibleChar, lastVisibleChar, trailingWhitespaceStart, columnCount, circleRadius);
+                }
+            }
+
+            // Draw composing text underline
+            if (line == mConnection.mComposingLine) {
+                int composingStart = mConnection.mComposingStart;
+                int composingEnd = mConnection.mComposingEnd;
+                int paintStart = Math.min(Math.max(composingStart, firstVisibleChar), lastVisibleChar);
+                int paintEnd = Math.min(Math.max(composingEnd, firstVisibleChar), lastVisibleChar);
+                if (paintStart != paintEnd) {
+                    mRect.top = getRowBottom(row) - getOffsetY();
+                    mRect.bottom = mRect.top + getRowHeight() * 0.06f;
+                    mRect.left = paintingOffset + measureText(mBuffer, firstVisibleChar, paintStart - firstVisibleChar);
+                    mRect.right = mRect.left + measureText(mBuffer, paintStart, paintEnd - paintStart);
+                    drawColor(canvas, mColors.getColor(EditorColorScheme.UNDERLINE), mRect);
+                }
+            }
+
+            // Draw cursors
+            if (mCursor.isSelected()) {
+                if (mTextActionPresenter.shouldShowCursor()) {
+                    if (mCursor.getLeftLine() == line && isInside(mCursor.getLeftColumn(), firstVisibleChar, lastVisibleChar, line)) {
+                        float centerX = paintingOffset + measureText(mBuffer, firstVisibleChar, mCursor.getLeftColumn() - firstVisibleChar);
+                        postDrawCursor.add(new CursorPaintAction(row, centerX, mLeftHandle, false, EditorTouchEventHandler.SelectionHandle.LEFT));
+                    }
+                    if (mCursor.getRightLine() == line && isInside(mCursor.getRightColumn(), firstVisibleChar, lastVisibleChar, line)) {
+                        float centerX = paintingOffset + measureText(mBuffer, firstVisibleChar, mCursor.getRightColumn() - firstVisibleChar);
+                        postDrawCursor.add(new CursorPaintAction(row, centerX, mRightHandle, false, EditorTouchEventHandler.SelectionHandle.RIGHT));
+                    }
+                }
+            } else if (mCursor.getLeftLine() == line && isInside(mCursor.getLeftColumn(), firstVisibleChar, lastVisibleChar, line)) {
+                float centerX = paintingOffset + measureText(mBuffer, firstVisibleChar, mCursor.getLeftColumn() - firstVisibleChar);
+                postDrawCursor.add(new CursorPaintAction(row, centerX, mEventHandler.shouldDrawInsertHandle() ? mInsertHandle : null, true));
+            }
+        }
+
+        mPaintOther.setStrokeWidth(circleRadius * 2);
+        mDrawPoints.commitPoints(canvas, mPaintOther);
+    }
+
     /**
      * Draw rows with a {@link RowIterator}
      *
@@ -1310,7 +1660,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
      * @param postDrawLineNumbers Line numbers to be drawn later
      * @param postDrawCursor      Cursors to be drawn later
      */
-    protected void drawRows(Canvas canvas, float offset, LongArrayList postDrawLineNumbers, List<CursorPaintAction> postDrawCursor, LongArrayList postDrawCurrentLines, MutableInt requiredFirstLn) {
+    protected void drawRowsOld(Canvas canvas, float offset, LongArrayList postDrawLineNumbers, List<CursorPaintAction> postDrawCursor, LongArrayList postDrawCurrentLines, MutableInt requiredFirstLn) {
         final float waveLength = getDpUnit() * 8;
         final float amplitude = getDpUnit() * 2;
         RowIterator rowIterator = mLayout.obtainRowIterator(getFirstVisibleRow());

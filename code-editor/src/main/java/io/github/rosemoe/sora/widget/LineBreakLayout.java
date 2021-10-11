@@ -35,7 +35,7 @@ import io.github.rosemoe.sora.util.IntPair;
  *
  * @author Rose
  */
-class LineBreakLayout extends AbstractLayout {
+class  LineBreakLayout extends AbstractLayout {
 
     private BinaryHeap widthMaintainer;
 
