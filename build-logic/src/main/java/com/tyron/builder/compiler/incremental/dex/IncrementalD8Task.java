@@ -142,9 +142,9 @@ public class IncrementalD8Task extends Task {
             }
 
             D8Command.Builder builder = D8Command.builder(diagnosticsHandler)
+                    .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
                     .addLibraryFiles(getLibraryFiles())
                     .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
-                    .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
                     .setMinApiLevel(mProject.getMinSdk());
 
             if (mProject.getTargetSdk() == Build.VERSION.SDK_INT) {
@@ -168,8 +168,8 @@ public class IncrementalD8Task extends Task {
         D8Command command = D8Command.builder(diagnosticsHandler)
                 .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
                 .addLibraryFiles(getLibraryFiles())
-                .addProgramFiles(getLibraryDexes())
                 .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
+                .addProgramFiles(getLibraryDexes())
                 .setMinApiLevel(mProject.getMinSdk())
                 .setMode(CompilationMode.DEBUG)
                 .setOutput(output.toPath(), OutputMode.DexIndexed)
