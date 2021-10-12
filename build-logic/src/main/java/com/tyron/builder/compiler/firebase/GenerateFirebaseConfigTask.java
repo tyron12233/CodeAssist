@@ -59,7 +59,7 @@ public class GenerateFirebaseConfigTask extends Task {
 
         String contents = FileUtils.readFileToString(mConfigFile, Charset.defaultCharset());
         try {
-            File xmlDirectory = new File(mProject.getBuildDirectory(), "xml");
+            File xmlDirectory = new File(mProject.getResourceDirectory(), "xml");
             if (!xmlDirectory.exists() && !xmlDirectory.mkdirs()) {
                 throw new IOException("Unable to create xml folder");
             }
