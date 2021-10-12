@@ -59,7 +59,6 @@ public class Resource extends Value {
     public final int resId;
     private final String name;
 
-    @Deprecated
     private Resource(int resId, String name) {
         this.resId = resId;
         this.name = name;
