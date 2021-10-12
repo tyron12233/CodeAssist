@@ -116,7 +116,6 @@ public class CleanTask extends Task {
                     mLogger.warning("Unrecognized dex file: " + file.getName());
                     continue;
                 } else {
-
                     String className = name.substring(start, end);
                     path = path.substring(0, path.lastIndexOf('.')) + "." + className;
                 }
@@ -128,7 +127,7 @@ public class CleanTask extends Task {
 
             if (FileManager.getInstance().list(path).isEmpty() && !FileManager.getInstance().containsClass(packageName)) {
                 if (file.delete()) {
-                    mLogger.debug("Deleted dex file " + file.getName());
+                    mLogger.debug("Deleted dex file " + path);
                 }
             }
         }
