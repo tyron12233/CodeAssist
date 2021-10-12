@@ -4,6 +4,7 @@ import com.flipkart.android.proteus.ProteusBuilder;
 import com.tyron.layout.appcompat.widget.AppBarLayoutParser;
 import com.tyron.layout.appcompat.widget.CollapsingToolbarLayoutParser;
 import com.tyron.layout.appcompat.widget.CoordinatorLayoutParser;
+import com.tyron.layout.appcompat.widget.MaterialCardViewParser;
 
 public class AppCompatModule implements ProteusBuilder.Module {
 
@@ -19,6 +20,7 @@ public class AppCompatModule implements ProteusBuilder.Module {
         builder.register(new AppBarLayoutParser<>());
         builder.register(new CollapsingToolbarLayoutParser<>());
         builder.register(new CoordinatorLayoutParser<>());
+        builder.register(new MaterialCardViewParser<>());
         AppCompatModuleAttributeHelper.register(builder);
     }
 }
