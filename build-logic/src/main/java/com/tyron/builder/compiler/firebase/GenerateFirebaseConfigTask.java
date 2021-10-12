@@ -3,6 +3,7 @@ package com.tyron.builder.compiler.firebase;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
@@ -58,29 +59,47 @@ public class GenerateFirebaseConfigTask extends Task {
 
         String contents = FileUtils.readFileToString(mConfigFile, Charset.defaultCharset());
         try {
-            JSONObject jsonObject = new JSONObject(contents);
-            JSONObject projectInfo = jsonObject.getJSONObject("project_info");
-
-            JSONArray clientArray = jsonObject.getJSONArray("client");
-            for (int i = 0; i < clientArray.length(); i++) {
-                JSONObject object = clientArray.getJSONObject(i);
-                JSONObject clientInfo = object.getJSONObject("client_info");
-                JSONObject androidClientInfo = clientInfo.getJSONObject("android_client_info");
-
-                String packageName = androidClientInfo.getString("package_name");
-                if (packageName.equals(mProject.getPackageName())) {
-                    parseConfig(projectInfo, object, clientInfo);
-                    return;
-                }
+            File xmlDirectory = new File(mProject.getBuildDirectory(), "xml");
+            if (!xmlDirectory.exists() && !xmlDirectory.mkdirs()) {
+                throw new IOException("Unable to create xml folder");
             }
 
+            File secretsFile = new File(xmlDirectory, "secrets.xml");
+            if (!secretsFile.exists() && !secretsFile.createNewFile()) {
+                throw new IOException("Unable to create secrets.xml file");
+            }
+
+            if (doGenerate(contents, mProject.getPackageName(), secretsFile)) {
+                return;
+            }
             throw new CompilationFailedException("Unable to find " + mProject.getPackageName() + " in google-services.json");
         } catch (JSONException e) {
             throw new CompilationFailedException("Failed to parse google-services.json: " + e.getMessage());
         }
     }
 
-    private void parseConfig(JSONObject projectInfo, JSONObject client, JSONObject clientInfo) throws JSONException, IOException {
+    @VisibleForTesting
+    public boolean doGenerate(String contents, String packageName, File secretsFile) throws JSONException, IOException {
+        JSONObject jsonObject = new JSONObject(contents);
+        JSONObject projectInfo = jsonObject.getJSONObject("project_info");
+
+        JSONArray clientArray = jsonObject.getJSONArray("client");
+        for (int i = 0; i < clientArray.length(); i++) {
+            JSONObject object = clientArray.getJSONObject(i);
+            JSONObject clientInfo = object.getJSONObject("client_info");
+            JSONObject androidClientInfo = clientInfo.getJSONObject("android_client_info");
+
+            String clientPackageName = androidClientInfo.getString("package_name");
+            if (packageName.equals(clientPackageName)) {
+                parseConfig(projectInfo, object, clientInfo, secretsFile);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void parseConfig(JSONObject projectInfo, JSONObject client, JSONObject clientInfo, File secretsFile) throws JSONException, IOException {
         Iterator<String> keys = projectInfo.keys();
         Map<String, String> map = new HashMap<>();
         keys.forEachRemaining(s -> {
@@ -112,23 +131,15 @@ public class GenerateFirebaseConfigTask extends Task {
 
         }
 
-        generateXML(map);
+
+        generateXML(map, secretsFile);
     }
 
-    private void generateXML(Map<String, String> config) throws IOException {
-        File xmlDirectory = new File(mProject.getResourceDirectory(), "xml");
-        if (!xmlDirectory.exists() && !xmlDirectory.mkdirs()) {
-            throw new IOException("Unable to create xml folder");
-        }
-
-        File secretsFile = new File(xmlDirectory, "secrets.xml");
-        if (!secretsFile.exists() && !secretsFile.createNewFile()) {
-            throw new IOException("Unable to create secrets.xml file");
-        }
-
+    private void generateXML(Map<String, String> config, File secretsFile) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(secretsFile.toPath())) {
             writer.write("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
             writer.write("<resources>\n");
+            writer.write("\t<integer name=\"google_play_services_version\">12451000</integer>\n");
             for (Map.Entry<String, String> entry : config.entrySet()) {
                 writer.write("\t<string name=\"");
                 writer.write(entry.getKey());
