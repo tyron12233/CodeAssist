@@ -151,14 +151,16 @@ public class IncrementalJavaTask extends Task {
             for (JavaFileObject fileObject : generate) {
                 String path = fileObject.getName();
                 File classFile = new File(path);
+                Log.d("PATH JAVA", "path: " + path);
                 if (classFile.exists()) {
-                    Log.d(TAG, "Adding class file " + classFile.getName() + " to cache");
                     String classPath = classFile.getAbsolutePath()
                             .replace("build/bin/classes/", "src/main/java/")
                             .replace(".class", ".java");
-                    if (classPath.contains("$")) {
+                    Log.d(TAG, "Adding class file " + classFile.getName() + " to cache" + "\n cache:" + classPath);
+                    if (classFile.getName().indexOf('$') != -1) {
                         classPath = classPath.substring(0, classPath.indexOf('$'))
                                 + ".java";
+                        Log.d(TAG, "class path: " + classPath);
                     }
                     File file = new File(classPath);
                     if (!file.exists()) {
@@ -184,7 +186,14 @@ public class IncrementalJavaTask extends Task {
                 File first = values.iterator().next();
                 File parent = first.getParentFile();
                 if (parent != null) {
-                    File[] children = parent.listFiles(c -> c.getName().startsWith(name) && c.getName().contains("$"));
+                    File[] children = parent.listFiles(c -> {
+                        if (!c.getName().contains("$")) {
+                            return false;
+                        }
+                        String baseClassName = c.getName()
+                                .substring(0, c.getName().indexOf('$'));
+                        return baseClassName.equals(name);
+                    });
                     if (children != null) {
                         for (File file : children) {
                             if (!values.contains(file)) {
