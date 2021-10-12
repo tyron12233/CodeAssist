@@ -6,11 +6,11 @@ import org.openjdk.javax.tools.Diagnostic;
 
 public interface ILogger {
 
-    public static ILogger wrap(LogViewModel logViewModel) {
+    static ILogger wrap(LogViewModel logViewModel) {
         return new ILogger() {
             @Override
             public void info(DiagnosticWrapper wrapper) {
-
+                logViewModel.d(LogViewModel.BUILD_LOG, wrapper);
             }
 
             @Override

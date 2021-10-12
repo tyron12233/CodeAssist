@@ -241,7 +241,7 @@ public class XmlElement extends OrphanXmlElement {
             return;
 
         }
-        mergingReport.getLogger().info("Merging " + getId()
+        mergingReport.getLogger().verbose("Merging " + getId()
                 + " with lower " + lowerPriorityNode.printPosition());
 
         // workaround for 0.12 release and overlay treatment of manifest entries. This will
