@@ -24,6 +24,7 @@ import com.google.gson.stream.JsonReader;
 import com.tyron.builder.model.Project;
 import com.tyron.layout.appcompat.AppCompatModule;
 import com.tyron.layout.cardview.CardViewModule;
+import com.tyron.layout.constraintlayout.ConstraintLayoutModule;
 import com.tyron.layoutpreview.ResourceManager;
 import com.flipkart.android.proteus.StringManager;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
@@ -125,6 +126,7 @@ public class PreviewLayoutInflater {
     public PreviewLayoutInflater(Context base, Project project) {
         mBaseContext = base;
         ProteusBuilder builder = new ProteusBuilder();
+        builder.register(ConstraintLayoutModule.create());
         builder.register(CardViewModule.create());
         builder.register(AppCompatModule.create());
         registerCustomViews(builder, project);
