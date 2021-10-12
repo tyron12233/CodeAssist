@@ -44,6 +44,8 @@ import java.io.InputStreamReader;
 import java.io.StringReader;
 import java.util.List;
 
+import dalvik.system.DexClassLoader;
+
 public class PreviewLayoutInflater {
 
     private final Context mBaseContext;
@@ -194,29 +196,12 @@ public class PreviewLayoutInflater {
             return;
         }
 
-        File[] jsonFiles = customViewsDir.listFiles(c -> c.getName().endsWith(".json"));
-        if (jsonFiles == null) {
-            return;
-        }
-
-        for (File jsonFile : jsonFiles) {
-            try {
-                List<CustomView> customViews = new Gson().fromJson(new InputStreamReader(new FileInputStream(jsonFile)),
-                        new TypeToken<List<CustomView>>(){}.getType());
-
-                if (customViews != null) {
-                    customViews.forEach(it -> {
-                        if (it.isViewGroup()) {
-                            builder.register(new CustomViewGroupParser(it));
-                        } else {
-                            builder.register(new CustomViewParser(it));
-                        }
-                    });
-                }
-            } catch (FileNotFoundException ignore) {
-
+        File[] jarFiles = customViewsDir.listFiles(c -> c.getName().endsWith(".jar"));
+        if (jarFiles != null) {
+            for (File file : jarFiles) {
+                // TODO: use the class loader of the project, Load class from META-INF
+                DexClassLoader loader = new DexClassLoader(file.getAbsolutePath(), mContext.getCodeCacheDir().getAbsolutePath(), null, this.getClass().getClassLoader());
             }
-
         }
     }
 }
