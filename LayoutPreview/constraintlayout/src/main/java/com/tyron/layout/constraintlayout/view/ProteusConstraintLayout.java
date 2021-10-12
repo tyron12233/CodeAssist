@@ -25,10 +25,11 @@ public class ProteusConstraintLayout extends ConstraintLayout implements Proteus
 
     @NonNull
     @Override
-    public void setViewManager(Manager manager) {
+    public void setViewManager(@NonNull Manager manager) {
         this.manager = manager;
     }
 
+    @NonNull
     @Override
     public View getAsView() {
         return this;
