@@ -7,6 +7,7 @@ import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.MemberReferenceTree;
 import org.openjdk.source.tree.MemberSelectTree;
+import org.openjdk.source.tree.SwitchTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
@@ -73,57 +74,6 @@ public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
         }
         return super.visitMemberReference(t, find);
     }
-
- /*   @Override
-    public TreePath visitParenthesized(ParenthesizedTree node, Long find) {
-        long start = pos.getEndPosition(root, node.getExpression()) + 1;
-        long end = pos.getEndPosition(root, node);
-        if (start <= find && find <= end) {
-            Log.d("PARENTHESIZED NODE", node.toString());
-            //return getCurrentPath();
-        }
-        return super.visitParenthesized(node, find);
-    }
-
-    @Override
-    public TreePath visitTypeParameter(TypeParameterTree node, Long find) {
-        long start = pos.getStartPosition(root, node);
-        long end = pos.getEndPosition(root, node);
-        if (start <= find && find <= end) {
-            Log.d(TAG, "visted typr parameter: " + node);
-            return getCurrentPath();
-        }
-        return super.visitTypeParameter(node, find);
-    }
-
-    @Override
-    public TreePath visitMethodInvocation(MethodInvocationTree node, Long find) {
-        long start = pos.getStartPosition(root, node);
-        long end = pos.getEndPosition(root, node);
-        if (start <= find && find <= end) {
-            Log.d(TAG, "visted method invocation: " + node);
-            return getCurrentPath();
-        }
-        return super.visitMethodInvocation(node, find);
-    }
-
-    @Override
-    public TreePath visitExpressionStatement(ExpressionStatementTree node, Long find) {
-        long start = pos.getStartPosition(root, node);
-        long end = pos.getEndPosition(root, node);
-        if (start <= find && find <= end) {
-            Log.d(TAG, "visted typr parameter: " + node);
-            return getCurrentPath();
-        }
-        return super.visitExpressionStatement(node, find);
-    }
-
-    
-    @Override
-    public TreePath visitLambdaExpression(LambdaExpressionTree node, Long p) {
-        Log.d(TAG, "visited lambda expression: " + node.toString());
-        return super.visitLambdaExpression(node, p);
-    }*/
     
     @Override
     public TreePath visitCase(CaseTree node, Long find) {
@@ -134,7 +84,17 @@ public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
         }
         return super.visitCase(node, find);
     }
-    
+
+    @Override
+    public TreePath visitSwitch(SwitchTree t, Long find) {
+        long start = pos.getStartPosition(root, t);
+        long end = pos.getEndPosition(root, t);
+        if (start <= find && find <= end) {
+            return getCurrentPath();
+        }
+        return super.visitSwitch(t, find);
+    }
+
     @Override
     public TreePath visitErroneous(ErroneousTree node, Long find) {
         if (node.getErrorTrees() == null) {

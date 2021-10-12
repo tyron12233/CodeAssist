@@ -199,7 +199,7 @@ public class CompletionProvider {
 					return completeMemberSelect(task, path, partial, endsWithParen);
 				case MEMBER_REFERENCE:
 					return completeMemberReference(task, path, partial);
-				case CASE:
+				case SWITCH:
 					return completeSwitchConstant(task, path, partial);
 				case IMPORT:
 					return completeImport(qualifiedPartialIdentifier(contents, (int) cursor));
@@ -279,7 +279,9 @@ public class CompletionProvider {
         return false;
     }
 
-    private void addKeywords(TreePath path, String partial, CompletionList list) {
+    private void addKeywords(TreePath path, String partial, CompletionList list) throws InterruptedException {
+	    checkInterrupted();
+
         Tree level = findKeywordLevel(path);
         String[] keywords = {};
         if (level instanceof CompilationUnitTree) {
@@ -354,7 +356,9 @@ public class CompletionProvider {
         }
     }
 
-    private CompletionList completeArrayMemberSelect(boolean isStatic) {
+    private CompletionList completeArrayMemberSelect(boolean isStatic) throws InterruptedException {
+	    checkInterrupted();
+
         if (isStatic) {
             return new CompletionList();
         } else {
@@ -365,6 +369,8 @@ public class CompletionProvider {
     }
 
     private CompletionList completeTypeVariableMemberSelect(CompileTask task, Scope scope, TypeVariable type, boolean isStatic, String partial, boolean endsWithParen) throws InterruptedException {
+	    checkInterrupted();
+
         if (type.getUpperBound() instanceof DeclaredType) {
             return completeDeclaredTypeMemberSelect(task, scope, (DeclaredType) type.getUpperBound(), isStatic, partial, endsWithParen);
         } else if (type.getUpperBound() instanceof TypeVariable) {
@@ -448,7 +454,9 @@ public class CompletionProvider {
         return list;
     }
 
-    public List<CompletionItem> addLambda(CompileTask task, TreePath path, String partial) {
+    public List<CompletionItem> addLambda(CompileTask task, TreePath path, String partial) throws InterruptedException {
+	    checkInterrupted();
+
         Trees trees = Trees.instance(task.task);
         List<CompletionItem> items = new ArrayList<>();
         MethodInvocationTree method = (MethodInvocationTree) path.getLeaf();
@@ -520,7 +528,9 @@ public class CompletionProvider {
         return items;
     }
 
-    public List<CompletionItem> addAnonymous(CompileTask task, TreePath path, String partial) {
+    public List<CompletionItem> addAnonymous(CompileTask task, TreePath path, String partial) throws InterruptedException {
+	    checkInterrupted();
+
         List<CompletionItem> items = new ArrayList<>();
 
 		if (!(path.getLeaf() instanceof NewClassTree)) {
@@ -601,7 +611,9 @@ public class CompletionProvider {
         }
     }
 
-    private boolean isEnclosingClass(DeclaredType type, Scope start) {
+    private boolean isEnclosingClass(DeclaredType type, Scope start) throws InterruptedException {
+	    checkInterrupted();
+
         for (Scope s : ScopeHelper.fastScopes(start)) {
             // If we reach a static method, stop looking
             ExecutableElement method = s.getEnclosingMethod();
@@ -629,7 +641,9 @@ public class CompletionProvider {
         return staticImport.contentEquals("*") || staticImport.contentEquals(member.getSimpleName());
     }
 
-    private CompletionList completeImport(String path) {
+    private CompletionList completeImport(String path) throws InterruptedException {
+	    checkInterrupted();
+
         Set<String> names = new HashSet<>();
         CompletionList list = new CompletionList();
         for (String className : compiler.publicTopLevelTypes()) {
@@ -656,6 +670,8 @@ public class CompletionProvider {
     }
 
     private CompletionList completeMemberReference(CompileTask task, TreePath path, String partial) throws InterruptedException {
+	    checkInterrupted();
+
         Trees trees = Trees.instance(task.task);
         MemberReferenceTree select = (MemberReferenceTree) path.getLeaf();
         path = new TreePath(path, select.getQualifierExpression());
@@ -732,7 +748,9 @@ public class CompletionProvider {
         return comp;
     }
 
-    private CompletionList completeSwitchConstant(CompileTask task, TreePath path, String partial) {
+    private CompletionList completeSwitchConstant(CompileTask task, TreePath path, String partial) throws InterruptedException {
+	    checkInterrupted();
+
         SwitchTree switchTree = (SwitchTree) path.getLeaf();
         path = new TreePath(path, switchTree.getExpression());
         TypeMirror type = Trees.instance(task.task).getTypeMirror(path);

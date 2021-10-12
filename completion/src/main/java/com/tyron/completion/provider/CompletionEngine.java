@@ -14,10 +14,12 @@ import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.model.CompletionList;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 public class CompletionEngine {
     private static final String TAG = CompletionEngine.class.getSimpleName();
@@ -99,16 +101,9 @@ public class CompletionEngine {
         project.getRJavaFiles();
         project.getLibraries();
         JavaCompilerService compiler = getCompiler();
-        Set<File> filesToIndex = new HashSet<>(project.getJavaFiles().values());
-        for (File file : filesToIndex) {
-            if (file == null || !file.exists()) {
-                continue;
-            }
-            //noinspection EmptyTryBlock
-            try (CompileTask task = compiler.compile(file.toPath())) {
-                // empty
-            }
-        }
+
+        compiler.compile(project.getJavaFiles().values().stream().map(File::toPath).toArray(Path[]::new));
+
         setIndexing(false);
         if (callback != null) {
             handler.post(callback);
