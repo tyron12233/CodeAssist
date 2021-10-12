@@ -116,7 +116,7 @@ public class CompletionEngine {
     }
 
     @NonNull
-    public CompletionList complete(File file, String contents, long cursor) {
+    public CompletionList complete(File file, String contents, long cursor) throws InterruptedException {
         // Do not request for completion if we're indexing
         if (mIndexing) {
             return CompletionList.EMPTY;
@@ -124,7 +124,7 @@ public class CompletionEngine {
 
         try {
             return new CompletionProvider(getCompiler()).complete(file, contents, cursor);
-        } catch (RuntimeException | AssertionError e) {
+        } catch (RuntimeException e) {
             Log.d(TAG, "Completion failed: " + Log.getStackTraceString(e) + " Clearing cache.");
             mProvider = null;
             index(FileManager.getInstance().getCurrentProject(), null);

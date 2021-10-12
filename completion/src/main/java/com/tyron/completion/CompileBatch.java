@@ -15,6 +15,8 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -59,12 +61,15 @@ public class CompileBatch implements AutoCloseable {
         this.roots = new ArrayList<>();
         // Compile all roots
         try {
+            Instant start = Instant.now();
             for (CompilationUnitTree t : borrow.task.parse()) {
                 roots.add(t);
             }
             // The results of borrow.task.analyze() are unreliable when errors are present
             // You can get at `Element` values using `Trees`
             borrow.task.analyze();
+
+            Log.d("CompileBatch", "Parse and analyze took " + Duration.between(start, Instant.now()).toMillis() + " ms");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

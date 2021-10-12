@@ -340,7 +340,11 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         }
         mLastPrefix = prefix;
         mRequestTime = System.currentTimeMillis();
-        new MatchThread(mRequestTime, prefix).start();
+        if (mPreviousThread != null) {
+            mPreviousThread.interrupt();
+        }
+        mPreviousThread = new MatchThread(mRequestTime, prefix);
+        mPreviousThread.start();
     }
 
     public void setMaxHeight(int height) {
@@ -354,9 +358,6 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      * @param requestTime The time that this thread starts
      */
     private void displayResults(final List<CompletionItem> results, long requestTime) {
-        if (mRequestTime != requestTime) {
-            return;
-        }
         if (mLastPrefix.equals(selectedItem)) {
             selectedItem = "";
             return;
@@ -380,6 +381,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             }
         });
     }
+
+    private volatile Thread mPreviousThread;
 
     /**
      * Analysis thread
@@ -407,9 +410,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         public void run() {
             try {
                 displayResults(mLocalProvider.getAutoCompleteItems(mPrefix, mColors, mLine, mCurrent), mTime);
-            } catch (Exception e) {
-                e.printStackTrace();
-                displayResults(new ArrayList<>(), mTime);
+            } catch (InterruptedException e) {
+                Log.d("MatchThread", "Thread is interrupted, exiting");
             }
         }
     }

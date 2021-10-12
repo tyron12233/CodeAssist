@@ -139,9 +139,10 @@ public class CompletionProvider {
         this.compiler = compiler;
     }
 
-	public CompletionList complete(File file, String fileContents, long index) {
-		ParseTask task = compiler.parse(file.toPath(), fileContents);
+	public CompletionList complete(File file, String fileContents, long index) throws InterruptedException {
+        checkInterrupted();
 
+        ParseTask task = compiler.parse(file.toPath(), fileContents);
 		StringBuilder contents;
 		try {
             contents = new PruneMethodBodies(task.task).scan(task.root, index);
@@ -151,7 +152,7 @@ public class CompletionProvider {
 		    Log.w(TAG, "Unable to insert semicolon at the end of line, skipping completion", e);
             return new CompletionList();
         }
-		CompletionList list = compileAndComplete(file, contents.toString(), index);
+        CompletionList list = compileAndComplete(file, contents.toString(), index);
 //		list.items.sort((item, item1) -> {
 //		    // workaround for class keyword always at the first completion for now.
 //
@@ -181,16 +182,17 @@ public class CompletionProvider {
 		return list;
 	}
 
-	public CompletionList compileAndComplete(File file, String contents, long cursor) {
+	public CompletionList compileAndComplete(File file, String contents, long cursor) throws InterruptedException {
 		Instant start = Instant.now();
 		SourceFileObject source = new SourceFileObject(file.toPath(), contents, start);
 		String partial = partialIdentifier(contents, (int) cursor);
 		boolean endsWithParen = endsWithParen(contents, (int) cursor);
-		//noinspection
+
+		checkInterrupted();
 		try (CompileTask task = compiler.compile(Collections.singletonList(source))) {
 			Log.d(TAG, "Compiled in: " + Duration.between(start, Instant.now()).toMillis() + "ms");
 			TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
-			switch (path.getLeaf().getKind()) {
+            switch (path.getLeaf().getKind()) {
 				case IDENTIFIER:             
 					return completeIdentifier(task, path, partial, endsWithParen);
 				case MEMBER_SELECT:              
@@ -200,7 +202,7 @@ public class CompletionProvider {
 				case CASE:
 					return completeSwitchConstant(task, path, partial);
 				case IMPORT:
-					return completeImport(qualifiedPartialIdentifier(contents.toString(), (int) cursor));
+					return completeImport(qualifiedPartialIdentifier(contents, (int) cursor));
 				default:
 					CompletionList list = new CompletionList();
 					addKeywords(path, partial, list);
@@ -318,7 +320,9 @@ public class CompletionProvider {
 
 		return false;
 	}
-    private CompletionList completeIdentifier(CompileTask task, TreePath path, final String partial, boolean endsWithParen) {
+    private CompletionList completeIdentifier(CompileTask task, TreePath path, final String partial, boolean endsWithParen) throws InterruptedException {
+	    checkInterrupted();
+
         CompletionList list = new CompletionList();
         list.items = completeUsingScope(task, path, partial, endsWithParen);
         addStaticImports(task, path.getCompilationUnit(), partial, endsWithParen, list);
@@ -326,15 +330,12 @@ public class CompletionProvider {
             addClassNames(path.getCompilationUnit(), partial, list);
         }
         addKeywords(path, partial, list);
-		if (isAnnotationTree(path)) {
-			if (StringSearch.matchesPartialName("Override", partial)) {
-                CustomActions.addOverrideItem(list);
-            }
-		}
         return list;
     }
 
-    private CompletionList completeMemberSelect(CompileTask task, TreePath path, String partial, boolean endsWithParen) {
+    private CompletionList completeMemberSelect(CompileTask task, TreePath path, String partial, boolean endsWithParen) throws InterruptedException {
+	    checkInterrupted();
+
         MemberSelectTree select = (MemberSelectTree) path.getLeaf();
         path = new TreePath(path, select.getExpression());
         Trees trees = Trees.instance(task.task);
@@ -363,7 +364,7 @@ public class CompletionProvider {
         }
     }
 
-    private CompletionList completeTypeVariableMemberSelect(CompileTask task, Scope scope, TypeVariable type, boolean isStatic, String partial, boolean endsWithParen) {
+    private CompletionList completeTypeVariableMemberSelect(CompileTask task, Scope scope, TypeVariable type, boolean isStatic, String partial, boolean endsWithParen) throws InterruptedException {
         if (type.getUpperBound() instanceof DeclaredType) {
             return completeDeclaredTypeMemberSelect(task, scope, (DeclaredType) type.getUpperBound(), isStatic, partial, endsWithParen);
         } else if (type.getUpperBound() instanceof TypeVariable) {
@@ -373,7 +374,9 @@ public class CompletionProvider {
         }
     }
 
-    private CompletionList completeDeclaredTypeMemberSelect(CompileTask task, Scope scope, DeclaredType type, boolean isStatic, String partial, boolean endsWithParen) {
+    private CompletionList completeDeclaredTypeMemberSelect(CompileTask task, Scope scope, DeclaredType type, boolean isStatic, String partial, boolean endsWithParen) throws InterruptedException {
+	    checkInterrupted();
+
         Trees trees = Trees.instance(task.task);
         TypeElement typeElement = (TypeElement) type.asElement();
         List<CompletionItem> list = new ArrayList<>();
@@ -412,7 +415,9 @@ public class CompletionProvider {
     }
 
 
-    private List<CompletionItem> completeUsingScope(CompileTask task, TreePath path, final String partial, boolean endsWithParen) {
+    private List<CompletionItem> completeUsingScope(CompileTask task, TreePath path, final String partial, boolean endsWithParen) throws InterruptedException {
+	    checkInterrupted();
+
         Trees trees = Trees.instance(task.task);
         List<CompletionItem> list = new ArrayList<>();
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
@@ -429,15 +434,16 @@ public class CompletionProvider {
         }
 
         for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
+            if (list.size() > MAX_COMPLETION_ITEMS) {
+                break;
+            }
+
             if (element.getKind() == ElementKind.METHOD) {
-                putMethod((ExecutableElement) element, methods);
+                ExecutableElement executableElement = (ExecutableElement) element;
+                list.addAll(method(Collections.singletonList(executableElement), endsWithParen));
             } else {
                 list.add(item(element));
             }
-        }
-
-        for (List<ExecutableElement> overloads : methods.values()) {
-            list.addAll(method(overloads, !endsWithParen));
         }
         return list;
     }
@@ -563,7 +569,9 @@ public class CompletionProvider {
         return items;
     }
 
-    private void addStaticImports(CompileTask task, CompilationUnitTree root, String partial, boolean endsWithParen, CompletionList list) {
+    private void addStaticImports(CompileTask task, CompilationUnitTree root, String partial, boolean endsWithParen, CompletionList list) throws InterruptedException {
+	    checkInterrupted();
+
         Trees trees = Trees.instance(task.task);
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         outer:
@@ -647,7 +655,7 @@ public class CompletionProvider {
         return list;
     }
 
-    private CompletionList completeMemberReference(CompileTask task, TreePath path, String partial) {
+    private CompletionList completeMemberReference(CompileTask task, TreePath path, String partial) throws InterruptedException {
         Trees trees = Trees.instance(task.task);
         MemberReferenceTree select = (MemberReferenceTree) path.getLeaf();
         path = new TreePath(path, select.getQualifierExpression());
@@ -677,7 +685,7 @@ public class CompletionProvider {
     }
 
     private CompletionList completeTypeVariableMemberReference(
-        CompileTask task, Scope scope, TypeVariable type, boolean isStatic, String partial) {
+        CompileTask task, Scope scope, TypeVariable type, boolean isStatic, String partial) throws InterruptedException {
         if (type.getUpperBound() instanceof DeclaredType) {
             return completeDeclaredTypeMemberReference(
                 task, scope, (DeclaredType) type.getUpperBound(), isStatic, partial);
@@ -689,7 +697,9 @@ public class CompletionProvider {
         }
     }
 
-    private CompletionList completeDeclaredTypeMemberReference(CompileTask task, Scope scope, DeclaredType type, boolean isStatic, String partial) {
+    private CompletionList completeDeclaredTypeMemberReference(CompileTask task, Scope scope, DeclaredType type, boolean isStatic, String partial) throws InterruptedException {
+	    checkInterrupted();
+
         Trees trees = Trees.instance(task.task);
         TypeElement typeElement = (TypeElement) type.asElement();
         List<CompletionItem> list = new ArrayList<>();
@@ -746,7 +756,9 @@ public class CompletionProvider {
     }
 
 
-    private void addClassNames(CompilationUnitTree root, String partial, CompletionList list) {
+    private void addClassNames(CompilationUnitTree root, String partial, CompletionList list) throws InterruptedException {
+	    checkInterrupted();
+
         String packageName = Objects.toString(root.getPackageName(), "");
         Set<String> uniques = new HashSet<>();
         for (String className : compiler.packagePrivateTopLevelTypes(packageName)) {
@@ -934,5 +946,11 @@ public class CompletionProvider {
             }
         }
         return false;
+    }
+
+    private void checkInterrupted() throws InterruptedException {
+	    if (Thread.currentThread().isInterrupted()) {
+	        throw new InterruptedException();
+        }
     }
 }

@@ -1,6 +1,7 @@
 package com.tyron.code.ui.editor.language.java;
 
 import android.content.SharedPreferences;
+import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
@@ -9,6 +10,8 @@ import com.tyron.builder.parser.FileManager;
 import com.tyron.completion.CompileBatch;
 import com.tyron.completion.provider.CompletionEngine;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -32,7 +35,7 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
 
 
     @Override
-    public List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) {
+    public List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) throws InterruptedException {
         FileManager.getInstance().save(mEditor.getCurrentFile(), mEditor.getText().toString());
 
         if (!mPreferences.getBoolean("code_editor_completion", true)) {
@@ -44,13 +47,16 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
         }
 
         Cursor cursor = mEditor.getCursor();
+
         CompletionList list = CompletionEngine.getInstance().complete(mEditor.getCurrentFile(), String.valueOf(mEditor.getText()), cursor.getLeft());
 
         List<CompletionItem> result = new ArrayList<>();
 
-        for (com.tyron.completion.model.CompletionItem item : list.items) {
-            result.add(new CompletionItem(item));
-        }
+
+            for (com.tyron.completion.model.CompletionItem item : list.items) {
+                result.add(new CompletionItem(item));
+            }
+
 
         return result;
     }
