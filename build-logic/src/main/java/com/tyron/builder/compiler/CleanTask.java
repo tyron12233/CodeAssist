@@ -83,7 +83,7 @@ public class CleanTask extends Task {
 
             String packageName = path;
             if (path.contains("$")) {
-                path = path.substring(0, path.lastIndexOf("$"));
+                path = path.substring(0, path.indexOf("$"));
             }
 
             if (FileManager.getInstance().list(path).isEmpty() && !FileManager.getInstance().containsClass(packageName)) {
@@ -122,7 +122,7 @@ public class CleanTask extends Task {
                 }
             } else {
                 if (path.contains("$")) {
-                    path = path.substring(0, path.lastIndexOf("$"));
+                    path = path.substring(0, path.indexOf("$"));
                 }
             }
 
