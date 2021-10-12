@@ -110,7 +110,10 @@ public class AppLogFragment extends Fragment {
 
         }
         mLogView.setText(builder);
-        mRoot.scrollTo(0, mLogView.getBottom());
+
+        if (mRoot.canScrollVertically(-1)) {
+            mRoot.scrollTo(0, mLogView.getBottom());
+        }
 
         mIgnoreProcess = false;
     }
