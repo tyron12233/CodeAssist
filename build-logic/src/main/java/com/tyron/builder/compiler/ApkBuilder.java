@@ -6,6 +6,7 @@ import android.util.Log;
 
 import com.tyron.builder.compiler.apk.PackageTask;
 import com.tyron.builder.compiler.apk.SignTask;
+import com.tyron.builder.compiler.firebase.GenerateFirebaseConfigTask;
 import com.tyron.builder.compiler.incremental.dex.IncrementalD8Task;
 import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
 import com.tyron.builder.compiler.incremental.kotlin.IncrementalKotlinCompiler;
@@ -87,6 +88,7 @@ public class ApkBuilder {
         return Arrays.asList(
                 new CleanTask(),
                 new ManifestMergeTask(),
+                new GenerateFirebaseConfigTask(),
                 new IncrementalAapt2Task(),
                 new MergeSymbolsTask(),
                 new InjectLoggerTask(),
