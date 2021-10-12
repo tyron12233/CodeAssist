@@ -19,6 +19,7 @@ package com.flipkart.android.proteus.value;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.text.TextUtils;
+import android.util.Log;
 import android.util.LruCache;
 import android.util.StateSet;
 
@@ -54,8 +55,13 @@ public abstract class Color extends Value {
     Color color = ColorCache.cache.get(value);
     if (null == color) {
       if (isColor(value)) {
-        @ColorInt int colorInt = android.graphics.Color.parseColor(value);
-        color = new Int(colorInt);
+        try {
+          @ColorInt int colorInt = android.graphics.Color.parseColor(value);
+          color = new Int(colorInt);
+        } catch (IllegalArgumentException e) {
+          Log.d("Color", "Unknown value: " + value);
+          color = new Int(android.graphics.Color.TRANSPARENT);
+        }
       } else {
         color = defaultValue;
       }
