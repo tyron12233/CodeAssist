@@ -28,10 +28,19 @@ public class CompletionEngine {
     private final CompilerClassPath classPath;
     private final AsyncExecutor async = new AsyncExecutor();
 
-    public CompletionEngine(Project project) {
+    private CompletionEngine(Project project) {
         mProject = project;
         classPath = new CompilerClassPath(project);
         sp = new SourcePath(classPath);
+    }
+
+    private static CompletionEngine INSTANCE = null;
+
+    public static CompletionEngine getInstance(Project project) {
+        if (INSTANCE == null) {
+            INSTANCE = new CompletionEngine(project);
+        }
+        return INSTANCE;
     }
 
     private Pair<CompiledFile, Integer> recover(File file, String contents, Recompile recompile, int offset) {

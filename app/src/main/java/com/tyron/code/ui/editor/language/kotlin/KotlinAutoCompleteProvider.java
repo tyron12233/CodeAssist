@@ -21,7 +21,6 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
 
-    private CompletionEngine engine;
     private final CodeEditor mEditor;
     private final SharedPreferences mPreferences;
 
@@ -41,12 +40,9 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
             return Collections.emptyList();
         }
 
-        if (engine == null) {
-            engine = new CompletionEngine(FileManager.getInstance().getCurrentProject());
-        }
-
         try {
-            CompletionList list = engine.complete(mEditor.getCurrentFile(), mEditor.getText().toString(), mEditor.getCursor().getLeft());
+            CompletionList list = CompletionEngine.getInstance(FileManager.getInstance().getCurrentProject())
+                    .complete(mEditor.getCurrentFile(), mEditor.getText().toString(), mEditor.getCursor().getLeft());
             List<CompletionItem> result = new ArrayList<>();
             List<com.tyron.completion.model.CompletionItem> item = list.items;
             for (com.tyron.completion.model.CompletionItem comp : item) {
