@@ -39,6 +39,10 @@ public class CompletionEngine {
     public static CompletionEngine getInstance(Project project) {
         if (INSTANCE == null) {
             INSTANCE = new CompletionEngine(project);
+        } else {
+            if (project != INSTANCE.mProject) {
+                INSTANCE = new CompletionEngine(project);
+            }
         }
         return INSTANCE;
     }
@@ -64,8 +68,6 @@ public class CompletionEngine {
 
     public CompletionList complete(File file, String contents, int cursor) {
         Pair<CompiledFile, Integer> pair = recover(file, contents, Recompile.AFTER_DOT, cursor);
-
-
         return new Completions().completions(pair.first, cursor, sp.getIndex());
     }
 }
