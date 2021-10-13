@@ -6,6 +6,7 @@ import android.util.Log;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.compiler.resource.AAPT2Compiler;
 import com.tyron.builder.compiler.LibraryChecker;
+import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.Decompress;
 import com.tyron.common.util.StringSearch;
 
@@ -27,7 +28,7 @@ public class Project {
     public final File mRoot;
     
     public Map<String, File> javaFiles = new HashMap<>();
-    private Map<String, File> kotlinFiles = new HashMap<>();
+    private final Map<String, File> kotlinFiles = new HashMap<>();
     public List<String> jarFiles = new ArrayList<>();
 
     private final Set<File> libraries = new HashSet<>();
@@ -41,17 +42,26 @@ public class Project {
     private File mAssetsDir;
     private File mNativeLibsDir;
 
+    private FileManager mFileManager;
+
     /**
      * Creates a project object from specified root
      */
     public Project(File root) {
         mRoot = root;
-        
-        findJavaFiles(new File(root, "app/src/main/java"));
-        findKotlinFiles(new File(root, "app/src/main/java"));
 
         mAssetsDir = new File(root, "app/src/main/assets");
         mNativeLibsDir = new File(root, "app/src/main/jniLibs");
+
+        mFileManager = new FileManager();
+    }
+
+    public void open() {
+        mFileManager.openProject(this);
+    }
+
+    public FileManager getFileManager() {
+        return mFileManager;
     }
 
     private void findKotlinFiles(File file) {
@@ -74,6 +84,7 @@ public class Project {
             }
         }
     }
+
     private void findJavaFiles(File file) {
         File[] files = file.listFiles();
         
@@ -139,6 +150,7 @@ public class Project {
             }
         }
     }
+
     public Map<String, File> getRJavaFiles() {
         if (RJavaFiles.isEmpty()) {
             searchRJavaFiles(new File(getBuildDirectory(), "gen"));

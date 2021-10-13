@@ -52,7 +52,7 @@ public class MergeSymbolsTask extends Task {
 
         long start = System.currentTimeMillis();
 
-        Cache<Void, Void> cache = FileManager.getInstance().getSymbolCache();
+        Cache<Void, Void> cache = mProject.getFileManager().getSymbolCache();
 
         SymbolLoader fullSymbolValues = null;
         Multimap<String, SymbolLoader> libMap = ArrayListMultimap.create();

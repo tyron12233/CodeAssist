@@ -110,7 +110,7 @@ public class AAPT2Compiler {
 		args.add(getBinary().getAbsolutePath());
 		args.add("link");
 		args.add("-I");
-		args.add(FileManager.getInstance().getAndroidJar().getAbsolutePath());
+		args.add(FileManager.getAndroidJar().getAbsolutePath());
 		args.add("--allow-reserved-package-id");
         args.add("--no-version-vectors");
         args.add("--no-version-transitions");

@@ -4,6 +4,7 @@ import android.content.SharedPreferences;
 
 import androidx.preference.PreferenceManager;
 
+import com.tyron.ProjectManager;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.CompletionEngine;
@@ -41,7 +42,7 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
         }
 
         try {
-            CompletionList list = CompletionEngine.getInstance(FileManager.getInstance().getCurrentProject())
+            CompletionList list = CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
                     .complete(mEditor.getCurrentFile(), mEditor.getText().toString(), mEditor.getCursor().getLeft());
             List<CompletionItem> result = new ArrayList<>();
             List<com.tyron.completion.model.CompletionItem> item = list.items;

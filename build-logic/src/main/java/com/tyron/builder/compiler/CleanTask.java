@@ -61,11 +61,11 @@ public class CleanTask extends Task {
             FileUtils.deleteDirectory(intermediateDirectory);
         }
 
-        FileManager.getInstance().getClassCache()
+        mProject.getFileManager().getClassCache()
                 .clear();
-        FileManager.getInstance().getDexCache()
+        mProject.getFileManager().getDexCache()
                 .clear();
-        FileManager.getInstance().getSymbolCache()
+        mProject.getFileManager().getSymbolCache()
                 .clear();
     }
     private void cleanClasses() {
@@ -86,7 +86,7 @@ public class CleanTask extends Task {
                 path = path.substring(0, path.indexOf("$"));
             }
 
-            if (FileManager.getInstance().list(path).isEmpty() && !FileManager.getInstance().containsClass(packageName)) {
+            if (mProject.getFileManager().list(path).isEmpty() && !mProject.getFileManager().containsClass(packageName)) {
                 if (file.delete()) {
                     mLogger.debug("Deleted class file " + file.getName());
                 };
@@ -125,7 +125,7 @@ public class CleanTask extends Task {
                 }
             }
 
-            if (FileManager.getInstance().list(path).isEmpty() && !FileManager.getInstance().containsClass(packageName)) {
+            if (mProject.getFileManager().list(path).isEmpty() && !mProject.getFileManager().containsClass(packageName)) {
                 if (file.delete()) {
                     mLogger.debug("Deleted dex file " + path);
                 }

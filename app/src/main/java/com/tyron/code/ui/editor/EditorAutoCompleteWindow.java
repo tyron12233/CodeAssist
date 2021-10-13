@@ -279,25 +279,6 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                     applyTextEdit(edit);
                 }
             }
-
-            if (item.item.action == com.tyron.completion.model.CompletionItem.Kind.IMPORT) {
-                Parser parser = Parser.parseFile(mEditor.getCurrentFile().toPath());
-                ParseTask task = new ParseTask(parser.task, parser.root);
-                Log.d("PackageName", task.root.getPackageName().toString());
-
-                boolean samePackage = false;
-                if (!item.item.data.contains(".") //it's either in the same class or it's already imported
-                        || task.root.getPackageName().toString().equals(getAfterLastDot(item.item.data))) {
-                    samePackage = true;
-                }
-
-                if (!samePackage && !CompletionProvider.hasImport(task.root, item.item.data)) {
-                    AddImport imp = new AddImport(new File(""), item.item.data);
-                    Map<File, TextEdit> edits = imp.getText(task);
-                    TextEdit edit = edits.values().iterator().next();
-                    applyTextEdit(edit);
-                }
-            }
             mCancelShowUp = false;
         }
         mEditor.postHideCompletionWindow();

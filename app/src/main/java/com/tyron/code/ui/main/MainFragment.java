@@ -156,7 +156,7 @@ public class MainFragment extends Fragment {
         mFilesViewModel.currentPosition.observe(getViewLifecycleOwner(), mPager::setCurrentItem);
         mFilesViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE));
         mFilesViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
-        mProjectManager = new ProjectManager(logViewModel);
+        mProjectManager = ProjectManager.getInstance();
         return mRoot;
     }
 
@@ -298,7 +298,8 @@ public class MainFragment extends Fragment {
 
                 dialog.show();
             } else if (item.getItemId() == R.id.debug_refresh) {
-                Project project = FileManager.getInstance().getCurrentProject();
+                Project project = ProjectManager.getInstance()
+                        .getCurrentProject();
 
                 if (project != null) {
                     project.clear();
@@ -379,8 +380,8 @@ public class MainFragment extends Fragment {
                     .commitNow();
         }
 
-        if (FileManager.getInstance().getCurrentProject() != null) {
-            mToolbar.setTitle(FileManager.getInstance().getCurrentProject().mRoot.getName());
+        if (mProjectManager.getCurrentProject() != null) {
+            mToolbar.setTitle(mProjectManager.getCurrentProject().mRoot.getName());
         }
 
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
@@ -419,7 +420,7 @@ public class MainFragment extends Fragment {
             mBinder.getCompilerService().setShouldShowNotification(true);
         }
 
-        Project current = FileManager.getInstance().getCurrentProject();
+        Project current = mProjectManager.getCurrentProject();
         if (current != null) {
             SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
             SharedPreferences.Editor editor = preferences.edit();
@@ -443,7 +444,7 @@ public class MainFragment extends Fragment {
         super.onSaveInstanceState(outState);
         saveAll();
 
-        Project current = FileManager.getInstance().getCurrentProject();
+        Project current = ProjectManager.getInstance().getCurrentProject();
         if (current != null) {
             outState.putString("current_project", current.mRoot.getAbsolutePath());
         }
@@ -533,7 +534,7 @@ public class MainFragment extends Fragment {
                     }
                 });
             }
-        });
+        }, ILogger.wrap(logViewModel));
 
         requireActivity().runOnUiThread(() -> {
             Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
@@ -593,7 +594,7 @@ public class MainFragment extends Fragment {
                 }
                 if (success && getActivity() != null) {
                     logger.debug(message);
-                    File file = new File(FileManager.getInstance().getCurrentProject().getBuildDirectory(), "bin/signed.apk");
+                    File file = new File(mProjectManager.getCurrentProject().getBuildDirectory(), "bin/signed.apk");
                     mProgressBar.postDelayed(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()), 300);
                 }
 
@@ -604,7 +605,7 @@ public class MainFragment extends Fragment {
             }));
 
             if (mBuildType != null) {
-                mBinder.getCompilerService().compile(mBuildType);
+                mBinder.getCompilerService().compile(mProjectManager.getCurrentProject(), mBuildType);
             }
         }
 

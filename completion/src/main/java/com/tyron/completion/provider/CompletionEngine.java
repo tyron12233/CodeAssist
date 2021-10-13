@@ -39,16 +39,16 @@ public class CompletionEngine {
     private static boolean mIndexing;
 
     private CompletionEngine() {
-        getCompiler();
+
     }
 
     @NonNull
-    public JavaCompilerService getCompiler() {
+    public JavaCompilerService getCompiler(Project project) {
 
-        Set<File> paths = FileManager.getInstance().fileClasspath();
+        Set<File> paths = project.getFileManager().fileClasspath();
 
-       if (changed(mCachedPaths, paths) || mProvider == null) {
-           mProvider = new JavaCompilerService(paths,
+       if (mProvider == null || changed(mCachedPaths, paths)) {
+           mProvider = new JavaCompilerService(project, paths,
                    Collections.emptySet(), Collections.emptySet());
 
            mCachedPaths.clear();
@@ -100,9 +100,10 @@ public class CompletionEngine {
         project.getKotlinFiles();
         project.getRJavaFiles();
         project.getLibraries();
-        JavaCompilerService compiler = getCompiler();
 
-        compiler.compile(project.getJavaFiles().values().stream().map(File::toPath).toArray(Path[]::new));
+        JavaCompilerService compiler = getCompiler(project);
+        CompileTask compile = compiler.compile(project.getJavaFiles().values().stream().map(File::toPath).toArray(Path[]::new));
+        compile.close();
 
         setIndexing(false);
         if (callback != null) {
@@ -111,14 +112,14 @@ public class CompletionEngine {
     }
 
     @NonNull
-    public CompletionList complete(File file, String contents, long cursor) throws InterruptedException {
+    public CompletionList complete(Project project, File file, String contents, long cursor) throws InterruptedException {
         // Do not request for completion if we're indexing
         if (mIndexing) {
             return CompletionList.EMPTY;
         }
 
         try {
-            return new CompletionProvider(getCompiler()).complete(file, contents, cursor);
+            return new CompletionProvider(getCompiler(project)).complete(file, contents, cursor);
         } catch (RuntimeException e) {
             Log.d(TAG, "Completion failed: " + Log.getStackTraceString(e) + " Clearing cache.");
             mProvider = null;

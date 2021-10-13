@@ -2,6 +2,7 @@ package com.tyron.completion;
 
 import android.content.Context;
 
+import com.tyron.builder.model.Project;
 import com.tyron.completion.SourceFileManager;
 import com.tyron.common.util.Decompress;
 
@@ -19,10 +20,11 @@ import org.openjdk.javax.tools.StandardLocation;
  */
 public class Docs {
 
-    public final SourceFileManager fileManager = new SourceFileManager();
+    public final SourceFileManager fileManager;
 
-    public Docs(Set<File> docPaths) {
+    public Docs(Project project, Set<File> docPaths) {
         // we include android sources into the list
+        fileManager = new SourceFileManager(project);
         File srcZip = androidSourcesZip();
 
         List<File> sourcePaths = new ArrayList<>(docPaths);

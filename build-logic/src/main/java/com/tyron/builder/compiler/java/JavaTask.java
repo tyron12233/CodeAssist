@@ -98,10 +98,10 @@ public class JavaTask extends Task {
         try {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singletonList(outputDir));
             standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, Arrays.asList(
-                    FileManager.getInstance().getAndroidJar(),
-                    FileManager.getInstance().getLambdaStubs()
+                    FileManager.getAndroidJar(),
+                    FileManager.getLambdaStubs()
             ));
-            standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, FileManager.getInstance().getLibraries());
+            standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, mProject.getFileManager().getLibraries());
             standardJavaFileManager.setLocation(StandardLocation.SOURCE_PATH, javaFiles);
         } catch (IOException e) {
             throw new CompilationFailedException(e);

@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.tyron.ProjectManager;
+import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
@@ -139,7 +140,11 @@ public class TreeFileManagerFragment extends Fragment {
                                     treeView.refreshTreeView();
 
                                     mMainViewModel.addFile(createdFile);
-                                    FileManager.getInstance().addJavaFile(createdFile);
+                                    Project currentProject = ProjectManager.getInstance().getCurrentProject();
+                                    if (currentProject != null) {
+                                        currentProject.getFileManager()
+                                                .addJavaFile(currentFile);
+                                    }
                                 } catch (IOException e) {
                                     ApplicationLoader.showToast("Unable to create class: " + e.getMessage());
                                 }
@@ -178,11 +183,15 @@ public class TreeFileManagerFragment extends Fragment {
             if (file.getName().endsWith(".java")) { // todo: add .kt and .xml checks
                 mMainViewModel.removeFile(file);
 
-                String packageName = StringSearch.packageName(file);
-                if (packageName != null) {
-                    packageName += "." + file.getName()
-                            .substring(0, file.getName().lastIndexOf("."));
-                    FileManager.getInstance().removeJavaFile(packageName);
+                Project project = ProjectManager.getInstance().getCurrentProject();
+                if (project != null) {
+                    String packageName = StringSearch.packageName(file);
+                    if (packageName != null) {
+                        packageName += "." + file.getName()
+                                .substring(0, file.getName().lastIndexOf("."));
+                        project.getFileManager()
+                                .removeJavaFile(packageName);
+                    }
                 }
             }
         });

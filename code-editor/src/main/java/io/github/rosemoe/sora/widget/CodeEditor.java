@@ -82,6 +82,7 @@ import java.util.List;
 
 import io.github.rosemoe.sora.R;
 import io.github.rosemoe.sora.annotations.Experimental;
+import io.github.rosemoe.sora.data.CompletionItem;
 import io.github.rosemoe.sora.graphics.BufferedDrawPoints;
 import io.github.rosemoe.sora.interfaces.EditorEventListener;
 import io.github.rosemoe.sora.interfaces.EditorLanguage;
@@ -280,6 +281,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     private BufferedDrawPoints mDrawPoints;
     private HwAcceleratedRenderer mRenderer;
     KeyMetaStates mKeyMetaStates = new KeyMetaStates(this);
+
     private File mCurrentFile;
 
     public CodeEditor(Context context) {
@@ -311,6 +313,20 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         if (mSpanner != null) {
             mSpanner.analyze(getText());
         }
+    }
+
+    public interface OnCompletionItemSelectedListener {
+        void onItemSelect(EditorAutoCompleteWindow window, CompletionItem item);
+    }
+
+    private OnCompletionItemSelectedListener onCompletionItemSelectedListener;
+
+    public void setOnCompletionItemSelectedListener(OnCompletionItemSelectedListener listener) {
+        onCompletionItemSelectedListener = listener;
+    }
+
+    public OnCompletionItemSelectedListener getOnCompletionItemSelectedListener() {
+        return onCompletionItemSelectedListener;
     }
 
     private OnLongPressListener mLongPressListener;

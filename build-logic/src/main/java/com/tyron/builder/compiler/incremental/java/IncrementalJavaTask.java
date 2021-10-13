@@ -44,6 +44,7 @@ public class IncrementalJavaTask extends Task {
     private List<File> mJavaFiles;
     private List<File> mFilesToCompile;
     private Cache<String, List<File>> mClassCache;
+    private Project mProject;
     private ILogger mLogger;
 
     @Override
@@ -53,6 +54,7 @@ public class IncrementalJavaTask extends Task {
 
     @Override
     public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
+        mProject = project;
         mLogger = logger;
 
         mOutputDir = new File(project.getBuildDirectory(), "bin/classes");
@@ -63,7 +65,7 @@ public class IncrementalJavaTask extends Task {
         project.clear();
 
         mFilesToCompile = new ArrayList<>();
-        mClassCache = FileManager.getInstance().getClassCache();
+        mClassCache = mProject.getFileManager().getClassCache();
         mJavaFiles = new ArrayList<>(project.getJavaFiles().values());
         mJavaFiles.addAll(JavaTask.getJavaFiles(new File(project.getBuildDirectory(), "gen")));
 
@@ -113,14 +115,14 @@ public class IncrementalJavaTask extends Task {
                 Charset.defaultCharset()
         );
 
-        List<File> classpath = new ArrayList<>(FileManager.getInstance().getLibraries());
+        List<File> classpath = new ArrayList<>(mProject.getFileManager().getLibraries());
         classpath.add(mOutputDir);
 
         try {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singletonList(mOutputDir));
             standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, Arrays.asList(
-                    FileManager.getInstance().getAndroidJar(),
-                    FileManager.getInstance().getLambdaStubs()
+                    FileManager.getAndroidJar(),
+                    FileManager.getLambdaStubs()
             ));
             standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, classpath);
             standardJavaFileManager.setLocation(StandardLocation.SOURCE_PATH, mJavaFiles);

@@ -61,7 +61,7 @@ public class IncrementalD8Task extends Task {
         mProject = project;
         mLogger = logger;
         mBuildType = type;
-        mDexCache = FileManager.getInstance().getDexCache();
+        mDexCache = mProject.getFileManager().getDexCache();
 
         File output = new File(project.getBuildDirectory(), "intermediate/classes");
         if (!output.exists() && !output.mkdirs()) {
@@ -245,8 +245,8 @@ public class IncrementalD8Task extends Task {
 
     private List<Path> getLibraryFiles() {
         List<Path> path = new ArrayList<>();
-        path.add(FileManager.getInstance().getAndroidJar().toPath());
-        path.add(FileManager.getInstance().getLambdaStubs().toPath());
+        path.add(FileManager.getAndroidJar().toPath());
+        path.add(FileManager.getLambdaStubs().toPath());
         return path;
     }
 

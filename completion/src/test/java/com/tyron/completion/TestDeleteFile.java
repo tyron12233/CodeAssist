@@ -64,7 +64,7 @@ public class TestDeleteFile {
     }
 
     private JavaCompilerService getNewService(Set<File> paths) {
-        return new JavaCompilerService(paths,
+        return new JavaCompilerService(null, paths,
                 Collections.emptySet(), Collections.emptySet());
     }
 

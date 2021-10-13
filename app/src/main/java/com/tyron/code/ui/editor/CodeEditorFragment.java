@@ -20,8 +20,12 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.ProjectManager;
+import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.code.R;
+import com.tyron.completion.ParseTask;
+import com.tyron.completion.Parser;
 import com.tyron.completion.action.CodeActionProvider;
 import com.tyron.code.lint.LintIssue;
 import com.tyron.completion.model.CodeAction;
@@ -36,6 +40,8 @@ import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.provider.CompletionEngine;
+import com.tyron.completion.provider.CompletionProvider;
+import com.tyron.completion.rewrite.AddImport;
 import com.tyron.lint.api.TextFormat;
 
 import org.apache.commons.io.FileUtils;
@@ -89,23 +95,6 @@ public class CodeEditorFragment extends Fragment {
         super.onPause();
 
         hideEditorWindows();
-//        if (mLanguage instanceof LanguageXML) {
-//            Project project = FileManager.getInstance().getCurrentProject();
-//            if (mCurrentFile != null && project != null && ProjectUtils.isResourceXMLFile(mCurrentFile)) {
-//                File resourceFile = project.getRJavaFiles().get(project.getPackageName());
-//                if (resourceFile != null && resourceFile.exists()) {
-//                    mMainViewModel.setIndexing(true);
-//                    mMainViewModel.setCurrentState("Indexing R.java");
-//                    Executors.newSingleThreadExecutor().submit(() -> {
-//                        JavaCompilerService service = CompletionEngine.getInstance().getCompiler();
-//                        try (CompileTask task = service.compile(resourceFile.toPath())) {
-//                           mMainViewModel.isIndexing().postValue(false);
-//                           mMainViewModel.getCurrentState().postValue(null);
-//                        }
-//                    });
-//                }
-//            }
-//        }
     }
 
     @Override
@@ -147,6 +136,7 @@ public class CodeEditorFragment extends Fragment {
         mEditor.setTextActionMode(CodeEditor.TextActionMode.POPUP_WINDOW);
         mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(), R.font.jetbrains_mono_regular));
+        mEditor.setLigatureEnabled(true);
         mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         mContent.addView(mEditor, new FrameLayout.LayoutParams(-1, -1));
         return mRoot;
@@ -158,7 +148,6 @@ public class CodeEditorFragment extends Fragment {
 
         if (mCurrentFile.exists()) {
             String contents = "";
-
             try {
                 contents = FileUtils.readFileToString(mCurrentFile, Charset.defaultCharset());
             } catch (IOException e) {
@@ -167,6 +156,54 @@ public class CodeEditorFragment extends Fragment {
             mEditor.setText(contents);
         }
 
+        mEditor.setOnCompletionItemSelectedListener((window, item) -> {
+            Cursor cursor = mEditor.getCursor();
+            if (!cursor.isSelected()) {
+                window.setCancelShowUp(true);
+
+                int length = window.getLastPrefix().length();
+                if (window.getLastPrefix().contains(".")) {
+                    length -= window.getLastPrefix().lastIndexOf(".") + 1;
+                }
+                mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - length, cursor.getLeftLine(), cursor.getLeftColumn());
+
+                window.setSelectedItem(item.commit);
+                cursor.onCommitMultilineText(item.commit);
+
+                if (item.commit != null && item.cursorOffset != item.commit.length()) {
+                    int delta = (item.commit.length() - item.cursorOffset);
+                    int newSel = Math.max(mEditor.getCursor().getLeft() - delta, 0);
+                    CharPosition charPosition = mEditor.getCursor().getIndexer().getCharPosition(newSel);
+                    mEditor.setSelection(charPosition.line, charPosition.column);
+                }
+
+                if (item.item.additionalTextEdits != null) {
+                    for (TextEdit edit : item.item.additionalTextEdits) {
+                        window.applyTextEdit(edit);
+                    }
+                }
+
+                if (item.item.action == com.tyron.completion.model.CompletionItem.Kind.IMPORT) {
+                    Parser parser = Parser.parseFile(ProjectManager.getInstance().getCurrentProject(), mEditor.getCurrentFile().toPath());
+                    ParseTask task = new ParseTask(parser.task, parser.root);
+
+                    boolean samePackage = false;
+                    if (!item.item.data.contains(".") //it's either in the same class or it's already imported
+                            || task.root.getPackageName().toString().equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
+                        samePackage = true;
+                    }
+
+                    if (!samePackage && !CompletionProvider.hasImport(task.root, item.item.data)) {
+                        AddImport imp = new AddImport(new File(""), item.item.data);
+                        Map<File, TextEdit> edits = imp.getText(task);
+                        TextEdit edit = edits.values().iterator().next();
+                        window.applyTextEdit(edit);
+                    }
+                }
+                window.setCancelShowUp(false);
+            }
+            mEditor.postHideCompletionWindow();
+        });
         mEditor.setEventListener(new EditorEventListener() {
 
             @Override
@@ -210,7 +247,8 @@ public class CodeEditorFragment extends Fragment {
             }
         });
         mEditor.setOnLongPressListener((start, end, event) -> {
-            if (mLanguage instanceof JavaLanguage) {
+            Project project = ProjectManager.getInstance().getCurrentProject();
+            if (mLanguage instanceof JavaLanguage && project != null) {
                 int cursorStart = mEditor.getCursor().getLeft();
                 int cursorEnd = mEditor.getCursor().getRight();
 
@@ -227,7 +265,7 @@ public class CodeEditorFragment extends Fragment {
                     }
                 }
                 final Path current = mEditor.getCurrentFile().toPath();
-                List<CodeActionList> actions = new CodeActionProvider(CompletionEngine.getInstance().getCompiler())
+                List<CodeActionList> actions = new CodeActionProvider(CompletionEngine.getInstance().getCompiler(project))
                         .codeActionsForCursor(current, mEditor.getCursor().getLeft());
 
                 mEditor.setOnCreateContextMenuListener((menu, view1, info) -> {
@@ -279,7 +317,11 @@ public class CodeEditorFragment extends Fragment {
                 return;
             }
 
-            FileManager.getInstance().save(mCurrentFile, mEditor.getText().toString());
+            Project currentProject = ProjectManager.getInstance().getCurrentProject();
+            if (currentProject != null) {
+                currentProject.getFileManager()
+                        .save(mCurrentFile, mEditor.getText().toString());
+            }
         }
     }
 

@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -25,8 +26,10 @@ import org.openjdk.javax.tools.StandardLocation;
 
 
 /**
- * @Deprecated use JavaCompilerService instead
+ * use JavaCompilerService instead
  */
+@Deprecated
+@SuppressWarnings("ALL")
 public class JavaParser {
 
     private static final String TAG = "JavaParser";
@@ -52,11 +55,11 @@ public class JavaParser {
         
         fileManager = mTool.getStandardFileManager(diagnostics, Locale.ENGLISH, Charset.defaultCharset());
         try {
-            File file = new File(FileManager.getInstance().getAndroidJar().getAbsolutePath());
-            fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, List.of(file, FileManager.getInstance().getLambdaStubs()));
+            File file = new File(FileManager.getAndroidJar().getAbsolutePath());
+            fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, Arrays.asList(file, FileManager.getLambdaStubs()));
             
             
-            fileManager.setLocation(StandardLocation.CLASS_OUTPUT, List.of(FileManager.getInstance().getCurrentProject().getBuildDirectory()));
+            fileManager.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singletonList(FileManager.getInstance().getCurrentProject().getBuildDirectory()));
             fileManager.setLocation(StandardLocation.CLASS_PATH, classpath());
         } catch (IOException e) {
            // log.d(LogViewModel.DEBUG, e.getMessage());
@@ -88,7 +91,7 @@ public class JavaParser {
         
         
         task = mTool.getTask(null, fileManager,
-                                          diagnostics, List.of("-g", "-parameters"), null, List.of(source));                                  
+                                          diagnostics, Arrays.asList("-g", "-parameters"), null, Collections.singletonList(source));
        
         CompilationUnitTree unit = null;
         try {
@@ -124,7 +127,7 @@ public class JavaParser {
     private List<File> classpath() {
         List<File> files = new ArrayList<>();
         files.addAll(FileManager.getInstance().getLibraries());
-        files.add(FileManager.getInstance().getLambdaStubs());
+        files.add(FileManager.getLambdaStubs());
         files.add(FileManager.getInstance().getCurrentProject().getJavaDirectory());
         return files;
     }

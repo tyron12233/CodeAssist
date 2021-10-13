@@ -134,7 +134,7 @@ public class IncrementalAapt2Task extends Task {
         args.add(getBinary().getAbsolutePath());
         args.add("link");
         args.add("-I");
-        args.add(FileManager.getInstance().getAndroidJar().getAbsolutePath());
+        args.add(FileManager.getAndroidJar().getAbsolutePath());
 
         File files = new File(getOutputPath(), "compiled");
         File[] resources = files.listFiles();

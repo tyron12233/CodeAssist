@@ -105,8 +105,6 @@ public class CompileBatch implements AutoCloseable {
                 addFiles.add(javaFile.toPath());
             }
         }
-
-		Log.d("CompileBatch", "Additional sources: " + addFiles.toString());
         return addFiles;
     }
 
@@ -178,7 +176,7 @@ public class CompileBatch implements AutoCloseable {
         List<String> list = new ArrayList<>();
 
         Collections.addAll(list, "-cp", joinPath(classPath));
-        Collections.addAll(list, "-bootclasspath", joinPath(Arrays.asList(FileManager.getInstance().getAndroidJar(), FileManager.getInstance().getLambdaStubs())));
+        Collections.addAll(list, "-bootclasspath", joinPath(Arrays.asList(FileManager.getAndroidJar(), FileManager.getLambdaStubs())));
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
         //Collections.addAll(list, "-verbose");
         Collections.addAll(list, "-proc:none");

@@ -146,6 +146,10 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         }*/
     }
 
+    public void setCancelShowUp(boolean val) {
+        mCancelShowUp = val;
+    }
+
     @Override
     public void show() {
         if (mCancelShowUp) {
@@ -253,6 +257,12 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     public void select(int pos) {
         CompletionItem item = mAdapter.getItem(pos);
         Cursor cursor = mEditor.getCursor();
+
+        if (mEditor.getOnCompletionItemSelectedListener() != null) {
+            mEditor.getOnCompletionItemSelectedListener()
+                    .onItemSelect(this, item);
+            return;
+        }
         if (!cursor.isSelected()) {
             mCancelShowUp = true;
 
@@ -279,31 +289,20 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
                     applyTextEdit(edit);
                 }
             }
-
-            if (item.item.action == com.tyron.completion.model.CompletionItem.Kind.IMPORT) {
-                Parser parser = Parser.parseFile(mEditor.getCurrentFile().toPath());
-                ParseTask task = new ParseTask(parser.task, parser.root);
-
-                boolean samePackage = false;
-                if (!item.item.data.contains(".") //it's either in the same class or it's already imported
-                        || task.root.getPackageName().toString().equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
-                    samePackage = true;
-                }
-
-                if (!samePackage && !CompletionProvider.hasImport(task.root, item.item.data)) {
-                    AddImport imp = new AddImport(new File(""), item.item.data);
-                    Map<File, TextEdit> edits = imp.getText(task);
-                    TextEdit edit = edits.values().iterator().next();
-                    applyTextEdit(edit);
-                }
-            }
             mCancelShowUp = false;
         }
         mEditor.postHideCompletionWindow();
     }
 
+    public String getLastPrefix() {
+        return mLastPrefix;
+    }
+    public void setSelectedItem(String item) {
+        selectedItem = item;
+    }
+
     // only applies for single line edits
-    private void applyTextEdit(TextEdit edit) {
+    public void applyTextEdit(TextEdit edit) {
         Range range = edit.range;
 
         if (range.start.equals(range.end)) {

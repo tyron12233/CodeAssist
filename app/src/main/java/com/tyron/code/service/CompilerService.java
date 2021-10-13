@@ -145,8 +145,8 @@ public class CompilerService extends Service {
         return mBinder;
     }
 
-    public void compile(BuildType type) {
-        mProject = FileManager.getInstance().getCurrentProject();
+    public void compile(Project project, BuildType type) {
+        mProject = project;
 
 
         if (mProject == null) {

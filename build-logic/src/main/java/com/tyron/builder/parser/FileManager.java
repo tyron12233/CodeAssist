@@ -57,8 +57,8 @@ public class FileManager {
     private Cache<String, List<File>> mDexCache = new Cache<>();
     private Cache<Void, Void> mSymbolCache = new Cache<>();
 
-    private File mAndroidJar;
-    private File mLambdaStubs;
+    private static File sAndroidJar;
+    private static File sLambdaStubs;
 
     public static FileManager getInstance() {
         if (INSTANCE == null) {
@@ -75,18 +75,14 @@ public class FileManager {
         return INSTANCE;
     }
 
-    FileManager() {
-        try {
-            putJar(getAndroidJar());
-        } catch (IOException ignore) {
+    public FileManager() {
 
-        }
     }
 
     @VisibleForTesting
     public FileManager(File androidJar, File lambdaStubs) {
-        mAndroidJar = androidJar;
-        mLambdaStubs = lambdaStubs;
+        sAndroidJar = androidJar;
+        sLambdaStubs = lambdaStubs;
 
         try {
             putJar(androidJar);
@@ -193,6 +189,7 @@ public class FileManager {
         mCurrentProject = project;
         classFiles.clear();
         javaFiles.clear();
+
         if (mCurrentProject != project) {
             classCache = new Cache<>();
             mDexCache = new Cache<>();
@@ -408,37 +405,37 @@ public class FileManager {
     }
 
     @VisibleForTesting
-    public void setAndroidJar(File androidJar) {
-        mAndroidJar = androidJar;
+    public static void setAndroidJar(File androidJar) {
+        sAndroidJar = androidJar;
     }
 
-    public File getAndroidJar() {
-        if (mAndroidJar == null) {
+    public static File getAndroidJar() {
+        if (sAndroidJar == null) {
             Context context = BuildModule.getContext();
             if (context == null) {
                 return null;
             }
 
-            mAndroidJar = new File(context
+            sAndroidJar = new File(context
                     .getFilesDir(), "rt.jar");
-            if (!mAndroidJar.exists()) {
+            if (!sAndroidJar.exists()) {
                 Decompress.unzipFromAssets(BuildModule.getContext(),
                         "rt.zip",
-                        mAndroidJar.getParentFile().getAbsolutePath());
+                        sAndroidJar.getParentFile().getAbsolutePath());
             }
         }
 
-        return mAndroidJar;
+        return sAndroidJar;
     }
     
-    public File getLambdaStubs() {
-        if (mLambdaStubs == null) {
-            mLambdaStubs = new File(BuildModule.getContext().getFilesDir(), "core-lambda-stubs.jar");
+    public static File getLambdaStubs() {
+        if (sLambdaStubs == null) {
+            sLambdaStubs = new File(BuildModule.getContext().getFilesDir(), "core-lambda-stubs.jar");
 
-            if (!mLambdaStubs.exists()) {
-                Decompress.unzipFromAssets(BuildModule.getContext(), "lambda-stubs.zip", mLambdaStubs.getParentFile().getAbsolutePath());
+            if (!sLambdaStubs.exists()) {
+                Decompress.unzipFromAssets(BuildModule.getContext(), "lambda-stubs.zip", sLambdaStubs.getParentFile().getAbsolutePath());
             }
         }
-        return mLambdaStubs;
+        return sLambdaStubs;
     }
 }

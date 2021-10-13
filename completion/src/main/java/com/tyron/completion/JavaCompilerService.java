@@ -3,6 +3,7 @@ package com.tyron.completion;
 import android.annotation.SuppressLint;
 import android.util.Log;
 
+import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.Cache;
@@ -40,6 +41,7 @@ public class JavaCompilerService implements CompilerProvider {
 
     public final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
 
+    private final Project mProject;
     public final Set<File> classPath, docPath;
     public final Set<String> addExports;
     public final ReusableCompiler compiler = new ReusableCompiler();
@@ -47,18 +49,17 @@ public class JavaCompilerService implements CompilerProvider {
 
     public final ReentrantLock mLock = new ReentrantLock();
 
-    public JavaCompilerService(Set<File> classPath, Set<File> docPath, Set<String> addExports) {
-
+    public JavaCompilerService(Project project, Set<File> classPath, Set<File> docPath, Set<String> addExports) {
+        mProject = project;
         this.classPath = Collections.unmodifiableSet(classPath);
         this.docPath = Collections.unmodifiableSet(docPath);
         this.addExports = Collections.unmodifiableSet(addExports);
 
-        this.fileManager = new SourceFileManager();
-        this.docs = new Docs(docPath);
+        this.fileManager = new SourceFileManager(project);
+        this.docs = new Docs(project, docPath);
     }
 
     public CompileBatch cachedCompile;
-    private final Object mCachedCompileLock = new Object();
     private final Map<JavaFileObject, Long> cachedModified = new HashMap<>();
 
     /**
@@ -144,7 +145,7 @@ public class JavaCompilerService implements CompilerProvider {
     @Override
     public List<String> publicTopLevelTypes() {
         List<String> classes = new ArrayList<>();
-        classes.addAll(FileManager.getInstance().all());
+        classes.addAll(mProject.getFileManager().all());
         classes.addAll(Collections.emptyList());
         return classes;
     }
@@ -248,7 +249,7 @@ public class JavaCompilerService implements CompilerProvider {
 
         String packageName = packageName(className);
         String simpleName = simpleName(className);
-        for (File file : FileManager.getInstance().list(packageName)) {
+        for (File file : mProject.getFileManager().list(packageName)) {
             if (containsWord(file.toPath(), simpleName) && containsType(file.toPath(), className)) {
                 if (file.getName().endsWith(".java")) {
                     return file.toPath();
@@ -299,7 +300,7 @@ public class JavaCompilerService implements CompilerProvider {
 
     private ParseTask cachedParse(Path file) {
         if (parseCache.needs(file, file.toFile().getName())) {
-            Parser parser = Parser.parseFile(file);
+            Parser parser = Parser.parseFile(mProject, file);
             parseCache.load(file, file.toFile().getName(), new ParseTask(parser.task, parser.root));
         }
         return parseCache.get(file, file.toFile().getName());
@@ -310,11 +311,10 @@ public class JavaCompilerService implements CompilerProvider {
             // workaround to get the file uri of a JarFileObject
             String path = file.toUri().toString()
                     .substring(4, file.toUri().toString().lastIndexOf("!"));
-            Log.d("TEST", path);
 
             Path parsedPath = new File(URI.create(path)).toPath();
             if (parseCache.needs(parsedPath, file.getName())) {
-                Parser parser = Parser.parseJavaFileObject(file);
+                Parser parser = Parser.parseJavaFileObject(mProject, file);
                 parseCache.load(parsedPath, file.getName(), new ParseTask(parser.task, parser.root));
             }
             return parseCache.get(parsedPath, file.getName());
@@ -322,7 +322,7 @@ public class JavaCompilerService implements CompilerProvider {
             return cachedParse(((SourceFileObject) file).mFile);
         }
 
-        Parser parser = Parser.parseJavaFileObject(file);
+        Parser parser = Parser.parseJavaFileObject(mProject, file);
         return new ParseTask(parser.task, parser.root);
     }
 
@@ -350,7 +350,7 @@ public class JavaCompilerService implements CompilerProvider {
 
     public ParseTask parse(Path file, String contents) {
         SourceFileObject object = new SourceFileObject(file, contents, Instant.now());
-        Parser parser = Parser.parseJavaFileObject(object);
+        Parser parser = Parser.parseJavaFileObject(mProject, object);
         return new ParseTask(parser.task, parser.root);
     }
 
@@ -395,12 +395,17 @@ public class JavaCompilerService implements CompilerProvider {
 
     public boolean isReady() {
         if (CompletionEngine.isIndexing()) {
+            Log.d("asdasd", "still indexing");
             return false;
         }
         if (cachedCompile == null) {
             return true;
         }
-        return cachedCompile.closed;
+        boolean closed = cachedCompile.closed;
+        if (!closed) {
+            Log.d("asdasd", "Not yet closed");
+        }
+        return closed;
     }
 
 }

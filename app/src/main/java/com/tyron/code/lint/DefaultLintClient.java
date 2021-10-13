@@ -27,7 +27,7 @@ public class DefaultLintClient extends LintClient {
     private final JavaCompilerService mCompiler;
 
     public DefaultLintClient(Project project) {
-        mCompiler = CompletionEngine.getInstance().getCompiler();
+        mCompiler = CompletionEngine.getInstance().getCompiler(project);
         mLint = new Lint(mCompiler, project, this);
     }
 

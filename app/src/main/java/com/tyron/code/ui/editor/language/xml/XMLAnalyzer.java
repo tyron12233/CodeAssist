@@ -4,6 +4,7 @@ import android.graphics.Color;
 import android.os.Handler;
 import android.util.Log;
 
+import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
@@ -152,7 +153,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 					if (CompletionEngine.isIndexing()) {
 						return;
 					}
-					Project project = FileManager.getInstance().getCurrentProject();
+					Project project = ProjectManager.getInstance().getCurrentProject();
 					if (project != null) {
 						Task task = new IncrementalAapt2Task();
 						try {

@@ -4,6 +4,7 @@ import android.text.TextUtils;
 
 import org.openjdk.tools.javac.api.JavacTool;
 
+import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.StringSearch;
@@ -25,9 +26,12 @@ import org.openjdk.javax.tools.StandardJavaFileManager;
 import org.openjdk.javax.tools.StandardLocation;
 
 public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFileManager> {
-	
-	public SourceFileManager() {
+
+    private final Project mProject;
+
+	public SourceFileManager(Project project) {
 		super(createDelegateFileManager());
+        mProject = project;
 	}
 	
 	private static StandardJavaFileManager createDelegateFileManager() {
@@ -43,7 +47,7 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
 	public Iterable<JavaFileObject> list(JavaFileManager.Location location, String packageName, Set<JavaFileObject.Kind> kinds, boolean recurse) throws IOException {
 		
 		if (location == StandardLocation.SOURCE_PATH) {
-			Stream<JavaFileObject> stream = FileManager.getInstance()
+			Stream<JavaFileObject> stream = mProject.getFileManager()
 					.list(packageName).stream()
 					.map(this::asJavaFileObject);
 			return stream.collect(Collectors.toList());
@@ -88,7 +92,7 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
         if (location == StandardLocation.SOURCE_PATH) {
             String packageName = StringSearch.mostName(className);
             String simpleClassName = StringSearch.lastName(className);
-            for (File f : FileManager.getInstance().list(packageName)) {
+            for (File f : mProject.getFileManager().list(packageName)) {
                 if (f.getName().equals(simpleClassName + kind.extension)) {
                     return new SourceFileObject(f.toPath());
                 }

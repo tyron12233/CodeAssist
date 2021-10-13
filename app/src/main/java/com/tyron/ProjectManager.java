@@ -1,5 +1,6 @@
 package com.tyron;
 
+import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.Project;
 import com.tyron.completion.provider.CompletionEngine;
@@ -24,13 +25,21 @@ public class ProjectManager {
         void onComplete(boolean success, String message);
     }
 
-    private final LogViewModel mLogger;
+    private static ProjectManager INSTANCE = null;
 
-    public ProjectManager(LogViewModel logger) {
-        mLogger = logger;
+    public static ProjectManager getInstance() {
+        if (INSTANCE == null) {
+            INSTANCE = new ProjectManager();
+        }
+        return INSTANCE;
+    }
+    private Project mCurrentProject;
+
+    private ProjectManager() {
+        
     }
 
-    public void openProject(Project proj, boolean downloadLibs, TaskListener mListener) {
+    public void openProject(Project proj, boolean downloadLibs, TaskListener mListener, ILogger logger) {
         Executors.newSingleThreadExecutor().execute(() -> {
             if (downloadLibs) {
                 mListener.onTaskStarted("Resolving dependencies");
@@ -56,15 +65,19 @@ public class ProjectManager {
                 try {
                     downloader.download(dependencies);
                 } catch (IOException e) {
-                    mLogger.w(LogViewModel.BUILD_LOG, "Unable to download dependencies: " + e.getMessage());
+                    logger.warning("Unable to download dependencies: " + e.getMessage());
                 }
             }
-
             mListener.onTaskStarted("Indexing");
 
-            FileManager.getInstance().openProject(proj);
+            mCurrentProject = proj;
+            proj.open();
             CompletionEngine.getInstance().index(proj, () -> mListener.onComplete(true, "Index successful"));
         });
+    }
+
+    public Project getCurrentProject() {
+        return mCurrentProject;
     }
 
     public static File createClass(File directory, String className, CodeTemplate template) throws IOException {
