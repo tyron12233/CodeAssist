@@ -6,6 +6,7 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
+import com.google.googlejavaformat.Input;
 import com.tyron.ProjectManager;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
@@ -50,7 +51,8 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
     private static final String TAG = JavaAnalyzer.class.getSimpleName();
     private static final Tokens[] sKeywordsBeforeFunctionName = new Tokens[]{Tokens.RETURN, Tokens.BREAK, Tokens.IF, Tokens.AND, Tokens.OR, Tokens.OREQ,
-            Tokens.OROR, Tokens.ANDAND, Tokens.ANDEQ, Tokens.RPAREN, Tokens.LBRACE, Tokens.NEW, Tokens.DOT, Tokens.SEMICOLON};
+            Tokens.OROR, Tokens.ANDAND, Tokens.ANDEQ, Tokens.RPAREN, Tokens.LBRACE, Tokens.NEW, Tokens.DOT, Tokens.SEMICOLON, Tokens.EQ, Tokens.NOTEQ, Tokens.NOT,
+            Tokens.RBRACE};
 
     private final List<DiagnosticWrapper> diagnostics = new ArrayList<>();
     private final List<LintIssue> mLintDiagnostics = new ArrayList<>();
