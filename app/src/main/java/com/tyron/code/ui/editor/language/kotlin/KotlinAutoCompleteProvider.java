@@ -8,6 +8,8 @@ import com.tyron.builder.parser.FileManager;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.CompletionEngine;
 
+import org.jetbrains.kotlin.com.intellij.openapi.progress.ProcessCanceledException;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -30,7 +32,7 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
     }
 
     @Override
-    public List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) {
+    public List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) throws InterruptedException {
         if (com.tyron.completion.provider.CompletionEngine.isIndexing()) {
             return null;
         }
@@ -43,13 +45,16 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
             engine = new CompletionEngine(FileManager.getInstance().getCurrentProject());
         }
 
-        CompletionList list = engine.complete(mEditor.getCurrentFile(), mEditor.getText().toString(), mEditor.getCursor().getLeft());
-        List<CompletionItem> result = new ArrayList<>();
-        List<com.tyron.completion.model.CompletionItem> item = list.items;
-        for (com.tyron.completion.model.CompletionItem comp : item) {
-            result.add(new CompletionItem(comp));
+        try {
+            CompletionList list = engine.complete(mEditor.getCurrentFile(), mEditor.getText().toString(), mEditor.getCursor().getLeft());
+            List<CompletionItem> result = new ArrayList<>();
+            List<com.tyron.completion.model.CompletionItem> item = list.items;
+            for (com.tyron.completion.model.CompletionItem comp : item) {
+                result.add(new CompletionItem(comp));
+            }
+            return result;
+        } catch (ProcessCanceledException e) {
+            throw new InterruptedException(e.getMessage());
         }
-
-        return result;
     }
 }
