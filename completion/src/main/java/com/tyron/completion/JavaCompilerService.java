@@ -395,17 +395,12 @@ public class JavaCompilerService implements CompilerProvider {
 
     public boolean isReady() {
         if (CompletionEngine.isIndexing()) {
-            Log.d("asdasd", "still indexing");
             return false;
         }
         if (cachedCompile == null) {
             return true;
         }
-        boolean closed = cachedCompile.closed;
-        if (!closed) {
-            Log.d("asdasd", "Not yet closed");
-        }
-        return closed;
+        return cachedCompile.closed;
     }
 
 }

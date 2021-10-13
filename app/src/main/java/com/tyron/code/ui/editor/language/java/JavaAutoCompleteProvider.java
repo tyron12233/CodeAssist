@@ -35,7 +35,6 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
     public List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) throws InterruptedException {
         Project currentProject = ProjectManager.getInstance().getCurrentProject();
         if (currentProject != null) {
-            Log.d("Service", "AutoComplete");
             currentProject.getFileManager()
                     .save(mEditor.getCurrentFile(), mEditor.getText().toString());
 
@@ -44,7 +43,6 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
             }
 
             if (!CompletionEngine.getInstance().getCompiler(currentProject).isReady()) {
-                Log.w("JavaAutoCompleteProvider", "CompletionEngine is not yet ready, returning an empty list");
                 return Collections.emptyList();
             }
 
