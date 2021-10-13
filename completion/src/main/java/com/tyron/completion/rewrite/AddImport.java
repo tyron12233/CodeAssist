@@ -47,7 +47,11 @@ public class AddImport implements Rewrite {
 
     public Map<File, TextEdit> getText(ParseTask task) {
         Position point = insertPosition(task);
+
         String text = "import " + className + ";\n";
+        if (point.line == 1) {
+            text = "\nimport " + className + ";\n";
+        }
         TextEdit edit = new TextEdit(new Range(point, point), text);
         return Collections.singletonMap(currentFile, edit);
     }
