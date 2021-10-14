@@ -43,10 +43,80 @@ public class InjectLoggerTask extends Task {
             "       super.onCreate();\n" +
             "   }\n" +
             "}";
-    private static final String LOGGER_CLASS =
+    private static final String LOGGER_CLASS = "import android.content.Context;\n" +
+            "import android.content.Intent;\n" +
+            "\n" +
+            "import java.io.BufferedReader;\n" +
+            "import java.io.IOException;\n" +
+            "import java.io.InputStreamReader;\n" +
+            "import java.util.concurrent.Executors;\n" +
+            "\n" +
+            "public class Logger {\n" +
+            "\n" +
+            "    private static final String DEBUG = \"DEBUG\";\n" +
+            "    private static final String WARNING = \"WARNING\";\n" +
+            "    private static final String ERROR = \"ERROR\";\n" +
+            "\n" +
+            "    private static volatile boolean mInitialized;\n" +
+            "    private static Context mContext;\n" +
+            "\n" +
+            "    public static void initialize(Context context) {\n" +
+            "        if (mInitialized) {\n" +
+            "            return;\n" +
+            "        }\n" +
+            "        mInitialized = true;\n" +
+            "        mContext = context.getApplicationContext();\n" +
+            "        \n" +
+            "        start();\n" +
+            "    }\n" +
+            "\n" +
+            "    private static void start() {\n" +
+            "        Executors.newSingleThreadExecutor().execute(() -> {\n" +
+            "            try {\n" +
+            "                clear();\n" +
+            "                Process process = Runtime.getRuntime()\n" +
+            "                        .exec(\"logcat\");\n" +
+            "                BufferedReader reader = new BufferedReader(new InputStreamReader(\n" +
+            "                        process.getInputStream()));\n" +
+            "                String line = null;\n" +
+            "                while ((line = reader.readLine()) != null) {\n" +
+            "                    error(line);\n" +
+            "                }\n" +
+            "            } catch (IOException e) {\n" +
+            "                error(\"IOException occured on Logger: \" + e.getMessage());\n" +
+            "            }\n" +
+            "        });\n" +
+            "    }\n" +
+            "\n" +
+            "    private static void clear() throws IOException {\n" +
+            "        Runtime.getRuntime().exec(\"logcat -c\");\n" +
+            "    }\n" +
+            "\n" +
+            "    private static void debug(String message) {\n" +
+            "        broadcast(DEBUG, message);\n" +
+            "    }\n" +
+            "\n" +
+            "    private static void warning(String message) {\n" +
+            "        broadcast(WARNING, message);\n" +
+            "    }\n" +
+            "\n" +
+            "    private static void error(String message) {\n" +
+            "        broadcast(ERROR, message);\n" +
+            "    }\n" +
+            "\n" +
+            "    private static void broadcast(String type, String message) {\n" +
+            "        Intent intent = new Intent(mContext.getPackageName() + \".LOG\");\n" +
+            "        intent.putExtra(\"type\", type);\n" +
+            "        intent.putExtra(\"message\", message);\n" +
+            "        mContext.sendBroadcast(intent);\n" +
+            "    }\n" +
+            "}\n";
 
     private Project mProject;
     private ILogger mLogger;
+    private File mLoggerFile;
+    private File mApplicationFile;
+    private String mOriginalApplication;
 
     @Override
     public String getName() {
@@ -63,15 +133,55 @@ public class InjectLoggerTask extends Task {
     @Override
     public void run() throws IOException, CompilationFailedException {
         try {
+            addLoggerClass();
+
+            boolean isNewApplicationClass = true;
+
             String applicationClass = getApplicationClass();
             if (applicationClass == null) {
                 applicationClass = mProject.getPackageName() + ".LoggerApplication";
                 createApplicationClass(applicationClass);
+            } else {
+                isNewApplicationClass = false;
             }
+
+            mApplicationFile = mProject.getFileManager()
+                    .getJavaFile(applicationClass);
+            if (!isNewApplicationClass) {
+                mOriginalApplication = FileUtils.readFileToString(mApplicationFile, Charset.defaultCharset());
+            }
+
+            injectLogger(mApplicationFile);
 
             mLogger.debug("application class: " + applicationClass);
         } catch (RuntimeException | XmlPullParserException | ParserConfigurationException | SAXException | TransformerException e) {
             throw new CompilationFailedException(e);
+        }
+    }
+
+    @Override
+    protected void clean() {
+        if (mApplicationFile != null) {
+            if (mOriginalApplication != null) {
+                try {
+                    FileUtils.writeStringToFile(mApplicationFile, mOriginalApplication, Charset.defaultCharset());
+                } catch (IOException ignore) {
+                }
+            } else {
+                try {
+                    FileUtils.delete(mApplicationFile);
+                } catch (IOException ignore) {
+
+                }
+            }
+        }
+
+        if (mLoggerFile != null) {
+            try {
+                FileUtils.delete(mLoggerFile);
+            } catch (IOException ignore) {
+
+            }
         }
     }
 
@@ -132,13 +242,20 @@ public class InjectLoggerTask extends Task {
             throw  new IOException("Unable to create LoggerApplication");
         }
 
-        String classString = "package " + name + ";\n" +
+        String classString = "package " + mProject.getPackageName() + ";\n" +
                 APPLICATION_CLASS;
         FileUtils.writeStringToFile(output, classString, Charset.defaultCharset());
+        mProject.getFileManager()
+                .addJavaFile(output);
     }
 
     private void injectLogger(File applicationClass) throws IOException, CompilationFailedException {
         String applicationContents = FileUtils.readFileToString(applicationClass, Charset.defaultCharset());
+        if (applicationContents.contains("Logger.initialize(this);")) {
+            mLogger.debug("Application class already initializes Logger");
+            return;
+        }
+
         String onCreateString = "super.onCreate();";
         int index = applicationContents.indexOf(onCreateString);
         if (index == -1) {
@@ -147,5 +264,25 @@ public class InjectLoggerTask extends Task {
 
         String before = applicationContents.substring(0, index + onCreateString.length());
         String after = applicationContents.substring(index + onCreateString.length());
+        String injected = before + "\n" + "Logger.initialize(this);\n" +
+                after;
+        FileUtils.writeStringToFile(applicationClass, injected, Charset.defaultCharset());
+    }
+
+    private void addLoggerClass() throws IOException {
+        mLogger.debug("Creating Logger.java");
+
+        File loggerClass = new File(mProject.getJavaDirectory(), mProject.getPackageName()
+        .replace('.', '/') + "/Logger.java");
+        if (!loggerClass.exists() && !loggerClass.createNewFile()) {
+            throw new IOException("Unable to create Logger.java");
+        }
+
+        String loggerString = "package " + mProject.getPackageName() + ";\n" +
+                LOGGER_CLASS;
+        FileUtils.writeStringToFile(loggerClass, loggerString, Charset.defaultCharset());
+        mLoggerFile = loggerClass;
+        mProject.getFileManager()
+                .addJavaFile(loggerClass);
     }
 }

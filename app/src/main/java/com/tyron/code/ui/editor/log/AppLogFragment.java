@@ -110,25 +110,14 @@ public class AppLogFragment extends Fragment {
                             case "WARNING":
                                 model.w(LogViewModel.APP_LOG, wrapped);
                                 break;
+                            case "INFO":
+                                model.d(LogViewModel.APP_LOG, wrapped);
+                                break;
                         }
                     }
                 };
                 requireActivity().registerReceiver(mLogReceiver, new IntentFilter(ProjectManager.getInstance().getCurrentProject().getPackageName() + ".LOG"));
             }
-
-            new Thread(() -> {
-                while (true) {
-                    Intent intent = new Intent("com.test.LOG");
-                    intent.putExtra("type", "ERROR");
-                    intent.putExtra("message", "UNKNOWN");
-                    requireActivity().sendBroadcast(intent);
-                    try {
-                        Thread.sleep(500);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }).start();
         }
     }
 
