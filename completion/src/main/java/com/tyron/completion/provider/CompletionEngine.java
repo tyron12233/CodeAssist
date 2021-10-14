@@ -9,6 +9,7 @@ import androidx.annotation.NonNull;
 
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
+import com.tyron.completion.CompileBatch;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.model.CompletionList;
@@ -102,8 +103,11 @@ public class CompletionEngine {
         project.getLibraries();
 
         JavaCompilerService compiler = getCompiler(project);
-        CompileTask compile = compiler.compile(project.getJavaFiles().values().stream().map(File::toPath).toArray(Path[]::new));
-        compile.close();
+        project.getJavaFiles().forEach((key, value) -> {
+            try (CompileTask task = compiler.compile(value.toPath())) {
+                Log.d(TAG, "Compiled " + task.root().getPackage());
+            }
+        });
 
         setIndexing(false);
         if (callback != null) {
