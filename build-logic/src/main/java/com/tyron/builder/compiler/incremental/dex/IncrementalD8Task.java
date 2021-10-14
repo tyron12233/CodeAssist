@@ -107,7 +107,7 @@ public class IncrementalD8Task extends Task {
                     .setMinApiLevel(mProject.getMinSdk())
                     .setMode(CompilationMode.RELEASE)
                     .setIntermediate(true)
-                    .setOutput(mOutputPath, OutputMode.DexFilePerClass)
+                    .setOutput(mOutputPath, OutputMode.DexFilePerClassFile)
                     .build();
             D8.run(command);
 
@@ -132,7 +132,7 @@ public class IncrementalD8Task extends Task {
                     .setMinApiLevel(mProject.getMinSdk())
                     .setMode(CompilationMode.DEBUG)
                     .setIntermediate(true)
-                    .setOutput(mOutputPath, OutputMode.DexFilePerClass)
+                    .setOutput(mOutputPath, OutputMode.DexFilePerClassFile)
                     .build();
             D8.run(command);
 
