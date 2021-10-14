@@ -593,6 +593,8 @@ public class MainFragment extends Fragment {
                 }
                 if (success && getActivity() != null) {
                     logger.debug(message);
+                    logViewModel.clear(LogViewModel.APP_LOG);
+
                     File file = new File(mProjectManager.getCurrentProject().getBuildDirectory(), "bin/signed.apk");
                     mProgressBar.postDelayed(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()), 300);
                 }
