@@ -86,7 +86,8 @@ public class WizardFragment extends Fragment {
                     if (result != null) {
                         try {
                             mSaveLocationLayout.getEditText()
-                                    .setText(FileUtils.getPath(result));
+                                    .setText(FileUtils.getPath(result)
+                                    .replace("%20", " "));
                         } catch (Exception e) {
                             ApplicationLoader.showToast(e.getMessage());
                         }
