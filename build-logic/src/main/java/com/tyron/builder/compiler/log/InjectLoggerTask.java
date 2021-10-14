@@ -50,12 +50,16 @@ public class InjectLoggerTask extends Task {
             "import java.io.IOException;\n" +
             "import java.io.InputStreamReader;\n" +
             "import java.util.concurrent.Executors;\n" +
+            "import java.util.regex.Matcher;\n" +
+            "import java.util.regex.Pattern;\n" +
             "\n" +
             "public class Logger {\n" +
             "\n" +
             "    private static final String DEBUG = \"DEBUG\";\n" +
             "    private static final String WARNING = \"WARNING\";\n" +
             "    private static final String ERROR = \"ERROR\";\n" +
+            "    private static final String INFO = \"INFO\";\n" +
+            "    private static final Pattern TYPE_PATTERN = Pattern.compile(\"^(.*\\\\d) ([ADEIW]) (.*): (.*)\");\n" +
             "\n" +
             "    private static volatile boolean mInitialized;\n" +
             "    private static Context mContext;\n" +
@@ -66,7 +70,7 @@ public class InjectLoggerTask extends Task {
             "        }\n" +
             "        mInitialized = true;\n" +
             "        mContext = context.getApplicationContext();\n" +
-            "        \n" +
+            "\n" +
             "        start();\n" +
             "    }\n" +
             "\n" +
@@ -80,10 +84,23 @@ public class InjectLoggerTask extends Task {
             "                        process.getInputStream()));\n" +
             "                String line = null;\n" +
             "                while ((line = reader.readLine()) != null) {\n" +
-            "                    error(line);\n" +
+            "                    Matcher matcher = TYPE_PATTERN.matcher(line);\n" +
+            "                    if (matcher.matches()) {\n" +
+            "                        String type = matcher.group(2);\n" +
+            "                        if (type != null) {\n" +
+            "                           switch (type) {\n" +
+            "                               case \"D\": debug(line);   break;\n" +
+            "                               case \"E\": error(line);   break;\n" +
+            "                               case \"W\": warning(line); break;\n" +
+            "                               case \"I\": info(line);    break;\n" +
+            "                           }\n" +
+            "                        } else {\n" +
+            "                            debug(line);\n" +
+            "                        }\n" +
+            "                    }\n" +
             "                }\n" +
             "            } catch (IOException e) {\n" +
-            "                error(\"IOException occured on Logger: \" + e.getMessage());\n" +
+            "                error(\"IOException occurred on Logger: \" + e.getMessage());\n" +
             "            }\n" +
             "        });\n" +
             "    }\n" +
@@ -104,6 +121,10 @@ public class InjectLoggerTask extends Task {
             "        broadcast(ERROR, message);\n" +
             "    }\n" +
             "\n" +
+            "    private static void info(String message) {\n" +
+            "        broadcast(INFO, message);\n" +
+            "    }\n" +
+            "\n" +
             "    private static void broadcast(String type, String message) {\n" +
             "        Intent intent = new Intent(mContext.getPackageName() + \".LOG\");\n" +
             "        intent.putExtra(\"type\", type);\n" +
@@ -111,7 +132,6 @@ public class InjectLoggerTask extends Task {
             "        mContext.sendBroadcast(intent);\n" +
             "    }\n" +
             "}\n";
-
     private Project mProject;
     private ILogger mLogger;
     private File mLoggerFile;

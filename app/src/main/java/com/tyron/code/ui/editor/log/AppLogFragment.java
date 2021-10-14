@@ -102,6 +102,7 @@ public class AppLogFragment extends Fragment {
                         DiagnosticWrapper wrapped = ILogger.wrap(message);
                         switch (type) {
                             case "DEBUG":
+                            case "INFO":
                                 wrapped.setKind(Diagnostic.Kind.NOTE);
                                 model.d(LogViewModel.APP_LOG, wrapped);
                                 break;
@@ -112,9 +113,6 @@ public class AppLogFragment extends Fragment {
                             case "WARNING":
                                 wrapped.setKind(Diagnostic.Kind.WARNING);
                                 model.w(LogViewModel.APP_LOG, wrapped);
-                                break;
-                            case "INFO":
-                                model.d(LogViewModel.APP_LOG, wrapped);
                                 break;
                         }
                     }
