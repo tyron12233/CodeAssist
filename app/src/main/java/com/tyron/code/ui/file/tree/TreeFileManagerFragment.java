@@ -142,8 +142,10 @@ public class TreeFileManagerFragment extends Fragment {
                                     mMainViewModel.addFile(createdFile);
                                     Project currentProject = ProjectManager.getInstance().getCurrentProject();
                                     if (currentProject != null) {
+                                        String packageName = ProjectUtils.getPackageName(directory)
+                                                + "." + className;
                                         currentProject.getFileManager()
-                                                .addJavaFile(currentFile);
+                                                .addJavaFile(currentFile, packageName);
                                     }
                                 } catch (IOException e) {
                                     ApplicationLoader.showToast("Unable to create class: " + e.getMessage());

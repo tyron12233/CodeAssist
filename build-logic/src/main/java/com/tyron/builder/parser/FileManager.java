@@ -137,10 +137,17 @@ public class FileManager {
     public void addJavaFile(File javaFile) {
         String packageName = StringSearch.packageName(javaFile);
         if (packageName != null) {
-            packageName += "." + javaFile.getName()
-                    .substring(0, javaFile.getName().lastIndexOf("."));
-            javaFiles.put(packageName, javaFile);
+            String fileName = javaFile.getName();
+            if (fileName.lastIndexOf('.') != -1) {
+                fileName = fileName.substring(0, fileName.lastIndexOf('.'));
+            }
+            packageName += "." + fileName;
+            addJavaFile(javaFile, packageName);
         }
+    }
+
+    public void addJavaFile(File javaFile, String packageName) {
+        javaFiles.put(packageName, javaFile);
     }
 
     /**
