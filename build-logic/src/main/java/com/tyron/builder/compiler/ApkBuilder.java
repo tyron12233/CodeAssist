@@ -82,6 +82,8 @@ public class ApkBuilder {
             task.prepare(mProject, log, type);
             task.run();
         }
+
+        tasks.forEach(Task::clean);
     }
 
     private List<Task> getTasks() {

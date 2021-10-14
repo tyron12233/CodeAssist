@@ -28,4 +28,11 @@ public abstract class Task {
      * @throws CompilationFailedException if an exception occurred while the task is running
      */
     public abstract void run() throws IOException, CompilationFailedException;
+
+    /**
+     * Called after the compilation has finished successfully on every tasks
+     */
+    protected void clean() {
+
+    }
 }
