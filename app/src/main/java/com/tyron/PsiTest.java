@@ -10,6 +10,7 @@ import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
+import com.tyron.common.util.StringSearch;
 
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys;
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
@@ -20,6 +21,8 @@ import org.jetbrains.kotlin.cli.jvm.compiler.CliBindingTrace;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM;
+import org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt;
+import org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment;
 import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
 import org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage;
@@ -28,10 +31,18 @@ import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileSystem;
+import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiField;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFileFactory;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiReference;
+import org.jetbrains.kotlin.com.intellij.psi.impl.PsiFileFactoryImpl;
+import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.JavaFileManager;
+import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope;
+import org.jetbrains.kotlin.com.intellij.psi.util.PsiElementFilter;
+import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.kotlin.config.ApiVersion;
 import org.jetbrains.kotlin.config.CommonConfigurationKeys;
 import org.jetbrains.kotlin.config.CompilerConfiguration;
@@ -51,6 +62,7 @@ import org.jetbrains.kotlin.resolve.CompilerEnvironment;
 import org.jetbrains.kotlin.resolve.LazyTopDownAnalyzer;
 import org.jetbrains.kotlin.resolve.TopDownAnalysisMode;
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo;
+import org.jetbrains.kotlin.resolve.jvm.KotlinCliJavaFileManager;
 import org.jetbrains.kotlin.resolve.lazy.declarations.FileBasedDeclarationProviderFactory;
 
 import java.io.Closeable;
@@ -68,42 +80,44 @@ public class PsiTest implements Closeable {
     KotlinCoreEnvironment environment;
     Disposable disposable;
 
-    ConstraintLayout.LayoutParams layout;
-
-    ConstraintLayout constraintLayout;
     {
         UtilKt.setIdeaIoUseFallback();
         disposable = Disposer.newDisposable();
 
-        HashMap<LanguageFeature, LanguageFeature.State> map = new HashMap<>();
-        for (LanguageFeature value : LanguageFeature.values()) {
-            map.put(value, LanguageFeature.State.ENABLED);
-        }
-        LanguageVersionSettings settings = new LanguageVersionSettingsImpl(LanguageVersion.LATEST_STABLE, ApiVersion.createByLanguageVersion(LanguageVersion.LATEST_STABLE),
-                Collections.emptyMap(), map);
-        CompilerConfiguration configuration = new CompilerConfiguration();
-        configuration.put(CommonConfigurationKeys.MODULE_NAME, JvmProtoBufUtil.DEFAULT_MODULE_NAME);
-        configuration.put(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS, settings);
-        configuration.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, new LoggingMessageCollector());
-        configuration.put(JVMConfigurationKeys.USE_PSI_CLASS_FILES_READING, true);
-        configuration.put(JVMConfigurationKeys.NO_JDK, true);
+        CoreApplicationEnvironment coreApplicationEnvironment = new CoreApplicationEnvironment(disposable);
+        JavaCoreProjectEnvironment javaCoreProjectEnvironment = new JavaCoreProjectEnvironment(disposable, coreApplicationEnvironment);
+        javaCoreProjectEnvironment.addJarToClassPath(FileManager.getAndroidJar());
 
-        Project project = FileManager.getInstance().getCurrentProject();
-//        org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt.addJvmClasspathRoot(configuration, project.getJavaDirectory());
-        environment = KotlinCoreEnvironment.createForProduction(disposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES);
-//        environment.addKotlinSourceRoots(Collections.singletonList(new File(project.getJavaDirectory(), "androidx/test/Test.kt")));
-//
-//        Compiler compiler = new Compiler();
-//        Pair<BindingContext, ComponentProvider> provider = compiler.compileKtFiles(environment.getSourceFiles(), environment.getSourceFiles(), CompletionKind.DEFAULT);
-//        new JavaCoreProjectEnvironment(disposable, environment.getProjectEnvironment().getEnvironment());
+        javaCoreProjectEnvironment.getProject()
+                .getService(JavaFileManager.class)
+                .getNonTrivialPackagePrefixes()
+                .forEach(System.out::println);
+        PsiFile test = PsiFileFactory.getInstance(javaCoreProjectEnvironment.getProject())
+                .createFileFromText(JavaLanguage.INSTANCE, "package com.test\n;" +
+                        "public class Main { String string = \"hello\"; }");
 
-        PsiJavaFile psiJavaFile = (PsiJavaFile) PsiFileFactory.getInstance(environment.getProject()).createFileFromText(JavaLanguage.INSTANCE, "package test; public class Main {" +
-                "public static void main(String[] args) {" +
-                "" +
-                "}" +
-                "}");
-        for (PsiElement child : psiJavaFile.getChildren()) {
+    }
 
+    private void print(PsiElement element) {
+        for (PsiElement child : element.getChildren()) {
+            Log.d("PSI Text", child.getText());
+            if (child == null) {
+                continue;
+            }
+            if (child.getReference() == null) {
+                Log.d("PSI", "null reference");
+                continue;
+            }
+            PsiElement resolve = child.getReference()
+                    .resolve();
+            Log.d("PSI Resolved", "resolve: " + resolve);
+
+            if (child.getChildren() != null) {
+                for (PsiElement childChild : child.getChildren()) {
+                    print(childChild);
+
+                }
+            }
         }
     }
 

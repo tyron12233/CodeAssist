@@ -3,6 +3,7 @@ package com.tyron.code.ui.editor.log;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.text.SpannableStringBuilder;
@@ -23,6 +24,8 @@ import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.tyron.ProjectManager;
+import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.R;
@@ -36,7 +39,7 @@ import java.util.List;
 import java.util.Locale;
 
 public class AppLogFragment extends Fragment {
-    
+
     public static AppLogFragment newInstance(int id) {
         AppLogFragment fragment = new AppLogFragment();
         Bundle bundle = new Bundle();
@@ -44,16 +47,16 @@ public class AppLogFragment extends Fragment {
         fragment.setArguments(bundle);
         return fragment;
     }
-    
+
     private int id;
     private NestedScrollView mRoot;
     private TextView mLogView;
     private boolean mIgnoreProcess;
 
     private MainViewModel mMainViewModel;
-    
+
     public AppLogFragment() {
-        
+
     }
 
     @Override
@@ -63,7 +66,7 @@ public class AppLogFragment extends Fragment {
 
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     }
-  
+
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         mRoot = new NestedScrollView(requireContext());
@@ -79,6 +82,8 @@ public class AppLogFragment extends Fragment {
         return mRoot;
     }
 
+    private BroadcastReceiver mLogReceiver;
+
     @Override
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
@@ -86,6 +91,54 @@ public class AppLogFragment extends Fragment {
         LogViewModel model = new ViewModelProvider(requireActivity())
                 .get(LogViewModel.class);
         model.getLogs(id).observe(getViewLifecycleOwner(), this::process);
+
+        if (id == LogViewModel.APP_LOG) {
+            if (ProjectManager.getInstance().getCurrentProject() != null) {
+                mLogReceiver = new BroadcastReceiver() {
+                    @Override
+                    public void onReceive(Context context, Intent intent) {
+                        String type = intent.getExtras().getString("type", "DEBUG");
+                        String message = intent.getExtras().getString("message", "No message provided");
+                        DiagnosticWrapper wrapped = ILogger.wrap(message);
+                        switch (type) {
+                            case "DEBUG":
+                                model.d(LogViewModel.APP_LOG, wrapped);
+                                break;
+                            case "ERROR":
+                                model.e(LogViewModel.APP_LOG, wrapped);
+                                break;
+                            case "WARNING":
+                                model.w(LogViewModel.APP_LOG, wrapped);
+                                break;
+                        }
+                    }
+                };
+                requireActivity().registerReceiver(mLogReceiver, new IntentFilter(ProjectManager.getInstance().getCurrentProject().getPackageName() + ".LOG"));
+            }
+
+            new Thread(() -> {
+                while (true) {
+                    Intent intent = new Intent("com.test.LOG");
+                    intent.putExtra("type", "ERROR");
+                    intent.putExtra("message", "UNKNOWN");
+                    requireActivity().sendBroadcast(intent);
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }).start();
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+        if (mLogReceiver != null) {
+            requireActivity().unregisterReceiver(mLogReceiver);
+        }
     }
 
     private void process(List<DiagnosticWrapper> text) {
@@ -121,10 +174,14 @@ public class AppLogFragment extends Fragment {
     @ColorInt
     private int getColor(Diagnostic.Kind kind) {
         switch (kind) {
-            case ERROR: return 0xffcf6679;
-            case WARNING: return Color.YELLOW;
-            case NOTE: return Color.BLUE;
-            default: return 0xffFFFFFF;
+            case ERROR:
+                return 0xffcf6679;
+            case WARNING:
+                return Color.YELLOW;
+            case NOTE:
+                return Color.BLUE;
+            default:
+                return 0xffFFFFFF;
         }
     }
 
