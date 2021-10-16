@@ -194,7 +194,7 @@ public class WizardFragment extends Fragment {
     private AutoCompleteTextView mMinSdkText;
 
     private void initDetailsView() {
-        List<String> languages = Collections.singletonList("Java");
+        List<String> languages = Arrays.asList("Java", "Kotlin");
 
         mNameLayout = mWizardDetailsView.findViewById(R.id.til_app_name);
         mNameLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
