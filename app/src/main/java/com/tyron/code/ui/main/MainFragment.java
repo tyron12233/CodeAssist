@@ -495,7 +495,7 @@ public class MainFragment extends Fragment {
     public void openProject(Project proj, boolean downloadLibs) {
 
         if (!proj.isValidProject()) {
-            ApplicationLoader.showToast("Invalid project directory");
+            ApplicationLoader.showToast("Invalid project directory: " + proj.mRoot);
             return;
         }
 

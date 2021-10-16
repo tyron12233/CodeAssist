@@ -377,6 +377,8 @@ public class WizardFragment extends Fragment {
             mNameLayout.setErrorEnabled(false);
         }
 
+
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             File file = new File(requireContext().getExternalFilesDir("Projects") + "/" + editable.toString());
             String suffix = "";
@@ -429,6 +431,8 @@ public class WizardFragment extends Fragment {
         mLoadingLayout.setVisibility(View.VISIBLE);
 
         Executors.newSingleThreadExecutor().execute(() -> {
+            String savePath = mSaveLocationLayout.getEditText().getText().toString();
+
             try {
                 if (validateDetails()) {
                     createProject();
@@ -444,7 +448,7 @@ public class WizardFragment extends Fragment {
                 return;
             }
 
-            Project project = new Project(new File(mSaveLocationLayout.getEditText().getText().toString()));
+            Project project = new Project(new File(savePath));
             replacePlaceholders(project.mRoot);
 
             requireActivity().runOnUiThread(() -> {
@@ -510,9 +514,6 @@ public class WizardFragment extends Fragment {
     }
 
     private void createProject() throws IOException  {
-        if (!validateDetails()) {
-            return;
-        }
 
         File projectRoot = new File(mSaveLocationLayout.getEditText().getText().toString());
         if (!projectRoot.exists()) {
