@@ -14,6 +14,7 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.charset.Charset;
 
 public class CompletionEngine {
@@ -66,7 +67,7 @@ public class CompletionEngine {
         return Pair.create(compiled, offset);
     }
 
-    public CompletionList complete(File file, String contents, int cursor) {
+    public CompletionList complete(File file, String contents, int cursor) throws ClosedByInterruptException {
         Pair<CompiledFile, Integer> pair = recover(file, contents, Recompile.AFTER_DOT, cursor);
         return new Completions().completions(pair.first, cursor, sp.getIndex());
     }

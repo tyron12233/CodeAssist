@@ -11,6 +11,7 @@ import com.tyron.kotlin_completion.CompletionEngine;
 
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProcessCanceledException;
 
+import java.nio.channels.ClosedByInterruptException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -50,7 +51,7 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
                 result.add(new CompletionItem(comp));
             }
             return result;
-        } catch (ProcessCanceledException e) {
+        } catch (ProcessCanceledException | ClosedByInterruptException e) {
             throw new InterruptedException(e.getMessage());
         }
     }
