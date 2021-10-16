@@ -6,7 +6,6 @@ import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
-import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,7 +20,6 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.documentfile.provider.DocumentFile;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -186,42 +184,14 @@ public class WizardFragment extends Fragment {
         mNameLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
             @Override
             public void afterTextChanged(Editable editable) {
-                if (TextUtils.isEmpty(mNameLayout.getEditText().getText())) {
-                    mNameLayout.setError(getString(R.string.wizard_error_name_empty));
-                } else {
-                    mNameLayout.setErrorEnabled(false);
-                }
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    File file = new File(requireContext().getExternalFilesDir(null) + "/" + "Projects" + "/" + editable.toString());
-                    String suffix = "";
-                    if (file.exists()) {
-                        suffix = "-1";
-                    }
-                    String path = file.getAbsolutePath() + suffix.trim();
-                    mSaveLocationLayout.getEditText().setText(path);
-                }
+                verifyClassName(editable);
             }
         });
         mPackageNameLayout = mWizardDetailsView.findViewById(R.id.til_package_name);
         mPackageNameLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
             @Override
             public void afterTextChanged(Editable editable) {
-                String packageName = editable.toString();
-                String[] packages = packageName.split("\\.");
-                if (packages == null) {
-                    mPackageNameLayout.setError(getString(R.string.wizard_package_empty));
-                } else if (packages.length == 1) {
-                    mPackageNameLayout.setError(getString(R.string.wizard_package_too_short));
-                } else if (packageName.endsWith(".")) {
-                    mPackageNameLayout.setError(getString(R.string.wizard_package_illegal));
-                } else if (packageName.contains(" ")) {
-                    mPackageNameLayout.setError(getString(R.string.wizard_package_contains_spaces));
-                } else if (!packageName.matches("^[a-zA-Z0-9.]+$")) {
-                    mPackageNameLayout.setError(getString(R.string.wizard_package_illegal));
-                } else {
-                    mPackageNameLayout.setErrorEnabled(false);
-                }
+                verifyPackageName(editable);
             }
         });
 
@@ -236,17 +206,7 @@ public class WizardFragment extends Fragment {
         mSaveLocationLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
             @Override
             public void afterTextChanged(Editable editable) {
-                if (editable.toString().length() >= 240) {
-                    mSaveLocationLayout.setError(getString(R.string.wizard_path_exceeds));
-                } else {
-                    mSaveLocationLayout.setErrorEnabled(false);
-                }
-                File file = new File(editable.toString());
-                if (file.getParentFile() == null || !file.getParentFile().canWrite()) {
-                    mSaveLocationLayout.setError(getString(R.string.wizard_file_not_writable));
-                } else {
-                    mSaveLocationLayout.setErrorEnabled(false);
-                }
+                verifySaveLocation(editable);
             }
         });
 
@@ -268,6 +228,87 @@ public class WizardFragment extends Fragment {
                 mMinSdkLayout.setError(getString(R.string.wizard_select_min_sdk));
             }
         });
+    }
+
+    private boolean validateDetails() {
+
+        requireActivity().runOnUiThread(() -> {
+            verifyPackageName(mPackageNameLayout.getEditText().getText());
+            verifyClassName(mNameLayout.getEditText().getText());
+            verifySaveLocation(mNameLayout.getEditText().getText());
+        });
+
+        if (mPackageNameLayout.isErrorEnabled()) {
+            return false;
+        }
+
+        if (mSaveLocationLayout.isErrorEnabled()) {
+            return false;
+        }
+
+        if (mPackageNameLayout.isErrorEnabled()) {
+            return false;
+        }
+
+        if (mMinSdkLayout.isErrorEnabled()) {
+            return false;
+        }
+
+        if (TextUtils.isEmpty(mMinSdkText.getText())) {
+            return false;
+        }
+
+        return mCurrentTemplate != null;
+    }
+
+    private void verifyClassName(Editable editable) {
+        if (TextUtils.isEmpty(mNameLayout.getEditText().getText())) {
+            mNameLayout.setError(getString(R.string.wizard_error_name_empty));
+        } else {
+            mNameLayout.setErrorEnabled(false);
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            File file = new File(requireContext().getExternalFilesDir(null) + "/" + "Projects" + "/" + editable.toString());
+            String suffix = "";
+            if (file.exists()) {
+                suffix = "-1";
+            }
+            String path = file.getAbsolutePath() + suffix.trim();
+            mSaveLocationLayout.getEditText().setText(path);
+        }
+    }
+
+    private void verifySaveLocation(Editable editable) {
+        if (editable.toString().length() >= 240) {
+            mSaveLocationLayout.setError(getString(R.string.wizard_path_exceeds));
+        } else {
+            mSaveLocationLayout.setErrorEnabled(false);
+        }
+        File file = new File(editable.toString());
+        if (file.getParentFile() == null || !file.getParentFile().canWrite()) {
+            mSaveLocationLayout.setError(getString(R.string.wizard_file_not_writable));
+        } else {
+            mSaveLocationLayout.setErrorEnabled(false);
+        }
+    }
+
+    private void verifyPackageName(Editable editable) {
+        String packageName = editable.toString();
+        String[] packages = packageName.split("\\.");
+        if (packages == null) {
+            mPackageNameLayout.setError(getString(R.string.wizard_package_empty));
+        } else if (packages.length == 1) {
+            mPackageNameLayout.setError(getString(R.string.wizard_package_too_short));
+        } else if (packageName.endsWith(".")) {
+            mPackageNameLayout.setError(getString(R.string.wizard_package_illegal));
+        } else if (packageName.contains(" ")) {
+            mPackageNameLayout.setError(getString(R.string.wizard_package_contains_spaces));
+        } else if (!packageName.matches("^[a-zA-Z0-9.]+$")) {
+            mPackageNameLayout.setError(getString(R.string.wizard_package_illegal));
+        } else {
+            mPackageNameLayout.setErrorEnabled(false);
+        }
     }
 
     private void createProjectAsync() {
@@ -383,41 +424,6 @@ public class WizardFragment extends Fragment {
         }
         org.apache.commons.io.FileUtils.copyDirectory(new File(sourcesDir, "$packagename"), targetSourceDir);
         org.apache.commons.io.FileUtils.copyDirectory(new File(sourcesDir.getParentFile(), "files"), projectRoot);
-    }
-
-    private boolean validateDetails() {
-
-        if (mPackageNameLayout.isErrorEnabled()) {
-            return false;
-        }
-
-        if (mSaveLocationLayout.isErrorEnabled()) {
-            return false;
-        }
-
-        if (mPackageNameLayout.isErrorEnabled()) {
-            return false;
-        }
-
-        if (mMinSdkLayout.isErrorEnabled()) {
-            return false;
-        }
-
-        if (TextUtils.isEmpty(mNameLayout.getEditText().getText().toString())) {
-            mNameLayout.post(() -> mNameLayout.setError(getString(R.string.wizard_error_name_empty)));
-            return false;
-        }
-
-        if (TextUtils.isEmpty(mSaveLocationLayout.getEditText().getText())) {
-            mSaveLocationLayout.post(() -> mSaveLocationLayout.setError(getString(R.string.wizard_select_save_location)));
-            return false;
-        }
-
-        if (TextUtils.isEmpty(mMinSdkText.getText())) {
-            return false;
-        }
-
-        return mCurrentTemplate != null;
     }
 
     private List<String> getSdks() {
