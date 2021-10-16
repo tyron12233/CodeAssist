@@ -21,6 +21,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.documentfile.provider.DocumentFile;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -38,6 +39,7 @@ import com.tyron.code.ui.wizard.adapter.WizardTemplateAdapter;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.common.util.Decompress;
 import com.tyron.code.util.FileUtils;
+import com.tyron.common.util.SingleTextWatcher;
 
 import java.io.File;
 import java.io.IOException;
@@ -181,17 +183,7 @@ public class WizardFragment extends Fragment {
         List<String> languages = Collections.singletonList("Java");
 
         mNameLayout = mWizardDetailsView.findViewById(R.id.til_app_name);
-        mNameLayout.getEditText().addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-
-            }
-
-            @Override
-            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-
-            }
-
+        mNameLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
             @Override
             public void afterTextChanged(Editable editable) {
                 if (TextUtils.isEmpty(mNameLayout.getEditText().getText())) {
@@ -199,6 +191,7 @@ public class WizardFragment extends Fragment {
                 } else {
                     mNameLayout.setErrorEnabled(false);
                 }
+
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     File file = new File(requireContext().getExternalFilesDir(null) + "/" + "Projects" + "/" + editable.toString());
                     String suffix = "";
@@ -211,17 +204,7 @@ public class WizardFragment extends Fragment {
             }
         });
         mPackageNameLayout = mWizardDetailsView.findViewById(R.id.til_package_name);
-        mPackageNameLayout.getEditText().addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-
-            }
-
-            @Override
-            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-
-            }
-
+        mPackageNameLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
             @Override
             public void afterTextChanged(Editable editable) {
                 String packageName = editable.toString();
@@ -241,6 +224,7 @@ public class WizardFragment extends Fragment {
                 }
             }
         });
+
         mSaveLocationLayout = mWizardDetailsView.findViewById(R.id.til_save_location);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             mSaveLocationLayout.setHelperText(getString(R.string.wizard_scoped_storage_info));
@@ -249,17 +233,7 @@ public class WizardFragment extends Fragment {
         } else {
             mSaveLocationLayout.setEndIconOnClickListener(view -> mLocationLauncher.launch(null));
         }
-        mSaveLocationLayout.getEditText().addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-
-            }
-
-            @Override
-            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-
-            }
-
+        mSaveLocationLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
             @Override
             public void afterTextChanged(Editable editable) {
                 if (editable.toString().length() >= 240) {
