@@ -479,7 +479,7 @@ public class WizardFragment extends Fragment {
                 }
                 if (child.getName().equals("build.gradle")) {
                     replacePlaceholder(child);
-                } else if (child.getName().endsWith(".java")) {
+                } else if (child.getName().endsWith(".java") || child.getName().endsWith(".kt")) {
                     replacePlaceholder(child);
                 } else if (child.getName().endsWith(".xml")) {
                     replacePlaceholder(child);
