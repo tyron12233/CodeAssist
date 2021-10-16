@@ -94,6 +94,7 @@ public class IncrementalKotlinCompiler extends Task {
             args.setNoJdk(true);
             args.setNoReflect(true);
             args.setNoStdlib(true);
+            args.setJavaSourceRoots(mFilesToCompile.stream().map(File::getAbsolutePath).toArray(String[]::new));
             args.setKotlinHome(mKotlinHome.getAbsolutePath());
             args.setDestination(mClassOutput.getAbsolutePath());
             args.setPluginClasspaths(getPlugins().stream().map(File::getAbsolutePath).toArray(String[]::new));
