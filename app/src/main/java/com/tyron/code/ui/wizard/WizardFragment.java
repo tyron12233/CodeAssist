@@ -2,6 +2,7 @@ package com.tyron.code.ui.wizard;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -9,6 +10,7 @@ import android.os.Environment;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,8 +33,11 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.transition.TransitionManager;
 
+import com.github.angads25.filepicker.controller.DialogSelectionListener;
+import com.github.angads25.filepicker.controller.adapters.FileListAdapter;
 import com.github.angads25.filepicker.model.DialogConfigs;
 import com.github.angads25.filepicker.model.DialogProperties;
+import com.github.angads25.filepicker.model.MarkedItemList;
 import com.github.angads25.filepicker.view.FilePickerDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputLayout;
@@ -51,6 +56,7 @@ import com.tyron.common.util.SingleTextWatcher;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -60,8 +66,6 @@ import java.util.concurrent.Executors;
 
 @SuppressWarnings("ConstantConditions")
 public class WizardFragment extends Fragment {
-    
-    private static final int PERMISSION_REQ_CODE = 231;
     
     private Button mNavigateButton;
     private Button mExitButton;
@@ -256,9 +260,9 @@ public class WizardFragment extends Fragment {
             mSaveLocationLayout.setHelperText(getString(R.string.wizard_scoped_storage_info));
             mSaveLocationLayout.getEditText().setText(requireContext().getExternalFilesDir("Projects").getAbsolutePath());
             mSaveLocationLayout.getEditText().setInputType(InputType.TYPE_NULL);
-            mSaveLocationLayout.setEndIconOnClickListener(null);
-        } else {
-            mSaveLocationLayout.setEndIconOnClickListener(view -> {
+        }
+        mSaveLocationLayout.setEndIconOnClickListener(view -> {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
                 if (isGrantedStoragePermission()) {
                     showDirectoryPickerDialog();
                 } else if (shouldShowRequestPermissionRationale()) {
@@ -280,8 +284,8 @@ public class WizardFragment extends Fragment {
                     mShowDialogOnPermissionGrant = true;
                     requestPermissions();
                 }
-            });
-        }
+            }
+        });
     }
 
     private void showDirectoryPickerDialog() {
@@ -292,6 +296,41 @@ public class WizardFragment extends Fragment {
         properties.error_dir = requireContext().getExternalFilesDir(null);
 
         FilePickerDialog dialog = new FilePickerDialog(requireContext(), properties);
+        dialog.setDialogSelectionListener(files  -> {
+            String file = files[0];
+            mSaveLocationLayout.getEditText()
+                    .setText(file);
+        });
+        dialog.setOnShowListener((d) -> {
+                // work around to set the color of the dialog buttons to white since the color
+                // accent of the app is orange
+            Button cancel = dialog.findViewById(com.github.angads25.filepicker.R.id.cancel);
+            Button select = dialog.findViewById(com.github.angads25.filepicker.R.id.select);
+
+            cancel.setTextColor(Color.WHITE);
+            select.setTextColor(Color.WHITE);
+
+            String positiveButtonNameStr = getString(com.github.angads25.filepicker.R.string.choose_button_label);
+            try {
+                Field mAdapterField = dialog.getClass().getDeclaredField("mFileListAdapter");
+                mAdapterField.setAccessible(true);
+                FileListAdapter adapter = (FileListAdapter) mAdapterField.get(dialog);
+                adapter.setNotifyItemCheckedListener(() -> {
+                    int size = MarkedItemList.getFileCount();
+                    if (size == 0) {
+                        select.setEnabled(false);
+                        select.setTextColor(Color.WHITE);
+                        select.setText(positiveButtonNameStr);
+                    } else {
+                        select.setEnabled(true);
+                        select.setText(positiveButtonNameStr + " (" + size + ") ");
+                    }
+                    adapter.notifyDataSetChanged();
+                });
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                Log.w("WizardFragment", "Unable to get declared field", e);
+            }
+        });
         dialog.show();
     }
 
@@ -300,7 +339,7 @@ public class WizardFragment extends Fragment {
         requireActivity().runOnUiThread(() -> {
             verifyPackageName(mPackageNameLayout.getEditText().getText());
             verifyClassName(mNameLayout.getEditText().getText());
-            verifySaveLocation(mNameLayout.getEditText().getText());
+            verifySaveLocation(mSaveLocationLayout.getEditText().getText());
         });
 
         if (mPackageNameLayout.isErrorEnabled()) {
@@ -352,9 +391,11 @@ public class WizardFragment extends Fragment {
     private void verifySaveLocation(Editable editable) {
         if (editable.toString().length() >= 240) {
             mSaveLocationLayout.setError(getString(R.string.wizard_path_exceeds));
+            return;
         } else {
             mSaveLocationLayout.setErrorEnabled(false);
         }
+
         File file = new File(editable.toString());
         if (file.getParentFile() == null || !file.getParentFile().canWrite()) {
             mSaveLocationLayout.setError(getString(R.string.wizard_file_not_writable));
