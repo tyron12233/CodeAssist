@@ -52,6 +52,8 @@ public class IncrementalKotlinCompiler extends Task {
     public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
         mProject = project;
         mLogger = logger;
+
+        project.clearRJavaFiles();
         mFilesToCompile = new ArrayList<>(getSourceFiles(project.getJavaDirectory()));
         mFilesToCompile.addAll(project.getRJavaFiles().values());
 

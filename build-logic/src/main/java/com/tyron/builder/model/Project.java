@@ -158,6 +158,10 @@ public class Project {
         return RJavaFiles;
     }
 
+    public void clearRJavaFiles() {
+        RJavaFiles.clear();
+    }
+
     public void searchLibraries() {
         libraries.clear();
 
