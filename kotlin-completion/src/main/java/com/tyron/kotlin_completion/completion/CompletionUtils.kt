@@ -166,7 +166,7 @@ private fun matchingPrefixLength(left: FqName, right: FqName): Int =
 private fun keywordCompletionItems(partial: String): Sequence<CompletionItem> {
     val start = Instant.now();
     try {
-        return (KtTokens.SOFT_KEYWORDS.getTypes() + KtTokens.KEYWORDS.getTypes()).asSequence()
+        return (KtTokens.SOFT_KEYWORDS.types + KtTokens.KEYWORDS.types).asSequence()
             .mapNotNull { (it as? KtKeywordToken)?.value }
             .filter { it.startsWith(partial) }
             .map {
