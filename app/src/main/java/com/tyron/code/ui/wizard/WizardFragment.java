@@ -1,8 +1,11 @@
 package com.tyron.code.ui.wizard;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
@@ -16,15 +19,22 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.transition.TransitionManager;
 
+import com.github.angads25.filepicker.model.DialogConfigs;
+import com.github.angads25.filepicker.model.DialogProperties;
+import com.github.angads25.filepicker.view.FilePickerDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.transition.MaterialFadeThrough;
 import com.google.android.material.transition.MaterialSharedAxis;
@@ -50,7 +60,9 @@ import java.util.concurrent.Executors;
 
 @SuppressWarnings("ConstantConditions")
 public class WizardFragment extends Fragment {
-
+    
+    private static final int PERMISSION_REQ_CODE = 231;
+    
     private Button mNavigateButton;
     private Button mExitButton;
     private RecyclerView mRecyclerView;
@@ -61,8 +73,8 @@ public class WizardFragment extends Fragment {
     private View mWizardDetailsView;
 
     private boolean mLast;
-
-    private ActivityResultLauncher<Uri> mLocationLauncher;
+    private boolean mShowDialogOnPermissionGrant = false;
+    private boolean mUseInternalStorage = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R;
 
     private WizardTemplate mCurrentTemplate;
 
@@ -72,6 +84,8 @@ public class WizardFragment extends Fragment {
             onNavigateBack(mExitButton);
         }
     };
+    private ActivityResultLauncher<String[]> mPermissionLauncher;
+    private final ActivityResultContracts.RequestMultiplePermissions mPermissionsContract = new ActivityResultContracts.RequestMultiplePermissions();
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -80,20 +94,18 @@ public class WizardFragment extends Fragment {
         setEnterTransition(new MaterialSharedAxis(MaterialSharedAxis.X, false));
         setExitTransition(new MaterialSharedAxis(MaterialSharedAxis.X, true));
 
-        mLocationLauncher = registerForActivityResult(
-                new ActivityResultContracts.OpenDocumentTree(),
-                result -> {
-                    if (result != null) {
-                        try {
-                            mSaveLocationLayout.getEditText()
-                                    .setText(FileUtils.getPath(result)
-                                    .replace("%20", " "));
-                        } catch (Exception e) {
-                            ApplicationLoader.showToast(e.getMessage());
-                        }
-                    }
+        mPermissionLauncher = registerForActivityResult(mPermissionsContract, isGranted -> {
+            if (isGranted.containsValue(false)) {
+                mUseInternalStorage = true;
+                initializeSaveLocation();
+            } else {
+                mUseInternalStorage = false;
+                if (mShowDialogOnPermissionGrant) {
+                    mShowDialogOnPermissionGrant = false;
+                    showDirectoryPickerDialog();
                 }
-        );
+            }
+        });
         requireActivity().getOnBackPressedDispatcher()
                 .addCallback(this, onBackPressedCallback);
     }
@@ -196,13 +208,8 @@ public class WizardFragment extends Fragment {
         });
 
         mSaveLocationLayout = mWizardDetailsView.findViewById(R.id.til_save_location);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            mSaveLocationLayout.setHelperText(getString(R.string.wizard_scoped_storage_info));
-            mSaveLocationLayout.getEditText().setText(requireContext().getExternalFilesDir("Projects").getAbsolutePath());
-            mSaveLocationLayout.getEditText().setInputType(InputType.TYPE_NULL);
-        } else {
-            mSaveLocationLayout.setEndIconOnClickListener(view -> mLocationLauncher.launch(null));
-        }
+        initializeSaveLocation();
+
         mSaveLocationLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
             @Override
             public void afterTextChanged(Editable editable) {
@@ -228,6 +235,64 @@ public class WizardFragment extends Fragment {
                 mMinSdkLayout.setError(getString(R.string.wizard_select_min_sdk));
             }
         });
+    }
+
+    private boolean isGrantedStoragePermission() {
+        return ContextCompat.checkSelfPermission(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(requireActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean shouldShowRequestPermissionRationale() {
+        return shouldShowRequestPermissionRationale(Manifest.permission.READ_EXTERNAL_STORAGE) ||
+                shouldShowRequestPermissionRationale(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+    }
+
+    private void requestPermissions() {
+        mPermissionLauncher.launch(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE});
+    }
+
+    private void initializeSaveLocation() {
+        if (mUseInternalStorage) {
+            mSaveLocationLayout.setHelperText(getString(R.string.wizard_scoped_storage_info));
+            mSaveLocationLayout.getEditText().setText(requireContext().getExternalFilesDir("Projects").getAbsolutePath());
+            mSaveLocationLayout.getEditText().setInputType(InputType.TYPE_NULL);
+            mSaveLocationLayout.setEndIconOnClickListener(null);
+        } else {
+            mSaveLocationLayout.setEndIconOnClickListener(view -> {
+                if (isGrantedStoragePermission()) {
+                    showDirectoryPickerDialog();
+                } else if (shouldShowRequestPermissionRationale()) {
+                    new MaterialAlertDialogBuilder(view.getContext())
+                            .setMessage("The application needs storage permissions in order to save project files that " +
+                                    "will not be deleted when you uninstall the app. Alternatively you can choose to " +
+                                    "save project files into the app's internal storage.")
+                            .setPositiveButton("Allow", (d, which) -> {
+                                mShowDialogOnPermissionGrant = true;
+                                requestPermissions();
+                            })
+                            .setNegativeButton("Use internal storage", (d, which) -> {
+                                mUseInternalStorage = true;
+                                initializeSaveLocation();
+                            })
+                            .setTitle("Storage permissions")
+                            .show();
+                } else {
+                    mShowDialogOnPermissionGrant = true;
+                    requestPermissions();
+                }
+            });
+        }
+    }
+
+    private void showDirectoryPickerDialog() {
+        DialogProperties properties = new DialogProperties();
+        properties.selection_mode = DialogConfigs.SINGLE_MODE;
+        properties.selection_type = DialogConfigs.DIR_SELECT;
+        properties.root = Environment.getExternalStorageDirectory();
+        properties.error_dir = requireContext().getExternalFilesDir(null);
+
+        FilePickerDialog dialog = new FilePickerDialog(requireContext(), properties);
+        dialog.show();
     }
 
     private boolean validateDetails() {
@@ -262,14 +327,19 @@ public class WizardFragment extends Fragment {
     }
 
     private void verifyClassName(Editable editable) {
-        if (TextUtils.isEmpty(mNameLayout.getEditText().getText())) {
+        String name = editable.toString();
+        if (TextUtils.isEmpty(name)) {
             mNameLayout.setError(getString(R.string.wizard_error_name_empty));
+            return;
+        } else if (name.contains(File.pathSeparator) || name.contains(File.separator)) {
+            mNameLayout.setError(getString(R.string.wizard_error_name_illegal));
+            return;
         } else {
             mNameLayout.setErrorEnabled(false);
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            File file = new File(requireContext().getExternalFilesDir(null) + "/" + "Projects" + "/" + editable.toString());
+            File file = new File(requireContext().getExternalFilesDir("Projects") + "/" + editable.toString());
             String suffix = "";
             if (file.exists()) {
                 suffix = "-1";
