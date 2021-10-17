@@ -1,14 +1,21 @@
 package com.tyron.code.ui.project;
 
+import android.Manifest;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 import androidx.preference.PreferenceManager;
@@ -16,13 +23,18 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.transition.TransitionManager;
 
+import com.github.angads25.filepicker.model.DialogConfigs;
+import com.github.angads25.filepicker.model.DialogProperties;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.transition.MaterialFade;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.tyron.builder.model.Project;
 import com.tyron.code.R;
+import com.tyron.code.ui.file.FilePickerDialogFixed;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.project.adapter.ProjectManagerAdapter;
 import com.tyron.code.ui.wizard.WizardFragment;
@@ -30,8 +42,11 @@ import com.tyron.common.SharedPreferenceKeys;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.function.ToLongFunction;
 
 public class ProjectManagerFragment extends Fragment {
 
@@ -40,7 +55,10 @@ public class ProjectManagerFragment extends Fragment {
     private SharedPreferences mPreferences;
     private RecyclerView mRecyclerView;
     private ProjectManagerAdapter mAdapter;
-    private FloatingActionButton mCreateProjectFab;
+    private ExtendedFloatingActionButton mCreateProjectFab;
+    private boolean mShowDialogOnPermissionGrant;
+    private ActivityResultLauncher<String[]> mPermissionLauncher;
+    private final ActivityResultContracts.RequestMultiplePermissions mPermissionsContract = new ActivityResultContracts.RequestMultiplePermissions();
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -48,6 +66,29 @@ public class ProjectManagerFragment extends Fragment {
 
         setExitTransition(new MaterialSharedAxis(MaterialSharedAxis.X, false));
         mPreferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        mPermissionLauncher = registerForActivityResult(mPermissionsContract, isGranted -> {
+            if (isGranted.containsValue(false)) {
+                new MaterialAlertDialogBuilder(requireContext())
+                        .setTitle("Permission denied")
+                        .setMessage("Projects will be saved to the app's internal storage directory. " +
+                                "Backup your projects before uninstalling the app.")
+                        .setPositiveButton("Request again", (d, which) -> {
+                            mShowDialogOnPermissionGrant = true;
+                            requestPermissions();
+                        })
+                        .setNegativeButton("Continue", (d, which) -> {
+                            mShowDialogOnPermissionGrant = false;
+                            setSavePath(Environment.getExternalStorageDirectory().getAbsolutePath());
+                        })
+                        .show();
+                setSavePath(Environment.getExternalStorageDirectory().getAbsolutePath());
+            } else {
+                if (mShowDialogOnPermissionGrant) {
+                    mShowDialogOnPermissionGrant = false;
+                    showDirectorySelectDialog();
+                }
+            }
+        });
     }
 
     @Override
@@ -74,7 +115,7 @@ public class ProjectManagerFragment extends Fragment {
         mRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         mRecyclerView.setAdapter(mAdapter);
 
-        loadProjects();
+        checkSavePath();
     }
 
     @Nullable
@@ -87,7 +128,70 @@ public class ProjectManagerFragment extends Fragment {
     public void onResume() {
         super.onResume();
 
+        checkSavePath();
+    }
+
+    private void checkSavePath() {
+        String path = mPreferences.getString(SharedPreferenceKeys.PROJECT_SAVE_PATH, null);
+        if (path == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            if (permissionsGranted()) {
+                showDirectorySelectDialog();
+            } else if (shouldShowRequestPermissionRationale()) {
+                if (shouldShowRequestPermissionRationale()) {
+                    new MaterialAlertDialogBuilder(requireContext())
+                            .setMessage("The application needs storage permissions in order to save project files that " +
+                                    "will not be deleted when you uninstall the app. Alternatively you can choose to " +
+                                    "save project files into the app's internal storage.")
+                            .setPositiveButton("Allow", (d, which) -> {
+                                mShowDialogOnPermissionGrant = true;
+                                requestPermissions();
+                            })
+                            .setNegativeButton("Use internal storage", (d, which) -> {
+                                setSavePath(Environment.getExternalStorageDirectory().getAbsolutePath());
+                            })
+                            .setTitle("Storage permissions")
+                            .show();
+                }
+            } else {
+                requestPermissions();
+            }
+        } else {
+            loadProjects();
+        }
+    }
+
+    private void setSavePath(String path) {
+        mPreferences.edit()
+                .putString(SharedPreferenceKeys.PROJECT_SAVE_PATH, path)
+                .apply();
         loadProjects();
+    }
+
+    private void showDirectorySelectDialog() {
+        DialogProperties properties = new DialogProperties();
+        properties.selection_type = DialogConfigs.DIR_SELECT;
+        properties.selection_mode = DialogConfigs.SINGLE_MODE;
+        properties.root = Environment.getExternalStorageDirectory();
+        FilePickerDialogFixed dialogFixed = new FilePickerDialogFixed(requireContext(), properties);
+        dialogFixed.setDialogSelectionListener(files -> {
+            setSavePath(files[0]);
+            loadProjects();
+        });
+        dialogFixed.show();
+    }
+
+    private boolean permissionsGranted() {
+        return ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean shouldShowRequestPermissionRationale() {
+        return shouldShowRequestPermissionRationale(Manifest.permission.READ_EXTERNAL_STORAGE) ||
+                shouldShowRequestPermissionRationale(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+    }
+
+    private void requestPermissions() {
+        mPermissionLauncher.launch(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE});
     }
 
     private void openProject(Project project) {
@@ -102,15 +206,21 @@ public class ProjectManagerFragment extends Fragment {
         toggleLoading(true);
 
         Executors.newSingleThreadExecutor().execute(() -> {
-            String path = mPreferences.getString(SharedPreferenceKeys.PROJECT_SAVE_PATH,
-                    requireContext().getExternalFilesDir("Projects").getAbsolutePath());
+            String path;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                path =  requireContext().getExternalFilesDir("Projects").getAbsolutePath();
+            } else {
+                path = mPreferences.getString(SharedPreferenceKeys.PROJECT_SAVE_PATH,
+                        requireContext().getExternalFilesDir("Projects").getAbsolutePath());
+            }
             File projectDir = new File(path);
             File[] directories = projectDir.listFiles(File::isDirectory);
 
             List<Project> projects = new ArrayList<>();
             if (directories != null) {
+                Arrays.sort(directories, Comparator.comparingLong(File::lastModified));
                 for (File directory : directories) {
-                    Project project = new Project(directory);
+                    Project project = new Project(new File(directory.getAbsolutePath().replaceAll("%20", " ")));
                     if (project.isValidProject()) {
                         projects.add(project);
                     }
