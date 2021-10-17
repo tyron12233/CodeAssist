@@ -101,6 +101,11 @@ public class ProjectManagerFragment extends Fragment {
         toolbar.setTitle(R.string.app_name);
 
         mCreateProjectFab = view.findViewById(R.id.create_project_fab);
+        mCreateProjectFab.setOnLongClickListener(v -> {
+            setSavePath(null);
+            checkSavePath();
+            return true;
+        });
         mCreateProjectFab.setOnClickListener(v -> {
             WizardFragment wizardFragment = new WizardFragment();
             wizardFragment.setOnProjectCreatedListener(this::openProject);
@@ -173,6 +178,7 @@ public class ProjectManagerFragment extends Fragment {
         properties.selection_mode = DialogConfigs.SINGLE_MODE;
         properties.root = Environment.getExternalStorageDirectory();
         FilePickerDialogFixed dialogFixed = new FilePickerDialogFixed(requireContext(), properties);
+        dialogFixed.setTitle("Select save location");
         dialogFixed.setDialogSelectionListener(files -> {
             setSavePath(files[0]);
             loadProjects();

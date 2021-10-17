@@ -3,7 +3,6 @@ package com.tyron.code.ui.wizard;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -21,19 +20,17 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 
 import androidx.activity.OnBackPressedCallback;
-import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
+import androidx.preference.PreferenceManager;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.transition.TransitionManager;
 
-import com.github.angads25.filepicker.controller.DialogSelectionListener;
 import com.github.angads25.filepicker.controller.adapters.FileListAdapter;
 import com.github.angads25.filepicker.model.DialogConfigs;
 import com.github.angads25.filepicker.model.DialogProperties;
@@ -43,15 +40,14 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.transition.MaterialFadeThrough;
 import com.google.android.material.transition.MaterialSharedAxis;
-import com.tyron.code.ApplicationLoader;
-import com.tyron.code.R;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
-import com.tyron.code.ui.main.MainFragment;
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.R;
 import com.tyron.code.ui.wizard.adapter.WizardTemplateAdapter;
 import com.tyron.code.util.AndroidUtilities;
+import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.Decompress;
-import com.tyron.code.util.FileUtils;
 import com.tyron.common.util.SingleTextWatcher;
 
 import java.io.File;
@@ -227,6 +223,8 @@ public class WizardFragment extends Fragment {
         });
 
         mSaveLocationLayout = mWizardDetailsView.findViewById(R.id.til_save_location);
+        mSaveLocationLayout.getEditText().setText(PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .getString(SharedPreferenceKeys.PROJECT_SAVE_PATH, requireContext().getExternalFilesDir("Projects").getAbsolutePath()));
         initializeSaveLocation();
 
         mSaveLocationLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
@@ -311,14 +309,14 @@ public class WizardFragment extends Fragment {
         properties.error_dir = requireContext().getExternalFilesDir(null);
 
         FilePickerDialog dialog = new FilePickerDialog(requireContext(), properties);
-        dialog.setDialogSelectionListener(files  -> {
+        dialog.setDialogSelectionListener(files -> {
             String file = files[0];
             mSaveLocationLayout.getEditText()
                     .setText(file);
         });
         dialog.setOnShowListener((d) -> {
-                // work around to set the color of the dialog buttons to white since the color
-                // accent of the app is orange
+            // work around to set the color of the dialog buttons to white since the color
+            // accent of the app is orange
             Button cancel = dialog.findViewById(com.github.angads25.filepicker.R.id.cancel);
             Button select = dialog.findViewById(com.github.angads25.filepicker.R.id.select);
 
@@ -391,7 +389,6 @@ public class WizardFragment extends Fragment {
         } else {
             mNameLayout.setErrorEnabled(false);
         }
-
 
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -481,6 +478,7 @@ public class WizardFragment extends Fragment {
     /**
      * Traverses all files in a directory, including subdirectory and replaces
      * placeholders with the right text.
+     *
      * @param file Root directory to start
      */
     private void replacePlaceholders(File file) {
@@ -504,6 +502,7 @@ public class WizardFragment extends Fragment {
 
     /**
      * Replaces the placeholders in a file such as $packagename, $appname
+     *
      * @param file Input file
      */
     private void replacePlaceholder(File file) {
@@ -521,13 +520,13 @@ public class WizardFragment extends Fragment {
         FileManager.writeFile(
                 file,
                 string.replace("$packagename", mPackageNameLayout.getEditText().getText())
-                .replace("$appname", mNameLayout.getEditText().getText())
-                .replace("${targetSdkVersion}", targetSdk)
-                .replace("${minSdkVersion}", String.valueOf(minSdkInt))
+                        .replace("$appname", mNameLayout.getEditText().getText())
+                        .replace("${targetSdkVersion}", targetSdk)
+                        .replace("${minSdkVersion}", String.valueOf(minSdkInt))
         );
     }
 
-    private void createProject() throws IOException  {
+    private void createProject() throws IOException {
 
         File projectRoot = new File(mSaveLocationLayout.getEditText().getText().toString());
         if (!projectRoot.exists()) {
