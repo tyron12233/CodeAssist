@@ -8,12 +8,14 @@ import com.tyron.layoutpreview.resource.ResourceStringParser;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(manifest = Config.NONE)
 public class TestResourceManager {
 
     private static final String TEST_XML = "" +
