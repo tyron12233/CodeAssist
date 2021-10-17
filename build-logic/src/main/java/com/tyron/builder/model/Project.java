@@ -3,6 +3,8 @@ package com.tyron.builder.model;
 import android.text.TextUtils;
 import android.util.Log;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.compiler.resource.AAPT2Compiler;
 import com.tyron.builder.compiler.LibraryChecker;
@@ -11,6 +13,7 @@ import com.tyron.common.util.Decompress;
 import com.tyron.common.util.StringSearch;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,19 +33,16 @@ public class Project {
     public Map<String, File> javaFiles = new HashMap<>();
     private final Map<String, File> kotlinFiles = new HashMap<>();
     public List<String> jarFiles = new ArrayList<>();
-
     private final Set<File> libraries = new HashSet<>();
     private final Map<String, File> RJavaFiles = new HashMap<>();
 
     //TODO: Adjust these values according to build.gradle or manifest
     private final int minSdk = 21;
     private final int targetSdk = 31;
-
     private String packageName;
-    private File mAssetsDir;
-    private File mNativeLibsDir;
-
-    private FileManager mFileManager;
+    private final File mAssetsDir;
+    private final File mNativeLibsDir;
+    private final FileManager mFileManager;
 
     /**
      * Creates a project object from specified root
@@ -54,6 +54,18 @@ public class Project {
         mNativeLibsDir = new File(root, "app/src/main/jniLibs");
 
         mFileManager = new FileManager();
+    }
+
+    @VisibleForTesting
+    public Project(FileManager manager) {
+        try {
+            mAssetsDir = File.createTempFile("assets", "");
+            mNativeLibsDir = new File("jniLibs");
+            mRoot = mNativeLibsDir.getParentFile();
+            mFileManager = manager;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void open() {
