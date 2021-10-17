@@ -3,6 +3,8 @@
     <style name="AppTheme" parent="Theme.MaterialComponents.NoActionBar">
         <item name="colorAccent">@color/colorAccent</item>
         <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorSecondary">@color/colorSecondary</item>
+        <item name="colorOnSecondary">@color/colorOnSecondary</item>
         <item name="android:textColorPrimary">@color/white</item>
         <item name="android:statusBarColor">@color/colorBackground</item>
         <item name="colorControlNormal">@color/colorControlNormal</item>
