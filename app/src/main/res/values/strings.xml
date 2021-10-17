@@ -101,4 +101,6 @@
     <string name="action_menu_build_debug">Build debug APK</string>
 
     <string name="project_manager_projects">Projects</string>
+    <string name="project_manager_empty">Projects are empty</string>
+    <string name="project_manager_create_project">Create project</string>
 </resources>
