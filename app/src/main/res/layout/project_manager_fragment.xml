@@ -4,6 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
     android:background="@color/colorBackground">
 
     <com.google.android.material.appbar.AppBarLayout
@@ -88,7 +89,7 @@
 
             <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -102,9 +103,9 @@
                     android:layout_marginStart="16dp"
                     android:layout_marginTop="16dp"
                     android:layout_marginEnd="16dp"
+                    android:paddingBottom="55dp"
                     android:overScrollMode="never"
                     android:scrollbars="none"
-                    android:visibility="gone"
                     tools:itemCount="21"
                     tools:listitem="@layout/project_item" />
 
