@@ -66,7 +66,11 @@ import java.util.concurrent.Executors;
 
 @SuppressWarnings("ConstantConditions")
 public class WizardFragment extends Fragment {
-    
+
+    public interface OnProjectCreatedListener {
+        void onProjectCreated(Project project);
+    }
+
     private Button mNavigateButton;
     private Button mExitButton;
     private RecyclerView mRecyclerView;
@@ -90,6 +94,11 @@ public class WizardFragment extends Fragment {
     };
     private ActivityResultLauncher<String[]> mPermissionLauncher;
     private final ActivityResultContracts.RequestMultiplePermissions mPermissionsContract = new ActivityResultContracts.RequestMultiplePermissions();
+    private OnProjectCreatedListener mListener;
+
+    public void setOnProjectCreatedListener(OnProjectCreatedListener listener) {
+        mListener = listener;
+    }
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -451,16 +460,15 @@ public class WizardFragment extends Fragment {
             Project project = new Project(new File(savePath));
             replacePlaceholders(project.mRoot);
 
-            requireActivity().runOnUiThread(() -> {
-                Fragment fragment = getParentFragmentManager().findFragmentByTag("main_fragment");
-                if (fragment instanceof MainFragment) {
-                    ((MainFragment) fragment).openProject(project, true);
-                }
+            if (mListener != null) {
+                requireActivity().runOnUiThread(() -> {
+                    mListener.onProjectCreated(project);
+                    getParentFragmentManager().beginTransaction()
+                            .remove(WizardFragment.this)
+                            .commit();
+                });
+            }
 
-                getParentFragmentManager().beginTransaction()
-                        .remove(WizardFragment.this)
-                        .commit();
-            });
         });
     }
 
