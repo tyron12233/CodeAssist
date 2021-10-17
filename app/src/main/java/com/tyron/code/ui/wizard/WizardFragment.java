@@ -123,6 +123,12 @@ public class WizardFragment extends Fragment {
                 .addCallback(this, onBackPressedCallback);
     }
 
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        onBackPressedCallback.setEnabled(false);
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
