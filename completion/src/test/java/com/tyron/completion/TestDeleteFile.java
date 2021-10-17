@@ -3,6 +3,7 @@ package com.tyron.completion;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.truth.Truth;
+import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 
 import org.junit.Before;
@@ -26,13 +27,17 @@ public class TestDeleteFile {
     private File mMainClass;
     private File mClassToDelete;
 
+    private Project mProject;
+    private FileManager mFileManager;
     private Set<File> mJavaFiles;
     private JavaCompilerService mService;
 
     @Before
     public void setup() {
-        FileManager.getInstance(new File(resolveBasePath(), "classpath/rt.jar"),
+
+        mFileManager = FileManager.getInstance(new File(resolveBasePath(), "classpath/rt.jar"),
                 new File(resolveBasePath(), "classpath/core-lambda-stubs.jar"));
+        mProject = new Project(mFileManager);
 
         mMainClass = new File(resolveBasePath(), "classes/Main.java");
         mClassToDelete = new File(resolveBasePath(), "classes/MainSecond.java");
@@ -64,7 +69,7 @@ public class TestDeleteFile {
     }
 
     private JavaCompilerService getNewService(Set<File> paths) {
-        return new JavaCompilerService(null, paths,
+        return new JavaCompilerService(mProject, paths,
                 Collections.emptySet(), Collections.emptySet());
     }
 
