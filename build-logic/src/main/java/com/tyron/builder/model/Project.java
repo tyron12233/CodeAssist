@@ -3,6 +3,7 @@ package com.tyron.builder.model;
 import android.text.TextUtils;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.BuildModule;
@@ -295,5 +296,21 @@ public class Project {
 
     public File getNativeLibsDirectory() {
         return mNativeLibsDir;
+    }
+
+    @Override
+    public int hashCode() {
+        return mRoot.hashCode();
+    }
+
+    @Override
+    public boolean equals(@Nullable Object obj) {
+        if (obj instanceof Project) {
+            Project that = (Project) obj;
+            if (this.mRoot.equals(that.mRoot)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
