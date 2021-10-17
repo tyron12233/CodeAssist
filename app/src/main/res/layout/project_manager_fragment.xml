@@ -68,7 +68,7 @@
                     android:layout_marginBottom="16dp"
                     android:layout_marginStart="16dp"
                     android:layout_marginEnd="16dp"
-                    android:text="@string/project_manager_create_project"
+                    android:text="New bugs!"
                     android:textSize="12sp"
                     android:textStyle="bold" />
             </com.google.android.material.card.MaterialCardView>
@@ -92,7 +92,8 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/title">
+                app:layout_constraintTop_toBottomOf="@+id/title"
+                app:layout_constraintVertical_bias="0.0">
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/projects_recycler"
@@ -117,12 +118,13 @@
         </androidx.constraintlayout.widget.ConstraintLayout>
     </androidx.core.widget.NestedScrollView>
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
+    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/create_project_fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="16dp"
+        app:icon="@drawable/ic_baseline_add_24"
         app:layout_anchor="@+id/scrolling_view"
         app:layout_anchorGravity="bottom|end" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
