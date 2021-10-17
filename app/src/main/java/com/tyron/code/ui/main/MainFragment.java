@@ -40,6 +40,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
+import com.google.android.material.transition.MaterialSharedAxis;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.ProjectManager;
@@ -69,7 +70,15 @@ import java.util.stream.Collectors;
 
 public class MainFragment extends Fragment {
 
-    private static final int TOOLBAR_PREVIEW_LAYOUT_ID = 19;
+    public static MainFragment newInstance(String projectPath) {
+        Bundle bundle = new Bundle();
+        bundle.putString("project_path", projectPath);
+
+        MainFragment fragment = new MainFragment();
+        fragment.setArguments(bundle);
+
+        return fragment;
+    }
 
     private ProjectManager mProjectManager;
     private LogViewModel logViewModel;
@@ -78,7 +87,10 @@ public class MainFragment extends Fragment {
     private LinearProgressIndicator mProgressBar;
     private FrameLayout mBottomContainer;
     private BottomSheetBehavior<View> mBehavior;
-
+    private TabLayout mTabLayout;
+    private ViewPager2 mPager;
+    private PageAdapter mAdapter;
+    private MainViewModel mFilesViewModel;
     OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {
         @Override
         public void handleOnBackPressed() {
@@ -91,11 +103,7 @@ public class MainFragment extends Fragment {
             }
         }
     };
-    private TabLayout mTabLayout;
-    private ViewPager2 mPager;
-    private PageAdapter mAdapter;
-
-    private MainViewModel mFilesViewModel;
+    private Project mProject;
 
     public MainFragment() {
 
@@ -105,18 +113,13 @@ public class MainFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        setEnterTransition(new MaterialSharedAxis(MaterialSharedAxis.X, true));
+        setExitTransition(new MaterialSharedAxis(MaterialSharedAxis.X, false));
+
         requireActivity().getOnBackPressedDispatcher().addCallback(this, onBackPressedCallback);
-    }
 
-    @Override
-    public void onResume() {
-        super.onResume();
-
-        Intent intent = new Intent();
-        intent.setAction("com.tyron.code.Log");
-        intent.putExtra("ads", "das");
-        intent.setComponent(new ComponentName("com.tyron.code", "com.tyron.code.ui.editor.log.LogListener"));
-        requireActivity().sendBroadcast(intent);
+        String projectPath = requireArguments().getString("project_path");
+        mProject = new Project(new File(projectPath));
     }
 
     @Override
@@ -156,6 +159,7 @@ public class MainFragment extends Fragment {
         mFilesViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE));
         mFilesViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
         mProjectManager = ProjectManager.getInstance();
+
         return mRoot;
     }
 
@@ -170,7 +174,7 @@ public class MainFragment extends Fragment {
                 mRoot.openDrawer(GravityCompat.START);
             }
         });
-        mRoot.addDrawerListener(new DrawerLayout.DrawerListener() {
+        mRoot.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
             @Override
             public void onDrawerSlide(@NonNull View p1, float p) {
                 File currentFile = mFilesViewModel.getCurrentFile();
@@ -190,11 +194,6 @@ public class MainFragment extends Fragment {
             @Override
             public void onDrawerClosed(@NonNull View p1) {
                 onBackPressedCallback.setEnabled(mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED);
-            }
-
-            @Override
-            public void onDrawerStateChanged(int p1) {
-
             }
         });
 
@@ -260,43 +259,43 @@ public class MainFragment extends Fragment {
             @Override
             public void onPageSelected(int position) {
                 mFilesViewModel.updateCurrentPosition(position);
-
                 File current = mFilesViewModel.getCurrentFile();
                 mToolbar.getMenu().findItem(R.id.menu_preview_layout)
                         .setVisible(current != null && ProjectUtils.isResourceXMLFile(current));
             }
         });
         mToolbar.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == R.id.debug_create) {
-
-                WizardFragment fragment = new WizardFragment();
-                getParentFragmentManager().beginTransaction()
-                        .add(R.id.fragment_container, fragment, "wizard_fragment")
-                        .commit();
-
-                return true;
-            } else if (item.getItemId() == R.id.action_open) {
-                final EditText et = new EditText(requireContext());
-                et.setHint("Project root directory");
-
-                @SuppressLint("RestrictedApi")
-                AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
-                        .setTitle("Open a project")
-                        .setNegativeButton("cancel", null)
-                        .setPositiveButton("OPEN", (i, which) -> {
-                            File file = new File(et.getText().toString());
-                            Project project = new Project(file);
-                            if (project.isValidProject()) {
-                                openProject(project);
-                            } else {
-                                ApplicationLoader.showToast("The selected directory is not a valid project directory");
-                            }
-                        })
-                        .setView(et, 24, 0, 24, 0)
-                        .create();
-
-                dialog.show();
-            } else if (item.getItemId() == R.id.debug_refresh) {
+//            if (item.getItemId() == R.id.debug_create) {
+//
+//                WizardFragment fragment = new WizardFragment();
+//                getParentFragmentManager().beginTransaction()
+//                        .add(R.id.fragment_container, fragment, "wizard_fragment")
+//                        .commit();
+//
+//                return true;
+//            } else if (item.getItemId() == R.id.action_open) {
+//                final EditText et = new EditText(requireContext());
+//                et.setHint("Project root directory");
+//
+//                @SuppressLint("RestrictedApi")
+//                AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
+//                        .setTitle("Open a project")
+//                        .setNegativeButton("cancel", null)
+//                        .setPositiveButton("OPEN", (i, which) -> {
+//                            File file = new File(et.getText().toString());
+//                            Project project = new Project(file);
+//                            if (project.isValidProject()) {
+//                                openProject(project);
+//                            } else {
+//                                ApplicationLoader.showToast("The selected directory is not a valid project directory");
+//                            }
+//                        })
+//                        .setView(et, 24, 0, 24, 0)
+//                        .create();
+//
+//                dialog.show();
+//            } else
+            if (item.getItemId() == R.id.debug_refresh) {
                 Project project = ProjectManager.getInstance()
                         .getCurrentProject();
 
@@ -342,17 +341,10 @@ public class MainFragment extends Fragment {
         mBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
             @Override
             public void onStateChanged(@NonNull View p1, int state) {
-                switch (state) {
-                    case BottomSheetBehavior.STATE_COLLAPSED:
-                        onBackPressedCallback.setEnabled(false);
-                        break;
-                    case BottomSheetBehavior.STATE_EXPANDED:
-                        onBackPressedCallback.setEnabled(true);
-                    case BottomSheetBehavior.STATE_DRAGGING:
-                    case BottomSheetBehavior.STATE_HALF_EXPANDED:
-                    case BottomSheetBehavior.STATE_HIDDEN:
-                    case BottomSheetBehavior.STATE_SETTLING:
-                        break;
+                if (state == BottomSheetBehavior.STATE_COLLAPSED) {
+                    onBackPressedCallback.setEnabled(false);
+                } else if (state == BottomSheetBehavior.STATE_EXPANDED) {
+                    onBackPressedCallback.setEnabled(true);
                 }
             }
 
@@ -379,31 +371,11 @@ public class MainFragment extends Fragment {
                     .commitNow();
         }
 
+        openProject(mProject);
+
         if (mProjectManager.getCurrentProject() != null) {
-            mToolbar.setTitle(mProjectManager.getCurrentProject().mRoot.getName());
+            mToolbar.setTitle(mProject.mRoot.getName());
         }
-
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        String lastProjectString = preferences.getString("last_opened_project", null);
-        if (lastProjectString != null) {
-            Project project = new Project(new File(lastProjectString));
-            if (project.isValidProject()) {
-                openProject(project);
-
-                String openedFiles = preferences.getString("last_opened_files", null);
-                if (openedFiles != null) {
-                    List<String> openedFilesList = new Gson().fromJson(openedFiles, new TypeToken<ArrayList<String>>() {
-                    }.getType());
-                    if (openedFilesList != null) {
-                        mFilesViewModel.setFiles(openedFilesList.stream()
-                                .map(File::new).collect(Collectors.toList()));
-                    }
-                }
-            } else {
-                ApplicationLoader.showToast("Unable to open last project.");
-            }
-        }
-
     }
 
     @Override
@@ -419,22 +391,22 @@ public class MainFragment extends Fragment {
             mBinder.getCompilerService().setShouldShowNotification(true);
         }
 
-        Project current = mProjectManager.getCurrentProject();
-        if (current != null) {
-            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
-            SharedPreferences.Editor editor = preferences.edit();
-
-            editor.putString("last_opened_project", current.mRoot.getAbsolutePath());
-            List<File> openedFiles = mAdapter.getItems();
-            if (openedFiles.isEmpty()) {
-                editor.remove("last_opened_files");
-            } else {
-                editor.putString("last_opened_files", new Gson().toJson(
-                        openedFiles.stream().map(File::getAbsolutePath).collect(Collectors.toList())
-                ));
-            }
-            editor.apply();
-        }
+//        Project current = mProjectManager.getCurrentProject();
+//        if (current != null) {
+//            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
+//            SharedPreferences.Editor editor = preferences.edit();
+//
+//            editor.putString("last_opened_project", current.mRoot.getAbsolutePath());
+//            List<File> openedFiles = mAdapter.getItems();
+//            if (openedFiles.isEmpty()) {
+//                editor.remove("last_opened_files");
+//            } else {
+//                editor.putString("last_opened_files", new Gson().toJson(
+//                        openedFiles.stream().map(File::getAbsolutePath).collect(Collectors.toList())
+//                ));
+//            }
+//            editor.apply();
+//        }
 
     }
 
@@ -443,10 +415,10 @@ public class MainFragment extends Fragment {
         super.onSaveInstanceState(outState);
         saveAll();
 
-        Project current = ProjectManager.getInstance().getCurrentProject();
-        if (current != null) {
-            outState.putString("current_project", current.mRoot.getAbsolutePath());
-        }
+//        Project current = ProjectManager.getInstance().getCurrentProject();
+//        if (current != null) {
+//            outState.putString("current_project", current.mRoot.getAbsolutePath());
+//        }
     }
 
     /**

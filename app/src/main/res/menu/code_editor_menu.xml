@@ -27,13 +27,6 @@
 		app:showAsAction="ifRoom">
 		<menu>
 			<item
-				android:id="@+id/debug_create"
-				android:title="@string/menu_create_project" />
-
-			<item
-				android:id="@+id/action_open"
-				android:title="@string/menu_open_project" />
-			<item
 				android:id="@+id/debug_refresh"
 				android:title="@string/menu_refresh" />
 		</menu>
