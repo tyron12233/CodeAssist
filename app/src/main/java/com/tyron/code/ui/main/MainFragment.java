@@ -70,7 +70,7 @@ import java.util.stream.Collectors;
 
 public class MainFragment extends Fragment {
 
-    public static MainFragment newInstance(String projectPath) {
+    public static MainFragment newInstance(@NonNull String projectPath) {
         Bundle bundle = new Bundle();
         bundle.putString("project_path", projectPath);
 

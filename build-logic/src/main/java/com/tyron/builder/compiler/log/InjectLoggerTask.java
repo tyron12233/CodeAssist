@@ -206,7 +206,7 @@ public class InjectLoggerTask extends Task {
     }
 
     private String getApplicationClass() throws XmlPullParserException, IOException, ParserConfigurationException, SAXException, TransformerException, TransformerException {
-        File manifest = new File(mProject.getBuildDirectory(), "bin/AndroidManifest.xml");
+        File manifest = new File(mProject.getBuildDirectory().getAbsolutePath().replaceAll("%20", " "), "bin/AndroidManifest.xml");
         XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
         parser.setInput(new FileInputStream(manifest), null);
 
@@ -243,7 +243,8 @@ public class InjectLoggerTask extends Task {
     private void createApplicationClass(String name) throws IOException, ParserConfigurationException, TransformerException, SAXException {
         mLogger.debug("Creating application class " + name);
 
-        File manifest = new File(mProject.getBuildDirectory(), "bin/AndroidManifest.xml");
+        File manifest = new File(mProject.getBuildDirectory().getAbsolutePath().replaceAll("%20", " "), "bin/AndroidManifest.xml");
+
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         DocumentBuilder documentBuilder = factory.newDocumentBuilder();
         Document document = documentBuilder.parse(manifest);
@@ -254,7 +255,7 @@ public class InjectLoggerTask extends Task {
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
         Transformer transformer = transformerFactory.newTransformer();
         DOMSource source = new DOMSource(document);
-        transformer.transform(source, new StreamResult(manifest));
+        transformer.transform(source, new StreamResult(manifest.getAbsolutePath()));
 
         File directory = mProject.getJavaDirectory();
         File output = new File(directory, name.replace('.', '/') + ".java");
