@@ -1,8 +1,18 @@
 package com.tyron.code.template.kotlin;
 
+import android.os.Parcel;
+
 import com.tyron.code.template.CodeTemplate;
 
 public class KotlinClassTemplate extends CodeTemplate {
+
+    public KotlinClassTemplate() {
+
+    }
+
+    public KotlinClassTemplate(Parcel in) {
+        super(in);
+    }
 
     @Override
     public String getName() {
@@ -10,12 +20,12 @@ public class KotlinClassTemplate extends CodeTemplate {
     }
 
     @Override
-    public String get() {
-        return "package " +
+    public void setup() {
+        setContents("package " +
                 CodeTemplate.PACKAGE_NAME +
                 "\n\npublic class " +
                 CodeTemplate.CLASS_NAME +
-                " {\n\t\n}";
+                " {\n\t\n}");
     }
 
     @Override

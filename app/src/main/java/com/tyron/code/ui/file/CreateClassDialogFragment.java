@@ -2,6 +2,7 @@ package com.tyron.code.ui.file;
 
 import android.app.Dialog;
 import android.os.Bundle;
+import android.os.Parcelable;
 import android.text.Editable;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -25,10 +26,19 @@ import com.tyron.common.util.SingleTextWatcher;
 
 import org.openjdk.javax.lang.model.SourceVersion;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 public class CreateClassDialogFragment extends DialogFragment {
+
+    public static CreateClassDialogFragment newInstance(List<CodeTemplate> templates) {
+        CreateClassDialogFragment fragment = new CreateClassDialogFragment();
+        Bundle args = new Bundle();
+        args.putParcelableArrayList("templates", (ArrayList<? extends Parcelable>) templates);
+        fragment.setArguments(args);
+        return fragment;
+    }
 
     public interface OnClassCreatedListener {
         void onClassCreated(String className, CodeTemplate template);
@@ -101,9 +111,6 @@ public class CreateClassDialogFragment extends DialogFragment {
 
 
     private List<CodeTemplate> getTemplates() {
-        return Arrays.asList(
-                new JavaClassTemplate(),
-                new AbstractTemplate(),
-                new InterfaceTemplate());
+        return requireArguments().getParcelableArrayList("templates");
     }
 }

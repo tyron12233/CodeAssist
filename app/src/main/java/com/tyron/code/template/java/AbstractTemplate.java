@@ -1,8 +1,18 @@
 package com.tyron.code.template.java;
 
+import android.os.Parcel;
+
 import com.tyron.code.template.CodeTemplate;
 
 public class AbstractTemplate extends CodeTemplate {
+
+    public AbstractTemplate() {
+
+    }
+
+    public AbstractTemplate(Parcel in) {
+        super(in);
+    }
 
     @Override
     public String getName() {
@@ -10,14 +20,14 @@ public class AbstractTemplate extends CodeTemplate {
     }
 
     @Override
-    public String get() {
-        return "package " +
+    public void setup() {
+        setContents("package " +
                 CodeTemplate.PACKAGE_NAME +
                 ";\n" +
                 "\npublic abstract" +
                 " class " +
                 CodeTemplate.CLASS_NAME +
-                " {\n\t\n}";
+                " {\n\t\n}");
     }
 
     @Override
