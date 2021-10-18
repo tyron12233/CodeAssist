@@ -80,7 +80,7 @@ public class Project {
 
 
     public String getPackageName() {
-       return mManifestData.getVersionName();
+       return mManifestData.getPackage();
     }
 
     
