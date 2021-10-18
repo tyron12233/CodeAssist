@@ -385,10 +385,6 @@ public class MainFragment extends Fragment {
         }
 
         openProject(mProject);
-
-        if (mProjectManager.getCurrentProject() != null) {
-            mToolbar.setTitle(mProject.mRoot.getName());
-        }
     }
 
     @Override
@@ -485,6 +481,10 @@ public class MainFragment extends Fragment {
                     if (!success) {
                         if (mBehavior.getState() != BottomSheetBehavior.STATE_EXPANDED) {
                             mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                        }
+                    } else {
+                        if (mProjectManager.getCurrentProject() != null) {
+                            mToolbar.setTitle(mProject.mRoot.getName());
                         }
                     }
                     int pos = mPager.getCurrentItem();
