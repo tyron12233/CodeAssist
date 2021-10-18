@@ -1,12 +1,9 @@
 package com.tyron.code.ui.main;
 
-import android.annotation.SuppressLint;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.ServiceConnection;
-import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -14,35 +11,24 @@ import android.os.IBinder;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentManager;
-import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.preference.PreferenceManager;
-import androidx.recyclerview.widget.DiffUtil;
-import androidx.viewpager2.adapter.FragmentStateAdapter;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.android.material.transition.MaterialSharedAxis;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.ILogger;
@@ -57,17 +43,13 @@ import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.main.adapter.PageAdapter;
 import com.tyron.code.ui.settings.SettingsActivity;
-import com.tyron.code.ui.wizard.WizardFragment;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ApkInstaller;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.provider.CompletionEngine;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
 public class MainFragment extends Fragment {
 
