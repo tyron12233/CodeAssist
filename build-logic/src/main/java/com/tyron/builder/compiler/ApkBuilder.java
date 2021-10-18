@@ -19,6 +19,7 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.exception.CompilationFailedException;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -76,11 +77,19 @@ public class ApkBuilder {
     // TODO: run tasks in parallel if applicable
     private void doBuild(BuildType type) throws IOException, CompilationFailedException {
         List<Task> tasks = getTasks();
+        List<Task> tasksRan = new ArrayList<>();
 
         for (Task task : tasks) {
-            post(() -> mTaskListener.onTaskStarted(task.getName(), "Task started."));
-            task.prepare(mProject, log, type);
-            task.run();
+            try {
+                post(() -> mTaskListener.onTaskStarted(task.getName(), "Task started."));
+                task.prepare(mProject, log, type);
+                task.run();
+            } catch (CompilationFailedException | IOException e) {
+                tasksRan.forEach(Task::clean);
+                throw e;
+            }
+
+            tasksRan.add(task);
         }
 
         tasks.forEach(Task::clean);
