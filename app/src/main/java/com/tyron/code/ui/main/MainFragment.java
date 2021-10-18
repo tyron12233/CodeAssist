@@ -529,7 +529,7 @@ public class MainFragment extends Fragment {
     }
 
     private void compile(BuildType type) {
-        if (mBinder == null) {
+        if (mBinder != null) {
             return;
         }
 
