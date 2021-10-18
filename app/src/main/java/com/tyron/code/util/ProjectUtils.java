@@ -14,6 +14,7 @@ public class ProjectUtils {
      * Utility method to get package name from a current directory, this traverses up
      * the file hierarchy until it reaches the "java" folder we can then workout the possible
      * package name from that
+     *
      * @param directory the parent file of the class
      * @return null if name cannot be determined
      */
@@ -33,7 +34,7 @@ public class ProjectUtils {
         }
 
         String originalPath = original.getAbsolutePath();
-        String javaPath =directory.getAbsolutePath();
+        String javaPath = directory.getAbsolutePath();
 
         String cutPath = originalPath.replace(javaPath, "");
         return formatPackageName(cutPath);
@@ -41,6 +42,7 @@ public class ProjectUtils {
 
     /**
      * Utility method to determine if the folder is the app/src/main/java folder
+     *
      * @param file file to check
      * @return true if its the java folder
      */
@@ -81,6 +83,7 @@ public class ProjectUtils {
     /**
      * Formats a path into a package name
      * eg. com/my/test into com.my.test
+     *
      * @param path input path
      * @return formatted package name
      */
@@ -95,23 +98,36 @@ public class ProjectUtils {
         return path.replace("/", ".");
     }
 
+    public static boolean isResourceXMLDir(File dir) {
+        if (dir == null) {
+            return false;
+        }
+        File parent = dir.getParentFile();
+        if (parent != null) {
+            return parent.getName().equals("res");
+        }
+        return false;
+    }
+
     public static boolean isResourceXMLFile(@NonNull File file) {
         if (!file.getName().endsWith(".xml")) {
             return false;
         }
-        File resourceFolder = file;
-        for (int i = 0; i < 2; i++) {
-            File parentFile = resourceFolder.getParentFile();
-            if (parentFile == null) {
-                resourceFolder = null;
-                break;
-            } else {
-                resourceFolder = parentFile;
+        return isResourceXMLDir(file.getParentFile());
+    }
+
+    public static boolean isLayoutXMLFile(@NonNull File file) {
+        if (!file.getName().endsWith(".xml")) {
+            return false;
+        }
+
+        if (file.getParentFile() != null) {
+            File parent = file.getParentFile();
+            if (parent.isDirectory() && parent.getName().startsWith("layout")) {
+                return isResourceXMLFile(file);
             }
         }
 
-        if (resourceFolder == null) {
-            return false;
-        } else return resourceFolder.isDirectory() && resourceFolder.getName().equals("res");
+        return false;
     }
 }

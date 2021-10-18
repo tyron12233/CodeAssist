@@ -147,7 +147,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 			}
 
 			Executors.newSingleThreadExecutor().execute(() -> {
-				boolean isResource = ProjectUtils.isResourceXMLFile(mEditor.getCurrentFile());
+				boolean isResource = ProjectUtils.isLayoutXMLFile(mEditor.getCurrentFile());
 
 				if (isResource) {
 					if (CompletionEngine.isIndexing()) {
