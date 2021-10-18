@@ -33,7 +33,7 @@ public class CreateLayoutAction extends FileAction {
                 .add("Create layout")
                 .setOnMenuItemClickListener(item -> {
                     CreateClassDialogFragment dialogFragment = CreateClassDialogFragment.newInstance(getTemplates(),
-                            Collections.singletonList(new RegexReason("^[a-z0-9.]+$", "Resource names must only contain lowercase a-z, 0-9 or an underscore.")));
+                            Collections.singletonList(new RegexReason("^[a-z0-9_]+$", "Resource names must only contain lowercase a-z, 0-9 or an underscore.")));
                     dialogFragment.show(context.getFragment().getChildFragmentManager(), null);
                     dialogFragment.setOnClassCreatedListener((className, template) -> {
                         try {
