@@ -5,6 +5,7 @@ import android.widget.PopupMenu;
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.file.action.file.DeleteFileAction;
 import com.tyron.code.ui.file.action.java.CreateClassAction;
+import com.tyron.code.ui.file.action.xml.CreateLayoutAction;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 
@@ -18,6 +19,7 @@ public class FileActionManager {
     public FileActionManager() {
         registerAction(new CreateClassAction());
         registerAction(new DeleteFileAction());
+        registerAction(new CreateLayoutAction());
     }
 
     public void registerAction(FileAction action) {
