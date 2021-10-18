@@ -24,6 +24,7 @@ import com.tyron.code.util.ProjectUtils;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class CreateClassAction extends FileAction {
@@ -40,7 +41,7 @@ public class CreateClassAction extends FileAction {
         SubMenu subMenu = context.getMenu().addSubMenu("New");
         subMenu.add("Java class")
                 .setOnMenuItemClickListener(item -> {
-                    CreateClassDialogFragment dialogFragment = CreateClassDialogFragment.newInstance(getTemplates());
+                    CreateClassDialogFragment dialogFragment = CreateClassDialogFragment.newInstance(getTemplates(), Collections.emptyList());
                     dialogFragment.show(context.getFragment().getChildFragmentManager(), null);
                     dialogFragment.setOnClassCreatedListener((className, template) -> {
                         try {

@@ -2,7 +2,6 @@ package com.tyron.code.ui.file;
 
 import android.app.Dialog;
 import android.os.Bundle;
-import android.os.Parcelable;
 import android.text.Editable;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -19,22 +18,22 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.tyron.code.R;
 import com.tyron.code.template.CodeTemplate;
-import com.tyron.code.template.java.AbstractTemplate;
-import com.tyron.code.template.java.InterfaceTemplate;
 import com.tyron.code.template.java.JavaClassTemplate;
 import com.tyron.common.util.SingleTextWatcher;
 
 import org.openjdk.javax.lang.model.SourceVersion;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class CreateClassDialogFragment extends DialogFragment {
 
-    public static CreateClassDialogFragment newInstance(List<CodeTemplate> templates) {
+    public static CreateClassDialogFragment newInstance(List<CodeTemplate> templates, List<RegexReason> regex) {
         CreateClassDialogFragment fragment = new CreateClassDialogFragment();
         Bundle args = new Bundle();
+        args.putParcelableArrayList("regex", new ArrayList<>(regex));
         args.putParcelableArrayList("templates", new ArrayList<>(templates));
         fragment.setArguments(args);
         return fragment;
@@ -49,6 +48,7 @@ public class CreateClassDialogFragment extends DialogFragment {
 
     private TextInputLayout mClassNameLayout;
     private TextInputEditText mClassNameEditText;
+    private AppCompatAutoCompleteTextView mClassTypeTextView;
 
     public void setOnClassCreatedListener(OnClassCreatedListener listener) {
         mListener = listener;
@@ -75,21 +75,14 @@ public class CreateClassDialogFragment extends DialogFragment {
 
         ArrayAdapter<CodeTemplate> adapter = new ArrayAdapter<>(
                 requireContext(), android.R.layout.simple_list_item_1, mTemplates);
-        AppCompatAutoCompleteTextView classTypeTextView = view.findViewById(R.id.et_class_type);
-        classTypeTextView.setAdapter(adapter);
-        classTypeTextView.setText(mTemplates.get(0).getName(), false);
+        mClassTypeTextView = view.findViewById(R.id.et_class_type);
+        mClassTypeTextView.setAdapter(adapter);
+        mClassTypeTextView.setText(mTemplates.get(0).getName(), false);
 
         builder.setView(view);
         builder.setPositiveButton(R.string.create_class_dialog_positive, ((dialogInterface, i) -> {
             if (mListener != null) {
-
-                String name = String.valueOf(classTypeTextView.getText());
-                CodeTemplate template = mTemplates.stream()
-                        .filter(temp -> temp.getName().equals(name))
-                        .findAny()
-                        .orElse(new JavaClassTemplate());
-
-                mListener.onClassCreated(String.valueOf(mClassNameEditText.getText()), template);
+                mListener.onClassCreated(String.valueOf(mClassNameEditText.getText()), getCurrentTemplate());
             }
         }));
         builder.setNegativeButton(android.R.string.cancel, null);
@@ -103,12 +96,21 @@ public class CreateClassDialogFragment extends DialogFragment {
                 @Override
                 public void afterTextChanged(Editable editable) {
                     String name = editable.toString();
-                    if (SourceVersion.isName(name)) {
-                        mClassNameLayout.setErrorEnabled(false);
-                        positiveButton.setEnabled(true);
+                    if (getCurrentTemplate() instanceof JavaClassTemplate) {
+                        if (SourceVersion.isName(name)) {
+                            mClassNameLayout.setErrorEnabled(false);
+                            positiveButton.setEnabled(true);
+                        } else {
+                            positiveButton.setEnabled(false);
+                            mClassNameLayout.setError(getString(R.string.create_class_dialog_invalid_name));
+                        }
                     } else {
-                        positiveButton.setEnabled(false);
-                        mClassNameLayout.setError(getString(R.string.create_class_dialog_invalid_name));
+                        if (isValid(name)) {
+                            mClassNameLayout.setErrorEnabled(false);
+                            positiveButton.setEnabled(true);
+                        } else {
+                            positiveButton.setEnabled(false);
+                        }
                     }
                 }
             });
@@ -117,7 +119,27 @@ public class CreateClassDialogFragment extends DialogFragment {
     }
 
 
+    private CodeTemplate getCurrentTemplate() {
+        String name = String.valueOf(mClassTypeTextView.getText());
+        return mTemplates.stream()
+                .filter(temp -> temp.getName().equals(name))
+                .findAny()
+                .orElse(new JavaClassTemplate());
+    }
     private List<CodeTemplate> getTemplates() {
         return requireArguments().getParcelableArrayList("templates");
+    }
+
+    private boolean isValid(String string) {
+        List<RegexReason> regex = requireArguments().getParcelableArrayList("regex");
+        for (RegexReason s : regex) {
+            Pattern pattern = Pattern.compile(s.getRegexString());
+            Matcher matcher = pattern.matcher(string);
+            if (!matcher.find()) {
+                mClassNameLayout.setError(s.getReason());
+                return false;
+            }
+        }
+        return true;
     }
 }
