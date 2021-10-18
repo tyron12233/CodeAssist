@@ -3,6 +3,9 @@ package com.tyron.code.util;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.code.ui.component.tree.TreeNode;
+import com.tyron.code.ui.file.tree.model.TreeFile;
+
 import java.io.File;
 
 public class ProjectUtils {
@@ -57,6 +60,22 @@ public class ProjectUtils {
         }
 
         return false;
+    }
+
+    /**
+     * Gets the parent directory of a node, if the node is already a directory then
+     * it is returned
+     *
+     * @param node the node to search
+     * @return parent directory or itself if its already a directory
+     */
+    public static File getDirectory(TreeNode<TreeFile> node) {
+        File file = node.getContent().getFile();
+        if (file.isDirectory()) {
+            return file;
+        } else {
+            return file.getParentFile();
+        }
     }
 
     /**
