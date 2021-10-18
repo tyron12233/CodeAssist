@@ -81,7 +81,6 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
         root.setOnClickListener(v -> {
            if (mListener != null) {
                int position = holder.getBindingAdapterPosition();
-               Log.d("ADAPTER", "position: " + position);
                if (position != RecyclerView.NO_POSITION) {
                    mListener.onProjectSelect(mProjects.get(position));
                }
@@ -99,6 +98,9 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
 
     @Override
     public int getItemCount() {
+        if (mProjects.isEmpty()) {
+            return 1;
+        }
         return mProjects.size();
     }
 
@@ -137,7 +139,7 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
 
     private static class EmptyViewHolder extends ViewHolder {
 
-        private final TextView text;
+        public final TextView text;
 
         public EmptyViewHolder(FrameLayout view) {
             super(view);
