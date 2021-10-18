@@ -2,7 +2,6 @@ package com.tyron.code.ui.file.tree;
 
 import android.os.Bundle;
 import android.view.LayoutInflater;
-import android.view.SubMenu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -10,34 +9,21 @@ import android.widget.PopupMenu;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
-import com.tyron.ProjectManager;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
-import com.tyron.code.ApplicationLoader;
-import com.tyron.code.R;
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.component.tree.TreeView;
-import com.tyron.code.ui.file.CreateClassDialogFragment;
+import com.tyron.code.ui.file.action.FileActionManager;
 import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewBinder.TreeFileNodeListener;
 import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewFactory;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
-import com.tyron.code.util.AndroidUtilities;
-import com.tyron.code.util.ProjectUtils;
-import com.tyron.common.util.StringSearch;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
-import kotlin.io.FileWalkDirection;
-import kotlin.io.FilesKt;
 
 public class TreeFileManagerFragment extends Fragment {
 
@@ -51,7 +37,7 @@ public class TreeFileManagerFragment extends Fragment {
 
     private File mRootFile;
     private MainViewModel mMainViewModel;
-
+    private FileActionManager mActionManager;
     private TreeView<TreeFile> treeView;
 
     @Override
@@ -80,6 +66,8 @@ public class TreeFileManagerFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+
+        mActionManager = new FileActionManager();
 
         treeView.setAdapter(new TreeFileNodeViewFactory(new TreeFileNodeListener() {
             @Override
@@ -112,110 +100,18 @@ public class TreeFileManagerFragment extends Fragment {
      * @param popupMenu The PopupMenu to add to
      * @param node      The current TreeNode in the file tree
      */
-    // TODO: simplify
     private void addMenus(PopupMenu popupMenu, TreeNode<TreeFile> node) {
-        File currentFile = node.getContent().getFile();
-
-        if (currentFile.isDirectory()) {
-            SubMenu newSubMenu = popupMenu.getMenu().addSubMenu("New");
-
-            // Only show the new java file menu if its under app/src/main/java
-            if (ProjectUtils.getPackageName(getDirectory(node)) != null) {
-                newSubMenu.add("Java class")
-                        .setOnMenuItemClickListener(menuItem -> {
-                            CreateClassDialogFragment fragment = new CreateClassDialogFragment();
-                            fragment.show(getChildFragmentManager(), "create_class_fragment");
-
-                            fragment.setOnClassCreatedListener((className, template) -> {
-
-                                File directory = getDirectory(node);
-                                try {
-                                    File createdFile = ProjectManager.createClass(directory, className, template);
-                                    TreeNode<TreeFile> newNode = new TreeNode<>(
-                                            TreeFile.fromFile(createdFile),
-                                            node.getLevel() + 1
-                                    );
-
-                                    treeView.addNode(node, newNode);
-                                    treeView.refreshTreeView();
-
-                                    mMainViewModel.addFile(createdFile);
-                                    Project currentProject = ProjectManager.getInstance().getCurrentProject();
-                                    if (currentProject != null) {
-                                        String packageName = ProjectUtils.getPackageName(directory)
-                                                + "." + className;
-                                        currentProject.getFileManager()
-                                                .addJavaFile(currentFile, packageName);
-                                    }
-                                } catch (IOException e) {
-                                    ApplicationLoader.showToast("Unable to create class: " + e.getMessage());
-                                }
-                            });
-                            return true;
-                        });
-            }
-        }
-
-        popupMenu.getMenu().add("Copy path")
-                .setOnMenuItemClickListener(menuItem -> {
-                    AndroidUtilities.copyToClipboard(currentFile.getAbsolutePath(), true);
-
-                    return true;
-                });
-
-        popupMenu.getMenu().add("Delete")
-                .setOnMenuItemClickListener(menuItem -> {
-
-                    new AlertDialog.Builder(requireContext())
-                            .setMessage(String.format(getString(R.string.dialog_confirm_delete), currentFile.getName()))
-                            .setPositiveButton(getString(R.string.dialog_delete), (d, which) -> {
-
-                                deleteFiles(currentFile);
-                                treeView.deleteNode(node);
-                                treeView.refreshTreeView();
-
-                            })
-                            .show();
-                    return true;
-                });
+        mActionManager.addMenus(popupMenu, node, this);
     }
 
-    private void deleteFiles(File fileToDelete) {
-        FilesKt.walk(fileToDelete, FileWalkDirection.TOP_DOWN).iterator().forEachRemaining(file -> {
-            if (file.getName().endsWith(".java")) { // todo: add .kt and .xml checks
-                mMainViewModel.removeFile(file);
-
-                Project project = ProjectManager.getInstance().getCurrentProject();
-                if (project != null) {
-                    String packageName = StringSearch.packageName(file);
-                    if (packageName != null) {
-                        packageName += "." + file.getName()
-                                .substring(0, file.getName().lastIndexOf("."));
-                        project.getFileManager()
-                                .removeJavaFile(packageName);
-                    }
-                }
-            }
-        });
-
-        FilesKt.deleteRecursively(fileToDelete);
+    public TreeView<TreeFile> getTreeView() {
+        return treeView;
     }
 
-    /**
-     * Gets the parent directory of a node, if the node is already a directory then
-     * it is returned
-     *
-     * @param node the node to search
-     * @return parent directory or itself if its already a directory
-     */
-    private File getDirectory(TreeNode<TreeFile> node) {
-        File file = node.getContent().getFile();
-        if (file.isDirectory()) {
-            return file;
-        } else {
-            return file.getParentFile();
-        }
+    public MainViewModel getMainViewModel() {
+        return mMainViewModel;
     }
+
 
     /**
      * Sets the tree to be rooted at this file, calls refresh() after
