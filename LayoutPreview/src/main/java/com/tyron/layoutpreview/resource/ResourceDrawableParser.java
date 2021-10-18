@@ -66,7 +66,12 @@ public class ResourceDrawableParser {
     }
 
     private DrawableValue parseFile(File file) {
-        return DrawableValue.valueOf(file);
+        try {
+            return DrawableValue.valueOf(file);
+        } catch (Throwable e) {
+            // Do not propagate exceptions just do not include the drawable
+            return null;
+        }
     }
 
     private DrawableValue parseXml(File file) throws IOException, ConvertException, XmlPullParserException {
