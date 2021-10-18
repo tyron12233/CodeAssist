@@ -7,6 +7,8 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.BuildModule;
+import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
+import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.compiler.resource.AAPT2Compiler;
 import com.tyron.builder.compiler.LibraryChecker;
 import com.tyron.builder.parser.FileManager;
@@ -37,13 +39,11 @@ public class Project {
     private final Set<File> libraries = new HashSet<>();
     private final Map<String, File> RJavaFiles = new HashMap<>();
 
-    //TODO: Adjust these values according to build.gradle or manifest
-    private final int minSdk = 21;
-    private final int targetSdk = 31;
-    private String packageName;
+    //TODO: Adjust these values according to build.gradle or manifest\
     private final File mAssetsDir;
     private final File mNativeLibsDir;
     private final FileManager mFileManager;
+    private ManifestData mManifestData;
 
     /**
      * Creates a project object from specified root
@@ -69,69 +69,20 @@ public class Project {
         }
     }
 
-    public void open() {
+    public void open() throws IOException {
         mFileManager.openProject(this);
+        mManifestData = AndroidManifestParser.parse(getManifestFile().toPath());
     }
 
     public FileManager getFileManager() {
         return mFileManager;
     }
 
-    private void findKotlinFiles(File file) {
-        File[] files = file.listFiles();
-
-        if (files != null) {
-            for (File child : files) {
-                if (child.isDirectory()) {
-                    findKotlinFiles(child);
-                } else {
-                    if (child.getName().endsWith(".kt")) {
-                        String packageName = StringSearch.packageName(child);
-                        if (packageName.isEmpty()) {
-                            Log.d("Error package empty", child.getAbsolutePath());
-                        } else {
-                                javaFiles.put(packageName + "." + child.getName().replace(".kt", ""), child);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private void findJavaFiles(File file) {
-        File[] files = file.listFiles();
-        
-        if (files != null) {
-            for (File child : files) {
-                if (child.isDirectory()) {
-                    findJavaFiles(child);
-                } else {
-                    if (child.getName().endsWith(".java")) {
-                        String packageName = StringSearch.packageName(child);
-                        Log.d("PROJECT FIND JAVA", "Found " + child.getAbsolutePath());
-                        if (packageName.isEmpty()) {
-                            Log.d("Error package empty", child.getAbsolutePath());
-                        } else {
-                            if (SourceVersion.isName(packageName + "." + child.getName().replace(".java", ""))) {
-                                javaFiles.put(packageName + "." + child.getName().replace(".java", ""), child);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     public String getPackageName() {
-        if (TextUtils.isEmpty(packageName)) {
-            loadPackageName();
-        }
-        return packageName;
+       return mManifestData.getVersionName();
     }
 
-    private void loadPackageName() {
-        packageName = AAPT2Compiler.getPackageName(getManifestFile());
-    }
     
     public Map<String, File> getJavaFiles() {
         if (javaFiles.isEmpty()) {
@@ -175,22 +126,6 @@ public class Project {
         RJavaFiles.clear();
     }
 
-    public void searchLibraries() {
-        libraries.clear();
-
-        File libPath = new File(getBuildDirectory(), "libs");
-        File[] files = libPath.listFiles();
-        if (files != null) {
-            for (File lib : files) {
-                if (lib.isDirectory()) {
-                    File check = new File(lib, "classes.jar");
-                    if (check.exists()) {
-                        libraries.add(check);
-                    }
-                }
-            }
-        }
-    }
     public Set<File> getLibraries() {
         if (libraries.isEmpty()) {
             LibraryChecker checker = new LibraryChecker(this);
@@ -206,8 +141,6 @@ public class Project {
      * is opened, it will get loaded again
      */
     public void clear() {
-        packageName = null;
-
         RJavaFiles.clear();
         libraries.clear();
         javaFiles.clear();
@@ -262,12 +195,74 @@ public class Project {
         return getBuildDirectory().mkdirs();
     }
 
+    private void findKotlinFiles(File file) {
+        File[] files = file.listFiles();
+
+        if (files != null) {
+            for (File child : files) {
+                if (child.isDirectory()) {
+                    findKotlinFiles(child);
+                } else {
+                    if (child.getName().endsWith(".kt")) {
+                        String packageName = StringSearch.packageName(child);
+                        if (packageName.isEmpty()) {
+                            Log.d("Error package empty", child.getAbsolutePath());
+                        } else {
+                            javaFiles.put(packageName + "." + child.getName().replace(".kt", ""), child);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public void searchLibraries() {
+        libraries.clear();
+
+        File libPath = new File(getBuildDirectory(), "libs");
+        File[] files = libPath.listFiles();
+        if (files != null) {
+            for (File lib : files) {
+                if (lib.isDirectory()) {
+                    File check = new File(lib, "classes.jar");
+                    if (check.exists()) {
+                        libraries.add(check);
+                    }
+                }
+            }
+        }
+    }
+
+    private void findJavaFiles(File file) {
+        File[] files = file.listFiles();
+
+        if (files != null) {
+            for (File child : files) {
+                if (child.isDirectory()) {
+                    findJavaFiles(child);
+                } else {
+                    if (child.getName().endsWith(".java")) {
+                        String packageName = StringSearch.packageName(child);
+                        Log.d("PROJECT FIND JAVA", "Found " + child.getAbsolutePath());
+                        if (packageName.isEmpty()) {
+                            Log.d("Error package empty", child.getAbsolutePath());
+                        } else {
+                            if (SourceVersion.isName(packageName + "." + child.getName().replace(".java", ""))) {
+                                javaFiles.put(packageName + "." + child.getName().replace(".java", ""), child);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     public int getMinSdk() {
-        return minSdk;
+        return mManifestData.getMinSdkVersion();
     }
 
     public int getTargetSdk() {
-        return targetSdk;
+        return mManifestData.getTargetSdkVersion();
     }
 	
 	public File getResourceDirectory() {

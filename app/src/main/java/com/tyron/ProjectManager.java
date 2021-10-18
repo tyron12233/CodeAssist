@@ -70,8 +70,13 @@ public class ProjectManager {
             }
             mListener.onTaskStarted("Indexing");
 
+            try {
+                proj.open();
+            } catch(IOException e) {
+                mListener.onComplete(false, "Unable to open project: " + e.getMessage());
+                return;
+            }
             mCurrentProject = proj;
-            proj.open();
             CompletionEngine.getInstance().index(proj, () -> mListener.onComplete(true, "Index successful"));
         });
     }
