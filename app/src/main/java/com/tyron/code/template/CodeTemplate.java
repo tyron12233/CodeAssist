@@ -42,6 +42,7 @@ public class CodeTemplate implements Parcelable {
     }
 
     public final String get() {
+        setup();
         return mContents;
     }
 
@@ -55,8 +56,6 @@ public class CodeTemplate implements Parcelable {
     public void setup() {
 
     }
-
-
 
     public String getName() {
         throw new IllegalStateException("getName() is not subclassed");
