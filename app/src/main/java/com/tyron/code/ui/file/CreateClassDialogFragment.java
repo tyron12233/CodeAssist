@@ -35,7 +35,7 @@ public class CreateClassDialogFragment extends DialogFragment {
     public static CreateClassDialogFragment newInstance(List<CodeTemplate> templates) {
         CreateClassDialogFragment fragment = new CreateClassDialogFragment();
         Bundle args = new Bundle();
-        args.putParcelableArrayList("templates", (ArrayList<? extends Parcelable>) templates);
+        args.putParcelableArrayList("templates", new ArrayList<>(templates));
         fragment.setArguments(args);
         return fragment;
     }
@@ -44,7 +44,7 @@ public class CreateClassDialogFragment extends DialogFragment {
         void onClassCreated(String className, CodeTemplate template);
     }
 
-    private final List<CodeTemplate> mTemplates = getTemplates();
+    private List<CodeTemplate> mTemplates;
     private OnClassCreatedListener mListener;
 
     private TextInputLayout mClassNameLayout;
@@ -52,6 +52,13 @@ public class CreateClassDialogFragment extends DialogFragment {
 
     public void setOnClassCreatedListener(OnClassCreatedListener listener) {
         mListener = listener;
+    }
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        mTemplates = getTemplates();
     }
 
     @NonNull
