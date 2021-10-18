@@ -29,6 +29,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Stack;
@@ -105,6 +106,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
             }
         }
+        diagnostics.sort(Comparator.comparingLong(DiagnosticWrapper::getPosition));
 
         while (delegate.shouldAnalyze()) {
             try {

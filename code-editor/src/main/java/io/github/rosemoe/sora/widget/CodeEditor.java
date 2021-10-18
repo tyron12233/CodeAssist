@@ -377,7 +377,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             return;
         }
         // We do this because if you hide it at once, the editor seems to flash with unknown reason
-        mCompletionWindow.hide();
+        post(mCompletionWindow::hide);
     }
 
     /**

@@ -94,6 +94,9 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
     }
 
     private String getAfterLastDot(String str) {
+        if (str == null) {
+            return "";
+        }
         if (str.contains(".")) {
             str = str.substring(str.lastIndexOf(".") + 1);
         }

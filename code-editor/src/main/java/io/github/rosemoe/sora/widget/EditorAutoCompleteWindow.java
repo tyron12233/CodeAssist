@@ -24,6 +24,7 @@ import com.tyron.completion.rewrite.AddImport;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -58,32 +59,6 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     public EditorAutoCompleteWindow(CodeEditor editor) {
         super(editor);
         mEditor = editor;
-      /*  mAdapter = new DefaultCompletionItemAdapter();
-        RelativeLayout layout = new RelativeLayout(mEditor.getContext());
-        mListView = new ListView(mEditor.getContext());
-        layout.addView(mListView, new LinearLayout.LayoutParams(-1, -1));
-        mTip = new TextView(mEditor.getContext());
-        mTip.setText(TIP);
-        mTip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        mTip.setBackgroundColor(0xeeeeeeee);
-        mTip.setTextColor(0xff000000);
-        layout.addView(mTip);
-        ((RelativeLayout.LayoutParams) mTip.getLayoutParams()).addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
-        setContentView(layout);
-        GradientDrawable gd = new GradientDrawable();
-        gd.setCornerRadius(1);
-        layout.setBackgroundDrawable(gd);
-        mBg = gd;
-        applyColorScheme();
-        mListView.setDividerHeight(0);
-        setLoading(true);
-        mListView.setOnItemClickListener((parent, view, position, id) -> {
-            try {
-                select(position);
-            } catch (Exception e) {
-                Toast.makeText(mEditor.getContext(), Log.getStackTraceString(e), Toast.LENGTH_SHORT).show();
-            }
-        });*/
 
         RelativeLayout layout = new RelativeLayout(mEditor.getContext());
         setContentView(layout);
@@ -336,7 +311,10 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
 
         if (isShowing()) {
             setLoading(true);
+        } else {
+            mAdapter.attachAttributes(this, Collections.emptyList());
         }
+
         mLastPrefix = prefix;
         mRequestTime = System.currentTimeMillis();
         if (mPreviousThread != null) {
