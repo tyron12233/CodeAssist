@@ -37,7 +37,7 @@ public class CreateLayoutAction extends FileAction {
                     dialogFragment.show(context.getFragment().getChildFragmentManager(), null);
                     dialogFragment.setOnClassCreatedListener((className, template) -> {
                         try {
-                            File createdFile = ProjectManager.createClass(context.getCurrentNode().getContent().getFile(),
+                            File createdFile = ProjectManager.createFile(context.getCurrentNode().getContent().getFile(),
                                     className, template);
 
                             TreeNode<TreeFile> newNode = new TreeNode<>(
