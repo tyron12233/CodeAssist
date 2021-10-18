@@ -4,7 +4,7 @@ import android.os.Parcel;
 
 import com.tyron.code.template.CodeTemplate;
 
-public class AbstractTemplate extends CodeTemplate {
+public class AbstractTemplate extends JavaClassTemplate {
 
     public AbstractTemplate() {
 
@@ -28,10 +28,5 @@ public class AbstractTemplate extends CodeTemplate {
                 " class " +
                 CodeTemplate.CLASS_NAME +
                 " {\n\t\n}");
-    }
-
-    @Override
-    public String getExtension() {
-        return ".java";
     }
 }

@@ -4,7 +4,7 @@ import android.os.Parcel;
 
 import com.tyron.code.template.CodeTemplate;
 
-public class InterfaceTemplate extends CodeTemplate {
+public class InterfaceTemplate extends JavaClassTemplate {
 
     public InterfaceTemplate() {
 
@@ -26,10 +26,5 @@ public class InterfaceTemplate extends CodeTemplate {
                 ";\n" + "\npublic interface " +
                 CodeTemplate.CLASS_NAME +
                 " {\n\t\n}");
-    }
-
-    @Override
-    public String getExtension() {
-        return ".java";
     }
 }
