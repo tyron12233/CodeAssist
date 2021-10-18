@@ -85,6 +85,27 @@ public class ProjectManager {
         return mCurrentProject;
     }
 
+    public static File createFile(File directory, String name, CodeTemplate template) throws IOException {
+        if (!directory.isDirectory()) {
+            return null;
+        }
+
+        String code = template.get()
+                .replace(CodeTemplate.CLASS_NAME, name);
+
+        File classFile = new File(directory, name + template.getExtension());
+        if (classFile.exists()) {
+            return null;
+        }
+        if (!classFile.createNewFile()) {
+            return null;
+        }
+
+        FileManager.writeFile(classFile, code);
+
+        return classFile;
+    }
+
     public static File createClass(File directory, String className, CodeTemplate template) throws IOException {
         if (!directory.isDirectory()) {
             return null;
