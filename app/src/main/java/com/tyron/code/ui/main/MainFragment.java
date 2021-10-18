@@ -55,6 +55,7 @@ import com.tyron.code.ui.editor.BottomEditorFragment;
 import com.tyron.code.ui.editor.CodeEditorFragment;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
+import com.tyron.code.ui.main.adapter.PageAdapter;
 import com.tyron.code.ui.settings.SettingsActivity;
 import com.tyron.code.ui.wizard.WizardFragment;
 import com.tyron.code.util.AndroidUtilities;
@@ -104,6 +105,60 @@ public class MainFragment extends Fragment {
         }
     };
     private Project mProject;
+    private BuildType mBuildType;
+    private CompilerService.CompilerBinder mBinder;
+    private final ServiceConnection mServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+            ILogger logger = ILogger.wrap(logViewModel);
+
+            mBinder = (CompilerService.CompilerBinder) iBinder;
+            mBinder.getCompilerService().setLogger(logger);
+            mBinder.getCompilerService().setShouldShowNotification(false);
+            mBinder.getCompilerService().setOnResultListener((success, message) -> requireActivity().runOnUiThread(() -> {
+                mFilesViewModel.setCurrentState(null);
+
+                if (mProgressBar != null) {
+                    AndroidUtilities.hideKeyboard(mProgressBar);
+                }
+                mFilesViewModel.setIndexing(false);
+
+                if (!success) {
+                    logger.error(message);
+
+                    if (mBehavior.getState() == BottomSheetBehavior.STATE_COLLAPSED) {
+                        mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                    }
+                }
+                if (success && getActivity() != null) {
+                    logger.debug(message);
+                    logViewModel.clear(LogViewModel.APP_LOG);
+
+                    File file = new File(mProjectManager.getCurrentProject().getBuildDirectory(), "bin/signed.apk");
+                    mProgressBar.postDelayed(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()), 300);
+                }
+
+                if (getActivity() != null) {
+                    mBinder = null;
+                    requireActivity().unbindService(this);
+                }
+            }));
+
+            if (mBuildType != null) {
+                mBinder.getCompilerService().compile(mProjectManager.getCurrentProject(), mBuildType);
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName componentName) {
+            mBinder = null;
+            mFilesViewModel.setCurrentState(null);
+            mFilesViewModel.setIndexing(false);
+            if (mProgressBar != null) {
+                AndroidUtilities.hideKeyboard(mProgressBar);
+            }
+        }
+    };
 
     public MainFragment() {
 
@@ -154,7 +209,11 @@ public class MainFragment extends Fragment {
 
         logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
         mFilesViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
-        mFilesViewModel.getFiles().observe(getViewLifecycleOwner(), mAdapter::submitList);
+        mFilesViewModel.getFiles().observe(getViewLifecycleOwner(),
+                files -> {
+                    mAdapter.submitList(files);
+                    mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
+                });
         mFilesViewModel.currentPosition.observe(getViewLifecycleOwner(), mPager::setCurrentItem);
         mFilesViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE));
         mFilesViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
@@ -265,36 +324,6 @@ public class MainFragment extends Fragment {
             }
         });
         mToolbar.setOnMenuItemClickListener(item -> {
-//            if (item.getItemId() == R.id.debug_create) {
-//
-//                WizardFragment fragment = new WizardFragment();
-//                getParentFragmentManager().beginTransaction()
-//                        .add(R.id.fragment_container, fragment, "wizard_fragment")
-//                        .commit();
-//
-//                return true;
-//            } else if (item.getItemId() == R.id.action_open) {
-//                final EditText et = new EditText(requireContext());
-//                et.setHint("Project root directory");
-//
-//                @SuppressLint("RestrictedApi")
-//                AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext(), R.style.CodeEditorDialog)
-//                        .setTitle("Open a project")
-//                        .setNegativeButton("cancel", null)
-//                        .setPositiveButton("OPEN", (i, which) -> {
-//                            File file = new File(et.getText().toString());
-//                            Project project = new Project(file);
-//                            if (project.isValidProject()) {
-//                                openProject(project);
-//                            } else {
-//                                ApplicationLoader.showToast("The selected directory is not a valid project directory");
-//                            }
-//                        })
-//                        .setView(et, 24, 0, 24, 0)
-//                        .create();
-//
-//                dialog.show();
-//            } else
             if (item.getItemId() == R.id.debug_refresh) {
                 Project project = ProjectManager.getInstance()
                         .getCurrentProject();
@@ -390,35 +419,12 @@ public class MainFragment extends Fragment {
         if (mBinder != null) {
             mBinder.getCompilerService().setShouldShowNotification(true);
         }
-
-//        Project current = mProjectManager.getCurrentProject();
-//        if (current != null) {
-//            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
-//            SharedPreferences.Editor editor = preferences.edit();
-//
-//            editor.putString("last_opened_project", current.mRoot.getAbsolutePath());
-//            List<File> openedFiles = mAdapter.getItems();
-//            if (openedFiles.isEmpty()) {
-//                editor.remove("last_opened_files");
-//            } else {
-//                editor.putString("last_opened_files", new Gson().toJson(
-//                        openedFiles.stream().map(File::getAbsolutePath).collect(Collectors.toList())
-//                ));
-//            }
-//            editor.apply();
-//        }
-
     }
 
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         saveAll();
-
-//        Project current = ProjectManager.getInstance().getCurrentProject();
-//        if (current != null) {
-//            outState.putString("current_project", current.mRoot.getAbsolutePath());
-//        }
     }
 
     /**
@@ -538,61 +544,6 @@ public class MainFragment extends Fragment {
         }
     }
 
-    private BuildType mBuildType;
-    private CompilerService.CompilerBinder mBinder;
-    private final ServiceConnection mServiceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-            ILogger logger = ILogger.wrap(logViewModel);
-
-            mBinder = (CompilerService.CompilerBinder) iBinder;
-            mBinder.getCompilerService().setLogger(logger);
-            mBinder.getCompilerService().setShouldShowNotification(false);
-            mBinder.getCompilerService().setOnResultListener((success, message) -> requireActivity().runOnUiThread(() -> {
-                mFilesViewModel.setCurrentState(null);
-
-                if (mProgressBar != null) {
-                    AndroidUtilities.hideKeyboard(mProgressBar);
-                }
-                mFilesViewModel.setIndexing(false);
-
-                if (!success) {
-                    logger.error(message);
-
-                    if (mBehavior.getState() == BottomSheetBehavior.STATE_COLLAPSED) {
-                        mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
-                    }
-                }
-                if (success && getActivity() != null) {
-                    logger.debug(message);
-                    logViewModel.clear(LogViewModel.APP_LOG);
-
-                    File file = new File(mProjectManager.getCurrentProject().getBuildDirectory(), "bin/signed.apk");
-                    mProgressBar.postDelayed(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()), 300);
-                }
-
-                if (getActivity() != null) {
-                    mBinder = null;
-                    requireActivity().unbindService(this);
-                }
-            }));
-
-            if (mBuildType != null) {
-                mBinder.getCompilerService().compile(mProjectManager.getCurrentProject(), mBuildType);
-            }
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName componentName) {
-            mBinder = null;
-            mFilesViewModel.setCurrentState(null);
-            mFilesViewModel.setIndexing(false);
-            if (mProgressBar != null) {
-                AndroidUtilities.hideKeyboard(mProgressBar);
-            }
-        }
-    };
-
     private void compile(BuildType type) {
         mBuildType = type;
         saveAll();
@@ -605,106 +556,4 @@ public class MainFragment extends Fragment {
         requireActivity().bindService(new Intent(requireContext(), CompilerService.class),
                 mServiceConnection, Context.BIND_IMPORTANT);
     }
-
-
-    private class PageAdapter extends FragmentStateAdapter {
-
-        private final List<File> data = new ArrayList<>();
-
-        public PageAdapter(FragmentManager fm, Lifecycle lifecycle) {
-            super(fm, lifecycle);
-        }
-
-        public void submitList(List<File> files) {
-            DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
-                @Override
-                public int getOldListSize() {
-                    return data.size();
-                }
-
-                @Override
-                public int getNewListSize() {
-                    return files.size();
-                }
-
-                @Override
-                public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
-                    return Objects.equals(data.get(oldItemPosition), files.get(newItemPosition));
-                }
-
-                @Override
-                public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
-                    return Objects.equals(data.get(oldItemPosition), files.get(newItemPosition));
-                }
-            });
-            data.clear();
-            data.addAll(files);
-            result.dispatchUpdatesTo(this);
-
-            mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
-        }
-
-        public void submitFile(File file) {
-            mTabLayout.setVisibility(View.VISIBLE);
-            data.add(file);
-            notifyItemInserted(data.size());
-        }
-
-        @Override
-        public int getItemCount() {
-            return data.size();
-        }
-
-        @NonNull
-        @Override
-        public Fragment createFragment(int p1) {
-            return CodeEditorFragment.newInstance(data.get(p1));
-        }
-
-        @Nullable
-        public File getItem(int position) {
-            if (position > data.size() - 1) {
-                return null;
-            }
-            return data.get(position);
-        }
-
-        @Override
-        public long getItemId(int position) {
-            if (data.isEmpty() || position > data.size()) {
-                return -1;
-            }
-            return data.get(position).getAbsolutePath().hashCode();
-        }
-
-        public int getPosition(File file) {
-            if (containsItem(file.getAbsolutePath().hashCode())) {
-                return data.indexOf(file);
-            }
-            return -1;
-        }
-
-        public void removeItem(int position) {
-            if (position > data.size()) {
-                return;
-            }
-            data.remove(position);
-            notifyItemRemoved(position);
-        }
-
-        public List<File> getItems() {
-            return data;
-        }
-
-        @Override
-        public boolean containsItem(long itemId) {
-            for (File file : data) {
-                if (file.getAbsolutePath().hashCode() == itemId) {
-                    return true;
-                }
-            }
-            return false;
-        }
-    }
-
 }
