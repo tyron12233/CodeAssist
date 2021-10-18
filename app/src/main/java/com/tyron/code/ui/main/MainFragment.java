@@ -307,12 +307,14 @@ public class MainFragment extends Fragment {
         });
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_refresh) {
-                Project project = ProjectManager.getInstance()
-                        .getCurrentProject();
+                if (mBinder == null) {
+                    Project project = ProjectManager.getInstance()
+                            .getCurrentProject();
 
-                if (project != null) {
-                    project.clear();
-                    openProject(project, true);
+                    if (project != null) {
+                        project.clear();
+                        openProject(project, true);
+                    }
                 }
             } else if(item.getItemId() == R.id.action_build_debug) {
                 compile(BuildType.DEBUG);
@@ -527,6 +529,10 @@ public class MainFragment extends Fragment {
     }
 
     private void compile(BuildType type) {
+        if (mBinder == null) {
+            return;
+        }
+
         mBuildType = type;
         saveAll();
 
