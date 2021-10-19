@@ -2,7 +2,6 @@ package com.tyron.kotlin_completion;
 
 import android.util.Log;
 
-import com.tyron.builder.parser.FileManager;
 import com.tyron.kotlin_completion.compiler.CompletionKind;
 import com.tyron.kotlin_completion.index.SymbolIndex;
 import com.tyron.kotlin_completion.util.AsyncExecutor;
@@ -10,12 +9,12 @@ import com.tyron.kotlin_completion.util.AsyncExecutor;
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.container.ComponentProvider;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
 import org.jetbrains.kotlin.idea.KotlinLanguage;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.resolve.BindingContext;
-import org.jetbrains.kotlin.resolve.BindingTrace;
 
 import java.io.File;
 import java.io.IOException;
@@ -26,6 +25,7 @@ import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
@@ -44,6 +44,10 @@ public class SourcePath {
 
     public SourcePath(CompilerClassPath classPath) {
         cp = classPath;
+    }
+
+    public CompilerClassPath getCompilerClassPath() {
+        return cp;
     }
 
     public SymbolIndex getIndex() {
@@ -129,14 +133,18 @@ public class SourcePath {
         }
 
         private void doCompile() {
-            Pair<BindingContext, ComponentProvider> pair = cp.getCompiler().compileKtFile(parsed, allIncludingThis());
-            parsedDataWriteLock.lock();
-            try {
-                compiledContext = pair.getFirst();
-                compiledcontainer = pair.getSecond();
-                compiledFile = parsed;
-            } finally {
-                parsedDataWriteLock.unlock();
+            if (this.path.toFile().getName().endsWith(".kt")) {
+                Pair<BindingContext, ComponentProvider> pair = cp.getCompiler().compileKtFile((KtFile) parsed, allIncludingThis());
+                parsedDataWriteLock.lock();
+                try {
+                    compiledContext = pair.getFirst();
+                    compiledcontainer = pair.getSecond();
+                    compiledFile = parsed;
+                } finally {
+                    parsedDataWriteLock.unlock();
+                }
+            } else {
+
             }
             initializeIndexAsyncIfNeeded(compiledcontainer);
         }
@@ -158,14 +166,14 @@ public class SourcePath {
         }
 
         public CompiledFile doPrepareCompiledFile() {
-            return new CompiledFile(content, compiledFile, compiledContext, compiledcontainer, allIncludingThis(), cp);
+            return new CompiledFile(content, (KtFile) compiledFile, compiledContext, compiledcontainer, allIncludingThis(), cp);
         }
 
         private Collection<KtFile> allIncludingThis() {
             parseIfChanged();
             if (isTemporary) {
-                Collection<KtFile> all = all(false);
-                Sequence<KtFile> plus = SequencesKt.plus(SequencesKt.asSequence(all.iterator()), SequencesKt.sequenceOf(parsed));
+                Set<KtFile> all = all(false);
+                Sequence<KtFile> plus = SequencesKt.plus(SequencesKt.asSequence(all.iterator()), (KtFile) SequencesKt.sequenceOf(parsed));
                 return SequencesKt.toList(plus);
             } else {
                 return all(false);
@@ -225,7 +233,7 @@ public class SourcePath {
         }
         return files.get(file.toURI());
     }
-    private Collection<KtFile> all(boolean includeHidden) {
+    private Set<KtFile> all(boolean includeHidden) {
         return files.values().stream()
                 .filter(it -> includeHidden || !it.isTemporary)
                 .map(it -> {

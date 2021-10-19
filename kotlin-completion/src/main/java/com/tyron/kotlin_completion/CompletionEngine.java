@@ -19,7 +19,7 @@ import java.nio.charset.Charset;
 
 public class CompletionEngine {
 
-    private enum Recompile {
+    public enum Recompile {
         ALWAYS, AFTER_DOT, NEVER
     }
 
@@ -48,7 +48,11 @@ public class CompletionEngine {
         return INSTANCE;
     }
 
-    private Pair<CompiledFile, Integer> recover(File file, String contents, Recompile recompile, int offset) {
+    public SourcePath getSourcePath() {
+        return sp;
+    }
+
+    public Pair<CompiledFile, Integer> recover(File file, String contents, Recompile recompile, int offset) {
         boolean shouldRecompile = true;
         switch (recompile) {
             case NEVER: shouldRecompile = false; break;

@@ -104,7 +104,6 @@ public class Compiler implements Closeable {
         }
     }
 
-
     public Pair<BindingContext, ComponentProvider> compileJavaFiles(Collection<? extends PsiJavaFile> files, Collection<KtFile> sourcePath, CompletionKind kind) {
         mCompileLock.lock();
         try {
