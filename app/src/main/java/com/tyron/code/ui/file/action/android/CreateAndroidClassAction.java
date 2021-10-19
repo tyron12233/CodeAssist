@@ -1,49 +1,31 @@
-package com.tyron.code.ui.file.action.java;
-
-import android.content.Context;
-import android.view.Menu;
-import android.view.SubMenu;
-
-import androidx.fragment.app.FragmentActivity;
+package com.tyron.code.ui.file.action.android;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.ProjectManager;
 import com.tyron.builder.model.Project;
-import com.tyron.code.template.CodeTemplate;
-import com.tyron.code.template.java.AbstractTemplate;
-import com.tyron.code.template.java.InterfaceTemplate;
-import com.tyron.code.template.java.JavaClassTemplate;
+import com.tyron.code.template.android.ActivityTemplate;
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.file.CreateClassDialogFragment;
 import com.tyron.code.ui.file.action.ActionContext;
-import com.tyron.code.ui.file.action.FileAction;
-import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
+import com.tyron.code.ui.file.action.java.CreateClassAction;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.code.util.ProjectUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 
-public class CreateClassAction extends FileAction {
-    @Override
-    public boolean isApplicable(File file) {
-        if (file.isDirectory()) {
-            return ProjectUtils.getPackageName(file) != null;
-        }
-        return false;
-    }
+public class CreateAndroidClassAction extends CreateClassAction {
 
     @Override
     public void addMenu(ActionContext context) {
-        SubMenu subMenu = context.addSubMenu("new", "New");
-        subMenu.add("Java class")
+        context.addSubMenu("new", "New")
+                .add("Android Class")
                 .setOnMenuItemClickListener(item -> {
-                    CreateClassDialogFragment dialogFragment = CreateClassDialogFragment.newInstance(getTemplates(), Collections.emptyList());
-                    dialogFragment.show(context.getFragment().getChildFragmentManager(), null);
-                    dialogFragment.setOnClassCreatedListener((className, template) -> {
+                    CreateClassDialogFragment fragment = CreateClassDialogFragment.newInstance(
+                            Collections.singletonList(new ActivityTemplate()), Collections.emptyList());
+                    fragment.show(context.getFragment().getChildFragmentManager(), null);
+                    fragment.setOnClassCreatedListener((className, template) -> {
                         try {
                             File createdFile = ProjectManager.createClass(context.getCurrentNode().getContent().getFile(),
                                     className, template);
@@ -73,14 +55,7 @@ public class CreateClassAction extends FileAction {
                                     .show();
                         }
                     });
-
-                    return true;
+                   return true;
                 });
-    }
-
-    private List<CodeTemplate> getTemplates() {
-        return Arrays.asList(new AbstractTemplate(),
-                new InterfaceTemplate(),
-                new JavaClassTemplate());
     }
 }

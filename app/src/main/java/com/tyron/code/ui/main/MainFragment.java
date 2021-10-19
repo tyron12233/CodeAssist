@@ -432,8 +432,8 @@ public class MainFragment extends Fragment {
                 ((CodeEditorFragment) fragment).setCursorPosition(lineNumber, column);
             }
         }, delay);
-        mRoot.closeDrawer(GravityCompat.START, true);
 
+        mRoot.closeDrawer(GravityCompat.START, true);
         mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
     }
 
