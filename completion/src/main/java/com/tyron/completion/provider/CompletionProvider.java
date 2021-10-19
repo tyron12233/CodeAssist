@@ -13,6 +13,7 @@ import com.tyron.common.util.StringSearch;
 import com.tyron.completion.drawable.CircleDrawable;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.completion.rewrite.EditHelper;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
@@ -426,7 +427,6 @@ public class CompletionProvider {
 
         Trees trees = Trees.instance(task.task);
         List<CompletionItem> list = new ArrayList<>();
-        HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         Scope scope = trees.getScope(path);
 
         Predicate<CharSequence> filter = p1 -> StringSearch.matchesPartialName(String.valueOf(p1), partial);
@@ -517,7 +517,7 @@ public class CompletionProvider {
                             ? label + " -> "
                             : "(" + label + ")" + " -> ";
                     item.commitText = item.label;
-                    item.detail = simpleName(sam.getReturnType().toString()).toString();
+                    item.detail = EditHelper.printType(sam.getReturnType());
                     item.cursorOffset = item.label.length();
                     item.iconKind = CircleDrawable.Kind.Lambda;
                     items.add(item);
@@ -562,7 +562,7 @@ public class CompletionProvider {
                         CompletionItem item = new CompletionItem();
                         item.iconKind = CircleDrawable.Kind.Interface;
                         item.label = classElement.getSimpleName().toString() + " {...}";
-                        item.commitText = "new " + classElement.getSimpleName() + "() {\n\t//TODO:\n}";
+                        item.commitText = "" + classElement.getSimpleName() + "() {\n\t//TODO:\n}";
                         item.cursorOffset = item.commitText.length();
                         item.detail = "";
 

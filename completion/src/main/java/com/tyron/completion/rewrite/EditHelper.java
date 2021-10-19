@@ -82,7 +82,7 @@ public class EditHelper {
         return buf.toString();
     }
 
-    private static String printBody(ExecutableElement method, MethodTree source) {
+    public static String printBody(ExecutableElement method, MethodTree source) {
         TypeMirror returnType = method.getReturnType();
         if (!method.getModifiers().contains(Modifier.ABSTRACT)) {
 
@@ -123,7 +123,7 @@ public class EditHelper {
      * @param source element from the .java file
      * @return Formatted string that represents the methods parameters with proper names
      */
-    private static String printParameters(ExecutableType method, MethodTree source) {
+    public static String printParameters(ExecutableType method, MethodTree source) {
         StringJoiner join = new StringJoiner(", ");
         for (int i = 0; i < method.getParameterTypes().size(); i++) {
             String type = EditHelper.printType(method.getParameterTypes().get(i));
@@ -141,7 +141,7 @@ public class EditHelper {
      * @param source the class file of the method
      * @return Formatted String that represents the parameters of this method
      */
-    private static String printParameters(ExecutableType method, ExecutableElement source) {
+    public static String printParameters(ExecutableType method, ExecutableElement source) {
         StringJoiner join = new StringJoiner(", ");
         for (int i = 0; i < method.getParameterTypes().size(); i++) {
             String type = EditHelper.printType(method.getParameterTypes().get(i));
@@ -151,7 +151,7 @@ public class EditHelper {
         return join.toString();
     }
 
-    static String printType(TypeMirror type) {
+    public static String printType(TypeMirror type) {
         if (type instanceof DeclaredType) {
             DeclaredType declared = (DeclaredType) type;
             String string = printTypeName((TypeElement) declared.asElement());
@@ -167,7 +167,7 @@ public class EditHelper {
         }
     }
 
-    private static String printTypeParameters(List<? extends TypeMirror> arguments) {
+    public static String printTypeParameters(List<? extends TypeMirror> arguments) {
         StringJoiner join = new StringJoiner(", ");
         for (TypeMirror a : arguments) {
             join.add(printType(a));
@@ -175,14 +175,14 @@ public class EditHelper {
         return join.toString();
     }
 
-    static String printTypeName(TypeElement type) {
+    public static String printTypeName(TypeElement type) {
         if (type.getEnclosingElement() instanceof TypeElement) {
             return printTypeName((TypeElement) type.getEnclosingElement()) + "." + type.getSimpleName();
         }
         return type.getSimpleName().toString();
     }
 
-    static int indent(JavacTask task, CompilationUnitTree root, ClassTree leaf) {
+    public static int indent(JavacTask task, CompilationUnitTree root, ClassTree leaf) {
         SourcePositions pos = Trees.instance(task).getSourcePositions();
         LineMap lines = root.getLineMap();
         long startClass = pos.getStartPosition(root, leaf);
