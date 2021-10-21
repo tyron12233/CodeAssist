@@ -28,7 +28,7 @@
             app:iconSpaceReserved="false"
             android:dialogTitle="@string/font_size_title"
             android:defaultValue="14"
-            android:inputType="number"
+            android:inputType="numberDecimal"
             android:digits="0123456789"
             android:title="@string/font_size_title"
             android:summary="@string/font_size_summary"
