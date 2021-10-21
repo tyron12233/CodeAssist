@@ -4,22 +4,13 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.graphics.Color;
 import android.os.Bundle;
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.method.LinkMovementMethod;
-import android.text.style.ClickableSpan;
-import android.text.style.ForegroundColorSpan;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.TextView;
 
-import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
-import androidx.core.content.res.ResourcesCompat;
 import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -30,16 +21,12 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.code.R;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainFragment;
-import com.tyron.code.ui.main.MainViewModel;
 
 import org.openjdk.javax.tools.Diagnostic;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 public class AppLogFragment extends Fragment {
 
@@ -52,12 +39,8 @@ public class AppLogFragment extends Fragment {
     }
 
     private int id;
-    private NestedScrollView mRoot;
     private LogAdapter mAdapter;
     private RecyclerView mRecyclerView;
-    private TextView mLogView;
-
-    private MainViewModel mMainViewModel;
 
     public AppLogFragment() {
 
@@ -67,13 +50,11 @@ public class AppLogFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         id = requireArguments().getInt("id");
-
-        mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     }
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        mRoot = new NestedScrollView(requireContext());
+        NestedScrollView mRoot = new NestedScrollView(requireContext());
         mRoot.setFillViewport(true);
 
         mAdapter = new LogAdapter();
