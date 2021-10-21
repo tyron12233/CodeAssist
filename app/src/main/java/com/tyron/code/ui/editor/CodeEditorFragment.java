@@ -24,6 +24,7 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.code.R;
+import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.ParseTask;
 import com.tyron.completion.Parser;
 import com.tyron.completion.action.CodeActionProvider;
@@ -64,7 +65,7 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 
 @SuppressWarnings("FieldCanBeLocal")
-public class CodeEditorFragment extends Fragment {
+public class CodeEditorFragment extends Fragment implements SharedPreferences.OnSharedPreferenceChangeListener {
 
     private LinearLayout mRoot;
     private LinearLayout mContent;
@@ -73,6 +74,7 @@ public class CodeEditorFragment extends Fragment {
     private EditorLanguage mLanguage;
     private File mCurrentFile = new File("");
     private MainViewModel mMainViewModel;
+    private SharedPreferences mPreferences;
 
     public static CodeEditorFragment newInstance(File file) {
         CodeEditorFragment fragment = new CodeEditorFragment();
@@ -122,7 +124,7 @@ public class CodeEditorFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        mPreferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
 
         mRoot = (LinearLayout) inflater.inflate(R.layout.code_editor_fragment, container, false);
         mContent = mRoot.findViewById(R.id.content);
@@ -131,15 +133,37 @@ public class CodeEditorFragment extends Fragment {
         mEditor.setEditorLanguage(mLanguage = LanguageManager.getInstance().get(mEditor, mCurrentFile));
         mEditor.setColorScheme(new SchemeDarcula());
         mEditor.setOverScrollEnabled(false);
-        mEditor.setTextSize(Integer.parseInt(preferences.getString("font_size", "12")));
+        mEditor.setTextSize(Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
         mEditor.setCurrentFile(mCurrentFile);
         mEditor.setTextActionMode(CodeEditor.TextActionMode.POPUP_WINDOW);
-        mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        if (mPreferences.getBoolean(SharedPreferenceKeys.KEYBOARD_ENABLE_SUGGESTIONS, false)) {
+            mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        }
         mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(), R.font.jetbrains_mono_regular));
         mEditor.setLigatureEnabled(true);
         mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         mContent.addView(mEditor, new FrameLayout.LayoutParams(-1, -1));
+
+        mPreferences.registerOnSharedPreferenceChangeListener(this);
         return mRoot;
+    }
+
+    @Override
+    public void onSharedPreferenceChanged(SharedPreferences pref, String key) {
+        if (mEditor == null) {
+            return;
+        }
+        switch (key) {
+            case SharedPreferenceKeys.FONT_SIZE:
+                mEditor.setTextSize(Integer.parseInt(pref.getString(key, "14")));
+                break;
+            case SharedPreferenceKeys.KEYBOARD_ENABLE_SUGGESTIONS:
+                if (pref.getBoolean(key, false)) {
+                    mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
+                } else {
+                    mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+                }
+        }
     }
 
     @Override
@@ -303,6 +327,13 @@ public class CodeEditorFragment extends Fragment {
                 mEditor.showContextMenu(event.getX(), event.getY());
             }
         });
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+        mPreferences.unregisterOnSharedPreferenceChangeListener(this);
     }
 
     public void save() {
