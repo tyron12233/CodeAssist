@@ -37,4 +37,17 @@
             android:negativeButtonText="@android:string/cancel"
             android:positiveButtonText="@android:string/ok"/>
     </PreferenceCategory>
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        android:title="Keyboard">
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:iconSpaceReserved="false"
+            android:key="keyboard_enable_suggestions"
+            app:iconSpaceReserved="false"
+            android:title="@string/keyboard_enable_suggestions_description" />
+
+    </PreferenceCategory>
 </PreferenceScreen>

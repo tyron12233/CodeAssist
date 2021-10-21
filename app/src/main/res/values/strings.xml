@@ -82,6 +82,8 @@
     <string name="font_size_title">Font size</string>
     <string name="font_size_message">Set editor font size</string>
     <string name="font_size_summary">Specify the default font size of the editor</string>
+    <string name="keyboard_settings_title">Keyboard</string>
+    <string name="keyboard_enable_suggestions_description">Enable keyboard suggestions</string>
 
     <!-- file manager menu -->
     <string name="menu_action_new_java_class">Java class file</string>
