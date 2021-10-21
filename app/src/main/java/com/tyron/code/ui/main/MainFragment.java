@@ -37,6 +37,7 @@ import com.tyron.builder.model.Project;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.service.CompilerService;
+import com.tyron.code.service.IndexService;
 import com.tyron.code.ui.editor.BottomEditorFragment;
 import com.tyron.code.ui.editor.CodeEditorFragment;
 import com.tyron.code.ui.editor.language.LanguageManager;
@@ -89,6 +90,7 @@ public class MainFragment extends Fragment {
     private Project mProject;
     private BuildType mBuildType;
     private CompilerService.CompilerBinder mBinder;
+    private IndexService.IndexBinder mIndexBinder;
     private final ServiceConnection mServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
@@ -141,7 +143,62 @@ public class MainFragment extends Fragment {
             }
         }
     };
+    private final ServiceConnection mIndexServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+            mIndexBinder = (IndexService.IndexBinder) iBinder;
 
+            ProjectManager.TaskListener taskListener = new ProjectManager.TaskListener() {
+                @Override
+                public void onTaskStarted(String message) {
+                    if (getActivity() == null) {
+                        return;
+                    }
+                    requireActivity().runOnUiThread(() -> mFilesViewModel.setCurrentState(message));
+                }
+
+                @Override
+                public void onComplete(boolean success, String message) {
+                    if (getActivity() == null) {
+                        return;
+                    }
+
+                    requireActivity().runOnUiThread(() -> {
+                        mFilesViewModel.setIndexing(false);
+                        mFilesViewModel.setCurrentState(null);
+                        if (!success) {
+                            if (mBehavior.getState() != BottomSheetBehavior.STATE_EXPANDED) {
+                                mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                            }
+                        } else {
+                            if (mProjectManager.getCurrentProject() != null) {
+                                mToolbar.setTitle(mProject.mRoot.getName());
+                            }
+                        }
+                        int pos = mPager.getCurrentItem();
+                        Fragment fragment = getChildFragmentManager()
+                                .findFragmentByTag("f" + mAdapter.getItemId(pos));
+                        if (fragment instanceof CodeEditorFragment) {
+                            ((CodeEditorFragment) fragment).analyze();
+                        }
+                    });
+                    requireActivity().runOnUiThread(() -> {
+                        Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
+                        if (fragment instanceof TreeFileManagerFragment) {
+                            ((TreeFileManagerFragment) fragment).setRoot(mProject.mRoot);
+                        }
+                    });
+                }
+            };
+
+            mIndexBinder.index(mProject, taskListener, ILogger.wrap(logViewModel));
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName componentName) {
+            mIndexBinder = null;
+        }
+    };
     public MainFragment() {
 
     }
@@ -460,49 +517,9 @@ public class MainFragment extends Fragment {
         mFilesViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
 
-        mProjectManager.openProject(proj, downloadLibs, new ProjectManager.TaskListener() {
-            @Override
-            public void onTaskStarted(String message) {
-                if (getActivity() == null) {
-                    return;
-                }
-                requireActivity().runOnUiThread(() -> mFilesViewModel.setCurrentState(message));
-            }
-
-            @Override
-            public void onComplete(boolean success, String message) {
-                if (getActivity() == null) {
-                    return;
-                }
-
-                requireActivity().runOnUiThread(() -> {
-                    mFilesViewModel.setIndexing(false);
-                    mFilesViewModel.setCurrentState(null);
-                    if (!success) {
-                        if (mBehavior.getState() != BottomSheetBehavior.STATE_EXPANDED) {
-                            mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
-                        }
-                    } else {
-                        if (mProjectManager.getCurrentProject() != null) {
-                            mToolbar.setTitle(mProject.mRoot.getName());
-                        }
-                    }
-                    int pos = mPager.getCurrentItem();
-                    Fragment fragment = getChildFragmentManager()
-                            .findFragmentByTag("f" + mAdapter.getItemId(pos));
-                    if (fragment instanceof CodeEditorFragment) {
-                        ((CodeEditorFragment) fragment).analyze();
-                    }
-                });
-            }
-        }, ILogger.wrap(logViewModel));
-
-        requireActivity().runOnUiThread(() -> {
-            Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
-            if (fragment instanceof TreeFileManagerFragment) {
-                ((TreeFileManagerFragment) fragment).setRoot(proj.mRoot);
-            }
-        });
+        requireActivity().startService(new Intent(requireContext(), IndexService.class));
+        requireActivity().bindService(new Intent(requireContext(), IndexService.class),
+                mIndexServiceConnection, Context.BIND_IMPORTANT);
     }
 
     /**
