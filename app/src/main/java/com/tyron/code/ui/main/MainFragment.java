@@ -197,6 +197,8 @@ public class MainFragment extends Fragment {
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
             mIndexBinder = null;
+            mFilesViewModel.setIndexing(false);
+            mFilesViewModel.setCurrentState(null);
         }
     };
     public MainFragment() {
@@ -364,7 +366,7 @@ public class MainFragment extends Fragment {
         });
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_refresh) {
-                if (mBinder == null) {
+                if (mBinder == null && mIndexBinder == null) {
                     Project project = ProjectManager.getInstance()
                             .getCurrentProject();
 
@@ -546,7 +548,7 @@ public class MainFragment extends Fragment {
     }
 
     private void compile(BuildType type) {
-        if (mBinder != null) {
+        if (mBinder != null || mIndexBinder != null) {
             return;
         }
 
