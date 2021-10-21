@@ -30,6 +30,10 @@ import android.util.Log;
 
 public class DependencyResolver {
 
+    public interface Listener {
+        void onResolve(Dependency dependency);
+    }
+
     private static final String TAG = DependencyResolver.class.getSimpleName();
     private static final List<String> REPOS = Arrays.asList(
             "https://repo1.maven.org/maven2",
@@ -38,8 +42,7 @@ public class DependencyResolver {
             "https://jcenter.bintray.com/"
     );
     private final File mOutputDir;
-    private final ExecutorService service = Executors.newFixedThreadPool(4);
-    private final Handler mainThread = new Handler(Looper.getMainLooper());
+    private Listener mListener;
     private final Set<Dependency> library;
 
     public DependencyResolver(Dependency library, File file) {
@@ -49,6 +52,10 @@ public class DependencyResolver {
     public DependencyResolver(Set<Dependency> library, File file) {
         this.library = library;
         mOutputDir = file;
+    }
+
+    public void setListener(Listener listener) {
+        mListener = listener;
     }
 
     /**
@@ -80,6 +87,9 @@ public class DependencyResolver {
     private final Map<Dependency, String> mResolvedLibraries = new HashMap<>();
 
     private void resolveDependency(Dependency parent) {
+        if (mListener != null) {
+            mListener.onResolve(parent);
+        }
         if (mResolvedLibraries.containsKey(parent)) {
             String resolvedVersion = mResolvedLibraries.get(parent);
             String thisVersion = parent.getVersion();

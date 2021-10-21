@@ -46,7 +46,7 @@ public class IndexService extends Service {
         updateNotification(notification);
         startForeground(NOTIFICATION_ID, notification);
 
-        return super.onStartCommand(intent, flags, startId);
+        return START_STICKY;
     }
 
     private void index(Project project, ProjectManager.TaskListener listener, ILogger logger) {
@@ -68,6 +68,7 @@ public class IndexService extends Service {
             public void onComplete(boolean success, String message) {
                 listener.onComplete(success, message);
                 stopForeground(true);
+                stopSelf();
             }
         };
         ProjectManager.getInstance()

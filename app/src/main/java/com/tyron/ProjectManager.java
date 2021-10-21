@@ -1,5 +1,7 @@
 package com.tyron;
 
+import android.util.Log;
+
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.Project;
@@ -43,7 +45,6 @@ public class ProjectManager {
         Executors.newSingleThreadExecutor().execute(() -> {
             if (downloadLibs) {
                 mListener.onTaskStarted("Resolving dependencies");
-
                 // this is the existing libraries from app/libs
                 Set<Dependency> libs = DependencyUtils.fromLibs(proj.getLibraryDirectory());
 
@@ -58,10 +59,12 @@ public class ProjectManager {
 
                 DependencyResolver resolver = new DependencyResolver(dependencies, proj.getLibraryDirectory());
                 resolver.addResolvedLibraries(libs);
+                resolver.setListener(d -> mListener.onTaskStarted("Resolving " + d.toString()));
                 dependencies = resolver.resolveMain();
 
                 mListener.onTaskStarted("Downloading dependencies");
                 DependencyDownloader downloader = new DependencyDownloader(libs, proj.getLibraryDirectory());
+                downloader.setListener(d -> mListener.onTaskStarted("Downloading " + d.toString()));
                 try {
                     downloader.download(dependencies);
                 } catch (IOException e) {
@@ -69,7 +72,6 @@ public class ProjectManager {
                 }
             }
             mListener.onTaskStarted("Indexing");
-
             try {
                 proj.open();
             } catch(IOException e) {

@@ -17,14 +17,23 @@ import java.util.Set;
 
 public class DependencyDownloader {
 
+    public interface Listener {
+        void onDownload(Dependency dependency);
+    }
+
     private static final String TAG = DependencyDownloader.class.getSimpleName();
 
     private File mOutputDir;
     private Set<Dependency> mDownloadedLibraries;
+    private Listener mListener;
 
     public DependencyDownloader(Set <Dependency> downloaded, File file) {
         mOutputDir = file;
         mDownloadedLibraries = downloaded;
+    }
+
+    public void setListener(Listener listener) {
+        mListener = listener;
     }
 
     public void download(Set<Dependency> libraries) throws IOException {
@@ -39,6 +48,9 @@ public class DependencyDownloader {
     }
 
     private void download(Dependency library) throws IOException {
+        if (mListener != null) {
+            mListener.onDownload(library);
+        }
 
         // first we check if the library exists or there is an older version of it
         for (Dependency downloaded : mDownloadedLibraries) {
