@@ -71,8 +71,22 @@ public class IndexService extends Service {
                 stopSelf();
             }
         };
-        ProjectManager.getInstance()
-                .openProject(project, true, delegate, logger);
+
+        try {
+            ProjectManager.getInstance()
+                    .openProject(project, true, delegate, logger);
+        } catch (Throwable e) {
+            stopForeground(true);
+            Notification notification = new NotificationCompat.Builder(IndexService.this, "Index")
+                    .setProgress(100, 0, true)
+                    .setSmallIcon(R.drawable.ic_launcher)
+                    .setContentTitle("Indexing error")
+                    .setContentText("Unknown error: " + e.getMessage())
+                    .build();
+            updateNotification(notification);
+            stopSelf();
+            throw e;
+        }
     }
 
     private String createNotificationChannel() {
