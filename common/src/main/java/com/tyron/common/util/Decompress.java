@@ -20,8 +20,9 @@ public class Decompress {
         try {
             if (destination == null || destination.length() == 0)
                 destination = context.getFilesDir().getAbsolutePath();
-            InputStream stream = context.getAssets().open(zipFile);
-            unzip(stream, destination);
+            try (InputStream stream = context.getAssets().open(zipFile)) {
+                unzip(stream, destination);
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -29,13 +30,11 @@ public class Decompress {
 
     @SuppressWarnings("unused")
     public static void unzip(String zipFile, String location) {
-        try {
-            FileInputStream fin = new FileInputStream(zipFile);
+        try (FileInputStream fin = new FileInputStream(zipFile)) {
             unzip(fin, location);
-        } catch (FileNotFoundException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
 
     public static void unzip(InputStream stream, String destination) {
