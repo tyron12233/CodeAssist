@@ -98,9 +98,6 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
 
     @Override
     public int getItemCount() {
-        if (mProjects.isEmpty()) {
-            return 1;
-        }
         return mProjects.size();
     }
 
