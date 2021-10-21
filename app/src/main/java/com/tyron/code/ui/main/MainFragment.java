@@ -114,15 +114,16 @@ public class MainFragment extends Fragment {
                         mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
                     }
                 }
-                if (success && getActivity() != null) {
-                    logger.debug(message);
-                    logViewModel.clear(LogViewModel.APP_LOG);
-
-                    File file = new File(mProjectManager.getCurrentProject().getBuildDirectory(), "bin/signed.apk");
-                    mProgressBar.postDelayed(() -> ApkInstaller.installApplication(requireActivity(), file.getAbsolutePath()), 300);
-                }
 
                 if (getActivity() != null) {
+                    if (success) {
+                        logger.debug(message);
+                        logViewModel.clear(LogViewModel.APP_LOG);
+
+                        File file = new File(mProjectManager.getCurrentProject().getBuildDirectory(), "bin/signed.apk");
+                        mProgressBar.postDelayed(() -> ApkInstaller.installApplication(requireContext(), file.getAbsolutePath()), 400);
+                    }
+
                     mBinder = null;
                     requireActivity().unbindService(this);
                 }

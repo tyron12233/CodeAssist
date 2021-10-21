@@ -15,6 +15,8 @@ import java.io.File;
 
 public class ApkInstaller {
 
+    private static final String TAG = ApkInstaller.class.getSimpleName();
+
     public static void installApplication(Context context, String filePath) {
         Intent intent = new Intent(Intent.ACTION_VIEW);
         intent.setDataAndType(uriFromFile(context, new File(filePath)), "application/vnd.android.package-archive");
@@ -24,7 +26,7 @@ public class ApkInstaller {
             context.startActivity(intent);
         } catch (ActivityNotFoundException e) {
             e.printStackTrace();
-            Log.e("TAG", "Error in opening the file!");
+            Log.e(TAG, "Error in opening the file!");
         }
     }
 
