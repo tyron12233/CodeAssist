@@ -23,12 +23,15 @@ import androidx.core.content.res.ResourcesCompat;
 import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.tyron.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.R;
+import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 
@@ -50,8 +53,9 @@ public class AppLogFragment extends Fragment {
 
     private int id;
     private NestedScrollView mRoot;
+    private LogAdapter mAdapter;
+    private RecyclerView mRecyclerView;
     private TextView mLogView;
-    private boolean mIgnoreProcess;
 
     private MainViewModel mMainViewModel;
 
@@ -72,13 +76,22 @@ public class AppLogFragment extends Fragment {
         mRoot = new NestedScrollView(requireContext());
         mRoot.setFillViewport(true);
 
-        mLogView = new TextView(requireContext());
-        mLogView.setTypeface(ResourcesCompat.getFont(requireContext(), R.font.jetbrains_mono_regular));
-        mLogView.setMovementMethod(LinkMovementMethod.getInstance());
-        mLogView.setVerticalScrollBarEnabled(true);
-        mLogView.setTextColor(0xffFFFFFF);
-
-        mRoot.addView(mLogView, new FrameLayout.LayoutParams(-1, -1));
+        mAdapter = new LogAdapter();
+        mAdapter.setListener(diagnostic -> {
+            // MainFragment -> BottomEditorFragment -> AppLogFragment
+            Fragment parent = getParentFragment();
+            if (parent != null) {
+                Fragment main = parent.getParentFragment();
+                if (main instanceof MainFragment) {
+                    ((MainFragment) main).openFile(diagnostic.getSource(),
+                            (int) diagnostic.getLineNumber() - 1, 0);
+                }
+            }
+        });
+        mRecyclerView = new RecyclerView(requireContext());
+        mRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
+        mRecyclerView.setAdapter(mAdapter);
+        mRoot.addView(mRecyclerView, new FrameLayout.LayoutParams(-1, -1));
         return mRoot;
     }
 
@@ -131,72 +144,12 @@ public class AppLogFragment extends Fragment {
         }
     }
 
-    private void process(List<DiagnosticWrapper> text) {
-        if (mIgnoreProcess) {
-            return;
-        }
-        mIgnoreProcess = true;
+    private void process(List<DiagnosticWrapper> texts) {
+        mAdapter.submitList(texts);
 
-        SpannableStringBuilder builder = new SpannableStringBuilder();
-
-        for (DiagnosticWrapper diagnostic : new ArrayList<>(text)) {
-
-            if (diagnostic.getKind() != null) {
-                builder.append(diagnostic.getKind().name() + ": ", new ForegroundColorSpan(getColor(diagnostic.getKind())), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            }
-            builder.append(diagnostic.getMessage(Locale.getDefault()));
-            if (diagnostic.getSource() != null) {
-                builder.append(' ');
-                addClickableFile(builder, diagnostic);
-            }
-            builder.append('\n');
-
-        }
-        mLogView.setText(builder);
-
-        if (mRoot.canScrollVertically(-1)) {
-            mRoot.scrollTo(0, mLogView.getBottom());
-        }
-
-        mIgnoreProcess = false;
-    }
-
-    @ColorInt
-    private int getColor(Diagnostic.Kind kind) {
-        switch (kind) {
-            case ERROR:
-                return 0xffcf6679;
-            case WARNING:
-                return Color.YELLOW;
-            case NOTE:
-                return Color.BLUE;
-            default:
-                return 0xffFFFFFF;
+        if (mRecyclerView.canScrollVertically(-1)) {
+            mRecyclerView.scrollToPosition(mAdapter.getItemCount());
         }
     }
 
-    private void addClickableFile(SpannableStringBuilder sb, final DiagnosticWrapper diagnostic) {
-        if (diagnostic.getSource() == null || !diagnostic.getSource().exists()) {
-            return;
-        }
-        ClickableSpan span = new ClickableSpan() {
-            @Override
-            public void onClick(@NonNull View view) {
-                // MainFragment -> BottomEditorFragment -> AppLogFragment
-                Fragment parent = getParentFragment();
-                if (parent != null) {
-                    Fragment main = parent.getParentFragment();
-                    if (main instanceof MainFragment) {
-                        ((MainFragment) main).openFile(diagnostic.getSource(),
-                                (int) diagnostic.getLineNumber() - 1, 0);
-                    }
-                }
-            }
-        };
-
-        String label = diagnostic.getSource().getName();
-        label = label + ":" + diagnostic.getLineNumber();
-
-        sb.append("[" + label + "]", span, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-    }
 }

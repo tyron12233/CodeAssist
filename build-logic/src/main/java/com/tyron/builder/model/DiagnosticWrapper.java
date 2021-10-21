@@ -1,10 +1,13 @@
 package com.tyron.builder.model;
 
+import androidx.annotation.Nullable;
+
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
 
 import java.io.File;
 import java.util.Locale;
+import java.util.Objects;
 
 public class DiagnosticWrapper implements Diagnostic<File> {
     
@@ -130,5 +133,38 @@ public class DiagnosticWrapper implements Diagnostic<File> {
 
     public void setExtra(Object mExtra) {
         this.mExtra = mExtra;
+    }
+
+    @Override
+    public boolean equals(@Nullable Object obj) {
+        if (obj instanceof DiagnosticWrapper) {
+            DiagnosticWrapper that = (DiagnosticWrapper) obj;
+
+            if (that.message != null && this.message == null) {
+                return false;
+            }
+
+            if (that.message == null && this.message != null) {
+                return false;
+            }
+
+            if (!Objects.equals(that.message, this.message)) {
+                return false;
+            }
+
+            if (!Objects.equals(that.source, this.source)) {
+                return false;
+            }
+
+            if (that.lineNumber != this.lineNumber) {
+                return false;
+            }
+
+            if (that.columnNumber != this.columnNumber) {
+                return false;
+            }
+            return true;
+        }
+        return super.equals(obj);
     }
 }
