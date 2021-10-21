@@ -37,7 +37,7 @@ public class ApkBuilder {
     }
 
     public interface TaskListener {
-        void onTaskStarted(String name, String message);
+        void onTaskStarted(String name, String message, int progress);
     }
 
     private final ILogger log;
@@ -78,10 +78,14 @@ public class ApkBuilder {
     private void doBuild(BuildType type) throws IOException, CompilationFailedException {
         List<Task> tasks = getTasks();
         List<Task> tasksRan = new ArrayList<>();
+        int totalTasks = tasks.size();
 
-        for (Task task : tasks) {
+        for (int i = 0; i < totalTasks; i++) {
+            Task task = tasks.get(i);
+            final float currentPos = i;
             try {
-                post(() -> mTaskListener.onTaskStarted(task.getName(), "Task started."));
+                post(() -> mTaskListener.onTaskStarted(task.getName(), "Task started.",
+                        (int) ((currentPos / (float) totalTasks) * 100f)));
                 task.prepare(mProject, log, type);
                 task.run();
             } catch (CompilationFailedException | IOException e) {

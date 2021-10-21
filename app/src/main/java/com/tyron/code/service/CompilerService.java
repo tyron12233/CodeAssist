@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationChannelCompat;
@@ -102,28 +103,29 @@ public class CompilerService extends Service {
 
         String channelId = createNotificationChannel();
 
-        return new NotificationCompat.Builder(this, channelId)
-                .setContentTitle("CodeAssist")
+        Notification notification = new NotificationCompat.Builder(this, channelId)
+                .setContentTitle(getString(R.string.app_name))
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentText("Preparing")
-                .setPriority(Notification.PRIORITY_MIN)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setOngoing(true)
-            .build();
+                .setProgress(100, 0, true)
+                .build();
+        return notification;
     }
 
-    private void updateNotification(String title, String message) {
-        if (!shouldShowNotification) {
-            return;
-        }
-        Notification notif = new NotificationCompat.Builder(this, "Compiler")
+    private void updateNotification(String title, String message, int progress) {
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "Compiler")
                 .setContentTitle(title)
                 .setContentText(message)
                 .setSmallIcon(R.drawable.ic_launcher)
-                .setPriority(Notification.PRIORITY_MIN)
-                .build();
+                .setPriority(Notification.PRIORITY_HIGH);
 
+        if (progress != -1) {
+            builder.setProgress(100, progress, false);
+        }
         NotificationManagerCompat.from(this)
-                .notify(201, notif);
+                .notify(201, builder.build());
     }
 
     private String createNotificationChannel() {
@@ -155,7 +157,7 @@ public class CompilerService extends Service {
             }
 
             if (shouldShowNotification) {
-                updateNotification("Compilation failed", "Unable to open project");
+                updateNotification("Compilation failed", "Unable to open project", -1);
             }
             return;
         }
@@ -171,8 +173,12 @@ public class CompilerService extends Service {
             stopForeground(true);
 
             if (!success) {
-                updateNotification(projectName, "Compilation failed");
+                updateNotification(projectName, "Compilation failed", -1);
             } else {
+                if (!shouldShowNotification) {
+                    return;
+                }
+
                 Intent intent = new Intent(Intent.ACTION_VIEW);
                 intent.setDataAndType(ApkInstaller.uriFromFile(this, new File(mProject.getBuildDirectory(), "bin/signed.apk")), "application/vnd.android.package-archive");
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
