@@ -12,6 +12,8 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.component.tree.TreeView;
 import com.tyron.code.ui.file.action.FileActionManager;
@@ -24,6 +26,9 @@ import com.tyron.code.ui.main.MainViewModel;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 
 public class TreeFileManagerFragment extends Fragment {
 
@@ -57,9 +62,14 @@ public class TreeFileManagerFragment extends Fragment {
                         FrameLayout.LayoutParams.MATCH_PARENT));
 
         treeView = new TreeView<>(
-                requireContext(), TreeNode.root(getNodes())
-        );
+                requireContext(), TreeNode.root());
 
+        CompletableFuture.supplyAsync(() ->
+             TreeNode.root(getNodes())
+        ).thenApply(nodes -> {
+            treeView.refreshTreeView(nodes);
+            return null;
+        });
         root.addView(treeView.getView(), new FrameLayout.LayoutParams(-1, -1));
         return root;
     }
@@ -125,7 +135,11 @@ public class TreeFileManagerFragment extends Fragment {
 
     public void refresh() {
         if (treeView != null) {
-            treeView.refreshTreeView(TreeNode.root(getNodes()));
+            CompletableFuture.supplyAsync(() -> TreeNode.root(getNodes()))
+                    .thenApply(nodes -> {
+                        treeView.refreshTreeView(nodes);
+                        return null;
+                    });
         }
     }
 
