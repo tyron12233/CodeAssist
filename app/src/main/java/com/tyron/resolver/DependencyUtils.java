@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 public class DependencyUtils {
 
     private static final Pattern GRADLE_IMPL = Pattern.compile("\\s*(implementation)\\s*(')([a-zA-Z0-9.'/-:\\-]+)(')");
+    private static final Pattern GRADLE_IMPL_QUOT = Pattern.compile("\\s*(implementation)\\s*(\")([a-zA-Z0-9.'/-:\\-]+)(\")");
     /**
      * Parses a build.gradle file and gets the dependencies out of it
      * @param file input build.gradle file
@@ -30,6 +31,18 @@ public class DependencyUtils {
 
         List<Dependency> deps = new ArrayList<>();
         while (matcher.find()) {
+            String declaration = matcher.group(3);
+            try {
+                Dependency dependency = Dependency.from(declaration);
+                dependency.setUserDefined(true);
+                deps.add(dependency);
+            } catch (IllegalArgumentException e) {
+                throw new Exception("Cannot parse build.gradle: " + e.getMessage());
+            }
+        }
+
+        matcher = GRADLE_IMPL_QUOT.matcher(readString);
+        while(matcher.find()) {
             String declaration = matcher.group(3);
             try {
                 Dependency dependency = Dependency.from(declaration);

@@ -94,24 +94,28 @@ public class DependencyResolver {
             String resolvedVersion = mResolvedLibraries.get(parent);
             String thisVersion = parent.getVersion();
 
-            int result = new ComparableVersion(resolvedVersion)
-                    .compareTo(new ComparableVersion(thisVersion));
+            try {
+                int result = new ComparableVersion(resolvedVersion)
+                        .compareTo(new ComparableVersion(thisVersion));
 
-            if (result == 0) {
-                Log.d(TAG, "Skipping resolution of " + parent.getAtrifactId());
-                return;
-            }
-
-            if (parent.isUserDefined()) {
-                mResolvedLibraries.remove(parent);
-            } else {
-                if (result > 0) {
-                    // we have already resolved a version more recent than this one
+                if (result == 0) {
+                    Log.d(TAG, "Skipping resolution of " + parent.getAtrifactId());
                     return;
-                } else {
-                    Log.d(TAG, "Found old version of library " + parent.getAtrifactId() + "\nold: " + resolvedVersion + "\nnew: " + thisVersion);
-                    mResolvedLibraries.remove(parent);
                 }
+
+                if (parent.isUserDefined()) {
+                    mResolvedLibraries.remove(parent);
+                } else {
+                    if (result > 0) {
+                        // we have already resolved a version more recent than this one
+                        return;
+                    } else {
+                        Log.d(TAG, "Found old version of library " + parent.getAtrifactId() + "\nold: " + resolvedVersion + "\nnew: " + thisVersion);
+                        mResolvedLibraries.remove(parent);
+                    }
+                }
+            } catch (Throwable ignore) {
+                // Keep both
             }
         }
 
