@@ -56,6 +56,7 @@ public class IncrementalKotlinCompiler extends Task {
         project.clearRJavaFiles();
         mFilesToCompile = new ArrayList<>(getSourceFiles(project.getJavaDirectory()));
         mFilesToCompile.addAll(project.getRJavaFiles().values());
+        mFilesToCompile.addAll(project.getKotlinFiles().values());
 
         mKotlinHome = new File(BuildModule.getContext().getFilesDir(), "kotlin-home");
         if (!mKotlinHome.exists() && !mKotlinHome.mkdirs()) {
