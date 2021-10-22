@@ -228,48 +228,7 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
             }
             mEditor.postHideCompletionWindow();
         });
-        mEditor.setEventListener(new EditorEventListener() {
 
-            @Override
-            public boolean onRequestFormat(@NonNull CodeEditor editor) {
-                return false;
-            }
-
-            @Override
-            public boolean onFormatFail(@NonNull CodeEditor editor, Throwable cause) {
-                return false;
-            }
-
-            @Override
-            public void onFormatSucceed(@NonNull CodeEditor editor) {
-
-            }
-
-            @Override
-            public void onNewTextSet(@NonNull CodeEditor editor) {
-
-            }
-
-            @Override
-            public void afterDelete(@NonNull CodeEditor editor, @NonNull CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence deletedContent) {
-                FileManager.writeFile(mCurrentFile, String.valueOf(content));
-            }
-
-            @Override
-            public void afterInsert(@NonNull CodeEditor editor, @NonNull CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence insertedContent) {
-                FileManager.writeFile(mCurrentFile, String.valueOf(content));
-            }
-
-            @Override
-            public void beforeReplace(@NonNull CodeEditor editor, @NonNull CharSequence content) {
-
-            }
-
-            @Override
-            public void onSelectionChanged(@NonNull CodeEditor editor, @NonNull Cursor cursor) {
-
-            }
-        });
         mEditor.setOnLongPressListener((start, end, event) -> {
             Project project = ProjectManager.getInstance().getCurrentProject();
             if (mLanguage instanceof JavaLanguage && project != null) {
