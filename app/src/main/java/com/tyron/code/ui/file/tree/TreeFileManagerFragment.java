@@ -23,12 +23,24 @@ import com.tyron.code.ui.main.MainViewModel;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 
 public class TreeFileManagerFragment extends Fragment {
+
+    private static final Comparator<File> FILE_FIRST_ORDER = (file1, file2) -> {
+        if (file1.isFile() && file2.isDirectory()) {
+            return -1;
+        } else if (file2.isFile() && file1.isDirectory()) {
+            return 1;
+        } else {
+            return String.CASE_INSENSITIVE_ORDER.compare(file1.getName(), file2.getName());
+        }
+    };
 
     public static TreeFileManagerFragment newInstance(File root) {
         TreeFileManagerFragment fragment = new TreeFileManagerFragment();
@@ -150,6 +162,7 @@ public class TreeFileManagerFragment extends Fragment {
 
         File[] children = mRootFile.listFiles();
         if (children != null) {
+            Arrays.sort(children, FILE_FIRST_ORDER);
             for (File file : children) {
                 addNode(root, file, 1);
             }
@@ -166,6 +179,7 @@ public class TreeFileManagerFragment extends Fragment {
         if (file.isDirectory()) {
             File[] children = file.listFiles();
             if (children != null) {
+                Arrays.sort(children, FILE_FIRST_ORDER);
                 for (File child : children) {
                     addNode(childNode, child, level + 1);
                 }
