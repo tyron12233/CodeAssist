@@ -124,10 +124,9 @@ public class CompletionEngine {
 
         try {
             return new CompletionProvider(getCompiler(project)).complete(file, contents, cursor);
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
             Log.d(TAG, "Completion failed: " + Log.getStackTraceString(e) + " Clearing cache.");
             mProvider = null;
-            index(FileManager.getInstance().getCurrentProject(), null);
         }
         return CompletionList.EMPTY;
     }
