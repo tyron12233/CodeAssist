@@ -181,9 +181,8 @@ public class MainFragment extends Fragment {
                         if (fragment instanceof CodeEditorFragment) {
                             ((CodeEditorFragment) fragment).analyze();
                         }
-                    });
-                    requireActivity().runOnUiThread(() -> {
-                        Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
+
+                        fragment = getChildFragmentManager().findFragmentByTag("file_manager");
                         if (fragment instanceof TreeFileManagerFragment) {
                             ((TreeFileManagerFragment) fragment).setRoot(mProject.mRoot);
                         }
@@ -440,10 +439,12 @@ public class MainFragment extends Fragment {
             }
             getChildFragmentManager().beginTransaction()
                     .replace(R.id.nav_root, TreeFileManagerFragment.newInstance(root), "file_manager")
-                    .commitNow();
+                    .commit();
         }
 
-        openProject(mProject);
+        if (mProject != null) {
+            mRoot.postDelayed(() -> openProject(mProject), 200  );
+        }
     }
 
     @Override

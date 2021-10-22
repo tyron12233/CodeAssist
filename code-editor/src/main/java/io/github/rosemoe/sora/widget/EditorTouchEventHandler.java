@@ -337,7 +337,7 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
                     downY = e.getY();
                     downX = e.getX();
 
-                    insert = new NativeSelectionHandle(SelectionHandle.BOTH);
+                    insert = new SelectionHandle(SelectionHandle.BOTH);
                 }
                 boolean left = mEditor.getLeftHandleRect().contains(e.getX(), e.getY());
                 boolean right = mEditor.getRightHandleRect().contains(e.getX(), e.getY());
@@ -352,8 +352,8 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
                     downY = e.getY();
                     downX = e.getX();
 
-                    this.left = new NativeSelectionHandle(SelectionHandle.LEFT);
-                    this.right = new NativeSelectionHandle(SelectionHandle.RIGHT);
+                    this.left = new SelectionHandle(SelectionHandle.LEFT);
+                    this.right = new SelectionHandle(SelectionHandle.RIGHT);
 
                 }
                 return true;
