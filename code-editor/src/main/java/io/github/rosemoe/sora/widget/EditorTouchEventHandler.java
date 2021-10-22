@@ -337,7 +337,7 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
                     downY = e.getY();
                     downX = e.getX();
 
-                    insert = new SelectionHandle(SelectionHandle.BOTH);
+                    insert = new NativeSelectionHandle(SelectionHandle.BOTH);
                 }
                 boolean left = mEditor.getLeftHandleRect().contains(e.getX(), e.getY());
                 boolean right = mEditor.getRightHandleRect().contains(e.getX(), e.getY());
@@ -352,8 +352,8 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
                     downY = e.getY();
                     downX = e.getX();
 
-                    this.left = new SelectionHandle(SelectionHandle.LEFT);
-                    this.right = new SelectionHandle(SelectionHandle.RIGHT);
+                    this.left = new NativeSelectionHandle(SelectionHandle.LEFT);
+                    this.right = new NativeSelectionHandle(SelectionHandle.RIGHT);
 
                 }
                 return true;
@@ -839,7 +839,7 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
          */
         public void applyPosition(MotionEvent e) {
             float targetX = mScroller.getCurrX() + e.getX();
-            float targetY = mScroller.getCurrY() + e.getY() - Math.max(mEditor.getInsertHandleRect().height(), mEditor.getRightHandleRect().height()) * 4 / 3;
+            float targetY = mScroller.getCurrY() + e.getY() - Math.max(mEditor.getInsertHandleRect().height(), mEditor.getRightHandleRect().height()) * 4 / 2;
             int line = IntPair.getFirst(mEditor.getPointPosition(0, targetY));
             if (line >= 0 && line < mEditor.getLineCount()) {
                 int column = IntPair.getSecond(mEditor.getPointPosition(targetX, targetY));
@@ -856,7 +856,7 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
                             break;
                         case RIGHT:
                             if (anotherLine > line || (anotherLine == line && anotherColumn > column)) {
-                                //Swap type
+//                                //Swap type
                                 EditorTouchEventHandler.this.mSelHandleType = LEFT;
                                 this.type = LEFT;
                                 left.type = RIGHT;
@@ -878,6 +878,67 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
                                 right = left;
                                 left = tmp;
                                 mEditor.setSelectionRegion(anotherLine, anotherColumn, line, column, false);
+                            } else {
+                                mEditor.setSelectionRegion(line, column, anotherLine, anotherColumn, false);
+                            }
+                            break;
+                    }
+                }
+            }
+
+            if (mEditor.getTextActionPresenter() instanceof TextActionPopupWindow) {
+                mEditor.getTextActionPresenter().onUpdate(TextActionPopupWindow.DRAG);
+            } else {
+                mEditor.getTextActionPresenter().onUpdate();
+            }
+        }
+
+    }
+
+    private class NativeSelectionHandle extends SelectionHandle {
+
+        /**
+         * Create a handle
+         *
+         * @param type Type :left,right,both
+         */
+        public NativeSelectionHandle(int type) {
+            super(type);
+        }
+
+        /**
+         * Handle the event
+         *
+         * @param e Event sent by EventHandler
+         */
+        public void applyPosition(MotionEvent e) {
+            float targetX = mScroller.getCurrX() + e.getX();
+            float targetY = mScroller.getCurrY() + e.getY() - Math.max(mEditor.getInsertHandleRect().height(), mEditor.getRightHandleRect().height()) * 4 / 3;
+            int line = IntPair.getFirst(mEditor.getPointPosition(0, targetY));
+            if (line >= 0 && line < mEditor.getLineCount()) {
+                int column = IntPair.getSecond(mEditor.getPointPosition(targetX, targetY));
+                int lastLine = type == RIGHT ? mEditor.getCursor().getRightLine() : mEditor.getCursor().getLeftLine();
+                int lastColumn = type == RIGHT ? mEditor.getCursor().getRightColumn() : mEditor.getCursor().getLeftColumn();
+                int anotherLine = type != RIGHT ? mEditor.getCursor().getRightLine() : mEditor.getCursor().getLeftLine();
+                int anotherColumn = type != RIGHT ? mEditor.getCursor().getRightColumn() : mEditor.getCursor().getLeftColumn();
+                if (line != lastLine || column != lastColumn) {
+                    switch (type) {
+                        case BOTH:
+                            mEditor.cancelAnimation();
+                            mEditor.setSelection(line, column, false);
+                            break;
+                        case RIGHT:
+                            if (anotherLine > line) {
+                                return;
+                            } else if (anotherLine == line) {
+                                mEditor.setSelectionRegion(anotherLine, anotherColumn, lastLine, column);
+                            } else {
+                                mEditor.setSelectionRegion(anotherLine, anotherColumn, line, column, false);
+                            }
+                            break;
+                        case LEFT:
+                            if (anotherLine < line || (anotherLine == line && anotherColumn < column)) {
+                                return;
                             } else {
                                 mEditor.setSelectionRegion(line, column, anotherLine, anotherColumn, false);
                             }

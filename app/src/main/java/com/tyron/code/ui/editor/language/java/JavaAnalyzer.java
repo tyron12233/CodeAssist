@@ -106,7 +106,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
             }
         }
-        diagnostics.sort(Comparator.comparingLong(DiagnosticWrapper::getPosition));
+        diagnostics.sort(Comparator.comparingLong(d -> d.getStartPosition() + d.getEndPosition()));
 
         while (delegate.shouldAnalyze()) {
             try {
@@ -287,14 +287,18 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         // this prevents the analyzer to stop working while the user types
         try {
             diagnostics.forEach(it -> {
-                Indexer indexer = mEditor.getText().getIndexer();
-                int startLine = indexer.getCharLine((int) it.getStartPosition());
-                int endLine = indexer.getCharLine((int) it.getEndPosition());
-                int startColumn = indexer.getCharColumn((int) it.getStartPosition());
-                int endColumn = indexer.getCharColumn((int) it.getEndPosition());
-
-                int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
-                colors.markProblemRegion(flag, startLine, startColumn, endLine, endColumn);
+                try {
+                    Indexer indexer = mEditor.getText().getIndexer();
+                    int startLine = indexer.getCharLine((int) it.getStartPosition());
+                    int startColumn = indexer.getCharColumn((int) it.getStartPosition());
+                    int endColumn = indexer.getCharColumn((int) it.getEndPosition());
+                    int endLine = indexer.getCharLine((int) it.getEndPosition());
+                    int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
+                    colors.markProblemRegion(flag, startLine, startColumn, endLine, endColumn);
+                } catch (IllegalArgumentException e) {
+                    // Work around for the indexer requiring a sorted positions
+                    Log.w(TAG, "Unable to mark problem region", e);
+                }
             });
 
             mLintDiagnostics.forEach(it -> {
