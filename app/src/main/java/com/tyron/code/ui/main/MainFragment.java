@@ -148,7 +148,6 @@ public class MainFragment extends Fragment {
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
             mIndexBinder = (IndexService.IndexBinder) iBinder;
-
             ProjectManager.TaskListener taskListener = new ProjectManager.TaskListener() {
                 @Override
                 public void onTaskStarted(String message) {
@@ -520,8 +519,9 @@ public class MainFragment extends Fragment {
         mFilesViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
 
-        requireActivity().startService(new Intent(requireContext(), IndexService.class));
-        requireActivity().bindService(new Intent(requireContext(), IndexService.class),
+        Intent intent = new Intent(requireContext(), IndexService.class);
+        requireActivity().startService(intent);
+        requireActivity().bindService(intent,
                 mIndexServiceConnection, Context.BIND_IMPORTANT);
     }
 

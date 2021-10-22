@@ -54,8 +54,7 @@ public class AppLogFragment extends Fragment {
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        NestedScrollView mRoot = new NestedScrollView(requireContext());
-        mRoot.setFillViewport(true);
+        FrameLayout mRoot = new FrameLayout(requireContext());
 
         mAdapter = new LogAdapter();
         mAdapter.setListener(diagnostic -> {
@@ -72,7 +71,8 @@ public class AppLogFragment extends Fragment {
         mRecyclerView = new RecyclerView(requireContext());
         mRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         mRecyclerView.setAdapter(mAdapter);
-        mRoot.addView(mRecyclerView, new FrameLayout.LayoutParams(-1, -1));
+        mRoot.addView(mRecyclerView,
+                new FrameLayout.LayoutParams(-1, -2));
         return mRoot;
     }
 
