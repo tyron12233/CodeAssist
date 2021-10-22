@@ -48,6 +48,7 @@ public class FileManager {
     // Map of compiled (.class) files with their fully qualified name as key
     private final Map<String, File> classFiles = new HashMap<>();
     private final Map<String, File> javaFiles = new HashMap<>();
+    private final Map<String, File> kotlinFiles = new HashMap<>();
 
     /**
      * Cache of java class files, keys can contain Dex files, Java class files and the values are
@@ -93,6 +94,10 @@ public class FileManager {
 
     public File getJavaFile(String className) {
         return javaFiles.get(className);
+    }
+
+    public File getKotlinFile(String className) {
+        return kotlinFiles.get(className);
     }
 
     public List<File> list(String packageName) {
@@ -210,7 +215,8 @@ public class FileManager {
         }
         
         javaFiles.putAll(project.getJavaFiles());
-        
+        kotlinFiles.putAll(project.getKotlinFiles());
+
         for (File file : project.getLibraries()) {
             try {
                 putJar(file);
@@ -250,6 +256,7 @@ public class FileManager {
         List<String> files = new ArrayList<>();
         files.addAll(javaFiles.keySet());
         files.addAll(classFiles.keySet());
+        files.addAll(kotlinFiles.keySet());
 
         if (mCurrentProject != null) {
             files.addAll(mCurrentProject.getRJavaFiles().keySet());

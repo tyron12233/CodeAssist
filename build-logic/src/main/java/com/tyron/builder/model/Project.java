@@ -94,6 +94,7 @@ public class Project {
     public Map<String, File> getKotlinFiles() {
         if (kotlinFiles.isEmpty()) {
             findKotlinFiles(getJavaDirectory());
+            findKotlinFiles(getKotlinDirectory());
         }
         return kotlinFiles;
     }
@@ -144,7 +145,7 @@ public class Project {
         RJavaFiles.clear();
         libraries.clear();
         javaFiles.clear();
-        libraries.clear();
+        kotlinFiles.clear();
     }
     /**
      * Used to check if this project contains the required directories
@@ -208,7 +209,9 @@ public class Project {
                         if (packageName.isEmpty()) {
                             Log.d("Error package empty", child.getAbsolutePath());
                         } else {
-                            javaFiles.put(packageName + "." + child.getName().replace(".kt", ""), child);
+                            String name = packageName + "." + child.getName().replace(".kt", "");
+                            Log.d("PROJECT FIND KOTLIN", "Found " + name);
+                            kotlinFiles.put(name, child);
                         }
                     }
                 }
@@ -271,6 +274,10 @@ public class Project {
     
     public File getJavaDirectory() {
         return new File(mRoot, "app/src/main/java");
+    }
+
+    public File getKotlinDirectory() {
+        return new File(mRoot, "app/src/main/kotlin");
     }
     
     public File getLibraryDirectory() {
