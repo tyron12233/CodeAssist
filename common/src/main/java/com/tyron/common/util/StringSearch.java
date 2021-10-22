@@ -215,7 +215,7 @@ public class StringSearch {
     }
     
     public static String packageName(File file) {
-        Pattern packagePattern = Pattern.compile("^package +(.*);");
+        Pattern packagePattern = Pattern.compile("package\\s+([a-zA_Z][.\\w]*+)(;)?");
         Pattern startOfClass = Pattern.compile("^[\\w ]*class +\\w+");
         try (BufferedReader lines = bufferedReader(file)) {
             for (String line = lines.readLine(); line != null; line = lines.readLine()) {
