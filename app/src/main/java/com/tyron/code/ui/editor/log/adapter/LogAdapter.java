@@ -69,7 +69,11 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.ViewHolder>{
         });
         mData.clear();
         mData.addAll(newData);
-        result.dispatchUpdatesTo(this);
+        try {
+            result.dispatchUpdatesTo(this);
+        } catch (IndexOutOfBoundsException e) {
+            notifyDataSetChanged();
+        }
     }
 
     @NonNull
