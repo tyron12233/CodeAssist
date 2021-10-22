@@ -262,26 +262,27 @@ public class FileManager {
     }
 
     private void putJar(File file) throws IOException {
-        JarFile jar = new JarFile(file);
-        Enumeration<JarEntry> entries = jar.entries();
-        while (entries.hasMoreElements()) {
-            JarEntry entry = entries.nextElement();
+        try (JarFile jar = new JarFile(file)) {
+            Enumeration<JarEntry> entries = jar.entries();
+            while (entries.hasMoreElements()) {
+                JarEntry entry = entries.nextElement();
 
-            if (!entry.getName().endsWith(".class")) {
-                continue;
+                if (!entry.getName().endsWith(".class")) {
+                    continue;
+                }
+
+                // We only want top level classes, if it contains $ then
+                // its an inner class, we ignore it
+                if (entry.getName().contains("$")) {
+                    continue;
+                }
+
+                String packageName = entry.getName().replace("/", ".")
+                        .substring(0, entry.getName().length() - ".class".length());
+
+
+                classFiles.put(packageName, file);
             }
-
-            // We only want top level classes, if it contains $ then 
-            // its an inner class, we ignore it
-            if (entry.getName().contains("$")) {
-                continue;
-            }
-
-            String packageName = entry.getName().replace("/", ".")
-                .substring(0, entry.getName().length() - ".class".length());                   
-
-
-            classFiles.put(packageName, file);
         }
     }
     
