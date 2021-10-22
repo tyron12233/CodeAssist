@@ -148,6 +148,8 @@ public class InjectLoggerTask extends Task {
         mProject = project;
         mLogger = logger;
 
+        project.getJavaFiles();
+        project.getKotlinFiles();
     }
 
     @Override
@@ -167,6 +169,10 @@ public class InjectLoggerTask extends Task {
 
             mApplicationFile = mProject.getFileManager()
                     .getJavaFile(applicationClass);
+            if (mApplicationFile == null) {
+                mApplicationFile = mProject.getFileManager()
+                        .getKotlinFile(applicationClass);
+            }
             if (!isNewApplicationClass) {
                 mOriginalApplication = FileUtils.readFileToString(mApplicationFile, Charset.defaultCharset());
             }
@@ -277,7 +283,7 @@ public class InjectLoggerTask extends Task {
             return;
         }
 
-        String onCreateString = "super.onCreate();";
+        String onCreateString = "super.onCreate()";
         int index = applicationContents.indexOf(onCreateString);
         if (index == -1) {
             throw new CompilationFailedException("No super method for Application.onCreate() found");
