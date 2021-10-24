@@ -76,8 +76,6 @@ public class IncrementalD8Task extends Task {
                 File file = mDexCache.get(key.file, "dex").iterator().next();
                 deleteAllFiles(file, ".dex");
                 mDexCache.remove(key.file, "dex");
-
-                mLogger.debug("Removed class file: " + key.file.toFile().getName());
             }
         }
 
