@@ -38,7 +38,7 @@ public class ProjectSettings implements SharedPreferences {
         } catch (FileNotFoundException ignore) {
 
         }
-        return config == null ? Collections.emptyMap() : config;
+        return config == null ? new HashMap<>() : config;
     }
 
     @Override
@@ -85,7 +85,7 @@ public class ProjectSettings implements SharedPreferences {
 
     @Override
     public Editor edit() {
-        return null;
+        return new Editor(mConfigFile, mConfigMap);
     }
 
     @Override
