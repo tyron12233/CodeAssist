@@ -141,10 +141,12 @@ public class TreeFileManagerFragment extends Fragment {
         if (treeView != null) {
             Executors.newSingleThreadExecutor().execute(() -> {
                 TreeNode<TreeFile> nodes = TreeNode.root(getNodes());
-                requireActivity().runOnUiThread(() -> {
-                    treeView.refreshTreeView(nodes);
-                    treeView.updateTreeView();
-                });
+                if (getActivity() != null) {
+                    requireActivity().runOnUiThread(() -> {
+                        treeView.refreshTreeView(nodes);
+                        treeView.updateTreeView();
+                    });
+                }
             });
         }
     }
