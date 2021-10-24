@@ -53,10 +53,10 @@ public class IncrementalKotlinCompiler extends Task {
         mProject = project;
         mLogger = logger;
 
-        project.clearRJavaFiles();
-        mFilesToCompile = new ArrayList<>(getSourceFiles(project.getJavaDirectory()));
-        mFilesToCompile.addAll(project.getRJavaFiles().values());
-        mFilesToCompile.addAll(project.getKotlinFiles().values());
+        mFilesToCompile = new ArrayList<>();
+        mFilesToCompile.addAll(mProject.getJavaFiles().values());
+        mFilesToCompile.addAll(mProject.getRJavaFiles().values());
+        mFilesToCompile.addAll(mProject.getKotlinFiles().values());
 
         mKotlinHome = new File(BuildModule.getContext().getFilesDir(), "kotlin-home");
         if (!mKotlinHome.exists() && !mKotlinHome.mkdirs()) {
@@ -83,8 +83,6 @@ public class IncrementalKotlinCompiler extends Task {
         List<String> arguments = new ArrayList<>();
         Collections.addAll(arguments, "-cp", classpath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)));
         Collections.addAll(arguments, mFilesToCompile.stream().map(File::getAbsolutePath).toArray(String[]::new));
-
-
         try {
             K2JVMCompiler compiler = new K2JVMCompiler();
             K2JVMCompilerArguments args = new K2JVMCompilerArguments();
