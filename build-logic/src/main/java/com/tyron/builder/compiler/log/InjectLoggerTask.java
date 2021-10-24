@@ -289,7 +289,7 @@ public class InjectLoggerTask extends Task {
             throw new CompilationFailedException("No super method for Application.onCreate() found");
         }
 
-        String before = applicationContents.substring(0, index + onCreateString.length());
+        String before = applicationContents.substring(0, index + onCreateString.length() + 1);
         String after = applicationContents.substring(index + onCreateString.length());
         String injected = before + "\n" + "Logger.initialize(this);\n" +
                 after;
