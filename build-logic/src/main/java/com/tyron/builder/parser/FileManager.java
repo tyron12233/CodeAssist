@@ -11,6 +11,7 @@ import com.tyron.builder.model.Project;
 import com.tyron.common.util.Cache;
 import com.tyron.common.util.Decompress;
 import com.tyron.common.util.StringSearch;
+
 import org.apache.commons.io.FileUtils;
 
 import java.io.BufferedReader;
@@ -41,15 +42,11 @@ import java.util.jar.JarFile;
 public class FileManager {
 
     private static FileManager INSTANCE = null;
+    private static File sAndroidJar;
+    private static File sLambdaStubs;
     private final ExecutorService service = Executors.newFixedThreadPool(4);
 
     private Project mCurrentProject;
-
-    // Map of compiled (.class) files with their fully qualified name as key
-    private final Map<String, File> classFiles = new HashMap<>();
-    private final Map<String, File> javaFiles = new HashMap<>();
-    private final Map<String, File> kotlinFiles = new HashMap<>();
-
     /**
      * Cache of java class files, keys can contain Dex files, Java class files and the values are
      * the files corresponding to it
@@ -58,8 +55,8 @@ public class FileManager {
     private Cache<String, List<File>> mDexCache = new Cache<>();
     private Cache<Void, Void> mSymbolCache = new Cache<>();
 
-    private static File sAndroidJar;
-    private static File sLambdaStubs;
+    // Map of compiled (.class) files with their fully qualified name as key
+    private final Map<String, File> classFiles = new HashMap<>();
 
     public static FileManager getInstance() {
         if (INSTANCE == null) {
@@ -76,10 +73,6 @@ public class FileManager {
         return INSTANCE;
     }
 
-    public FileManager() {
-
-    }
-
     @VisibleForTesting
     public FileManager(File androidJar, File lambdaStubs) {
         sAndroidJar = androidJar;
@@ -92,24 +85,30 @@ public class FileManager {
         }
     }
 
+    public FileManager() {
+
+    }
+
     public File getJavaFile(String className) {
-        return javaFiles.get(className);
+        return mCurrentProject.getJavaFiles()
+                .get(className);
     }
 
     public File getKotlinFile(String className) {
-        return kotlinFiles.get(className);
+        return mCurrentProject.getKotlinFiles()
+                .get(className);
     }
 
     public List<File> list(String packageName) {
         List<File> list = new ArrayList<>();
 
-        for (String file : javaFiles.keySet()) {
+        for (String file : mCurrentProject.getJavaFiles().keySet()) {
             String name = file;
             if (file.endsWith(".")) {
                 name = file.substring(0, file.length() - 1);
             }
             if (name.substring(0, name.lastIndexOf(".")).equals(packageName) || name.equals(packageName)) {
-                list.add(javaFiles.get(file));
+                list.add(mCurrentProject.getJavaFiles().get(file));
             }
         }
 
@@ -152,22 +151,26 @@ public class FileManager {
     }
 
     public void addJavaFile(File javaFile, String packageName) {
-        javaFiles.put(packageName, javaFile);
+        mCurrentProject.getJavaFiles()
+                .put(packageName, javaFile);
     }
 
     /**
      * Removes a java file from the indices
+     *
      * @param packageName fully qualified name of the class
      */
     public void removeJavaFile(@NonNull String packageName) {
-        javaFiles.remove(packageName);
+        mCurrentProject.getJavaFiles()
+                .remove(packageName);
     }
 
     /**
      * Removes all the java files from the directory on the index and deletes the file
+     *
      * @param directory The directory to delete
-     * @throws IOException if the directory cannot be deleted
      * @return The files that are deleted
+     * @throws IOException if the directory cannot be deleted
      */
     public List<File> deleteDirectory(File directory) throws IOException {
         List<File> javaFiles = rDelete(directory);
@@ -185,37 +188,33 @@ public class FileManager {
             }
             String packageName = StringSearch.packageName(file);
             if (packageName != null) {
-                this.javaFiles.remove(packageName);
+                mCurrentProject.getJavaFiles().remove(packageName);
                 FileUtils.delete(file);
             }
         }
         return javaFiles;
     }
 
-    public void openProject(Project project) {
+    public void openProject(@NonNull Project project) {
         if (!project.isValidProject()) {
             //TODO: throw exception
             return;
         }
-        
-        mCurrentProject = project;
-        classFiles.clear();
-        javaFiles.clear();
 
-        if (mCurrentProject != project) {
+
+        if (!project.equals(mCurrentProject)) {
+            mCurrentProject = project;
+
             classCache = new Cache<>();
             mDexCache = new Cache<>();
             mSymbolCache = new Cache<>();
         }
-        
+
         try {
             putJar(getAndroidJar());
         } catch (IOException ignore) {
 
         }
-        
-        javaFiles.putAll(project.getJavaFiles());
-        kotlinFiles.putAll(project.getKotlinFiles());
 
         for (File file : project.getLibraries()) {
             try {
@@ -225,41 +224,39 @@ public class FileManager {
             }
         }
     }
-    
+
     public Project getCurrentProject() {
         return mCurrentProject;
     }
-    
+
     public Set<File> getLibraries() {
         return mCurrentProject.getLibraries();
     }
-    
+
     public Set<String> classpath() {
         Set<String> classpath = new HashSet<>();
-        classpath.addAll(javaFiles.keySet());
+        classpath.addAll(mCurrentProject.getJavaFiles().keySet());
         classpath.addAll(mCurrentProject.getRJavaFiles().keySet());
         classpath.addAll(Collections.emptySet());
         return classpath;
     }
 
     public Set<File> fileClasspath() {
-        Set<File> classpath = new HashSet<>(javaFiles.values());
-
         if (mCurrentProject != null) {
+            Set<File> classpath = new HashSet<>(mCurrentProject.getJavaFiles().values());
             classpath.addAll(mCurrentProject.getLibraries());
             classpath.addAll(mCurrentProject.getRJavaFiles().values());
+            return classpath;
         }
-        return classpath;
+        return Collections.emptySet();
     }
-    
-    public List<String> all() {
-        List<String> files = new ArrayList<>();
-        files.addAll(javaFiles.keySet());
-        files.addAll(classFiles.keySet());
-        files.addAll(kotlinFiles.keySet());
 
+    public List<String> all() {
+        List<String> files = new ArrayList<>(classFiles.keySet());
         if (mCurrentProject != null) {
+            files.addAll(mCurrentProject.getJavaFiles().keySet());
             files.addAll(mCurrentProject.getRJavaFiles().keySet());
+            files.addAll(mCurrentProject.getKotlinFiles().keySet());
         }
         return files;
     }
@@ -287,12 +284,11 @@ public class FileManager {
                 String packageName = entry.getName().replace("/", ".")
                         .substring(0, entry.getName().length() - ".class".length());
 
-
                 classFiles.put(packageName, file);
             }
         }
     }
-    
+
     public void save(final File file, final String contents) {
         service.submit(() -> writeFile(file, contents));
     }
@@ -305,7 +301,7 @@ public class FileManager {
         BufferedReader fr = null;
         try {
             fr = bufferedReader(file);
-            
+
             String str;
             while ((str = fr.readLine()) != null) {
                 sb.append(str).append("\n");
@@ -324,13 +320,13 @@ public class FileManager {
 
         return sb.toString();
     }
-    
+
     private static void createNewFile(File file) {
-        
+
         if (file.exists()) {
             return;
         }
-        
+
         String path = file.getAbsolutePath();
         int lastSep = path.lastIndexOf(File.separator);
         if (lastSep > 0) {
@@ -343,9 +339,9 @@ public class FileManager {
         } catch (IOException e) {
             e.printStackTrace();
         }
-	}
-    
-    
+    }
+
+
     public static void makeDir(File file) {
         if (!file.exists()) {
             file.mkdirs();
@@ -369,7 +365,7 @@ public class FileManager {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-	    }
+        }
     }
 
     public static BufferedReader bufferedReader(File file) {
@@ -442,7 +438,7 @@ public class FileManager {
 
         return sAndroidJar;
     }
-    
+
     public static File getLambdaStubs() {
         if (sLambdaStubs == null) {
             sLambdaStubs = new File(BuildModule.getContext().getFilesDir(), "core-lambda-stubs.jar");

@@ -35,15 +35,14 @@ public class Project {
     
     public Map<String, File> javaFiles = new HashMap<>();
     private final Map<String, File> kotlinFiles = new HashMap<>();
-    public List<String> jarFiles = new ArrayList<>();
     private final Set<File> libraries = new HashSet<>();
     private final Map<String, File> RJavaFiles = new HashMap<>();
 
-    //TODO: Adjust these values according to build.gradle or manifest\
     private final File mAssetsDir;
     private final File mNativeLibsDir;
     private final FileManager mFileManager;
     private ManifestData mManifestData;
+    private ProjectSettings mSettings;
 
     /**
      * Creates a project object from specified root
@@ -53,7 +52,6 @@ public class Project {
 
         mAssetsDir = new File(root, "app/src/main/assets");
         mNativeLibsDir = new File(root, "app/src/main/jniLibs");
-
         mFileManager = new FileManager();
     }
 
@@ -72,17 +70,23 @@ public class Project {
     public void open() throws IOException {
         mFileManager.openProject(this);
         mManifestData = AndroidManifestParser.parse(getManifestFile().toPath());
+        if (!getConfigFile().exists() && !getConfigFile().createNewFile()) {
+            throw new IOException("Unable to create config file");
+        }
+        mSettings = new ProjectSettings(getConfigFile());
+    }
+
+    public ProjectSettings getSettings() {
+        return mSettings;
     }
 
     public FileManager getFileManager() {
         return mFileManager;
     }
 
-
     public String getPackageName() {
        return mManifestData.getPackage();
     }
-
     
     public Map<String, File> getJavaFiles() {
         if (javaFiles.isEmpty()) {
@@ -147,6 +151,8 @@ public class Project {
         javaFiles.clear();
         kotlinFiles.clear();
     }
+
+
     /**
      * Used to check if this project contains the required directories
      * such as app/src/main/java, resources and others
@@ -158,11 +164,7 @@ public class Project {
             return false;
         }
 
-        if (!getResourceDirectory().exists()) {
-            return false;
-        }
-
-        return true;
+        return getResourceDirectory().exists();
     }
     
     /**
@@ -300,6 +302,10 @@ public class Project {
         return mNativeLibsDir;
     }
 
+    public File getConfigFile() {
+        return new File(mRoot, "app_config.json");
+    }
+
     @Override
     public int hashCode() {
         return mRoot.hashCode();
@@ -309,9 +315,7 @@ public class Project {
     public boolean equals(@Nullable Object obj) {
         if (obj instanceof Project) {
             Project that = (Project) obj;
-            if (this.mRoot.equals(that.mRoot)) {
-                return true;
-            }
+            return this.mRoot.equals(that.mRoot);
         }
         return false;
     }
