@@ -52,6 +52,7 @@ import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.provider.CompletionEngine;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -262,7 +263,7 @@ public class MainFragment extends Fragment {
         mFilesViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         // If the user has changed projects, clear the current opened files
         if (!mProject.equals(mProjectManager.getCurrentProject())) {
-            mFilesViewModel.setFiles(Collections.emptyList());
+            mFilesViewModel.setFiles(new ArrayList<>());
         }
         mFilesViewModel.getFiles().observe(getViewLifecycleOwner(),
                 files -> {
