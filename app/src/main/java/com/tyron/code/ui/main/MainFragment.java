@@ -257,9 +257,13 @@ public class MainFragment extends Fragment {
         mToolbar.setNavigationIcon(R.drawable.ic_baseline_menu_24);
         mToolbar.inflateMenu(R.menu.code_editor_menu);
 
+        mProjectManager = ProjectManager.getInstance();
         logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
         mFilesViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
-        mFilesViewModel.setFiles(Collections.emptyList());
+        // If the user has changed projects, clear the current opened files
+        if (!mProject.equals(mProjectManager.getCurrentProject())) {
+            mFilesViewModel.setFiles(Collections.emptyList());
+        }
         mFilesViewModel.getFiles().observe(getViewLifecycleOwner(),
                 files -> {
                     mAdapter.submitList(files);
@@ -268,7 +272,6 @@ public class MainFragment extends Fragment {
         mFilesViewModel.currentPosition.observe(getViewLifecycleOwner(), mPager::setCurrentItem);
         mFilesViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE));
         mFilesViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
-        mProjectManager = ProjectManager.getInstance();
 
         return mRoot;
     }
@@ -454,7 +457,9 @@ public class MainFragment extends Fragment {
         }
 
         if (mProject != null) {
-            mRoot.postDelayed(() -> openProject(mProject), 200  );
+            if (!mProject.equals(mProjectManager.getCurrentProject())) {
+                mRoot.postDelayed(() -> openProject(mProject), 200);
+            }
         }
     }
 
