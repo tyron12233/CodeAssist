@@ -16,7 +16,9 @@ import com.tyron.resolver.model.Dependency;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
 
@@ -27,6 +29,10 @@ public class ProjectManager {
         void onComplete(boolean success, String message);
     }
 
+    public interface OnProjectOpenListener {
+        void onProjectOpen(Project project);
+    }
+
     private static ProjectManager INSTANCE = null;
 
     public static ProjectManager getInstance() {
@@ -35,10 +41,20 @@ public class ProjectManager {
         }
         return INSTANCE;
     }
+
+    private final List<OnProjectOpenListener> mProjectOpenListeners = new ArrayList<>();
     private Project mCurrentProject;
 
     private ProjectManager() {
         
+    }
+
+    public void addOnProjectOpenListener(OnProjectOpenListener listener) {
+        mProjectOpenListeners.add(listener);
+    }
+
+    public void removeOnProjectOpenListener(OnProjectOpenListener listener) {
+        mProjectOpenListeners.remove(listener);
     }
 
     public void openProject(Project proj, boolean downloadLibs, TaskListener mListener, ILogger logger) {
@@ -79,6 +95,7 @@ public class ProjectManager {
                 return;
             }
             mCurrentProject = proj;
+            mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
             CompletionEngine.getInstance().index(proj, () -> mListener.onComplete(true, "Index successful"));
         });
     }
