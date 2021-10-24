@@ -170,6 +170,7 @@ public class CompilerService extends Service {
             }
 
             String projectName = mProject.mRoot.getName();
+            stopSelf();
             stopForeground(true);
 
             if (!success) {
