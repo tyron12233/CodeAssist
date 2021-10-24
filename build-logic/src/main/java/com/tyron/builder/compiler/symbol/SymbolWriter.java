@@ -120,6 +120,9 @@ public class SymbolWriter {
             writer.write("}\n");
 
             if (newFile || !file.exists()) {
+                if (!file.createNewFile()) {
+                    throw new IOException("Unable to create R.txt file");
+                }
                 FileUtils.writeStringToFile(file, writer.toString(), Charset.defaultCharset());
             } else {
                 String oldContents;
