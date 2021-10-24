@@ -12,6 +12,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
+import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -56,7 +57,7 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        FrameLayout mRoot = new FrameLayout(requireContext());
+        NestedScrollView mRoot = new NestedScrollView(requireContext());
 
         mAdapter = new LogAdapter();
         mAdapter.setListener(diagnostic -> {
@@ -123,7 +124,7 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
                 String type = intent.getExtras().getString("type", "DEBUG");
                 String message = intent.getExtras().getString("message", "No message provided");
                 DiagnosticWrapper wrapped = ILogger.wrap(message);
-                Log.d("DAS", "Received message: " + message);
+
                 switch (type) {
                     case "DEBUG":
                     case "INFO":
