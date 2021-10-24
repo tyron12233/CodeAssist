@@ -1,14 +1,11 @@
 package com.tyron;
 
-import android.util.Log;
-
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.Project;
-import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.util.ProjectUtils;
+import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.resolver.DependencyDownloader;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.DependencyUtils;

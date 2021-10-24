@@ -5,13 +5,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
-import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -21,6 +21,7 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.model.Project;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainFragment;
 
@@ -28,7 +29,7 @@ import org.openjdk.javax.tools.Diagnostic;
 
 import java.util.List;
 
-public class AppLogFragment extends Fragment {
+public class AppLogFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
 
     public static AppLogFragment newInstance(int id) {
         AppLogFragment fragment = new AppLogFragment();
@@ -39,6 +40,7 @@ public class AppLogFragment extends Fragment {
     }
 
     private int id;
+    private LogViewModel mModel;
     private LogAdapter mAdapter;
     private RecyclerView mRecyclerView;
 
@@ -82,37 +84,12 @@ public class AppLogFragment extends Fragment {
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        LogViewModel model = new ViewModelProvider(requireActivity())
+        mModel = new ViewModelProvider(requireActivity())
                 .get(LogViewModel.class);
-        model.getLogs(id).observe(getViewLifecycleOwner(), this::process);
+        mModel.getLogs(id).observe(getViewLifecycleOwner(), this::process);
 
         if (id == LogViewModel.APP_LOG) {
-            if (ProjectManager.getInstance().getCurrentProject() != null) {
-                mLogReceiver = new BroadcastReceiver() {
-                    @Override
-                    public void onReceive(Context context, Intent intent) {
-                        String type = intent.getExtras().getString("type", "DEBUG");
-                        String message = intent.getExtras().getString("message", "No message provided");
-                        DiagnosticWrapper wrapped = ILogger.wrap(message);
-                        switch (type) {
-                            case "DEBUG":
-                            case "INFO":
-                                wrapped.setKind(Diagnostic.Kind.NOTE);
-                                model.d(LogViewModel.APP_LOG, wrapped);
-                                break;
-                            case "ERROR":
-                                wrapped.setKind(Diagnostic.Kind.ERROR);
-                                model.e(LogViewModel.APP_LOG, wrapped);
-                                break;
-                            case "WARNING":
-                                wrapped.setKind(Diagnostic.Kind.WARNING);
-                                model.w(LogViewModel.APP_LOG, wrapped);
-                                break;
-                        }
-                    }
-                };
-                requireActivity().registerReceiver(mLogReceiver, new IntentFilter(ProjectManager.getInstance().getCurrentProject().getPackageName() + ".LOG"));
-            }
+            ProjectManager.getInstance().addOnProjectOpenListener(this);
         }
     }
 
@@ -120,6 +97,7 @@ public class AppLogFragment extends Fragment {
     public void onDestroy() {
         super.onDestroy();
 
+        ProjectManager.getInstance().removeOnProjectOpenListener(this);
         if (mLogReceiver != null) {
             requireActivity().unregisterReceiver(mLogReceiver);
         }
@@ -133,4 +111,36 @@ public class AppLogFragment extends Fragment {
         }
     }
 
+    @Override
+    public void onProjectOpen(Project project) {
+        if (mLogReceiver != null) {
+            requireActivity().unregisterReceiver(mLogReceiver);
+        }
+
+        mLogReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String type = intent.getExtras().getString("type", "DEBUG");
+                String message = intent.getExtras().getString("message", "No message provided");
+                DiagnosticWrapper wrapped = ILogger.wrap(message);
+                Log.d("DAS", "Received message: " + message);
+                switch (type) {
+                    case "DEBUG":
+                    case "INFO":
+                        wrapped.setKind(Diagnostic.Kind.NOTE);
+                        mModel.d(LogViewModel.APP_LOG, wrapped);
+                        break;
+                    case "ERROR":
+                        wrapped.setKind(Diagnostic.Kind.ERROR);
+                        mModel.e(LogViewModel.APP_LOG, wrapped);
+                        break;
+                    case "WARNING":
+                        wrapped.setKind(Diagnostic.Kind.WARNING);
+                        mModel.w(LogViewModel.APP_LOG, wrapped);
+                        break;
+                }
+            }
+        };
+        requireActivity().registerReceiver(mLogReceiver, new IntentFilter(ProjectManager.getInstance().getCurrentProject().getPackageName() + ".LOG"));
+    }
 }
