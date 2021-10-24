@@ -90,11 +90,17 @@ public class FileManager {
     }
 
     public File getJavaFile(String className) {
+        if (mCurrentProject == null) {
+            return null;
+        }
         return mCurrentProject.getJavaFiles()
                 .get(className);
     }
 
     public File getKotlinFile(String className) {
+        if (mCurrentProject == null) {
+            return null;
+        }
         return mCurrentProject.getKotlinFiles()
                 .get(className);
     }
