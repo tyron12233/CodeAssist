@@ -29,6 +29,8 @@ import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.android.material.transition.MaterialSharedAxis;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.ILogger;
@@ -50,6 +52,7 @@ import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.provider.CompletionEngine;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.List;
 
 public class MainFragment extends Fragment {
@@ -173,6 +176,13 @@ public class MainFragment extends Fragment {
                         } else {
                             if (mProjectManager.getCurrentProject() != null) {
                                 mToolbar.setTitle(mProject.mRoot.getName());
+
+                                String openedFilesString = mProjectManager.getCurrentProject().getSettings().getString("editor_opened_files", null);
+                                if (openedFilesString != null) {
+                                    List<File> files = new Gson().fromJson(openedFilesString,
+                                            new TypeToken<List<File>>(){}.getType());
+                                    mFilesViewModel.setFiles(files);
+                                }
                             }
                         }
                         int pos = mPager.getCurrentItem();
@@ -249,6 +259,7 @@ public class MainFragment extends Fragment {
 
         logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
         mFilesViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
+        mFilesViewModel.setFiles(Collections.emptyList());
         mFilesViewModel.getFiles().observe(getViewLifecycleOwner(),
                 files -> {
                     mAdapter.submitList(files);
@@ -459,6 +470,8 @@ public class MainFragment extends Fragment {
         if (mBinder != null) {
             mBinder.getCompilerService().setShouldShowNotification(true);
         }
+
+        mProject.getSettings().getString("editor_opened_files", null);
     }
 
     @Override
@@ -539,7 +552,8 @@ public class MainFragment extends Fragment {
     }
 
     private void saveAll() {
-        for (File file : mAdapter.getItems()) {
+        List<File> items = mAdapter.getItems();
+        for (File file : items) {
             CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager().findFragmentByTag(
                     "f" + file.getAbsolutePath().hashCode()
             );
@@ -547,6 +561,11 @@ public class MainFragment extends Fragment {
                 fragment.save();
             }
         }
+
+        String itemString = new Gson().toJson(items);
+        mProject.getSettings().edit()
+                .putString("editor_opened_files", itemString)
+                .apply();
     }
 
     private void compile(BuildType type) {
