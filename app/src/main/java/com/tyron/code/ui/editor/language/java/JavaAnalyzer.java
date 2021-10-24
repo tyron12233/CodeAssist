@@ -106,7 +106,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
             }
         }
-        diagnostics.sort(Comparator.comparingLong(d -> d.getStartPosition() + d.getEndPosition()));
 
         while (delegate.shouldAnalyze()) {
             try {
@@ -122,7 +121,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             // Backup values because looking ahead in function name match will change them
             int thisIndex = tokenizer.getIndex();
             int thisLength = tokenizer.getTokenLength();
-
 
             switch (token) {
                 case WHITESPACE:
@@ -293,6 +291,9 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     int startColumn = indexer.getCharColumn((int) it.getStartPosition());
                     int endColumn = indexer.getCharColumn((int) it.getEndPosition());
                     int endLine = indexer.getCharLine((int) it.getEndPosition());
+                    if (startLine == endLine && endColumn == startColumn) {
+                        startColumn--;
+                    }
                     int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
                     colors.markProblemRegion(flag, startLine, startColumn, endLine, endColumn);
                 } catch (IllegalArgumentException e) {

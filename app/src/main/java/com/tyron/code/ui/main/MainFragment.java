@@ -470,8 +470,6 @@ public class MainFragment extends Fragment {
         if (mBinder != null) {
             mBinder.getCompilerService().setShouldShowNotification(true);
         }
-
-        mProject.getSettings().getString("editor_opened_files", null);
     }
 
     @Override
