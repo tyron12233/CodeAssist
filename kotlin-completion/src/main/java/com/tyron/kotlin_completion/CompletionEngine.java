@@ -10,6 +10,7 @@ import com.tyron.kotlin_completion.completion.Completions;
 import com.tyron.kotlin_completion.util.AsyncExecutor;
 
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.kotlin.com.intellij.util.ExceptionUtil;
 
 import java.io.File;
 import java.io.IOException;
@@ -71,8 +72,12 @@ public class CompletionEngine {
         return Pair.create(compiled, offset);
     }
 
-    public CompletionList complete(File file, String contents, int cursor) throws ClosedByInterruptException {
-        Pair<CompiledFile, Integer> pair = recover(file, contents, Recompile.AFTER_DOT, cursor);
-        return new Completions().completions(pair.first, cursor, sp.getIndex());
+    public CompletionList complete(File file, String contents, int cursor) throws InterruptedException {
+        try {
+            Pair<CompiledFile, Integer> pair = recover(file, contents, Recompile.AFTER_DOT, cursor);
+            return new Completions().completions(pair.first, cursor, sp.getIndex());
+        } catch (RuntimeException e) {
+            throw new InterruptedException(e.getMessage());
+        }
     }
 }

@@ -50,7 +50,7 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
                 result.add(new CompletionItem(comp));
             }
             return result;
-        } catch (ProcessCanceledException | ClosedByInterruptException e) {
+        } catch (ProcessCanceledException e) {
             throw new InterruptedException(e.getMessage());
         }
     }
