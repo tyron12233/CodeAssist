@@ -458,16 +458,17 @@ public class MainFragment extends Fragment {
                     .commit();
         }
 
-        if (mProject != null) {
             if (!mProject.equals(mProjectManager.getCurrentProject())) {
                 mRoot.postDelayed(() -> openProject(mProject), 200);
             }
-        }
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+
+        ProjectManager.getInstance()
+                .closeProject(mProject);
     }
 
     @Override

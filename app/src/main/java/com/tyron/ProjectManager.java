@@ -97,6 +97,10 @@ public class ProjectManager {
         });
     }
 
+    public void closeProject(Project project) {
+        mCurrentProject = null;
+    }
+
     public Project getCurrentProject() {
         return mCurrentProject;
     }
