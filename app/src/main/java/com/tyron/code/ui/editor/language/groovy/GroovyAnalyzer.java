@@ -58,6 +58,7 @@ public class GroovyAnalyzer implements CodeAnalyzer {
                     case GroovyLexer.KW_TRUE:
                     case GroovyLexer.KW_FALSE:
                         result.addIfNeeded(line, Span.obtain(column, EditorColorScheme.KEYWORD));
+                        break;
                     case GroovyLexer.INTEGER:
                     case GroovyLexer.STRING:
                         result.addIfNeeded(line, Span.obtain(column, EditorColorScheme.LITERAL));
