@@ -492,6 +492,10 @@ public class MainFragment extends Fragment {
             return;
         }
 
+        if (!file.exists()) {
+            return;
+        }
+
         int delay = 0;
 
         int pos = mAdapter.getPosition(file);
