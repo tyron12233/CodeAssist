@@ -103,7 +103,7 @@ public class CompletionEngine {
         project.getLibraries();
 
         JavaCompilerService compiler = getCompiler(project);
-        project.getJavaFiles().forEach((key, value) -> {
+        project.getRJavaFiles().forEach((key, value) -> {
             try (CompileTask task = compiler.compile(value.toPath())) {
                 Log.d(TAG, "Compiled " + task.root().getPackage());
             }
