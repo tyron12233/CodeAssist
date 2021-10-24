@@ -89,6 +89,9 @@ public class MainViewModel extends ViewModel {
     }
 
     public void setFiles(@NonNull List<File> files) {
+        if (mFiles == null) {
+            mFiles = new MutableLiveData<>(new ArrayList<>());
+        }
         mFiles.setValue(files);
     }
 
