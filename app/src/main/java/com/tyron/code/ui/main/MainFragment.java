@@ -174,6 +174,7 @@ public class MainFragment extends Fragment {
                             if (mBehavior.getState() != BottomSheetBehavior.STATE_EXPANDED) {
                                 mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
                             }
+                            logViewModel.e(LogViewModel.BUILD_LOG, message);
                         } else {
                             if (mProjectManager.getCurrentProject() != null) {
                                 mToolbar.setTitle(mProject.mRoot.getName());
