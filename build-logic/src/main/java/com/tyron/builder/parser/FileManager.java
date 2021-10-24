@@ -195,6 +195,11 @@ public class FileManager {
         return javaFiles;
     }
 
+    @VisibleForTesting
+    public void setCurrentProject(Project project) {
+        mCurrentProject = project;
+    }
+
     public void openProject(@NonNull Project project) {
         if (!project.isValidProject()) {
             //TODO: throw exception

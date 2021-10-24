@@ -12,6 +12,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.Collections;
@@ -33,11 +34,11 @@ public class TestDeleteFile {
     private JavaCompilerService mService;
 
     @Before
-    public void setup() {
-
+    public void setup() throws IOException {
         mFileManager = FileManager.getInstance(new File(resolveBasePath(), "classpath/rt.jar"),
                 new File(resolveBasePath(), "classpath/core-lambda-stubs.jar"));
         mProject = new Project(mFileManager);
+        mFileManager.setCurrentProject(mProject);
 
         mMainClass = new File(resolveBasePath(), "classes/Main.java");
         mClassToDelete = new File(resolveBasePath(), "classes/MainSecond.java");
@@ -46,7 +47,7 @@ public class TestDeleteFile {
         mJavaFiles.add(mMainClass);
         mJavaFiles.add(mClassToDelete);
 
-        mJavaFiles.forEach(FileManager.getInstance()::addJavaFile);
+        mJavaFiles.forEach(mFileManager::addJavaFile);
     }
 
     @Test
