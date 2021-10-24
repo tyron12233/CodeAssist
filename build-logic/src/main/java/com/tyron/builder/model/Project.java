@@ -1,30 +1,26 @@
 package com.tyron.builder.model;
 
-import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.BuildModule;
+import com.tyron.builder.compiler.LibraryChecker;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
-import com.tyron.builder.compiler.resource.AAPT2Compiler;
-import com.tyron.builder.compiler.LibraryChecker;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.Decompress;
 import com.tyron.common.util.StringSearch;
 
+import org.openjdk.javax.lang.model.SourceVersion;
+
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import org.openjdk.javax.lang.model.SourceVersion;
 
 /**
  * Class for storing project data, directories and files

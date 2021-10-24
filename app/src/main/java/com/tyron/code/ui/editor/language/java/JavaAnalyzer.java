@@ -1,17 +1,14 @@
 package com.tyron.code.ui.editor.language.java;
 
 import android.content.SharedPreferences;
-import android.graphics.Color;
 import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
-import com.google.googlejavaformat.Input;
 import com.tyron.ProjectManager;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.code.lint.DefaultLintClient;
 import com.tyron.code.lint.LintIssue;
 import com.tyron.completion.CompileTask;
@@ -21,15 +18,11 @@ import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.lint.api.Severity;
 
 import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.tools.javac.parser.JavaTokenizer;
-import org.openjdk.tools.javac.parser.JavacParser;
-import org.openjdk.tools.javac.parser.ScannerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Stack;

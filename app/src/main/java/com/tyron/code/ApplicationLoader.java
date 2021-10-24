@@ -1,11 +1,10 @@
 package com.tyron.code;
+
 import android.app.Application;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Toast;
-
-import androidx.cardview.widget.CardView;
 
 import com.developer.crashx.config.CrashConfig;
 import com.tyron.builder.BuildModule;
