@@ -50,8 +50,11 @@ import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.Decompress;
 import com.tyron.common.util.SingleTextWatcher;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -547,13 +550,14 @@ public class WizardFragment extends Fragment {
                 throw new IOException("Unable to create target directory");
             }
         }
-        org.apache.commons.io.FileUtils.copyDirectory(new File(sourcesDir, "$packagename"), targetSourceDir);
-        org.apache.commons.io.FileUtils.copyDirectory(new File(sourcesDir.getParentFile(), "files"), projectRoot);
+        FileUtils.copyDirectory(sourcesDir, projectRoot);
+        FileUtils.deleteDirectory(new File(projectRoot, "app/src/main/java/$packagename"));
+        org.apache.commons.io.FileUtils.copyDirectory(new File(sourcesDir, "app/src/main/java/$packagename"), targetSourceDir);
     }
 
     private List<String> getSdks() {
         return Arrays.asList(
-                "API 16: Android 4.0 (JellyBean)",
+                "API 16: Android 4.0 (Ice Cream Sandwich)",
                 "API 17: Android 4.2 (JellyBean)",
                 "API 18: Android 4.3 (JellyBean)",
                 "API 19: Android 4.4 (KitKat)",
@@ -614,36 +618,67 @@ public class WizardFragment extends Fragment {
     }
 
     private List<WizardTemplate> getTemplates() {
-        File file = requireContext().getExternalFilesDir("templates");
-        if (!file.exists()) {
-            extractTemplates();
-        }
+        try {
+            File file = requireContext().getExternalFilesDir("templates");
+            extractTemplatesMaybe();
 
-        File[] templateFiles = file.listFiles();
-        if (templateFiles == null) {
-            return Collections.emptyList();
-        }
-        if (templateFiles.length == 0) {
-            extractTemplates();
-        }
-        templateFiles = file.listFiles();
-        if (templateFiles == null) {
-            return Collections.emptyList();
-        }
-
-        List<WizardTemplate> templates = new ArrayList<>();
-        for (File child : templateFiles) {
-            WizardTemplate template = WizardTemplate.fromFile(child);
-            if (template != null) {
-                templates.add(template);
+            File[] templateFiles = file.listFiles();
+            if (templateFiles == null) {
+                return Collections.emptyList();
             }
+            if (templateFiles.length == 0) {
+                extractTemplatesMaybe();
+            }
+            templateFiles = file.listFiles();
+            if (templateFiles == null) {
+                return Collections.emptyList();
+            }
+
+            List<WizardTemplate> templates = new ArrayList<>();
+            for (File child : templateFiles) {
+                WizardTemplate template = WizardTemplate.fromFile(child);
+                if (template != null) {
+                    templates.add(template);
+                }
+            }
+            return templates;
+        } catch (IOException e) {
+            return Collections.emptyList();
         }
-        return templates;
     }
 
-    private void extractTemplates() {
-        Decompress.unzipFromAssets(requireContext(),
-                "templates.zip",
-                requireContext().getExternalFilesDir(null).getAbsolutePath());
+    private void extractTemplatesMaybe() throws IOException {
+       File hashFile = new File(requireContext().getExternalFilesDir("templates"), "hash");
+       if (!hashFile.exists()) {
+           extractTemplates();
+       } else {
+           InputStream newIs = requireContext().getAssets()
+                   .open("templates.zip");
+           String newIsMd5 = AndroidUtilities.calculateMD5(newIs);
+           String oldMd5 = FileUtils.readFileToString(hashFile, Charset.defaultCharset());
+
+           if (!newIsMd5.equals(oldMd5)) {
+               extractTemplates();
+           } else {
+               Log.d("WizardExtractor", "Templates are up to date");
+           }
+       }
+    }
+
+    private void extractTemplates() throws IOException {
+        File templatesDir = requireContext().getExternalFilesDir(null);
+        if (templatesDir.exists()) {
+            FileUtils.deleteDirectory(templatesDir);
+        }
+
+        Decompress.unzipFromAssets(requireContext(), "templates.zip", templatesDir.getAbsolutePath());
+        File hashFile = new File(new File(templatesDir, "templates"), "hash");
+        if (!hashFile.createNewFile()) {
+            throw new IOException("Unable to create hash file");
+        }
+        FileUtils.writeStringToFile(hashFile,
+                AndroidUtilities.calculateMD5(requireContext().getAssets()
+                        .open("templates.zip")),
+                Charset.defaultCharset());
     }
 }
