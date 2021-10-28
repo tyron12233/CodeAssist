@@ -104,6 +104,11 @@ public class Compiler implements Closeable {
         }
     }
 
+    public CompilationEnvironment getDefaultCompileEnvironment() {
+        return mDefaultCompileEnvironment;
+    }
+
+
     public Pair<BindingContext, ComponentProvider> compileJavaFiles(Collection<? extends PsiJavaFile> files, Collection<KtFile> sourcePath, CompletionKind kind) {
         mCompileLock.lock();
         try {
