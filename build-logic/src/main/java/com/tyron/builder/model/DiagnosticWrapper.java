@@ -1,5 +1,6 @@
 package com.tyron.builder.model;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.openjdk.javax.tools.Diagnostic;
@@ -133,6 +134,16 @@ public class DiagnosticWrapper implements Diagnostic<File> {
 
     public void setExtra(Object mExtra) {
         this.mExtra = mExtra;
+    }
+
+    @NonNull
+    @Override
+    public String toString() {
+        return "startOffset: " + startPosition + "\n" +
+                "endOffset: " + endPosition + "\n" +
+                "position: " + position + "\n" +
+                "lineNumber: " + lineNumber + "\n" +
+                "message: " + message;
     }
 
     @Override

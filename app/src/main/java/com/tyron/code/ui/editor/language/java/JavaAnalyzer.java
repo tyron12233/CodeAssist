@@ -280,6 +280,10 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             diagnostics.forEach(it -> {
                 try {
                     Indexer indexer = mEditor.getText().getIndexer();
+
+                    if (it.getStartPosition() < 0 && it.getEndPosition() > 0) {
+                        it.setStartPosition(it.getEndPosition() - 1);
+                    }
                     int startLine = indexer.getCharLine((int) it.getStartPosition());
                     int startColumn = indexer.getCharColumn((int) it.getStartPosition());
                     int endColumn = indexer.getCharColumn((int) it.getEndPosition());
@@ -287,11 +291,12 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     if (startLine == endLine && endColumn == startColumn) {
                         startColumn--;
                     }
+
                     int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
                     colors.markProblemRegion(flag, startLine, startColumn, endLine, endColumn);
                 } catch (IllegalArgumentException e) {
                     // Work around for the indexer requiring a sorted positions
-                    Log.w(TAG, "Unable to mark problem region", e);
+                    Log.w(TAG, "Unable to mark problem region: diagnostics " + diagnostics, e);
                 }
             });
 

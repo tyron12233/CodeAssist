@@ -47,30 +47,34 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
         }
 
         try {
-            PsiJavaFile javaFile = CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
-                    .getSourcePath()
-                    .getCompilerClassPath()
-                    .getCompiler()
-                    .createJavaFile("class Main { }", Paths.get("Main.java"), CompletionKind.DEFAULT);
+            if (engine == null) {
+//                CompletionList list = CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
+//                        .complete(mEditor.getCurrentFile(), mEditor.getText().toString(), mEditor.getCursor().getLeft());
+//                List<CompletionItem> result = new ArrayList<>();
+//                List<com.tyron.completion.model.CompletionItem> item = list.items;
+//                for (com.tyron.completion.model.CompletionItem comp : item) {
+//                    result.add(new CompletionItem(comp));
+//                }
+            } else {
+
+            }
+
             if (engine == null) {
                 engine = new com.tyron.psi.completion.CompletionEngine(CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
                         .getSourcePath()
                         .getCompilerClassPath()
                         .getCompiler().getDefaultCompileEnvironment().getEnvironment().getProjectEnvironment());
             }
-            engine.complete(javaFile, javaFile.findElementAt(1), 1);
 
+            PsiJavaFile javaFile = CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
+                    .getSourcePath()
+                    .getCompilerClassPath()
+                    .getCompiler()
+                    .createJavaFile(mEditor.getText().toString(), Paths.get("Main.java"), CompletionKind.DEFAULT);
+            engine.complete(javaFile, javaFile.findElementAt(mEditor.getCursor().getLeft() - 1), mEditor.getCursor().getLeft());
             return null;
-//            CompletionList list = CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
-//                    .complete(mEditor.getCurrentFile(), mEditor.getText().toString(), mEditor.getCursor().getLeft());
-//            List<CompletionItem> result = new ArrayList<>();
-//            List<com.tyron.completion.model.CompletionItem> item = list.items;
-//            for (com.tyron.completion.model.CompletionItem comp : item) {
-//                result.add(new CompletionItem(comp));
-//            }
-//            return result;
         } catch (ProcessCanceledException e) {
-            throw new InterruptedException(e.getMessage());
+            return null;
         }
     }
 }

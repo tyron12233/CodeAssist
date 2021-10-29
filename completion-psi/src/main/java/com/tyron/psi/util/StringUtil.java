@@ -13,7 +13,7 @@ public class StringUtil extends StringUtilRt {
     }
 
     public static @NotNull StringBuilder escapeToRegexp(@NotNull CharSequence text, @NotNull StringBuilder builder) {
-        return Strings.escapeToRegexp(text, builder);
+        throw new UnsupportedOperationException("Not yet implemented");
     }
 
     @Contract(pure = true)

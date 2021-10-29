@@ -2,7 +2,9 @@ package com.tyron.psi.completion;
 
 import android.util.Log;
 
+import com.tyron.psi.lookup.AutoCompletionPolicy;
 import com.tyron.psi.lookup.LookupElement;
+import com.tyron.psi.lookup.LookupElementBuilder;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -22,11 +24,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author peter
  */
 public abstract class CompletionService {
-   // public static final Key<CompletionStatistician> STATISTICS_KEY = Key.create("completion");
+//    public static final Key<CompletionStatistician> STATISTICS_KEY = Key.create("completion");
 //    /**
 //     * A "weigher" extension key (see {@link Weigher}) to sort completion items by priority and move the heaviest to the top of the Lookup.
 //     */
-   // public static final Key<CompletionWeigher> RELEVANCE_KEY = Key.create("completion");
+//    public static final Key<CompletionWeigher> RELEVANCE_KEY = Key.create("completion");
 
     public static CompletionService getCompletionService() {
         return ApplicationManager.getApplication().getService(CompletionService.class);
@@ -60,7 +62,6 @@ public abstract class CompletionService {
                                                PrefixMatcher matcher, Consumer<? super CompletionResult> consumer,
                                                CompletionSorter customSorter) {
         final List<CompletionContributor> contributors = CompletionContributor.forParameters(parameters);
-
         for (int i = contributors.indexOf(from) + 1; i < contributors.size(); i++) {
             ProgressManager.checkCanceled();
             CompletionContributor contributor = contributors.get(i);
@@ -116,9 +117,9 @@ public abstract class CompletionService {
 
             @Override
             public void consume(CompletionResult result) {
-//                if (typoTolerant.get() && result.getLookupElement().getAutoCompletionPolicy() != AutoCompletionPolicy.NEVER_AUTOCOMPLETE) {
-//                    result = result.withLookupElement(AutoCompletionPolicy.NEVER_AUTOCOMPLETE.applyPolicy(result.getLookupElement()));
-//                }
+                if (typoTolerant.get() && result.getLookupElement().getAutoCompletionPolicy() != AutoCompletionPolicy.NEVER_AUTOCOMPLETE) {
+                    result = result.withLookupElement(AutoCompletionPolicy.NEVER_AUTOCOMPLETE.applyPolicy(result.getLookupElement()));
+                }
                 if (lookupSet.add(result.getLookupElement())) {
                     consumer.consume(result);
                 }
@@ -136,6 +137,10 @@ public abstract class CompletionService {
     public abstract CompletionSorter defaultSorter(CompletionParameters parameters, PrefixMatcher matcher);
 
     public abstract CompletionSorter emptySorter();
+
+    public void correctCaseInsensitiveString(LookupElementBuilder lookupElementBuilder, InsertionContext context) {
+
+    }
 
 //    public static boolean isStartMatch(LookupElement element, WeighingContext context) {
 //        return getItemMatcher(element, context).isStartMatch(element);

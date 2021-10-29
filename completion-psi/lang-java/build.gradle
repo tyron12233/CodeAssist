@@ -28,6 +28,7 @@ android {
 }
 
 dependencies {
+    implementation 'one.util:streamex:0.7.3'
     implementation project(path: ':completion-psi')
     testImplementation 'junit:junit:4.+'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'

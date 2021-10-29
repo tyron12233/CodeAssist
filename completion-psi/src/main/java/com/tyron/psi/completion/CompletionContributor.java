@@ -103,5 +103,5 @@ public abstract class CompletionContributor {
         return DumbService.getInstance(project).filterByDumbAwareness(forLanguage(language));
     }
 
-    private static final LanguageExtension<CompletionContributor> INSTANCE = new CompletionExtension<>(EP.getName());
+    public static final LanguageExtension<CompletionContributor> INSTANCE = new CompletionExtension<>(EP.getName());
 }

@@ -1,11 +1,10 @@
 package com.tyron.psi.completion.impl;
 
-import androidx.annotation.Nullable;
-
 import com.tyron.psi.completion.CompletionParameters;
 import com.tyron.psi.patterns.CharPattern;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.project.IndexNotReadyException;

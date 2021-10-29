@@ -4,9 +4,6 @@ import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
-import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
-import org.jetbrains.kotlin.com.intellij.patterns.PatternCondition;
-import org.jetbrains.kotlin.com.intellij.patterns.TreeElementPattern;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 
 /**
