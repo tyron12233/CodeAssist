@@ -1,4 +1,4 @@
-package com.tyron.psi.completions.lang.java.earch;
+package com.tyron.psi.completions.lang.java.search;
 
 import com.tyron.psi.roots.ContentIterator;
 

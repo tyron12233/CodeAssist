@@ -1,8 +1,11 @@
 package com.tyron.psi.completions.lang.java;
 
 import com.tyron.psi.completion.PrefixMatcher;
+import com.tyron.psi.completions.lang.java.filter.getters.ClassLiteralGetter;
+import com.tyron.psi.completions.lang.java.guess.GuessManager;
 import com.tyron.psi.completions.lang.java.lookup.KeywordLookupItem;
 import com.tyron.psi.lookup.LookupElement;
+import com.tyron.psi.lookup.LookupElementBuilder;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -50,13 +53,13 @@ public final class BasicExpressionCompletionContributor {
         }
 
         if (!JavaKeywordCompletion.AFTER_DOT.accepts(element)) {
-//            if (parameters.getParameters().getInvocationCount() <= 1) {
-//                new CollectionsUtilityMethodsProvider(parameters.getPosition(),
-//                        parameters.getExpectedType(),
-//                        parameters.getDefaultType(), result)
-//                        .addCompletions(StringUtil.isNotEmpty(matcher.getPrefix()));
-//            }
-//            ClassLiteralGetter.addCompletions(parameters, result, matcher);
+            if (parameters.getParameters().getInvocationCount() <= 1) {
+                new CollectionsUtilityMethodsProvider(parameters.getPosition(),
+                        parameters.getExpectedType(),
+                        parameters.getDefaultType(), result)
+                        .addCompletions(StringUtil.isNotEmpty(matcher.getPrefix()));
+            }
+            ClassLiteralGetter.addCompletions(parameters, result, matcher);
 
             final PsiElement position = parameters.getPosition();
             final PsiType expectedType = parameters.getExpectedType();
@@ -85,42 +88,43 @@ public final class BasicExpressionCompletionContributor {
         final PsiExpression context = PsiTreeUtil.getParentOfType(parameters.getPosition(), PsiExpression.class);
         if (context == null) return;
 
-//        MultiMap<PsiExpression, PsiType> map = GuessManager.getInstance(context.getProject()).getControlFlowExpressionTypes(context, parameters.getParameters().getInvocationCount() > 1);
-//        if (map.isEmpty()) {
-//            return;
-//        }
-//
-//        PsiScopesUtil.treeWalkUp(new PsiScopeProcessor() {
-//            @Override
-//            public boolean execute(@NotNull PsiElement element, @NotNull ResolveState state) {
-//                if (element instanceof PsiLocalVariable) {
-//                    if (!matcher.prefixMatches(((PsiLocalVariable)element).getName())) {
-//                        return true;
-//                    }
-//
-//                    final PsiExpression expression = ((PsiLocalVariable)element).getInitializer();
-//                    if (expression instanceof PsiTypeCastExpression) {
-//                        PsiTypeCastExpression typeCastExpression = (PsiTypeCastExpression)expression;
-//                        final PsiExpression operand = typeCastExpression.getOperand();
-//                        if (operand != null) {
-//                            if (map.get(operand).contains(typeCastExpression.getType())) {
-//                                map.remove(operand);
-//                            }
-//                        }
-//                    }
-//                }
-//                return true;
-//            }
-//        }, context, context.getContainingFile());
+        MultiMap<PsiExpression, PsiType> map = GuessManager.getInstance(context.getProject()).getControlFlowExpressionTypes(context, parameters.getParameters().getInvocationCount() > 1);
+        if (map.entrySet().isEmpty()) {
+            return;
+        }
 
-//        for (PsiExpression expression : map.keySet()) {
-//            for (PsiType castType : map.get(expression)) {
-//                PsiType baseType = expression.getType();
-//                if (expectedType == null || (expectedType.isAssignableFrom(castType) && (baseType == null || !expectedType.isAssignableFrom(baseType)))) {
-////                    consumer.consume(CastingLookupElementDecorator.createCastingElement(expressionToLookupElement(expression), castType));
-//                }
-//            }
-//        }
+        PsiScopesUtil.treeWalkUp(new PsiScopeProcessor() {
+            @Override
+            public boolean execute(@NotNull PsiElement element, @NotNull ResolveState state) {
+                if (element instanceof PsiLocalVariable) {
+                    if (!matcher.prefixMatches(((PsiLocalVariable)element).getName())) {
+                        return true;
+                    }
+
+                    final PsiExpression expression = ((PsiLocalVariable)element).getInitializer();
+                    if (expression instanceof PsiTypeCastExpression) {
+                        PsiTypeCastExpression typeCastExpression = (PsiTypeCastExpression)expression;
+                        final PsiExpression operand = typeCastExpression.getOperand();
+                        if (operand != null) {
+                            if (map.get(operand).contains(typeCastExpression.getType())) {
+                                map.remove(operand, typeCastExpression.getType());
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+        }, context, context.getContainingFile());
+
+        for (PsiExpression expression : map.keySet()) {
+            for (PsiType castType : map.get(expression)) {
+                PsiType baseType = expression.getType();
+                if (expectedType == null || (expectedType.isAssignableFrom(castType) && (baseType == null || !expectedType.isAssignableFrom(baseType)))) {
+                    consumer.consume(expressionToLookupElement(expression));
+//                    consumer.consume(CastingLookupElementDecorator.createCastingElement(expressionToLookupElement(expression), castType));
+                }
+            }
+        }
     }
 
     @NotNull
@@ -140,12 +144,13 @@ public final class BasicExpressionCompletionContributor {
             final PsiMethodCallExpression call = (PsiMethodCallExpression)expression;
             if (!call.getMethodExpression().isQualified()) {
                 final PsiMethod method = call.resolveMethod();
-//                if (method != null) {
+                if (method != null) {
+                    return LookupElementBuilder.create(method);
 //                    return new JavaMethodCallElement(method);
-//                }
+                }
             }
         }
-return null;
+        return LookupElementBuilder.create(expression);
 //        return new ExpressionLookupItem(expression);
     }
 

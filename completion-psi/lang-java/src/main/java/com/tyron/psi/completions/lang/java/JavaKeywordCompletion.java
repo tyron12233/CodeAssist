@@ -521,7 +521,7 @@ public class JavaKeywordCompletion {
                 .withTailText(caseRuleName)
                 .withLookupString(caseRuleName);
 
-        return null;
+        return lookupElement;
         //return new JavaCompletionContributor.IndentingDecorator(TailTypeDecorator.withTail(lookupElement, tailType));
     }
 

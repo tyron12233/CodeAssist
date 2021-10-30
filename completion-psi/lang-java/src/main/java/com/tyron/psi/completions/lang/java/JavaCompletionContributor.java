@@ -377,12 +377,12 @@ public class  JavaCompletionContributor extends CompletionContributor implements
             return;
         }
 
-//        if (parameters.getInvocationCount() >= 2) {
-//            JavaNoVariantsDelegator.suggestNonImportedClasses(parameters, result, session);
-//        }
-//        else {
-//            advertiseSecondCompletion(parameters.getPosition().getProject(), result);
-//        }
+        if (parameters.getInvocationCount() >= 2) {
+            JavaNoVariantsDelegator.suggestNonImportedClasses(parameters, result, session);
+        }
+        else {
+           // advertiseSecondCompletion(parameters.getPosition().getProject(), result);
+        }
     }
 
     private static @NotNull List<LookupElement> completePermitsListReference(@NotNull CompletionParameters parameters,
@@ -415,20 +415,20 @@ public class  JavaCompletionContributor extends CompletionContributor implements
         PsiElement position = parameters.getPosition();
         ElementFilter filter = getReferenceFilter(position);
         if (filter == null) return Collections.emptyList();
-//        if (parameters.getInvocationCount() <= 1 && JavaClassNameCompletionContributor.AFTER_NEW.accepts(position)) {
-//            filter = new AndFilter(filter, new ElementFilter() {
-//                @Override
-//                public boolean isAcceptable(Object element, @Nullable PsiElement context) {
-//                    return !JavaPsiClassReferenceElement.isInaccessibleConstructorSuggestion(position, tryCast(element, PsiClass.class));
-//                }
-//
-//                @Override
-//                public boolean isClassAcceptable(Class hintClass) {
-//                    return true;
-//                }
-//            });
-//        }
-//
+        if (parameters.getInvocationCount() <= 1 && JavaClassNameCompletionContributor.AFTER_NEW.accepts(position)) {
+            filter = new AndFilter(filter, new ElementFilter() {
+                @Override
+                public boolean isAcceptable(Object element, @Nullable PsiElement context) {
+                    return !JavaPsiClassReferenceElement.isInaccessibleConstructorSuggestion(position, tryCast(element, PsiClass.class));
+                }
+
+                @Override
+                public boolean isClassAcceptable(Class hintClass) {
+                    return true;
+                }
+            });
+        }
+
         boolean smart = parameters.getCompletionType() == CompletionType.SMART;
         if (smart) {
             if (JavaSmartCompletionContributor.INSIDE_TYPECAST_EXPRESSION.accepts(position) || SmartCastProvider.inCastContext(parameters)) {
@@ -602,6 +602,7 @@ public class  JavaCompletionContributor extends CompletionContributor implements
                                               CompletionResultSet result,
                                               JavaCompletionSession session, PrefixMatcher matcher) {
         session.registerBatchItems(getFastIdentifierVariants(parameters, position, matcher, position.getParent(), session));
+        session.flushBatchItems();
 //
 //        if (JavaSmartCompletionContributor.AFTER_NEW.accepts(position)) {
 //            session.flushBatchItems();
@@ -726,7 +727,7 @@ public class  JavaCompletionContributor extends CompletionContributor implements
     private static LookupElementBuilder createAnnotationAttributeElement(PsiMethod annoMethod, @Nullable String value) {
         String space = " "; //getSpace(CodeStyle.getLanguageSettings(annoMethod.getContainingFile()).SPACE_AROUND_ASSIGNMENT_OPERATORS);
         String lookupString = annoMethod.getName() + (value == null ? "" : space + "=" + space + value);
-        return LookupElementBuilder.create(annoMethod, lookupString).withIcon(annoMethod.getIcon(0))
+        return LookupElementBuilder.create(annoMethod, lookupString)
                 .withStrikeoutness(PsiImplUtil.isDeprecated(annoMethod))
                 .withInsertHandler((context, item) -> {
                     final Editor editor = context.getEditor();

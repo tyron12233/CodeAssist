@@ -1,7 +1,7 @@
 package com.tyron.psi.completions.lang.java;
 
 import com.tyron.psi.completions.lang.java.daemon.impl.quickfix.ImportClassFixBase;
-import com.tyron.psi.completions.lang.java.earch.PsiShortNamesCache;
+import com.tyron.psi.completions.lang.java.search.PsiShortNamesCache;
 import com.tyron.psi.tailtype.TailType;
 
 import org.jetbrains.annotations.NotNull;

@@ -9,6 +9,7 @@ import com.tyron.psi.completion.CompletionResultSet;
 import com.tyron.psi.completion.CompletionService;
 import com.tyron.psi.completion.CompletionSorter;
 import com.tyron.psi.completion.PrefixMatcher;
+import com.tyron.psi.completions.lang.java.CamelHumpMatcher;
 import com.tyron.psi.lookup.LookupElement;
 import com.tyron.psi.lookup.LookupElementWeigher;
 import com.tyron.psi.patterns.CharPattern;
@@ -61,7 +62,12 @@ public class CompletionServiceImpl extends CompletionService {
     @NotNull
     @Override
     protected PrefixMatcher createMatcher(String prefix, boolean typoTolerant) {
-        return PrefixMatcher.ALWAYS_TRUE;
+        return createMatcher(prefix, true, typoTolerant);
+    }
+
+    @NotNull
+    private static CamelHumpMatcher createMatcher(String prefix, boolean caseSensitive, boolean typoTolerant) {
+        return new CamelHumpMatcher(prefix, caseSensitive, typoTolerant);
     }
 
     @Override
@@ -159,7 +165,9 @@ public class CompletionServiceImpl extends CompletionService {
 
         @Override
         public CompletionResultSet caseInsensitive() {
-            return withPrefixMatcher(PrefixMatcher.ALWAYS_TRUE);
+            PrefixMatcher matcher = getPrefixMatcher();
+            boolean typoTolerant = matcher instanceof CamelHumpMatcher && ((CamelHumpMatcher)matcher).isTypoTolerant();
+            return withPrefixMatcher(createMatcher(matcher.getPrefix(), false, typoTolerant));
         }
 
         @Override

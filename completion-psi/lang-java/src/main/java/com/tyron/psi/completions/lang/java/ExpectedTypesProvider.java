@@ -1,7 +1,7 @@
 package com.tyron.psi.completions.lang.java;
 
 import com.tyron.psi.completion.CompletionUtil;
-import com.tyron.psi.completions.lang.java.earch.PsiShortNamesCache;
+import com.tyron.psi.completions.lang.java.search.PsiShortNamesCache;
 import com.tyron.psi.completions.lang.java.resolve.CompletionParameterTypeInferencePolicy;
 import com.tyron.psi.completions.lang.java.util.GenericsUtilEx;
 import com.tyron.psi.completions.lang.java.util.JavaPsiConstructorUtil;
@@ -33,7 +33,6 @@ import org.jetbrains.kotlin.com.intellij.psi.util.TypeConversionUtil;
 import org.jetbrains.kotlin.com.intellij.util.ArrayUtil;
 import org.jetbrains.kotlin.com.intellij.util.ObjectUtils;
 import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
-import org.jetbrains.kotlin.types.TypeUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;

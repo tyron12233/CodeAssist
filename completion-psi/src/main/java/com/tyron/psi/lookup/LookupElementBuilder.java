@@ -1,6 +1,7 @@
 package com.tyron.psi.lookup;
 
 import android.graphics.Color;
+import android.graphics.drawable.Icon;
 
 import com.tyron.psi.completion.CompletionService;
 import com.tyron.psi.completion.InsertHandler;
@@ -22,8 +23,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
-
-import javax.swing.Icon;
 
 /**
  * @author peter
@@ -85,7 +84,7 @@ public final class LookupElementBuilder extends LookupElement {
 
     public static @NotNull LookupElementBuilder createWithIcon(@NotNull PsiNamedElement element) {
         PsiUtilCore.ensureValid(element);
-        return create(element).withIcon(element.getIcon(0));
+        return create(element);
     }
 
     public static @NotNull LookupElementBuilder create(@NotNull Object lookupObject, @NotNull String lookupString) {

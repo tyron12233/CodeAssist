@@ -1,4 +1,4 @@
-package com.tyron.psi.completions.lang.java.earch;
+package com.tyron.psi.completions.lang.java.search;
 
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;

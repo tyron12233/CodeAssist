@@ -1,21 +1,18 @@
 package com.tyron.code.ui.editor.language.kotlin;
 
 import android.content.SharedPreferences;
+import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
 import com.tyron.ProjectManager;
-import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.CompletionEngine;
 import com.tyron.kotlin_completion.compiler.CompletionKind;
 
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProcessCanceledException;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaFile;
 
-import java.nio.channels.ClosedByInterruptException;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -34,6 +31,15 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
     public KotlinAutoCompleteProvider(CodeEditor editor) {
         mEditor = editor;
         mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
+
+        editor.postDelayed(() -> {
+            try {
+                CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
+                        .complete(mEditor.getCurrentFile(), mEditor.getText().toString(), mEditor.getCursor().getLeft());
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }, 7000);
     }
 
     @Override
@@ -65,13 +71,14 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
                         .getCompilerClassPath()
                         .getCompiler().getDefaultCompileEnvironment().getEnvironment().getProjectEnvironment());
             }
-
             PsiJavaFile javaFile = CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
                     .getSourcePath()
                     .getCompilerClassPath()
                     .getCompiler()
                     .createJavaFile(mEditor.getText().toString(), Paths.get("Main.java"), CompletionKind.DEFAULT);
-            engine.complete(javaFile, javaFile.findElementAt(mEditor.getCursor().getLeft() - 1), mEditor.getCursor().getLeft());
+            engine.complete(javaFile, javaFile.findElementAt(mEditor.getCursor().getLeft() - 1), mEditor.getCursor().getLeft(), result -> {
+                Log.d("COMPLETION RESULT", result.toString());
+            });
             return null;
         } catch (ProcessCanceledException e) {
             return null;

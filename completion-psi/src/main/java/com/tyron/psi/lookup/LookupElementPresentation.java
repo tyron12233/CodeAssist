@@ -1,8 +1,7 @@
 package com.tyron.psi.lookup;
 
 import android.graphics.Color;
-
-import javax.swing.*;
+import android.graphics.drawable.Icon;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
