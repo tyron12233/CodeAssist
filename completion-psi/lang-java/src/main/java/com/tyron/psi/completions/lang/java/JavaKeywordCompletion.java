@@ -880,10 +880,10 @@ public class JavaKeywordCompletion {
     }
 
     private static boolean mayExpectBoolean(CompletionParameters parameters) {
-//        for (ExpectedTypeInfo info : JavaSmartCompletionContributor.getExpectedTypes(parameters)) {
-//            PsiType type = info.getType();
-//            if (type instanceof PsiClassType || PsiType.BOOLEAN.equals(type)) return true;
-//        }
+        for (ExpectedTypeInfo info : JavaSmartCompletionContributor.getExpectedTypes(parameters)) {
+            PsiType type = info.getType();
+            if (type instanceof PsiClassType || PsiType.BOOLEAN.equals(type)) return true;
+        }
         return false;
     }
 
@@ -1094,9 +1094,9 @@ public class JavaKeywordCompletion {
             addKeyword(TailTypeDecorator.withTail(createKeyword(PsiKeyword.YIELD), TailType.INSERT_SPACE));
         }
 
-//        for (PsiLabeledStatement labeled : psiApi().parents(myPosition).takeWhile(notInstanceOf(PsiMember.class)).filter(PsiLabeledStatement.class)) {
-//            addKeyword(TailTypeDecorator.withTail(LookupElementBuilder.create("break " + labeled.getName()).bold(), TailType.SEMICOLON));
-//        }
+        for (PsiLabeledStatement labeled : psiApi().parents(myPosition).takeWhile(Conditions.not(Conditions.instanceOf(PsiMember.class))).filter(PsiLabeledStatement.class)) {
+            addKeyword(TailTypeDecorator.withTail(LookupElementBuilder.create("break " + labeled.getName()).bold(), TailType.SEMICOLON));
+        }
     }
 
     private static boolean isStatementPosition(PsiElement position) {

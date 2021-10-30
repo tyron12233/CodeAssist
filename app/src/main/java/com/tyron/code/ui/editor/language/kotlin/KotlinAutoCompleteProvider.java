@@ -8,9 +8,11 @@ import androidx.preference.PreferenceManager;
 import com.tyron.ProjectManager;
 import com.tyron.kotlin_completion.CompletionEngine;
 import com.tyron.kotlin_completion.compiler.CompletionKind;
+import com.tyron.psi.completion.CompletionResult;
 
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProcessCanceledException;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaFile;
+import org.jetbrains.kotlin.com.intellij.util.Consumer;
 
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -76,8 +78,11 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
                     .getCompilerClassPath()
                     .getCompiler()
                     .createJavaFile(mEditor.getText().toString(), Paths.get("Main.java"), CompletionKind.DEFAULT);
-            engine.complete(javaFile, javaFile.findElementAt(mEditor.getCursor().getLeft() - 1), mEditor.getCursor().getLeft(), result -> {
-                Log.d("COMPLETION RESULT", result.toString());
+            engine.complete(javaFile, javaFile.findElementAt(mEditor.getCursor().getLeft() - 1), mEditor.getCursor().getLeft(), new Consumer<com.tyron.psi.completion.CompletionResult>() {
+                @Override
+                public void consume(CompletionResult completionResult) {
+                    Log.d("RESULT", completionResult.toString());
+                }
             });
             return null;
         } catch (ProcessCanceledException e) {

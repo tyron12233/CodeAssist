@@ -1,6 +1,7 @@
 package com.tyron.psi.completion;
 
 import com.tyron.psi.lookup.LookupElement;
+import com.tyron.psi.lookup.LookupValueWithPsiElement;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -14,6 +15,22 @@ import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 
 public class CompletionUtil {
+
+    @Nullable
+    public static PsiElement getTargetElement(LookupElement lookupElement) {
+        PsiElement psiElement = lookupElement.getPsiElement();
+        if (psiElement != null && psiElement.isValid()) {
+            return getOriginalElement(psiElement);
+        }
+
+        Object object = lookupElement.getObject();
+        if (object instanceof LookupValueWithPsiElement) {
+            final PsiElement element = ((LookupValueWithPsiElement)object).getElement();
+            if (element != null && element.isValid()) return getOriginalElement(element);
+        }
+
+        return null;
+    }
 
     @Nullable
     public static <T extends PsiElement> T getOriginalElement(@NotNull T psi) {

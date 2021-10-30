@@ -44,33 +44,13 @@ public class DocumentUtils {
                 offset, 0, offset);
     }
 
-    public static void deleteString(Document document, int offset, @NotNull CharSequence s) {
-        if (offset < 0) throw new IndexOutOfBoundsException("Wrong offset: " + offset);
-        if (offset > document.getTextLength()) {
-            throw new IndexOutOfBoundsException("Wrong offset: " + offset + "; documentLength: " + document.getTextLength());
-        }
-        if (s.length() == 0) return;
-        RangeMarker marker;
-        try {
-            Method getRangeGuard = DocumentImpl.class.getDeclaredMethod("getRangeGuard", int.class, int.class);
-            getRangeGuard.setAccessible(true);
-            marker = (RangeMarker) getRangeGuard.invoke(document, offset, offset);
-        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
-            return;
-        }
+    public static void deleteString(Document document, int offset, int endOffset) {
+       if (!(document instanceof DocumentImpl)) {
+           return;
+       }
 
-        ImmutableCharSequence myText;
-        try {
-            Field myTextField = DocumentImpl.class.getDeclaredField("myText");
-            myTextField.setAccessible(true);
-            myText = (ImmutableCharSequence) myTextField.get(document);
-        } catch (Exception ignored) {
-            return;
-        }
-        ImmutableCharSequence newText = myText.insert(offset, s);
-        ImmutableCharSequence newString = newText.subtext(offset, offset + s.length());
-        updateText(document, newText, offset, "", newString, false, LocalTimeCounter.currentTime(),
-                offset, 0, offset);
+       DocumentImpl impl = (DocumentImpl) document;
+       impl.deleteString(offset, endOffset);
     }
 
     public static void trimToSize(Document document) {

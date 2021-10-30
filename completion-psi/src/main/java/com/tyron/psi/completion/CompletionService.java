@@ -5,6 +5,7 @@ import android.util.Log;
 import com.tyron.psi.lookup.AutoCompletionPolicy;
 import com.tyron.psi.lookup.LookupElement;
 import com.tyron.psi.lookup.LookupElementBuilder;
+import com.tyron.psi.lookup.WeighingContext;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -142,16 +143,16 @@ public abstract class CompletionService {
 
     }
 
-//    public static boolean isStartMatch(LookupElement element, WeighingContext context) {
-//        return getItemMatcher(element, context).isStartMatch(element);
-//    }
-//
-//    public static PrefixMatcher getItemMatcher(LookupElement element, WeighingContext context) {
-//        PrefixMatcher itemMatcher = context.itemMatcher(element);
-//        String pattern = context.itemPattern(element);
-//        if (!pattern.equals(itemMatcher.getPrefix())) {
-//            return itemMatcher.cloneWithPrefix(pattern);
-//        }
-//        return itemMatcher;
-//    }
+    public static boolean isStartMatch(LookupElement element, WeighingContext context) {
+        return getItemMatcher(element, context).isStartMatch(element);
+    }
+
+    public static PrefixMatcher getItemMatcher(LookupElement element, WeighingContext context) {
+        PrefixMatcher itemMatcher = context.itemMatcher(element);
+        String pattern = context.itemPattern(element);
+        if (!pattern.equals(itemMatcher.getPrefix())) {
+            return itemMatcher.cloneWithPrefix(pattern);
+        }
+        return itemMatcher;
+    }
 }

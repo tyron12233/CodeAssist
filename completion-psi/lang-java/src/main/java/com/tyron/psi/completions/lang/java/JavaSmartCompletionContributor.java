@@ -8,6 +8,7 @@ import com.tyron.psi.completion.CompletionType;
 import com.tyron.psi.completions.lang.java.filter.ElementExtractorFilter;
 import com.tyron.psi.completions.lang.java.filter.getters.ExpectedTypesGetter;
 import com.tyron.psi.completions.lang.java.filter.types.AssignableFromFilter;
+import com.tyron.psi.lookup.LookupElement;
 import com.tyron.psi.patterns.ElementPattern;
 import com.tyron.psi.tailtype.TailType;
 
@@ -20,6 +21,7 @@ import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.kotlin.com.intellij.util.SmartList;
 import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
 
+import java.util.Collection;
 import java.util.List;
 
 import gnu.trove.TObjectHashingStrategy;
@@ -92,6 +94,10 @@ public class JavaSmartCompletionContributor {
         if (expression == null) return ExpectedTypeInfo.EMPTY_ARRAY;
 
         return ExpectedTypesProvider.getExpectedTypes(expression, true, voidable, false);
+    }
+
+    public static SmartCompletionDecorator decorate(LookupElement lookupElement, Collection<? extends ExpectedTypeInfo> infos) {
+        return new SmartCompletionDecorator(lookupElement, infos);
     }
 
 }

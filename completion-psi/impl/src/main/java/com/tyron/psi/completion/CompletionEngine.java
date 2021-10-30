@@ -6,6 +6,7 @@ import com.tyron.psi.completion.impl.CompletionServiceImpl;
 import com.tyron.psi.completions.lang.java.BasicExpressionCompletionContributor;
 import com.tyron.psi.completions.lang.java.JavaClassNameCompletionContributor;
 import com.tyron.psi.completions.lang.java.JavaCompletionContributor;
+import com.tyron.psi.completions.lang.java.JavaNoVariantsDelegator;
 import com.tyron.psi.editor.CaretModel;
 import com.tyron.psi.editor.Editor;
 import com.tyron.psi.lookup.LookupElementPresentation;
@@ -44,6 +45,7 @@ public class CompletionEngine {
         JavaCompletionContributor javaCompletionContributor = new JavaCompletionContributor();
         CompletionContributor.INSTANCE.addExplicitExtension(JavaLanguage.INSTANCE, javaCompletionContributor);
         CompletionContributor.INSTANCE.addExplicitExtension(JavaLanguage.INSTANCE, new JavaClassNameCompletionContributor());
+        CompletionContributor.INSTANCE.addExplicitExtension(JavaLanguage.INSTANCE, new JavaNoVariantsDelegator());
       //  CompletionContributor.INSTANCE.addExplicitExtension(JavaLanguage.INSTANCE, new BasicExpressionCompletionContributor());
     }
 

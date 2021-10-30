@@ -1,5 +1,6 @@
 package com.tyron.psi.lookup;
 
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -11,13 +12,13 @@ public abstract class LookupElementWeigher {
     private final boolean myNegated;
     private final boolean myPrefixDependent;
 
-    protected LookupElementWeigher(String id, boolean negated, boolean dependsOnPrefix) {
+    protected LookupElementWeigher(@NonNls String id, boolean negated, boolean dependsOnPrefix) {
         myId = id;
         myNegated = negated;
         myPrefixDependent = dependsOnPrefix;
     }
 
-    protected LookupElementWeigher(String id) {
+    protected LookupElementWeigher(@NonNls String id) {
         this(id, false, false);
     }
 
@@ -35,6 +36,13 @@ public abstract class LookupElementWeigher {
     }
 
     @Nullable
-    public abstract Comparable weigh(@NotNull LookupElement element);
+    public Comparable weigh(@NotNull LookupElement element, @NotNull WeighingContext context) {
+        return weigh(element);
+    }
+
+    @Nullable
+    public Comparable weigh(@NotNull LookupElement element) {
+        throw new UnsupportedOperationException("weigh not implemented in " + getClass());
+    }
 
 }
