@@ -36,6 +36,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.Project;
+import com.tyron.builder.model.ProjectSettings;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.service.CompilerService;
@@ -562,6 +563,10 @@ public class MainFragment extends Fragment {
     }
 
     private void saveAll() {
+        if (mProject == null) {
+            return;
+        }
+
         List<File> items = mAdapter.getItems();
         for (File file : items) {
             CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager().findFragmentByTag(
@@ -572,8 +577,12 @@ public class MainFragment extends Fragment {
             }
         }
 
+        ProjectSettings settings = mProject.getSettings();
+        if (settings == null) {
+            return;
+        }
         String itemString = new Gson().toJson(items);
-        mProject.getSettings().edit()
+        settings.edit()
                 .putString("editor_opened_files", itemString)
                 .apply();
     }
