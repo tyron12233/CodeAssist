@@ -6,15 +6,19 @@ import android.util.Log;
 import androidx.preference.PreferenceManager;
 
 import com.tyron.ProjectManager;
+import com.tyron.completion.drawable.CircleDrawable;
 import com.tyron.kotlin_completion.CompletionEngine;
 import com.tyron.kotlin_completion.compiler.CompletionKind;
 import com.tyron.psi.completion.CompletionResult;
 
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProcessCanceledException;
+import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
 import org.jetbrains.kotlin.com.intellij.util.Consumer;
 
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -78,13 +82,20 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
                     .getCompilerClassPath()
                     .getCompiler()
                     .createJavaFile(mEditor.getText().toString(), Paths.get("Main.java"), CompletionKind.DEFAULT);
-            engine.complete(javaFile, javaFile.findElementAt(mEditor.getCursor().getLeft() - 1), mEditor.getCursor().getLeft(), new Consumer<com.tyron.psi.completion.CompletionResult>() {
-                @Override
-                public void consume(CompletionResult completionResult) {
-                    Log.d("RESULT", completionResult.toString());
+            List<CompletionItem> result = new ArrayList<>();
+            engine.complete(javaFile, javaFile.findElementAt(mEditor.getCursor().getLeft() - 1), mEditor.getCursor().getLeft(), completionResult -> {
+                com.tyron.completion.model.CompletionItem item = new com.tyron.completion.model.CompletionItem();
+                item.commitText = completionResult.getLookupElement().getLookupString();
+                item.label = item.commitText;
+                item.detail = "test";
+                if (completionResult.getLookupElement().getPsiElement() instanceof PsiMethod) {
+                    item.iconKind = CircleDrawable.Kind.Method;
+                } else if (completionResult.getLookupElement().getPsiElement() instanceof PsiClass) {
+                    item.iconKind = CircleDrawable.Kind.Class;
                 }
+                result.add(new CompletionItem(item));
             });
-            return null;
+            return result;
         } catch (ProcessCanceledException e) {
             return null;
         }

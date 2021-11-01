@@ -127,7 +127,6 @@ public abstract class CompletionService {
             }
         };
         String prefix = suggestPrefix(parameters);
-        Log.d("PREFIX", prefix);
         getVariantsFromContributors(parameters, null, createMatcher(prefix, false), batchConsumer);
         if (lookupSet.isEmpty() && prefix.length() > 2) {
             typoTolerant.set(true);

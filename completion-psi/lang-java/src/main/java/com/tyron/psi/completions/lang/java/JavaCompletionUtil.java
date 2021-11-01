@@ -412,13 +412,13 @@ public class JavaCompletionUtil {
 
     static Iterable<? extends LookupElement> createLookupElements(CompletionElement completionElement, PsiJavaReference reference) {
         Object completion = completionElement.getElement();
-//        assert !(completion instanceof LookupElement);
-//
-//        if (reference instanceof PsiJavaCodeReferenceElement) {
-//            if (completion instanceof PsiMethod &&
-//                    ((PsiJavaCodeReferenceElement)reference).getParent() instanceof PsiImportStaticStatement) {
-//                return Collections.singletonList(JavaLookupElementBuilder.forMethod((PsiMethod)completion, PsiSubstitutor.EMPTY));
-//            }
+        assert !(completion instanceof LookupElement);
+
+        if (reference instanceof PsiJavaCodeReferenceElement) {
+            if (completion instanceof PsiMethod &&
+                    ((PsiJavaCodeReferenceElement)reference).getParent() instanceof PsiImportStaticStatement) {
+                return Collections.singletonList(JavaLookupElementBuilder.forMethod((PsiMethod)completion, PsiSubstitutor.EMPTY));
+            }
 //
 //            if (completion instanceof PsiClass) {
 //                List<JavaPsiClassReferenceElement> classItems = JavaClassNameCompletionContributor.createClassLookupItems(
@@ -428,10 +428,10 @@ public class JavaCompletionUtil {
 //                        Conditions.alwaysTrue());
 //                return JBIterable.from(classItems).flatMap(i -> JavaConstructorCallElement.wrap(i, reference.getElement()));
 //            }
-//        }
-//
-//        PsiSubstitutor substitutor = completionElement.getSubstitutor();
-//        if (substitutor == null) substitutor = PsiSubstitutor.EMPTY;
+        }
+
+        PsiSubstitutor substitutor = completionElement.getSubstitutor();
+        if (substitutor == null) substitutor = PsiSubstitutor.EMPTY;
 //        if (completion instanceof PsiClass) {
 //            JavaPsiClassReferenceElement classItem =
 //                    JavaClassNameCompletionContributor.createClassLookupItem((PsiClass)completion, true).setSubstitutor(substitutor);
