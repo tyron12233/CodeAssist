@@ -7,6 +7,10 @@ import com.tyron.psi.completions.lang.java.BasicExpressionCompletionContributor;
 import com.tyron.psi.completions.lang.java.JavaClassNameCompletionContributor;
 import com.tyron.psi.completions.lang.java.JavaCompletionContributor;
 import com.tyron.psi.completions.lang.java.JavaNoVariantsDelegator;
+import com.tyron.psi.completions.lang.java.TestCompletionContributor;
+import com.tyron.psi.completions.lang.java.guess.GuessManager;
+import com.tyron.psi.completions.lang.java.guess.GuessManagerImpl;
+import com.tyron.psi.completions.lang.java.scope.JavaCompletionProcessor;
 import com.tyron.psi.editor.CaretModel;
 import com.tyron.psi.editor.Editor;
 import com.tyron.psi.lookup.LookupElementPresentation;
@@ -26,26 +30,40 @@ import org.jetbrains.kotlin.com.intellij.openapi.extensions.PluginId;
 import org.jetbrains.kotlin.com.intellij.openapi.project.DumbService;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
+import org.jetbrains.kotlin.com.intellij.psi.JavaPsiFacade;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiNameHelper;
+import org.jetbrains.kotlin.com.intellij.psi.PsiReference;
+import org.jetbrains.kotlin.com.intellij.psi.PsiResolveHelper;
+import org.jetbrains.kotlin.com.intellij.psi.ResolveState;
+import org.jetbrains.kotlin.com.intellij.psi.impl.PsiNameHelperImpl;
+import org.jetbrains.kotlin.com.intellij.psi.scope.PsiScopeProcessor;
+import org.jetbrains.kotlin.com.intellij.psi.scope.util.PsiScopesUtil;
+import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.kotlin.com.intellij.util.Consumer;
 
 public class CompletionEngine {
 
     private final CoreProjectEnvironment mProjectEnvironment;
     private final CompletionService mCompletionService;
+    private final Project mProject;
 
     public CompletionEngine(CoreProjectEnvironment environment) {
         mProjectEnvironment = environment;
+        mProject = environment.getProject();
         mCompletionService = new CompletionServiceImpl();
 
         environment.registerProjectExtensionPoint(CompletionContributor.EP, CompletionContributor.class);
         environment.getEnvironment().registerApplicationService(CompletionService.class, mCompletionService);
-
+        environment.getProject().registerService(GuessManager.class, new GuessManagerImpl(mProject));
+        environment.getProject().registerService(PsiNameHelper.class, PsiNameHelperImpl.getInstance());
         JavaCompletionContributor javaCompletionContributor = new JavaCompletionContributor();
+//        CompletionContributor.INSTANCE.addExplicitExtension(JavaLanguage.INSTANCE, new TestCompletionContributor());
         CompletionContributor.INSTANCE.addExplicitExtension(JavaLanguage.INSTANCE, javaCompletionContributor);
-        CompletionContributor.INSTANCE.addExplicitExtension(JavaLanguage.INSTANCE, new JavaClassNameCompletionContributor());
-        CompletionContributor.INSTANCE.addExplicitExtension(JavaLanguage.INSTANCE, new JavaNoVariantsDelegator());
+//        CompletionContributor.INSTANCE.addExplicitExtension(JavaLanguage.INSTANCE, new JavaClassNameCompletionContributor());
+//        CompletionContributor.INSTANCE.addExplicitExtension(JavaLanguage.INSTANCE, new JavaNoVariantsDelegator());
       //  CompletionContributor.INSTANCE.addExplicitExtension(JavaLanguage.INSTANCE, new BasicExpressionCompletionContributor());
     }
 
@@ -137,12 +155,7 @@ public class CompletionEngine {
             public <T> void putUserData(@NotNull Key<T> key, @Nullable T t) {
 
             }
-        }, new CompletionProcess() {
-            @Override
-            public boolean isAutopopupCompletion() {
-                return true;
-            }
-        });
+        }, () -> true);
         mCompletionService.performCompletion(completionParameters, consumer);
     }
 }

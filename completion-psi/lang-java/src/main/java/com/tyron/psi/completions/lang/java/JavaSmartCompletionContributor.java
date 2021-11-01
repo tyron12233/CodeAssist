@@ -3,11 +3,14 @@ package com.tyron.psi.completions.lang.java;
 import static com.tyron.psi.completions.lang.java.patterns.PsiJavaPatterns.psiElement;
 import static com.tyron.psi.patterns.StandardPatterns.or;
 
+import com.tyron.psi.completion.CompletionContributor;
 import com.tyron.psi.completion.CompletionParameters;
 import com.tyron.psi.completion.CompletionType;
+import com.tyron.psi.completion.PrefixMatcher;
 import com.tyron.psi.completions.lang.java.filter.ElementExtractorFilter;
 import com.tyron.psi.completions.lang.java.filter.getters.ExpectedTypesGetter;
 import com.tyron.psi.completions.lang.java.filter.types.AssignableFromFilter;
+import com.tyron.psi.completions.lang.java.scope.JavaCompletionProcessor;
 import com.tyron.psi.lookup.LookupElement;
 import com.tyron.psi.patterns.ElementPattern;
 import com.tyron.psi.tailtype.TailType;
@@ -17,12 +20,15 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.psi.*;
 import org.jetbrains.kotlin.com.intellij.psi.filters.ElementFilter;
 import org.jetbrains.kotlin.com.intellij.psi.filters.OrFilter;
+import org.jetbrains.kotlin.com.intellij.psi.infos.CandidateInfo;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil;
+import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 import org.jetbrains.kotlin.com.intellij.util.SmartList;
 import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import gnu.trove.TObjectHashingStrategy;
 
@@ -98,6 +104,37 @@ public class JavaSmartCompletionContributor {
 
     public static SmartCompletionDecorator decorate(LookupElement lookupElement, Collection<? extends ExpectedTypeInfo> infos) {
         return new SmartCompletionDecorator(lookupElement, infos);
+    }
+
+    static Set<LookupElement> completeReference(final PsiElement element,
+                                                PsiJavaCodeReferenceElement reference,
+                                                final ElementFilter filter,
+                                                final boolean acceptClasses,
+                                                final boolean acceptMembers,
+                                                CompletionParameters parameters, final PrefixMatcher matcher) {
+        ElementFilter checkClass = new ElementFilter() {
+            @Override
+            public boolean isAcceptable(Object element, PsiElement context) {
+                return filter.isAcceptable(element, context);
+            }
+
+            @Override
+            public boolean isClassAcceptable(Class hintClass) {
+                if (ReflectionUtil.isAssignable(PsiClass.class, hintClass)) {
+                    return acceptClasses;
+                }
+
+                if (ReflectionUtil.isAssignable(PsiVariable.class, hintClass) ||
+                        ReflectionUtil.isAssignable(PsiMethod.class, hintClass) ||
+                        ReflectionUtil.isAssignable(CandidateInfo.class, hintClass)) {
+                    return acceptMembers;
+                }
+                return false;
+            }
+        };
+        JavaCompletionProcessor.Options options =
+                JavaCompletionProcessor.Options.DEFAULT_OPTIONS.withFilterStaticAfterInstance(parameters.getInvocationCount() <= 1);
+        return JavaCompletionUtil.processJavaReference(element, reference, checkClass, options, matcher::prefixMatches, parameters);
     }
 
 }

@@ -281,8 +281,11 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 try {
                     Indexer indexer = mEditor.getText().getIndexer();
 
-                    if (it.getStartPosition() < 0 && it.getEndPosition() > 0) {
-                        it.setStartPosition(it.getEndPosition() - 1);
+                    if (it.getStartPosition() == -1) {
+                        it.setStartPosition(it.getPosition());
+                    }
+                    if (it.getEndPosition() == -1) {
+                        it.setEndPosition(it.getPosition());
                     }
                     int startLine = indexer.getCharLine((int) it.getStartPosition());
                     int startColumn = indexer.getCharColumn((int) it.getStartPosition());

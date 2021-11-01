@@ -46,9 +46,9 @@ public class JavaClassNameCompletionContributor extends CompletionContributor im
                                      final boolean filterByScope,
                                      @NotNull final PrefixMatcher matcher,
                                      @NotNull final Consumer<? super LookupElement> consumer) {
-//        final PsiElement insertedElement = parameters.getPosition();
-//        final PsiFile psiFile = insertedElement.getContainingFile();
-//
+        final PsiElement insertedElement = parameters.getPosition();
+        final PsiFile psiFile = insertedElement.getContainingFile();
+
 //        JavaClassReference ref = JavaClassReferenceCompletionContributor.findJavaClassReference(psiFile, parameters.getOffset());
 //        if (ref != null && ref.getContext() instanceof PsiClass) {
 //            return;

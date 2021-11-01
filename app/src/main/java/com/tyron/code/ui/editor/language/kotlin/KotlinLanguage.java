@@ -34,7 +34,7 @@ public class KotlinLanguage implements EditorLanguage {
 
     @Override
     public boolean isAutoCompleteChar(char ch) {
-        return ch == '.' || MyCharacter.isJavaIdentifierPart(ch);
+        return true; //return ch == '.' || MyCharacter.isJavaIdentifierPart(ch);
     }
 
     @Override

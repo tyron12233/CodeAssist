@@ -1,5 +1,7 @@
 package com.tyron.psi.completion;
 
+import com.tyron.psi.patterns.ElementPattern;
+
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
@@ -10,7 +12,6 @@ import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager;
 import org.jetbrains.kotlin.com.intellij.openapi.project.DumbService;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
-import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtilCore;

@@ -133,11 +133,12 @@ public final class BasicExpressionCompletionContributor {
             final PsiReferenceExpression refExpr = (PsiReferenceExpression)expression;
             if (!refExpr.isQualified()) {
                 final PsiElement target = refExpr.resolve();
-//                if (target instanceof PsiVariable) {
+                if (target instanceof PsiVariable) {
+                    return LookupElementBuilder.create(target);
 //                    final VariableLookupItem item = new VariableLookupItem((PsiVariable)target);
 //                    item.setSubstitutor(PsiSubstitutor.EMPTY);
 //                    return item;
-//                }
+                }
             }
         }
         if (expression instanceof PsiMethodCallExpression) {

@@ -41,7 +41,7 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-        }, 7000);
+        }, 4000);
     }
 
     @Override
