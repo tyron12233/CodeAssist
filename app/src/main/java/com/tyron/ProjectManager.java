@@ -98,7 +98,7 @@ public class ProjectManager {
             }
             mCurrentProject = proj;
             mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
-            mCompletionEnvironment = CompletionEnvironment.newInstance(proj.getJavaFiles().values(), proj.getKotlinFiles().values(), proj.getLibraries());
+            //mCompletionEnvironment = CompletionEnvironment.newInstance(proj.getJavaFiles().values(), proj.getKotlinFiles().values(), proj.getLibraries());
             CompletionEngine.getInstance().index(proj, () -> mListener.onComplete(true, "Index successful"));
         });
     }

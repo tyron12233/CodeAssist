@@ -50,53 +50,71 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
         if (!mPreferences.getBoolean("code_editor_completion", true)) {
             return Collections.emptyList();
         }
+        if (CompletionEngine.isIndexing()) {
+            return Collections.emptyList();
+        }
 
         Project currentProject = ProjectManager.getInstance().getCurrentProject();
-        CompletionEnvironment completionEnvironment = ProjectManager.getInstance().getCompletionEnvironment();
+        List<CompletionItem> result = new ArrayList<>();
+        if (currentProject != null) {
+            CompletionList completionList = CompletionEngine.getInstance().complete(currentProject,
+                    mEditor.getCurrentFile(),
+                    mEditor.getText().toString(),
+                    mEditor.getCursor().getLeft());
 
-        if (currentProject != null && completionEnvironment != null) {
-            currentProject.getFileManager()
-                    .save(mEditor.getCurrentFile(), mEditor.getText().toString());
-
-            if (!CompletionEngine.getInstance().getCompiler(currentProject).isReady()) {
-                return Collections.emptyList();
+            for (com.tyron.completion.model.CompletionItem item : completionList.items) {
+                result.add(new CompletionItem(item));
             }
-
-            Cursor cursor = mEditor.getCursor();
-            int offset = cursor.getLeft();
-
-            List<CompletionItem> result = new ArrayList<>();
-
-            PsiJavaFile javaFile = (PsiJavaFile) completionEnvironment.getPsiFile(mEditor.getCurrentFile());
-            if (javaFile == null) {
-                return null;
-            }
-            Document document = javaFile.getViewProvider().getDocument();
-            if (document == null) {
-                return null;
-            }
-            CommandProcessor.getInstance().executeCommand(completionEnvironment.getEnvironment().getProject(), () -> {
-                document.replaceString(0, document.getTextLength(), mEditor.getText().toString());
-            }, "insert", "");
-            PsiDocumentManager.getInstance(completionEnvironment.getEnvironment().getProject()).commitDocument(document);
-            javaFile = (PsiJavaFile) PsiDocumentManager.getInstance(completionEnvironment.getEnvironment().getProject()).getPsiFile(document);
-            if (javaFile == null) {
-                return null;
-            }
-            PsiManager.getInstance(completionEnvironment.getEnvironment().getProject())
-                    .reloadFromDisk(javaFile);
-            completionEnvironment.getCompletionEngine()
-                    .complete(javaFile, javaFile.getViewProvider().findElementAt(offset - 1), offset, completionResult -> {
-                        LookupElement element = completionResult.getLookupElement();
-                        com.tyron.completion.model.CompletionItem item = new com.tyron.completion.model.CompletionItem();
-                        item.label = element.getLookupString();
-                        item.iconKind = CircleDrawable.Kind.Method;
-                        result.add(new CompletionItem(item));
-                    });
             return result;
         } else {
             Log.w("JavaAutoCompleteProvider", "Current project is null");
         }
         return null;
+    }
+
+    @SuppressWarnings("all")
+    private List<CompletionItem> getPsiItems() {
+        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+        CompletionEnvironment completionEnvironment = ProjectManager.getInstance().getCompletionEnvironment();
+
+        currentProject.getFileManager()
+                .save(mEditor.getCurrentFile(), mEditor.getText().toString());
+
+        if (!CompletionEngine.getInstance().getCompiler(currentProject).isReady()) {
+            return Collections.emptyList();
+        }
+
+        Cursor cursor = mEditor.getCursor();
+        int offset = cursor.getLeft();
+
+        List<CompletionItem> result = new ArrayList<>();
+
+        PsiJavaFile javaFile = (PsiJavaFile) completionEnvironment.getPsiFile(mEditor.getCurrentFile());
+        if (javaFile == null) {
+            return null;
+        }
+        Document document = javaFile.getViewProvider().getDocument();
+        if (document == null) {
+            return null;
+        }
+        CommandProcessor.getInstance().executeCommand(completionEnvironment.getEnvironment().getProject(), () -> {
+            document.replaceString(0, document.getTextLength(), mEditor.getText().toString());
+        }, "insert", "");
+        PsiDocumentManager.getInstance(completionEnvironment.getEnvironment().getProject()).commitDocument(document);
+        javaFile = (PsiJavaFile) PsiDocumentManager.getInstance(completionEnvironment.getEnvironment().getProject()).getPsiFile(document);
+        if (javaFile == null) {
+            return null;
+        }
+        PsiManager.getInstance(completionEnvironment.getEnvironment().getProject())
+                .reloadFromDisk(javaFile);
+        completionEnvironment.getCompletionEngine()
+                .complete(javaFile, javaFile.getViewProvider().findElementAt(offset - 1), offset, completionResult -> {
+                    LookupElement element = completionResult.getLookupElement();
+                    com.tyron.completion.model.CompletionItem item = new com.tyron.completion.model.CompletionItem();
+                    item.label = element.getLookupString();
+                    item.iconKind = CircleDrawable.Kind.Method;
+                    result.add(new CompletionItem(item));
+                });
+        return result;
     }
 }
