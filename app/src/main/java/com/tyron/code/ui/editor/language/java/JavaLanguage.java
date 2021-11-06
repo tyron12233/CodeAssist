@@ -17,6 +17,7 @@ import com.google.common.collect.Range;
 import com.google.googlejavaformat.java.Formatter;
 import com.google.googlejavaformat.java.FormatterException;
 import com.google.googlejavaformat.java.JavaFormatterOptions;
+import com.tyron.ProjectManager;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -32,7 +33,6 @@ public class JavaLanguage implements EditorLanguage {
 
     public JavaLanguage(CodeEditor editor) {
         mEditor = editor;
-
         mAnalyzer = new JavaAnalyzer(editor);
         mAutoCompleteProvider = new JavaAutoCompleteProvider(mEditor);
     }

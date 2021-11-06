@@ -1,11 +1,15 @@
 package com.tyron;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.provider.CompletionEngine;
+import com.tyron.psi.completion.CompletionEnvironment;
 import com.tyron.resolver.DependencyDownloader;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.DependencyUtils;
@@ -39,6 +43,7 @@ public class ProjectManager {
         return INSTANCE;
     }
 
+    private CompletionEnvironment mCompletionEnvironment;
     private final List<OnProjectOpenListener> mProjectOpenListeners = new ArrayList<>();
     private Project mCurrentProject;
 
@@ -93,12 +98,21 @@ public class ProjectManager {
             }
             mCurrentProject = proj;
             mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
+            mCompletionEnvironment = CompletionEnvironment.newInstance(proj.getJavaFiles().values(), proj.getKotlinFiles().values(), proj.getLibraries());
             CompletionEngine.getInstance().index(proj, () -> mListener.onComplete(true, "Index successful"));
         });
     }
 
-    public void closeProject(Project project) {
-        mCurrentProject = null;
+    public void closeProject(@NonNull Project project) {
+        if (project.equals(mCurrentProject)) {
+            mCurrentProject = null;
+            mCompletionEnvironment.close();
+        }
+    }
+
+    @Nullable
+    public CompletionEnvironment getCompletionEnvironment() {
+        return mCompletionEnvironment;
     }
 
     public Project getCurrentProject() {

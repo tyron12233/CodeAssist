@@ -10,6 +10,7 @@ import com.tyron.completion.drawable.CircleDrawable;
 import com.tyron.kotlin_completion.CompletionEngine;
 import com.tyron.kotlin_completion.compiler.CompletionKind;
 import com.tyron.psi.completion.CompletionResult;
+import com.tyron.psi.lookup.LookupElementPresentation;
 
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProcessCanceledException;
 import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
@@ -84,16 +85,16 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
                     .createJavaFile(mEditor.getText().toString(), Paths.get("Main.java"), CompletionKind.DEFAULT);
             List<CompletionItem> result = new ArrayList<>();
             engine.complete(javaFile, javaFile.findElementAt(mEditor.getCursor().getLeft() - 1), mEditor.getCursor().getLeft(), completionResult -> {
+                LookupElementPresentation presentation = new LookupElementPresentation();
+                completionResult.getLookupElement()
+                        .renderElement(presentation);
+
                 com.tyron.completion.model.CompletionItem item = new com.tyron.completion.model.CompletionItem();
-                item.commitText = completionResult.getLookupElement().getLookupString();
-                item.label = item.commitText;
-                item.detail = "test";
-                if (completionResult.getLookupElement().getPsiElement() instanceof PsiMethod) {
-                    item.iconKind = CircleDrawable.Kind.Method;
-                } else if (completionResult.getLookupElement().getPsiElement() instanceof PsiClass) {
-                    item.iconKind = CircleDrawable.Kind.Class;
-                }
+                item.commitText = presentation.getItemText();
+                item.label = presentation.getItemText();
+                item.detail = presentation.getTypeText();
                 result.add(new CompletionItem(item));
+
             });
             return result;
         } catch (ProcessCanceledException e) {

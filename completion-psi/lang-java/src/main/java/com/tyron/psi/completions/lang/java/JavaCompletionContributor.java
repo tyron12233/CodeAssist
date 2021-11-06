@@ -486,7 +486,7 @@ public class  JavaCompletionContributor extends CompletionContributor implements
         }
 //
 //        boolean inSwitchLabel = IN_SWITCH_LABEL.accepts(position);
-//        TailType forcedTail = null;
+        TailType forcedTail = null;
 //        if (!smart) {
 //            if (inSwitchLabel) {
 //                forcedTail = TailTypes.forSwitchLabel(Objects.requireNonNull(PsiTreeUtil.getParentOfType(position, PsiSwitchBlock.class)));
@@ -520,10 +520,10 @@ public class  JavaCompletionContributor extends CompletionContributor implements
             }
 
             LookupItem<?> item = element.as(LookupItem.CLASS_CONDITION_KEY);
-//
-//            if (forcedTail != null && !(element instanceof JavaPsiClassReferenceElement)) {
-//                element = TailTypeDecorator.withTail(element, forcedTail);
-//            }
+
+            if (forcedTail != null && !(element instanceof JavaPsiClassReferenceElement)) {
+                element = TailTypeDecorator.withTail(element, forcedTail);
+            }
 //
 //            if (inSwitchLabel && !smart) {
 //                element = new IndentingDecorator(element);

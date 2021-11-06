@@ -4986,6 +4986,9 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             mRenderer.afterInsert(content, startLine, startColumn, endLine, endColumn, insertedContent);
         }
         mLayout.afterInsert(content, startLine, startColumn, endLine, endColumn, insertedContent);
+        if (mListener != null) {
+            mListener.afterInsert(this, mText, startLine, startColumn, endLine, endColumn, insertedContent);
+        }
 
         // Notify input method
         updateCursor();
@@ -5030,9 +5033,6 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
 
         onSelectionChanged();
         invalidateInCursor();
-        if (mListener != null) {
-            mListener.afterInsert(this, mText, startLine, startColumn, endLine, endColumn, insertedContent);
-        }
     }
 
     @Override
@@ -5049,6 +5049,9 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             mRenderer.afterDelete(content, startLine, startColumn, endLine, endColumn, deletedContent);
         }
         mLayout.afterDelete(content, startLine, startColumn, endLine, endColumn, deletedContent);
+        if (mListener != null) {
+            mListener.afterDelete(this, mText, startLine, startColumn, endLine, endColumn, deletedContent);
+        }
 
         updateCursor();
         exitSelectModeIfNeeded();
@@ -5080,9 +5083,6 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
 
         onSelectionChanged();
         invalidateInCursor();
-        if (mListener != null) {
-            mListener.afterDelete(this, mText, startLine, startColumn, endLine, endColumn, deletedContent);
-        }
     }
 
     @Override

@@ -44,8 +44,23 @@ import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.completion.provider.CompletionProvider;
 import com.tyron.completion.rewrite.AddImport;
 import com.tyron.lint.api.TextFormat;
+import com.tyron.psi.completion.CompletionEnvironment;
+import com.tyron.psi.util.DocumentUtils;
 
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.kotlin.com.intellij.lang.java.parser.JavaParserUtil;
+import org.jetbrains.kotlin.com.intellij.openapi.application.ReadAction;
+import org.jetbrains.kotlin.com.intellij.openapi.application.WriteAction;
+import org.jetbrains.kotlin.com.intellij.openapi.command.WriteCommandAction;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl;
+import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
+import org.jetbrains.kotlin.com.intellij.psi.JavaPsiFacade;
+import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
+import org.jetbrains.kotlin.com.intellij.psi.impl.PsiDocumentManagerBase;
+import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiFileImpl;
 
 import java.io.File;
 import java.io.IOException;
@@ -53,10 +68,12 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 
+import io.github.rosemoe.sora.interfaces.EditorEventListener;
 import io.github.rosemoe.sora.interfaces.EditorLanguage;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Cursor;
@@ -229,7 +246,6 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
             }
             mEditor.postHideCompletionWindow();
         });
-
         mEditor.setOnLongPressListener((start, end, event) -> {
             Project project = ProjectManager.getInstance().getCurrentProject();
             if (mLanguage instanceof JavaLanguage && project != null) {
@@ -285,6 +301,47 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                     }
                 });
                 mEditor.showContextMenu(event.getX(), event.getY());
+            }
+        });
+        mEditor.setEventListener(new EditorEventListener() {
+            @Override
+            public boolean onRequestFormat(@NonNull CodeEditor editor) {
+                return false;
+            }
+
+            @Override
+            public boolean onFormatFail(@NonNull CodeEditor editor, Throwable cause) {
+                return false;
+            }
+
+            @Override
+            public void onFormatSucceed(@NonNull CodeEditor editor) {
+
+            }
+
+            @Override
+            public void onNewTextSet(@NonNull CodeEditor editor) {
+
+            }
+
+            @Override
+            public void afterDelete(@NonNull CodeEditor editor, @NonNull CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence deletedContent) {
+
+            }
+
+            @Override
+            public void afterInsert(@NonNull CodeEditor editor, @NonNull CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence insertedContent) {
+
+            }
+
+            @Override
+            public void beforeReplace(@NonNull CodeEditor editor, @NonNull CharSequence content) {
+
+            }
+
+            @Override
+            public void onSelectionChanged(@NonNull CodeEditor editor, @NonNull Cursor cursor) {
+
             }
         });
     }

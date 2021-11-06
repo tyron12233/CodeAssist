@@ -60,7 +60,6 @@ public class CompilationEnvironment implements Closeable {
         mParser = new KtPsiFactory(mEnvironment.getProject());
     }
 
-
     private CompilerConfiguration getConfiguration() {
         HashMap<LanguageFeature, LanguageFeature.State> map = new HashMap<>();
         for (LanguageFeature value : LanguageFeature.values()) {
@@ -71,25 +70,9 @@ public class CompilationEnvironment implements Closeable {
         CompilerConfiguration configuration = new CompilerConfiguration();
         configuration.put(CommonConfigurationKeys.MODULE_NAME, JvmProtoBufUtil.DEFAULT_MODULE_NAME);
         configuration.put(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS, settings);
-        configuration.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, new MessageCollector() {
-            @Override
-            public void clear() {
-
-            }
-
-            @Override
-            public void report(CompilerMessageSeverity compilerMessageSeverity, String s, CompilerMessageSourceLocation compilerMessageSourceLocation) {
-                Log.d("CompilationEnvironment", compilerMessageSeverity +": " + s);
-            }
-
-            @Override
-            public boolean hasErrors() {
-                return false;
-            }
-        });
+        configuration.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.Companion.getNONE());
         configuration.put(JVMConfigurationKeys.USE_PSI_CLASS_FILES_READING, true);
         configuration.put(JVMConfigurationKeys.NO_JDK, true);
-
         JvmContentRootsKt.addJvmClasspathRoots(configuration, mClassPath.stream().map(Path::toFile).collect(Collectors.toList()));
         JvmContentRootsKt.addJavaSourceRoots(configuration, mJavaSourcePath.stream().map(Path::toFile).collect(Collectors.toList()));
 

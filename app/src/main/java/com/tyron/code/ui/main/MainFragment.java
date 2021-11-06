@@ -51,6 +51,7 @@ import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ApkInstaller;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.provider.CompletionEngine;
+import com.tyron.psi.completion.CompletionEnvironment;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -358,6 +359,11 @@ public class MainFragment extends Fragment {
                         .findFragmentByTag("f" + mAdapter.getItemId(p1.getPosition()));
                 if (fragment instanceof CodeEditorFragment) {
                     ((CodeEditorFragment) fragment).analyze();
+                }
+
+                CompletionEnvironment completionEnvironment = mProjectManager.getCompletionEnvironment();
+                if (completionEnvironment != null) {
+                    completionEnvironment.createContainer(Collections.emptyList());
                 }
             }
         });

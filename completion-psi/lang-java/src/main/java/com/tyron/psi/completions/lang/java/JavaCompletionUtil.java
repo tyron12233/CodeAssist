@@ -35,6 +35,8 @@ import org.jetbrains.kotlin.com.intellij.psi.filters.ElementFilter;
 import org.jetbrains.kotlin.com.intellij.psi.impl.FakePsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.impl.light.LightVariableBuilder;
 import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiImmediateClassType;
+import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiJavaModuleReferenceImpl;
+import org.jetbrains.kotlin.com.intellij.psi.impl.source.tree.java.PsiReferenceExpressionImpl;
 import org.jetbrains.kotlin.com.intellij.psi.scope.PsiScopeProcessor;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTypesUtil;
@@ -353,6 +355,7 @@ public class JavaCompletionUtil {
         }
 
         javaReference.processVariants(processor);
+
 
         List<PsiTypeLookupItem> castItems = ContainerUtil.map(runtimeQualifiers, q -> PsiTypeLookupItem.createLookupItem(q, element));
 
