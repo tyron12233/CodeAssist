@@ -583,6 +583,10 @@ public class MainFragment extends Fragment {
             }
         }
 
+        if (CompletionEngine.isIndexing()) {
+            return;
+        }
+
         ProjectSettings settings = mProject.getSettings();
         if (settings == null) {
             return;
