@@ -95,6 +95,12 @@ public class CompletionEngine {
 
     @SuppressLint("NewApi")
     public void index(Project project, Runnable callback) {
+        if (!changed(mCachedPaths, project.getFileManager().fileClasspath())) {
+            setIndexing(false);
+            handler.post(callback);
+            return;
+        }
+
         setIndexing(true);
         project.clear();
         project.getJavaFiles();
