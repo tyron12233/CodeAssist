@@ -10,7 +10,7 @@ public class Dependency {
         String[] strings = string.split(":");
 
         if (strings.length < 3) {
-            throw new IllegalArgumentException("Invalid dependency format, must be groupId:atifactId:version");
+            throw new IllegalArgumentException("Invalid dependency format, expected groupId:atifactId:version but got " + string);
         }
 
         Dependency dependency = new Dependency();
