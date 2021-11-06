@@ -106,7 +106,9 @@ public class ProjectManager {
     public void closeProject(@NonNull Project project) {
         if (project.equals(mCurrentProject)) {
             mCurrentProject = null;
-            mCompletionEnvironment.close();
+            if (mCompletionEnvironment != null) {
+                mCompletionEnvironment.close();
+            }
         }
     }
 
