@@ -106,16 +106,15 @@ public class ImplementAbstractMethods implements Rewrite {
                 if (member.getKind() == ElementKind.METHOD && member.getModifiers().contains(Modifier.ABSTRACT)) {
                     ExecutableElement method = (ExecutableElement) member;
                     MethodTree source = findSource(compiler, task, method);
-                    if (source == null) {
-                        Log.w(getClass().getSimpleName(), "Unable to find source for " + method);
-                        continue;
-                    }
-                    ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType, method);
-
                     int tabCount = indent / 4;
-
                     String tabs = Strings.repeat("\t", tabCount);
-                    String text = EditHelper.printMethod(method, parameterizedType, source);
+                    ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType, method);
+                    String text;
+                    if (source != null) {
+                        text = EditHelper.printMethod(method, parameterizedType, source);
+                    } else {
+                        text = EditHelper.printMethod(method, parameterizedType, method);
+                    }
                     text = tabs + text.replace("\n", "\n" + tabs);
                     insertText.add(text);
                 }

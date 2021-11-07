@@ -299,7 +299,7 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
 
             @Override
             public void onNewTextSet(@NonNull CodeEditor editor) {
-
+                updateFile(editor.getText().toString());
             }
 
             @Override

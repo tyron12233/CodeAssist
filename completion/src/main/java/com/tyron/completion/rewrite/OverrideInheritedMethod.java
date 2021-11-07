@@ -70,7 +70,7 @@ public class OverrideInheritedMethod implements Rewrite {
                 MethodTree source = FindHelper.findMethod(parse, superClassName, methodName, erasedParameterTypes);
                 text = EditHelper.printMethod(superMethod, parameterizedType, source);
             } else {
-                text = EditHelper.printMethod(superMethod, parameterizedType, null);
+                text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
             }
 
             int tabCount = indent / 4;

@@ -82,6 +82,30 @@ public class EditHelper {
         return buf.toString();
     }
 
+    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, ExecutableElement source) {
+        StringBuilder buf = new StringBuilder();
+        buf.append("@Override\n");
+        if (method.getModifiers().contains(Modifier.PUBLIC)) {
+            buf.append("public ");
+        }
+        if (method.getModifiers().contains(Modifier.PROTECTED)) {
+            buf.append("protected ");
+        }
+
+        buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(" ");
+
+        buf.append(method.getSimpleName()).append("(");
+        if (source == null) {
+            buf.append(printParameters(parameterizedType, method));
+        } else {
+            buf.append(printParameters(parameterizedType, source));
+        }
+        buf.append(") {\n\t");
+        buf.append(printBody(method, source));
+        buf.append("\n}");
+        return buf.toString();
+    }
+
     public static String printBody(ExecutableElement method, MethodTree source) {
         TypeMirror returnType = method.getReturnType();
         if (!method.getModifiers().contains(Modifier.ABSTRACT)) {
@@ -93,6 +117,41 @@ public class EditHelper {
                 String names;
                 if (source != null) {
                     names = source.getParameters().stream().map(VariableTree::getName)
+                            .map(Name::toString).collect(Collectors.joining(", "));
+                } else {
+                    names = method.getParameters().stream().map(VariableElement::getSimpleName)
+                            .map(Name::toString).collect(Collectors.joining(", "));
+                }
+                body = "super." + method.getSimpleName() + "(" + names + ");";
+            }
+
+            return returnType.getKind() == TypeKind.VOID ? body : "return " + body;
+        }
+
+        switch (returnType.getKind()) {
+            case VOID: return "";
+            case SHORT:
+            case CHAR:
+            case FLOAT:
+            case BYTE:
+            case INT: return "return 0;";
+            case BOOLEAN: return "return false;";
+            default:
+                return "return null;";
+        }
+    }
+
+    public static String printBody(ExecutableElement method, ExecutableElement source) {
+        TypeMirror returnType = method.getReturnType();
+        if (!method.getModifiers().contains(Modifier.ABSTRACT)) {
+
+            String body;
+            if (method.getParameters().size() == 0) {
+                body = "super." + method.getSimpleName() + "();";
+            } else {
+                String names;
+                if (source != null) {
+                    names = source.getParameters().stream().map(VariableElement::getSimpleName)
                             .map(Name::toString).collect(Collectors.joining(", "));
                 } else {
                     names = method.getParameters().stream().map(VariableElement::getSimpleName)
