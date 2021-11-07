@@ -1,9 +1,11 @@
 package com.tyron.completion.action;
 
 import android.util.Log;
+import android.widget.Toast;
 
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.CompilerProvider;
+import com.tyron.completion.CompletionModule;
 import com.tyron.completion.FindTypeDeclarationAt;
 import com.tyron.completion.model.CodeAction;
 import com.tyron.completion.model.CodeActionList;
@@ -45,6 +47,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -59,7 +62,6 @@ public class CodeActionProvider {
     public List<CodeActionList> codeActionsForCursor(Path file, long cursor) {
         List<CodeActionList> codeActionList = new ArrayList<>();
 
-        List<IAction> applicableActions = new ArrayList<>();
         Diagnostic<? extends JavaFileObject> diagnostic;
         TreeMap<String, Rewrite> overrideMethods = new TreeMap<>();
         try (CompileTask task = mCompiler.compile(file)) {
@@ -67,6 +69,9 @@ public class CodeActionProvider {
             overrideMethods.putAll(getOverrideInheritedMethods(task, file, cursor));
         }
         if (diagnostic != null) {
+            CompletionModule.post(() -> Toast.makeText(CompletionModule.getContext(), diagnostic.getMessage(Locale.getDefault()), Toast.LENGTH_LONG)
+                    .show());
+
             codeActionList.add(getDiagnosticActions(file, diagnostic));
         }
 
@@ -108,7 +113,7 @@ public class CodeActionProvider {
      * @param cursor the current cursor position
      * @return null if no diagnostic is found
      */
-    private Diagnostic<? extends JavaFileObject> getDiagnostic(CompileTask task, long cursor) {
+    public Diagnostic<? extends JavaFileObject> getDiagnostic(CompileTask task, long cursor) {
         for (Diagnostic<? extends JavaFileObject> diagnostic : task.diagnostics) {
             if (diagnostic.getStartPosition() <= cursor && cursor < diagnostic.getEndPosition()) {
                 return diagnostic;

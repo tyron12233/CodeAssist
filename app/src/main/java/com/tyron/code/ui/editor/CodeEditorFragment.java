@@ -435,8 +435,8 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
         Project project = ProjectManager.getInstance().getCurrentProject();
         if (mLanguage instanceof JavaLanguage && project != null) {
             final Path current = mEditor.getCurrentFile().toPath();
-            return new CodeActionProvider(CompletionEngine.getInstance().getCompiler(project))
-                    .codeActionsForCursor(current, mEditor.getCursor().getLeft());
+            CodeActionProvider provider = new CodeActionProvider(CompletionEngine.getInstance().getCompiler(project));
+            return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
         }
         return Collections.emptyList();
     }
