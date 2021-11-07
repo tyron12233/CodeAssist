@@ -56,7 +56,7 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
 	}
 	
 	private JavaFileObject asJavaFileObject(File file) {
-		return new SourceFileObject(file.toPath());
+		return new SourceFileObject(file.toPath(), mProject);
 	}
 	
 	@Override
@@ -94,7 +94,7 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
             String simpleClassName = StringSearch.lastName(className);
             for (File f : mProject.getFileManager().list(packageName)) {
                 if (f.getName().equals(simpleClassName + kind.extension)) {
-                    return new SourceFileObject(f.toPath());
+                    return new SourceFileObject(f.toPath(), mProject);
                 }
             }
             // Fall through to disk in case we have .jar or .zip files on the source path

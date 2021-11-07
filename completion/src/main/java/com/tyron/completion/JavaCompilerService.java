@@ -113,7 +113,7 @@ public class JavaCompilerService implements CompilerProvider {
         firstAttempt.borrow.close();
         List<JavaFileObject> moreSources = new ArrayList<>(sources);
         for (Path add : addFiles) {
-            moreSources.add(new SourceFileObject(add));
+            moreSources.add(new SourceFileObject(add, mProject));
         }
         return new CompileBatch(this, moreSources);
     }
@@ -176,7 +176,7 @@ public class JavaCompilerService implements CompilerProvider {
 
         Path fromSource = findTypeDeclaration(className);
         if (fromSource != NOT_FOUND) {
-            return Optional.of(new SourceFileObject(fromSource));
+            return Optional.of(new SourceFileObject(fromSource, mProject));
         }
 
         return Optional.empty();
@@ -351,7 +351,7 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
     public ParseTask parse(Path file, String contents) {
-        SourceFileObject object = new SourceFileObject(file, contents, Instant.now());
+        SourceFileObject object = new SourceFileObject(file, contents, Instant.now(), mProject);
         Parser parser = Parser.parseJavaFileObject(mProject, object);
         return new ParseTask(parser.task, parser.root);
     }
@@ -367,7 +367,7 @@ public class JavaCompilerService implements CompilerProvider {
     public CompileTask compile(Path... files) {
         List<JavaFileObject> sources = new ArrayList<>();
         for (Path f : files) {
-            sources.add(new SourceFileObject(f));
+            sources.add(new SourceFileObject(f, mProject));
         }
         return compile(sources);
     }

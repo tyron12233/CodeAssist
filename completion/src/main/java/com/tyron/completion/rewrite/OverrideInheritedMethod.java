@@ -95,11 +95,13 @@ public class OverrideInheritedMethod implements Rewrite {
 
     private Position nextMember(ParseTask task, ClassTree parent) {
         SourcePositions pos = Trees.instance(task.task).getSourcePositions();
-        for (Tree member : parent.getMembers()) {
-            long start = pos.getStartPosition(task.root, member);
-            if (start > insertPosition) {
-                int line = (int) task.root.getLineMap().getLineNumber(start);
-                return new Position(line - 1, 0);
+        if (parent != null) {
+            for (Tree member : parent.getMembers()) {
+                long start = pos.getStartPosition(task.root, member);
+                if (start > insertPosition) {
+                    int line = (int) task.root.getLineMap().getLineNumber(start);
+                    return new Position(line - 1, 0);
+                }
             }
         }
         return Position.NONE;

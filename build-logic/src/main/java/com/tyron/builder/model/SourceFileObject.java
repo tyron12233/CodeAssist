@@ -22,21 +22,35 @@ public class SourceFileObject extends SimpleJavaFileObject {
 
 	public Path mFile;
 	private final Instant modified;
-	private String mContents;
+	private final String mContents;
+	private final Project mProject;
 	
 	public SourceFileObject(Path file) {
-		this(file, null, null);
+		this(file, null, null, null);
+	}
+
+	public SourceFileObject(Path file, Project project) {
+		this(file, null, null, project);
+	}
+
+	public SourceFileObject(Path file, String contents, Instant modified) {
+		this(file, contents, modified, null);
 	}
 	
-	public SourceFileObject(Path file, String contents, Instant modified) {
+	public SourceFileObject(Path file, String contents, Instant modified, Project project) {
 		super(file.toUri(), JavaFileObject.Kind.SOURCE);
 		mContents = contents;
 		mFile = file;
 		this.modified = modified;
+		mProject = project;
 	}
 
 	@Override
 	public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+		if (mProject != null) {
+			return mProject.getFileManager().readFile(mFile.toFile());
+		}
+
 		if (mContents != null) {
 			return mContents;
 		}
