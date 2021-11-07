@@ -316,6 +316,8 @@ public class JavaCompilerService implements CompilerProvider {
             if (parseCache.needs(parsedPath, file.getName())) {
                 Parser parser = Parser.parseJavaFileObject(mProject, file);
                 parseCache.load(parsedPath, file.getName(), new ParseTask(parser.task, parser.root));
+            } else {
+                Log.d("JavaCompilerService", "Using cached parse for " + file.getName());
             }
             return parseCache.get(parsedPath, file.getName());
         } else if (file instanceof SourceFileObject) {

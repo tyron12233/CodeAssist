@@ -1,19 +1,23 @@
 package com.tyron.code.ui.editor;
 
+import android.app.ProgressDialog;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.ContextMenu;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.ListPopupWindow;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -52,6 +56,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -227,59 +232,49 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
             mEditor.postHideCompletionWindow();
         });
         mEditor.setOnLongPressListener((start, end, event) -> {
-            if (mLanguage instanceof JavaLanguage && project != null) {
-                int cursorStart = mEditor.getCursor().getLeft();
-                int cursorEnd = mEditor.getCursor().getRight();
+            ProgressDialog dialog = new ProgressDialog(requireContext());
+            dialog.setMessage("Analyzing");
+            dialog.show();
 
-                for (LintIssue issue : ((JavaAnalyzer) mLanguage.getAnalyzer()).getDiagnostics()) {
-                    CharPosition issueStart = mEditor.getText().getIndexer().getCharPosition(issue.getLocation().getStart().line, issue.getLocation().getStart().column);
-                    CharPosition issueEnd = mEditor.getText().getIndexer().getCharPosition(issue.getLocation().getEnd().line, issue.getLocation().getEnd().column);
-                    if (issueStart.index <= cursorStart && cursorEnd < issueEnd.index) {
-                        new MaterialAlertDialogBuilder(requireContext())
-                                .setTitle(issue.getIssue().getId())
-                                .setMessage("Severity: " + issue.getSeverity().getDescription() + "\n" +
-                                        "" + issue.getIssue().getExplanation(TextFormat.TEXT))
-                                .setPositiveButton("OK", null)
-                                .show();
-                    }
-                }
-                final Path current = mEditor.getCurrentFile().toPath();
-                List<CodeActionList> actions = new CodeActionProvider(CompletionEngine.getInstance().getCompiler(project))
-                        .codeActionsForCursor(current, mEditor.getCursor().getLeft());
+            Executors.newSingleThreadExecutor().execute(() -> {
+                List<CodeActionList> actions = getCodeActions();
+                if (getActivity() != null) {
+                    requireActivity().runOnUiThread(() -> {
+                        dialog.dismiss();
+                        mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
+                            for (final CodeActionList action : actions) {
+                                if (action.getActions().isEmpty()) {
+                                    continue;
+                                }
+                                menu.add(action.getTitle()).setOnMenuItemClickListener(menuItem -> {
+                                    new MaterialAlertDialogBuilder(requireContext())
+                                            .setTitle(action.getTitle())
+                                            .setItems(action.getActions().stream().map(CodeAction::getTitle).toArray(String[]::new), ((dialogInterface, i) -> {
+                                                CodeAction codeAction = action.getActions().get(i);
+                                                Map<Path, List<TextEdit>> rewrites = codeAction.getEdits();
+                                                List<TextEdit> edits = rewrites.values().iterator().next();
+                                                for (TextEdit edit : edits) {
+                                                    Range range = edit.range;
+                                                    if (range.start.equals(range.end)) {
+                                                        mEditor.getText().insert(range.start.line, range.start.column, edit.newText);
+                                                    } else {
+                                                        mEditor.getText().replace(range.start.line, range.start.column, range.end.line, range.end.column, edit.newText);
+                                                    }
 
-                mEditor.setOnCreateContextMenuListener((menu, view1, info) -> {
-
-                    for (final CodeActionList action : actions) {
-                        if (action.getActions().isEmpty()) {
-                            continue;
-                        }
-                        menu.add(action.getTitle()).setOnMenuItemClickListener(menuItem -> {
-                            new MaterialAlertDialogBuilder(requireContext())
-                                    .setTitle(action.getTitle())
-                                    .setItems(action.getActions().stream().map(CodeAction::getTitle).toArray(String[]::new), ((dialogInterface, i) -> {
-                                        CodeAction codeAction = action.getActions().get(i);
-                                        Map<Path, List<TextEdit>> rewrites = codeAction.getEdits();
-                                        List<TextEdit> edits = rewrites.values().iterator().next();
-                                        for (TextEdit edit : edits) {
-                                            Range range = edit.range;
-                                            if (range.start.equals(range.end)) {
-                                                mEditor.getText().insert(range.start.line, range.start.column, edit.newText);
-                                            } else {
-                                                mEditor.getText().replace(range.start.line, range.start.column, range.end.line, range.end.column, edit.newText);
-                                            }
-
-                                            int startFormat = mEditor.getText()
-                                                    .getCharIndex(range.start.line, range.start.column);
-                                            int endFormat = startFormat + edit.newText.length();
-                                            mEditor.formatCodeAsync(startFormat, endFormat);
-                                        }
-                                    })).show();
-                            return true;
+                                                    int startFormat = mEditor.getText()
+                                                            .getCharIndex(range.start.line, range.start.column);
+                                                    int endFormat = startFormat + edit.newText.length();
+                                                    mEditor.formatCodeAsync(startFormat, endFormat);
+                                                }
+                                            })).show();
+                                    return true;
+                                });
+                            }
                         });
-                    }
-                });
-                mEditor.showContextMenu(event.getX(), event.getY());
-            }
+                        mEditor.showContextMenu(event.getX(), event.getY());
+                    });
+                }
+            });
         });
         mEditor.setEventListener(new EditorEventListener() {
             @Override
@@ -428,6 +423,15 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                 }
             });
         }
+    }
 
+    private List<CodeActionList> getCodeActions() {
+        Project project = ProjectManager.getInstance().getCurrentProject();
+        if (mLanguage instanceof JavaLanguage && project != null) {
+            final Path current = mEditor.getCurrentFile().toPath();
+            return new CodeActionProvider(CompletionEngine.getInstance().getCompiler(project))
+                    .codeActionsForCursor(current, mEditor.getCursor().getLeft());
+        }
+        return Collections.emptyList();
     }
 }

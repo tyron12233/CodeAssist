@@ -56,7 +56,6 @@ public class FindHelper {
     public static MethodTree findMethod(
             ParseTask task, String className, String methodName, String[] erasedParameterTypes) {
         ClassTree classTree = findType(task, className);
-        Log.d("TEST", className);
         for (Tree member : classTree.getMembers()) {
             if (member.getKind() != Tree.Kind.METHOD) continue;
             MethodTree method = (MethodTree) member;
