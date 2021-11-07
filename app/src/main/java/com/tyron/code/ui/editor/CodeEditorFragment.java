@@ -238,8 +238,8 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
 
             Executors.newSingleThreadExecutor().execute(() -> {
                 List<CodeActionList> actions = getCodeActions();
-                if (getActivity() != null) {
-                    requireActivity().runOnUiThread(() -> {
+                if (getActivity() != null && mEditor != null) {
+                    mEditor.postDelayed(() -> {
                         dialog.dismiss();
                         mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
                             for (final CodeActionList action : actions) {
@@ -272,7 +272,7 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                             }
                         });
                         mEditor.showContextMenu(event.getX(), event.getY());
-                    });
+                    }, 300);
                 }
             });
         });
