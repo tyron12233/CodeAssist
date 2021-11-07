@@ -572,6 +572,9 @@ public class MainFragment extends Fragment {
         if (mProject == null) {
             return;
         }
+        if (CompletionEngine.isIndexing()) {
+            return;
+        }
 
         List<File> items = mAdapter.getItems();
         for (File file : items) {
@@ -581,10 +584,6 @@ public class MainFragment extends Fragment {
             if (fragment != null) {
                 fragment.save();
             }
-        }
-
-        if (CompletionEngine.isIndexing()) {
-            return;
         }
 
         ProjectSettings settings = mProject.getSettings();

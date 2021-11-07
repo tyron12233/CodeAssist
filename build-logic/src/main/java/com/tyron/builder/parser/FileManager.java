@@ -22,6 +22,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.StringReader;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -41,6 +42,17 @@ import java.util.jar.JarFile;
  */
 public class FileManager {
 
+    private static class OpenedFile {
+
+        private final String text;
+        private final File file;
+
+        private OpenedFile(String text, File file) {
+            this.text = text;
+            this.file = file;
+        }
+    }
+
     private static FileManager INSTANCE = null;
     private static File sAndroidJar;
     private static File sLambdaStubs;
@@ -57,6 +69,8 @@ public class FileManager {
 
     // Map of compiled (.class) files with their fully qualified name as key
     private final Map<String, File> classFiles = new HashMap<>();
+
+    private final Map<File, OpenedFile> mOpenedFiles = new HashMap<>();
 
     public static FileManager getInstance() {
         if (INSTANCE == null) {
@@ -301,80 +315,46 @@ public class FileManager {
     }
 
     public void save(final File file, final String contents) {
-        service.submit(() -> writeFile(file, contents));
-    }
-
-    @Deprecated
-    public static String readFile(File file) {
-        createNewFile(file);
-
-        StringBuilder sb = new StringBuilder();
-        BufferedReader fr = null;
-        try {
-            fr = bufferedReader(file);
-
-            String str;
-            while ((str = fr.readLine()) != null) {
-                sb.append(str).append("\n");
-            }
-        } catch (IOException e) {
-            Log.e("FileManager", e.getMessage());
-        } finally {
-            if (fr != null) {
-                try {
-                    fr.close();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        return sb.toString();
-    }
-
-    private static void createNewFile(File file) {
-
-        if (file.exists()) {
-            return;
-        }
-
-        String path = file.getAbsolutePath();
-        int lastSep = path.lastIndexOf(File.separator);
-        if (lastSep > 0) {
-            String dirPath = path.substring(0, lastSep);
-            makeDir(new File(dirPath));
-        }
-        try {
-            if (!file.exists())
-                file.createNewFile();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-
-    public static void makeDir(File file) {
-        if (!file.exists()) {
-            file.mkdirs();
-        }
-    }
-
-    public static void writeFile(File file, String str) {
-        createNewFile(file);
-        FileWriter fileWriter = null;
-
-        try {
-            fileWriter = new FileWriter(file, false);
-            fileWriter.write(str);
-            fileWriter.flush();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
+        service.submit(() -> {
             try {
-                if (fileWriter != null)
-                    fileWriter.close();
+                FileUtils.writeStringToFile(file, contents, Charset.defaultCharset());
             } catch (IOException e) {
                 e.printStackTrace();
+            }
+        });
+    }
+
+    public String readFile(File file) {
+        OpenedFile openedFile = mOpenedFiles.get(file);
+        if (openedFile != null) {
+            return openedFile.text;
+        } else {
+            String text;
+            try {
+                text = FileUtils.readFileToString(file, Charset.defaultCharset());
+            } catch (IOException e) {
+                text = "";
+            }
+            return text;
+        }
+    }
+
+    public void updateFile(File file, String contents) {
+        OpenedFile openedFile = new OpenedFile(contents, file);
+        mOpenedFiles.put(file, openedFile);
+    }
+
+    public void openFile(File file) {
+       String contents = readFile(file);
+       updateFile(file, contents);
+    }
+
+    public void closeFile(File file, boolean save) {
+        OpenedFile openedFile = mOpenedFiles.get(file);
+        if (openedFile != null) {
+            mOpenedFiles.remove(file);
+            if (save) {
+                save(file, openedFile.text);
             }
         }
     }

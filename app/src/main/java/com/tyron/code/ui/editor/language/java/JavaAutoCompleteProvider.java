@@ -59,7 +59,7 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
         if (currentProject != null) {
             CompletionList completionList = CompletionEngine.getInstance().complete(currentProject,
                     mEditor.getCurrentFile(),
-                    mEditor.getText().toString(),
+                    currentProject.getFileManager().readFile(mEditor.getCurrentFile()),
                     mEditor.getCursor().getLeft());
 
             for (com.tyron.completion.model.CompletionItem item : completionList.items) {

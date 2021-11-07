@@ -57,6 +57,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -455,26 +456,24 @@ public class WizardFragment extends Fragment {
                     requireActivity().runOnUiThread(this::showDetailsView);
                     return;
                 }
+
+                Project project = new Project(new File(savePath));
+                replacePlaceholders(project.mRoot);
+
+                if (mListener != null) {
+                    requireActivity().runOnUiThread(() -> {
+                        mListener.onProjectCreated(project);
+                        getParentFragmentManager().beginTransaction()
+                                .remove(WizardFragment.this)
+                                .commit();
+                    });
+                }
             } catch (IOException e) {
                 requireActivity().runOnUiThread(() -> {
                     ApplicationLoader.showToast(e.getMessage());
                     showDetailsView();
                 });
-                return;
             }
-
-            Project project = new Project(new File(savePath));
-            replacePlaceholders(project.mRoot);
-
-            if (mListener != null) {
-                requireActivity().runOnUiThread(() -> {
-                    mListener.onProjectCreated(project);
-                    getParentFragmentManager().beginTransaction()
-                            .remove(WizardFragment.this)
-                            .commit();
-                });
-            }
-
         });
     }
 
@@ -484,7 +483,7 @@ public class WizardFragment extends Fragment {
      *
      * @param file Root directory to start
      */
-    private void replacePlaceholders(File file) {
+    private void replacePlaceholders(File file) throws IOException {
         File[] files = file.listFiles();
         if (files != null) {
             for (File child : files) {
@@ -508,7 +507,7 @@ public class WizardFragment extends Fragment {
      *
      * @param file Input file
      */
-    private void replacePlaceholder(File file) {
+    private void replacePlaceholder(File file) throws IOException {
         String string;
         try {
             string = org.apache.commons.io.FileUtils.readFileToString(file, Charset.defaultCharset());
@@ -520,12 +519,13 @@ public class WizardFragment extends Fragment {
                 .substring("API".length() + 1, "API".length() + 3); // at least 2 digits
         int minSdkInt = Integer.parseInt(minSdk);
 
-        FileManager.writeFile(
+        FileUtils.writeStringToFile(
                 file,
                 string.replace("$packagename", mPackageNameLayout.getEditText().getText())
                         .replace("$appname", mNameLayout.getEditText().getText())
                         .replace("${targetSdkVersion}", targetSdk)
-                        .replace("${minSdkVersion}", String.valueOf(minSdkInt))
+                        .replace("${minSdkVersion}", String.valueOf(minSdkInt)),
+                StandardCharsets.UTF_8
         );
     }
 

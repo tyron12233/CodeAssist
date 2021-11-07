@@ -3,9 +3,9 @@ package com.tyron;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.common.base.Charsets;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.provider.CompletionEngine;
@@ -14,6 +14,8 @@ import com.tyron.resolver.DependencyDownloader;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.DependencyUtils;
 import com.tyron.resolver.model.Dependency;
+
+import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -137,8 +139,7 @@ public class ProjectManager {
             return null;
         }
 
-        FileManager.writeFile(classFile, code);
-
+        FileUtils.writeStringToFile(classFile, code, Charsets.UTF_8);
         return classFile;
     }
 
@@ -164,8 +165,7 @@ public class ProjectManager {
             return null;
         }
 
-        FileManager.writeFile(classFile, code);
-
+        FileUtils.writeStringToFile(classFile, code, Charsets.UTF_8);
         return classFile;
     }
 }

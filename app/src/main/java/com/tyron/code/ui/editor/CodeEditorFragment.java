@@ -22,7 +22,6 @@ import androidx.preference.PreferenceManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.ProjectManager;
 import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.code.R;
 import com.tyron.code.lint.LintIssue;
 import com.tyron.code.ui.editor.language.LanguageManager;
@@ -44,23 +43,8 @@ import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.completion.provider.CompletionProvider;
 import com.tyron.completion.rewrite.AddImport;
 import com.tyron.lint.api.TextFormat;
-import com.tyron.psi.completion.CompletionEnvironment;
-import com.tyron.psi.util.DocumentUtils;
 
 import org.apache.commons.io.FileUtils;
-import org.jetbrains.kotlin.com.intellij.lang.java.parser.JavaParserUtil;
-import org.jetbrains.kotlin.com.intellij.openapi.application.ReadAction;
-import org.jetbrains.kotlin.com.intellij.openapi.application.WriteAction;
-import org.jetbrains.kotlin.com.intellij.openapi.command.WriteCommandAction;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl;
-import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
-import org.jetbrains.kotlin.com.intellij.psi.JavaPsiFacade;
-import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
-import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
-import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
-import org.jetbrains.kotlin.com.intellij.psi.impl.PsiDocumentManagerBase;
-import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiFileImpl;
 
 import java.io.File;
 import java.io.IOException;
@@ -68,7 +52,6 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -188,14 +171,11 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        if (mCurrentFile.exists()) {
-            String contents = "";
-            try {
-                contents = FileUtils.readFileToString(mCurrentFile, Charset.defaultCharset());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            mEditor.setText(contents);
+        Project project = ProjectManager.getInstance().getCurrentProject();
+
+        if (mCurrentFile.exists() && project != null) {
+            project.getFileManager().openFile(mCurrentFile);
+            mEditor.setText(project.getFileManager().readFile(mCurrentFile));
         }
 
         mEditor.setOnCompletionItemSelectedListener((window, item) -> {
@@ -247,7 +227,6 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
             mEditor.postHideCompletionWindow();
         });
         mEditor.setOnLongPressListener((start, end, event) -> {
-            Project project = ProjectManager.getInstance().getCurrentProject();
             if (mLanguage instanceof JavaLanguage && project != null) {
                 int cursorStart = mEditor.getCursor().getLeft();
                 int cursorEnd = mEditor.getCursor().getRight();
@@ -275,7 +254,6 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                             continue;
                         }
                         menu.add(action.getTitle()).setOnMenuItemClickListener(menuItem -> {
-                            FileManager.writeFile(mEditor.getCurrentFile(), mEditor.getText().toString());
                             new MaterialAlertDialogBuilder(requireContext())
                                     .setTitle(action.getTitle())
                                     .setItems(action.getActions().stream().map(CodeAction::getTitle).toArray(String[]::new), ((dialogInterface, i) -> {
@@ -326,22 +304,28 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
 
             @Override
             public void afterDelete(@NonNull CodeEditor editor, @NonNull CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence deletedContent) {
-
+                updateFile(content);
             }
 
             @Override
             public void afterInsert(@NonNull CodeEditor editor, @NonNull CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence insertedContent) {
-
+                updateFile(content);
             }
 
             @Override
             public void beforeReplace(@NonNull CodeEditor editor, @NonNull CharSequence content) {
-
+                updateFile(content);
             }
 
             @Override
             public void onSelectionChanged(@NonNull CodeEditor editor, @NonNull Cursor cursor) {
 
+            }
+
+            private void updateFile(CharSequence contents) {
+                if (project != null) {
+                    project.getFileManager().updateFile(mCurrentFile, contents.toString());
+                }
             }
         });
     }
@@ -349,7 +333,10 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
     @Override
     public void onDestroy() {
         super.onDestroy();
-
+        if (ProjectManager.getInstance().getCurrentProject() != null) {
+            ProjectManager.getInstance().getCurrentProject().getFileManager()
+                    .closeFile(mCurrentFile, true);
+        }
         mPreferences.unregisterOnSharedPreferenceChangeListener(this);
     }
 
@@ -370,6 +357,12 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                 currentProject.getFileManager()
                         .save(mCurrentFile, mEditor.getText().toString());
             }
+        }
+    }
+
+    public void undo() {
+        if (mEditor.canUndo()) {
+            mEditor.undo();
         }
     }
 
