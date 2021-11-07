@@ -143,6 +143,7 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
         mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(), R.font.jetbrains_mono_regular));
         mEditor.setLigatureEnabled(true);
         mEditor.setHighlightCurrentBlock(true);
+        mEditor.setAllowFullscreen(false);
         mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         mContent.addView(mEditor, new FrameLayout.LayoutParams(-1, -1));
 
