@@ -5,19 +5,16 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
-import android.view.ContextMenu;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.widget.ListPopupWindow;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -26,10 +23,9 @@ import androidx.preference.PreferenceManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.ProjectManager;
 import com.tyron.builder.model.Project;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.lint.LintIssue;
 import com.tyron.code.ui.editor.language.LanguageManager;
-import com.tyron.code.ui.editor.language.java.JavaAnalyzer;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
@@ -46,7 +42,6 @@ import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.completion.provider.CompletionProvider;
 import com.tyron.completion.rewrite.AddImport;
-import com.tyron.lint.api.TextFormat;
 
 import org.apache.commons.io.FileUtils;
 
@@ -284,6 +279,7 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
 
             @Override
             public boolean onFormatFail(@NonNull CodeEditor editor, Throwable cause) {
+                ApplicationLoader.showToast("Unable to format: " + cause.getMessage());
                 return false;
             }
 
@@ -356,8 +352,20 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
     }
 
     public void undo() {
+        if (mEditor == null) {
+            return;
+        }
         if (mEditor.canUndo()) {
             mEditor.undo();
+        }
+    }
+
+    public void redo() {
+        if (mEditor == null) {
+            return;
+        }
+        if (mEditor.canRedo()) {
+            mEditor.redo();
         }
     }
 
@@ -413,13 +421,11 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                     });
 
                 } catch (Exception e) {
-                    requireActivity().runOnUiThread(() -> {
-                        new MaterialAlertDialogBuilder(requireContext())
-                                .setTitle("Unable to preview")
-                                .setMessage(Log.getStackTraceString(e))
-                                .setPositiveButton(android.R.string.ok, null)
-                                .show();
-                    });
+                    requireActivity().runOnUiThread(() -> new MaterialAlertDialogBuilder(requireContext())
+                            .setTitle("Unable to preview")
+                            .setMessage(Log.getStackTraceString(e))
+                            .setPositiveButton(android.R.string.ok, null)
+                            .show());
                 }
             });
         }
