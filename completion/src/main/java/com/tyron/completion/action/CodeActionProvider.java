@@ -123,13 +123,7 @@ public class CodeActionProvider {
     }
 
     private Map<String, Rewrite> getOverrideInheritedMethods(CompileTask task, Path file, long cursor) {
-        TreeMap<String, Rewrite> rewrites = new TreeMap<>(overrideInheritedMethods(task, file, cursor));
-
-        List<CodeAction> actions = new ArrayList<>();
-        for (String title : rewrites.keySet()) {
-            actions.addAll(createQuickFix(title, rewrites.get(title)));
-        }
-       return rewrites;
+        return new TreeMap<>(overrideInheritedMethods(task, file, cursor));
     }
 
     private Map<String, Rewrite> overrideInheritedMethods(CompileTask task, Path file, long cursor) {
