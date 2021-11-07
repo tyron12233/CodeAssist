@@ -839,7 +839,7 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
          */
         public void applyPosition(MotionEvent e) {
             float targetX = mScroller.getCurrX() + e.getX();
-            float targetY = mScroller.getCurrY() + e.getY() - Math.max(mEditor.getInsertHandleRect().height(), mEditor.getRightHandleRect().height()) * 4 / 2;
+            float targetY = mScroller.getCurrY() + e.getY() - Math.max(mEditor.getInsertHandleRect().height(), mEditor.getRightHandleRect().height()) * 4 / 3;
             int line = IntPair.getFirst(mEditor.getPointPosition(0, targetY));
             if (line >= 0 && line < mEditor.getLineCount()) {
                 int column = IntPair.getSecond(mEditor.getPointPosition(targetX, targetY));
