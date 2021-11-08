@@ -97,10 +97,10 @@ public class XMLAnalyzer implements CodeAnalyzer {
 										.setUnderlineColor(Color.TRANSPARENT);
 								colors.addIfNeeded(line, column + text.length(), EditorColorScheme.TEXT_NORMAL)
 										.setUnderlineColor(Color.TRANSPARENT);
+								break;
 							} catch (Exception ignore) {}
-						} else {
-							colors.addIfNeeded(line,column, EditorColorScheme.LITERAL);
 						}
+						colors.addIfNeeded(line,column, EditorColorScheme.LITERAL);
 						break;
 					case XMLLexer.SLASH:
 					case XMLLexer.OPEN:
