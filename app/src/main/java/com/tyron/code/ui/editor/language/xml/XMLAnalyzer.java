@@ -170,6 +170,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 					}
 					Project project = ProjectManager.getInstance().getCurrentProject();
 					if (project != null) {
+						project.getFileManager().save(mEditor.getCurrentFile(), mEditor.getText().toString());
 						Task task = new IncrementalAapt2Task();
 						try {
 							task.prepare(project, ILogger.EMPTY, BuildType.DEBUG);
