@@ -41,9 +41,6 @@ public class XMLAnalyzer implements CodeAnalyzer {
 	
 	@Override
 	public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
-
-		compile();
-
 		try {
 			CodePointCharStream stream = CharStreams.fromReader(new StringReader(content.toString()));
 			XMLLexer lexer = new XMLLexer(stream);
@@ -121,6 +118,8 @@ public class XMLAnalyzer implements CodeAnalyzer {
 				}
 			}
 			colors.determine(lastLine);
+
+			compile();
 		} catch (IOException ignore) {
 
 		}
