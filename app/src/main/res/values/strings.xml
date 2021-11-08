@@ -78,7 +78,8 @@
     <string name="settings_code_completions">Enable code completions</string>
     <string name="code_editor_error_highlight">Enable error highlighting</string>
 
-    <string name="text_settings_title">Text settings</string>
+    <string name="editor_settings_title">Code Editor settings</string>
+    <string name="editor_settings_wordwrap">Word wrap mode</string>
     <string name="font_size_title">Font size</string>
     <string name="font_size_message">Set editor font size</string>
     <string name="font_size_summary">Specify the default font size of the editor</string>

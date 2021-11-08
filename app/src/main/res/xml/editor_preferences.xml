@@ -22,7 +22,7 @@
 
     <PreferenceCategory
         app:iconSpaceReserved="false"
-        android:title="@string/text_settings_title">
+        android:title="@string/editor_settings_title">
 
         <EditTextPreference
             app:iconSpaceReserved="false"
@@ -36,6 +36,12 @@
             android:dialogMessage="@string/font_size_message"
             android:negativeButtonText="@android:string/cancel"
             android:positiveButtonText="@android:string/ok"/>
+
+        <SwitchPreference
+            app:iconSpaceReserved="false"
+            app:defaultValue="false"
+            app:title="@string/editor_settings_wordwrap"
+            app:key="editor_wordwrap" />
     </PreferenceCategory>
 
     <PreferenceCategory

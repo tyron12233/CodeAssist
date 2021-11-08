@@ -48,6 +48,7 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -144,6 +145,7 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
         mEditor.setLigatureEnabled(true);
         mEditor.setHighlightCurrentBlock(true);
         mEditor.setAllowFullscreen(false);
+        mEditor.setWordwrap(mPreferences.getBoolean(SharedPreferenceKeys.EDITOR_WORDWRAP, false));
         mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         mContent.addView(mEditor, new FrameLayout.LayoutParams(-1, -1));
 
@@ -166,6 +168,10 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                 } else {
                     mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
                 }
+                break;
+            case SharedPreferenceKeys.EDITOR_WORDWRAP:
+                mEditor.setWordwrap(pref.getBoolean(key, false));
+                break;
         }
     }
 
@@ -175,9 +181,19 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
 
         Project project = ProjectManager.getInstance().getCurrentProject();
 
-        if (mCurrentFile.exists() && project != null) {
-            project.getFileManager().openFile(mCurrentFile);
-            mEditor.setText(project.getFileManager().readFile(mCurrentFile));
+        if (mCurrentFile.exists()) {
+            String text;
+            if (project != null) {
+                project.getFileManager().openFile(mCurrentFile);
+                text = project.getFileManager().readFile(mCurrentFile);
+            } else { // fallback to reading through disk
+                try {
+                    text = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
+                } catch (IOException e) {
+                    text = "File does not exist: " + e.getMessage();
+                }
+            }
+            mEditor.setText(text);
         }
 
         mEditor.setOnCompletionItemSelectedListener((window, item) -> {
