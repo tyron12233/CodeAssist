@@ -19,6 +19,7 @@ import com.tyron.completion.provider.CompletionEngine;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Token;
+import org.openjdk.javax.tools.Diagnostic;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -26,6 +27,8 @@ import java.util.concurrent.Executors;
 
 import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
 import io.github.rosemoe.sora.data.Span;
+import io.github.rosemoe.sora.text.CharPosition;
+import io.github.rosemoe.sora.text.Indexer;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.text.TextAnalyzer;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -119,7 +122,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 			}
 			colors.determine(lastLine);
 
-			compile();
+			compile(colors);
 		} catch (IOException ignore) {
 
 		}
@@ -129,18 +132,31 @@ public class XMLAnalyzer implements CodeAnalyzer {
 	long delay = 1000L;
 	long lastTime;
 
-	private void compile() {
+	private void compile(TextAnalyzeResult colors) {
 		handler.removeCallbacks(runnable);
 		lastTime = System.currentTimeMillis();
+		runnable.setColors(colors);
 		handler.postDelayed(runnable, delay);
 	}
 
 	CompileRunnable runnable = new CompileRunnable();
 
 	private class CompileRunnable implements Runnable {
+
+		private TextAnalyzeResult colors;
+
+		public CompileRunnable() {
+		}
+
+		public void setColors(TextAnalyzeResult colors) {
+			this.colors = colors;
+		}
+
 		@Override
 		public void run() {
-			Log.d("AAPT2", "Compiling");
+			if (colors == null) {
+				return;
+			}
 			if (System.currentTimeMillis() < (lastTime - 500)) {
 				return;
 			}
@@ -156,27 +172,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 					if (project != null) {
 						Task task = new IncrementalAapt2Task();
 						try {
-							task.prepare(project, new ILogger() {
-								@Override
-								public void info(DiagnosticWrapper wrapper) {
-
-								}
-
-								@Override
-								public void debug(DiagnosticWrapper wrapper) {
-
-								}
-
-								@Override
-								public void warning(DiagnosticWrapper wrapper) {
-
-								}
-
-								@Override
-								public void error(DiagnosticWrapper wrapper) {
-
-								}
-							}, BuildType.DEBUG);
+							task.prepare(project, ILogger.EMPTY, BuildType.DEBUG);
 							task.run();
 						} catch (IOException | CompilationFailedException e) {
 							e.printStackTrace();

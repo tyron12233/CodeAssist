@@ -6,6 +6,28 @@ import org.openjdk.javax.tools.Diagnostic;
 
 public interface ILogger {
 
+    ILogger EMPTY = new ILogger() {
+        @Override
+        public void info(DiagnosticWrapper wrapper) {
+
+        }
+
+        @Override
+        public void debug(DiagnosticWrapper wrapper) {
+
+        }
+
+        @Override
+        public void warning(DiagnosticWrapper wrapper) {
+
+        }
+
+        @Override
+        public void error(DiagnosticWrapper wrapper) {
+
+        }
+    };
+
     static ILogger wrap(LogViewModel logViewModel) {
         return new ILogger() {
             @Override
