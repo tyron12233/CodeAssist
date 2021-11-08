@@ -34,6 +34,7 @@ import io.github.rosemoe.sora.data.BlockLine;
 import io.github.rosemoe.sora.data.NavigationItem;
 import io.github.rosemoe.sora.data.Span;
 import io.github.rosemoe.sora.langs.java.JavaCodeAnalyzer;
+import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Indexer;
 import io.github.rosemoe.sora.text.LineNumberCalculator;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
@@ -287,16 +288,18 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     if (it.getEndPosition() == -1) {
                         it.setEndPosition(it.getPosition());
                     }
-                    int startLine = indexer.getCharLine((int) it.getStartPosition());
-                    int startColumn = indexer.getCharColumn((int) it.getStartPosition());
-                    int endColumn = indexer.getCharColumn((int) it.getEndPosition());
-                    int endLine = indexer.getCharLine((int) it.getEndPosition());
-                    if (startLine == endLine && endColumn == startColumn) {
-                        startColumn--;
+
+                    CharPosition start = indexer.getCharPosition((int) it.getStartPosition());
+                    CharPosition end = indexer.getCharPosition((int) it.getEndPosition());
+
+                    // the editor does not support marking underline spans for the same start and end index
+                    // to work around this, we just subtract one to the start index
+                    if (start.line == end.line && end.column == start.column) {
+                        start.column--;
                     }
 
                     int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
-                    colors.markProblemRegion(flag, startLine, startColumn, endLine, endColumn);
+                    colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
                 } catch (IllegalArgumentException e) {
                     // Work around for the indexer requiring a sorted positions
                     Log.w(TAG, "Unable to mark problem region: diagnostics " + diagnostics, e);
