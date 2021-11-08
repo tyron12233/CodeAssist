@@ -7,6 +7,8 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class CursorMoveAction implements ShortcutAction {
 
+    public static final String KIND = "cursorMove";
+
     public enum Direction {
         UP,
         DOWN,
@@ -14,7 +16,7 @@ public class CursorMoveAction implements ShortcutAction {
         RIGHT
     }
 
-    private Direction mDirection;
+    private final Direction mDirection;
 
     public CursorMoveAction(Direction direction, int count) {
         mDirection = direction;
@@ -22,7 +24,7 @@ public class CursorMoveAction implements ShortcutAction {
 
     @Override
     public boolean isApplicable(String kind) {
-        return kind.equals("cursormove");
+        return KIND.equals(kind);
     }
 
     @Override

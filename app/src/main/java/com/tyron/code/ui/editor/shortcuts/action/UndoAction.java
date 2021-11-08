@@ -3,12 +3,11 @@ package com.tyron.code.ui.editor.shortcuts.action;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 
-import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
-public class TextInsertAction implements ShortcutAction {
+public class UndoAction implements ShortcutAction {
 
-    public static final String KIND = "textInsert";
+    public static final String KIND = "undoAction";
 
     @Override
     public boolean isApplicable(String kind) {
@@ -17,7 +16,8 @@ public class TextInsertAction implements ShortcutAction {
 
     @Override
     public void apply(CodeEditor editor, ShortcutItem item) {
-        Cursor cursor = editor.getCursor();
-        editor.getText().insert(cursor.getLeftLine(), cursor.getLeftColumn(), item.label);
+        if (editor.canUndo()) {
+            editor.undo();
+        }
     }
 }

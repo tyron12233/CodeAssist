@@ -24,7 +24,9 @@ import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.editor.shortcuts.ShortcutsAdapter;
 import com.tyron.code.ui.editor.shortcuts.action.CursorMoveAction;
+import com.tyron.code.ui.editor.shortcuts.action.RedoAction;
 import com.tyron.code.ui.editor.shortcuts.action.TextInsertAction;
+import com.tyron.code.ui.editor.shortcuts.action.UndoAction;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.AndroidUtilities;
 
@@ -123,15 +125,17 @@ public class BottomEditorFragment extends Fragment {
                 .map(item -> {
                     ShortcutItem it = new ShortcutItem();
                     it.label = item;
-                    it.kind = "textinsert";
-                    it.actions = Arrays.asList(new TextInsertAction());
+                    it.kind = TextInsertAction.KIND;
+                    it.actions = Collections.singletonList(new TextInsertAction());
                     return it;
                 }).collect(Collectors.toList());
         Collections.addAll(items,
-                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.UP, 1)),"↑", "cursormove"),
-                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.DOWN, 1)),"↓", "cursormove"),
-                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.LEFT, 1)),"←", "cursormove"),
-                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.RIGHT, 1)), "→", "cursormove")
+                new ShortcutItem(Collections.singletonList(new UndoAction()), "⬿", UndoAction.KIND),
+                new ShortcutItem(Collections.singletonList(new RedoAction()), "⤳", RedoAction.KIND),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.UP, 1)),"↑", CursorMoveAction.KIND),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.DOWN, 1)),"↓", CursorMoveAction.KIND),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.LEFT, 1)),"←", CursorMoveAction.KIND),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.RIGHT, 1)), "→", CursorMoveAction.KIND)
         );
 
         return items;

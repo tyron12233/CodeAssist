@@ -180,7 +180,6 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
         super.onViewCreated(view, savedInstanceState);
 
         Project project = ProjectManager.getInstance().getCurrentProject();
-
         if (mCurrentFile.exists()) {
             String text;
             if (project != null) {
