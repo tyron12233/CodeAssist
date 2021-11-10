@@ -41,7 +41,6 @@ import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.transition.MaterialFadeThrough;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.wizard.adapter.WizardTemplateAdapter;
@@ -394,16 +393,16 @@ public class WizardFragment extends Fragment {
             mNameLayout.setErrorEnabled(false);
         }
 
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            File file = new File(requireContext().getExternalFilesDir("Projects") + "/" + editable.toString());
-            String suffix = "";
-            if (file.exists()) {
-                suffix = "-1";
-            }
-            String path = file.getAbsolutePath() + suffix.trim();
-            mSaveLocationLayout.getEditText().setText(path);
+        File file = new File(
+                PreferenceManager.getDefaultSharedPreferences(requireContext()).getString(SharedPreferenceKeys.PROJECT_SAVE_PATH,
+                        requireContext().getExternalFilesDir("Project").getAbsolutePath())
+                        + "/" + editable.toString());
+        String suffix = "";
+        if (file.exists()) {
+            suffix = "-1";
         }
+        String path = file.getAbsolutePath() + suffix.trim();
+        mSaveLocationLayout.getEditText().setText(path);
     }
 
     private void verifySaveLocation(Editable editable) {
@@ -648,21 +647,21 @@ public class WizardFragment extends Fragment {
     }
 
     private void extractTemplatesMaybe() throws IOException {
-       File hashFile = new File(requireContext().getExternalFilesDir("templates"), "hash");
-       if (!hashFile.exists()) {
-           extractTemplates();
-       } else {
-           InputStream newIs = requireContext().getAssets()
-                   .open("templates.zip");
-           String newIsMd5 = AndroidUtilities.calculateMD5(newIs);
-           String oldMd5 = FileUtils.readFileToString(hashFile, Charset.defaultCharset());
+        File hashFile = new File(requireContext().getExternalFilesDir("templates"), "hash");
+        if (!hashFile.exists()) {
+            extractTemplates();
+        } else {
+            InputStream newIs = requireContext().getAssets()
+                    .open("templates.zip");
+            String newIsMd5 = AndroidUtilities.calculateMD5(newIs);
+            String oldMd5 = FileUtils.readFileToString(hashFile, Charset.defaultCharset());
 
-           if (!newIsMd5.equals(oldMd5)) {
-               extractTemplates();
-           } else {
-               Log.d("WizardExtractor", "Templates are up to date");
-           }
-       }
+            if (!newIsMd5.equals(oldMd5)) {
+                extractTemplates();
+            } else {
+                Log.d("WizardExtractor", "Templates are up to date");
+            }
+        }
     }
 
     private void extractTemplates() throws IOException {
