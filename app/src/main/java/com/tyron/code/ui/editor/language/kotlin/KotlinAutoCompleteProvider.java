@@ -38,15 +38,6 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
     public KotlinAutoCompleteProvider(CodeEditor editor) {
         mEditor = editor;
         mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
-
-        editor.postDelayed(() -> {
-            try {
-                CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
-                        .complete(mEditor.getCurrentFile(), mEditor.getText().toString(), mEditor.getCursor().getLeft());
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }, 4000);
     }
 
     @Override
