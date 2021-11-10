@@ -153,7 +153,6 @@ public class IncrementalJavaTask extends Task {
             for (JavaFileObject fileObject : generate) {
                 String path = fileObject.getName();
                 File classFile = new File(path);
-                Log.d("PATH JAVA", "path: " + path);
                 if (classFile.exists()) {
                     String classPath = classFile.getAbsolutePath()
                             .replace("build/bin/classes/", "src/main/java/")

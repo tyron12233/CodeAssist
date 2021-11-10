@@ -7,6 +7,7 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
+import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
 import org.w3c.dom.Document;
@@ -18,7 +19,6 @@ import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -28,7 +28,6 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
@@ -195,23 +194,25 @@ public class InjectLoggerTask extends Task {
                 }
             } else {
                 try {
+                    mProject.getFileManager().removeJavaFile(StringSearch.packageName(mApplicationFile));
                     FileUtils.delete(mApplicationFile);
-                } catch (IOException ignore) {
-
+                } catch (IOException e) {
+                    mLogger.error("Failed to delete application class: " + e.getMessage());
                 }
             }
         }
 
         if (mLoggerFile != null) {
             try {
+                mProject.getFileManager().removeJavaFile(StringSearch.packageName(mLoggerFile));
                 FileUtils.delete(mLoggerFile);
-            } catch (IOException ignore) {
-
+            } catch (IOException e) {
+                mLogger.error("Failed to delete logger class: " + e.getMessage());
             }
         }
     }
 
-    private String getApplicationClass() throws XmlPullParserException, IOException, ParserConfigurationException, SAXException, TransformerException, TransformerException {
+    private String getApplicationClass() throws XmlPullParserException, IOException, ParserConfigurationException, SAXException, TransformerException {
         File manifest = new File(mProject.getBuildDirectory().getAbsolutePath().replaceAll("%20", " "), "bin/AndroidManifest.xml");
         XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
         parser.setInput(new FileInputStream(manifest), null);
