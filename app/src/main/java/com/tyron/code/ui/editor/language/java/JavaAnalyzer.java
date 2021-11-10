@@ -268,8 +268,28 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             Log.w(TAG, "Unable to mark problem region", e);
         }
 
-        mAnalyzeRunnable.setAnalyzeResult(colors);
-        mAnalyzeRunnable.run();
+        List<DiagnosticWrapper> innerDiagnostics = new ArrayList<>();
+
+            // do not compile the file if it not yet closed as it will cause issues when
+            // compiling multiple files at the same time
+            if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
+                Project project = ProjectManager.getInstance().getCurrentProject();
+                if (project != null) {
+                    JavaCompilerService service = CompletionEngine.getInstance().getCompiler(project);
+                    if (service.isReady()) {
+                        try {
+                            try (CompileTask task = service.compile(
+                                    Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
+                                innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
+                            }
+                        } catch (RuntimeException e) {
+                            Log.e("JavaAnalyzer", "Failed compiling the file", e);
+                            service.close();
+                        }
+                    }
+                }
+            }
+        markDiagnostics(innerDiagnostics, colors);
 
         Log.d(TAG, "Analysis took " + Duration.between(startTime, Instant.now()).toMillis() + " ms");
     }
@@ -296,30 +316,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         @Override
         public void run() {
             Log.d(getClass().getName(), "Analyzing in background...");
-
-            List<DiagnosticWrapper> diagnostics = new ArrayList<>();
-
-            // do not compile the file if it not yet closed as it will cause issues when
-            // compiling multiple files at the same time
-            if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
-                Project project = ProjectManager.getInstance().getCurrentProject();
-                if (project != null) {
-                    JavaCompilerService service = CompletionEngine.getInstance().getCompiler(project);
-                    if (service.isReady()) {
-                        try {
-                            try (CompileTask task = service.compile(
-                                    Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), mEditor.getText().toString(), Instant.now())))) {
-                                diagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
-                            }
-                        } catch (RuntimeException e) {
-                            Log.e("JavaAnalyzer", "Failed compiling the file", e);
-                            service.close();
-                        }
-                    }
-                }
-            }
-
-            markDiagnostics(diagnostics, colors);
+            
         }
     }
 
