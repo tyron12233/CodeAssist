@@ -57,6 +57,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class MainFragment extends Fragment {
 
@@ -183,8 +184,12 @@ public class MainFragment extends Fragment {
 
                                 String openedFilesString = mProjectManager.getCurrentProject().getSettings().getString("editor_opened_files", null);
                                 if (openedFilesString != null) {
-                                    List<File> files = new Gson().fromJson(openedFilesString,
-                                            new TypeToken<List<File>>(){}.getType());
+                                    List<String> paths = new Gson().fromJson(openedFilesString,
+                                            new TypeToken<List<String>>(){}.getType());
+                                    List<File> files = paths.stream()
+                                            .map(File::new)
+                                            .filter(File::exists)
+                                            .collect(Collectors.toList());
                                     mFilesViewModel.setFiles(files);
                                 }
                             }
@@ -214,6 +219,7 @@ public class MainFragment extends Fragment {
             mFilesViewModel.setCurrentState(null);
         }
     };
+
     public MainFragment() {
 
     }
@@ -397,7 +403,7 @@ public class MainFragment extends Fragment {
                         openProject(project, true);
                     }
                 }
-            } else if(item.getItemId() == R.id.action_build_debug) {
+            } else if (item.getItemId() == R.id.action_build_debug) {
                 compile(BuildType.DEBUG);
             } else if (item.getItemId() == R.id.action_build_release) {
                 compile(BuildType.RELEASE);
@@ -465,9 +471,9 @@ public class MainFragment extends Fragment {
                     .commit();
         }
 
-            if (!mProject.equals(mProjectManager.getCurrentProject())) {
-                mRoot.postDelayed(() -> openProject(mProject), 200);
-            }
+        if (!mProject.equals(mProjectManager.getCurrentProject())) {
+            mRoot.postDelayed(() -> openProject(mProject), 200);
+        }
     }
 
     @Override
@@ -590,7 +596,7 @@ public class MainFragment extends Fragment {
         if (settings == null) {
             return;
         }
-        String itemString = new Gson().toJson(items);
+        String itemString = new Gson().toJson(items.stream().map(File::getAbsolutePath).collect(Collectors.toList()));
         settings.edit()
                 .putString("editor_opened_files", itemString)
                 .apply();
