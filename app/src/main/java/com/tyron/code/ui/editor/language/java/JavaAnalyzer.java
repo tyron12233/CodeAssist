@@ -81,26 +81,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
         boolean first = true;
 
-        // do not compile the file if it not yet closed as it will cause issues when
-        // compiling multiple files at the same time
-        if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
-            Project project = ProjectManager.getInstance().getCurrentProject();
-            if (project != null) {
-                JavaCompilerService service = CompletionEngine.getInstance().getCompiler(project);
-                if (service.isReady()) {
-                    try {
-                        try (CompileTask task = service.compile(
-                                Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
-                            diagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
-                        }
-                    } catch (RuntimeException e) {
-                        Log.e("JavaAnalyzer", "Failed compiling the file", e);
-                        service.close();
-                    }
-                }
-            }
-        }
-
         while (delegate.shouldAnalyze()) {
             try {
                 // directNextToken() does not skip any token
@@ -278,34 +258,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         // Work around to CodeEditor's bug
         // this prevents the analyzer to stop working while the user types
         try {
-            diagnostics.forEach(it -> {
-                try {
-                    Indexer indexer = mEditor.getText().getIndexer();
-
-                    if (it.getStartPosition() == -1) {
-                        it.setStartPosition(it.getPosition());
-                    }
-                    if (it.getEndPosition() == -1) {
-                        it.setEndPosition(it.getPosition());
-                    }
-
-                    CharPosition start = indexer.getCharPosition((int) it.getStartPosition());
-                    CharPosition end = indexer.getCharPosition((int) it.getEndPosition());
-
-                    // the editor does not support marking underline spans for the same start and end index
-                    // to work around this, we just subtract one to the start index
-                    if (start.line == end.line && end.column == start.column) {
-                        start.column--;
-                    }
-
-                    int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
-                    colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
-                } catch (IllegalArgumentException e) {
-                    // Work around for the indexer requiring a sorted positions
-                    Log.w(TAG, "Unable to mark problem region: diagnostics " + diagnostics, e);
-                }
-            });
-
             mLintDiagnostics.forEach(it -> {
                 int flag = it.getSeverity() == Severity.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
                 Position start = it.getLocation().getStart();
@@ -316,11 +268,88 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             Log.w(TAG, "Unable to mark problem region", e);
         }
 
+        mAnalyzeRunnable.setAnalyzeResult(colors);
+        mAnalyzeRunnable.run();
+
         Log.d(TAG, "Analysis took " + Duration.between(startTime, Instant.now()).toMillis() + " ms");
     }
 
 
     public List<LintIssue> getDiagnostics() {
         return mLintDiagnostics;
+    }
+
+    private final AnalyzeRunnable mAnalyzeRunnable = new AnalyzeRunnable();
+
+    private class AnalyzeRunnable implements Runnable {
+
+        private TextAnalyzeResult colors;
+
+        public AnalyzeRunnable() {
+
+        }
+
+        public void setAnalyzeResult(TextAnalyzeResult colors) {
+            this.colors = colors;
+        }
+
+        @Override
+        public void run() {
+            Log.d(getClass().getName(), "Analyzing in background...");
+
+            List<DiagnosticWrapper> diagnostics = new ArrayList<>();
+
+            // do not compile the file if it not yet closed as it will cause issues when
+            // compiling multiple files at the same time
+            if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
+                Project project = ProjectManager.getInstance().getCurrentProject();
+                if (project != null) {
+                    JavaCompilerService service = CompletionEngine.getInstance().getCompiler(project);
+                    if (service.isReady()) {
+                        try {
+                            try (CompileTask task = service.compile(
+                                    Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), mEditor.getText().toString(), Instant.now())))) {
+                                diagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
+                            }
+                        } catch (RuntimeException e) {
+                            Log.e("JavaAnalyzer", "Failed compiling the file", e);
+                            service.close();
+                        }
+                    }
+                }
+            }
+
+            markDiagnostics(diagnostics, colors);
+        }
+    }
+
+    private void markDiagnostics(List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
+        diagnostics.forEach(it -> {
+            try {
+                Indexer indexer = mEditor.getText().getIndexer();
+
+                if (it.getStartPosition() == -1) {
+                    it.setStartPosition(it.getPosition());
+                }
+                if (it.getEndPosition() == -1) {
+                    it.setEndPosition(it.getPosition());
+                }
+
+                CharPosition start = indexer.getCharPosition((int) it.getStartPosition());
+                CharPosition end = indexer.getCharPosition((int) it.getEndPosition());
+
+                // the editor does not support marking underline spans for the same start and end index
+                // to work around this, we just subtract one to the start index
+                if (start.line == end.line && end.column == start.column) {
+                    start.column--;
+                }
+
+                int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
+                colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
+            } catch (IllegalArgumentException |  IndexOutOfBoundsException e) {
+                // Work around for the indexer requiring a sorted positions
+                Log.w(TAG, "Unable to mark problem region: diagnostics " + diagnostics, e);
+            }
+        });
     }
 }
