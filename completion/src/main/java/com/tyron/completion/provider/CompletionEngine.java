@@ -8,19 +8,14 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 
 import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
-import com.tyron.completion.CompileBatch;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.model.CompletionList;
 
 import java.io.File;
-import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 
 public class CompletionEngine {
     private static final String TAG = CompletionEngine.class.getSimpleName();
@@ -130,7 +125,7 @@ public class CompletionEngine {
 
         try {
             return new CompletionProvider(getCompiler(project)).complete(file, contents, cursor);
-        } catch (Throwable e) {
+        } catch (RuntimeException e) {
             Log.d(TAG, "Completion failed: " + Log.getStackTraceString(e) + " Clearing cache.");
             mProvider = null;
         }

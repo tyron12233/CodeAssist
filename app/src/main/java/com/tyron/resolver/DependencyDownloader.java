@@ -10,9 +10,6 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public class DependencyDownloader {
@@ -36,6 +33,7 @@ public class DependencyDownloader {
         mListener = listener;
     }
 
+
     public void download(Set<Dependency> libraries) throws IOException {
         if (!mOutputDir.exists()) {
             if (!mOutputDir.mkdirs()) {
@@ -45,6 +43,43 @@ public class DependencyDownloader {
         for (Dependency dependency : libraries) {
             download(dependency);
         }
+    }
+
+    public void cache(Set<Dependency> libraries) throws IOException {
+        for (Dependency dependency : libraries) {
+            downloadToCache(dependency);
+        }
+    }
+
+    private void downloadToCache(Dependency library) throws IOException {
+        if (mListener != null) {
+            mListener.onDownload(library);
+        }
+
+        File cachedLibrary = getFromCache(library);
+        if (cachedLibrary != null) {
+            return;
+        }
+
+        // if we got into here then we download the library
+        // lets try with aar first
+        boolean isAar = true;
+        InputStream is = DependencyResolver.getAarStream(library);
+        if (is == null) {
+            // this library doesnt have an aar file, lets try with a jar file
+            isAar = false;
+            is = DependencyResolver.getJarStream(library);
+        }
+
+        if (is == null) {
+            Log.d(TAG, "Failed to find download link for library: " + library);
+            return;
+        }
+
+        Log.d(TAG, "Downloading library: " + library.getFileName());
+        saveToCache(library, is, isAar);
+
+        is.close();
     }
 
     private void download(Dependency library) throws IOException {
@@ -201,5 +236,23 @@ public class DependencyDownloader {
 
         Log.d(TAG, "Saving library " + library + " to cache");
         FileUtils.copyFile(library, libraryFile);
+    }
+
+    private void saveToCache(Dependency library, InputStream inputStream, boolean isAar) throws IOException {
+        File libraryCacheDir = new File(ApplicationLoader.applicationContext.getCacheDir(), "libraries");
+        if (!libraryCacheDir.exists()) {
+            if (!libraryCacheDir.mkdir()) {
+                throw new IOException("Unable to create library cache directory");
+            }
+        }
+
+        File libraryFile = new File(libraryCacheDir, library.getFileName() + (isAar ? ".aar" : ".jar"));
+        if (!libraryFile.exists()) {
+            if (!libraryFile.createNewFile()) {
+                throw new IOException("Unable to create library cache file for " + libraryFile.getName());
+            }
+        }
+
+        FileUtils.copyInputStreamToFile(inputStream, libraryFile);
     }
 }

@@ -1,15 +1,12 @@
 package com.tyron.completion.provider;
 
-import android.text.TextUtils;
 import android.util.Log;
 
-import com.tyron.completion.CompileTask;
-import com.tyron.completion.CompilerProvider;
-import com.tyron.completion.CustomActions;
-import com.tyron.completion.JavaCompilerService;
-import com.tyron.completion.ParseTask;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.common.util.StringSearch;
+import com.tyron.completion.CompileTask;
+import com.tyron.completion.JavaCompilerService;
+import com.tyron.completion.ParseTask;
 import com.tyron.completion.drawable.CircleDrawable;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
@@ -49,7 +46,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -386,6 +382,8 @@ public class CompletionProvider {
 
         Trees trees = Trees.instance(task.task);
         TypeElement typeElement = (TypeElement) type.asElement();
+
+
         List<CompletionItem> list = new ArrayList<>();
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         for (Element member : task.task.getElements().getAllMembers(typeElement)) {
@@ -679,6 +677,7 @@ public class CompletionProvider {
         boolean isStatic = element instanceof TypeElement;
         Scope scope = trees.getScope(path);
         TypeMirror type = trees.getTypeMirror(path);
+
         if (type instanceof ArrayType) {
             return completeArrayMemberReference(isStatic);
         } else if (type instanceof TypeVariable) {
@@ -865,11 +864,14 @@ public class CompletionProvider {
 	}
 
     private List<CompletionItem> method(List<ExecutableElement> overloads, boolean endsWithParen, boolean methodRef) {
+        return method(overloads, endsWithParen, methodRef, null);
+    }
+
+    private List<CompletionItem> method(List<ExecutableElement> overloads, boolean endsWithParen, boolean methodRef, DeclaredType type) {
         List<CompletionItem> items = new ArrayList<>();
         for (ExecutableElement first : overloads) {
             CompletionItem item = new CompletionItem();
             item.label = getMethodLabel(first) + getThrowsType(first);
-			
             item.commitText = first.getSimpleName().toString() + (methodRef ? "" : "()");
             item.detail = simpleType(first.getReturnType());
             item.iconKind = CircleDrawable.Kind.Method;

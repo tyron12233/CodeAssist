@@ -66,7 +66,7 @@ public class ProjectManager {
             if (downloadLibs) {
                 mListener.onTaskStarted("Resolving dependencies");
                 // this is the existing libraries from app/libs
-                Set<Dependency> libs = DependencyUtils.fromLibs(proj.getLibraryDirectory());
+                Set<Dependency> libs = new HashSet<>();
 
                 // dependencies parsed from the build.gradle file
                 Set<Dependency> dependencies = new HashSet<>();
@@ -86,7 +86,7 @@ public class ProjectManager {
                 DependencyDownloader downloader = new DependencyDownloader(libs, proj.getLibraryDirectory());
                 downloader.setListener(d -> mListener.onTaskStarted("Downloading " + d.toString()));
                 try {
-                    downloader.download(dependencies);
+                    downloader.cache(dependencies);
                 } catch (IOException e) {
                     logger.warning("Unable to download dependencies: " + e.getMessage());
                 }
