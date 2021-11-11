@@ -326,7 +326,7 @@ public class FileManager {
         });
     }
 
-    public String readFile(File file) {
+    public synchronized String readFile(File file) {
         OpenedFile openedFile = mOpenedFiles.get(file);
         if (openedFile != null) {
             return openedFile.text;
@@ -341,7 +341,7 @@ public class FileManager {
         }
     }
 
-    public void updateFile(File file, String contents) {
+    public synchronized void updateFile(File file, String contents) {
         OpenedFile openedFile = new OpenedFile(contents, file);
         mOpenedFiles.put(file, openedFile);
     }

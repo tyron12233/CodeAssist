@@ -321,10 +321,11 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     }
 
     private void markDiagnostics(List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
+        mEditor.getText().beginStreamCharGetting(0);
+        Indexer indexer = mEditor.getText().getIndexer();
+
         diagnostics.forEach(it -> {
             try {
-                Indexer indexer = mEditor.getText().getIndexer();
-
                 if (it.getStartPosition() == -1) {
                     it.setStartPosition(it.getPosition());
                 }
@@ -348,5 +349,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 Log.w(TAG, "Unable to mark problem region: diagnostics " + diagnostics, e);
             }
         });
+
+        mEditor.getText().endStreamCharGetting();
     }
 }

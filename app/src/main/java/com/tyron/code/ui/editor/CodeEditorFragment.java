@@ -249,6 +249,8 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
             dialog.show();
 
             Executors.newSingleThreadExecutor().execute(() -> {
+                save();
+
                 List<CodeActionList> actions = getCodeActions();
                 if (getActivity() != null && mEditor != null) {
                     mEditor.postDelayed(() -> {

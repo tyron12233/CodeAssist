@@ -3,13 +3,12 @@ package com.tyron.completion.rewrite;
 import com.google.common.base.Strings;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.CompilerProvider;
-import com.tyron.completion.FindNewTypeDeclarationAt;
 import com.tyron.completion.FindTypeDeclarationAt;
 import com.tyron.completion.ParseTask;
-import com.tyron.completion.provider.FindHelper;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
+import com.tyron.completion.provider.FindHelper;
 
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.TypeElement;
