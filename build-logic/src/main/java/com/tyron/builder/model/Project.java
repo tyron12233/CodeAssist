@@ -6,7 +6,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.BuildModule;
-import com.tyron.builder.compiler.LibraryChecker;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.parser.FileManager;
@@ -129,9 +128,6 @@ public class Project {
 
     public Set<File> getLibraries() {
         if (libraries.isEmpty()) {
-            LibraryChecker checker = new LibraryChecker(this);
-            checker.check();
-
             searchLibraries();
         }
         return libraries;

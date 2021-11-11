@@ -188,7 +188,7 @@ public class DependencyDownloader {
         }
         FileUtils.copyInputStreamToFile(is, outputFile);
 
-        // after downloading, copy the library to our cache so we wont dowload it again on a new project
+        // after downloading, copy the library to our cache so we wont download it again on a new project
         saveToCache(outputFile);
     }
 
@@ -246,7 +246,7 @@ public class DependencyDownloader {
             }
         }
 
-        File libraryFile = new File(libraryCacheDir, library.getFileName() + (isAar ? ".aar" : ".jar"));
+        File libraryFile = new File(libraryCacheDir, library.toString() + (isAar ? ".aar" : ".jar"));
         if (!libraryFile.exists()) {
             if (!libraryFile.createNewFile()) {
                 throw new IOException("Unable to create library cache file for " + libraryFile.getName());
