@@ -6,6 +6,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.widget.Toast;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.developer.crashx.config.CrashConfig;
 import com.tyron.builder.BuildModule;
 import com.tyron.completion.CompletionModule;
@@ -34,5 +36,10 @@ public class ApplicationLoader extends Application {
     public static void showToast(String message) {
         Toast.makeText(applicationContext, message, Toast.LENGTH_LONG)
                 .show();
+    }
+
+    @VisibleForTesting
+    public static void setApplicationContext(Context context) {
+        applicationContext = context;
     }
 }

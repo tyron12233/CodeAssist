@@ -10,6 +10,7 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashSet;
 import java.util.Set;
 
 public class DependencyDownloader {
@@ -45,20 +46,24 @@ public class DependencyDownloader {
         }
     }
 
-    public void cache(Set<Dependency> libraries) throws IOException {
+    public Set<Dependency> cache(Set<Dependency> libraries) throws IOException {
+        Set<Dependency> downloaded = new HashSet<>();
         for (Dependency dependency : libraries) {
-            downloadToCache(dependency);
+            if (downloadToCache(dependency)) {
+                downloaded.add(dependency);
+            }
         }
+        return downloaded;
     }
 
-    private void downloadToCache(Dependency library) throws IOException {
+    private boolean downloadToCache(Dependency library) throws IOException {
         if (mListener != null) {
             mListener.onDownload(library);
         }
 
         File cachedLibrary = getFromCache(library);
         if (cachedLibrary != null) {
-            return;
+            return false;
         }
 
         // if we got into here then we download the library
@@ -73,13 +78,15 @@ public class DependencyDownloader {
 
         if (is == null) {
             Log.d(TAG, "Failed to find download link for library: " + library);
-            return;
+            return false;
         }
 
         Log.d(TAG, "Downloading library: " + library.getFileName());
         saveToCache(library, is, isAar);
 
         is.close();
+
+        return true;
     }
 
     private void download(Dependency library) throws IOException {

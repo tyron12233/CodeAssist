@@ -81,6 +81,7 @@ public class ProjectManager {
                 proj.open();
                 mCurrentProject = proj;
 
+                proj.getLibraries().clear();
                 if (downloadLibs) {
                     downloadLibraries(proj, mListener, logger);
                 } else {
@@ -151,8 +152,7 @@ public class ProjectManager {
 
         String librariesString = project.getSettings().getString("libraries", "[]");
         try {
-            List<Library> parsedLibraries = new Gson().fromJson(librariesString, new TypeToken<List<Library>>() {
-            }.getType());
+            List<Library> parsedLibraries = new Gson().fromJson(librariesString, new TypeToken<List<Library>>(){}.getType());
             if (parsedLibraries != null) {
                 for (Library parsedLibrary : parsedLibraries) {
                     if (!libraries.contains(parsedLibrary)) {
@@ -199,6 +199,8 @@ public class ProjectManager {
             File libraryDir = new File(project.getBuildDirectory(), "libs/" + hash);
             if (!libraryDir.exists()) {
                 libraryDir.mkdir();
+            } else {
+                continue;
             }
 
             if (library.getSourceFile().getName().endsWith(".jar")) {

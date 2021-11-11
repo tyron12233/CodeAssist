@@ -71,6 +71,7 @@ public class Project {
         mSettings = new ProjectSettings(getConfigFile());
     }
 
+
     public ProjectSettings getSettings() {
         return mSettings;
     }
@@ -189,6 +190,13 @@ public class Project {
 
         return getBuildDirectory().mkdirs();
     }
+
+    @VisibleForTesting
+    public void createForTesting() {
+        Decompress.unzipFromAssets(BuildModule.getContext(), "project_unit_test.zip",
+                mRoot.getAbsolutePath());
+    }
+
 
     private void findKotlinFiles(File file) {
         File[] files = file.listFiles();
