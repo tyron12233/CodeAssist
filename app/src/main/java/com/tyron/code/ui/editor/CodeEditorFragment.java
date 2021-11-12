@@ -139,6 +139,13 @@ public class CodeEditorFragment extends Fragment
                 Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
         mEditor.setCurrentFile(mCurrentFile);
         mEditor.setTextActionMode(CodeEditor.TextActionMode.POPUP_WINDOW);
+        mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(),
+                R.font.jetbrains_mono_regular));
+        mEditor.setLigatureEnabled(true);
+        mEditor.setHighlightCurrentBlock(true);
+        mEditor.setAllowFullscreen(false);
+        mEditor.setWordwrap(mPreferences.getBoolean(SharedPreferenceKeys.EDITOR_WORDWRAP, false));
+        mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         if (mPreferences.getBoolean(SharedPreferenceKeys.KEYBOARD_ENABLE_SUGGESTIONS, false)) {
             mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT |
                     EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
@@ -148,13 +155,6 @@ public class CodeEditorFragment extends Fragment
                     EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
                     EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         }
-        mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(),
-                R.font.jetbrains_mono_regular));
-        mEditor.setLigatureEnabled(true);
-        mEditor.setHighlightCurrentBlock(true);
-        mEditor.setAllowFullscreen(false);
-        mEditor.setWordwrap(mPreferences.getBoolean(SharedPreferenceKeys.EDITOR_WORDWRAP, false));
-        mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         mContent.addView(mEditor, new FrameLayout.LayoutParams(-1, -1));
 
         mPreferences.registerOnSharedPreferenceChangeListener(this);
@@ -280,24 +280,38 @@ public class CodeEditorFragment extends Fragment
                                 menu.add(action.getTitle()).setOnMenuItemClickListener(menuItem -> {
                                     new MaterialAlertDialogBuilder(CodeEditorFragment.this.requireContext())
                                             .setTitle(action.getTitle())
-                                            .setItems(action.getActions().stream().map(CodeAction::getTitle).toArray(String[]::new), ((dialogInterface, i) -> {
-                                                CodeAction codeAction = action.getActions().get(i);
-                                                Map<Path, List<TextEdit>> rewrites = codeAction.getEdits();
-                                                List<TextEdit> edits = rewrites.values().iterator().next();
-                                                for (TextEdit edit : edits) {
-                                                    Range range = edit.range;
-                                                    if (range.start.equals(range.end)) {
-                                                        mEditor.getText().insert(range.start.line, range.start.column, edit.newText);
-                                                    } else {
-                                                        mEditor.getText().replace(range.start.line, range.start.column, range.end.line, range.end.column, edit.newText);
-                                                    }
-
-                                                    int startFormat = mEditor.getText()
-                                                            .getCharIndex(range.start.line, range.start.column);
-                                                    int endFormat = startFormat + edit.newText.length();
-                                                    mEditor.formatCodeAsync(startFormat, endFormat);
-                                                }
-                                            })).show();
+                                            .setItems(action.getActions().stream()
+                                                            .map(CodeAction::getTitle)
+                                                            .toArray(String[]::new),
+                                                    ((dialogInterface, i) -> {
+                                                        CodeAction codeAction = action.getActions().get(i);
+                                                        Map<Path, List<TextEdit>> rewrites =
+                                                                codeAction.getEdits();
+                                                        List<TextEdit> edits = rewrites.values()
+                                                                .iterator().next();
+                                                        for (TextEdit edit : edits) {
+                                                            Range range = edit.range;
+                                                            if (range.start.equals(range.end)) {
+                                                                mEditor.getText()
+                                                                        .insert(range.start.line,
+                                                                                range.start.column,
+                                                                                edit.newText);
+                                                            } else {
+                                                                mEditor.getText()
+                                                                        .replace(range.start.line,
+                                                                                range.start.column,
+                                                                                range.end.line,
+                                                                                range.end.column,
+                                                                                edit.newText);
+                                                            }
+                                                            int startFormat = mEditor.getText()
+                                                                    .getCharIndex(range.start.line,
+                                                                            range.start.column);
+                                                            int endFormat = startFormat +
+                                                                    edit.newText.length();
+                                                            mEditor.formatCodeAsync(startFormat, endFormat);
+                                                        }
+                                                    })).show();
                                     return true;
                                 });
                             }

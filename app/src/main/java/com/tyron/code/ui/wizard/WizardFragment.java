@@ -36,7 +36,6 @@ import com.github.angads25.filepicker.model.DialogConfigs;
 import com.github.angads25.filepicker.model.DialogProperties;
 import com.github.angads25.filepicker.model.MarkedItemList;
 import com.github.angads25.filepicker.view.FilePickerDialog;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.transition.MaterialFadeThrough;
 import com.google.android.material.transition.MaterialSharedAxis;
@@ -286,31 +285,31 @@ public class WizardFragment extends Fragment {
                     .getExternalFilesDir("Projects").getAbsolutePath());
             mSaveLocationLayout.getEditText().setInputType(InputType.TYPE_NULL);
         }
-        mSaveLocationLayout.setEndIconOnClickListener(view -> {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-                if (isGrantedStoragePermission()) {
-                    showDirectoryPickerDialog();
-                } else if (shouldShowRequestPermissionRationale()) {
-                    new MaterialAlertDialogBuilder(view.getContext())
-                            .setMessage("The application needs storage permissions in order to save project files that " +
-                                    "will not be deleted when you uninstall the app. Alternatively you can choose to " +
-                                    "save project files into the app's internal storage.")
-                            .setPositiveButton("Allow", (d, which) -> {
-                                mShowDialogOnPermissionGrant = true;
-                                requestPermissions();
-                            })
-                            .setNegativeButton("Use internal storage", (d, which) -> {
-                                mUseInternalStorage = true;
-                                initializeSaveLocation();
-                            })
-                            .setTitle("Storage permissions")
-                            .show();
-                } else {
-                    mShowDialogOnPermissionGrant = true;
-                    requestPermissions();
-                }
-            }
-        });
+//        mSaveLocationLayout.setEndIconOnClickListener(view -> {
+//            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+//                if (isGrantedStoragePermission()) {
+//                    showDirectoryPickerDialog();
+//                } else if (shouldShowRequestPermissionRationale()) {
+//                    new MaterialAlertDialogBuilder(view.getContext())
+//                            .setMessage("The application needs storage permissions in order to save project files that " +
+//                                    "will not be deleted when you uninstall the app. Alternatively you can choose to " +
+//                                    "save project files into the app's internal storage.")
+//                            .setPositiveButton("Allow", (d, which) -> {
+//                                mShowDialogOnPermissionGrant = true;
+//                                requestPermissions();
+//                            })
+//                            .setNegativeButton("Use internal storage", (d, which) -> {
+//                                mUseInternalStorage = true;
+//                                initializeSaveLocation();
+//                            })
+//                            .setTitle("Storage permissions")
+//                            .show();
+//                } else {
+//                    mShowDialogOnPermissionGrant = true;
+//                    requestPermissions();
+//                }
+//            }
+//        });
     }
 
     private void showDirectoryPickerDialog() {
@@ -547,12 +546,16 @@ public class WizardFragment extends Fragment {
             }
         }
         boolean isJava = mLanguageText.getText().toString().equals("Java");
-        File sourcesDir = new File(mCurrentTemplate.getPath() + "/" + (isJava ? "java" : "kotlin"));
+        File sourcesDir = new File(mCurrentTemplate.getPath() +
+                "/" + (isJava ? "java" : "kotlin"));
         if (!sourcesDir.exists()) {
-            throw new IOException("Unable to find source file for language " + mLanguageText.getText());
+            throw new IOException("Unable to find source file for language " +
+                    mLanguageText.getText());
         }
 
-        String packageNameDir = mPackageNameLayout.getEditText().getText().toString().replace(".", "/");
+        String packageNameDir = mPackageNameLayout.getEditText()
+                .getText().toString()
+                .replace(".", "/");
         File targetSourceDir = new File(projectRoot, "/app/src/main/java/" + packageNameDir);
         if (!targetSourceDir.exists()) {
             if (!targetSourceDir.mkdirs()) {
@@ -561,7 +564,8 @@ public class WizardFragment extends Fragment {
         }
         FileUtils.copyDirectory(sourcesDir, projectRoot);
         FileUtils.deleteDirectory(new File(projectRoot, "app/src/main/java/$packagename"));
-        org.apache.commons.io.FileUtils.copyDirectory(new File(sourcesDir, "app/src/main/java/$packagename"), targetSourceDir);
+        org.apache.commons.io.FileUtils.copyDirectory(new File(sourcesDir,
+                "app/src/main/java/$packagename"), targetSourceDir);
     }
 
     private List<String> getSdks() {
