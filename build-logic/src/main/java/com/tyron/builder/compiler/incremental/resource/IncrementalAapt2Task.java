@@ -436,7 +436,7 @@ public class IncrementalAapt2Task extends Task {
                 throw new IOException("Unable to create directories");
             }
         }
-        if (!createdFile.createNewFile()) {
+        if (!createdFile.exists() && !createdFile.createNewFile()) {
             throw new IOException("Unable to create file " + name);
         }
         return createdFile;
