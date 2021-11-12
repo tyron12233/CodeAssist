@@ -62,16 +62,6 @@ public class Project {
         }
     }
 
-    public void open() throws IOException {
-        mFileManager.openProject(this);
-        mManifestData = AndroidManifestParser.parse(getManifestFile().toPath());
-        if (!getConfigFile().exists() && !getConfigFile().createNewFile()) {
-            throw new IOException("Unable to create config file");
-        }
-        mSettings = new ProjectSettings(getConfigFile());
-    }
-
-
     public ProjectSettings getSettings() {
         return mSettings;
     }
@@ -82,6 +72,10 @@ public class Project {
 
     public String getPackageName() {
        return mManifestData.getPackage();
+    }
+
+    public String getName() {
+        return mRoot.getName();
     }
     
     public Map<String, File> getJavaFiles() {
@@ -133,70 +127,6 @@ public class Project {
         }
         return libraries;
     }
-
-    /**
-     * Clears all the cached files stored in this project, the next time ths project
-     * is opened, it will get loaded again
-     */
-    public void clear() {
-        RJavaFiles.clear();
-        libraries.clear();
-        javaFiles.clear();
-        kotlinFiles.clear();
-    }
-
-
-    /**
-     * Used to check if this project contains the required directories
-     * such as app/src/main/java, resources and others
-     */
-    public boolean isValidProject() {
-        File check = new File(mRoot, "app/src/main/java");
-
-        if (!check.exists()) {
-            return false;
-        }
-
-        return getResourceDirectory().exists();
-    }
-    
-    /**
-     * Creates a new project configured at mRoot, returns true if the project
-     * has been created, false if not.
-     */
-    public boolean create() {
-        
-        // this project already exists
-        if (isValidProject()) {
-            return false;
-        }
-        
-        File java = getJavaDirectory();
-        
-        if (!java.mkdirs()) {
-            return false;
-        }
-        
-		if (!getResourceDirectory().mkdirs()) {
-			return false;
-		}
-		
-        Decompress.unzipFromAssets(BuildModule.getContext(), "test_project.zip",
-                java.getAbsolutePath());
-		
-        if (!getLibraryDirectory().mkdirs()) {
-            return false;
-        }
-
-        return getBuildDirectory().mkdirs();
-    }
-
-    @VisibleForTesting
-    public void createForTesting() {
-        Decompress.unzipFromAssets(BuildModule.getContext(), "project_unit_test.zip",
-                mRoot.getAbsolutePath());
-    }
-
 
     private void findKotlinFiles(File file) {
         File[] files = file.listFiles();
@@ -260,6 +190,78 @@ public class Project {
                 }
             }
         }
+    }
+
+    /**
+     * Clears all the cached files stored in this project, the next time ths project
+     * is opened, it will get loaded again
+     */
+    public void clear() {
+        RJavaFiles.clear();
+        libraries.clear();
+        javaFiles.clear();
+        kotlinFiles.clear();
+    }
+
+    /**
+     * Used to check if this project contains the required directories
+     * such as app/src/main/java, resources and others
+     */
+    public boolean isValidProject() {
+        File check = new File(mRoot, "app/src/main/java");
+
+        if (!check.exists()) {
+            return false;
+        }
+
+        return getResourceDirectory().exists();
+    }
+    
+    /**
+     * Creates a new project configured at mRoot, returns true if the project
+     * has been created, false if not.
+     */
+    public boolean create() {
+        
+        // this project already exists
+        if (isValidProject()) {
+            return false;
+        }
+        
+        File java = getJavaDirectory();
+        
+        if (!java.mkdirs()) {
+            return false;
+        }
+        
+		if (!getResourceDirectory().mkdirs()) {
+			return false;
+		}
+		
+        Decompress.unzipFromAssets(BuildModule.getContext(), "test_project.zip",
+                java.getAbsolutePath());
+		
+        if (!getLibraryDirectory().mkdirs()) {
+            return false;
+        }
+
+        return getBuildDirectory().mkdirs();
+    }
+
+    public void open() throws IOException {
+        mFileManager.openProject(this);
+        mManifestData = AndroidManifestParser.parse(getManifestFile().toPath());
+        if (!getConfigFile().exists() && !getConfigFile().createNewFile()) {
+            throw new IOException("Unable to create config file");
+        }
+        mSettings = new ProjectSettings(getConfigFile());
+    }
+
+
+    @VisibleForTesting
+    public void createForTesting() {
+        Decompress.unzipFromAssets(BuildModule.getContext(), "project_unit_test.zip",
+                mRoot.getAbsolutePath());
     }
 
     public int getMinSdk() {
