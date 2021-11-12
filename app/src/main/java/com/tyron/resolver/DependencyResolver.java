@@ -39,18 +39,16 @@ public class DependencyResolver {
             "https://jitpack.io",
             "https://jcenter.bintray.com/"
     );
-    private final File mOutputDir;
     private File mPomCacheDir;
     private Listener mListener;
     private final Set<Dependency> library;
 
-    public DependencyResolver(Dependency library, File file) {
-        this(Collections.singleton(library), file);
+    public DependencyResolver(Dependency library) {
+        this(Collections.singleton(library));
     }
 
-    public DependencyResolver(Set<Dependency> library, File file) {
+    public DependencyResolver(Set<Dependency> library) {
         this.library = library;
-        mOutputDir = file;
     }
 
     public void setListener(Listener listener) {
