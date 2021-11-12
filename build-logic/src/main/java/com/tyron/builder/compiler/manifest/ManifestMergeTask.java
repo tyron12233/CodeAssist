@@ -98,7 +98,9 @@ public class ManifestMergeTask extends Task {
                 throw new CompilationFailedException(report.getReportString());
             }
             if (report.getMergedDocument().isPresent()) {
-                FileUtils.writeStringToFile(mOutputFile, report.getMergedDocument().get().prettyPrint(), Charset.defaultCharset());
+                FileUtils.writeStringToFile(mOutputFile,
+                        report.getMergedDocument().get().prettyPrint(),
+                        Charset.defaultCharset());
             }
         } catch (ManifestMerger2.MergeFailureException e) {
             throw new CompilationFailedException(e);

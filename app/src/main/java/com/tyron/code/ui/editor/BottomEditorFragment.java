@@ -1,6 +1,5 @@
 package com.tyron.code.ui.editor;
 
-import android.annotation.SuppressLint;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -80,7 +79,8 @@ public class BottomEditorFragment extends Fragment {
         mTabLayout.setupWithViewPager(mPager);
 
         ShortcutsAdapter adapter = new ShortcutsAdapter(getShortcuts());
-        LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false);
+        LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext(),
+                LinearLayoutManager.HORIZONTAL, false);
         mShortcutsRecyclerView.setLayoutManager(layoutManager);
         mShortcutsRecyclerView.setAdapter(adapter);
 

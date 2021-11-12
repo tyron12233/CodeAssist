@@ -92,7 +92,8 @@ public class WizardFragment extends Fragment {
         }
     };
     private ActivityResultLauncher<String[]> mPermissionLauncher;
-    private final ActivityResultContracts.RequestMultiplePermissions mPermissionsContract = new ActivityResultContracts.RequestMultiplePermissions();
+    private final ActivityResultContracts.RequestMultiplePermissions mPermissionsContract =
+            new ActivityResultContracts.RequestMultiplePermissions();
     private OnProjectCreatedListener mListener;
 
     public void setOnProjectCreatedListener(OnProjectCreatedListener listener) {
@@ -226,8 +227,11 @@ public class WizardFragment extends Fragment {
         });
 
         mSaveLocationLayout = mWizardDetailsView.findViewById(R.id.til_save_location);
-        mSaveLocationLayout.getEditText().setText(PreferenceManager.getDefaultSharedPreferences(requireContext())
-                .getString(SharedPreferenceKeys.PROJECT_SAVE_PATH, requireContext().getExternalFilesDir("Projects").getAbsolutePath()));
+        mSaveLocationLayout.getEditText()
+                .setText(PreferenceManager.getDefaultSharedPreferences(requireContext())
+                        .getString(SharedPreferenceKeys.PROJECT_SAVE_PATH,
+                                requireContext().getExternalFilesDir("Projects")
+                                        .getAbsolutePath()));
         initializeSaveLocation();
 
         mSaveLocationLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
@@ -239,11 +243,13 @@ public class WizardFragment extends Fragment {
 
         mLanguageLayout = mWizardDetailsView.findViewById(R.id.til_language);
         mLanguageText = mWizardDetailsView.findViewById(R.id.et_language);
-        mLanguageText.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_list_item_1, languages));
+        mLanguageText.setAdapter(new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_list_item_1, languages));
 
         mMinSdkLayout = mWizardDetailsView.findViewById(R.id.til_min_sdk);
         mMinSdkText = mWizardDetailsView.findViewById(R.id.et_min_sdk);
-        mMinSdkText.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_list_item_1, getSdks()));
+        mMinSdkText.setAdapter(new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_list_item_1, getSdks()));
         mMinSdkText.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
@@ -258,8 +264,10 @@ public class WizardFragment extends Fragment {
     }
 
     private boolean isGrantedStoragePermission() {
-        return ContextCompat.checkSelfPermission(requireActivity(), Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(requireActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        return ContextCompat.checkSelfPermission(requireActivity(),
+                Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(requireActivity(),
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
     }
 
     private boolean shouldShowRequestPermissionRationale() {
@@ -274,7 +282,8 @@ public class WizardFragment extends Fragment {
     private void initializeSaveLocation() {
         if (mUseInternalStorage) {
             mSaveLocationLayout.setHelperText(getString(R.string.wizard_scoped_storage_info));
-            mSaveLocationLayout.getEditText().setText(requireContext().getExternalFilesDir("Projects").getAbsolutePath());
+            mSaveLocationLayout.getEditText().setText(requireContext()
+                    .getExternalFilesDir("Projects").getAbsolutePath());
             mSaveLocationLayout.getEditText().setInputType(InputType.TYPE_NULL);
         }
         mSaveLocationLayout.setEndIconOnClickListener(view -> {
@@ -394,8 +403,9 @@ public class WizardFragment extends Fragment {
         }
 
         File file = new File(
-                PreferenceManager.getDefaultSharedPreferences(requireContext()).getString(SharedPreferenceKeys.PROJECT_SAVE_PATH,
-                        requireContext().getExternalFilesDir("Projects").getAbsolutePath())
+                PreferenceManager.getDefaultSharedPreferences(requireContext())
+                        .getString(SharedPreferenceKeys.PROJECT_SAVE_PATH,
+                                requireContext().getExternalFilesDir("Projects").getAbsolutePath())
                         + "/" + editable.toString());
         String suffix = "";
         if (file.exists()) {
@@ -600,7 +610,8 @@ public class WizardFragment extends Fragment {
 
             if (getActivity() != null) {
                 getActivity().runOnUiThread(() -> {
-                    TransitionManager.beginDelayedTransition((ViewGroup) requireView(), new MaterialFadeThrough());
+                    TransitionManager.beginDelayedTransition((ViewGroup) requireView(),
+                            new MaterialFadeThrough());
                     mLoadingLayout.setVisibility(View.GONE);
                     mRecyclerView.setVisibility(View.VISIBLE);
 
@@ -670,7 +681,8 @@ public class WizardFragment extends Fragment {
             FileUtils.deleteDirectory(templatesDir);
         }
 
-        Decompress.unzipFromAssets(requireContext(), "templates.zip", templatesDir.getAbsolutePath());
+        Decompress.unzipFromAssets(requireContext(), "templates.zip",
+                templatesDir.getAbsolutePath());
         File hashFile = new File(new File(templatesDir, "templates"), "hash");
         if (!hashFile.createNewFile()) {
             throw new IOException("Unable to create hash file");

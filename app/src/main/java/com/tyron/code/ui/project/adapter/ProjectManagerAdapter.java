@@ -1,6 +1,5 @@
 package com.tyron.code.ui.project.adapter;
 
-import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -70,7 +69,8 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         FrameLayout root = new FrameLayout(parent.getContext());
-        root.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
         final ViewHolder holder;
         if (viewType == TYPE_EMPTY) {
             holder = new EmptyViewHolder(root);

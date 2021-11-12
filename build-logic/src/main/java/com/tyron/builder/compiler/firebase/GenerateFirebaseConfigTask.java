@@ -1,8 +1,5 @@
 package com.tyron.builder.compiler.firebase;
 
-import android.util.Log;
-
-import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.compiler.BuildType;
@@ -72,14 +69,17 @@ public class GenerateFirebaseConfigTask extends Task {
             if (doGenerate(contents, mProject.getPackageName(), secretsFile)) {
                 return;
             }
-            throw new CompilationFailedException("Unable to find " + mProject.getPackageName() + " in google-services.json");
+            throw new CompilationFailedException("Unable to find " + mProject.getPackageName() +
+                    " in google-services.json");
         } catch (JSONException e) {
-            throw new CompilationFailedException("Failed to parse google-services.json: " + e.getMessage());
+            throw new CompilationFailedException("Failed to parse google-services.json: " +
+                    e.getMessage());
         }
     }
 
     @VisibleForTesting
-    public boolean doGenerate(String contents, String packageName, File secretsFile) throws JSONException, IOException {
+    public boolean doGenerate(String contents, String packageName, File secretsFile)
+            throws JSONException, IOException {
         JSONObject jsonObject = new JSONObject(contents);
         JSONObject projectInfo = jsonObject.getJSONObject("project_info");
 
@@ -99,7 +99,10 @@ public class GenerateFirebaseConfigTask extends Task {
         return false;
     }
 
-    private void parseConfig(JSONObject projectInfo, JSONObject client, JSONObject clientInfo, File secretsFile) throws JSONException, IOException {
+    private void parseConfig(JSONObject projectInfo,
+                             JSONObject client,
+                             JSONObject clientInfo,
+                             File secretsFile) throws JSONException, IOException {
         Iterator<String> keys = projectInfo.keys();
         Map<String, String> map = new HashMap<>();
         keys.forEachRemaining(s -> {

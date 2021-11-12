@@ -15,7 +15,9 @@ public class MainActivity extends AppCompatActivity {
 
         if (getSupportFragmentManager().findFragmentByTag(ProjectManagerFragment.TAG) == null) {
             getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, new ProjectManagerFragment(), ProjectManagerFragment.TAG)
+                    .replace(R.id.fragment_container,
+                            new ProjectManagerFragment(),
+                            ProjectManagerFragment.TAG)
                     .commit();
         }
     }

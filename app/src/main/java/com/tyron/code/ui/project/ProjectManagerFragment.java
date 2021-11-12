@@ -6,7 +6,6 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,10 +25,8 @@ import androidx.transition.TransitionManager;
 import com.github.angads25.filepicker.model.DialogConfigs;
 import com.github.angads25.filepicker.model.DialogProperties;
 import com.google.android.material.appbar.MaterialToolbar;
-import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.transition.MaterialFade;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.tyron.builder.model.Project;
@@ -46,7 +43,6 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Executors;
-import java.util.function.ToLongFunction;
 
 public class ProjectManagerFragment extends Fragment {
 
@@ -58,7 +54,8 @@ public class ProjectManagerFragment extends Fragment {
     private ExtendedFloatingActionButton mCreateProjectFab;
     private boolean mShowDialogOnPermissionGrant;
     private ActivityResultLauncher<String[]> mPermissionLauncher;
-    private final ActivityResultContracts.RequestMultiplePermissions mPermissionsContract = new ActivityResultContracts.RequestMultiplePermissions();
+    private final ActivityResultContracts.RequestMultiplePermissions mPermissionsContract =
+            new ActivityResultContracts.RequestMultiplePermissions();
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -125,7 +122,9 @@ public class ProjectManagerFragment extends Fragment {
 
     @Nullable
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater,
+                             @Nullable ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
         return inflater.inflate(R.layout.project_manager_fragment, container, false);
     }
 
@@ -144,8 +143,9 @@ public class ProjectManagerFragment extends Fragment {
             } else if (shouldShowRequestPermissionRationale()) {
                 if (shouldShowRequestPermissionRationale()) {
                     new MaterialAlertDialogBuilder(requireContext())
-                            .setMessage("The application needs storage permissions in order to save project files that " +
-                                    "will not be deleted when you uninstall the app. Alternatively you can choose to " +
+                            .setMessage("The application needs storage permissions in order to " +
+                                    "save project files that will not be deleted when you uninstall " +
+                                    "the app. Alternatively you can choose to " +
                                     "save project files into the app's internal storage.")
                             .setPositiveButton("Allow", (d, which) -> {
                                 mShowDialogOnPermissionGrant = true;
@@ -187,8 +187,10 @@ public class ProjectManagerFragment extends Fragment {
     }
 
     private boolean permissionsGranted() {
-        return ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        return ContextCompat.checkSelfPermission(requireContext(),
+                Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(requireContext(),
+                        Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
     }
 
     private boolean shouldShowRequestPermissionRationale() {
@@ -197,7 +199,9 @@ public class ProjectManagerFragment extends Fragment {
     }
 
     private void requestPermissions() {
-        mPermissionLauncher.launch(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE});
+        mPermissionLauncher.launch(
+                new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                        Manifest.permission.READ_EXTERNAL_STORAGE});
     }
 
     private void openProject(Project project) {
@@ -214,7 +218,7 @@ public class ProjectManagerFragment extends Fragment {
         Executors.newSingleThreadExecutor().execute(() -> {
             String path;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                path =  requireContext().getExternalFilesDir("Projects").getAbsolutePath();
+                path = requireContext().getExternalFilesDir("Projects").getAbsolutePath();
             } else {
                 path = mPreferences.getString(SharedPreferenceKeys.PROJECT_SAVE_PATH,
                         requireContext().getExternalFilesDir("Projects").getAbsolutePath());
@@ -226,7 +230,8 @@ public class ProjectManagerFragment extends Fragment {
             if (directories != null) {
                 Arrays.sort(directories, Comparator.comparingLong(File::lastModified));
                 for (File directory : directories) {
-                    Project project = new Project(new File(directory.getAbsolutePath().replaceAll("%20", " ")));
+                    Project project = new Project(new File(directory.getAbsolutePath()
+                            .replaceAll("%20", " ")));
                     if (project.isValidProject()) {
                         projects.add(project);
                     }
@@ -250,7 +255,8 @@ public class ProjectManagerFragment extends Fragment {
         View recycler = requireView().findViewById(R.id.projects_recycler);
         View empty = requireView().findViewById(R.id.empty_container);
 
-        TransitionManager.beginDelayedTransition((ViewGroup) recycler.getParent(), new MaterialFade());
+        TransitionManager.beginDelayedTransition((ViewGroup) recycler.getParent(),
+                new MaterialFade());
         if (show) {
             recycler.setVisibility(View.GONE);
             empty.setVisibility(View.VISIBLE);

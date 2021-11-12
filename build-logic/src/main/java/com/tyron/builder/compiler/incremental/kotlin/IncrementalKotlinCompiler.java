@@ -81,8 +81,14 @@ public class IncrementalKotlinCompiler extends Task {
         classpath.addAll(mProject.getLibraries());
 
         List<String> arguments = new ArrayList<>();
-        Collections.addAll(arguments, "-cp", classpath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)));
-        Collections.addAll(arguments, mFilesToCompile.stream().map(File::getAbsolutePath).toArray(String[]::new));
+        Collections.addAll(arguments, "-cp",
+                classpath.stream()
+                        .map(File::getAbsolutePath)
+                        .collect(Collectors.joining(File.pathSeparator)));
+        Collections.addAll(arguments,
+                mFilesToCompile.stream()
+                        .map(File::getAbsolutePath).
+                        toArray(String[]::new));
         try {
             K2JVMCompiler compiler = new K2JVMCompiler();
             K2JVMCompilerArguments args = new K2JVMCompilerArguments();
@@ -95,7 +101,9 @@ public class IncrementalKotlinCompiler extends Task {
             args.setNoStdlib(true);
             args.setKotlinHome(mKotlinHome.getAbsolutePath());
             args.setDestination(mClassOutput.getAbsolutePath());
-            args.setPluginClasspaths(getPlugins().stream().map(File::getAbsolutePath).toArray(String[]::new));
+            args.setPluginClasspaths(getPlugins().stream()
+                    .map(File::getAbsolutePath)
+                    .toArray(String[]::new));
             compiler.exec(mCollector, Services.EMPTY, args);
         } catch (Exception e) {
             throw new CompilationFailedException(e);
@@ -111,7 +119,8 @@ public class IncrementalKotlinCompiler extends Task {
         private final String mMessage;
         private final CompilerMessageSourceLocation mLocation;
 
-        public Diagnostic(CompilerMessageSeverity severity, String message, CompilerMessageSourceLocation location) {
+        public Diagnostic(CompilerMessageSeverity severity,
+                          String message, CompilerMessageSourceLocation location) {
             mSeverity = severity;
             mMessage = message;
 
@@ -206,7 +215,9 @@ public class IncrementalKotlinCompiler extends Task {
         }
 
         @Override
-        public void report(@NotNull CompilerMessageSeverity severity, @NotNull String s, CompilerMessageSourceLocation compilerMessageSourceLocation) {
+        public void report(@NotNull CompilerMessageSeverity severity,
+                           @NotNull String s,
+                           CompilerMessageSourceLocation compilerMessageSourceLocation) {
             Diagnostic diagnostic = new Diagnostic(severity, s, compilerMessageSourceLocation);
             mDiagnostics.add(diagnostic);
 

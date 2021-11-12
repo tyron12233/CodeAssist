@@ -52,19 +52,22 @@ public class ApkSigner {
             return check.getAbsolutePath();
         }
 
-        Decompress.unzipFromAssets(BuildModule.getContext(), "testkey.pk8.zip", check.getParentFile().getAbsolutePath());
+        Decompress.unzipFromAssets(BuildModule.getContext(), "testkey.pk8.zip",
+                check.getParentFile().getAbsolutePath());
 
         return check.getAbsolutePath();
     }
 
     private String getTestCertFilePath() {
-        File check = new File(BuildModule.getContext().getFilesDir() + "/temp/testkey.x509.pem");
+        File check = new File(BuildModule.getContext().getFilesDir() +
+                "/temp/testkey.x509.pem");
 
         if (check.exists()) {
             return check.getAbsolutePath();
         }
 
-        Decompress.unzipFromAssets(BuildModule.getContext(), "testkey.x509.pem.zip", check.getParentFile().getAbsolutePath());
+        Decompress.unzipFromAssets(BuildModule.getContext(), "testkey.x509.pem.zip",
+                check.getParentFile().getAbsolutePath());
 
         return check.getAbsolutePath();
     }

@@ -155,7 +155,8 @@ public class IncrementalD8Task extends Task {
 
         File output = new File(mProject.getBuildDirectory(), "bin");
         D8Command command = D8Command.builder(diagnosticsHandler)
-                .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath)
+                        .collect(Collectors.toList()))
                 .addLibraryFiles(getLibraryFiles())
                 .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
                 .addProgramFiles(getLibraryDexes())
@@ -173,7 +174,8 @@ public class IncrementalD8Task extends Task {
             if (parent != null) {
                 File[] dexFiles = parent.listFiles(file1 -> file1.getName().endsWith(".dex"));
                 if (dexFiles != null) {
-                    dexes.addAll(Arrays.stream(dexFiles).map(File::toPath).collect(Collectors.toList()));
+                    dexes.addAll(Arrays.stream(dexFiles).map(File::toPath)
+                            .collect(Collectors.toList()));
                 }
             }
         }
@@ -222,7 +224,8 @@ public class IncrementalD8Task extends Task {
                     mLogger.debug("Dexing jar " + parentFile.getName());
                     D8Command command = D8Command.builder(diagnosticsHandler)
                             .addLibraryFiles(getLibraryFiles())
-                            .addClasspathFiles(libraries.stream().map(File::toPath).collect(Collectors.toList()))
+                            .addClasspathFiles(libraries.stream().map(File::toPath)
+                                    .collect(Collectors.toList()))
                             .setMinApiLevel(21)
                             .addProgramFiles(lib.toPath())
                             .setMode(CompilationMode.RELEASE)
@@ -250,7 +253,8 @@ public class IncrementalD8Task extends Task {
         File parent = dexFile.getParentFile();
         String name = dexFile.getName().replace(ext, "");
         if (parent != null) {
-            File[] children = parent.listFiles((c) -> c.getName().endsWith(ext) && c.getName().contains("$"));
+            File[] children = parent.listFiles((c) -> c.getName().endsWith(ext) &&
+                    c.getName().contains("$"));
             if (children != null) {
                 for (File child : children) {
                     if (child.getName().startsWith(name)) {
@@ -294,7 +298,8 @@ public class IncrementalD8Task extends Task {
         }
 
         @Override
-        public DiagnosticsLevel modifyDiagnosticsLevel(DiagnosticsLevel diagnosticsLevel, Diagnostic diagnostic) {
+        public DiagnosticsLevel modifyDiagnosticsLevel(DiagnosticsLevel diagnosticsLevel,
+                                                       Diagnostic diagnostic) {
             Log.d("DiagnosticHandler", diagnostic.getDiagnosticMessage());
             return null;
         }

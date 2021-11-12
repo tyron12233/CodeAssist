@@ -1,15 +1,13 @@
 package com.tyron.code.ui.wizard;
 
 
-import com.tyron.builder.parser.FileManager;
-
 import org.apache.commons.io.FileUtils;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 public class WizardTemplate {
 
@@ -29,7 +27,8 @@ public class WizardTemplate {
 
         WizardTemplate template = new WizardTemplate();
         try {
-            JSONObject jsonObject = new JSONObject(FileUtils.readFileToString(infoFile, Charset.defaultCharset()));
+            JSONObject jsonObject = new JSONObject(FileUtils.readFileToString(infoFile,
+                    StandardCharsets.UTF_8));
             template.setMinSdk(jsonObject.getInt("minSdk"));
             template.setName(jsonObject.getString("name"));
             template.setPath(parent.getAbsolutePath());

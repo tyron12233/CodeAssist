@@ -65,7 +65,8 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 
 @SuppressWarnings("FieldCanBeLocal")
-public class CodeEditorFragment extends Fragment implements SharedPreferences.OnSharedPreferenceChangeListener {
+public class CodeEditorFragment extends Fragment
+        implements SharedPreferences.OnSharedPreferenceChangeListener {
 
     private LinearLayout mRoot;
     private LinearLayout mContent;
@@ -130,18 +131,25 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
         mContent = mRoot.findViewById(R.id.content);
 
         mEditor = new CodeEditor(requireActivity());
-        mEditor.setEditorLanguage(mLanguage = LanguageManager.getInstance().get(mEditor, mCurrentFile));
+        mEditor.setEditorLanguage(mLanguage =
+                LanguageManager.getInstance().get(mEditor, mCurrentFile));
         mEditor.setColorScheme(new SchemeDarcula());
         mEditor.setOverScrollEnabled(false);
-        mEditor.setTextSize(Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
+        mEditor.setTextSize(
+                Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
         mEditor.setCurrentFile(mCurrentFile);
         mEditor.setTextActionMode(CodeEditor.TextActionMode.POPUP_WINDOW);
         if (mPreferences.getBoolean(SharedPreferenceKeys.KEYBOARD_ENABLE_SUGGESTIONS, false)) {
-            mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
+            mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT |
+                    EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
         } else {
-            mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+            mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS |
+                    EditorInfo.TYPE_CLASS_TEXT |
+                    EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
+                    EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         }
-        mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(), R.font.jetbrains_mono_regular));
+        mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(),
+                R.font.jetbrains_mono_regular));
         mEditor.setLigatureEnabled(true);
         mEditor.setHighlightCurrentBlock(true);
         mEditor.setAllowFullscreen(false);
@@ -164,9 +172,13 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                 break;
             case SharedPreferenceKeys.KEYBOARD_ENABLE_SUGGESTIONS:
                 if (pref.getBoolean(key, false)) {
-                    mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
+                    mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT |
+                            EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
                 } else {
-                    mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+                    mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS |
+                            EditorInfo.TYPE_CLASS_TEXT |
+                            EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
+                            EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
                 }
                 break;
             case SharedPreferenceKeys.EDITOR_WORDWRAP:
@@ -204,7 +216,9 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                 if (window.getLastPrefix().contains(".")) {
                     length -= window.getLastPrefix().lastIndexOf(".") + 1;
                 }
-                mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - length, cursor.getLeftLine(), cursor.getLeftColumn());
+                mEditor.getText().delete(cursor.getLeftLine(),
+                        cursor.getLeftColumn() - length,
+                        cursor.getLeftLine(), cursor.getLeftColumn());
 
                 window.setSelectedItem(item.commit);
                 cursor.onCommitMultilineText(item.commit);
@@ -212,7 +226,8 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                 if (item.commit != null && item.cursorOffset != item.commit.length()) {
                     int delta = (item.commit.length() - item.cursorOffset);
                     int newSel = Math.max(mEditor.getCursor().getLeft() - delta, 0);
-                    CharPosition charPosition = mEditor.getCursor().getIndexer().getCharPosition(newSel);
+                    CharPosition charPosition = mEditor.getCursor()
+                            .getIndexer().getCharPosition(newSel);
                     mEditor.setSelection(charPosition.line, charPosition.column);
                 }
 
@@ -223,12 +238,14 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                 }
 
                 if (item.item.action == com.tyron.completion.model.CompletionItem.Kind.IMPORT) {
-                    Parser parser = Parser.parseFile(ProjectManager.getInstance().getCurrentProject(), mEditor.getCurrentFile().toPath());
+                    Parser parser = Parser.parseFile(ProjectManager.getInstance().getCurrentProject(),
+                            mEditor.getCurrentFile().toPath());
                     ParseTask task = new ParseTask(parser.task, parser.root);
 
                     boolean samePackage = false;
-                    if (!item.item.data.contains(".") //it's either in the same class or it's already imported
-                            || task.root.getPackageName().toString().equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
+                    //it's either in the same class or it's already imported
+                    if (!item.item.data.contains(".") || task.root.getPackageName().toString()
+                            .equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
                         samePackage = true;
                     }
 
@@ -261,7 +278,7 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                                     continue;
                                 }
                                 menu.add(action.getTitle()).setOnMenuItemClickListener(menuItem -> {
-                                    new MaterialAlertDialogBuilder(requireContext())
+                                    new MaterialAlertDialogBuilder(CodeEditorFragment.this.requireContext())
                                             .setTitle(action.getTitle())
                                             .setItems(action.getActions().stream().map(CodeAction::getTitle).toArray(String[]::new), ((dialogInterface, i) -> {
                                                 CodeAction codeAction = action.getActions().get(i);
@@ -313,12 +330,20 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
             }
 
             @Override
-            public void afterDelete(@NonNull CodeEditor editor, @NonNull CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence deletedContent) {
+            public void afterDelete(@NonNull CodeEditor editor,
+                                    @NonNull CharSequence content,
+                                    int startLine, int startColumn,
+                                    int endLine, int endColumn,
+                                    CharSequence deletedContent) {
                 updateFile(content);
             }
 
             @Override
-            public void afterInsert(@NonNull CodeEditor editor, @NonNull CharSequence content, int startLine, int startColumn, int endLine, int endColumn, CharSequence insertedContent) {
+            public void afterInsert(@NonNull CodeEditor editor,
+                                    @NonNull CharSequence content,
+                                    int startLine, int startColumn,
+                                    int endLine, int endColumn,
+                                    CharSequence insertedContent) {
                 updateFile(content);
             }
 
@@ -424,14 +449,17 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                     Instant start = Instant.now();
                     View view = ((LanguageXML) mLanguage).showPreview(requireContext(), container);
                     requireActivity().runOnUiThread(() -> {
-                        Toast.makeText(requireContext(), "PreviewTask took: " + Duration.between(start, Instant.now()).toMillis() + " ms.", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(requireContext(), "PreviewTask took: " +
+                                        Duration.between(start, Instant.now()).toMillis() + " ms.",
+                                Toast.LENGTH_SHORT).show();
                         if (view != null) {
-
-                            DisplayMetrics displayMetrics = requireActivity().getResources().getDisplayMetrics();
-
+                            DisplayMetrics displayMetrics =
+                                    requireActivity().getResources().getDisplayMetrics();
                             FrameLayout root = new FrameLayout(requireContext());
                             root.addView(view);
-                            container.addView(root, new ViewGroup.LayoutParams((int) (displayMetrics.widthPixels * .90), (int) (displayMetrics.heightPixels * .90)));
+                            container.addView(root, new ViewGroup.LayoutParams((int)
+                                    (displayMetrics.widthPixels * .90),
+                                    (int) (displayMetrics.heightPixels * .90)));
 
                             new AlertDialog.Builder(requireContext())
                                     .setView(container)
@@ -440,11 +468,12 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
                     });
 
                 } catch (Exception e) {
-                    requireActivity().runOnUiThread(() -> new MaterialAlertDialogBuilder(requireContext())
-                            .setTitle("Unable to preview")
-                            .setMessage(Log.getStackTraceString(e))
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show());
+                    requireActivity().runOnUiThread(() ->
+                            new MaterialAlertDialogBuilder(requireContext())
+                                    .setTitle("Unable to preview")
+                                    .setMessage(Log.getStackTraceString(e))
+                                    .setPositiveButton(android.R.string.ok, null)
+                                    .show());
                 }
             });
         }
@@ -454,7 +483,8 @@ public class CodeEditorFragment extends Fragment implements SharedPreferences.On
         Project project = ProjectManager.getInstance().getCurrentProject();
         if (mLanguage instanceof JavaLanguage && project != null) {
             final Path current = mEditor.getCurrentFile().toPath();
-            CodeActionProvider provider = new CodeActionProvider(CompletionEngine.getInstance().getCompiler(project));
+            CodeActionProvider provider =
+                    new CodeActionProvider(CompletionEngine.getInstance().getCompiler(project));
             return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
         }
         return Collections.emptyList();
