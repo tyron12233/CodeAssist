@@ -45,12 +45,10 @@ public class IndexService extends Service {
                 .build();
         updateNotification(notification);
         startForeground(NOTIFICATION_ID, notification);
-
         return START_STICKY;
     }
 
     private void index(Project project, ProjectManager.TaskListener listener, ILogger logger) {
-
         ProjectManager.TaskListener delegate = new ProjectManager.TaskListener() {
             @Override
             public void onTaskStarted(String message) {
@@ -95,10 +93,8 @@ public class IndexService extends Service {
                 .setName("Index Service")
                 .setDescription("Service that downloads libraries in the foreground")
                 .build();
-
         NotificationManagerCompat.from(this)
                 .createNotificationChannel(channel);
-
         return "Index";
     }
 

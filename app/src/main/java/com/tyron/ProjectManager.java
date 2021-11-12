@@ -76,7 +76,6 @@ public class ProjectManager {
 
     public void openProject(Project proj, boolean downloadLibs, TaskListener mListener, ILogger logger) {
         Executors.newSingleThreadExecutor().execute(() -> {
-            mListener.onTaskStarted("Indexing");
             try {
                 proj.open();
                 mCurrentProject = proj;
@@ -93,6 +92,8 @@ public class ProjectManager {
             }
             mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
             //mCompletionEnvironment = CompletionEnvironment.newInstance(proj.getJavaFiles().values(), proj.getKotlinFiles().values(), proj.getLibraries());
+
+            mListener.onTaskStarted("Indexing");
             CompletionEngine.getInstance().index(proj, () -> mListener.onComplete(true, "Index successful"));
         });
     }
@@ -111,7 +112,7 @@ public class ProjectManager {
             mListener.onComplete(false, exception.getMessage());
         }
 
-        DependencyResolver resolver = new DependencyResolver(dependencies, project.getLibraryDirectory());
+        DependencyResolver resolver = new DependencyResolver(dependencies);
         resolver.addResolvedLibraries(libs);
         resolver.setListener(d -> mListener.onTaskStarted("Resolving " + d.toString()));
         dependencies = resolver.resolveMain();

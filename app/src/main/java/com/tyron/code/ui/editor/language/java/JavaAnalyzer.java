@@ -10,12 +10,9 @@ import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.code.lint.DefaultLintClient;
-import com.tyron.code.lint.LintIssue;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
-import com.tyron.completion.model.Position;
 import com.tyron.completion.provider.CompletionEngine;
-import com.tyron.lint.api.Severity;
 
 import org.openjdk.javax.tools.Diagnostic;
 
@@ -24,7 +21,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
@@ -45,12 +41,12 @@ import io.github.rosemoe.sora.widget.EditorColorScheme;
 public class JavaAnalyzer extends JavaCodeAnalyzer {
 
     private static final String TAG = JavaAnalyzer.class.getSimpleName();
+    /**
+     * These are tokens that cannot exist before a valid function identifier
+     */
     private static final Tokens[] sKeywordsBeforeFunctionName = new Tokens[]{Tokens.RETURN, Tokens.BREAK, Tokens.IF, Tokens.AND, Tokens.OR, Tokens.OREQ,
             Tokens.OROR, Tokens.ANDAND, Tokens.ANDEQ, Tokens.RPAREN, Tokens.LBRACE, Tokens.NEW, Tokens.DOT, Tokens.SEMICOLON, Tokens.EQ, Tokens.NOTEQ, Tokens.NOT,
-            Tokens.RBRACE};
-
-    private final List<DiagnosticWrapper> diagnostics = new ArrayList<>();
-    private final List<LintIssue> mLintDiagnostics = new ArrayList<>();
+            Tokens.RBRACE, Tokens.COMMA};
 
     private final CodeEditor mEditor;
     private DefaultLintClient mClient;
@@ -65,8 +61,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
 
         Instant startTime = Instant.now();
-
-        diagnostics.clear();
 
         StringBuilder text = content instanceof StringBuilder ? (StringBuilder) content : new StringBuilder(content);
         JavaTextTokenizer tokenizer = new JavaTextTokenizer(text);
@@ -255,69 +249,30 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         colors.setSuppressSwitch(maxSwitch + 10);
         colors.setNavigation(labels);
 
-        // Work around to CodeEditor's bug
-        // this prevents the analyzer to stop working while the user types
-        try {
-            mLintDiagnostics.forEach(it -> {
-                int flag = it.getSeverity() == Severity.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
-                Position start = it.getLocation().getStart();
-                Position end = it.getLocation().getEnd();
-                colors.markProblemRegion(flag, Objects.requireNonNull(start).line, start.column, Objects.requireNonNull(end).line, end.column);
-            });
-        } catch (IndexOutOfBoundsException e) {
-            Log.w(TAG, "Unable to mark problem region", e);
-        }
-
         List<DiagnosticWrapper> innerDiagnostics = new ArrayList<>();
 
-            // do not compile the file if it not yet closed as it will cause issues when
-            // compiling multiple files at the same time
-            if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
-                Project project = ProjectManager.getInstance().getCurrentProject();
-                if (project != null) {
-                    JavaCompilerService service = CompletionEngine.getInstance().getCompiler(project);
-                    if (service.isReady()) {
-                        try {
-                            try (CompileTask task = service.compile(
-                                    Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
-                                innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
-                            }
-                        } catch (RuntimeException e) {
-                            Log.e("JavaAnalyzer", "Failed compiling the file", e);
-                            service.close();
+        // do not compile the file if it not yet closed as it will cause issues when
+        // compiling multiple files at the same time
+        if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
+            Project project = ProjectManager.getInstance().getCurrentProject();
+            if (project != null) {
+                JavaCompilerService service = CompletionEngine.getInstance().getCompiler(project);
+                if (service.isReady()) {
+                    try {
+                        try (CompileTask task = service.compile(
+                                Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
+                            innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
                         }
+                    } catch (RuntimeException e) {
+                        Log.e("JavaAnalyzer", "Failed compiling the file", e);
+                        service.close();
                     }
                 }
             }
+        }
         markDiagnostics(innerDiagnostics, colors);
 
         Log.d(TAG, "Analysis took " + Duration.between(startTime, Instant.now()).toMillis() + " ms");
-    }
-
-
-    public List<LintIssue> getDiagnostics() {
-        return mLintDiagnostics;
-    }
-
-    private final AnalyzeRunnable mAnalyzeRunnable = new AnalyzeRunnable();
-
-    private class AnalyzeRunnable implements Runnable {
-
-        private TextAnalyzeResult colors;
-
-        public AnalyzeRunnable() {
-
-        }
-
-        public void setAnalyzeResult(TextAnalyzeResult colors) {
-            this.colors = colors;
-        }
-
-        @Override
-        public void run() {
-            Log.d(getClass().getName(), "Analyzing in background...");
-            
-        }
     }
 
     private void markDiagnostics(List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
@@ -344,12 +299,11 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
                 int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
                 colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
-            } catch (IllegalArgumentException |  IndexOutOfBoundsException e) {
+            } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
                 // Work around for the indexer requiring a sorted positions
                 Log.w(TAG, "Unable to mark problem region: diagnostics " + diagnostics, e);
             }
         });
-
         mEditor.getText().endStreamCharGetting();
     }
 }

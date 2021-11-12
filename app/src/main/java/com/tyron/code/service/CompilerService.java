@@ -98,10 +98,7 @@ public class CompilerService extends Service {
     }
 
     private Notification setupNotification() {
-
-        String channelId = createNotificationChannel();
-
-        Notification notification = new NotificationCompat.Builder(this, channelId)
+        return new NotificationCompat.Builder(this, createNotificationChannel())
                 .setContentTitle(getString(R.string.app_name))
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentText("Preparing")
@@ -109,7 +106,6 @@ public class CompilerService extends Service {
                 .setOngoing(true)
                 .setProgress(100, 0, true)
                 .build();
-        return notification;
     }
 
     private void updateNotification(String title, String message, int progress) {
@@ -117,8 +113,7 @@ public class CompilerService extends Service {
                 .setContentTitle(title)
                 .setContentText(message)
                 .setSmallIcon(R.drawable.ic_launcher)
-                .setPriority(Notification.PRIORITY_HIGH);
-
+                .setPriority(NotificationCompat.PRIORITY_HIGH);
         if (progress != -1) {
             builder.setProgress(100, progress, false);
         }
@@ -167,7 +162,7 @@ public class CompilerService extends Service {
                 onResultListener.onComplete(success, message);
             }
 
-            String projectName = mProject.mRoot.getName();
+            String projectName = mProject.getName();
             stopSelf();
             stopForeground(true);
 
