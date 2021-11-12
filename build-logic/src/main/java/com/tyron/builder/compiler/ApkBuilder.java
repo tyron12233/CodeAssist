@@ -62,7 +62,8 @@ public class ApkBuilder {
                 long initialStart = System.currentTimeMillis();
                 doBuild(type);
 
-                post(() -> listener.onComplete(true, "Build success. Took " + (System.currentTimeMillis() - initialStart) + " ms"));
+                post(() -> listener.onComplete(true,
+                        "Build success. Took " + (System.currentTimeMillis() - initialStart) + " ms"));
             } catch (IOException | CompilationFailedException e) {
                 post(() -> listener.onComplete(false, Log.getStackTraceString(e)));
             }

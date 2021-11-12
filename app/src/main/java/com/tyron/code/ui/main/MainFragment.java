@@ -106,35 +106,39 @@ public class MainFragment extends Fragment {
             mBinder = (CompilerService.CompilerBinder) iBinder;
             mBinder.getCompilerService().setLogger(logger);
             mBinder.getCompilerService().setShouldShowNotification(false);
-            mBinder.getCompilerService().setOnResultListener((success, message) -> requireActivity().runOnUiThread(() -> {
-                mFilesViewModel.setCurrentState(null);
+            mBinder.getCompilerService().setOnResultListener((success, message) ->
+                    requireActivity().runOnUiThread(() -> {
+                        mFilesViewModel.setCurrentState(null);
 
-                if (mProgressBar != null) {
-                    AndroidUtilities.hideKeyboard(mProgressBar);
-                }
-                mFilesViewModel.setIndexing(false);
+                        if (mProgressBar != null) {
+                            AndroidUtilities.hideKeyboard(mProgressBar);
+                        }
+                        mFilesViewModel.setIndexing(false);
 
-                if (!success) {
-                    logger.error(message);
+                        if (!success) {
+                            logger.error(message);
 
-                    if (mBehavior.getState() == BottomSheetBehavior.STATE_COLLAPSED) {
-                        mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
-                    }
-                }
+                            if (mBehavior.getState() == BottomSheetBehavior.STATE_COLLAPSED) {
+                                mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                            }
+                        }
 
-                if (getActivity() != null) {
-                    if (success) {
-                        logger.debug(message);
-                        logViewModel.clear(LogViewModel.APP_LOG);
+                        if (getActivity() != null) {
+                            if (success) {
+                                logger.debug(message);
+                                logViewModel.clear(LogViewModel.APP_LOG);
 
-                        File file = new File(mProjectManager.getCurrentProject().getBuildDirectory(), "bin/signed.apk");
-                        mProgressBar.postDelayed(() -> ApkInstaller.installApplication(requireContext(), file.getAbsolutePath()), 400);
-                    }
+                                File file = new File(mProjectManager.getCurrentProject()
+                                        .getBuildDirectory(), "bin/signed.apk");
+                                mProgressBar.postDelayed(() ->
+                                        ApkInstaller.installApplication(requireContext()
+                                                , file.getAbsolutePath()), 400);
+                            }
 
-                    mBinder = null;
-                    requireActivity().unbindService(this);
-                }
-            }));
+                            mBinder = null;
+                            requireActivity().unbindService(this);
+                        }
+                    }));
 
             if (mBuildType != null) {
                 mBinder.getCompilerService().compile(mProjectManager.getCurrentProject(), mBuildType);
@@ -183,7 +187,8 @@ public class MainFragment extends Fragment {
                                 mToolbar.setTitle(mProject.mRoot.getName());
 
                                 String openedFilesString = mProjectManager.getCurrentProject()
-                                        .getSettings().getString(ProjectSettings.SAVED_EDITOR_FILES, null);
+                                        .getSettings()
+                                        .getString(ProjectSettings.SAVED_EDITOR_FILES, null);
                                 if (openedFilesString != null) {
                                     List<String> paths = new Gson().fromJson(openedFilesString,
                                             new TypeToken<List<String>>() {
@@ -304,7 +309,8 @@ public class MainFragment extends Fragment {
             public void onDrawerSlide(@NonNull View p1, float p) {
                 File currentFile = mFilesViewModel.getCurrentFile();
                 if (currentFile != null) {
-                    Fragment fragment = getChildFragmentManager().findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
+                    Fragment fragment = getChildFragmentManager()
+                            .findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
                     if (fragment instanceof CodeEditorFragment) {
                         ((CodeEditorFragment) fragment).hideEditorWindows();
                     }
@@ -318,7 +324,8 @@ public class MainFragment extends Fragment {
 
             @Override
             public void onDrawerClosed(@NonNull View p1) {
-                onBackPressedCallback.setEnabled(mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED);
+                onBackPressedCallback.setEnabled(mBehavior.getState() ==
+                        BottomSheetBehavior.STATE_EXPANDED);
             }
         });
 
@@ -471,7 +478,8 @@ public class MainFragment extends Fragment {
                 root = Environment.getExternalStorageDirectory();
             }
             getChildFragmentManager().beginTransaction()
-                    .replace(R.id.nav_root, TreeFileManagerFragment.newInstance(root), "file_manager")
+                    .replace(R.id.nav_root, TreeFileManagerFragment.newInstance(root),
+                            "file_manager")
                     .commit();
         }
 

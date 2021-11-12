@@ -119,11 +119,11 @@ public class IncrementalJavaTask extends Task {
         classpath.add(mOutputDir);
 
         try {
-            standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singletonList(mOutputDir));
-            standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, Arrays.asList(
-                    FileManager.getAndroidJar(),
-                    FileManager.getLambdaStubs()
-            ));
+            standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT,
+                    Collections.singletonList(mOutputDir));
+            standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH,
+                    Arrays.asList(FileManager.getAndroidJar(),
+                    FileManager.getLambdaStubs()));
             standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, classpath);
             standardJavaFileManager.setLocation(StandardLocation.SOURCE_PATH, mJavaFiles);
         } catch (IOException e) {
@@ -157,7 +157,8 @@ public class IncrementalJavaTask extends Task {
                     String classPath = classFile.getAbsolutePath()
                             .replace("build/bin/classes/", "src/main/java/")
                             .replace(".class", ".java");
-                    Log.d(TAG, "Adding class file " + classFile.getName() + " to cache" + "\n cache:" + classPath);
+                    Log.d(TAG, "Adding class file " +
+                            classFile.getName() + " to cache" + "\n cache:" + classPath);
                     if (classFile.getName().indexOf('$') != -1) {
                         classPath = classPath.substring(0, classPath.indexOf('$'))
                                 + ".java";
@@ -165,7 +166,8 @@ public class IncrementalJavaTask extends Task {
                     }
                     File file = new File(classPath);
                     if (!file.exists()) {
-                        file = new File(classPath.replace("src/main/java", "build/gen"));
+                        file = new File(
+                                classPath.replace("src/main/java", "build/gen"));
                     }
 
                     if (!compiledFiles.containsKey(file.getAbsolutePath())) {
@@ -176,7 +178,8 @@ public class IncrementalJavaTask extends Task {
                         Objects.requireNonNull(compiledFiles.get(file.getAbsolutePath()))
                                 .add(classFile);
                     }
-                    mClassCache.load(file.toPath(), "class", Collections.singletonList(classFile));
+                    mClassCache.load(file.toPath(), "class",
+                            Collections.singletonList(classFile));
                 }
             }
 
@@ -230,7 +233,8 @@ public class IncrementalJavaTask extends Task {
         File parent = classFile.getParentFile();
         String name = classFile.getName().replace(ext, "");
         if (parent != null) {
-            File[] children = parent.listFiles((c) -> c.getName().endsWith(ext) && c.getName().contains("$"));
+            File[] children = parent.listFiles((c) ->
+                    c.getName().endsWith(ext) && c.getName().contains("$"));
             if (children != null) {
                 for (File child : children) {
                     if (child.getName().startsWith(name)) {

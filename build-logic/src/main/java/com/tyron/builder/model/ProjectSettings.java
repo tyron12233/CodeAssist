@@ -102,12 +102,14 @@ public class ProjectSettings implements SharedPreferences {
     }
 
     @Override
-    public void registerOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener onSharedPreferenceChangeListener) {
+    public void registerOnSharedPreferenceChangeListener(
+            OnSharedPreferenceChangeListener onSharedPreferenceChangeListener) {
 
     }
 
     @Override
-    public void unregisterOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener onSharedPreferenceChangeListener) {
+    public void unregisterOnSharedPreferenceChangeListener(
+            OnSharedPreferenceChangeListener onSharedPreferenceChangeListener) {
 
     }
 
