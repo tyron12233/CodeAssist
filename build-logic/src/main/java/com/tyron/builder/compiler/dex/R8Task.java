@@ -72,7 +72,7 @@ public class R8Task extends Task {
                         }
                     }
                 }
-                paths.add(parent.toPath());
+                paths.add(it.toPath());
             }
         });
         return paths;
