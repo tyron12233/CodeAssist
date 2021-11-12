@@ -93,20 +93,9 @@ public class R8Task extends Task {
 
     private Collection<Path> getJarFiles() {
         Collection<Path> paths = new ArrayList<>();
-        mProject.getLibraries().forEach(it -> {
-            File parent = it.getParentFile();
-            if (parent != null) {
-                File[] dexFiles = parent.listFiles(c -> c.getName().endsWith(".dex"));
-                if (dexFiles != null) {
-                    for (File dexFile : dexFiles) {
-                        if (!dexFile.delete()) {
-                            mLogger.warning("Failed to delete dex file: " + dexFile);
-                        }
-                    }
-                }
-                paths.add(it.toPath());
-            }
-        });
+        for (File it : mProject.getLibraries()) {
+            paths.add(it.toPath());
+        }
         return paths;
     }
 
@@ -127,7 +116,8 @@ public class R8Task extends Task {
             rules.add(proguardRuleTxt.toPath());
         }
 
-        File aapt2Rules = new File(mProject.getBuildDirectory(), "bin/res/generated-rules.txt");
+        File aapt2Rules = new File(mProject.getBuildDirectory(),
+                "bin/res/generated-rules.txt");
         if (aapt2Rules.exists()) {
             rules.add(aapt2Rules.toPath());
         }
