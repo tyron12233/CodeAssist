@@ -7,7 +7,9 @@ import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
+import com.android.tools.r8.R8;
 import com.android.tools.r8.R8Command;
+import com.android.tools.r8.origin.Origin;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
@@ -20,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
@@ -46,17 +49,46 @@ public class R8Task extends Task {
         mLogger.debug("Running R8");
         try {
             File output = new File(mProject.getBuildDirectory(), "bin");
-            R8Command.builder()
+            R8Command.Builder command = R8Command.builder(new DiagnosticHandler())
                     .addLibraryFiles(getLibraryFiles())
                     .addProgramFiles(getJarFiles())
                     .addProgramFiles(D8Task.getClassFiles(new File(mProject.getBuildDirectory(), "bin/classes")))
+                    .addProguardConfiguration(getDefaultProguardRule(), Origin.unknown())
                     .addProguardConfigurationFiles(getProguardRules())
-                    .setMode(CompilationMode.RELEASE)
-                    .setOutput(output.toPath(), OutputMode.DexIndexed)
-                    .build();
+                    .setMinApiLevel(mProject.getMinSdk())
+                    .setMode(CompilationMode.DEBUG)
+                    .setDisableTreeShaking(true)
+                    .setDisableMinification(true)
+                    .setOutput(output.toPath(), OutputMode.DexIndexed);
+
+            R8.run(command.build());
         } catch (com.android.tools.r8.CompilationFailedException e) {
             throw new CompilationFailedException(e);
         }
+    }
+
+    private List<String> getDefaultProguardRule() {
+        List<String> rules = new ArrayList<>();
+        // Keep resource classes
+        rules.addAll(createConfiguration("-keepclassmembers class **.R$* {\n" +
+                "    public static <fields>;\n" +
+                "}"));
+        rules.addAll(createConfiguration("-keepclassmembers class * implements android.os.Parcelable {\n" +
+                "  public static final android.os.Parcelable$Creator CREATOR;\n" +
+                "}"));
+        // For native methods, see http://proguard.sourceforge.net/manual/examples.html#native
+        rules.addAll(createConfiguration("-keepclasseswithmembernames class * {\n" +
+                "    native <methods>;\n" +
+                "}"));
+        rules.addAll(createConfiguration("-keepclassmembers enum * {\n" +
+                "    public static **[] values();\n" +
+                "    public static ** valueOf(java.lang.String);\n" +
+                "}"));
+        return rules;
+    }
+
+    private List<String> createConfiguration(String string) {
+        return Arrays.asList(string.split("\n"));
     }
 
     private Collection<Path> getJarFiles() {
@@ -93,6 +125,11 @@ public class R8Task extends Task {
         File proguardRuleTxt = new File(mProject.mRoot, "app/proguard-rules.txt");
         if (proguardRuleTxt.exists()) {
             rules.add(proguardRuleTxt.toPath());
+        }
+
+        File aapt2Rules = new File(mProject.getBuildDirectory(), "bin/res/generated-rules.txt");
+        if (aapt2Rules.exists()) {
+            rules.add(aapt2Rules.toPath());
         }
         return rules;
     }

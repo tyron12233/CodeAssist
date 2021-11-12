@@ -52,8 +52,8 @@ public class IncrementalAapt2Task extends Task {
         link();
     }
 
-    private void compileProject(Map<String, List<File>> files) throws IOException, CompilationFailedException {
-
+    private void compileProject(Map<String, List<File>> files)
+            throws IOException, CompilationFailedException {
         List<String> args = new ArrayList<>();
         args.add(getBinary().getAbsolutePath());
         args.add("compile");
@@ -83,8 +83,8 @@ public class IncrementalAapt2Task extends Task {
         copyMapToDir(files);
     }
 
-    private void compileLibraries(List<File> libraries) throws IOException, CompilationFailedException {
-
+    private void compileLibraries(List<File> libraries)
+            throws IOException, CompilationFailedException {
         mLogger.debug("Compiling libraries.");
 
         File output = new File(mProject.getBuildDirectory(), "bin/res");
@@ -157,6 +157,9 @@ public class IncrementalAapt2Task extends Task {
         args.add(String.valueOf(mProject.getMinSdk()));
         args.add("--target-sdk-version");
         args.add(String.valueOf(mProject.getTargetSdk()));
+        args.add("--proguard");
+        args.add(createNewFile(new File(mProject.getBuildDirectory(), "bin/res"),
+                "generated-rules.txt").getAbsolutePath());
 
         resources = getOutputPath().listFiles();
         if (resources != null) {
@@ -188,7 +191,8 @@ public class IncrementalAapt2Task extends Task {
         args.add(gen.getAbsolutePath());
 
         args.add("--manifest");
-        File mergedManifest = new File(mProject.getBuildDirectory(), "bin/AndroidManifest.xml");
+        File mergedManifest = new File(mProject.getBuildDirectory(),
+                "bin/AndroidManifest.xml");
         if (!mergedManifest.exists()) {
             throw new IOException("Unable to get merged manifest file");
         }
@@ -248,7 +252,8 @@ public class IncrementalAapt2Task extends Task {
                     oldFilesResource = Collections.emptyList();
                 }
 
-                addToMapList(filesToCompile, resourceType, getModifiedFiles(newFilesResource, oldFilesResource));
+                addToMapList(filesToCompile, resourceType,
+                        getModifiedFiles(newFilesResource, oldFilesResource));
             }
         }
 
@@ -314,7 +319,10 @@ public class IncrementalAapt2Task extends Task {
     /**
      * Utility method to compare to list of files
      */
-    private List<ResourceFile> getModifiedFiles(List<ResourceFile> newFiles, List<ResourceFile> oldFiles) throws IOException {
+    private List<ResourceFile> getModifiedFiles(
+            List<ResourceFile> newFiles,
+            List<ResourceFile> oldFiles)
+            throws IOException {
         List<ResourceFile> resourceFiles = new ArrayList<>();
 
         for (ResourceFile newFile : newFiles) {
@@ -380,7 +388,8 @@ public class IncrementalAapt2Task extends Task {
             }
 
 
-            map.put(resourceType, files.stream().map(ResourceFile::fromFile).collect(Collectors.toList()));
+            map.put(resourceType, files.stream()
+                    .map(ResourceFile::fromFile).collect(Collectors.toList()));
         }
 
         return map;
