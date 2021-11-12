@@ -52,13 +52,12 @@ public class R8Task extends Task {
             R8Command.Builder command = R8Command.builder(new DiagnosticHandler())
                     .addLibraryFiles(getLibraryFiles())
                     .addProgramFiles(getJarFiles())
-                    .addProgramFiles(D8Task.getClassFiles(new File(mProject.getBuildDirectory(), "bin/classes")))
+                    .addProgramFiles(D8Task.getClassFiles(new File(mProject.getBuildDirectory(),
+                            "bin/classes")))
                     .addProguardConfiguration(getDefaultProguardRule(), Origin.unknown())
                     .addProguardConfigurationFiles(getProguardRules())
                     .setMinApiLevel(mProject.getMinSdk())
-                    .setMode(CompilationMode.DEBUG)
-                    .setDisableTreeShaking(true)
-                    .setDisableMinification(true)
+                    .setMode(CompilationMode.RELEASE)
                     .setOutput(output.toPath(), OutputMode.DexIndexed);
 
             R8.run(command.build());
@@ -73,7 +72,8 @@ public class R8Task extends Task {
         rules.addAll(createConfiguration("-keepclassmembers class **.R$* {\n" +
                 "    public static <fields>;\n" +
                 "}"));
-        rules.addAll(createConfiguration("-keepclassmembers class * implements android.os.Parcelable {\n" +
+        rules.addAll(createConfiguration("-keepclassmembers class *" +
+                " implements android.os.Parcelable {\n" +
                 "  public static final android.os.Parcelable$Creator CREATOR;\n" +
                 "}"));
         // For native methods, see http://proguard.sourceforge.net/manual/examples.html#native
@@ -158,7 +158,8 @@ public class R8Task extends Task {
         }
 
         @Override
-        public DiagnosticsLevel modifyDiagnosticsLevel(DiagnosticsLevel diagnosticsLevel, Diagnostic diagnostic) {
+        public DiagnosticsLevel modifyDiagnosticsLevel(DiagnosticsLevel diagnosticsLevel,
+                                                       Diagnostic diagnostic) {
             Log.d("DiagnosticHandler", diagnostic.getDiagnosticMessage());
             return null;
         }
