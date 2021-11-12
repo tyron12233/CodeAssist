@@ -7,20 +7,18 @@ import android.content.Intent;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
-import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
+import com.tyron.builder.compiler.ApkBuilder;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
 import com.tyron.code.R;
-import com.tyron.builder.compiler.ApkBuilder;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.code.util.ApkInstaller;
 
 import java.io.File;
@@ -185,7 +183,7 @@ public class CompilerService extends Service {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-                PendingIntent pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+                PendingIntent pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
 
                 Notification notification = new NotificationCompat.Builder(this, "Compiler")
                         .setSmallIcon(R.drawable.ic_launcher)
