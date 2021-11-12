@@ -6,6 +6,7 @@ import android.util.Log;
 
 import com.tyron.builder.compiler.apk.PackageTask;
 import com.tyron.builder.compiler.apk.SignTask;
+import com.tyron.builder.compiler.dex.R8Task;
 import com.tyron.builder.compiler.firebase.GenerateFirebaseConfigTask;
 import com.tyron.builder.compiler.incremental.dex.IncrementalD8Task;
 import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
@@ -14,21 +15,21 @@ import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.compiler.log.InjectLoggerTask;
 import com.tyron.builder.compiler.manifest.ManifestMergeTask;
 import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.log.ILogger;
 import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.Project;
+import com.tyron.builder.model.ProjectSettings;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
  * Main entry point for building apk files, this class does all
- * the necessary operations for building apk files such as compiling resources,
- * compiling java files, dexing and merging
+ *  * the necessary operations for building apk files such as compiling resources,
+ *  * compiling java files, dexing and merging
  */
 public class ApkBuilder {
 
@@ -100,17 +101,22 @@ public class ApkBuilder {
     }
 
     private List<Task> getTasks() {
-        return Arrays.asList(
-                new CleanTask(),
-                new ManifestMergeTask(),
-                new GenerateFirebaseConfigTask(),
-                new InjectLoggerTask(),
-                new IncrementalAapt2Task(),
-                new MergeSymbolsTask(),
-                new IncrementalKotlinCompiler(),
-                new IncrementalJavaTask(),
-                new IncrementalD8Task(),
-                new PackageTask(),
-                new SignTask());
+        List<Task> task = new ArrayList<>();
+        task.add(new CleanTask());
+        task.add(new ManifestMergeTask());
+        task.add(new GenerateFirebaseConfigTask());
+        task.add(new InjectLoggerTask());
+        task.add(new IncrementalAapt2Task());
+        task.add(new MergeSymbolsTask());
+        task.add(new IncrementalKotlinCompiler());
+        task.add(new IncrementalJavaTask());
+        if (mProject.getSettings().getBoolean(ProjectSettings.USE_R8, false)) {
+            task.add(new R8Task());
+        } else {
+            task.add(new IncrementalD8Task());
+        }
+        task.add(new PackageTask());
+        task.add(new SignTask());
+        return task;
     }
 }

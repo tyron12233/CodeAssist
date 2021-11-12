@@ -21,6 +21,13 @@ import java.util.concurrent.Executors;
 @SuppressWarnings({"unchecked", "ConstantConditions"})
 public class ProjectSettings implements SharedPreferences {
 
+    /**
+     * Commonly used keys for project settings
+     */
+    public static final String LIBRARY_LIST = "libraries";
+    public static final String SAVED_EDITOR_FILES = "editor_opened_files";
+    public static final String USE_R8 = "useR8";
+
     private final File mConfigFile;
     private final Map<String, Object> mConfigMap;
 

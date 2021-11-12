@@ -1,6 +1,5 @@
 package com.tyron.builder.compiler.incremental.dex;
 
-import android.os.Build;
 import android.util.Log;
 
 import com.android.tools.r8.CompilationMode;
@@ -10,11 +9,9 @@ import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
-import com.android.tools.r8.StringConsumer;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.dex.D8Task;
-import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -108,12 +105,11 @@ public class IncrementalD8Task extends Task {
                     .setOutput(mOutputPath, OutputMode.DexFilePerClassFile)
                     .build();
             D8.run(command);
-
             for (Path file : mFilesToCompile) {
                 mDexCache.load(file, "dex", Collections.singletonList(getDexFile(file.toFile())));
             }
 
-            merge();
+            mergeRelease();
         } catch (com.android.tools.r8.CompilationFailedException e) {
             throw new CompilationFailedException(e);
         }
@@ -154,8 +150,8 @@ public class IncrementalD8Task extends Task {
         }
     }
 
-    private void merge() throws com.android.tools.r8.CompilationFailedException {
-        mLogger.debug("Merging dex files");
+    private void mergeRelease() throws com.android.tools.r8.CompilationFailedException {
+        mLogger.debug("Merging dex files using R8");
 
         File output = new File(mProject.getBuildDirectory(), "bin");
         D8Command command = D8Command.builder(diagnosticsHandler)
@@ -164,12 +160,10 @@ public class IncrementalD8Task extends Task {
                 .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
                 .addProgramFiles(getLibraryDexes())
                 .setMinApiLevel(mProject.getMinSdk())
-                .setMode(CompilationMode.DEBUG)
+                .setMode(CompilationMode.RELEASE)
                 .setOutput(output.toPath(), OutputMode.DexIndexed)
-                .setIntermediate(true)
                 .build();
         D8.run(command);
-
     }
 
     private List<Path> getLibraryDexes() {
@@ -185,6 +179,7 @@ public class IncrementalD8Task extends Task {
         }
         return dexes;
     }
+
 
     private static final String INTERMEDIATE_DIR = "build/bin/classes/";
 
@@ -207,8 +202,6 @@ public class IncrementalD8Task extends Task {
      */
     protected void ensureDexedLibraries() throws com.android.tools.r8.CompilationFailedException {
         Set<File> libraries = mProject.getLibraries();
-
-        Log.d(TAG, "Dexing libraries");
 
         for (File lib : libraries) {
             File parentFile = lib.getParentFile();
