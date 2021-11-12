@@ -182,10 +182,12 @@ public class MainFragment extends Fragment {
                             if (mProjectManager.getCurrentProject() != null) {
                                 mToolbar.setTitle(mProject.mRoot.getName());
 
-                                String openedFilesString = mProjectManager.getCurrentProject().getSettings().getString("editor_opened_files", null);
+                                String openedFilesString = mProjectManager.getCurrentProject()
+                                        .getSettings().getString(ProjectSettings.SAVED_EDITOR_FILES, null);
                                 if (openedFilesString != null) {
                                     List<String> paths = new Gson().fromJson(openedFilesString,
-                                            new TypeToken<List<String>>(){}.getType());
+                                            new TypeToken<List<String>>() {
+                                            }.getType());
                                     List<File> files = paths.stream()
                                             .map(File::new)
                                             .filter(File::exists)
@@ -280,9 +282,9 @@ public class MainFragment extends Fragment {
                     mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
                 });
         mFilesViewModel.currentPosition.observe(getViewLifecycleOwner(), mPager::setCurrentItem);
-        mFilesViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE));
+        mFilesViewModel.isIndexing().observe(getViewLifecycleOwner(),
+                indexing -> mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE));
         mFilesViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
-
         return mRoot;
     }
 
@@ -367,7 +369,8 @@ public class MainFragment extends Fragment {
                     ((CodeEditorFragment) fragment).analyze();
                 }
 
-                CompletionEnvironment completionEnvironment = mProjectManager.getCompletionEnvironment();
+                CompletionEnvironment completionEnvironment =
+                        mProjectManager.getCompletionEnvironment();
                 if (completionEnvironment != null) {
                     completionEnvironment.createContainer(Collections.emptyList());
                 }
@@ -424,7 +427,8 @@ public class MainFragment extends Fragment {
             } else if (item.getItemId() == R.id.menu_preview_layout) {
                 File currentFile = mFilesViewModel.getCurrentFile();
                 if (currentFile != null) {
-                    Fragment fragment = getChildFragmentManager().findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
+                    Fragment fragment = getChildFragmentManager()
+                            .findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
                     if (fragment instanceof CodeEditorFragment) {
                         ((CodeEditorFragment) fragment).preview();
                     }
@@ -523,7 +527,8 @@ public class MainFragment extends Fragment {
         }
 
         mPager.postDelayed(() -> {
-            Fragment fragment = getChildFragmentManager().findFragmentByTag("f" + file.getAbsolutePath().hashCode());
+            Fragment fragment = getChildFragmentManager()
+                    .findFragmentByTag("f" + file.getAbsolutePath().hashCode());
             if (fragment instanceof CodeEditorFragment) {
                 ((CodeEditorFragment) fragment).setCursorPosition(lineNumber, column);
             }
@@ -568,7 +573,8 @@ public class MainFragment extends Fragment {
     private void saveCurrent() {
         int position = mPager.getCurrentItem();
         String tag = "f" + mAdapter.getItemId(position);
-        CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager().findFragmentByTag(tag);
+        CodeEditorFragment fragment =
+                (CodeEditorFragment) getChildFragmentManager().findFragmentByTag(tag);
         if (fragment != null) {
             fragment.save();
         }
@@ -584,9 +590,9 @@ public class MainFragment extends Fragment {
 
         List<File> items = mAdapter.getItems();
         for (File file : items) {
-            CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager().findFragmentByTag(
-                    "f" + file.getAbsolutePath().hashCode()
-            );
+            CodeEditorFragment fragment =
+                    (CodeEditorFragment) getChildFragmentManager()
+                            .findFragmentByTag("f" + file.getAbsolutePath().hashCode());
             if (fragment != null) {
                 fragment.save();
             }
@@ -596,7 +602,10 @@ public class MainFragment extends Fragment {
         if (settings == null) {
             return;
         }
-        String itemString = new Gson().toJson(items.stream().map(File::getAbsolutePath).collect(Collectors.toList()));
+        String itemString = new Gson()
+                .toJson(items.stream()
+                        .map(File::getAbsolutePath)
+                        .collect(Collectors.toList()));
         settings.edit()
                 .putString("editor_opened_files", itemString)
                 .apply();

@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import androidx.annotation.Nullable;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
 import org.apache.commons.io.FileUtils;
@@ -12,7 +13,7 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -44,7 +45,13 @@ public class ProjectSettings implements SharedPreferences {
         } catch (FileNotFoundException ignore) {
 
         }
-        return config == null ? new HashMap<>() : config;
+        return config == null ? getDefaults() : config;
+    }
+
+    private Map<String, Object> getDefaults() {
+        Map<String, Object> map = new HashMap<>();
+        map.put(USE_R8, false);
+        return map;
     }
 
     @Override
@@ -91,7 +98,7 @@ public class ProjectSettings implements SharedPreferences {
 
     @Override
     public Editor edit() {
-        return new Editor(mConfigFile, mConfigMap);
+        return new Editor(mConfigFile, parseFile());
     }
 
     @Override
@@ -166,8 +173,11 @@ public class ProjectSettings implements SharedPreferences {
         public boolean commit() {
             String json;
             try {
-                json = new Gson().toJson(mValues);
-                FileUtils.writeStringToFile(mConfigFile, json, Charset.defaultCharset());
+                Gson gson = new GsonBuilder()
+                        .setPrettyPrinting()
+                        .create();
+                json = gson.toJson(mValues);
+                FileUtils.writeStringToFile(mConfigFile, json, StandardCharsets.UTF_8);
                 return true;
             } catch (Exception e) {
                 return false;
