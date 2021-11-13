@@ -226,7 +226,7 @@ public class IncrementalD8Task extends Task {
                             .addLibraryFiles(getLibraryFiles())
                             .addClasspathFiles(libraries.stream().map(File::toPath)
                                     .collect(Collectors.toList()))
-                            .setMinApiLevel(21)
+                            .setMinApiLevel(mProject.getMinSdk())
                             .addProgramFiles(lib.toPath())
                             .setMode(CompilationMode.RELEASE)
                             .setOutput(lib.getParentFile().toPath(), OutputMode.DexIndexed)
