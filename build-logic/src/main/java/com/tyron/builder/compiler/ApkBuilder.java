@@ -78,7 +78,7 @@ public class ApkBuilder {
 
     // TODO: run tasks in parallel if applicable
     private void doBuild(BuildType type) throws IOException, CompilationFailedException {
-        List<Task> tasks = getTasks();
+        List<Task> tasks = getTasks(type);
         List<Task> tasksRan = new ArrayList<>();
         int totalTasks = tasks.size();
 
@@ -101,12 +101,14 @@ public class ApkBuilder {
         tasks.forEach(Task::clean);
     }
 
-    private List<Task> getTasks() {
+    private List<Task> getTasks(BuildType type) {
         List<Task> task = new ArrayList<>();
         task.add(new CleanTask());
         task.add(new ManifestMergeTask());
         task.add(new GenerateFirebaseConfigTask());
-        task.add(new InjectLoggerTask());
+        if (type == BuildType.DEBUG) {
+            task.add(new InjectLoggerTask());
+        }
         task.add(new IncrementalAapt2Task());
         task.add(new MergeSymbolsTask());
         task.add(new IncrementalKotlinCompiler());
