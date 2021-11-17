@@ -87,7 +87,7 @@ public class CleanTask extends Task {
                 path = path.substring(0, path.indexOf("$"));
             }
 
-            if (mProject.getFileManager().list(path).isEmpty() && !mProject.getFileManager().containsClass(packageName)) {
+            if (mProject.getFileManager().list(path).isEmpty() && !classExists(packageName)) {
                 if (file.delete()) {
                     mLogger.debug("Deleted class file " + file.getName());
                 };
@@ -126,11 +126,16 @@ public class CleanTask extends Task {
                 }
             }
 
-            if (mProject.getFileManager().list(path).isEmpty() && !mProject.getFileManager().containsClass(packageName)) {
+            if (mProject.getFileManager().list(path).isEmpty() && !classExists(packageName)) {
                 if (file.delete()) {
                     mLogger.debug("Deleted dex file " + path);
                 }
             }
         }
+    }
+
+    private boolean classExists(String fqn) {
+        return mProject.getJavaFiles().get(fqn) != null ||
+                mProject.getKotlinFiles.get(fqn) != null;
     }
 }
