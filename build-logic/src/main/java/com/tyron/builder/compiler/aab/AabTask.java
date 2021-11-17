@@ -225,22 +225,6 @@ public class AabTask extends Task {
             }
         }
 }		
-
-	private void budletool() throws IOException, Exception {
-		mLogger.debug("Preparing Bundletool");
-		
-		if (!new File(BuildModule.getContext().getFilesDir(), "bundletool.jar").exists()) {
-            try {
-                InputStream input = BuildModule.getContext().getAssets().open("bundletool.jar");
-                OutputStream output = new FileOutputStream(new File(BuildModule.getContext().getFilesDir(), "bundletool.jar"));
-                IOUtils.copy(input, output);
-                input.close();
-                output.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-}		
 	
 		
         
