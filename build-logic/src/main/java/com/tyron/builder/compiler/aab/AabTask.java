@@ -118,9 +118,35 @@ public class AabTask extends Task {
 		} catch (Exception e) {}
 
 		aab();
-
-
+    buildApks();
     }
+	private void buildApks() throws IOException, CompilationFailedException {
+		mLogger.debug("Building Apks");
+
+		List<String> args = new ArrayList<>();
+		args.add("dalvikvm");
+		args.add("-Xcompiler-option");
+		args.add("--compiler-filter=speed");
+		args.add("-Xmx256m");
+        args.add("-Djava.io.tmpdir="+ BuildModule.getContext().getCacheDir().getAbsolutePath());
+		args.add("-cp");
+		//bundletool.jar should be in download folder
+		args.add(BuildModule.getContext().getFilesDir() + "/bundletool.jar");
+		//args.add("/storage/emulated/0/Download/bundletool.jar");
+		args.add("com.android.tools.build.bundletool.BundleToolMain");
+		args.add("build-apks");
+		args.add("--bundle=" + mBinDir.getAbsolutePath() + "/module.aab");
+		args.add("--output=" + mBinDir.getAbsolutePath() + "/App.apks");
+		args.add("--mode=universal");
+		args.add("--aapt2=" + BuildModule.getContext().getApplicationInfo().nativeLibraryDir + "/libaapt2.so");
+
+
+		BinaryExecutor executor = new BinaryExecutor();
+        executor.setCommands(args);
+		if (!executor.execute().isEmpty()) {
+			throw new CompilationFailedException(executor.getLog());
+		}
+	}	
 
 	private void budletool() throws IOException, Exception {
 		mLogger.debug("Preparing Bundletool");
