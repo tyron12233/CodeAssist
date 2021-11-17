@@ -1,6 +1,7 @@
 package com.tyron.builder.compiler.incremental.kotlin;
 
 import android.text.TextUtils;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -14,22 +15,27 @@ import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.build.report.ICReporterBase;
+import org.jetbrains.kotlin.cli.common.ExitCode;
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments;
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity;
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation;
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector;
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler;
-import org.jetbrains.kotlin.config.Services;
+import org.jetbrains.kotlin.incremental.IncrementalJvmCompilerRunnerKt;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import kotlin.jvm.functions.Function0;
 
 public class IncrementalKotlinCompiler extends Task {
 
@@ -80,39 +86,74 @@ public class IncrementalKotlinCompiler extends Task {
         classpath.add(FileManager.getLambdaStubs());
         classpath.addAll(mProject.getLibraries());
 
+        List<File> javaSourceRoots = new ArrayList<>();
+        javaSourceRoots.addAll(mProject.getJavaFiles().values());
+        javaSourceRoots.addAll(mProject.getRJavaFiles().values());
+
         List<String> arguments = new ArrayList<>();
         Collections.addAll(arguments, "-cp",
                 classpath.stream()
                         .map(File::getAbsolutePath)
                         .collect(Collectors.joining(File.pathSeparator)));
-        Collections.addAll(arguments,
-                mFilesToCompile.stream()
-                        .map(File::getAbsolutePath).
-                        toArray(String[]::new));
+//        Collections.addAll(arguments,
+//                mFilesToCompile.stream()
+//                        .map(File::getAbsolutePath).
+//                        toArray(String[]::new));
         try {
             K2JVMCompiler compiler = new K2JVMCompiler();
             K2JVMCompilerArguments args = new K2JVMCompilerArguments();
             compiler.parseArguments(arguments.toArray(new String[0]), args);
 
-            args.setCompileJava(false);
+            args.setCompileJava(true);
             args.setIncludeRuntime(false);
             args.setNoJdk(true);
+            args.setModuleName("codeassist-kotlin");
             args.setNoReflect(true);
             args.setNoStdlib(true);
+            args.setJavaSourceRoots(javaSourceRoots.stream()
+                    .map(File::getAbsolutePath)
+                    .toArray(String[]::new));
             args.setKotlinHome(mKotlinHome.getAbsolutePath());
             args.setDestination(mClassOutput.getAbsolutePath());
             args.setPluginClasspaths(getPlugins().stream()
                     .map(File::getAbsolutePath)
                     .toArray(String[]::new));
-            compiler.exec(mCollector, Services.EMPTY, args);
+
+            File cacheDir = new File(mProject.getBuildDirectory(), "intermediate/kotlin");
+//            if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+//                throw new IOException("Failed to create cache directory");
+//            }
+            IncrementalJvmCompilerRunnerKt.makeIncrementally(cacheDir,
+                    Arrays.asList(mProject.getJavaDirectory(),
+                            new File(mProject.getBuildDirectory(), "gen")),
+                    args, mCollector, new ICReporterBase() {
+                @Override
+                public void report(@NonNull Function0<String> function0) {
+                    mLogger.info(function0.invoke());
+                }
+
+                @Override
+                public void reportVerbose(@NonNull Function0<String> function0) {
+                    mLogger.verbose(function0.invoke());
+                }
+
+                @Override
+                public void reportCompileIteration(boolean b,
+                                                   @NonNull Collection<? extends File> collection,
+                                                   @NonNull ExitCode exitCode) {
+                    Log.d("IC", exitCode.name());
+                }
+            });
+            //compiler.exec(mCollector, Services.EMPTY, args);
         } catch (Exception e) {
-            throw new CompilationFailedException(e);
+            throw new CompilationFailedException(Log.getStackTraceString(e));
         }
 
         if (mCollector.hasErrors()) {
             throw new CompilationFailedException("Compilation failed, see logs for more details");
         }
     }
+
 
     private static class Diagnostic extends DiagnosticWrapper {
         private final CompilerMessageSeverity mSeverity;
