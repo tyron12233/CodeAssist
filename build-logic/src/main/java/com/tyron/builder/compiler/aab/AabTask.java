@@ -119,7 +119,69 @@ public class AabTask extends Task {
 
 		aab();
     buildApks();
+		try {
+			extractApks();
+		} catch (Exception e) {}
+
+
     }
+
+	private void extractApks() throws IOException, Exception {
+		mLogger.debug("Extracting Apks");
+		String Apks = mBinDir.getAbsolutePath() + "/App.apks"
+			; String dApks =mBinDir.getAbsolutePath() + ""
+			; uApks(Apks, dApks); }
+	private static void uApks(String Apks, String dApks)
+	{ File dir =
+			new
+			File(dApks);
+// create output directory if it doesn't exist
+		if
+		(!dir.exists()) dir.mkdirs(); FileInputStream fis;
+//buffer for read and write data to file
+		byte
+			[] buffer =
+			new
+			byte
+			[
+			1024
+			];
+		try
+		{ fis =
+				new
+				FileInputStream(Apks); ZipInputStream zis =
+				new
+				ZipInputStream(fis); ZipEntry ze = zis.getNextEntry();
+			while
+			(ze !=
+			 null
+			 ){ String fileName = ze.getName(); File newFile =
+					new
+					File(dApks + File.separator + fileName); System.out.println(
+					"Unzipping to "
+					+newFile.getAbsolutePath());
+//create directories for sub directories in zip
+				new
+					File(newFile.getParent()).mkdirs(); FileOutputStream fos =
+					new
+					FileOutputStream(newFile);
+				int
+					len;
+				while
+				((len = zis.read(buffer)) >
+				 0
+				 ) { fos.write(buffer,
+							   0
+							   , len); } fos.close();
+//close this ZipEntry
+				zis.closeEntry(); ze = zis.getNextEntry(); }
+//close last ZipEntry
+			zis.closeEntry(); zis.close(); fis.close(); }
+		catch
+		(IOException e) { e.printStackTrace(); } } 
+	
+	
+	
 	private void buildApks() throws IOException, CompilationFailedException {
 		mLogger.debug("Building Apks");
 
@@ -147,6 +209,22 @@ public class AabTask extends Task {
 			throw new CompilationFailedException(executor.getLog());
 		}
 	}	
+	
+	private void budletool() throws IOException, Exception {
+		mLogger.debug("Preparing Bundletool");
+		
+		if (!new File(BuildModule.getContext().getFilesDir(), "bundletool.jar").exists()) {
+            try {
+                InputStream input = BuildModule.getContext().getAssets().open("bundletool.jar");
+                OutputStream output = new FileOutputStream(new File(BuildModule.getContext().getFilesDir(), "bundletool.jar"));
+                IOUtils.copy(input, output);
+                input.close();
+                output.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+}		
 
 	private void budletool() throws IOException, Exception {
 		mLogger.debug("Preparing Bundletool");
