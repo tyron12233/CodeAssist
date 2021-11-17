@@ -28,7 +28,6 @@ import org.jetbrains.kotlin.types.TypeUtils;
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingServices;
 
 import java.io.Closeable;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -53,7 +52,6 @@ public class Compiler implements Closeable {
     public Compiler(Set<Path> javaSourcePath, Set<Path> classPath) {
         mJavaSourcePath = javaSourcePath;
         mClassPath = classPath;
-
         mDefaultCompileEnvironment = new CompilationEnvironment(mJavaSourcePath, mClassPath);
         mLocalFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL);
 
