@@ -104,7 +104,7 @@ public class IncrementalKotlinCompiler extends Task {
             K2JVMCompilerArguments args = new K2JVMCompilerArguments();
             compiler.parseArguments(arguments.toArray(new String[0]), args);
 
-            args.setCompileJava(true);
+            args.setCompileJava(false);
             args.setIncludeRuntime(false);
             args.setNoJdk(true);
             args.setModuleName("codeassist-kotlin");
