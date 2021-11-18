@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">CodeAssist</string>
+    <string name="hello_world">Hello world!</string>
+    <item name="paste" type="string">Вставить</item>
+    <item name="copy" type="string">Скопировать</item>
+    <item name="selectAll" formatted="true" type="string">Выбрать все</item>
+    <item name="saveToProject" translatable="false" type="string">Проект</item>
+    <item name="cut" type="string">Вырезать</item>
+    <item name="last" type="string">Последнее</item>
+    <item name="next" type="string">Далее</item>
+    <item name="replace" type="string">Заменить</item>
+    <item name="replaceAll" type="string">Заменить все</item>
+    <item name="replacement" type="string">Замена</item>
+    <item name="cancel" type="string">Отмена</item>
+    <item name="text_to_search" type="string">Текст для поиска</item>
+
+    <item name="more" translatable="false" type="string">Больше</item>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">Сообщения</string>
+    <string name="sync_header">Синхронизация</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">Своя подпись</string>
+    <string name="reply_title">Действие ответа по умолчанию</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">Периодически синхронизировать Email</string>
+    <string name="attachment_title">Скачать входящие вложения</string>
+    <string name="attachment_summary_on">Автоматически загружать вложения для входящих писем
+    </string>
+    <string name="attachment_summary_off">Загружать вложения только по запросу вручную</string>
+
+
+    <!-- wizard -->
+    <string name="wizard_next">Далее</string>
+    <string name="wizard_finish">Завершить</string>
+    <string name="wizard_cancel">Отмена</string>
+    <string name="wizard_templates">Шаблоны</string>
+    <string name="wizard_exit">Выход</string>
+    <string name="wizard_desc">Выберите из шаблонов активностей</string>
+    <string name="wizard_empty_templates">Шаблонов нет :(</string>
+    <string name="wizard_loading">Загрузка шаблонов</string>
+    <string name="wizard_app_name">Название приложения</string>
+    <string name="wizard_package_name">com.my.myapplication</string>
+    <string name="wizard_save_location">Путь для проекта</string>
+    <string name="wizard_language">Язык программирования</string>
+    <string name="wizard_minimum_sdk">Минимальное SDK</string>
+    <string name="wizard_create">Создать</string>
+    <string name="wizard_previous">Назад</string>
+    <string name="wizard_scoped_storage_info">Из-за ограничений хранилища Android 11 вы можете сохранять файлы только во внутреннем хранилище приложения.</string>
+    <string name="wizard_file_not_writable">Директория недоступна для записи, выберите другой путь</string>
+    <string name="wizard_path_exceeds">Путь к проекту превышает 240 символов.</string>
+    <string name="wizard_package_illegal">Имя пакета содержит недопустимые символы.</string>
+    <string name="wizard_package_too_short">Имя пакета слишком короткое.</string>
+    <string name="wizard_package_contains_spaces">Имя пакета не может содержать пробелы.</string>
+    <string name="wizard_error_name_empty">Название не может быть пустым.</string>
+    <string name="wizard_error_name_illegal">Название содержит недопустимые символы.</string>
+    <string name="wizard_package_empty">Имя пакета не может быть пустым.</string>
+    <string name="wizard_select_min_sdk">Выберите минимальную версию SDK.</string>
+    <string name="wizard_select_save_location">Выберите путь для проекта.</string>
+
+    <string name="menu_open_project">Открыть проект</string>
+    <string name="menu_create_project">Создать проект</string>
+    <string name="menu_run">Запустить</string>
+    <string name="menu_refresh">Обновить проект</string>
+    <string name="menu_format">Форматировать</string>
+    <string name="menu_settings">Настройки</string>
+
+    <!-- preferences -->
+    <string name="settings_title_editor">Редактор</string>
+    <string name="title_activity_settings">Настройки</string>
+
+    <!-- Editor settings -->
+    <string name="code_engine_title">Движок автозавершения</string>
+    <string name="settings_code_completions">Включить автозавершение кода</string>
+    <string name="code_editor_error_highlight">Включить выделение ошибок</string>
+
+    <string name="editor_settings_title">Настройки редактора кода</string>
+    <string name="editor_settings_wordwrap">Перенос по словам</string>
+    <string name="font_size_title">Размер шрифта</string>
+    <string name="font_size_message">Установите размер шрифта редактора</string>
+    <string name="font_size_summary">Укажите размер шрифта редактора по умолчанию</string>
+    <string name="keyboard_settings_title">Клавиатура</string>
+    <string name="keyboard_enable_suggestions_description">Включить подсказки клавиатуры</string>
+
+    <!-- file manager menu -->
+    <string name="menu_action_new_java_class">Файл класса Java</string>
+    <string name="menu_new">Новый</string>
+    <string name="menu_refactor">Рефакторинг</string>
+    <string name="item_project">Проект</string>
+    <string name="dialog_create_class_title">Создать класс</string>
+    <string name="create_class_dialog_class_name">Название класса</string>
+    <string name="create_class_dialog_positive">Создать</string>
+    <string name="create_class_dialog_class_type">Тип класса</string>
+    <string name="create_class_dialog_invalid_name">Недействительное название класса</string>
+
+    <string name="dialog_confirm_delete">Вы уверены, что хотите удалить %1$s?</string>
+    <string name="dialog_delete">Удалить</string>
+    <string name="menu_preview_layout">Предпросмотр интерфейса</string>
+    <string name="action_menu_build_release">Собрать release APK</string>
+    <string name="action_menu_build_debug">Собрать debug APK</string>
+
+    <string name="project_manager_projects">Проекты</string>
+    <string name="project_manager_empty">Отсутствуют проекты</string>
+    <string name="project_manager_create_project">Создать проект</string>
+</resources>

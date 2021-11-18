@@ -136,6 +136,6 @@ public class CleanTask extends Task {
 
     private boolean classExists(String fqn) {
         return mProject.getJavaFiles().get(fqn) != null ||
-                mProject.getKotlinFiles.get(fqn) != null;
+                mProject.getKotlinFiles().get(fqn) != null;
     }
 }
