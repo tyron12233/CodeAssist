@@ -85,12 +85,13 @@ public class ManifestMergeTask extends Task {
             return;
         }
 
-        ManifestMerger2.Invoker invoker = ManifestMerger2.newMerger(mMainManifest,
+        ManifestMerger2.Invoker<?> invoker = ManifestMerger2.newMerger(mMainManifest,
                 mLogger, ManifestMerger2.MergeType.APPLICATION)
                 .addLibraryManifests(mLibraryManifestFiles);
         invoker.setOverride(ManifestMerger2.SystemProperty.PACKAGE, mPackageName);
+        invoker.setOverride(ManifestMerger2.SystemProperty.VERSION_CODE, "1");
+        invoker.setOverride(ManifestMerger2.SystemProperty.VERSION_NAME, "1.0");
         invoker.setVerbose(false);
-
         try {
             MergingReport report = invoker.merge();
             if (report.getResult().isError()) {

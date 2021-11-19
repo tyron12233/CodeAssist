@@ -417,6 +417,8 @@ public class MainFragment extends Fragment {
                 compile(BuildType.DEBUG);
             } else if (item.getItemId() == R.id.action_build_release) {
                 compile(BuildType.RELEASE);
+            } else if (item.getItemId() == R.id.action_build_aab) {
+                compile(BuildType.AAB);
             } else if (item.getItemId() == R.id.action_format) {
                 File file = mAdapter.getItem(mPager.getCurrentItem());
                 if (file != null) {

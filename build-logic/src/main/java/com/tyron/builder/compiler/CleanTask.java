@@ -33,7 +33,7 @@ public class CleanTask extends Task {
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-        if (mBuildType == BuildType.RELEASE) {
+        if (mBuildType == BuildType.RELEASE || mBuildType == BuildType.AAB) {
             cleanRelease();
         } else if (mBuildType == BuildType.DEBUG) {
             cleanClasses();

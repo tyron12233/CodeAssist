@@ -104,7 +104,11 @@ public class ApkBuilder {
     }
 
     private List<Task> getTasks(BuildType type) {
-        return getAabTasks();
+        if (BuildType.AAB == type) {
+            return getAabTasks();
+        } else {
+            return getApkTasks(type);
+        }
     }
 
     private List<Task> getApkTasks(BuildType type) {

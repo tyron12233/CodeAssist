@@ -83,7 +83,7 @@ public class IncrementalD8Task extends Task {
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-        if (mBuildType == BuildType.RELEASE) {
+        if (mBuildType == BuildType.RELEASE || mBuildType == BuildType.AAB) {
             doRelease();
         } else if (mBuildType == BuildType.DEBUG) {
             doDebug();

@@ -102,6 +102,7 @@
     <string name="menu_preview_layout">Preview Layout</string>
     <string name="action_menu_build_release">Build release APK</string>
     <string name="action_menu_build_debug">Build debug APK</string>
+    <string name="action_menu_build_aab">Build AAB</string>
 
     <string name="project_manager_projects">Projects</string>
     <string name="project_manager_empty">Projects are empty</string>
