@@ -4,15 +4,12 @@ import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
-import com.tyron.common.util.Cache;
 
 import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.List;
-import java.util.Map;
 
 public class CleanTask extends Task {
 
@@ -126,6 +123,7 @@ public class CleanTask extends Task {
                 }
             }
 
+            mLogger.debug("Checking path: "+ path + " package: " + packageName);
             if (mProject.getFileManager().list(path).isEmpty() && !classExists(packageName)) {
                 if (file.delete()) {
                     mLogger.debug("Deleted dex file " + path);

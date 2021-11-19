@@ -53,7 +53,9 @@ public class R8Task extends Task {
                     .addLibraryFiles(getLibraryFiles())
                     .addProgramFiles(getJarFiles())
                     .addProgramFiles(D8Task.getClassFiles(new File(mProject.getBuildDirectory(),
-                            "bin/classes")))
+                            "bin/kotlin/classes")))
+                    .addProgramFiles(D8Task.getClassFiles(new File(mProject.getBuildDirectory(),
+                            "bin/java/classes")))
                     .addProguardConfiguration(getDefaultProguardRule(), Origin.unknown())
                     .addProguardConfigurationFiles(getProguardRules())
                     .setMinApiLevel(mProject.getMinSdk())

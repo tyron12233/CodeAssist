@@ -54,6 +54,11 @@ public class ProjectSettings implements SharedPreferences {
         return map;
     }
 
+    public void refresh() {
+        mConfigMap.clear();
+        mConfigMap.putAll(parseFile());
+    }
+
     @Override
     public Map<String, ?> getAll() {
         return mConfigMap;

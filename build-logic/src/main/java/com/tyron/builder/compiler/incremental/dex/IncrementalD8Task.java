@@ -67,7 +67,8 @@ public class IncrementalD8Task extends Task {
         mOutputPath = output.toPath();
 
         mFilesToCompile = new ArrayList<>();
-        mClassFiles = new ArrayList<>(D8Task.getClassFiles(new File(project.getBuildDirectory(), "bin/classes")));
+        mClassFiles = new ArrayList<>(D8Task.getClassFiles(new File(project.getBuildDirectory(), "bin/java/classes")));
+        mClassFiles.addAll(D8Task.getClassFiles(new File(project.getBuildDirectory(), "bin/kotlin/classes")));
         for (Cache.Key<String> key : new HashSet<>(mDexCache.getKeys())) {
             if (!mFilesToCompile.contains(key.file)) {
                 File file = mDexCache.get(key.file, "dex").iterator().next();

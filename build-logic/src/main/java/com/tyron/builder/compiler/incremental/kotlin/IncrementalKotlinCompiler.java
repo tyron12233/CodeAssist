@@ -32,7 +32,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import kotlin.jvm.functions.Function0;
@@ -69,7 +68,7 @@ public class IncrementalKotlinCompiler extends Task {
             throw new IOException("Unable to create kotlin home directory");
         }
 
-        mClassOutput = new File(project.getBuildDirectory(), "bin/classes");
+        mClassOutput = new File(project.getBuildDirectory(), "bin/kotlin/classes");
         if (!mClassOutput.exists() && !mClassOutput.mkdirs()) {
             throw new IOException("Unable to create class output directory");
         }
@@ -85,25 +84,22 @@ public class IncrementalKotlinCompiler extends Task {
         classpath.add(FileManager.getAndroidJar());
         classpath.add(FileManager.getLambdaStubs());
         classpath.addAll(mProject.getLibraries());
-
-        List<File> javaSourceRoots = new ArrayList<>();
-        javaSourceRoots.addAll(mProject.getJavaFiles().values());
-        javaSourceRoots.addAll(mProject.getRJavaFiles().values());
-
         List<String> arguments = new ArrayList<>();
         Collections.addAll(arguments, "-cp",
                 classpath.stream()
                         .map(File::getAbsolutePath)
                         .collect(Collectors.joining(File.pathSeparator)));
-//        Collections.addAll(arguments,
-//                mFilesToCompile.stream()
-//                        .map(File::getAbsolutePath).
-//                        toArray(String[]::new));
+
+        List<File> javaSourceRoots = new ArrayList<>();
+        javaSourceRoots.addAll(mProject.getJavaFiles().values());
+        javaSourceRoots.addAll(mProject.getRJavaFiles().values());
+
         try {
             K2JVMCompiler compiler = new K2JVMCompiler();
             K2JVMCompilerArguments args = new K2JVMCompilerArguments();
             compiler.parseArguments(arguments.toArray(new String[0]), args);
 
+            args.setUseJavac(false);
             args.setCompileJava(false);
             args.setIncludeRuntime(false);
             args.setNoJdk(true);
@@ -118,33 +114,28 @@ public class IncrementalKotlinCompiler extends Task {
             args.setPluginClasspaths(getPlugins().stream()
                     .map(File::getAbsolutePath)
                     .toArray(String[]::new));
-
             File cacheDir = new File(mProject.getBuildDirectory(), "intermediate/kotlin");
-//            if (!cacheDir.exists() && !cacheDir.mkdirs()) {
-//                throw new IOException("Failed to create cache directory");
-//            }
             IncrementalJvmCompilerRunnerKt.makeIncrementally(cacheDir,
                     Arrays.asList(mProject.getJavaDirectory(),
                             new File(mProject.getBuildDirectory(), "gen")),
                     args, mCollector, new ICReporterBase() {
-                @Override
-                public void report(@NonNull Function0<String> function0) {
-                    mLogger.info(function0.invoke());
-                }
+                        @Override
+                        public void report(@NonNull Function0<String> function0) {
+                            mLogger.info(function0.invoke());
+                        }
 
-                @Override
-                public void reportVerbose(@NonNull Function0<String> function0) {
-                    mLogger.verbose(function0.invoke());
-                }
+                        @Override
+                        public void reportVerbose(@NonNull Function0<String> function0) {
+                            mLogger.verbose(function0.invoke());
+                        }
 
-                @Override
-                public void reportCompileIteration(boolean b,
-                                                   @NonNull Collection<? extends File> collection,
-                                                   @NonNull ExitCode exitCode) {
-                    Log.d("IC", exitCode.name());
-                }
-            });
-            //compiler.exec(mCollector, Services.EMPTY, args);
+                        @Override
+                        public void reportCompileIteration(boolean incremental,
+                                                           @NonNull Collection<? extends File> sources,
+                                                           @NonNull ExitCode exitCode) {
+                            Log.d("IC", "source files: " + sources);
+                        }
+                    });
         } catch (Exception e) {
             throw new CompilationFailedException(Log.getStackTraceString(e));
         }
@@ -154,6 +145,36 @@ public class IncrementalKotlinCompiler extends Task {
         }
     }
 
+    private List<File> getSourceFiles(File dir) {
+        List<File> files = new ArrayList<>();
+
+        File[] children = dir.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                if (child.isDirectory()) {
+                    files.addAll(getSourceFiles(child));
+                } else {
+                    if (child.getName().endsWith(".kt") || child.getName().endsWith(".java")) {
+                        files.add(child);
+                    }
+                }
+            }
+        }
+
+        return files;
+    }
+
+    private List<File> getPlugins() {
+        File pluginDir = new File(mProject.getBuildDirectory(), "plugins");
+        File[] children = pluginDir.listFiles(c -> c.getName().endsWith(".jar"));
+
+        if (children == null) {
+            return Collections.emptyList();
+        }
+
+        return new ArrayList<>(Arrays.asList(children));
+
+    }
 
     private static class Diagnostic extends DiagnosticWrapper {
         private final CompilerMessageSeverity mSeverity;
@@ -214,12 +235,17 @@ public class IncrementalKotlinCompiler extends Task {
         @Override
         public Kind getKind() {
             switch (mSeverity) {
-                case ERROR: return Kind.ERROR;
-                case STRONG_WARNING: return Kind.MANDATORY_WARNING;
-                case WARNING: return Kind.WARNING;
-                case LOGGING: return Kind.OTHER;
+                case ERROR:
+                    return Kind.ERROR;
+                case STRONG_WARNING:
+                    return Kind.MANDATORY_WARNING;
+                case WARNING:
+                    return Kind.WARNING;
+                case LOGGING:
+                    return Kind.OTHER;
                 default:
-                case INFO: return Kind.NOTE;
+                case INFO:
+                    return Kind.NOTE;
             }
         }
 
@@ -238,10 +264,12 @@ public class IncrementalKotlinCompiler extends Task {
             return mMessage;
         }
     }
+
     private class Collector implements MessageCollector {
 
         private final List<Diagnostic> mDiagnostics = new ArrayList<>();
-
+        private boolean mHasErrors;
+        
         @Override
         public void clear() {
             mDiagnostics.clear();
@@ -249,57 +277,35 @@ public class IncrementalKotlinCompiler extends Task {
 
         @Override
         public boolean hasErrors() {
-            Optional<Diagnostic> first = mDiagnostics.stream()
-                    .filter(d -> d.mSeverity == CompilerMessageSeverity.ERROR)
-                    .findFirst();
-            return first.isPresent();
+            return mHasErrors;
         }
 
         @Override
         public void report(@NotNull CompilerMessageSeverity severity,
-                           @NotNull String s,
-                           CompilerMessageSourceLocation compilerMessageSourceLocation) {
-            Diagnostic diagnostic = new Diagnostic(severity, s, compilerMessageSourceLocation);
+                           @NotNull String message,
+                           CompilerMessageSourceLocation location) {
+            if (message.contains("No class roots are found in the JDK path"))  {
+                // Android does not have JDK so its okay to ignore this error
+                return;
+            }
+            Diagnostic diagnostic = new Diagnostic(severity, message, location);
             mDiagnostics.add(diagnostic);
 
             switch (severity) {
-                case ERROR: mLogger.error(diagnostic); break;
+                case ERROR:
+                    mHasErrors = true;
+                    mLogger.error(diagnostic);
+                    break;
                 case STRONG_WARNING:
-                case WARNING: mLogger.warning(diagnostic); break;
-                case INFO: mLogger.info(diagnostic); break;
-                default: mLogger.debug(diagnostic);
+                case WARNING:
+                    mLogger.warning(diagnostic);
+                    break;
+                case INFO:
+                    mLogger.info(diagnostic);
+                    break;
+                default:
+                    mLogger.debug(diagnostic);
             }
         }
-    }
-
-    private List<File> getSourceFiles(File dir) {
-        List<File> files = new ArrayList<>();
-
-        File[] children = dir.listFiles();
-        if (children != null) {
-            for (File child : children) {
-                if (child.isDirectory()) {
-                    files.addAll(getSourceFiles(child));
-                } else {
-                    if (child.getName().endsWith(".kt") || child.getName().endsWith(".java")) {
-                        files.add(child);
-                    }
-                }
-            }
-        }
-
-        return files;
-    }
-
-    private List<File> getPlugins() {
-        File pluginDir = new File(mProject.getBuildDirectory(), "plugins");
-        File[] children = pluginDir.listFiles(c -> c.getName().endsWith(".jar"));
-
-        if (children == null) {
-            return Collections.emptyList();
-        }
-
-        return new ArrayList<>(Arrays.asList(children));
-
     }
 }

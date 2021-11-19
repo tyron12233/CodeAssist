@@ -63,6 +63,7 @@ public class Project {
     }
 
     public ProjectSettings getSettings() {
+        mSettings.refresh();
         return mSettings;
     }
 

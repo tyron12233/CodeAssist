@@ -57,7 +57,7 @@ public class IncrementalJavaTask extends Task {
         mProject = project;
         mLogger = logger;
 
-        mOutputDir = new File(project.getBuildDirectory(), "bin/classes");
+        mOutputDir = new File(project.getBuildDirectory(), "bin/java/classes");
         if (!mOutputDir.exists() && !mOutputDir.mkdirs()) {
             throw new IOException("Unable to create output directory");
         }
