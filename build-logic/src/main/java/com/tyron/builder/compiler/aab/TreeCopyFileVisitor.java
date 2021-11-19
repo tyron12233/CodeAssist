@@ -6,7 +6,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 
 public class TreeCopyFileVisitor extends SimpleFileVisitor<Path> {
 
-    private Path source;
+    private final Path source;
     private final Path target;
 
     public TreeCopyFileVisitor(String source, String target) {
@@ -33,9 +33,7 @@ public class TreeCopyFileVisitor extends SimpleFileVisitor<Path> {
 
         Path resolve = target.resolve(source.relativize(file));
         Files.copy(file, resolve);
-        System.out.println(
-			String.format("Copy File from \t'%s' to \t'%s'", file, resolve)
-        );
+        System.out.printf("Copy File from \t'%s' to \t'%s'%n", file, resolve);
 
         return FileVisitResult.CONTINUE;
 

@@ -5,6 +5,7 @@ import android.util.Log;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
+import com.tyron.builder.compiler.incremental.resource.ResourceFile;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
@@ -12,10 +13,20 @@ import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.BinaryExecutor;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -23,22 +34,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.io.FileInputStream;
-import java.util.zip.ZipInputStream;
 import java.util.zip.ZipEntry;
-import java.io.FileOutputStream;
-import java.nio.file.Paths;
-import com.tyron.builder.compiler.incremental.resource.ResourceFile;
+import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.FileVisitResult;
-import java.io.InputStream;
-import java.io.OutputStream;
-
-import org.apache.commons.io.IOUtils;
-import net.lingala.zip4j.core.ZipFile;
 
 public class AabTask extends Task {
 
@@ -46,18 +44,12 @@ public class AabTask extends Task {
 
     private Project mProject;
     private ILogger mLogger;
-
-	private File mBinDir;
-
-	private File dex;
-
-	private File base;
-
-	private File manifest;
-
-	private File bin;
-
-	private File jars;
+    private File dex;
+    private File mBinDir;
+    private File base;
+    private File manifest;
+    private File bin;
+    private File jars;
 
     @Override
     public String getName() {
@@ -68,27 +60,26 @@ public class AabTask extends Task {
     public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
         mProject = project;
         mLogger = logger;
-		mBinDir = new File(project.getBuildDirectory(), "/bin");
-		base = new File(mBinDir.getAbsolutePath(), "/base");
-            	
-		
-      if (!base.exists()) {
+        mBinDir = new File(project.getBuildDirectory(), "/bin");
+        base = new File(mBinDir.getAbsolutePath(), "/base");
+
+
+        if (!base.exists()) {
             if (!base.mkdirs()) {
                 throw new IOException("Failed to create resource output directory");
             }
         }
-		
-		
-		
-		manifest = new File(mBinDir.getAbsolutePath(), "/base/manifest");
-		if (!manifest.exists()) {
+
+
+        manifest = new File(mBinDir.getAbsolutePath(), "/base/manifest");
+        if (!manifest.exists()) {
             if (!manifest.mkdirs()) {
                 throw new IOException("Failed to create resource output directory");
             }
         }
 
-		dex = new File(mBinDir.getAbsolutePath(), "/base/dex");
-		if (!dex.exists()) {
+        dex = new File(mBinDir.getAbsolutePath(), "/base/dex");
+        if (!dex.exists()) {
             if (!dex.mkdirs()) {
                 throw new IOException("Failed to create resource output directory");
             }
@@ -100,120 +91,95 @@ public class AabTask extends Task {
         Map<String, List<File>> filesToCompile = getFiles();
         List<File> librariesToCompile = getLibraries();
         link();
-		
-		try {
-			unZip();
-		} catch (Exception e) {}
-
-		copy();
-		try {
-			copyJni();
-		} catch (Exception e) {}
-
-		try {
-			baseZip();
-		} catch (Exception e) {}
-		try {
-			budletool();
-		} catch (Exception e) {}
-
-		aab();
-    buildApks();
-		try {
-			extractApks();
-		} catch (Exception e) {}
-
-
+        unZip();
+        copy();
+        copyJni();
+        baseZip();
+        budletool();
+        aab();
+        buildApks();
+        extractApks();
     }
 
-	private void extractApks() throws IOException, Exception {
-		mLogger.debug("Extracting Apks");
-		String Apks = mBinDir.getAbsolutePath() + "/App.apks"
-			; String dApks =mBinDir.getAbsolutePath() + ""
-			; uApks(Apks, dApks); }
-	private static void uApks(String Apks, String dApks)
-	{ File dir =
-			new
-			File(dApks);
-// create output directory if it doesn't exist
-		if
-		(!dir.exists()) dir.mkdirs(); FileInputStream fis;
-//buffer for read and write data to file
-		byte
-			[] buffer =
-			new
-			byte
-			[
-			1024
-			];
-		try
-		{ fis =
-				new
-				FileInputStream(Apks); ZipInputStream zis =
-				new
-				ZipInputStream(fis); ZipEntry ze = zis.getNextEntry();
-			while
-			(ze !=
-			 null
-			 ){ String fileName = ze.getName(); File newFile =
-					new
-					File(dApks + File.separator + fileName); System.out.println(
-					"Unzipping to "
-					+newFile.getAbsolutePath());
-//create directories for sub directories in zip
-				new
-					File(newFile.getParent()).mkdirs(); FileOutputStream fos =
-					new
-					FileOutputStream(newFile);
-				int
-					len;
-				while
-				((len = zis.read(buffer)) >
-				 0
-				 ) { fos.write(buffer,
-							   0
-							   , len); } fos.close();
-//close this ZipEntry
-				zis.closeEntry(); ze = zis.getNextEntry(); }
-//close last ZipEntry
-			zis.closeEntry(); zis.close(); fis.close(); }
-		catch
-		(IOException e) { e.printStackTrace(); } } 
-	
-	
-	
-	private void buildApks() throws IOException, CompilationFailedException {
-		mLogger.debug("Building Apks");
+    private void extractApks() throws IOException {
+        mLogger.debug("Extracting Apks");
+        String Apks = mBinDir.getAbsolutePath() + "/App.apks";
+        String dApks = mBinDir.getAbsolutePath() + "";
+        uApks(Apks, dApks);
+    }
 
-		List<String> args = new ArrayList<>();
-		args.add("dalvikvm");
-		args.add("-Xcompiler-option");
-		args.add("--compiler-filter=speed");
-		args.add("-Xmx256m");
-        args.add("-Djava.io.tmpdir="+ BuildModule.getContext().getCacheDir().getAbsolutePath());
-		args.add("-cp");
-		//bundletool.jar should be in download folder
-		args.add(BuildModule.getContext().getFilesDir() + "/bundletool.jar");
-		//args.add("/storage/emulated/0/Download/bundletool.jar");
-		args.add("com.android.tools.build.bundletool.BundleToolMain");
-		args.add("build-apks");
-		args.add("--bundle=" + mBinDir.getAbsolutePath() + "/module.aab");
-		args.add("--output=" + mBinDir.getAbsolutePath() + "/App.apks");
-		args.add("--mode=universal");
-		args.add("--aapt2=" + BuildModule.getContext().getApplicationInfo().nativeLibraryDir + "/libaapt2.so");
+    private static void uApks(String Apks, String dApks) {
+        File dir = new File(dApks);
+        // create output directory if it doesn't exist
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        FileInputStream fis;
+        //buffer for read and write data to file
+        byte[] buffer = new byte[1024];
+        try {
+            fis = new FileInputStream(Apks);
+            ZipInputStream zis = new ZipInputStream(fis);
+            ZipEntry ze = zis.getNextEntry();
+            while (ze != null) {
+                String fileName = ze.getName();
+                File newFile = new File(dApks + File.separator + fileName);
+                System.out.println("Unzipping to " + newFile.getAbsolutePath());
+                //create directories for sub directories in zip
+                new File(newFile.getParent()).mkdirs();
+                FileOutputStream fos = new FileOutputStream(newFile);
+                int len;
+                while ((len = zis.read(buffer)) > 0) {
+                    fos.write(buffer, 0, len);
+                }
+                fos.close();
+                //close this ZipEntry
+                zis.closeEntry();
+                ze = zis.getNextEntry();
+            }
+            //close last ZipEntry
+            zis.closeEntry();
+            zis.close();
+            fis.close();
+        } catch
+        (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
 
-		BinaryExecutor executor = new BinaryExecutor();
+    private void buildApks() throws IOException, CompilationFailedException {
+        mLogger.debug("Building Apks");
+
+        List<String> args = new ArrayList<>();
+        args.add("dalvikvm");
+        args.add("-Xcompiler-option");
+        args.add("--compiler-filter=speed");
+        args.add("-Xmx256m");
+        args.add("-Djava.io.tmpdir=" + BuildModule.getContext().getCacheDir().getAbsolutePath());
+        args.add("-cp");
+        //bundletool.jar should be in download folder
+        args.add(BuildModule.getContext().getFilesDir() + "/bundletool.jar");
+        //args.add("/storage/emulated/0/Download/bundletool.jar");
+        args.add("com.android.tools.build.bundletool.BundleToolMain");
+        args.add("build-apks");
+        args.add("--bundle=" + mBinDir.getAbsolutePath() + "/module.aab");
+        args.add("--output=" + mBinDir.getAbsolutePath() + "/App.apks");
+        args.add("--mode=universal");
+        args.add("--aapt2=" + BuildModule.getContext().getApplicationInfo().nativeLibraryDir + "/libaapt2.so");
+
+
+        BinaryExecutor executor = new BinaryExecutor();
         executor.setCommands(args);
-		if (!executor.execute().isEmpty()) {
-			throw new CompilationFailedException(executor.getLog());
-		}
-	}	
-	
-	private void budletool() throws IOException, Exception {
-		mLogger.debug("Preparing Bundletool");
-		
-		if (!new File(BuildModule.getContext().getFilesDir(), "bundletool.jar").exists()) {
+        if (!executor.execute().isEmpty()) {
+            throw new CompilationFailedException(executor.getLog());
+        }
+    }
+
+    private void budletool() throws IOException {
+        mLogger.debug("Preparing Bundletool");
+
+        if (!new File(BuildModule.getContext().getFilesDir(), "bundletool.jar").exists()) {
             try {
                 InputStream input = BuildModule.getContext().getAssets().open("bundletool.jar");
                 OutputStream output = new FileOutputStream(new File(BuildModule.getContext().getFilesDir(), "bundletool.jar"));
@@ -224,77 +190,75 @@ public class AabTask extends Task {
                 e.printStackTrace();
             }
         }
-}		
-	
-		
-        
-	private void aab() throws IOException, CompilationFailedException {
-		mLogger.debug("Generating AAB.");
-
-		List<String> args = new ArrayList<>();
-		args.add("dalvikvm");
-		args.add("-Xcompiler-option");
-		args.add("--compiler-filter=speed");
-		args.add("-Xmx256m");
-        args.add("-Djava.io.tmpdir="+ BuildModule.getContext().getCacheDir().getAbsolutePath());
-		args.add("-cp");
-		//bundletool.jar should be in download folder
-		args.add(BuildModule.getContext().getFilesDir() + "/bundletool.jar");
-		//args.add("/storage/emulated/0/Download/bundletool.jar");
-		args.add("com.android.tools.build.bundletool.BundleToolMain");
-		args.add("build-bundle");
-		args.add("--modules=" + mBinDir.getAbsolutePath() + "/Base-Module.zip");
-		args.add("--output=" + mBinDir.getAbsolutePath() + "/module.aab");
+    }
 
 
+    private void aab() throws IOException, CompilationFailedException {
+        mLogger.debug("Generating AAB.");
 
-		BinaryExecutor executor = new BinaryExecutor();
+        List<String> args = new ArrayList<>();
+        args.add("dalvikvm");
+        args.add("-Xcompiler-option");
+        args.add("--compiler-filter=speed");
+        args.add("-Xmx256m");
+        args.add("-Djava.io.tmpdir=" + BuildModule.getContext().getCacheDir().getAbsolutePath());
+        args.add("-cp");
+        //bundletool.jar should be in download folder
+        args.add(BuildModule.getContext().getFilesDir() + "/bundletool.jar");
+        //args.add("/storage/emulated/0/Download/bundletool.jar");
+        args.add("com.android.tools.build.bundletool.BundleToolMain");
+        args.add("build-bundle");
+        args.add("--modules=" + mBinDir.getAbsolutePath() + "/Base-Module.zip");
+        args.add("--output=" + mBinDir.getAbsolutePath() + "/module.aab");
+
+
+        BinaryExecutor executor = new BinaryExecutor();
         executor.setCommands(args);
-		if (!executor.execute().isEmpty()) {
-			throw new CompilationFailedException(executor.getLog());
-		}
-	}	
+        if (!executor.execute().isEmpty()) {
+            throw new CompilationFailedException(executor.getLog());
+        }
+    }
 
 
-
-	private void baseZip() throws IOException, Exception {
-		mLogger.debug("Creating Module Archieve");
-		String folderToZip = base.getAbsolutePath();
+    private void baseZip() throws IOException {
+        mLogger.debug("Creating Module Archieve");
+        String folderToZip = base.getAbsolutePath();
         String zipName = mBinDir.getAbsolutePath() + "/Base-Module.zip";
         zipFolder(Paths.get(folderToZip), Paths.get(zipName));
     }
 
     // Uses java.util.zip to create zip file
-    private void zipFolder(final Path sourceFolderPath, Path zipPath) throws Exception {
+    private void zipFolder(final Path sourceFolderPath, Path zipPath) throws IOException {
         final ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipPath.toFile()));
         Files.walkFileTree(sourceFolderPath, new SimpleFileVisitor<Path>() {
-				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-					zos.putNextEntry(new ZipEntry(sourceFolderPath.relativize(file).toString()));
-					Files.copy(file, zos);
-					zos.closeEntry();
-					return FileVisitResult.CONTINUE;
-				}
-			});
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                zos.putNextEntry(new ZipEntry(sourceFolderPath.relativize(file).toString()));
+                Files.copy(file, zos);
+                zos.closeEntry();
+                return FileVisitResult.CONTINUE;
+            }
+        });
         zos.close();
     }
-	
 
-	private void copy() throws IOException, CompilationFailedException {
-		mLogger.debug("Coping Manifest.");
 
-		List<String> args = new ArrayList<>();
-		args.add("mv");
-		args.add(base.getAbsolutePath() + "/AndroidManifest.xml");
-		args.add(manifest.getAbsolutePath() + "");
-		BinaryExecutor executor = new BinaryExecutor();
+    private void copy() throws IOException, CompilationFailedException {
+        mLogger.debug("Coping Manifest.");
+
+        List<String> args = new ArrayList<>();
+        args.add("mv");
+        args.add(base.getAbsolutePath() + "/AndroidManifest.xml");
+        args.add(manifest.getAbsolutePath() + "");
+        BinaryExecutor executor = new BinaryExecutor();
         executor.setCommands(args);
         if (!executor.execute().isEmpty()) {
             throw new CompilationFailedException(executor.getLog());
         }
-	}
-	private void copyJni() throws IOException, Exception {
-		mLogger.debug("Coping JniLibs.");
-		String fromDirectory = mProject.getNativeLibsDirectory().getAbsolutePath();
+    }
+
+    private void copyJni() throws IOException {
+        mLogger.debug("Coping JniLibs.");
+        String fromDirectory = mProject.getNativeLibsDirectory().getAbsolutePath();
         String toToDirectory = base.getAbsolutePath() + "/lib";
 
         try {
@@ -310,69 +274,60 @@ public class AabTask extends Task {
     }
 
     public static void copyDirectoryFileVisitor(String source, String target)
-	throws IOException {
+            throws IOException {
 
         TreeCopyFileVisitor fileVisitor = new TreeCopyFileVisitor(source, target);
         Files.walkFileTree(Paths.get(source), fileVisitor);
 
     }
-	
 
-	private void unZip() throws IOException, Exception {
-		mLogger.debug("Unziping ProtoFormat.");
 
-		String zipFilePath = mBinDir.getAbsolutePath() + "/proto-format.zip"
-			; String destDir =base.getAbsolutePath() + ""
-			; unzip(zipFilePath, destDir); }
-	private static void unzip(String zipFilePath, String destDir)
-	{ File dir =
-			new
-			File(destDir);
-// create output directory if it doesn't exist
-		if
-		(!dir.exists()) dir.mkdirs(); FileInputStream fis;
-//buffer for read and write data to file
-		byte
-			[] buffer =
-			new
-			byte
-			[
-			1024
-			];
-		try
-		{ fis =
-				new
-				FileInputStream(zipFilePath); ZipInputStream zis =
-				new
-				ZipInputStream(fis); ZipEntry ze = zis.getNextEntry();
-			while
-			(ze !=
-			 null
-			 ){ String fileName = ze.getName(); File newFile =
-					new
-					File(destDir + File.separator + fileName); System.out.println(
-					"Unzipping to "
-					+newFile.getAbsolutePath());
-//create directories for sub directories in zip
-				new
-					File(newFile.getParent()).mkdirs(); FileOutputStream fos =
-					new
-					FileOutputStream(newFile);
-				int
-					len;
-				while
-				((len = zis.read(buffer)) >
-				 0
-				 ) { fos.write(buffer,
-							   0
-							   , len); } fos.close();
-//close this ZipEntry
-				zis.closeEntry(); ze = zis.getNextEntry(); }
-//close last ZipEntry
-			zis.closeEntry(); zis.close(); fis.close(); }
-		catch
-		(IOException e) { e.printStackTrace(); } } 
+    private void unZip() throws IOException {
+        mLogger.debug("Unziping ProtoFormat.");
 
+        String zipFilePath = mBinDir.getAbsolutePath() + "/proto-format.zip";
+        String destDir = base.getAbsolutePath() + "";
+        unzip(zipFilePath, destDir);
+    }
+
+    private static void unzip(String zipFilePath, String destDir) {
+        File dir = new File(destDir);
+        // create output directory if it doesn't exist
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        FileInputStream fis;
+        //buffer for read and write data to file
+        byte[] buffer = new byte[1024];
+        try {
+            fis = new FileInputStream(zipFilePath);
+            ZipInputStream zis = new ZipInputStream(fis);
+            ZipEntry ze = zis.getNextEntry();
+            while (ze != null) {
+                String fileName = ze.getName();
+                File newFile = new File(destDir + File.separator + fileName);
+                System.out.println("Unzipping to " + newFile.getAbsolutePath());
+                //create directories for sub directories in zip
+                new File(newFile.getParent()).mkdirs();
+                FileOutputStream fos = new FileOutputStream(newFile);
+                int len;
+                while ((len = zis.read(buffer)) > 0) {
+                    fos.write(buffer, 0, len);
+                }
+                fos.close();
+                //close this ZipEntry
+                zis.closeEntry();
+                ze = zis.getNextEntry();
+            }
+            //close last ZipEntry
+            zis.closeEntry();
+            zis.close();
+            fis.close();
+        } catch
+        (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
 
     private void link() throws IOException, CompilationFailedException {
@@ -383,11 +338,11 @@ public class AabTask extends Task {
         args.add(getBinary().getAbsolutePath());
         args.add("link");
         args.add("--proto-format");
-		args.add("-o");
+        args.add("-o");
         args.add(getOutputPath().getParent() + "/proto-format.zip");
-		args.add("-I");
+        args.add("-I");
         args.add(FileManager.getAndroidJar().getAbsolutePath());
-		args.add("--manifest");
+        args.add("--manifest");
         File mergedManifest = new File(mProject.getBuildDirectory(), "bin/AndroidManifest.xml");
         if (!mergedManifest.exists()) {
             throw new IOException("Unable to get merged manifest file");
@@ -406,10 +361,10 @@ public class AabTask extends Task {
                 continue;
             }
             args.add(resource.getAbsolutePath());
-			if (mProject.getAssetsDirectory().exists()) {
-				args.add("-A");
-				args.add(mProject.getAssetsDirectory().getAbsolutePath());
-			}
+            if (mProject.getAssetsDirectory().exists()) {
+                args.add("-A");
+                args.add(mProject.getAssetsDirectory().getAbsolutePath());
+            }
 
 
         }
@@ -444,11 +399,10 @@ public class AabTask extends Task {
         File gen = new File(mProject.getBuildDirectory(), "gen");
         if (!gen.exists()) {
             if (!gen.mkdirs()) {
-                throw  new CompilationFailedException("Failed to create gen folder");
+                throw new CompilationFailedException("Failed to create gen folder");
             }
         }
         args.add(gen.getAbsolutePath());
-
 
 
         BinaryExecutor exec = new BinaryExecutor();
@@ -457,8 +411,10 @@ public class AabTask extends Task {
             throw new CompilationFailedException(exec.getLog());
         }
     }
+
     /**
      * Utility function to get all the files that needs to be recompiled
+     *
      * @return resource files to compile
      */
     public Map<String, List<File>> getFiles() throws IOException {
@@ -513,8 +469,9 @@ public class AabTask extends Task {
 
     /**
      * Utility method to add a list of files to a map, if it doesn't exist, it creates a new one
-     * @param map The map to add to
-     * @param key Key to add the value
+     *
+     * @param map    The map to add to
+     * @param key    Key to add the value
      * @param values The list of files to add
      */
     private void addToMapList(Map<String, List<File>> map, String key, List<ResourceFile> values) {
@@ -538,9 +495,9 @@ public class AabTask extends Task {
         for (String resourceType : map.keySet()) {
             File outputDir = new File(output, resourceType);
             if (!outputDir.exists()) {
-				if (!outputDir.mkdir()) {
-					throw new IOException("Failed to create output directory for " + outputDir);
-				}
+                if (!outputDir.mkdir()) {
+                    throw new IOException("Failed to create output directory for " + outputDir);
+                }
             }
 
             List<File> files = map.get(resourceType);
@@ -596,6 +553,7 @@ public class AabTask extends Task {
 
     /**
      * Returns a map of resource type, and the files for a given resource directory
+     *
      * @param file res directory
      * @return Map of resource type and the files corresponding to it
      */
@@ -632,7 +590,7 @@ public class AabTask extends Task {
      * It determines whether the library should be compiled by checking the build/bin/res folder,
      * if it contains a zip file with its name, then its most likely the same library
      */
-    private List<File> getLibraries()  throws IOException {
+    private List<File> getLibraries() throws IOException {
         File resDir = new File(mProject.getBuildDirectory(), "bin/res");
         if (!resDir.exists()) {
             if (!resDir.mkdirs()) {
@@ -704,8 +662,8 @@ public class AabTask extends Task {
 
     private static File getBinary() throws IOException {
         File check = new File(
-			BuildModule.getContext().getApplicationInfo().nativeLibraryDir,
-			"libaapt2.so"
+                BuildModule.getContext().getApplicationInfo().nativeLibraryDir,
+                "libaapt2.so"
         );
         if (check.exists()) {
             return check;
