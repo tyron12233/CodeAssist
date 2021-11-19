@@ -123,7 +123,8 @@ public class ApkBuilder {
         task.add(new MergeSymbolsTask());
         task.add(new IncrementalKotlinCompiler());
         task.add(new IncrementalJavaTask());
-        if (mProject.getSettings().getBoolean(ProjectSettings.USE_R8, false)) {
+        if (mProject.getSettings().getBoolean(ProjectSettings.USE_R8, false) &&
+                type == BuildType.RELEASE) {
             task.add(new R8Task());
         } else {
             task.add(new IncrementalD8Task());
