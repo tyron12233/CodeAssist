@@ -5,17 +5,13 @@ import android.util.Log;
 import com.android.tools.r8.CompilationMode;
 import com.android.tools.r8.D8;
 import com.android.tools.r8.D8Command;
-import com.android.tools.r8.Diagnostic;
-import com.android.tools.r8.DiagnosticsHandler;
-import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
-import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
-import com.tyron.builder.log.ILogger;
-import com.tyron.builder.exception.CompilationFailedException;
 
 import java.io.File;
 import java.io.IOException;
@@ -34,7 +30,6 @@ public class D8Task extends Task {
 
 	private static final String TAG = D8Task.class.getSimpleName();
 
-	protected final DiagnosticsHandler diagnosticsHandler = new DiagnosticHandler();
 	protected ILogger logViewModel;
 	protected Project mProject;
 
@@ -66,7 +61,7 @@ public class D8Task extends Task {
 			startTime = System.currentTimeMillis();
 			List<Path> libraryDexes = getLibraryDexes();
 
-			D8Command command = D8Command.builder(diagnosticsHandler)
+			D8Command command = D8Command.builder(new DexDiagnosticHandler(logViewModel))
 					.addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
 					.setMinApiLevel(21)
 					.addLibraryFiles(getLibraryFiles())
@@ -109,7 +104,7 @@ public class D8Task extends Task {
 				}
 				if (lib.exists()) {
 					logViewModel.debug("Dexing jar " + parentFile.getName());
-					D8Command command = D8Command.builder(diagnosticsHandler)
+					D8Command command = D8Command.builder(new DexDiagnosticHandler(logViewModel))
 							.addLibraryFiles(getLibraryFiles())
 							.addClasspathFiles(libraries.stream().map(File::toPath).collect(Collectors.toList()))
 							.setMinApiLevel(21)
@@ -166,32 +161,4 @@ public class D8Task extends Task {
 		return paths;
 	}
 
-	public class DiagnosticHandler implements DiagnosticsHandler {
-		@Override
-		public void error(Diagnostic diagnostic) {
-			logViewModel.error(wrap(diagnostic));
-		}
-
-		@Override
-		public void warning(Diagnostic diagnostic) {
-			logViewModel.warning(wrap(diagnostic));
-		}
-
-		@Override
-		public void info(Diagnostic diagnostic) {
-			logViewModel.info(wrap(diagnostic));
-		}
-
-		@Override
-		public DiagnosticsLevel modifyDiagnosticsLevel(DiagnosticsLevel diagnosticsLevel, Diagnostic diagnostic) {
-			Log.d("DiagnosticHandler", diagnostic.getDiagnosticMessage());
-			return null;
-		}
-
-		private DiagnosticWrapper wrap(Diagnostic diagnostic) {
-			DiagnosticWrapper wrapper = new DiagnosticWrapper();
-			wrapper.setMessage(diagnostic.getDiagnosticMessage());
-			return wrapper;
-		}
-	}
 }

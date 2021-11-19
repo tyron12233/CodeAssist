@@ -1,20 +1,16 @@
 package com.tyron.builder.compiler.incremental.dex;
 
-import android.util.Log;
-
 import com.android.tools.r8.CompilationMode;
 import com.android.tools.r8.D8;
 import com.android.tools.r8.D8Command;
-import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.DiagnosticsHandler;
-import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.dex.D8Task;
+import com.tyron.builder.compiler.dex.DexDiagnosticHandler;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.Cache;
@@ -36,7 +32,7 @@ public class IncrementalD8Task extends Task {
 
     private static final String TAG = IncrementalD8Task.class.getSimpleName();
 
-    protected final DiagnosticsHandler diagnosticsHandler = new DiagnosticHandler();
+    private DiagnosticsHandler diagnosticsHandler;
     private List<Path> mClassFiles;
     private List<Path> mFilesToCompile;
 
@@ -58,6 +54,7 @@ public class IncrementalD8Task extends Task {
         mProject = project;
         mLogger = logger;
         mBuildType = type;
+        diagnosticsHandler = new DexDiagnosticHandler(logger);
         mDexCache = mProject.getFileManager().getDexCache();
 
         File output = new File(project.getBuildDirectory(), "intermediate/classes");
@@ -91,6 +88,11 @@ public class IncrementalD8Task extends Task {
         } else if (mBuildType == BuildType.DEBUG) {
             doDebug();
         }
+    }
+
+    @Override
+    protected void clean() {
+        super.clean();
     }
 
     private void doRelease() throws CompilationFailedException {
@@ -183,8 +185,6 @@ public class IncrementalD8Task extends Task {
         return dexes;
     }
 
-
-    private static final String INTERMEDIATE_DIR = "build/bin/classes/";
 
     private File getDexFile(File file) {
         File output = new File(mProject.getBuildDirectory(), "bin/classes/");
@@ -281,35 +281,4 @@ public class IncrementalD8Task extends Task {
         }
         return files;
     }
-
-    public class DiagnosticHandler implements DiagnosticsHandler {
-        @Override
-        public void error(Diagnostic diagnostic) {
-            mLogger.error(wrap(diagnostic));
-        }
-
-        @Override
-        public void warning(Diagnostic diagnostic) {
-            mLogger.warning(wrap(diagnostic));
-        }
-
-        @Override
-        public void info(Diagnostic diagnostic) {
-            mLogger.info(wrap(diagnostic));
-        }
-
-        @Override
-        public DiagnosticsLevel modifyDiagnosticsLevel(DiagnosticsLevel diagnosticsLevel,
-                                                       Diagnostic diagnostic) {
-            Log.d("DiagnosticHandler", diagnostic.getDiagnosticMessage());
-            return null;
-        }
-
-        private DiagnosticWrapper wrap(Diagnostic diagnostic) {
-            DiagnosticWrapper wrapper = new DiagnosticWrapper();
-            wrapper.setMessage(diagnostic.getDiagnosticMessage());
-            return wrapper;
-        }
-    }
-
 }

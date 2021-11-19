@@ -1,11 +1,6 @@
 package com.tyron.builder.compiler.dex;
 
-import android.util.Log;
-
 import com.android.tools.r8.CompilationMode;
-import com.android.tools.r8.Diagnostic;
-import com.android.tools.r8.DiagnosticsHandler;
-import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.OutputMode;
 import com.android.tools.r8.R8;
 import com.android.tools.r8.R8Command;
@@ -14,7 +9,6 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 
@@ -49,7 +43,7 @@ public class R8Task extends Task {
         mLogger.debug("Running R8");
         try {
             File output = new File(mProject.getBuildDirectory(), "bin");
-            R8Command.Builder command = R8Command.builder(new DiagnosticHandler())
+            R8Command.Builder command = R8Command.builder(new DexDiagnosticHandler(mLogger))
                     .addLibraryFiles(getLibraryFiles())
                     .addProgramFiles(getJarFiles())
                     .addProgramFiles(D8Task.getClassFiles(new File(mProject.getBuildDirectory(),
@@ -61,7 +55,6 @@ public class R8Task extends Task {
                     .setMinApiLevel(mProject.getMinSdk())
                     .setMode(CompilationMode.RELEASE)
                     .setOutput(output.toPath(), OutputMode.DexIndexed);
-
             R8.run(command.build());
         } catch (com.android.tools.r8.CompilationFailedException e) {
             throw new CompilationFailedException(e);
@@ -131,35 +124,5 @@ public class R8Task extends Task {
         path.add(FileManager.getAndroidJar().toPath());
         path.add(FileManager.getLambdaStubs().toPath());
         return path;
-    }
-
-    public class DiagnosticHandler implements DiagnosticsHandler {
-        @Override
-        public void error(Diagnostic diagnostic) {
-            mLogger.error(wrap(diagnostic));
-        }
-
-        @Override
-        public void warning(Diagnostic diagnostic) {
-            mLogger.warning(wrap(diagnostic));
-        }
-
-        @Override
-        public void info(Diagnostic diagnostic) {
-            mLogger.info(wrap(diagnostic));
-        }
-
-        @Override
-        public DiagnosticsLevel modifyDiagnosticsLevel(DiagnosticsLevel diagnosticsLevel,
-                                                       Diagnostic diagnostic) {
-            Log.d("DiagnosticHandler", diagnostic.getDiagnosticMessage());
-            return null;
-        }
-
-        private DiagnosticWrapper wrap(Diagnostic diagnostic) {
-            DiagnosticWrapper wrapper = new DiagnosticWrapper();
-            wrapper.setMessage(diagnostic.getDiagnosticMessage());
-            return wrapper;
-        }
     }
 }
