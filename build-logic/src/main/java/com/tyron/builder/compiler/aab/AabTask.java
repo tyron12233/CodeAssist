@@ -36,12 +36,9 @@ public class AabTask extends Task {
 
     private Project mProject;
     private ILogger mLogger;
-    private File dex;
     private File mBinDir;
     private File base;
     private File manifest;
-    private File bin;
-    private File jars;
 
     @Override
     public String getName() {
@@ -64,7 +61,7 @@ public class AabTask extends Task {
             throw new IOException("Failed to create resource output directory");
         }
 
-        dex = new File(mBinDir.getAbsolutePath(), "/base/dex");
+        File dex = new File(mBinDir.getAbsolutePath(), "/base/dex");
         if (!dex.exists() && !dex.mkdirs()) {
             throw new IOException("Failed to create resource output directory");
         }
@@ -81,6 +78,15 @@ public class AabTask extends Task {
         aab();
         buildApks();
         extractApks();
+    }
+
+    @Override
+    protected void clean() {
+        try {
+            FileUtils.deleteDirectory(base);
+        } catch (IOException ignore) {
+
+        }
     }
 
     private void extractApks() throws IOException {
@@ -249,7 +255,7 @@ public class AabTask extends Task {
     }
 
 
-    private void unZip() throws IOException {
+    private void unZip() {
         mLogger.debug("Unzipping proto format.");
         String zipFilePath = mBinDir.getAbsolutePath() + "/proto-format.zip";
         String destDir = base.getAbsolutePath() + "";
