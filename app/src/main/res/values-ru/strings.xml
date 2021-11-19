@@ -102,6 +102,7 @@
     <string name="menu_preview_layout">Предпросмотр интерфейса</string>
     <string name="action_menu_build_release">Собрать release APK</string>
     <string name="action_menu_build_debug">Собрать debug APK</string>
+    <string name="action_menu_build_aab">Собрать AAB</string>
 
     <string name="project_manager_projects">Проекты</string>
     <string name="project_manager_empty">Отсутствуют проекты</string>
