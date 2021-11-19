@@ -4,6 +4,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import com.tyron.builder.compiler.aab.AabTask;
 import com.tyron.builder.compiler.apk.PackageTask;
 import com.tyron.builder.compiler.apk.SignTask;
 import com.tyron.builder.compiler.dex.R8Task;
@@ -25,9 +26,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-import com.tyron.builder.compiler.incremental.dex.IncrementalD82Task;
-import com.tyron.builder.compiler.aab.AabTask;
 
 
 /**
@@ -106,6 +104,10 @@ public class ApkBuilder {
     }
 
     private List<Task> getTasks(BuildType type) {
+        return getAabTasks();
+    }
+
+    private List<Task> getApkTasks(BuildType type) {
         List<Task> task = new ArrayList<>();
         task.add(new CleanTask());
         task.add(new ManifestMergeTask());
@@ -117,16 +119,6 @@ public class ApkBuilder {
         task.add(new MergeSymbolsTask());
         task.add(new IncrementalKotlinCompiler());
         task.add(new IncrementalJavaTask());
-        //d82 task for move it classes.dex on base/dex
-		if (mProject.getSettings().getBoolean(ProjectSettings.USE_R8, false)) {
-         task.add(new R8Task());
-        } else {
-        task.add(new IncrementalD82Task());
-        }
-		//aab task make base.zip and convert throw dalvik 
-		//if (mProject.getSettings().getBoolean(ProjectSettings.ENABLE_AAB, false)) {
-        task.add(new AabTask());	
-		// }
         if (mProject.getSettings().getBoolean(ProjectSettings.USE_R8, false)) {
             task.add(new R8Task());
         } else {
@@ -135,5 +127,24 @@ public class ApkBuilder {
         task.add(new PackageTask());
         task.add(new SignTask());
         return task;
+    }
+
+
+    private List<Task> getAabTasks() {
+        List<Task> tasks = new ArrayList<>();
+        tasks.add(new CleanTask());
+        tasks.add(new ManifestMergeTask());
+        tasks.add(new GenerateFirebaseConfigTask());
+        tasks.add(new IncrementalAapt2Task(true));
+        tasks.add(new MergeSymbolsTask());
+        tasks.add(new IncrementalKotlinCompiler());
+        tasks.add(new IncrementalJavaTask());
+        if (mProject.getSettings().getBoolean(ProjectSettings.USE_R8, false)) {
+            tasks.add(new R8Task());
+        } else {
+            tasks.add(new IncrementalD8Task());
+        }
+        tasks.add(new AabTask());
+        return tasks;
     }
 }

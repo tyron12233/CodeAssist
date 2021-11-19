@@ -30,6 +30,15 @@ public class IncrementalAapt2Task extends Task {
 
     private Project mProject;
     private ILogger mLogger;
+    private final boolean mGenerateProtoFormat;
+
+    public IncrementalAapt2Task() {
+        this(false);
+    }
+
+    public IncrementalAapt2Task(boolean generateProtoFormat) {
+        mGenerateProtoFormat = generateProtoFormat;
+    }
 
     @Override
     public String getName() {
@@ -130,7 +139,6 @@ public class IncrementalAapt2Task extends Task {
         mLogger.debug("Linking resources");
 
         List<String> args = new ArrayList<>();
-
         args.add(getBinary().getAbsolutePath());
         args.add("link");
         args.add("-I");
@@ -199,7 +207,12 @@ public class IncrementalAapt2Task extends Task {
         args.add(mergedManifest.getAbsolutePath());
 
         args.add("-o");
-        args.add(getOutputPath().getParent() + "/generated.apk.res");
+        if (mGenerateProtoFormat) {
+            args.add(getOutputPath().getParent() + "/proto-format.zip");
+            args.add("--proto-format");
+        } else {
+            args.add(getOutputPath().getParent() + "/generated.apk.res");
+        }
 
         args.add("--output-text-symbols");
         File file = new File(getOutputPath(), "R.txt");
