@@ -9,7 +9,6 @@ import com.tyron.kotlin_completion.util.AsyncExecutor;
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
-import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.container.ComponentProvider;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
 import org.jetbrains.kotlin.idea.KotlinLanguage;
@@ -152,9 +151,9 @@ public class SourcePath {
         private void initializeIndexAsyncIfNeeded(ComponentProvider container) {
             indexAsync.execute(() -> {
                 if (!indexInitialized) {
-                    indexInitialized = true;
                     ModuleDescriptor module = (ModuleDescriptor) container.resolve(ModuleDescriptor.class).getValue();
-                    index.refresh(module, false);
+                    index.refresh(module, true);
+                    indexInitialized = true;
                 }
             });
         }
