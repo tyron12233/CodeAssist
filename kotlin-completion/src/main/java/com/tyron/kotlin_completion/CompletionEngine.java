@@ -44,6 +44,7 @@ public class CompletionEngine {
     public boolean isIndexing() {
         return sp.getIndex().getIndexing();
     }
+
     public SourcePath getSourcePath() {
         return sp;
     }
@@ -70,8 +71,12 @@ public class CompletionEngine {
     public CompletableFuture<CompletionList> complete(File file,
                                                       String contents,
                                                       int cursor) {
+        if (isIndexing()) {
+            return CompletableFuture.completedFuture(CompletionList.EMPTY);
+        }
+
         return async.compute(() -> {
-            Pair<CompiledFile, Integer> pair = recover(file, contents, Recompile.AFTER_DOT, cursor);
+            Pair<CompiledFile, Integer> pair = recover(file, contents, Recompile.NEVER, cursor);
             return new Completions().completions(pair.first, cursor, sp.getIndex());
         });
     }
