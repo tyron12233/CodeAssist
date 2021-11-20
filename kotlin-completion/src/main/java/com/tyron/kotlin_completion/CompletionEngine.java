@@ -1,22 +1,14 @@
 package com.tyron.kotlin_completion;
 
-import android.util.Log;
 import android.util.Pair;
 
 import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.completion.Completions;
 import com.tyron.kotlin_completion.util.AsyncExecutor;
 
-import org.apache.commons.io.FileUtils;
-import org.jetbrains.kotlin.com.intellij.util.ExceptionUtil;
-
 import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.nio.channels.ClosedByInterruptException;
-import java.nio.charset.Charset;
+import java.util.concurrent.CompletableFuture;
 
 public class CompletionEngine {
 
@@ -49,6 +41,9 @@ public class CompletionEngine {
         return INSTANCE;
     }
 
+    public boolean isIndexing() {
+        return sp.getIndex().getIndexing();
+    }
     public SourcePath getSourcePath() {
         return sp;
     }
@@ -72,12 +67,12 @@ public class CompletionEngine {
         return Pair.create(compiled, offset);
     }
 
-    public CompletionList complete(File file, String contents, int cursor) throws InterruptedException {
-        try {
+    public CompletableFuture<CompletionList> complete(File file,
+                                                      String contents,
+                                                      int cursor) {
+        return async.compute(() -> {
             Pair<CompiledFile, Integer> pair = recover(file, contents, Recompile.AFTER_DOT, cursor);
             return new Completions().completions(pair.first, cursor, sp.getIndex());
-        } catch (RuntimeException e) {
-            throw new InterruptedException(e.getMessage());
-        }
+        });
     }
 }
