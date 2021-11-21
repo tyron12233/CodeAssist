@@ -26,6 +26,7 @@ import java.io.File;
 public class CompilerService extends Service {
 
     private final CompilerBinder mBinder = new CompilerBinder();
+
     public class CompilerBinder extends Binder {
         public CompilerService getCompilerService() {
             return CompilerService.this;
@@ -173,21 +174,25 @@ public class CompilerService extends Service {
                     return;
                 }
 
-                Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setDataAndType(ApkInstaller.uriFromFile(this, new File(mProject.getBuildDirectory(), "bin/signed.apk")), "application/vnd.android.package-archive");
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                NotificationCompat.Builder builder =
+                        new NotificationCompat.Builder(this, "Compiler")
+                                .setSmallIcon(R.drawable.ic_launcher)
+                                .setContentTitle(projectName)
+                                .setContentText("Compilation success");
 
-                PendingIntent pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+                if (type != BuildType.AAB) {
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    intent.setDataAndType(ApkInstaller.uriFromFile(this,
+                            new File(mProject.getBuildDirectory(), "bin/signed.apk")),
+                            "application/vnd.android.package-archive");
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    PendingIntent pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+                    builder.addAction(new NotificationCompat.Action(0, "INSTALL", pending));
+                }
 
-                Notification notification = new NotificationCompat.Builder(this, "Compiler")
-                        .setSmallIcon(R.drawable.ic_launcher)
-                        .setContentTitle(projectName)
-                        .setContentText("Compilation success")
-                        .addAction(new NotificationCompat.Action(0, "INSTALL", pending))
-                        .build();
                 NotificationManagerCompat.from(this)
-                        .notify(201, notification);
+                        .notify(201, builder.build());
             }
 
         });

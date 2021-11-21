@@ -130,9 +130,11 @@ public class MainFragment extends Fragment {
 
                                 File file = new File(mProjectManager.getCurrentProject()
                                         .getBuildDirectory(), "bin/signed.apk");
-                                mProgressBar.postDelayed(() ->
-                                        ApkInstaller.installApplication(requireContext()
-                                                , file.getAbsolutePath()), 400);
+                                if (file.exists() && mBuildType != BuildType.AAB) {
+                                    mProgressBar.postDelayed(() ->
+                                            ApkInstaller.installApplication(requireContext()
+                                                    , file.getAbsolutePath()), 400);
+                                }
                             }
 
                             mBinder = null;
