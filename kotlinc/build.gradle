@@ -36,10 +36,10 @@ dependencies {
     implementation 'androidx.annotation:annotation:1.3.0'
     runtimeOnly ('org.jetbrains.kotlin:kotlin-reflect:1.5.21')
 
-    api files('libs/kotlin-compiler-compiler.jar', 'libs/kotlin-compiler-asm.jar',
-            'libs/kotlin-compiler-intellij.jar', 'libs/kotlin-compiler-ir.jar', 'libs/kotlin-compiler-fir.jar', 'libs/kotlin-compiler-other.jar')
-    api files('libs/kotlin-compiler-embeddable-1.5.21.jar')
-    api files('libs/kotlin-compiler-kotlin.jar')
+//    api files('libs/kotlin-compiler-compiler.jar', 'libs/kotlin-compiler-asm.jar',
+//            'libs/kotlin-compiler-intellij.jar', 'libs/kotlin-compiler-ir.jar', 'libs/kotlin-compiler-fir.jar', 'libs/kotlin-compiler-other.jar')
+    api files('libs/kotlin-compiler-embeddable-1.6.0.jar')
+//    api files('libs/kotlin-compiler-kotlin.jar')
 
 }
 repositories {

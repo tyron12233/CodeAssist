@@ -1,5 +1,0 @@
-Manifest-Version: 1.0
-Implementation-Title: kotlin-compiler-embeddable
-Implementation-Version: 1.5.21-release-314 (1.5.21)
-Implementation-Vendor: JetBrains
-

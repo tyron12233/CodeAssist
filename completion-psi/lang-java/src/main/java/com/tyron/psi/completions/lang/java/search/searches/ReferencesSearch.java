@@ -2,7 +2,6 @@ package com.tyron.psi.completions.lang.java.search.searches;
 
 import com.tyron.psi.completions.lang.java.search.PsiSearchHelper;
 import com.tyron.psi.completions.lang.java.search.QuerySearchRequest;
-import com.tyron.psi.completions.lang.java.search.SearchParameters;
 import com.tyron.psi.completions.lang.java.search.SearchRequestCollector;
 import com.tyron.psi.completions.lang.java.search.SearchRequestQuery;
 import com.tyron.psi.completions.lang.java.search.SearchSession;
@@ -19,14 +18,10 @@ import org.jetbrains.kotlin.com.intellij.psi.search.LocalSearchScope;
 import org.jetbrains.kotlin.com.intellij.psi.search.SearchScope;
 import org.jetbrains.kotlin.com.intellij.psi.search.searches.ExtensibleQueryFactory;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtilCore;
-import org.jetbrains.kotlin.com.intellij.util.Function;
 import org.jetbrains.kotlin.com.intellij.util.PairProcessor;
 import org.jetbrains.kotlin.com.intellij.util.Processor;
 import org.jetbrains.kotlin.com.intellij.util.Query;
 import org.jetbrains.kotlin.com.intellij.util.QueryExecutor;
-import org.jetbrains.kotlin.com.intellij.util.UniqueResultsQuery;
-
-import gnu.trove.TObjectHashingStrategy;
 
 /**
  * Locates all references to a specified PSI element.
@@ -188,7 +183,7 @@ public final class ReferencesSearch extends ExtensibleQueryFactory<PsiReference,
 
     @NotNull
     private static Query<PsiReference> uniqueResults(@NotNull Query<? extends PsiReference> composite) {
-        return new UniqueResultsQuery<>(composite, TObjectHashingStrategy.CANONICAL);
+       return null;
     }
 
     public static void searchOptimized(@NotNull PsiElement element,

@@ -27,7 +27,7 @@ public class PlainPrefixMatcher extends PrefixMatcher {
         if (myPrefixMatchesOnly) {
             return isStartMatch(name);
         }
-        return StringUtil.containsIgnoreCase(name, getPrefix());
+        return false;
     }
 
     @NotNull
