@@ -123,7 +123,6 @@ public class CleanTask extends Task {
                 }
             }
 
-            mLogger.debug("Checking path: "+ path + " package: " + packageName);
             if (mProject.getFileManager().list(path).isEmpty() && !classExists(packageName)) {
                 if (file.delete()) {
                     mLogger.debug("Deleted dex file " + path);
