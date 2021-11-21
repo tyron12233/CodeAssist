@@ -36,7 +36,7 @@ inline fun <reified Find> PsiElement.findParent() =
     PsiUtils.getParentsWithSelf(this).filterIsInstance<Find>().firstOrNull()
 
 const val MIN_SORT_LENGTH = 3
-const val MAX_COMPLETION_ITEMS = 50
+const val MAX_COMPLETION_ITEMS = 20
 
 fun completions(
     file: CompiledFile,
