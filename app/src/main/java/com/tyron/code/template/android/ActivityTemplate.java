@@ -28,7 +28,7 @@ public class ActivityTemplate extends JavaClassTemplate {
                 "public class " + CodeTemplate.CLASS_NAME + " extends Activity {\n\n" +
                 "   @Override\n" +
                 "   public void onCreate(Bundle savedInstanceState) {\n" +
-                "       \nsuper.onCreate(savedInstanceState);" +
+                "       super.onCreate(savedInstanceState);\n" +
                 "   }\n" +
                 "}");
     }
