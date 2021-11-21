@@ -6,6 +6,7 @@ import androidx.preference.PreferenceManager;
 
 import com.tyron.ProjectManager;
 import com.tyron.builder.model.Project;
+import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.CompletionEngine;
 
@@ -39,6 +40,10 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
         if (mTask != null) {
             mTask.cancel(true);
             mTask = null;
+        }
+
+        if (!mPreferences.getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
+            return null;
         }
 
         if (com.tyron.completion.provider.CompletionEngine.isIndexing()) {

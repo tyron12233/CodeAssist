@@ -2,7 +2,10 @@ package com.tyron.code.ui.editor.language.kotlin;
 
 import android.graphics.Color;
 
+import androidx.preference.PreferenceManager;
+
 import com.tyron.ProjectManager;
+import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.kotlin_completion.CompletionEngine;
 
 import org.antlr.v4.runtime.CharStream;
@@ -31,8 +34,11 @@ public class KotlinAnalyzer implements CodeAnalyzer {
 
     @Override
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
-        CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
-                .lintLater(mEditor.getCurrentFile());
+        if (PreferenceManager.getDefaultSharedPreferences(mEditor.getContext())
+                .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
+            CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
+                    .lintLater(mEditor.getCurrentFile());
+        }
         try {
             CodePointCharStream stream = CharStreams.fromString(String.valueOf(content));
             KotlinLexer lexer = new KotlinLexer(stream);

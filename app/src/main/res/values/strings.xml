@@ -76,6 +76,10 @@
     <!-- Editor settings -->
     <string name="code_engine_title">Completion Engine</string>
     <string name="settings_code_completions">Enable code completions</string>
+    <string name="settings_kotlin_completions">Enable code completions for Kotlin</string>
+    <string name="settings_kotlin_completions_desc">This feature is still experimental and may be slow.
+        Requires a powerful device.
+    </string>
     <string name="code_editor_error_highlight">Enable error highlighting</string>
 
     <string name="editor_settings_title">Code Editor settings</string>

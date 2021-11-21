@@ -14,6 +14,14 @@
             android:title="@string/settings_code_completions" />
 
         <SwitchPreference
+            android:defaultValue="false"
+            android:iconSpaceReserved="false"
+            android:key="experimental_kotlin_completions"
+            app:iconSpaceReserved="false"
+            android:title="@string/settings_kotlin_completions"
+            android:summary="@string/settings_kotlin_completions_desc"/>
+
+        <SwitchPreference
             android:defaultValue="true"
             app:iconSpaceReserved="false"
             android:key="code_editor_error_highlight"
