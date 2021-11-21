@@ -7,8 +7,6 @@ import com.tyron.kotlin_completion.classpath.DefaultClassPathResolver;
 import com.tyron.kotlin_completion.compiler.Compiler;
 import com.tyron.kotlin_completion.util.AsyncExecutor;
 
-import org.jetbrains.kotlin.config.CompilerConfiguration;
-
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -18,9 +16,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import kotlin.collections.SetsKt;
-import kotlin.jvm.functions.Function0;
 import kotlin.jvm.functions.Function1;
-import kotlin.jvm.internal.markers.KMutableSet;
 
 public class CompilerClassPath implements Closeable {
 
@@ -40,12 +36,14 @@ public class CompilerClassPath implements Closeable {
         mProject = project;
 
         mJavaSourcePath = project.getJavaFiles().values().stream().map(File::toPath).collect(Collectors.toSet());
+        mJavaSourcePath.addAll(project.getJavaFiles().values().stream().map(File::toPath).collect(Collectors.toSet()));
         mClassPath = project.getLibraries().stream().map(file -> new ClassPathEntry(file.toPath(), null)).collect(Collectors.toSet());
         mClassPath.add(new ClassPathEntry(FileManager.getAndroidJar().toPath(), null));
 
         compiler = new Compiler(mJavaSourcePath, mClassPath.stream().map(ClassPathEntry::getCompiledJar).collect(Collectors.toSet()));
         //compiler.updateConfiguration(mConfiguration);
     }
+
     private boolean refresh(boolean updateClassPath, boolean updateJavaSourcePath) {
         DefaultClassPathResolver resolver = new DefaultClassPathResolver(mProject.getLibraries());
         boolean refreshCompiler = updateJavaSourcePath;

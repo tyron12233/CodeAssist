@@ -5,7 +5,6 @@ import android.util.Log;
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
 import org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage;
-import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileSystem;
@@ -30,12 +29,12 @@ import org.jetbrains.kotlin.types.expressions.ExpressionTypingServices;
 import java.io.Closeable;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
+
+import kotlin.Pair;
 
 public class Compiler implements Closeable {
 
@@ -62,13 +61,10 @@ public class Compiler implements Closeable {
         return createPsiFile(content, Paths.get("dummy.virtual.kt"), KotlinLanguage.INSTANCE, CompletionKind.DEFAULT);
     }
     public PsiFile createPsiFile(String content, Path file, Language language, CompletionKind kind) {
-        Instant start = Instant.now();
-
         assert !content.contains("\r");
         PsiFile newFile = psiFileFactoryFor(kind).createFileFromText(file.toString(), language, content, true, false);
         assert newFile.getVirtualFile() != null;
 
-        Log.d("Compiler", "Parsing took " + Duration.between(start, Instant.now()).toMillis() + " ms");
         return newFile;
     }
 
@@ -90,14 +86,12 @@ public class Compiler implements Closeable {
 
     public Pair<BindingContext, ComponentProvider> compileKtFiles(Collection<? extends KtFile> files, Collection<KtFile> sourcePath, CompletionKind kind) {
         mCompileLock.lock();
-        Instant start = Instant.now();
-
         try {
             Pair<ComponentProvider, BindingTraceContext> pair = mDefaultCompileEnvironment.createContainer(sourcePath);
-            ((LazyTopDownAnalyzer) pair.first.resolve(LazyTopDownAnalyzer.class).getValue()).analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files, DataFlowInfo.Companion.getEMPTY(), null);
-            return Pair.create(pair.second.getBindingContext(), pair.first);
+            ((LazyTopDownAnalyzer) pair.getFirst().resolve(LazyTopDownAnalyzer.class).getValue())
+                    .analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files, DataFlowInfo.Companion.getEMPTY(), null);
+            return new Pair<>(pair.getSecond().getBindingContext(), pair.getFirst());
         } finally {
-            Log.d("KotlinCompiler", "Compilation took " + Duration.between(start, Instant.now()).toMillis() + " ms");
             mCompileLock.unlock();
         }
     }
@@ -106,23 +100,25 @@ public class Compiler implements Closeable {
         return mDefaultCompileEnvironment;
     }
 
-
     public Pair<BindingContext, ComponentProvider> compileJavaFiles(Collection<? extends PsiJavaFile> files, Collection<KtFile> sourcePath, CompletionKind kind) {
         mCompileLock.lock();
         try {
             Pair<ComponentProvider, BindingTraceContext> pair = mDefaultCompileEnvironment.createContainer(sourcePath);
-            ((LazyTopDownAnalyzer) pair.first.resolve(LazyTopDownAnalyzer.class).getValue()).analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files, DataFlowInfo.Companion.getEMPTY(), null);
-            return Pair.create(pair.second.getBindingContext(), pair.first);
+            ((LazyTopDownAnalyzer) pair.getFirst().resolve(LazyTopDownAnalyzer.class).getValue())
+                    .analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations,
+                            files, DataFlowInfo.Companion.getEMPTY(), null);
+            return new Pair<>(pair.getSecond().getBindingContext(), pair.getFirst());
         } finally {
             mCompileLock.unlock();
         }
     }
 
     public Pair<BindingContext, ComponentProvider> compileKtExpression(KtExpression expression, LexicalScope scopeWithImports, Collection<KtFile> sourcePath) {
+        Log.d(null, "Compiling kt expression: " + expression.getText());
         mCompileLock.lock();
         try {
             Pair<ComponentProvider, BindingTraceContext> pair = mDefaultCompileEnvironment.createContainer(sourcePath);
-            ExpressionTypingServices incrementalCompiler = pair.first.create(ExpressionTypingServices.class);
+            ExpressionTypingServices incrementalCompiler = pair.getFirst().create(ExpressionTypingServices.class);
             incrementalCompiler.getTypeInfo(
                     scopeWithImports,
                     expression,
@@ -131,7 +127,7 @@ public class Compiler implements Closeable {
                     InferenceSession.Companion.getDefault(),
                     pair.getSecond(),
                     true);
-            return Pair.create(pair.second.getBindingContext(), pair.first);
+            return new Pair<>(pair.getSecond().getBindingContext(), pair.getFirst());
         } finally {
             mCompileLock.unlock();
         }

@@ -2,7 +2,9 @@ package com.tyron.kotlin_completion.completion
 
 import android.util.Log
 import com.tyron.completion.drawable.CircleDrawable
-import com.tyron.completion.model.*
+import com.tyron.completion.model.CompletionItem
+import com.tyron.completion.model.CompletionList
+import com.tyron.completion.model.Position
 import com.tyron.kotlin_completion.CompiledFile
 import com.tyron.kotlin_completion.index.Symbol
 import com.tyron.kotlin_completion.index.SymbolIndex
@@ -42,7 +44,9 @@ fun completions(
     index: SymbolIndex,
     partial: String
 ): CompletionList {
+
     val (elementItems, isExhaustive, receiver) = elementCompletionItems(file, cursor, partial)
+
     val elementItemList = elementItems.toList()
     val elementItemLabels = elementItemList.mapNotNull { it.label }.toSet()
 
@@ -57,8 +61,6 @@ fun completions(
             + (if (elementItemList.isEmpty()) keywordCompletionItems(partial) else emptySequence())
             )
 
-    val start = Instant.now();
-
     val itemList = items
         .take(MAX_COMPLETION_ITEMS)
         .toList()
@@ -68,11 +70,6 @@ fun completions(
     val list = CompletionList()
     list.items = itemList
     list.isIncomplete = isIncomplete
-
-    Log.d(
-        "Completions",
-        "Merging completions took " + Duration.between(start, Instant.now()).toMillis() + " ms"
-    )
     return list
 }
 
@@ -104,7 +101,7 @@ private fun indexCompletionItems(
         if (receiverType?.constructor?.declarationDescriptor == null) null else
             PsiUtils.getFqNameSafe(receiverType.constructor.declarationDescriptor)
 
-    val result =  index
+    val result = index
         .query(partial, receiverTypeName, limit = MAX_COMPLETION_ITEMS)
         .asSequence()
         .filter { it.kind != Symbol.Kind.MODULE }
@@ -164,25 +161,17 @@ private fun matchingPrefixLength(left: FqName, right: FqName): Int =
 
 /** Finds keyword completions starting with the given partial identifier. */
 private fun keywordCompletionItems(partial: String): Sequence<CompletionItem> {
-    val start = Instant.now();
-    try {
-        return (KtTokens.SOFT_KEYWORDS.types + KtTokens.KEYWORDS.types).asSequence()
-            .mapNotNull { (it as? KtKeywordToken)?.value }
-            .filter { it.startsWith(partial) }
-            .map {
-                CompletionItem().apply {
-                    label = it
-                    iconKind = CircleDrawable.Kind.Keyword
-                    commitText = label
-                    cursorOffset = label.length
-                }
+    return (KtTokens.SOFT_KEYWORDS.types + KtTokens.KEYWORDS.types).asSequence()
+        .mapNotNull { (it as? KtKeywordToken)?.value }
+        .filter { it.startsWith(partial) }
+        .map {
+            CompletionItem().apply {
+                label = it
+                iconKind = CircleDrawable.Kind.Keyword
+                commitText = label
+                cursorOffset = label.length
             }
-    } finally {
-        Log.d(
-            "KeywordCompletions",
-            "KeywordCompletion took " + Duration.between(start, Instant.now()) + " ms"
-        )
-    }
+        }
 }
 
 fun functionInsertText(desc: FunctionDescriptor, snippetsEnabled: Boolean, name: String): String {
@@ -215,43 +204,35 @@ private fun elementCompletionItems(
     cursor: Int,
     partial: String
 ): ElementCompletionItems {
-    val start = Instant.now()
-    try {
-        val surroundingElement = completableElement(file, cursor) ?: return ElementCompletionItems(
-            emptySequence(),
-            true,
-            null
-        )
-        val completions = elementCompletions(file, cursor, surroundingElement)
+    val surroundingElement = completableElement(file, cursor) ?: return ElementCompletionItems(
+        emptySequence(),
+        true,
+        null
+    )
+    val completions = elementCompletions(file, cursor, surroundingElement)
 
-        val matchesName = completions.filter {
-            containsCharactersInOrder(
-                name(it),
-                partial,
-                caseSensitive = false
-            )
-        }
-        val sorted = matchesName.takeIf { partial.length >= MIN_SORT_LENGTH }
-            ?.sortedBy { stringDistance(name(it), partial) }
-            ?: matchesName.sortedBy { if (name(it).startsWith(partial)) 0 else 1 }
-        val visible = sorted.filter(isVisible(file, cursor))
-
-        val isExhaustive = surroundingElement !is KtNameReferenceExpression
-                && surroundingElement !is KtTypeElement
-                && surroundingElement !is KtQualifiedExpression
-        val receiver = (surroundingElement as? KtQualifiedExpression)?.receiverExpression
-
-        return ElementCompletionItems(
-            visible.map { completionItem(it, surroundingElement, file) },
-            isExhaustive,
-            receiver
-        )
-    } finally {
-        Log.d(
-            "Completions",
-            "ElementCompletions took " + Duration.between(start, Instant.now()).toMillis() + " ms"
+    val matchesName = completions.filter {
+        containsCharactersInOrder(
+            name(it),
+            partial,
+            caseSensitive = false
         )
     }
+    val sorted = matchesName.takeIf { partial.length >= MIN_SORT_LENGTH }
+        ?.sortedBy { stringDistance(name(it), partial) }
+        ?: matchesName.sortedBy { if (name(it).startsWith(partial)) 0 else 1 }
+    val visible = sorted.filter(isVisible(file, cursor))
+
+    val isExhaustive = surroundingElement !is KtNameReferenceExpression
+            && surroundingElement !is KtTypeElement
+            && surroundingElement !is KtQualifiedExpression
+    val receiver = (surroundingElement as? KtQualifiedExpression)?.receiverExpression
+
+    return ElementCompletionItems(
+        visible.map { completionItem(it, surroundingElement, file) },
+        isExhaustive,
+        receiver
+    )
 }
 
 private val callPattern = Regex("(.*)\\((?:\\$\\d+)?\\)(?:\\$0)?")
@@ -361,17 +342,17 @@ fun isNotVisible(
     target: DeclarationDescriptorWithVisibility,
     from: DeclarationDescriptor
 ): Boolean {
-    when (target.visibility.delegate) {
+    return when (target.visibility.delegate) {
         Visibilities.Private, Visibilities.PrivateToThis -> {
             if (DescriptorUtils.isTopLevelDeclaration(target))
-                return !sameFile(target, from)
+                !sameFile(target, from)
             else
-                return !sameParent(target, from)
+                !sameParent(target, from)
         }
         Visibilities.Protected -> {
-            return !subclassParent(target, from)
+            !subclassParent(target, from)
         }
-        else -> return false
+        else -> false
     }
 }
 
@@ -379,8 +360,8 @@ fun sameFile(target: DeclarationDescriptor, from: DeclarationDescriptor): Boolea
     val targetFile = DescriptorUtils.getContainingSourceFile(target)
     val fromFile = DescriptorUtils.getContainingSourceFile(from)
 
-    if (targetFile == SourceFile.NO_SOURCE_FILE || fromFile == SourceFile.NO_SOURCE_FILE) return true
-    else return targetFile.name == fromFile.name
+    return if (targetFile == SourceFile.NO_SOURCE_FILE || fromFile == SourceFile.NO_SOURCE_FILE) true
+    else targetFile.name == fromFile.name
 }
 
 fun sameParent(target: DeclarationDescriptor, from: DeclarationDescriptor): Boolean {

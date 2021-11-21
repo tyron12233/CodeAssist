@@ -15,18 +15,11 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.tyron.code.ui.editor.CompletionItemAdapter;
-import com.tyron.completion.ParseTask;
-import com.tyron.completion.Parser;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
-import com.tyron.completion.provider.CompletionProvider;
-import com.tyron.completion.rewrite.AddImport;
 
-import java.io.File;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 import io.github.rosemoe.sora.data.CompletionItem;
@@ -115,10 +108,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      * Not needed
      */
     protected void setAdapter(EditorCompletionAdapter adapter) {
-        /*mAdapter = adapter;
-        if (adapter == null) {
-            mAdapter = new DefaultCompletionItemAdapter();
-        }*/
+
     }
 
     public void setCancelShowUp(boolean val) {
@@ -334,7 +324,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      * @param results     Items of analysis
      * @param requestTime The time that this thread starts
      */
-    private void displayResults(final List<CompletionItem> results, long requestTime) {
+    public void displayResults(final List<CompletionItem> results, long requestTime) {
         if (mLastPrefix.equals(selectedItem)) {
             selectedItem = "";
             return;

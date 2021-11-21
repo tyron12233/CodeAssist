@@ -7,6 +7,7 @@ import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
 import io.github.rosemoe.sora.interfaces.EditorLanguage;
 import io.github.rosemoe.sora.interfaces.NewlineHandler;
+import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.util.MyCharacter;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
@@ -18,8 +19,7 @@ public class KotlinLanguage implements EditorLanguage {
 
     public KotlinLanguage(CodeEditor editor) {
         mEditor = editor;
-
-        mAnalyzer = new KotlinAnalyzer();
+        mAnalyzer = new KotlinAnalyzer(mEditor);
     }
 
     @Override
@@ -34,7 +34,7 @@ public class KotlinLanguage implements EditorLanguage {
 
     @Override
     public boolean isAutoCompleteChar(char ch) {
-        return true; //return ch == '.' || MyCharacter.isJavaIdentifierPart(ch);
+        return ch == '.' || MyCharacter.isJavaIdentifierPart(ch);
     }
 
     @Override
@@ -74,6 +74,30 @@ public class KotlinLanguage implements EditorLanguage {
 
     @Override
     public NewlineHandler[] getNewlineHandlers() {
-        return new NewlineHandler[0];
+        return handlers;
+    }
+
+    private final NewlineHandler[] handlers = new NewlineHandler[]{new BraceHandler()};
+
+    class BraceHandler implements NewlineHandler {
+
+        @Override
+        public boolean matchesRequirement(String beforeText, String afterText) {
+            return beforeText.endsWith("{") && afterText.startsWith("}");
+        }
+
+        @Override
+        public HandleResult handleNewline(String beforeText, String afterText, int tabSize) {
+            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
+            int advanceBefore = getIndentAdvance(beforeText);
+            int advanceAfter = getIndentAdvance(afterText);
+            String text;
+            StringBuilder sb = new StringBuilder("\n")
+                    .append(TextUtils.createIndent(count + advanceBefore, tabSize, useTab()))
+                    .append('\n')
+                    .append(text = TextUtils.createIndent(count + advanceAfter, tabSize, useTab()));
+            int shiftLeft = text.length() + 1;
+            return new HandleResult(sb, shiftLeft);
+        }
     }
 }

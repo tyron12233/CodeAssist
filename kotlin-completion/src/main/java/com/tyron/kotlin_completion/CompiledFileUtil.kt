@@ -1,6 +1,5 @@
 package com.tyron.kotlin_completion
 
-import android.util.Log
 import com.tyron.kotlin_completion.compiler.CompletionKind
 import com.tyron.kotlin_completion.completion.findParent
 import com.tyron.kotlin_completion.position.Position.changedRegion
@@ -18,18 +17,34 @@ import java.nio.file.Paths
  * convert a declaration (e.g. of a class or a function) to a referencing
  * expression before parsing it.
  */
-fun parseAtPoint(classPath: CompilerClassPath, cursor: Int, oldCursor: Int, content: String, parse: KtFile, asReference: Boolean = false): KtElement? {
+fun parseAtPoint(
+    classPath: CompilerClassPath,
+    cursor: Int,
+    oldCursor: Int,
+    content: String,
+    parse: KtFile,
+    asReference: Boolean = false
+): KtElement? {
     val oldChanged = changedRegion(parse.text, content)?.first ?: TextRange(cursor, cursor)
     val psi = parse.findElementAt(oldCursor) ?: return null
     val oldParent = psi.parentsWithSelf()
         .filterIsInstance<KtDeclaration>()
         .firstOrNull { it.textRange.contains(oldChanged) } ?: parse
 
-    Log.d("CompiledFile","PSI path: ${psi.parentsWithSelf().toList()}");
+    val (surroundingContent, offset) = contentAndOffsetFromElement(
+        parse,
+        content,
+        psi,
+        oldParent,
+        asReference
+    )
 
-    val (surroundingContent, offset) = contentAndOffsetFromElement(parse, content, psi, oldParent, asReference)
     val padOffset = " ".repeat(offset)
-    val recompile = classPath.compiler.createKtFile(padOffset + surroundingContent, Paths.get("dummy.virtual.kt"), CompletionKind.DEFAULT)
+    val recompile = classPath.compiler.createKtFile(
+        padOffset + surroundingContent,
+        Paths.get("dummy.virtual.kt"),
+        CompletionKind.DEFAULT
+    )
     return recompile.findElementAt(cursor)?.findParent<KtElement>()
 }
 
@@ -60,7 +75,7 @@ private fun contentAndOffsetFromElement(parse: KtFile, content: String, psi: Psi
 
     // Otherwise just use the expression
     val recoveryRange = parent.textRange
-    Log.d("CompiledFile", "Re-parsing ${parse.name}")
+   // Log.d("CompiledFile", "Re-parsing ${parse.name}")
 
     surroundingContent = content.substring(recoveryRange.startOffset, content.length - (parse.text.length - recoveryRange.endOffset))
     offset = recoveryRange.startOffset
