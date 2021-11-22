@@ -11,7 +11,6 @@ import com.tyron.code.ui.file.tree.model.TreeFile;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 public class ActionContext {
 
@@ -74,7 +73,7 @@ public class ActionContext {
     public SubMenu addSubMenu(String name, String title) {
         int id = getMenuId(name);
         MenuItem item = getMenu().findItem(id);
-        if (item == null) {
+        if (item == null || item.getSubMenu() == null) {
             return getMenu().addSubMenu(id, Menu.NONE, Menu.NONE, title);
         } else {
             return item.getSubMenu();

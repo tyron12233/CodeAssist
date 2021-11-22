@@ -36,7 +36,7 @@ public class CreateClassAction extends FileAction {
     public void addMenu(ActionContext context) {
         SubMenu subMenu = context.addSubMenu("new",
                 context.getFragment().getString(R.string.menu_new));
-        subMenu.add("Java class")
+        subMenu.add(R.string.menu_action_new_java_class)
                 .setOnMenuItemClickListener(item -> {
                     CreateClassDialogFragment dialogFragment =
                             CreateClassDialogFragment.newInstance(getTemplates(),
