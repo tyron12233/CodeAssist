@@ -22,25 +22,10 @@ import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 
 public class TreeFileManagerFragment extends Fragment {
-
-    private static final Comparator<File> FILE_FIRST_ORDER = (file1, file2) -> {
-        if (file1.isFile() && file2.isDirectory()) {
-            return -1;
-        } else if (file2.isFile() && file1.isDirectory()) {
-            return 1;
-        } else {
-            return String.CASE_INSENSITIVE_ORDER.compare(file1.getName(), file2.getName());
-        }
-    };
 
     public static TreeFileManagerFragment newInstance(File root) {
         TreeFileManagerFragment fragment = new TreeFileManagerFragment();
@@ -140,7 +125,7 @@ public class TreeFileManagerFragment extends Fragment {
     public void refresh() {
         if (treeView != null) {
             Executors.newSingleThreadExecutor().execute(() -> {
-                TreeNode<TreeFile> nodes = TreeNode.root(getNodes());
+                TreeNode<TreeFile> nodes = TreeNode.root(TreeUtil.getNodes(mRootFile));
                 if (getActivity() != null) {
                     requireActivity().runOnUiThread(() -> {
                         treeView.refreshTreeView(nodes);
@@ -151,45 +136,7 @@ public class TreeFileManagerFragment extends Fragment {
         }
     }
 
-    private List<TreeNode<TreeFile>> getNodes() {
-        List<TreeNode<TreeFile>> nodes = new ArrayList<>();
-        if (mRootFile == null) {
-            return nodes;
-        }
 
-        TreeNode<TreeFile> root = new TreeNode<>(
-                TreeFile.fromFile(mRootFile), 0
-        );
-        root.setExpanded(true);
-
-        File[] children = mRootFile.listFiles();
-        if (children != null) {
-            Arrays.sort(children, FILE_FIRST_ORDER);
-            for (File file : children) {
-                addNode(root, file, 1);
-            }
-        }
-        nodes.add(root);
-        return nodes;
-    }
-
-    private void addNode(TreeNode<TreeFile> node, File file, int level) {
-        TreeNode<TreeFile> childNode = new TreeNode<>(
-                TreeFile.fromFile(file), level
-        );
-
-        if (file.isDirectory()) {
-            File[] children = file.listFiles();
-            if (children != null) {
-                Arrays.sort(children, FILE_FIRST_ORDER);
-                for (File child : children) {
-                    addNode(childNode, child, level + 1);
-                }
-            }
-        }
-
-        node.addChild(childNode);
-    }
 
     private void openFile(File file) {
         Fragment parent = getParentFragment();
