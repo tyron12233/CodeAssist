@@ -91,6 +91,8 @@
     <string name="keyboard_enable_suggestions_description">Enable keyboard suggestions</string>
 
     <!-- file manager menu -->
+    <string name="error">Error</string>
+    <string name="error_resource_name_restriction">Resource names must only contain lowercase a–z, 0–9 or an underscore.</string>
     <string name="menu_action_new_java_class">Java class file</string>
     <string name="menu_new">New</string>
     <string name="menu_refactor">Refactor</string>
