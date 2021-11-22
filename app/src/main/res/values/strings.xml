@@ -96,6 +96,7 @@
     <string name="menu_action_new_java_class">Java class </string>
     <string name="menu_action_new_kotlin_class">Kotlin class</string>
     <string name="menu_action_new_directory">Directory</string>
+    <string name="directory_name">Directory name</string>
     <string name="menu_new">New</string>
     <string name="menu_refactor">Refactor</string>
     <string name="item_project">Project</string>

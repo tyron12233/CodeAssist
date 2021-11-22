@@ -2,7 +2,6 @@ package com.tyron.code.ui.file.action.file;
 
 import android.content.DialogInterface;
 import android.text.Editable;
-import android.view.MenuItem;
 import android.view.SubMenu;
 import android.view.View;
 import android.widget.Button;
@@ -10,6 +9,7 @@ import android.widget.EditText;
 
 import androidx.appcompat.app.AlertDialog;
 
+import com.google.android.material.textfield.TextInputLayout;
 import com.tyron.code.R;
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.file.action.ActionContext;
@@ -31,10 +31,11 @@ public class CreateDirectoryAction extends FileAction {
         SubMenu subMenu = context.addSubMenu("new",
                 context.getFragment().getString(R.string.menu_new));
         subMenu.add(R.string.menu_action_new_directory)
-                .setOnMenuItemClickListener(i -> onMenuItemClick(i, context));
+                .setOnMenuItemClickListener(i -> onMenuItemClick(context));
     }
 
-    public boolean onMenuItemClick(MenuItem menuItem, ActionContext context) {
+    @SuppressWarnings("ConstantConditions")
+    public boolean onMenuItemClick(ActionContext context) {
         File currentDir = context.getCurrentNode().getValue().getFile();
         AlertDialog dialog = new AlertDialog.Builder(context.getFragment().requireContext())
                 .setView(R.layout.create_class_dialog)
@@ -44,9 +45,11 @@ public class CreateDirectoryAction extends FileAction {
                 .create();
         dialog.setOnShowListener((d) -> {
             dialog.findViewById(R.id.til_class_type).setVisibility(View.GONE);
+            TextInputLayout til = dialog.findViewById(R.id.til_class_name);
             EditText editText = dialog.findViewById(R.id.et_class_name);
             Button positive = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
 
+            til.setHint(R.string.directory_name);
             positive.setOnClickListener(v -> {
                 File fileToCreate = new File(currentDir, editText.getText().toString());
                 if (!fileToCreate.mkdirs()) {
