@@ -1,10 +1,6 @@
 package com.tyron.code.ui.file.action.java;
 
-import android.content.Context;
-import android.view.Menu;
 import android.view.SubMenu;
-
-import androidx.fragment.app.FragmentActivity;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.ProjectManager;
@@ -17,7 +13,6 @@ import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.file.CreateClassDialogFragment;
 import com.tyron.code.ui.file.action.ActionContext;
 import com.tyron.code.ui.file.action.FileAction;
-import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.code.util.ProjectUtils;
 
@@ -79,8 +74,9 @@ public class CreateClassAction extends FileAction {
     }
 
     private List<CodeTemplate> getTemplates() {
-        return Arrays.asList(new AbstractTemplate(),
-                new InterfaceTemplate(),
-                new JavaClassTemplate());
+        return Arrays.asList(
+                new JavaClassTemplate(),
+                new AbstractTemplate(),
+                new InterfaceTemplate());
     }
 }
