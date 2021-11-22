@@ -31,7 +31,6 @@ public class DeleteFileAction extends FileAction {
                                 deleteFiles(context);
                                 context.getTreeView().deleteNode(context.getCurrentNode());
                                 context.getTreeView().refreshTreeView();
-
                             })
                             .show();
                     return true;

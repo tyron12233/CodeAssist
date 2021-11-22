@@ -21,17 +21,21 @@ public class TreeUtil {
         }
     };
 
+    public static List<TreeNode<TreeFile>> getNodes(File rootFile) {
+        return getNodes(rootFile, 0);
+    }
+
     /**
      * Get all the tree note at the given root
      */
-    public static List<TreeNode<TreeFile>> getNodes(File rootFile) {
+    public static List<TreeNode<TreeFile>> getNodes(File rootFile, int initialLevel) {
         List<TreeNode<TreeFile>> nodes = new ArrayList<>();
         if (rootFile == null) {
             return nodes;
         }
 
         TreeNode<TreeFile> root = new TreeNode<>(
-                TreeFile.fromFile(rootFile), 0
+                TreeFile.fromFile(rootFile), initialLevel
         );
         root.setExpanded(true);
 
@@ -39,7 +43,7 @@ public class TreeUtil {
         if (children != null) {
             Arrays.sort(children, FILE_FIRST_ORDER);
             for (File file : children) {
-                addNode(root, file, 1);
+                addNode(root, file, initialLevel + 1);
             }
         }
         nodes.add(root);
