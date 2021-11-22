@@ -103,6 +103,8 @@ public class PackageTask extends Task {
             }
 
             if (mBuildType == BuildType.DEBUG) {
+                builder.setDebugMode(true);
+                // For debug mode, dex files are not merged to save up compile time
                 for (File it : mProject.getLibraries()) {
                     File parent = it.getParentFile();
                     if (parent != null) {
@@ -116,8 +118,6 @@ public class PackageTask extends Task {
                     }
                 }
             }
-
-            builder.setDebugMode(true);
             builder.sealApk();
         } catch (ApkCreationException | SealedApkException | DuplicateFileException e) {
             throw new CompilationFailedException(e);
