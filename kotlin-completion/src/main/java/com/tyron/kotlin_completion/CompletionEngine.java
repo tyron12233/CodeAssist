@@ -6,7 +6,7 @@ import android.util.Pair;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.common.until.Debouncer;
+import com.tyron.common.util.Debouncer;
 import com.tyron.kotlin_completion.completion.Completions;
 import com.tyron.kotlin_completion.diagnostic.ConvertDiagnosticKt;
 import com.tyron.kotlin_completion.util.AsyncExecutor;
