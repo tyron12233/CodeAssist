@@ -2,6 +2,8 @@ plugins {
     id 'com.android.library'
 }
 
+apply plugin: 'kotlin-android'
+
 android {
     compileSdk 31
 
