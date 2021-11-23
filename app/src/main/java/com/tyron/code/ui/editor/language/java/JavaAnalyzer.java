@@ -62,6 +62,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             ourMap.put(type, EditorColorScheme.COMMENT);
         }
 
+        ourMap.put(JavaTokenType.AT, EditorColorScheme.ANNOTATION);
         ourMap.put(JavaTokenType.RBRACE, EditorColorScheme.OPERATOR);
         ourMap.put(JavaTokenType.LBRACE, EditorColorScheme.OPERATOR);
         ourMap.put(JavaTokenType.SEMICOLON, EditorColorScheme.KEYWORD);
@@ -113,7 +114,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         } else {
             lexer.start(content);
         }
-
         while (delegate.shouldAnalyze()) {
             token = lexer.getTokenType();
             if (token == null) {
@@ -123,7 +123,20 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             if (color != null) {
                 colors.addIfNeeded(helper.getLine(), helper.getColumn(), color);
             } else {
-                colors.addIfNeeded(helper.getLine(), helper.getColumn(), EditorColorScheme.TEXT_NORMAL);
+                if (token == JavaTokenType.IDENTIFIER) {
+                    try {
+                        Span span = colors.getSpanMap().get(helper.getLine() - 1).get(helper.getColumn() - 1);
+                        if (span != null) {
+                            if (span.colorId == EditorColorScheme.ANNOTATION) {
+                                colors.addIfNeeded(helper.getLine(), helper.getColumn(), EditorColorScheme.ANNOTATION);
+                            }
+                        }
+                    } catch (IndexOutOfBoundsException ignore) {
+
+                    }
+                } else {
+                    colors.addIfNeeded(helper.getLine(), helper.getColumn(), EditorColorScheme.TEXT_NORMAL);
+                }
             }
             if (token == JavaTokenType.RBRACE) {
                 colors.addIfNeeded(helper.getLine(), helper.getColumn(), EditorColorScheme.OPERATOR);
