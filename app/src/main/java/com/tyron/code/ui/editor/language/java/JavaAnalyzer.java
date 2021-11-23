@@ -15,6 +15,7 @@ import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.provider.CompletionEngine;
 
 import org.jetbrains.kotlin.com.intellij.lang.java.lexer.JavaLexer;
+import org.jetbrains.kotlin.com.intellij.lexer.Lexer;
 import org.jetbrains.kotlin.com.intellij.lexer.LexerPosition;
 import org.jetbrains.kotlin.com.intellij.pom.java.LanguageLevel;
 import org.jetbrains.kotlin.com.intellij.psi.JavaDocTokenType;
@@ -88,6 +89,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         }
     }
 
+    private final Lexer mLexer = new JavaLexer(LanguageLevel.JDK_1_8);
     private final CodeEditor mEditor;
     private DefaultLintClient mClient;
     private final SharedPreferences mPreferences;
@@ -107,15 +109,14 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         List<NavigationItem> labels = new ArrayList<>();
         int maxSwitch = 1, currSwitch = 0;
 
-        JavaLexer lexer = new JavaLexer(LanguageLevel.JDK_1_8);
         Object prevState = colors.getExtra();
         if (prevState instanceof LexerPosition) {
-            lexer.restore(((LexerPosition) prevState));
+            mLexer.restore(((LexerPosition) prevState));
         } else {
-            lexer.start(content);
+            mLexer.start(content);
         }
         while (delegate.shouldAnalyze()) {
-            token = lexer.getTokenType();
+            token = mLexer.getTokenType();
             if (token == null) {
                 break;
             }
@@ -163,8 +164,8 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 block.startColumn = helper.getColumn();
                 stack.push(block);
             }
-            helper.update(lexer.getTokenEnd() - lexer.getTokenStart());
-            lexer.advance();
+            helper.update(mLexer.getTokenEnd() - mLexer.getTokenStart());
+            mLexer.advance();
         }
 
         if (stack.isEmpty()) {
@@ -175,7 +176,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         colors.determine(helper.getLine());
         colors.setSuppressSwitch(maxSwitch + 10);
         colors.setNavigation(labels);
-        colors.setExtra(lexer.getCurrentPosition());
+        colors.setExtra(mLexer.getCurrentPosition());
 
         List<DiagnosticWrapper> innerDiagnostics = new ArrayList<>();
         // do not compile the file if it not yet closed as it will cause issues when
