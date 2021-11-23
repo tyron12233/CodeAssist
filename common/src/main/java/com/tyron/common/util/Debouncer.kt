@@ -1,4 +1,4 @@
-package com.tyron.kotlin_completion.symbols
+package com.tyron.common.util
 
 import java.time.Duration
 import java.util.concurrent.Executors
