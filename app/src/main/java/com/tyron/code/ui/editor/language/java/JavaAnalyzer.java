@@ -137,7 +137,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                         Span span =
                                 colors.getSpanMap()
                                         .get(helper.getLine() - 1)
-                                        .get(helper.getColumn() - 1);
+                                        .get(helper.getColumn() - 2);
                         if (span != null) {
                             if (span.colorId == EditorColorScheme.ANNOTATION) {
                                 color = EditorColorScheme.ANNOTATION;
