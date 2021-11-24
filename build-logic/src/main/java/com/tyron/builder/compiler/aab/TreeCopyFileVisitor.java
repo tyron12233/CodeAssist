@@ -15,8 +15,7 @@ public class TreeCopyFileVisitor extends SimpleFileVisitor<Path> {
     }
 
     @Override
-    public FileVisitResult preVisitDirectory(Path dir,
-											 BasicFileAttributes attrs) throws IOException {
+    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
 
         Path resolve = target.resolve(source.relativize(dir));
         if (Files.notExists(resolve)) {
@@ -28,8 +27,7 @@ public class TreeCopyFileVisitor extends SimpleFileVisitor<Path> {
     }
 
     @Override
-    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
-	throws IOException {
+    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 
         Path resolve = target.resolve(source.relativize(file));
         Files.copy(file, resolve);
