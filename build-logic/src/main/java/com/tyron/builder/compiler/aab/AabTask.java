@@ -84,9 +84,7 @@ public class AabTask extends Task {
     protected void clean() {
         try {
             FileUtils.deleteDirectory(base);
-        } catch (IOException ignore) {
-
-        }
+        } catch (IOException ignored) {}
     }
 
     private void extractApks() throws IOException {
@@ -146,7 +144,6 @@ public class AabTask extends Task {
         args.add("--mode=universal");
         args.add("--aapt2=" + BuildModule.getContext().getApplicationInfo().nativeLibraryDir + "/libaapt2.so");
 
-
         BinaryExecutor executor = new BinaryExecutor();
         executor.setCommands(args);
         if (!executor.execute().isEmpty()) {
@@ -199,7 +196,7 @@ public class AabTask extends Task {
         zipFolder(Paths.get(folderToZip), Paths.get(zipName));
     }
 
-    // Uses java.util.zip to create zip file
+    // Uses java.util.zip package to create a zip file
     private void zipFolder(final Path sourceFolderPath, Path zipPath) throws IOException {
         final ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipPath.toFile()));
         Files.walkFileTree(sourceFolderPath, new SimpleFileVisitor<Path>() {
