@@ -10,6 +10,7 @@ import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.code.lint.DefaultLintClient;
+import com.tyron.common.util.Debouncer;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.provider.CompletionEngine;
@@ -26,6 +27,7 @@ import org.jetbrains.kotlin.com.intellij.psi.tree.IElementType;
 import org.jetbrains.kotlin.com.intellij.psi.tree.TokenSet;
 import org.openjdk.javax.tools.Diagnostic;
 
+import java.io.File;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -47,11 +49,14 @@ import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.text.TextAnalyzer;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.EditorColorScheme;
+import kotlin.Unit;
+import kotlin.jvm.functions.Function0;
 
 public class JavaAnalyzer extends JavaCodeAnalyzer {
 
     private static final String TAG = JavaAnalyzer.class.getSimpleName();
     private static final Map<IElementType, Integer> ourMap;
+    private static final Debouncer ourDebouncer = new Debouncer(Duration.ofMillis(500));
 
     static {
         ourMap = new HashMap<>();
@@ -83,7 +88,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         fillMap(map, color, keys.getTypes());
     }
 
-    protected static void fillMap(Map<IElementType, Integer> map, int color, IElementType ... types) {
+    protected static void fillMap(Map<IElementType, Integer> map, int color, IElementType... types) {
         for (IElementType type : types) {
             map.put(type, color);
         }
@@ -94,6 +99,9 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     private DefaultLintClient mClient;
     private final SharedPreferences mPreferences;
 
+    private final Stack<BlockLine> mBlockStack = new Stack<>();
+    private final List<NavigationItem> mNavigationList = new ArrayList<>();
+
     public JavaAnalyzer(CodeEditor editor) {
         mEditor = editor;
         mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
@@ -101,13 +109,13 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
 
-        Instant startTime = Instant.now();
         IElementType token;
         LineNumberCalculator helper = new LineNumberCalculator(content);
 
-        Stack<BlockLine> stack = new Stack<>();
-        List<NavigationItem> labels = new ArrayList<>();
-        int maxSwitch = 1, currSwitch = 0;
+        mBlockStack.clear();
+        mNavigationList.clear();
+        int maxSwitch = 1;
+        int currSwitch = 0;
 
         Object prevState = colors.getExtra();
         if (prevState instanceof LexerPosition) {
@@ -115,6 +123,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         } else {
             mLexer.start(content);
         }
+
         while (delegate.shouldAnalyze()) {
             token = mLexer.getTokenType();
             if (token == null) {
@@ -139,10 +148,11 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     colors.addIfNeeded(helper.getLine(), helper.getColumn(), EditorColorScheme.TEXT_NORMAL);
                 }
             }
+
             if (token == JavaTokenType.RBRACE) {
                 colors.addIfNeeded(helper.getLine(), helper.getColumn(), EditorColorScheme.OPERATOR);
-                if (!stack.isEmpty()) {
-                    BlockLine block = stack.pop();
+                if (!mBlockStack.isEmpty()) {
+                    BlockLine block = mBlockStack.pop();
                     block.endLine = helper.getLine();
                     block.endColumn = helper.getColumn();
                     if (block.startLine != block.endLine) {
@@ -152,7 +162,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             }
 
             if (token == JavaTokenType.LBRACE) {
-                if (stack.isEmpty()) {
+                if (mBlockStack.isEmpty()) {
                     if (currSwitch > maxSwitch) {
                         maxSwitch = currSwitch;
                     }
@@ -162,22 +172,29 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 BlockLine block = colors.obtainNewBlock();
                 block.startLine = helper.getLine();
                 block.startColumn = helper.getColumn();
-                stack.push(block);
+                mBlockStack.push(block);
             }
             helper.update(mLexer.getTokenEnd() - mLexer.getTokenStart());
             mLexer.advance();
         }
 
-        if (stack.isEmpty()) {
+        if (mBlockStack.isEmpty()) {
             if (currSwitch > maxSwitch) {
                 maxSwitch = currSwitch;
             }
         }
         colors.determine(helper.getLine());
         colors.setSuppressSwitch(maxSwitch + 10);
-        colors.setNavigation(labels);
+        colors.setNavigation(mNavigationList);
         colors.setExtra(mLexer.getCurrentPosition());
 
+        analyzeInBackground(() -> false, colors);
+    }
+
+    /**
+     * Does not actually analyze in background yet, waiting for the code editor to support it
+     */
+    private Unit analyzeInBackground(Function0<Boolean> cancelCallback, TextAnalyzeResult result) {
         List<DiagnosticWrapper> innerDiagnostics = new ArrayList<>();
         // do not compile the file if it not yet closed as it will cause issues when
         // compiling multiple files at the same time
@@ -186,10 +203,16 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             if (project != null) {
                 JavaCompilerService service = CompletionEngine.getInstance().getCompiler(project);
                 if (service.isReady()) {
+                    File currentFile = mEditor.getCurrentFile();
                     try {
                         try (CompileTask task = service.compile(
-                                Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
-                            innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
+                                Collections.singletonList(new SourceFileObject(currentFile.toPath(),
+                                        project.getFileManager().readFile(currentFile),
+                                        Instant.now())))) {
+                            innerDiagnostics.addAll(task.diagnostics.stream()
+                                    .map(DiagnosticWrapper::new)
+                                    .collect(Collectors.toList())
+                            );
                         }
                     } catch (RuntimeException e) {
                         Log.e("JavaAnalyzer", "Failed compiling the file", e);
@@ -198,9 +221,10 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
             }
         }
-        markDiagnostics(innerDiagnostics, colors);
-
-        Log.d(TAG, "Analysis took " + Duration.between(startTime, Instant.now()).toMillis() + " ms");
+        if (!cancelCallback.invoke()) {
+            markDiagnostics(innerDiagnostics, result);
+        }
+        return Unit.INSTANCE;
     }
 
     private void markDiagnostics(List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
@@ -226,7 +250,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
 
                 int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
-                colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
+                colors .markProblemRegion(flag, start.line, start.column, end.line, end.column);
             } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
                 // Work around for the indexer requiring a sorted positions
                 Log.w(TAG, "Unable to mark problem region: diagnostics " + diagnostics, e);
