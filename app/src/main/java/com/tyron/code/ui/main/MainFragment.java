@@ -209,11 +209,6 @@ public class MainFragment extends Fragment {
                         if (fragment instanceof CodeEditorFragment) {
                             ((CodeEditorFragment) fragment).analyze();
                         }
-
-                        fragment = getChildFragmentManager().findFragmentByTag("file_manager");
-                        if (fragment instanceof TreeFileManagerFragment) {
-                            ((TreeFileManagerFragment) fragment).setRoot(mProject.mRoot);
-                        }
                     });
                 }
             };
@@ -572,6 +567,11 @@ public class MainFragment extends Fragment {
 
         mFilesViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
+
+        Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
+        if (fragment instanceof TreeFileManagerFragment) {
+            ((TreeFileManagerFragment) fragment).setRoot(mProject.mRoot);
+        }
 
         Intent intent = new Intent(requireContext(), IndexService.class);
         requireActivity().startService(intent);
