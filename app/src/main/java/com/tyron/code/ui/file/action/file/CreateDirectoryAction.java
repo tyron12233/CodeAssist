@@ -78,6 +78,6 @@ public class CreateDirectoryAction extends FileAction {
     private void refreshTreeView(ActionContext context) {
         TreeNode<TreeFile> currentNode = context.getCurrentNode();
         TreeUtil.updateNode(currentNode);
-        context.getTreeView().refreshTreeView(currentNode);
+        context.getTreeView().refreshTreeView();
     }
 }

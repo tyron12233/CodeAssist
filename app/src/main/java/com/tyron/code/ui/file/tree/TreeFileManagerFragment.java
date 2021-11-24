@@ -66,12 +66,12 @@ public class TreeFileManagerFragment extends Fragment {
         refreshLayout.addView(root);
         refreshLayout.setOnRefreshListener(() -> {
             Executors.newSingleThreadExecutor().execute(() -> {
-                TreeNode<TreeFile> node = new TreeNode<>(new TreeFile(mRootFile), 0);
+                TreeNode<TreeFile> node = treeView.getAllNodes().get(0);
                 TreeUtil.updateNode(node);
                 if (getActivity() != null) {
                     requireActivity().runOnUiThread(() -> {
                         refreshLayout.setRefreshing(false);
-                        treeView.refreshTreeView(node);
+                        treeView.refreshTreeView();
                     });
                 }
             });
