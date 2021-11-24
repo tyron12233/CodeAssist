@@ -19,6 +19,9 @@ import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.common.util.SingleTextWatcher;
 
 import java.io.File;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class CreateDirectoryAction extends FileAction {
     @Override
@@ -78,7 +81,35 @@ public class CreateDirectoryAction extends FileAction {
     private void refreshTreeView(ActionContext context) {
         TreeNode<TreeFile> node = context.getCurrentNode();
         File fileToRefresh = node.getValue().getFile();
-        node.setChildren(TreeUtil.getNodes(fileToRefresh, node.getLevel()).get(0).getChildren());
+
+        Set<File> expandedNodes = getExpandedNodes(node);
+        List<TreeNode<TreeFile>> newChildren = TreeUtil.getNodes(fileToRefresh, node.getLevel())
+                .get(0).getChildren();
+        setExpandedNodes(newChildren, expandedNodes);
+        node.setChildren(newChildren);
         context.getTreeView().refreshTreeView();
+    }
+
+    private void setExpandedNodes(List<TreeNode<TreeFile>> nodeList, Set<File> expandedNodes) {
+        for (TreeNode<TreeFile> treeFileTreeNode : nodeList) {
+            if (expandedNodes.contains(treeFileTreeNode.getValue().getFile())) {
+                treeFileTreeNode.setExpanded(true);
+            }
+
+            setExpandedNodes(treeFileTreeNode.getChildren(), expandedNodes);
+        }
+    }
+
+    private Set<File> getExpandedNodes(TreeNode<TreeFile> node) {
+        Set<File> expandedNodes = new HashSet<>();
+        if (node.isExpanded()) {
+            expandedNodes.add(node.getValue().getFile());
+        }
+        for (TreeNode<TreeFile> child : node.getChildren()) {
+            if (child.getValue().getFile().isDirectory()) {
+                expandedNodes.addAll(getExpandedNodes(child));
+            }
+        }
+        return expandedNodes;
     }
 }

@@ -23,11 +23,11 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.SimpleItemAnimator;
 
-import java.util.List;
-
 import com.tyron.code.ui.component.tree.base.BaseNodeViewFactory;
 import com.tyron.code.ui.component.tree.base.SelectableTreeAction;
 import com.tyron.code.ui.component.tree.helper.TreeHelper;
+
+import java.util.List;
 
 /**
  * Created by xinyuanzhong on 2017/4/20.
@@ -86,7 +86,7 @@ public class TreeView<D> implements SelectableTreeAction<D> {
 
     public void refreshTreeView() {
         if (rootView != null) {
-            ((TreeViewAdapter) rootView.getAdapter()).refreshView();
+            ((TreeViewAdapter<?>) rootView.getAdapter()).refreshView();
         }
     }
 
