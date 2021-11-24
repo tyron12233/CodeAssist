@@ -214,7 +214,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                                     .collect(Collectors.toList())
                             );
                         }
-                    } catch (RuntimeException e) {
+                    } catch (Throwable e) {
                         Log.e("JavaAnalyzer", "Failed compiling the file", e);
                         service.close();
                     }
