@@ -13,8 +13,11 @@ import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.model.CompletionList;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class CompletionEngine {
@@ -22,9 +25,9 @@ public class CompletionEngine {
 
     private final Set<File> mCachedPaths = new HashSet<>();
 
-    public static CompletionEngine Instance = null;
+    public static volatile CompletionEngine Instance = null;
 
-    public static CompletionEngine getInstance() {
+    public static synchronized CompletionEngine getInstance() {
         if (Instance == null) {
             Instance = new CompletionEngine();
         }
@@ -98,18 +101,19 @@ public class CompletionEngine {
 
         setIndexing(true);
         project.clear();
-        project.getJavaFiles();
         project.getKotlinFiles();
         project.getRJavaFiles();
         project.getLibraries();
 
         JavaCompilerService compiler = getCompiler(project);
-        project.getRJavaFiles().forEach((key, value) -> {
-            try (CompileTask task = compiler.compile(value.toPath())) {
-                Log.d(TAG, "Compiled " + task.root().getPackage());
-            }
-        });
 
+        List<File> filesToIndex = new ArrayList<>();
+        filesToIndex.addAll(project.getJavaFiles().values());
+        filesToIndex.addAll(project.getRJavaFiles().values());
+        try (CompileTask task = compiler.compile(filesToIndex.stream().map(File::toPath)
+                .toArray(Path[]::new))) {
+            Log.d(TAG, "Index success.");
+        }
         setIndexing(false);
         if (callback != null) {
             handler.post(callback);
@@ -117,7 +121,7 @@ public class CompletionEngine {
     }
 
     @NonNull
-    public CompletionList complete(Project project, File file, String contents, long cursor) throws InterruptedException {
+    public synchronized CompletionList complete(Project project, File file, String contents, long cursor) throws InterruptedException {
         // Do not request for completion if we're indexing
         if (mIndexing) {
             return CompletionList.EMPTY;
@@ -125,11 +129,14 @@ public class CompletionEngine {
 
         try {
             return new CompletionProvider(getCompiler(project)).complete(file, contents, cursor);
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
+            if (e instanceof InterruptedException) {
+                throw e;
+            }
+
             Log.d(TAG, "Completion failed: " + Log.getStackTraceString(e) + " Clearing cache.");
             mProvider = null;
         }
         return CompletionList.EMPTY;
     }
-
 }

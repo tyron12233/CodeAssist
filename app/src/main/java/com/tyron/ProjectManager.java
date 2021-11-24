@@ -49,9 +49,9 @@ public class ProjectManager {
         void onProjectOpen(Project project);
     }
 
-    private static ProjectManager INSTANCE = null;
+    private static volatile ProjectManager INSTANCE = null;
 
-    public static ProjectManager getInstance() {
+    public static synchronized ProjectManager getInstance() {
         if (INSTANCE == null) {
             INSTANCE = new ProjectManager();
         }

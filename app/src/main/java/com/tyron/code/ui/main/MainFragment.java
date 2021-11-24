@@ -526,7 +526,7 @@ public class MainFragment extends Fragment {
 
         int pos = mAdapter.getPosition(file);
         if (pos != -1) {
-            mPager.setCurrentItem(pos);
+            mFilesViewModel.updateCurrentPosition(pos);
         } else {
             mFilesViewModel.addFile(file);
             mFilesViewModel.updateCurrentPosition(mAdapter.getPosition(file));

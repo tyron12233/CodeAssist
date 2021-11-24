@@ -318,6 +318,9 @@ public class FileManager {
 
     public void save(final File file, final String contents) {
         service.submit(() -> {
+            if (mOpenedFiles.get(file) != null) {
+                updateFile(file, contents);
+            }
             try {
                 FileUtils.writeStringToFile(file, contents, Charset.defaultCharset());
             } catch (IOException e) {
