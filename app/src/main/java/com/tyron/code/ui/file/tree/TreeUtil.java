@@ -7,7 +7,9 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class TreeUtil {
 
@@ -20,6 +22,37 @@ public class TreeUtil {
             return String.CASE_INSENSITIVE_ORDER.compare(file1.getName(), file2.getName());
         }
     };
+
+    public static void updateNode(TreeNode<TreeFile> node) {
+        Set<File> expandedNodes = TreeUtil.getExpandedNodes(node);
+        List<TreeNode<TreeFile>> newChildren = getNodes(node.getValue().getFile(), node.getLevel())
+                .get(0).getChildren();
+        setExpandedNodes(newChildren, expandedNodes);
+        node.setChildren(newChildren);
+    }
+
+    private static void setExpandedNodes(List<TreeNode<TreeFile>> nodeList, Set<File> expandedNodes) {
+        for (TreeNode<TreeFile> treeFileTreeNode : nodeList) {
+            if (expandedNodes.contains(treeFileTreeNode.getValue().getFile())) {
+                treeFileTreeNode.setExpanded(true);
+            }
+
+            setExpandedNodes(treeFileTreeNode.getChildren(), expandedNodes);
+        }
+    }
+
+    private static Set<File> getExpandedNodes(TreeNode<TreeFile> node) {
+        Set<File> expandedNodes = new HashSet<>();
+        if (node.isExpanded()) {
+            expandedNodes.add(node.getValue().getFile());
+        }
+        for (TreeNode<TreeFile> child : node.getChildren()) {
+            if (child.getValue().getFile().isDirectory()) {
+                expandedNodes.addAll(getExpandedNodes(child));
+            }
+        }
+        return expandedNodes;
+    }
 
     public static List<TreeNode<TreeFile>> getNodes(File rootFile) {
         return getNodes(rootFile, 0);

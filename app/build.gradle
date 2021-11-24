@@ -44,6 +44,7 @@ dependencies {
     implementation project(path: ':code-editor')
     implementation project(path: ':completion-psi:impl')
     implementation project(path: ':completion-psi')
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:1.1.5")
 
     implementation 'androidx.appcompat:appcompat:1.3.1'

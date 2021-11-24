@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.component.tree.TreeView;
@@ -60,7 +61,23 @@ public class TreeFileManagerFragment extends Fragment {
                 requireContext(), TreeNode.root(Collections.emptyList()));
 
         root.addView(treeView.getView(), new FrameLayout.LayoutParams(-1, -1));
-        return root;
+
+        SwipeRefreshLayout refreshLayout = new SwipeRefreshLayout(requireContext());
+        refreshLayout.addView(root);
+        refreshLayout.setOnRefreshListener(() -> {
+            Executors.newSingleThreadExecutor().execute(() -> {
+                TreeNode<TreeFile> node = new TreeNode<>(new TreeFile(mRootFile), 0);
+                TreeUtil.updateNode(node);
+                if (getActivity() != null) {
+                    requireActivity().runOnUiThread(() -> {
+                        refreshLayout.setRefreshing(false);
+                        treeView.refreshTreeView(node);
+                    });
+                }
+            });
+        });
+
+        return refreshLayout;
     }
 
     @Override
