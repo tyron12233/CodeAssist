@@ -6,11 +6,12 @@ import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.Paths;
 
 @RunWith(RobolectricTestRunner.class)
 public class ProjectTest {
 
-    private static final File ROOT = new File("C:/Users/bounc/AndroidStudioProjects/CodeAssist");
+    private static final File ROOT = Paths.get(".").toFile();
     @Test
     public void init() throws IOException {
         Project project = new ProjectImpl(ROOT);
