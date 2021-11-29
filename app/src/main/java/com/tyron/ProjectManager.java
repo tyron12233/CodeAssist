@@ -3,7 +3,6 @@ package com.tyron;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import com.google.common.base.Charsets;
 import com.google.gson.Gson;
@@ -17,7 +16,6 @@ import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.util.Decompress;
 import com.tyron.completion.provider.CompletionEngine;
-import com.tyron.psi.completion.CompletionEnvironment;
 import com.tyron.resolver.DependencyDownloader;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.DependencyUtils;
@@ -58,7 +56,6 @@ public class ProjectManager {
         return INSTANCE;
     }
 
-    private CompletionEnvironment mCompletionEnvironment;
     private final List<OnProjectOpenListener> mProjectOpenListeners = new ArrayList<>();
     private Project mCurrentProject;
 
@@ -246,15 +243,7 @@ public class ProjectManager {
     public void closeProject(@NonNull Project project) {
         if (project.equals(mCurrentProject)) {
             mCurrentProject = null;
-            if (mCompletionEnvironment != null) {
-                mCompletionEnvironment.close();
-            }
         }
-    }
-
-    @Nullable
-    public CompletionEnvironment getCompletionEnvironment() {
-        return mCompletionEnvironment;
     }
 
     public Project getCurrentProject() {
