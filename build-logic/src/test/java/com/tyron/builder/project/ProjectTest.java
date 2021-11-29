@@ -6,7 +6,7 @@ import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.Paths;
+import java.nio.file.Paths;
 
 @RunWith(RobolectricTestRunner.class)
 public class ProjectTest {
