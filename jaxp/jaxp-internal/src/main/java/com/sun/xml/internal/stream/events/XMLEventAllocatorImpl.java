@@ -27,11 +27,11 @@ package com.sun.xml.internal.stream.events;
 
 import com.sun.org.apache.xerces.internal.impl.PropertyManager;
 import java.util.List;
-import org.openjdk.javax.xml.stream.util.XMLEventAllocator;
-import org.openjdk.javax.xml.stream.*;
-import org.openjdk.javax.xml.stream.events.*;
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.namespace.QName;
+import javax.xml.stream.util.XMLEventAllocator;
+import javax.xml.stream.*;
+import javax.xml.stream.events.*;
+import javax.xml.XMLConstants;
+import javax.xml.namespace.QName;
 import com.sun.org.apache.xerces.internal.util.NamespaceContextWrapper;
 import com.sun.org.apache.xerces.internal.util.NamespaceSupport;
 
@@ -45,7 +45,7 @@ public class XMLEventAllocatorImpl implements XMLEventAllocator {
     public XMLEventAllocatorImpl() {
     }
 
-    public org.openjdk.javax.xml.stream.events.XMLEvent allocate(org.openjdk.javax.xml.stream.XMLStreamReader xMLStreamReader) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public javax.xml.stream.events.XMLEvent allocate(javax.xml.stream.XMLStreamReader xMLStreamReader) throws javax.xml.stream.XMLStreamException {
         if(xMLStreamReader == null )
             throw new XMLStreamException("Reader cannot be null");
         //        allocate is not supposed to change the state of the reader so we shouldn't be calling next.
@@ -53,7 +53,7 @@ public class XMLEventAllocatorImpl implements XMLEventAllocator {
         return getXMLEvent(xMLStreamReader);
     }
 
-    public void allocate(org.openjdk.javax.xml.stream.XMLStreamReader xMLStreamReader, org.openjdk.javax.xml.stream.util.XMLEventConsumer xMLEventConsumer) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public void allocate(javax.xml.stream.XMLStreamReader xMLStreamReader, javax.xml.stream.util.XMLEventConsumer xMLEventConsumer) throws javax.xml.stream.XMLStreamException {
         XMLEvent currentEvent = getXMLEvent(xMLStreamReader);
         if(currentEvent != null )
             xMLEventConsumer.add(currentEvent);
@@ -61,7 +61,7 @@ public class XMLEventAllocatorImpl implements XMLEventAllocator {
         return;
     }
 
-    public org.openjdk.javax.xml.stream.util.XMLEventAllocator newInstance() {
+    public javax.xml.stream.util.XMLEventAllocator newInstance() {
         return new XMLEventAllocatorImpl();
     }
 

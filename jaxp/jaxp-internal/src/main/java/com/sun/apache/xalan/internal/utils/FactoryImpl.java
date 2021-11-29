@@ -25,8 +25,8 @@
 
 package com.sun.apache.xalan.internal.utils;
 
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.SAXParserFactory;
 
 /**
  *

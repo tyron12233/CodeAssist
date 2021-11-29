@@ -27,10 +27,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.Writer;
 
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.stream.XMLEventWriter;
-import org.openjdk.javax.xml.stream.util.XMLEventConsumer;
-import org.openjdk.javax.xml.stream.XMLStreamWriter;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.stream.XMLEventWriter;
+import javax.xml.stream.util.XMLEventConsumer;
+import javax.xml.stream.XMLStreamWriter;
 
 import com.sun.org.apache.xalan.internal.xsltc.trax.SAX2DOM;
 import com.sun.org.apache.xalan.internal.xsltc.trax.SAX2StAXEventWriter;

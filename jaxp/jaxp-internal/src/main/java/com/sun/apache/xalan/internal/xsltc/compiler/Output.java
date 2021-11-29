@@ -27,7 +27,7 @@ import java.io.OutputStreamWriter;
 import java.util.Properties;
 import java.util.StringTokenizer;
 
-import org.openjdk.javax.xml.transform.OutputKeys;
+import javax.xml.transform.OutputKeys;
 
 import com.sun.apache.bcel.internal.generic.ConstantPoolGen;
 import com.sun.apache.xalan.internal.xsltc.compiler.util.ClassGenerator;

@@ -22,7 +22,7 @@
  */
 package com.sun.apache.xpath.internal;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import com.sun.apache.xml.internal.dtm.DTM;
 import com.sun.apache.xml.internal.dtm.DTMManager;

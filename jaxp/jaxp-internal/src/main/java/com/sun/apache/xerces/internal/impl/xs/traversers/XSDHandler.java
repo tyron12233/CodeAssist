@@ -30,9 +30,9 @@ import java.util.Map;
 import java.util.Stack;
 import java.util.Vector;
 
-import org.openjdk.javax.xml.stream.XMLEventReader;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.XMLEventReader;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
 
 import com.sun.apache.xerces.internal.impl.xs.opti.SchemaDOM;
 import com.sun.apache.xerces.internal.impl.Constants;
@@ -107,7 +107,7 @@ import com.sun.apache.xerces.internal.xs.XSSimpleTypeDefinition;
 import com.sun.apache.xerces.internal.xs.XSTerm;
 import com.sun.apache.xerces.internal.xs.XSTypeDefinition;
 import com.sun.apache.xerces.internal.xs.datatypes.ObjectList;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;

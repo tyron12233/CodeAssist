@@ -27,7 +27,7 @@ import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.Properties;
 
-import org.openjdk.javax.xml.transform.Result;
+import javax.xml.transform.Result;
 
 import com.sun.org.apache.xml.internal.serializer.utils.MsgKey;
 import com.sun.org.apache.xml.internal.serializer.utils.Utils;

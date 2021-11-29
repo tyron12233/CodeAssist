@@ -21,13 +21,13 @@
 
 package com.sun.org.apache.xpath.internal.jaxp;
 
-import org.openjdk.javax.xml.namespace.QName;
-import org.openjdk.javax.xml.namespace.NamespaceContext;
-import org.openjdk.javax.xml.xpath.XPathExpressionException;
-import org.openjdk.javax.xml.xpath.XPathConstants;
-import org.openjdk.javax.xml.xpath.XPathFunctionResolver;
-import org.openjdk.javax.xml.xpath.XPathVariableResolver;
-import org.openjdk.javax.xml.xpath.XPathExpression;
+import javax.xml.namespace.QName;
+import javax.xml.namespace.NamespaceContext;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathFunctionResolver;
+import javax.xml.xpath.XPathVariableResolver;
+import javax.xml.xpath.XPathExpression;
 
 import com.sun.org.apache.xml.internal.dtm.DTM;
 import com.sun.org.apache.xpath.internal.*;
@@ -44,20 +44,20 @@ import org.w3c.dom.traversal.NodeIterator;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
-import org.openjdk.javax.xml.parsers.*;
+import javax.xml.parsers.*;
 
 import java.io.IOException;
 
 /**
  * The XPathImpl class provides implementation for the methods defined  in
- * org.openjdk.javax.xml.xpath.XPath interface. This provide simple access to the results
+ * javax.xml.xpath.XPath interface. This provide simple access to the results
  * of an XPath expression.
  *
  *
  * @version $Revision: 1.10 $
  * @author  Ramesh Mandava
  */
-public class XPathImpl implements org.openjdk.javax.xml.xpath.XPath {
+public class XPathImpl implements javax.xml.xpath.XPath {
 
     // Private variables
     private XPathVariableResolver variableResolver;
@@ -187,7 +187,7 @@ public class XPathImpl implements org.openjdk.javax.xml.xpath.XPath {
 
 
     private XObject eval(String expression, Object contextItem)
-        throws org.openjdk.javax.xml.transform.TransformerException {
+        throws javax.xml.transform.TransformerException {
         com.sun.org.apache.xpath.internal.XPath xpath = new com.sun.org.apache.xpath.internal.XPath( expression,
             null, prefixResolver, com.sun.org.apache.xpath.internal.XPath.SELECT );
         com.sun.org.apache.xpath.internal.XPathContext xpathSupport = null;
@@ -277,10 +277,10 @@ public class XPathImpl implements org.openjdk.javax.xml.xpath.XPath {
             // NullPointerException at this stage for some other reason
             // then we have to reurn XPathException
             throw new XPathExpressionException ( npe );
-        } catch ( org.openjdk.javax.xml.transform.TransformerException te ) {
+        } catch ( javax.xml.transform.TransformerException te ) {
             Throwable nestedException = te.getException();
-            if ( nestedException instanceof org.openjdk.javax.xml.xpath.XPathFunctionException ) {
-                throw (org.openjdk.javax.xml.xpath.XPathFunctionException)nestedException;
+            if ( nestedException instanceof javax.xml.xpath.XPathFunctionException ) {
+                throw (javax.xml.xpath.XPathFunctionException)nestedException;
             } else {
                 // For any other exceptions we need to throw
                 // XPathExpressionException ( as per spec )
@@ -303,7 +303,7 @@ public class XPathImpl implements org.openjdk.javax.xml.xpath.XPath {
      }
 
     private Object getResultAsType( XObject resultObject, QName returnType )
-        throws org.openjdk.javax.xml.transform.TransformerException {
+        throws javax.xml.transform.TransformerException {
         // XPathConstants.STRING
         if ( returnType.equals( XPathConstants.STRING ) ) {
             return resultObject.str();
@@ -396,7 +396,7 @@ public class XPathImpl implements org.openjdk.javax.xml.xpath.XPath {
                     prefixResolver, functionResolver, variableResolver,
                     featureSecureProcessing, useServiceMechanism, featureManager );
             return ximpl;
-        } catch ( org.openjdk.javax.xml.transform.TransformerException te ) {
+        } catch ( javax.xml.transform.TransformerException te ) {
             throw new XPathExpressionException ( te ) ;
         }
     }
@@ -471,10 +471,10 @@ public class XPathImpl implements org.openjdk.javax.xml.xpath.XPath {
             throw new XPathExpressionException ( e );
         } catch( IOException e ) {
             throw new XPathExpressionException ( e );
-        } catch ( org.openjdk.javax.xml.transform.TransformerException te ) {
+        } catch ( javax.xml.transform.TransformerException te ) {
             Throwable nestedException = te.getException();
-            if ( nestedException instanceof org.openjdk.javax.xml.xpath.XPathFunctionException ) {
-                throw (org.openjdk.javax.xml.xpath.XPathFunctionException)nestedException;
+            if ( nestedException instanceof javax.xml.xpath.XPathFunctionException ) {
+                throw (javax.xml.xpath.XPathFunctionException)nestedException;
             } else {
                 throw new XPathExpressionException ( te );
             }

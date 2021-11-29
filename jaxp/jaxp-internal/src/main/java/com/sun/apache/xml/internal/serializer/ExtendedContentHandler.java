@@ -22,7 +22,7 @@
  */
 package com.sun.apache.xml.internal.serializer;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
+import javax.xml.transform.SourceLocator;
 
 import org.xml.sax.SAXException;
 

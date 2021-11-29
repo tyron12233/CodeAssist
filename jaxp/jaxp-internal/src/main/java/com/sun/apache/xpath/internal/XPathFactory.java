@@ -22,7 +22,7 @@
  */
 package com.sun.apache.xpath.internal;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
+import javax.xml.transform.SourceLocator;
 
 import com.sun.apache.xml.internal.utils.PrefixResolver;
 

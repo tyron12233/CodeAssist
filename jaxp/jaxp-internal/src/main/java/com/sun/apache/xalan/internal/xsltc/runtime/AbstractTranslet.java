@@ -34,11 +34,11 @@ import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.Vector;
-import org.openjdk.javax.xml.transform.Templates;
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.Templates;
+import javax.xml.parsers.DocumentBuilderFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.DOMImplementation;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.ParserConfigurationException;
 
 import com.sun.apache.xml.internal.dtm.DTM;
 

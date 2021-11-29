@@ -39,8 +39,8 @@ import org.xml.sax.AttributeList;
 import org.xml.sax.EntityResolver;
 import org.xml.sax.SAXException;
 
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
-import org.openjdk.javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
+import javax.xml.parsers.SAXParser;
 
 import com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl;
 import com.sun.org.apache.xml.internal.resolver.Catalog;

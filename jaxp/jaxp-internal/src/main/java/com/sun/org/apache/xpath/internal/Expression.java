@@ -22,8 +22,8 @@
  */
 package com.sun.org.apache.xpath.internal;
 
-import org.openjdk.javax.xml.transform.ErrorListener;
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.ErrorListener;
+import javax.xml.transform.TransformerException;
 
 import com.sun.org.apache.xalan.internal.res.XSLMessages;
 import com.sun.org.apache.xml.internal.dtm.DTM;
@@ -87,11 +87,11 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    *
    * @return The result of the expression in the form of a <code>XObject</code>.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if a runtime exception
+   * @throws javax.xml.transform.TransformerException if a runtime exception
    *         occurs.
    */
   public XObject execute(XPathContext xctxt, int currentNode)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     // For now, the current node is already pushed.
@@ -110,12 +110,12 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    *
    * @return The result of the expression in the form of a <code>XObject</code>.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if a runtime exception
+   * @throws javax.xml.transform.TransformerException if a runtime exception
    *         occurs.
    */
   public XObject execute(
           XPathContext xctxt, int currentNode, DTM dtm, int expType)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     // For now, the current node is already pushed.
@@ -131,11 +131,11 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    *
    * @return The result of the expression in the form of a <code>XObject</code>.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if a runtime exception
+   * @throws javax.xml.transform.TransformerException if a runtime exception
    *         occurs.
    */
   public abstract XObject execute(XPathContext xctxt)
-    throws org.openjdk.javax.xml.transform.TransformerException;
+    throws javax.xml.transform.TransformerException;
 
   /**
    * Execute an expression in the XPath runtime context, and return the
@@ -148,11 +148,11 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    *
    * @return The result of the expression in the form of a <code>XObject</code>.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if a runtime exception
+   * @throws javax.xml.transform.TransformerException if a runtime exception
    *         occurs.
    */
   public XObject execute(XPathContext xctxt, boolean destructiveOK)
-    throws org.openjdk.javax.xml.transform.TransformerException
+    throws javax.xml.transform.TransformerException
   {
         return execute(xctxt);
   }
@@ -165,10 +165,10 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    * @param xctxt The XPath runtime context.
    * @return The expression evaluated as a double.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public double num(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return execute(xctxt).num();
   }
@@ -180,10 +180,10 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    * @param xctxt The XPath runtime context.
    * @return false
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean bool(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return execute(xctxt).bool();
   }
@@ -195,10 +195,10 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    * @param xctxt The XPath runtime context.
    * @return The string this wraps or the empty string if null
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XMLString xstr(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return execute(xctxt).xstr();
   }
@@ -219,10 +219,10 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    * @param xctxt The XPath runtime context.
    * @return the first node out of the nodeset, or DTM.NULL.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public int asNode(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
         DTMIterator iter = execute(xctxt).iter();
     return iter.nextNode();
@@ -240,11 +240,11 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    * @throws TransformerException thrown if the active ProblemListener decides
    * the error condition is severe enough to halt processing.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    * @xsl.usage experimental
    */
   public DTMIterator asIterator(XPathContext xctxt, int contextNode)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     try
@@ -271,11 +271,11 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    * @throws TransformerException thrown if the active ProblemListener decides
    * the error condition is severe enough to halt processing.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    * @xsl.usage experimental
    */
   public DTMIterator asIteratorRaw(XPathContext xctxt, int contextNode)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     try
@@ -302,13 +302,13 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    *
    * @return The result of the expression in the form of a <code>XObject</code>.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if a runtime exception
+   * @throws javax.xml.transform.TransformerException if a runtime exception
    *         occurs.
    * @throws org.xml.sax.SAXException
    */
   public void executeCharsToContentHandler(
           XPathContext xctxt, ContentHandler handler)
-            throws org.openjdk.javax.xml.transform.TransformerException,
+            throws javax.xml.transform.TransformerException,
                    org.xml.sax.SAXException
   {
 
@@ -385,10 +385,10 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    * @throws TransformerException if the current ErrorListoner determines to
    *                              throw an exception.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public void warn(XPathContext xctxt, String msg, Object[] args)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     java.lang.String fmsg = XSLMessages.createXPATHWarning(msg, args);
@@ -411,7 +411,7 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    *
    * @throws RuntimeException if the b argument is false.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public void assertion(boolean b, java.lang.String msg)
   {
@@ -440,10 +440,10 @@ public abstract class Expression implements java.io.Serializable, ExpressionNode
    * @throws TransformerException if the current ErrorListoner determines to
    *                              throw an exception.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public void error(XPathContext xctxt, String msg, Object[] args)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     java.lang.String fmsg = XSLMessages.createXPATHMessage(msg, args);

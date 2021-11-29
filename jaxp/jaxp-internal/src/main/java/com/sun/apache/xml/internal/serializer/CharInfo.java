@@ -34,7 +34,7 @@ import java.util.ResourceBundle;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import com.sun.apache.xalan.internal.utils.ObjectFactory;
 import com.sun.apache.xml.internal.serializer.utils.MsgKey;

@@ -25,12 +25,12 @@ package com.sun.apache.xpath.internal;
 import java.io.IOException;
 import java.util.Vector;
 
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.SourceLocator;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.transform.URIResolver;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
-import org.openjdk.javax.xml.transform.stream.StreamSource;
+import javax.xml.transform.Source;
+import javax.xml.transform.SourceLocator;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.URIResolver;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.stream.StreamSource;
 
 import com.sun.apache.xml.internal.dtm.DTM;
 import com.sun.apache.xml.internal.dtm.DTMWSFilter;
@@ -353,16 +353,16 @@ public class SourceTreeManager
       if (null == reader)
       {
         try {
-          org.openjdk.javax.xml.parsers.SAXParserFactory factory=
-              org.openjdk.javax.xml.parsers.SAXParserFactory.newInstance();
+          javax.xml.parsers.SAXParserFactory factory=
+              javax.xml.parsers.SAXParserFactory.newInstance();
           factory.setNamespaceAware( true );
-          org.openjdk.javax.xml.parsers.SAXParser jaxpParser=
+          javax.xml.parsers.SAXParser jaxpParser=
               factory.newSAXParser();
           reader=jaxpParser.getXMLReader();
 
-        } catch( org.openjdk.javax.xml.parsers.ParserConfigurationException ex ) {
+        } catch( javax.xml.parsers.ParserConfigurationException ex ) {
           throw new org.xml.sax.SAXException( ex );
-        } catch( org.openjdk.javax.xml.parsers.FactoryConfigurationError ex1 ) {
+        } catch( javax.xml.parsers.FactoryConfigurationError ex1 ) {
             throw new org.xml.sax.SAXException( ex1.toString() );
         } catch( NoSuchMethodError ex2 ) {
         }

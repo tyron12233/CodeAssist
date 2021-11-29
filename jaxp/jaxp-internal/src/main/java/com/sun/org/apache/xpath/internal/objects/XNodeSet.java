@@ -329,9 +329,9 @@ public class XNodeSet extends NodeSequence
    *
    * @return a NodeIterator.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public NodeIterator nodeset() throws org.openjdk.javax.xml.transform.TransformerException
+  public NodeIterator nodeset() throws javax.xml.transform.TransformerException
   {
     return new com.sun.org.apache.xml.internal.dtm.ref.DTMNodeIterator(iter());
   }
@@ -341,9 +341,9 @@ public class XNodeSet extends NodeSequence
    *
    * @return a NodeList.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public NodeList nodelist() throws org.openjdk.javax.xml.transform.TransformerException
+  public NodeList nodelist() throws javax.xml.transform.TransformerException
   {
     com.sun.org.apache.xml.internal.dtm.ref.DTMNodeList nodelist = new com.sun.org.apache.xml.internal.dtm.ref.DTMNodeList(this);
     // Creating a DTMNodeList has the side-effect that it will create a clone
@@ -469,10 +469,10 @@ public class XNodeSet extends NodeSequence
    *
    * @return See the comments below for each object type comparison
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean compare(XObject obj2, Comparator comparator)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     boolean result = false;
@@ -641,9 +641,9 @@ public class XNodeSet extends NodeSequence
    *
    * @return see this.compare(...)
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public boolean lessThan(XObject obj2) throws org.openjdk.javax.xml.transform.TransformerException
+  public boolean lessThan(XObject obj2) throws javax.xml.transform.TransformerException
   {
     return compare(obj2, S_LT);
   }
@@ -655,9 +655,9 @@ public class XNodeSet extends NodeSequence
    *
    * @return see this.compare(...)
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public boolean lessThanOrEqual(XObject obj2) throws org.openjdk.javax.xml.transform.TransformerException
+  public boolean lessThanOrEqual(XObject obj2) throws javax.xml.transform.TransformerException
   {
     return compare(obj2, S_LTE);
   }
@@ -669,9 +669,9 @@ public class XNodeSet extends NodeSequence
    *
    * @return see this.compare(...)
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public boolean greaterThan(XObject obj2) throws org.openjdk.javax.xml.transform.TransformerException
+  public boolean greaterThan(XObject obj2) throws javax.xml.transform.TransformerException
   {
     return compare(obj2, S_GT);
   }
@@ -683,10 +683,10 @@ public class XNodeSet extends NodeSequence
    *
    * @return see this.compare(...)
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean greaterThanOrEqual(XObject obj2)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return compare(obj2, S_GTE);
   }
@@ -698,7 +698,7 @@ public class XNodeSet extends NodeSequence
    *
    * @return see this.compare(...)
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean equals(XObject obj2)
   {
@@ -706,7 +706,7 @@ public class XNodeSet extends NodeSequence
     {
       return compare(obj2, S_EQ);
     }
-    catch(org.openjdk.javax.xml.transform.TransformerException te)
+    catch(javax.xml.transform.TransformerException te)
     {
       throw new com.sun.org.apache.xml.internal.utils.WrappedRuntimeException(te);
     }
@@ -719,9 +719,9 @@ public class XNodeSet extends NodeSequence
    *
    * @return see this.compare(...)
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public boolean notEquals(XObject obj2) throws org.openjdk.javax.xml.transform.TransformerException
+  public boolean notEquals(XObject obj2) throws javax.xml.transform.TransformerException
   {
     return compare(obj2, S_NEQ);
   }

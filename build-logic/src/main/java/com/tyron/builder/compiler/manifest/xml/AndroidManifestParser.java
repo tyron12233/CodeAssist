@@ -15,9 +15,9 @@ import com.tyron.builder.compiler.manifest.xml.ManifestData.UsesFeature;
 import com.tyron.builder.compiler.manifest.xml.ManifestData.UsesLibrary;
 import com.tyron.builder.util.XmlUtils;
 
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.parsers.SAXParser;
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
 import org.xml.sax.Attributes;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;

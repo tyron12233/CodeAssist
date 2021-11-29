@@ -33,7 +33,7 @@ import com.sun.apache.xml.internal.utils.BoolStack;
 
 import java.util.Vector;
 
-import org.openjdk.javax.xml.transform.Source;
+import javax.xml.transform.Source;
 
 import com.sun.apache.xml.internal.utils.XMLString;
 import com.sun.apache.xml.internal.utils.XMLStringFactory;

@@ -21,14 +21,14 @@
 
 package com.sun.org.apache.xerces.internal.util;
 
-import org.openjdk.javax.xml.stream.XMLEventReader;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.XMLEventReader;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
 
 import com.sun.org.apache.xerces.internal.xni.parser.XMLInputSource;
 
 /**
- * <p>An <code>XMLInputSource</code> analogue to <code>org.openjdk.javax.xml.transform.stax.StAXSource</code>.</p>
+ * <p>An <code>XMLInputSource</code> analogue to <code>javax.xml.transform.stax.StAXSource</code>.</p>
  *
  * @version $Id: StAXInputSource.java,v 1.2 2010-10-26 23:01:17 joehw Exp $
  */

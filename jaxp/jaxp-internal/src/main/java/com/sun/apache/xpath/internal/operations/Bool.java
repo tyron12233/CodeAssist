@@ -41,9 +41,9 @@ public class Bool extends UnaryOperation
    *
    * @return non-null reference to the XObject that represents the result of the operation.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public XObject operate(XObject right) throws org.openjdk.javax.xml.transform.TransformerException
+  public XObject operate(XObject right) throws javax.xml.transform.TransformerException
   {
 
     if (XObject.CLASS_BOOLEAN == right.getType())
@@ -59,10 +59,10 @@ public class Bool extends UnaryOperation
    *
    * @return The result of the operation as a boolean.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean bool(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return m_right.bool(xctxt);
   }

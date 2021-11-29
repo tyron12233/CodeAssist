@@ -151,7 +151,7 @@ public class XRTreeFrag extends XObject implements Cloneable
    * @return The result tree fragment as a number or NaN
    */
   public double num()
-    throws org.openjdk.javax.xml.transform.TransformerException
+    throws javax.xml.transform.TransformerException
   {
 
     XMLString s = xstr();
@@ -252,7 +252,7 @@ public class XRTreeFrag extends XObject implements Cloneable
    *
    * @return True if the two objects are equal
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean equals(XObject obj2)
   {
@@ -294,7 +294,7 @@ public class XRTreeFrag extends XObject implements Cloneable
         return super.equals(obj2);
       }
     }
-    catch(org.openjdk.javax.xml.transform.TransformerException te)
+    catch(javax.xml.transform.TransformerException te)
     {
       throw new com.sun.org.apache.xml.internal.utils.WrappedRuntimeException(te);
     }

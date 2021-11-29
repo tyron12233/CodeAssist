@@ -71,7 +71,7 @@ import com.sun.apache.xerces.internal.xs.XSLoader;
 import com.sun.apache.xerces.internal.xs.XSModel;
 import java.util.HashMap;
 import java.util.Map;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 import org.w3c.dom.DOMConfiguration;
 import org.w3c.dom.DOMError;
 import org.w3c.dom.DOMErrorHandler;

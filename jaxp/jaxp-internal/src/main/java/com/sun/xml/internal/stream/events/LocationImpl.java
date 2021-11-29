@@ -25,7 +25,7 @@
 
 package com.sun.xml.internal.stream.events;
 
-import org.openjdk.javax.xml.stream.Location;
+import javax.xml.stream.Location;
 
 /**
  *Implementation of Location interface to be used by

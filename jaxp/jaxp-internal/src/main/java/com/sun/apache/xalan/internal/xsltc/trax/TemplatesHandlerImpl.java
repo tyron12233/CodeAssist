@@ -23,12 +23,12 @@
 
 package com.sun.apache.xalan.internal.xsltc.trax;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.Templates;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.transform.URIResolver;
-import org.openjdk.javax.xml.transform.sax.TemplatesHandler;
+import javax.xml.XMLConstants;
+import javax.xml.transform.Source;
+import javax.xml.transform.Templates;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.URIResolver;
+import javax.xml.transform.sax.TemplatesHandler;
 
 import com.sun.apache.xalan.internal.xsltc.compiler.CompilerException;
 import com.sun.apache.xalan.internal.xsltc.compiler.Parser;
@@ -117,7 +117,7 @@ public class TemplatesHandlerImpl
     }
 
     /**
-     * Implements org.openjdk.javax.xml.transform.sax.TemplatesHandler.getSystemId()
+     * Implements javax.xml.transform.sax.TemplatesHandler.getSystemId()
      * Get the base ID (URI or system ID) from where relative URLs will be
      * resolved.
      * @return The systemID that was set with setSystemId(String id)
@@ -127,7 +127,7 @@ public class TemplatesHandlerImpl
     }
 
     /**
-     * Implements org.openjdk.javax.xml.transform.sax.TemplatesHandler.setSystemId()
+     * Implements javax.xml.transform.sax.TemplatesHandler.setSystemId()
      * Get the base ID (URI or system ID) from where relative URLs will be
      * resolved.
      * @param id Base URI for this stylesheet
@@ -144,7 +144,7 @@ public class TemplatesHandlerImpl
     }
 
     /**
-     * Implements org.openjdk.javax.xml.transform.sax.TemplatesHandler.getTemplates()
+     * Implements javax.xml.transform.sax.TemplatesHandler.getTemplates()
      * When a TemplatesHandler object is used as a ContentHandler or
      * DocumentHandler for the parsing of transformation instructions, it
      * creates a Templates object, which the caller can get once the SAX

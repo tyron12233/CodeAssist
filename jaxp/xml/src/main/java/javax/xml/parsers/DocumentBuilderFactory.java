@@ -117,11 +117,12 @@ public abstract class DocumentBuilderFactory {
      * the implementation is not available or cannot be instantiated.
      */
     public static DocumentBuilderFactory newInstance() {
-        return new DocumentBuilderFactoryWrapper(FactoryFinder.find(
-                /* The default property name according to the JAXP spec */
-                org.openjdk.javax.xml.parsers.DocumentBuilderFactory.class, // "javax.xml.parsers.DocumentBuilderFactory"
-                /* The fallback implementation class name */
-                "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl"));
+//        return new DocumentBuilderFactoryWrapper(FactoryFinder.find(
+//                /* The default property name according to the JAXP spec */
+//                javax.xml.parsers.DocumentBuilderFactory.class, // "javax.xml.parsers.DocumentBuilderFactory"
+//                /* The fallback implementation class name */
+//                "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl"));
+        throw new RuntimeException("NEW INSTANCE CALLED");
     }
 
     /**

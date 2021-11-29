@@ -27,7 +27,7 @@ package com.sun.org.apache.xalan.internal.utils;
 
 
 import com.sun.org.apache.xalan.internal.XalanConstants;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 
 /**
  * This class manages security related properties

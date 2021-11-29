@@ -22,7 +22,7 @@
  */
 package com.sun.org.apache.xpath.internal;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import org.w3c.dom.Node;
 
@@ -319,7 +319,7 @@ public class XPathException extends TransformerException
 
   /**
    *  Return the embedded exception, if any.
-   *  Overrides org.openjdk.javax.xml.transform.TransformerException.getException().
+   *  Overrides javax.xml.transform.TransformerException.getException().
    *
    *  @return The embedded exception, or null if there is none.
    */

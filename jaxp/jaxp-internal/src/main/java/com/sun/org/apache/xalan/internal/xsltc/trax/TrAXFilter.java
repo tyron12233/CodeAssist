@@ -26,16 +26,16 @@ package com.sun.org.apache.xalan.internal.xsltc.trax;
 
 import java.io.IOException;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.parsers.FactoryConfigurationError;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.parsers.SAXParser;
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
-import org.openjdk.javax.xml.transform.ErrorListener;
-import org.openjdk.javax.xml.transform.Templates;
-import org.openjdk.javax.xml.transform.Transformer;
-import org.openjdk.javax.xml.transform.TransformerConfigurationException;
-import org.openjdk.javax.xml.transform.sax.SAXResult;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.FactoryConfigurationError;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
+import javax.xml.transform.ErrorListener;
+import javax.xml.transform.Templates;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.sax.SAXResult;
 
 import com.sun.org.apache.xml.internal.utils.XMLReaderManager;
 

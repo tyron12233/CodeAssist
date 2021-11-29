@@ -30,7 +30,7 @@ import com.sun.apache.xml.internal.dtm.DTMManager;
 import com.sun.apache.xml.internal.dtm.DTMWSFilter;
 import com.sun.org.apache.xml.internal.dtm.*;
 
-import org.openjdk.javax.xml.transform.Source;
+import javax.xml.transform.Source;
 
 import com.sun.apache.xml.internal.utils.XMLStringFactory;
 

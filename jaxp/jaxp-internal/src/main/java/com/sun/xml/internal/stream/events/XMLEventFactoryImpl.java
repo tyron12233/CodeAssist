@@ -25,10 +25,10 @@
 
 package com.sun.xml.internal.stream.events;
 
-import org.openjdk.javax.xml.stream.XMLEventFactory;
-import org.openjdk.javax.xml.stream.Location;
-import org.openjdk.javax.xml.stream.events.Namespace;
-import org.openjdk.javax.xml.stream.events.EntityDeclaration;
+import javax.xml.stream.XMLEventFactory;
+import javax.xml.stream.Location;
+import javax.xml.stream.events.Namespace;
+import javax.xml.stream.events.EntityDeclaration;
 
 
 /**
@@ -42,23 +42,23 @@ public class XMLEventFactoryImpl extends XMLEventFactory {
     public XMLEventFactoryImpl() {
     }
 
-    public org.openjdk.javax.xml.stream.events.Attribute createAttribute(String localName, String value) {
+    public javax.xml.stream.events.Attribute createAttribute(String localName, String value) {
         AttributeImpl attr =  new AttributeImpl(localName, value);
         if(location != null)attr.setLocation(location);
         return attr;
     }
 
-    public org.openjdk.javax.xml.stream.events.Attribute createAttribute(org.openjdk.javax.xml.namespace.QName name, String value) {
+    public javax.xml.stream.events.Attribute createAttribute(javax.xml.namespace.QName name, String value) {
         return createAttribute(name.getPrefix(), name.getNamespaceURI(), name.getLocalPart(), value);
     }
 
-    public org.openjdk.javax.xml.stream.events.Attribute createAttribute(String prefix, String namespaceURI, String localName, String value) {
+    public javax.xml.stream.events.Attribute createAttribute(String prefix, String namespaceURI, String localName, String value) {
         AttributeImpl attr =  new AttributeImpl(prefix, namespaceURI, localName, value, null);
         if(location != null)attr.setLocation(location);
         return attr;
     }
 
-    public org.openjdk.javax.xml.stream.events.Characters createCData(String content) {
+    public javax.xml.stream.events.Characters createCData(String content) {
         //stax doesn't have separate CDATA event. This is taken care by
         //CHRACTERS event setting the cdata flag to true.
         CharacterEvent charEvent =  new CharacterEvent(content, true);
@@ -66,41 +66,41 @@ public class XMLEventFactoryImpl extends XMLEventFactory {
         return charEvent;
     }
 
-    public org.openjdk.javax.xml.stream.events.Characters createCharacters(String content) {
+    public javax.xml.stream.events.Characters createCharacters(String content) {
         CharacterEvent charEvent =  new CharacterEvent(content);
         if(location != null)charEvent.setLocation(location);
         return charEvent;
     }
 
-    public org.openjdk.javax.xml.stream.events.Comment createComment(String text) {
+    public javax.xml.stream.events.Comment createComment(String text) {
         CommentEvent charEvent =  new CommentEvent(text);
         if(location != null)charEvent.setLocation(location);
         return charEvent;
     }
 
-    public org.openjdk.javax.xml.stream.events.DTD createDTD(String dtd) {
+    public javax.xml.stream.events.DTD createDTD(String dtd) {
         DTDEvent dtdEvent = new DTDEvent(dtd);
         if(location != null)dtdEvent.setLocation(location);
         return dtdEvent;
     }
 
-    public org.openjdk.javax.xml.stream.events.EndDocument createEndDocument() {
+    public javax.xml.stream.events.EndDocument createEndDocument() {
         EndDocumentEvent event =new EndDocumentEvent();
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.EndElement createEndElement(org.openjdk.javax.xml.namespace.QName name, java.util.Iterator namespaces) {
+    public javax.xml.stream.events.EndElement createEndElement(javax.xml.namespace.QName name, java.util.Iterator namespaces) {
         return createEndElement(name.getPrefix(), name.getNamespaceURI(), name.getLocalPart());
     }
 
-    public org.openjdk.javax.xml.stream.events.EndElement createEndElement(String prefix, String namespaceUri, String localName) {
+    public javax.xml.stream.events.EndElement createEndElement(String prefix, String namespaceUri, String localName) {
         EndElementEvent event =  new EndElementEvent(prefix, namespaceUri, localName);
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.EndElement createEndElement(String prefix, String namespaceUri, String localName, java.util.Iterator namespaces) {
+    public javax.xml.stream.events.EndElement createEndElement(String prefix, String namespaceUri, String localName, java.util.Iterator namespaces) {
 
         EndElementEvent event =  new EndElementEvent(prefix, namespaceUri, localName);
         if(namespaces!=null){
@@ -111,81 +111,81 @@ public class XMLEventFactoryImpl extends XMLEventFactory {
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.EntityReference createEntityReference(String name, EntityDeclaration entityDeclaration) {
+    public javax.xml.stream.events.EntityReference createEntityReference(String name, EntityDeclaration entityDeclaration) {
         EntityReferenceEvent event =  new EntityReferenceEvent(name, entityDeclaration);
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.Characters createIgnorableSpace(String content) {
+    public javax.xml.stream.events.Characters createIgnorableSpace(String content) {
         CharacterEvent event =  new CharacterEvent(content, false, true);
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.Namespace createNamespace(String namespaceURI) {
+    public javax.xml.stream.events.Namespace createNamespace(String namespaceURI) {
         NamespaceImpl event =  new NamespaceImpl(namespaceURI);
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.Namespace createNamespace(String prefix, String namespaceURI) {
+    public javax.xml.stream.events.Namespace createNamespace(String prefix, String namespaceURI) {
         NamespaceImpl event =  new NamespaceImpl(prefix, namespaceURI);
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.ProcessingInstruction createProcessingInstruction(String target, String data) {
+    public javax.xml.stream.events.ProcessingInstruction createProcessingInstruction(String target, String data) {
         ProcessingInstructionEvent event =  new ProcessingInstructionEvent(target, data);
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.Characters createSpace(String content) {
+    public javax.xml.stream.events.Characters createSpace(String content) {
         CharacterEvent event =  new CharacterEvent(content);
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.StartDocument createStartDocument() {
+    public javax.xml.stream.events.StartDocument createStartDocument() {
         StartDocumentEvent event = new StartDocumentEvent();
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.StartDocument createStartDocument(String encoding) {
+    public javax.xml.stream.events.StartDocument createStartDocument(String encoding) {
         StartDocumentEvent event =  new StartDocumentEvent(encoding);
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.StartDocument createStartDocument(String encoding, String version) {
+    public javax.xml.stream.events.StartDocument createStartDocument(String encoding, String version) {
         StartDocumentEvent event =  new StartDocumentEvent(encoding, version);
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.StartDocument createStartDocument(String encoding, String version, boolean standalone) {
+    public javax.xml.stream.events.StartDocument createStartDocument(String encoding, String version, boolean standalone) {
         StartDocumentEvent event =  new StartDocumentEvent(encoding, version, standalone);
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.StartElement createStartElement(org.openjdk.javax.xml.namespace.QName name, java.util.Iterator attributes, java.util.Iterator namespaces) {
+    public javax.xml.stream.events.StartElement createStartElement(javax.xml.namespace.QName name, java.util.Iterator attributes, java.util.Iterator namespaces) {
         return createStartElement(name.getPrefix(), name.getNamespaceURI(), name.getLocalPart(), attributes, namespaces);
     }
 
-    public org.openjdk.javax.xml.stream.events.StartElement createStartElement(String prefix, String namespaceUri, String localName) {
+    public javax.xml.stream.events.StartElement createStartElement(String prefix, String namespaceUri, String localName) {
         StartElementEvent event =  new StartElementEvent(prefix, namespaceUri, localName);
         if(location != null)event.setLocation(location);
         return event;
     }
 
-    public org.openjdk.javax.xml.stream.events.StartElement createStartElement(String prefix, String namespaceUri, String localName, java.util.Iterator attributes, java.util.Iterator namespaces) {
+    public javax.xml.stream.events.StartElement createStartElement(String prefix, String namespaceUri, String localName, java.util.Iterator attributes, java.util.Iterator namespaces) {
         return createStartElement(prefix, namespaceUri, localName, attributes, namespaces, null);
     }
 
-    public org.openjdk.javax.xml.stream.events.StartElement createStartElement(String prefix, String namespaceUri, String localName, java.util.Iterator attributes, java.util.Iterator namespaces, org.openjdk.javax.xml.namespace.NamespaceContext context) {
+    public javax.xml.stream.events.StartElement createStartElement(String prefix, String namespaceUri, String localName, java.util.Iterator attributes, java.util.Iterator namespaces, javax.xml.namespace.NamespaceContext context) {
         StartElementEvent elem =  new StartElementEvent(prefix, namespaceUri, localName);
         elem.addAttributes(attributes);
         elem.addNamespaceAttributes(namespaces);
@@ -194,7 +194,7 @@ public class XMLEventFactoryImpl extends XMLEventFactory {
         return elem;
     }
 
-    public void setLocation(org.openjdk.javax.xml.stream.Location location) {
+    public void setLocation(javax.xml.stream.Location location) {
         this.location = location;
     }
 

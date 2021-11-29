@@ -29,9 +29,9 @@ import com.sun.apache.xerces.internal.utils.XMLSecurityManager;
 import com.sun.apache.xerces.internal.utils.XMLSecurityPropertyManager;
 import com.sun.stream.StaxEntityResolverWrapper;
 import java.util.HashMap;
-import org.openjdk.javax.xml.stream.XMLInputFactory;
-import org.openjdk.javax.xml.stream.XMLOutputFactory;
-import org.openjdk.javax.xml.stream.XMLResolver;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLResolver;
 
 /**
  *  This class manages different properties related to Stax specification and its implementation.
@@ -46,8 +46,8 @@ import org.openjdk.javax.xml.stream.XMLResolver;
 public class PropertyManager {
 
 
-    public static final String STAX_NOTATIONS = "org.openjdk.javax.xml.stream.notations";
-    public static final String STAX_ENTITIES = "org.openjdk.javax.xml.stream.entities";
+    public static final String STAX_NOTATIONS = "javax.xml.stream.notations";
+    public static final String STAX_ENTITIES = "javax.xml.stream.entities";
 
     private static final String STRING_INTERNING = "http://xml.org/sax/features/string-interning";
 

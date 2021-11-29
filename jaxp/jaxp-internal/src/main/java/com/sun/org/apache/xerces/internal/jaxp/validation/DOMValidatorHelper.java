@@ -23,13 +23,13 @@ package com.sun.org.apache.xerces.internal.jaxp.validation;
 import java.io.IOException;
 import java.util.Enumeration;
 
-import org.openjdk.javax.xml.parsers.DocumentBuilder;
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.transform.Result;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.dom.DOMResult;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.Result;
+import javax.xml.transform.Source;
+import javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.dom.DOMSource;
 
 import com.sun.org.apache.xerces.internal.impl.Constants;
 import com.sun.org.apache.xerces.internal.impl.XMLErrorReporter;

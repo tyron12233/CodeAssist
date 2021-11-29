@@ -328,7 +328,7 @@ public class XStringForFSB extends XString
    *
    * @return true if the two objects are equal
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean equals(XObject obj2)
   {
@@ -373,7 +373,7 @@ public class XStringForFSB extends XString
    *
    * @return true if the two objects are equal
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean equals(String anotherString)
   {

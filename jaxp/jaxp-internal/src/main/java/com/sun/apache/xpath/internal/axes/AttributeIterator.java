@@ -43,10 +43,10 @@ public class AttributeIterator extends ChildTestIterator
    * @param opPos The position within the op map, which contains the
    * location path expression for this itterator.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   AttributeIterator(Compiler compiler, int opPos, int analysis)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     super(compiler, opPos, analysis);
   }

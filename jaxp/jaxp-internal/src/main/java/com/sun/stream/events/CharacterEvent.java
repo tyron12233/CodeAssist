@@ -25,10 +25,10 @@
 
 package com.sun.stream.events;
 
-import org.openjdk.javax.xml.stream.events.Characters;
+import javax.xml.stream.events.Characters;
 import java.io.Writer;
 import java.io.IOException;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.XMLEvent;
 
 import com.sun.apache.xerces.internal.util.XMLChar;
 

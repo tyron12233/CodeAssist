@@ -22,8 +22,8 @@ package com.sun.apache.xerces.internal.jaxp;
 
 import java.io.IOException;
 
-import org.openjdk.javax.xml.validation.TypeInfoProvider;
-import org.openjdk.javax.xml.validation.ValidatorHandler;
+import javax.xml.validation.TypeInfoProvider;
+import javax.xml.validation.ValidatorHandler;
 
 import com.sun.apache.xerces.internal.impl.xs.opti.DefaultXMLDocumentHandler;
 import com.sun.apache.xerces.internal.util.AugmentationsImpl;
@@ -62,7 +62,7 @@ import org.xml.sax.SAXParseException;
 import org.xml.sax.helpers.DefaultHandler;
 
 /**
- * Runs events through a {@link org.openjdk.javax.xml.validation.ValidatorHandler}
+ * Runs events through a {@link javax.xml.validation.ValidatorHandler}
  * and performs validation/infoset-augmentation by an external validator.
  *
  * <p>

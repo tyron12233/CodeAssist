@@ -43,9 +43,9 @@ public class FuncNormalizeSpace extends FunctionDef1Arg
    * @param xctxt The current execution context.
    * @return A valid XObject.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public XObject execute(XPathContext xctxt) throws org.openjdk.javax.xml.transform.TransformerException
+  public XObject execute(XPathContext xctxt) throws javax.xml.transform.TransformerException
   {
     XMLString s1 = getArg0AsString(xctxt);
 
@@ -61,12 +61,12 @@ public class FuncNormalizeSpace extends FunctionDef1Arg
    *
    * @return The result of the expression in the form of a <code>XObject</code>.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if a runtime exception
+   * @throws javax.xml.transform.TransformerException if a runtime exception
    *         occurs.
    */
   public void executeCharsToContentHandler(XPathContext xctxt,
                                               ContentHandler handler)
-    throws org.openjdk.javax.xml.transform.TransformerException,
+    throws javax.xml.transform.TransformerException,
            org.xml.sax.SAXException
   {
     if(Arg0IsNodesetExpr())

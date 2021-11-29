@@ -795,7 +795,7 @@ public class EnvironmentCheck
 
     try
     {
-      final String JAXP1_CLASS = "org.openjdk.javax.xml.stream.XMLStreamConstants";
+      final String JAXP1_CLASS = "javax.xml.stream.XMLStreamConstants";
 
       clazz = ObjectFactory.findProviderClass(JAXP1_CLASS, true);
 

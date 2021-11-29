@@ -33,7 +33,7 @@ public interface XSQName {
     public com.sun.org.apache.xerces.internal.xni.QName getXNIQName();
 
     /**
-     * @return org.openjdk.javax.xml.namespace.QName class instance
+     * @return javax.xml.namespace.QName class instance
      */
-    public org.openjdk.javax.xml.namespace.QName getJAXPQName();
+    public javax.xml.namespace.QName getJAXPQName();
 }

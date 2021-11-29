@@ -92,9 +92,9 @@ public abstract class UnaryOperation extends Expression implements ExpressionOwn
    * @return An XObject that represents the result of applying the unary
    *         operation to the evaluated operand.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public XObject execute(XPathContext xctxt) throws org.openjdk.javax.xml.transform.TransformerException
+  public XObject execute(XPathContext xctxt) throws javax.xml.transform.TransformerException
   {
 
     return operate(m_right.execute(xctxt));
@@ -108,10 +108,10 @@ public abstract class UnaryOperation extends Expression implements ExpressionOwn
    *
    * @return non-null reference to the XObject that represents the result of the operation.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public abstract XObject operate(XObject right)
-    throws org.openjdk.javax.xml.transform.TransformerException;
+    throws javax.xml.transform.TransformerException;
 
   /** @return the operand of unary operation, as an Expression.
    */

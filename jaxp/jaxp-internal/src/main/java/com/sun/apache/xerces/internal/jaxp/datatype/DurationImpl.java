@@ -30,9 +30,9 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.TimeZone;
 
-import org.openjdk.javax.xml.datatype.DatatypeConstants;
-import org.openjdk.javax.xml.datatype.Duration;
-import org.openjdk.javax.xml.datatype.XMLGregorianCalendar;
+import javax.xml.datatype.DatatypeConstants;
+import javax.xml.datatype.Duration;
+import javax.xml.datatype.XMLGregorianCalendar;
 
 import com.sun.apache.xerces.internal.util.DatatypeMessageFormatter;
 
@@ -1087,7 +1087,7 @@ class DurationImpl
     public boolean isSet(DatatypeConstants.Field field) {
 
         if (field == null) {
-            String methodName = "org.openjdk.javax.xml.datatype.Duration" + "#isSet(DatatypeConstants.Field field)" ;
+            String methodName = "javax.xml.datatype.Duration" + "#isSet(DatatypeConstants.Field field)" ;
                 throw new NullPointerException(
                 //"cannot be called with field == null"
                 DatatypeMessageFormatter.formatMessage(null, "FieldCannotBeNull", new Object[]{methodName})
@@ -1117,7 +1117,7 @@ class DurationImpl
                 if (field == DatatypeConstants.SECONDS) {
                         return seconds != null;
                 }
-        String methodName = "org.openjdk.javax.xml.datatype.Duration" + "#isSet(DatatypeConstants.Field field)";
+        String methodName = "javax.xml.datatype.Duration" + "#isSet(DatatypeConstants.Field field)";
 
         throw new IllegalArgumentException(
             DatatypeMessageFormatter.formatMessage(null,"UnknownField", new Object[]{methodName, field.toString()})
@@ -1152,7 +1152,7 @@ class DurationImpl
     public Number getField(DatatypeConstants.Field field) {
 
                 if (field == null) {
-            String methodName = "org.openjdk.javax.xml.datatype.Duration" + "#isSet(DatatypeConstants.Field field) " ;
+            String methodName = "javax.xml.datatype.Duration" + "#isSet(DatatypeConstants.Field field) " ;
 
                         throw new NullPointerException(
                 DatatypeMessageFormatter.formatMessage(null,"FieldCannotBeNull", new Object[]{methodName})
@@ -1184,12 +1184,12 @@ class DurationImpl
                 }
                 /**
                 throw new IllegalArgumentException(
-                        "org.openjdk.javax.xml.datatype.Duration"
+                        "javax.xml.datatype.Duration"
                         + "#(getSet(DatatypeConstants.Field field) called with an unknown field: "
                         + field.toString()
                 );
         */
-        String methodName = "org.openjdk.javax.xml.datatype.Duration" + "#(getSet(DatatypeConstants.Field field)";
+        String methodName = "javax.xml.datatype.Duration" + "#(getSet(DatatypeConstants.Field field)";
 
         throw new IllegalArgumentException(
             DatatypeMessageFormatter.formatMessage(null,"UnknownField", new Object[]{methodName, field.toString()})

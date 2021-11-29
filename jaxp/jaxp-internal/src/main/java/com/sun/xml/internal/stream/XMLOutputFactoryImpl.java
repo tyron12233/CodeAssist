@@ -31,12 +31,12 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.Writer;
 
-import org.openjdk.javax.xml.stream.XMLOutputFactory ;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.transform.Result;
-import org.openjdk.javax.xml.transform.dom.DOMResult;
-import org.openjdk.javax.xml.transform.stream.StreamResult;
-import org.openjdk.javax.xml.transform.stax.StAXResult;
+import javax.xml.stream.XMLOutputFactory ;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.transform.Result;
+import javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.transform.stax.StAXResult;
 import com.sun.org.apache.xerces.internal.impl.Constants;
 import com.sun.org.apache.xerces.internal.impl.PropertyManager;
 
@@ -67,15 +67,15 @@ public class XMLOutputFactoryImpl extends XMLOutputFactory {
     public XMLOutputFactoryImpl() {
     }
 
-    public org.openjdk.javax.xml.stream.XMLEventWriter createXMLEventWriter(java.io.OutputStream outputStream) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public javax.xml.stream.XMLEventWriter createXMLEventWriter(java.io.OutputStream outputStream) throws javax.xml.stream.XMLStreamException {
         return createXMLEventWriter(outputStream,  null);
     }
 
-    public org.openjdk.javax.xml.stream.XMLEventWriter createXMLEventWriter(java.io.OutputStream outputStream, String encoding) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public javax.xml.stream.XMLEventWriter createXMLEventWriter(java.io.OutputStream outputStream, String encoding) throws javax.xml.stream.XMLStreamException {
         return new XMLEventWriterImpl(createXMLStreamWriter(outputStream, encoding));
     }
 
-    public org.openjdk.javax.xml.stream.XMLEventWriter createXMLEventWriter(org.openjdk.javax.xml.transform.Result result) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public javax.xml.stream.XMLEventWriter createXMLEventWriter(javax.xml.transform.Result result) throws javax.xml.stream.XMLStreamException {
 
         if (result instanceof StAXResult && ((StAXResult)result).getXMLEventWriter() != null)
             return ((StAXResult)result).getXMLEventWriter();
@@ -83,11 +83,11 @@ public class XMLOutputFactoryImpl extends XMLOutputFactory {
         return new XMLEventWriterImpl(createXMLStreamWriter(result));
     }
 
-    public org.openjdk.javax.xml.stream.XMLEventWriter createXMLEventWriter(java.io.Writer writer) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public javax.xml.stream.XMLEventWriter createXMLEventWriter(java.io.Writer writer) throws javax.xml.stream.XMLStreamException {
         return new XMLEventWriterImpl(createXMLStreamWriter(writer));
     }
 
-    public org.openjdk.javax.xml.stream.XMLStreamWriter createXMLStreamWriter(org.openjdk.javax.xml.transform.Result result) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public javax.xml.stream.XMLStreamWriter createXMLStreamWriter(javax.xml.transform.Result result) throws javax.xml.stream.XMLStreamException {
 
         if (result instanceof StreamResult) {
             return createXMLStreamWriter((StreamResult) result, null);
@@ -111,15 +111,15 @@ public class XMLOutputFactoryImpl extends XMLOutputFactory {
 
     }
 
-    public org.openjdk.javax.xml.stream.XMLStreamWriter createXMLStreamWriter(java.io.Writer writer) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public javax.xml.stream.XMLStreamWriter createXMLStreamWriter(java.io.Writer writer) throws javax.xml.stream.XMLStreamException {
         return createXMLStreamWriter(toStreamResult(null, writer, null) , null);
     }
 
-    public org.openjdk.javax.xml.stream.XMLStreamWriter createXMLStreamWriter(java.io.OutputStream outputStream) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public javax.xml.stream.XMLStreamWriter createXMLStreamWriter(java.io.OutputStream outputStream) throws javax.xml.stream.XMLStreamException {
         return createXMLStreamWriter(outputStream, null);
     }
 
-    public org.openjdk.javax.xml.stream.XMLStreamWriter createXMLStreamWriter(java.io.OutputStream outputStream, String encoding) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public javax.xml.stream.XMLStreamWriter createXMLStreamWriter(java.io.OutputStream outputStream, String encoding) throws javax.xml.stream.XMLStreamException {
         return createXMLStreamWriter(toStreamResult(outputStream, null, null) , encoding);
     }
 
@@ -174,7 +174,7 @@ public class XMLOutputFactoryImpl extends XMLOutputFactory {
         return sr;
     }
 
-    org.openjdk.javax.xml.stream.XMLStreamWriter createXMLStreamWriter(org.openjdk.javax.xml.transform.stream.StreamResult sr, String encoding) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    javax.xml.stream.XMLStreamWriter createXMLStreamWriter(javax.xml.transform.stream.StreamResult sr, String encoding) throws javax.xml.stream.XMLStreamException {
         //if factory is configured to reuse the instance & this instance can be reused
         //& the setProperty() hasn't been called
         try{

@@ -24,7 +24,7 @@
 
 package com.sun.apache.xpath.internal.domapi;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import com.sun.apache.xpath.internal.objects.XObject;
 import com.sun.apache.xpath.internal.XPath;

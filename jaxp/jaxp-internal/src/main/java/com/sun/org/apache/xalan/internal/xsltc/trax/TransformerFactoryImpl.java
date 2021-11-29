@@ -54,28 +54,28 @@ import java.util.Properties;
 import java.util.Vector;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.parsers.SAXParser;
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
 
-import org.openjdk.javax.xml.transform.ErrorListener;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.Templates;
-import org.openjdk.javax.xml.transform.Transformer;
-import org.openjdk.javax.xml.transform.TransformerConfigurationException;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.transform.TransformerFactory;
-import org.openjdk.javax.xml.transform.URIResolver;
-import org.openjdk.javax.xml.transform.dom.DOMResult;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
-import org.openjdk.javax.xml.transform.sax.SAXResult;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
-import org.openjdk.javax.xml.transform.sax.SAXTransformerFactory;
-import org.openjdk.javax.xml.transform.sax.TemplatesHandler;
-import org.openjdk.javax.xml.transform.sax.TransformerHandler;
-import org.openjdk.javax.xml.transform.stax.*;
-import org.openjdk.javax.xml.transform.stream.StreamResult;
-import org.openjdk.javax.xml.transform.stream.StreamSource;
+import javax.xml.transform.ErrorListener;
+import javax.xml.transform.Source;
+import javax.xml.transform.Templates;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.URIResolver;
+import javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.sax.SAXResult;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.sax.SAXTransformerFactory;
+import javax.xml.transform.sax.TemplatesHandler;
+import javax.xml.transform.sax.TransformerHandler;
+import javax.xml.transform.stax.*;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.transform.stream.StreamSource;
 import org.xml.sax.InputSource;
 import org.xml.sax.XMLFilter;
 import org.xml.sax.XMLReader;
@@ -232,7 +232,7 @@ public class TransformerFactoryImpl
     private final FeatureManager _featureManager;
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      */
     public TransformerFactoryImpl() {
         this(true);
@@ -264,7 +264,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Set the error event listener for the TransformerFactory, which is used
      * for the processing of transformation instructions, and not for the
      * transformation itself.
@@ -285,7 +285,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Get the error event handler for the TransformerFactory.
      *
      * @return The error listener used with the TransformerFactory
@@ -296,7 +296,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Returns the value set for a TransformerFactory attribute
      *
      * @param name The attribute name
@@ -345,7 +345,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Sets the value for a TransformerFactory attribute.
      *
      * @param name The attribute name
@@ -472,7 +472,7 @@ public class TransformerFactoryImpl
      * It is possible for an <code>TransformerFactory</code> to expose a feature value but be unable to change its state.
      * </p>
      *
-     * <p>See {@link org.openjdk.javax.xml.transform.TransformerFactory} for full documentation of specific features.</p>
+     * <p>See {@link javax.xml.transform.TransformerFactory} for full documentation of specific features.</p>
      *
      * @param name Feature name.
      * @param value Is feature state <code>true</code> or <code>false</code>.
@@ -535,7 +535,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Look up the value of a feature (to see if it is supported).
      * This method must be updated as the various methods and features of this
      * class are implemented.
@@ -602,7 +602,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Get the object that is used by default during the transformation to
      * resolve URIs used in document(), xsl:import, or xsl:include.
      *
@@ -615,7 +615,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Set the object that is used by default during the transformation to
      * resolve URIs used in document(), xsl:import, or xsl:include. Note that
      * this does not affect Templates and Transformers that are already
@@ -630,7 +630,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Get the stylesheet specification(s) associated via the xml-stylesheet
      * processing instruction (see http://www.w3.org/TR/xml-stylesheet/) with
      * the document document specified in the source parameter, and that match
@@ -705,7 +705,7 @@ public class TransformerFactoryImpl
         } catch (StopParseException e ) {
           // startElement encountered so do not parse further
 
-        } catch (org.openjdk.javax.xml.parsers.ParserConfigurationException e) {
+        } catch (javax.xml.parsers.ParserConfigurationException e) {
 
              throw new TransformerConfigurationException(
              "getAssociatedStylesheets failed", e);
@@ -727,7 +727,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Create a Transformer object that copies the input document to the result.
      *
      * @return A Transformer object that simply copies the source to the result.
@@ -750,7 +750,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Process the Source into a Templates object, which is a a compiled
      * representation of the source. Note that this method should not be
      * used with XSLTC, as the time-consuming compilation is done for each
@@ -815,7 +815,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Process the Source into a Templates object, which is a a compiled
      * representation of the source.
      *
@@ -1018,7 +1018,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.SAXTransformerFactory implementation.
+     * javax.xml.transform.sax.SAXTransformerFactory implementation.
      * Get a TemplatesHandler object that can process SAX ContentHandler
      * events into a Templates object.
      *
@@ -1038,7 +1038,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.SAXTransformerFactory implementation.
+     * javax.xml.transform.sax.SAXTransformerFactory implementation.
      * Get a TransformerHandler object that can process SAX ContentHandler
      * events into a Result. This method will return a pure copy transformer.
      *
@@ -1057,7 +1057,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.SAXTransformerFactory implementation.
+     * javax.xml.transform.sax.SAXTransformerFactory implementation.
      * Get a TransformerHandler object that can process SAX ContentHandler
      * events into a Result, based on the transformation instructions
      * specified by the argument.
@@ -1078,7 +1078,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.SAXTransformerFactory implementation.
+     * javax.xml.transform.sax.SAXTransformerFactory implementation.
      * Get a TransformerHandler object that can process SAX ContentHandler
      * events into a Result, based on the transformation instructions
      * specified by the argument.
@@ -1097,7 +1097,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.SAXTransformerFactory implementation.
+     * javax.xml.transform.sax.SAXTransformerFactory implementation.
      * Create an XMLFilter that uses the given source as the
      * transformation instructions.
      *
@@ -1115,7 +1115,7 @@ public class TransformerFactoryImpl
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.SAXTransformerFactory implementation.
+     * javax.xml.transform.sax.SAXTransformerFactory implementation.
      * Create an XMLFilter that uses the given source as the
      * transformation instructions.
      *

@@ -27,20 +27,20 @@ package com.sun.xml.internal.stream;
 
 import com.sun.xml.internal.stream.events.XMLEventAllocatorImpl;
 import java.util.NoSuchElementException;
-import org.openjdk.javax.xml.stream.XMLInputFactory;
-import org.openjdk.javax.xml.stream.XMLStreamConstants;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.XMLStreamReader;
-import org.openjdk.javax.xml.stream.events.EntityReference;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
-import org.openjdk.javax.xml.stream.util.XMLEventAllocator;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.events.EntityReference;
+import javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.util.XMLEventAllocator;
 
 /**
  * @author  @author  Neeraj Bajaj Sun Microsystems
  *
  */
 
-public class XMLEventReaderImpl implements org.openjdk.javax.xml.stream.XMLEventReader{
+public class XMLEventReaderImpl implements javax.xml.stream.XMLEventReader{
 
     protected XMLStreamReader fXMLReader ;
     protected XMLEventAllocator fXMLEventAllocator;

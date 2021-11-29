@@ -125,7 +125,7 @@ public class FilterExprIteratorSimple extends LocPathIterator
           result = (com.sun.org.apache.xpath.internal.objects.XNodeSet) expr.execute(xctxt);
 
     }
-    catch (org.openjdk.javax.xml.transform.TransformerException se)
+    catch (javax.xml.transform.TransformerException se)
     {
 
       // TODO: Fix...

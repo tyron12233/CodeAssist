@@ -55,10 +55,10 @@ public class VariableSafeAbsRef extends Variable
    *
    * @return The evaluated variable, or an empty nodeset if not found.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt, boolean destructiveOK)
-        throws org.openjdk.javax.xml.transform.TransformerException
+        throws javax.xml.transform.TransformerException
   {
         XNodeSet xns = (XNodeSet)super.execute(xctxt, destructiveOK);
         DTMManager dtmMgr = xctxt.getDTMManager();

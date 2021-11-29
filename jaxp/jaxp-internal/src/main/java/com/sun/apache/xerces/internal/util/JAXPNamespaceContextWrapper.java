@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.TreeSet;
 import java.util.Vector;
 
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 
 import com.sun.apache.xerces.internal.xni.NamespaceContext;
 
@@ -41,7 +41,7 @@ import com.sun.apache.xerces.internal.xni.NamespaceContext;
  */
 public final class JAXPNamespaceContextWrapper implements NamespaceContext {
 
-    private org.openjdk.javax.xml.namespace.NamespaceContext fNamespaceContext;
+    private javax.xml.namespace.NamespaceContext fNamespaceContext;
     private SymbolTable fSymbolTable;
     private List fPrefixes;
     private final Vector fAllPrefixes = new Vector();
@@ -53,11 +53,11 @@ public final class JAXPNamespaceContextWrapper implements NamespaceContext {
         setSymbolTable(symbolTable);
     }
 
-    public void setNamespaceContext(org.openjdk.javax.xml.namespace.NamespaceContext context) {
+    public void setNamespaceContext(javax.xml.namespace.NamespaceContext context) {
         fNamespaceContext = context;
     }
 
-    public org.openjdk.javax.xml.namespace.NamespaceContext getNamespaceContext() {
+    public javax.xml.namespace.NamespaceContext getNamespaceContext() {
         return fNamespaceContext;
     }
 

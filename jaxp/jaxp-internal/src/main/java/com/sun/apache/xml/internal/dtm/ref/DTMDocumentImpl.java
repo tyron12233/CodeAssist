@@ -22,7 +22,7 @@
  */
 package com.sun.apache.xml.internal.dtm.ref;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
+import javax.xml.transform.SourceLocator;
 
 import com.sun.apache.xml.internal.dtm.DTM;
 import com.sun.apache.xml.internal.dtm.DTMAxisIterator;

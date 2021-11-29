@@ -115,9 +115,9 @@ public class UnionPattern extends Expression
    *         {@link NodeTest#SCORE_QNAME}, or
    *         {@link NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public XObject execute(XPathContext xctxt) throws org.openjdk.javax.xml.transform.TransformerException
+  public XObject execute(XPathContext xctxt) throws javax.xml.transform.TransformerException
   {
 
     XObject bestScore = null;

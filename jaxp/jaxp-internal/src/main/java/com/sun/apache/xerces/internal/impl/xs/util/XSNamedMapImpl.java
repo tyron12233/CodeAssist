@@ -27,8 +27,8 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.namespace.QName;
+import javax.xml.XMLConstants;
+import javax.xml.namespace.QName;
 
 import com.sun.apache.xerces.internal.util.SymbolHash;
 import com.sun.apache.xerces.internal.xs.XSNamedMap;

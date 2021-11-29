@@ -23,7 +23,7 @@
 
 package com.sun.org.apache.xml.internal.dtm.ref;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
+import javax.xml.transform.SourceLocator;
 
 /**
  * <code>NodeLocator</code> maintains information on an XML source

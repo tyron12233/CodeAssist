@@ -26,7 +26,7 @@ package com.sun.org.apache.xalan.internal.xsltc.dom;
 import com.sun.org.apache.xalan.internal.XalanConstants;
 import java.io.FileNotFoundException;
 
-import org.openjdk.javax.xml.transform.stream.StreamSource;
+import javax.xml.transform.stream.StreamSource;
 
 import com.sun.org.apache.xalan.internal.xsltc.DOM;
 import com.sun.org.apache.xalan.internal.xsltc.DOMCache;

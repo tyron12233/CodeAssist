@@ -40,13 +40,13 @@ import java.util.Random;
 import java.util.Vector;
 import java.util.Set;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.namespace.NamespaceContext;
-import org.openjdk.javax.xml.stream.XMLOutputFactory;
-import org.openjdk.javax.xml.stream.XMLStreamConstants;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.XMLStreamWriter;
-import org.openjdk.javax.xml.transform.stream.StreamResult;
+import javax.xml.XMLConstants;
+import javax.xml.namespace.NamespaceContext;
+import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamWriter;
+import javax.xml.transform.stream.StreamResult;
 
 import com.sun.apache.xerces.internal.impl.Constants;
 import com.sun.apache.xerces.internal.impl.PropertyManager;

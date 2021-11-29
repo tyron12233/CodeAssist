@@ -25,8 +25,8 @@
 
 package com.sun.stream.events;
 
-import org.openjdk.javax.xml.stream.events.EntityDeclaration;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.EntityDeclaration;
+import javax.xml.stream.events.XMLEvent;
 
 import com.sun.apache.xerces.internal.xni.XMLResourceIdentifier;
 

@@ -22,7 +22,7 @@
  */
 package com.sun.org.apache.xpath.internal;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import com.sun.org.apache.xalan.internal.res.XSLMessages;
 import com.sun.org.apache.xpath.internal.objects.XObject;
@@ -463,11 +463,11 @@ public class VariableStack implements Cloneable
    *
    * @return The evaluated value of the variable.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject getVariableOrParam(
           XPathContext xctxt, com.sun.org.apache.xml.internal.utils.QName qname)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     // J2SE does not support Xalan interpretive
@@ -515,6 +515,6 @@ public class VariableStack implements Cloneable
     }
     */
 
-    throw new org.openjdk.javax.xml.transform.TransformerException(XSLMessages.createXPATHMessage(XPATHErrorResources.ER_VAR_NOT_RESOLVABLE, new Object[]{qname.toString()})); //"Variable not resolvable: " + qname);
+    throw new javax.xml.transform.TransformerException(XSLMessages.createXPATHMessage(XPATHErrorResources.ER_VAR_NOT_RESOLVABLE, new Object[]{qname.toString()})); //"Variable not resolvable: " + qname);
   }
 }  // end VariableStack

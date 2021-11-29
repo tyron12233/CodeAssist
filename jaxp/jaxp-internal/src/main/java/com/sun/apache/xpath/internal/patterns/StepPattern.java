@@ -328,10 +328,10 @@ public class StepPattern extends NodeTest implements SubContextList, ExpressionO
    *         {@link NodeTest#SCORE_QNAME}, or
    *         {@link NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt, int currentNode)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     DTM dtm = xctxt.getDTM(currentNode);
@@ -358,10 +358,10 @@ public class StepPattern extends NodeTest implements SubContextList, ExpressionO
    *         {@link NodeTest#SCORE_QNAME}, or
    *         {@link NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return execute(xctxt, xctxt.getCurrentNode());
   }
@@ -378,12 +378,12 @@ public class StepPattern extends NodeTest implements SubContextList, ExpressionO
    *
    * @return The result of the expression in the form of a <code>XObject</code>.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if a runtime exception
+   * @throws javax.xml.transform.TransformerException if a runtime exception
    *         occurs.
    */
   public XObject execute(
           XPathContext xctxt, int currentNode, DTM dtm, int expType)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     if (m_whatToShow == NodeTest.SHOW_BYFUNCTION)
@@ -501,7 +501,7 @@ public class StepPattern extends NodeTest implements SubContextList, ExpressionO
         }
       }
     }
-    catch (org.openjdk.javax.xml.transform.TransformerException se)
+    catch (javax.xml.transform.TransformerException se)
     {
 
       // TODO: should keep throw sax exception...
@@ -607,7 +607,7 @@ public class StepPattern extends NodeTest implements SubContextList, ExpressionO
         }
       }
     }
-    catch (org.openjdk.javax.xml.transform.TransformerException se)
+    catch (javax.xml.transform.TransformerException se)
     {
 
       // TODO: should keep throw sax exception...
@@ -662,11 +662,11 @@ public class StepPattern extends NodeTest implements SubContextList, ExpressionO
    *         {@link NodeTest#SCORE_QNAME}, or
    *         {@link NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   protected final XObject executeRelativePathPattern(
           XPathContext xctxt, DTM dtm, int currentNode)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     XObject score = NodeTest.SCORE_NONE;
@@ -706,11 +706,11 @@ public class StepPattern extends NodeTest implements SubContextList, ExpressionO
    *
    * @return true if the node should be accepted, false otherwise.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   protected final boolean executePredicates(
           XPathContext xctxt, DTM dtm, int currentNode)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     boolean result = true;
@@ -890,10 +890,10 @@ public class StepPattern extends NodeTest implements SubContextList, ExpressionO
    *         {@link NodeTest#SCORE_QNAME}, or
    *         {@link NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public double getMatchScore(XPathContext xctxt, int context)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     xctxt.pushCurrentNode(context);

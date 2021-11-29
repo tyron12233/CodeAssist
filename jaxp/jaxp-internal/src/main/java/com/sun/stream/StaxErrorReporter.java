@@ -27,10 +27,10 @@ package com.sun.stream;
 
 
 
-import org.openjdk.javax.xml.stream.Location;
-import org.openjdk.javax.xml.stream.XMLInputFactory;
-import org.openjdk.javax.xml.stream.XMLReporter;
-import org.openjdk.javax.xml.stream.XMLStreamException;
+import javax.xml.stream.Location;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLReporter;
+import javax.xml.stream.XMLStreamException;
 
 import com.sun.apache.xerces.internal.impl.PropertyManager;
 import com.sun.apache.xerces.internal.impl.XMLErrorReporter;

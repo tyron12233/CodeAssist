@@ -25,9 +25,9 @@
 
 package com.sun.stream.events;
 
-import org.openjdk.javax.xml.stream.Location;
-import org.openjdk.javax.xml.stream.XMLStreamConstants;
-import org.openjdk.javax.xml.stream.events.ProcessingInstruction;
+import javax.xml.stream.Location;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.events.ProcessingInstruction;
 
 /** Implements Processing Instruction Event
  *

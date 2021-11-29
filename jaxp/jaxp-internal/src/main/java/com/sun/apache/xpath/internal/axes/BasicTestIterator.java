@@ -71,10 +71,10 @@ public abstract class BasicTestIterator extends LocPathIterator
    * @param opPos The position of this iterator in the
    * opcode list from the compiler.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   protected BasicTestIterator(Compiler compiler, int opPos, int analysis)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     super(compiler, opPos, analysis, false);
 
@@ -109,11 +109,11 @@ public abstract class BasicTestIterator extends LocPathIterator
    * loaded, or false if this is a derived iterator and
    * it doesn't wish to load child walkers.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   protected BasicTestIterator(
           Compiler compiler, int opPos, int analysis, boolean shouldLoadWalkers)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
     super(compiler, opPos, analysis, shouldLoadWalkers);
   }

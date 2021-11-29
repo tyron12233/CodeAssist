@@ -25,7 +25,7 @@ import java.util.Locale;
 import java.util.Iterator;
 import java.util.Map;
 
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 
 import com.sun.org.apache.xerces.internal.impl.Constants;
 import com.sun.org.apache.xerces.internal.impl.XMLEntityManager;

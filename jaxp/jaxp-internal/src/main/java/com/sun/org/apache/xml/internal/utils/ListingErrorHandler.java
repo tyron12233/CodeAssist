@@ -30,9 +30,9 @@ import java.io.PrintWriter;
 import java.net.URL;
 import java.net.URLConnection;
 
-import org.openjdk.javax.xml.transform.ErrorListener;
-import org.openjdk.javax.xml.transform.SourceLocator;
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.ErrorListener;
+import javax.xml.transform.SourceLocator;
+import javax.xml.transform.TransformerException;
 
 import com.sun.org.apache.xml.internal.res.XMLErrorResources;
 import com.sun.org.apache.xml.internal.res.XMLMessages;
@@ -182,12 +182,12 @@ public class ListingErrorHandler implements ErrorHandler, ErrorListener
     }
 
 
-    /* ======== Implement org.openjdk.javax.xml.transform.ErrorListener ======== */
+    /* ======== Implement javax.xml.transform.ErrorListener ======== */
 
     /**
      * Receive notification of a warning.
      *
-     * <p>{@link org.openjdk.javax.xml.transform.Transformer} can use this method to report
+     * <p>{@link javax.xml.transform.Transformer} can use this method to report
      * conditions that are not errors or fatal errors.  The default behaviour
      * is to take no action.</p>
      *
@@ -198,10 +198,10 @@ public class ListingErrorHandler implements ErrorHandler, ErrorListener
      * @param exception The warning information encapsulated in a
      *                  transformer exception.
      *
-     * @throws org.openjdk.javax.xml.transform.TransformerException  only if
+     * @throws javax.xml.transform.TransformerException  only if
      * setThrowOnWarning is true.
      *
-     * @see org.openjdk.javax.xml.transform.TransformerException
+     * @see javax.xml.transform.TransformerException
      */
     public void warning(TransformerException exception)
         throws TransformerException
@@ -225,10 +225,10 @@ public class ListingErrorHandler implements ErrorHandler, ErrorListener
      * @param exception The error information encapsulated in a
      *                  transformer exception.
      *
-     * @throws org.openjdk.javax.xml.transform.TransformerException  only if
+     * @throws javax.xml.transform.TransformerException  only if
      * setThrowOnError is true.
      *
-     * @see org.openjdk.javax.xml.transform.TransformerException
+     * @see javax.xml.transform.TransformerException
      */
     public void error(TransformerException exception)
         throws TransformerException
@@ -253,10 +253,10 @@ public class ListingErrorHandler implements ErrorHandler, ErrorListener
      * @param exception The error information encapsulated in a
      *                  transformer exception.
      *
-     * @throws org.openjdk.javax.xml.transform.TransformerException  only if
+     * @throws javax.xml.transform.TransformerException  only if
      * setThrowOnError is true.
      *
-     * @see org.openjdk.javax.xml.transform.TransformerException
+     * @see javax.xml.transform.TransformerException
      */
     public void fatalError(TransformerException exception)
         throws TransformerException

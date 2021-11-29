@@ -136,7 +136,7 @@ public class UnionChildIterator extends ChildTestIterator
         }
       }
     }
-    catch (org.openjdk.javax.xml.transform.TransformerException se)
+    catch (javax.xml.transform.TransformerException se)
     {
 
       // TODO: Fix this.

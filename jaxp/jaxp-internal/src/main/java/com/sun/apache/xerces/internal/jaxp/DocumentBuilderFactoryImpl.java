@@ -22,11 +22,11 @@ package com.sun.apache.xerces.internal.jaxp;
 
 import java.util.Hashtable;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.parsers.DocumentBuilder;
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.validation.Schema;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.validation.Schema;
 
 import com.sun.apache.xerces.internal.parsers.DOMParser;
 import com.sun.apache.xerces.internal.util.SAXMessageFormatter;
@@ -53,7 +53,7 @@ public class DocumentBuilderFactoryImpl extends DocumentBuilderFactory {
     private boolean fSecureProcess = true;
 
     /**
-     * Creates a new instance of a {@link org.openjdk.javax.xml.parsers.DocumentBuilder}
+     * Creates a new instance of a {@link javax.xml.parsers.DocumentBuilder}
      * using the currently configured parameters.
      */
     public DocumentBuilder newDocumentBuilder()

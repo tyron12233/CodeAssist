@@ -22,11 +22,11 @@ package com.sun.apache.xerces.internal.jaxp;
 
 import java.util.Hashtable;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.parsers.SAXParser;
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
-import org.openjdk.javax.xml.validation.Schema;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
+import javax.xml.validation.Schema;
 
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXNotRecognizedException;
@@ -37,7 +37,7 @@ import com.sun.apache.xerces.internal.impl.Constants;
 
 /**
  * This is the implementation specific class for the
- * <code>org.openjdk.javax.xml.parsers.SAXParserFactory</code>. This is the platform
+ * <code>javax.xml.parsers.SAXParserFactory</code>. This is the platform
  * default implementation for the platform.
  *
  * @author Rajiv Mordani
@@ -71,7 +71,7 @@ public class SAXParserFactoryImpl extends SAXParserFactory {
     /**
      * Creates a new instance of <code>SAXParser</code> using the currently
      * configured factory parameters.
-     * @return org.openjdk.javax.xml.parsers.SAXParser
+     * @return javax.xml.parsers.SAXParser
      */
     public SAXParser newSAXParser()
         throws ParserConfigurationException

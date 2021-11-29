@@ -35,7 +35,7 @@ import com.sun.apache.xml.internal.utils.XMLString;
 
 import com.sun.apache.xml.internal.serializer.SerializationHandler;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
+import javax.xml.transform.SourceLocator;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.Attributes;

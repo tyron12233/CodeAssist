@@ -22,7 +22,7 @@
  */
 package com.sun.org.apache.xalan.internal.extensions;
 
-import org.openjdk.javax.xml.transform.ErrorListener;
+import javax.xml.transform.ErrorListener;
 
 import com.sun.org.apache.xpath.internal.objects.XObject;
 import org.w3c.dom.Node;
@@ -75,10 +75,10 @@ public interface ExpressionContext
    *
    * @return The evaluated value of the variable.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject getVariableOrParam(com.sun.org.apache.xml.internal.utils.QName qname)
-            throws org.openjdk.javax.xml.transform.TransformerException;
+            throws javax.xml.transform.TransformerException;
 
   /**
    * Get the XPathContext that owns this ExpressionContext.
@@ -87,9 +87,9 @@ public interface ExpressionContext
    * the variable stack and TransformerImpl.
    *
    * @return The current XPathContext.
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public com.sun.org.apache.xpath.internal.XPathContext getXPathContext()
-            throws org.openjdk.javax.xml.transform.TransformerException;
+            throws javax.xml.transform.TransformerException;
 
 }

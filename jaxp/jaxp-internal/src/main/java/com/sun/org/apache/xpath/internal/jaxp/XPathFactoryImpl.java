@@ -27,11 +27,11 @@ import com.sun.org.apache.xalan.internal.res.XSLMessages;
 import com.sun.org.apache.xalan.internal.utils.FeatureManager;
 import com.sun.org.apache.xalan.internal.utils.FeaturePropertyBase;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.xpath.XPathFactory;
-import org.openjdk.javax.xml.xpath.XPathFactoryConfigurationException;
-import org.openjdk.javax.xml.xpath.XPathFunctionResolver;
-import org.openjdk.javax.xml.xpath.XPathVariableResolver;
+import javax.xml.XMLConstants;
+import javax.xml.xpath.XPathFactory;
+import javax.xml.xpath.XPathFactoryConfigurationException;
+import javax.xml.xpath.XPathFunctionResolver;
+import javax.xml.xpath.XPathVariableResolver;
 
 /**
  * The XPathFactory builds XPaths.
@@ -65,7 +65,7 @@ public  class XPathFactoryImpl extends XPathFactory {
          */
         private boolean _isSecureMode = false;
         /**
-         * org.openjdk.javax.xml.xpath.XPathFactory implementation.
+         * javax.xml.xpath.XPathFactory implementation.
          */
 
         private boolean _useServicesMechanism = true;
@@ -135,7 +135,7 @@ public  class XPathFactoryImpl extends XPathFactory {
          *
          * @return New <code>XPath</code>
          */
-        public org.openjdk.javax.xml.xpath.XPath newXPath() {
+        public javax.xml.xpath.XPath newXPath() {
             return new com.sun.org.apache.xpath.internal.jaxp.XPathImpl(
                     xPathVariableResolver, xPathFunctionResolver,
                     !_isNotSecureProcessing, _useServicesMechanism,
@@ -156,7 +156,7 @@ public  class XPathFactoryImpl extends XPathFactory {
          * value but be unable to change its state.
          * </p>
          *
-         * <p>See {@link org.openjdk.javax.xml.xpath.XPathFactory} for full documentation
+         * <p>See {@link javax.xml.xpath.XPathFactory} for full documentation
          * of specific features.</p>
          *
          * @param name Feature name.

@@ -24,8 +24,8 @@ package com.sun.apache.xalan.internal.lib;
 
 import java.util.StringTokenizer;
 
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
 import com.sun.apache.xml.internal.utils.WrappedRuntimeException;
 import com.sun.apache.xpath.internal.NodeSet;

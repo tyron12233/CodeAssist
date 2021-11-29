@@ -101,8 +101,8 @@ public class QNameDV extends TypeValidator {
         public synchronized String toString() {
             return rawname;
         }
-        public org.openjdk.javax.xml.namespace.QName getJAXPQName() {
-            return new org.openjdk.javax.xml.namespace.QName(uri, localpart, prefix);
+        public javax.xml.namespace.QName getJAXPQName() {
+            return new javax.xml.namespace.QName(uri, localpart, prefix);
         }
         public QName getXNIQName() {
             return this;

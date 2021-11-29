@@ -56,12 +56,12 @@ public class WalkerFactory
    *
    * @return non-null AxesWalker derivative.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    * @xsl.usage advanced
    */
   static AxesWalker loadOneWalker(
           WalkingIterator lpi, Compiler compiler, int stepOpCodePos)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     AxesWalker firstWalker = null;
@@ -91,12 +91,12 @@ public class WalkerFactory
    *
    * @return non-null AxesWalker derivative.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    * @xsl.usage advanced
    */
   static AxesWalker loadWalkers(
           WalkingIterator lpi, Compiler compiler, int stepOpCodePos, int stepIndex)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     int stepType;
@@ -155,12 +155,12 @@ public class WalkerFactory
    *
    * @return non-null reference to a LocPathIterator or derivative.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public static DTMIterator newDTMIterator(
           Compiler compiler, int opPos,
           boolean isTopLevel)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     int firstStepPos = OpMap.getFirstChildPos(opPos);
@@ -297,11 +297,11 @@ public class WalkerFactory
    * @return 32 bits as an integer that give information about the location
    * path as a whole.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public static int getAxisFromStep(
           Compiler compiler, int stepOpCodePos)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     int stepType = compiler.getOp(stepOpCodePos);
@@ -473,7 +473,7 @@ public class WalkerFactory
    * Tell if the predicates need to have proximity knowledge.
    */
   public static boolean mightBeProximate(Compiler compiler, int opPos, int stepType)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     boolean mightBeProximate = false;
@@ -553,11 +553,11 @@ public class WalkerFactory
    * @return 32 bits as an integer that give information about the location
    * path as a whole.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   private static boolean isOptimizableForDescendantIterator(
           Compiler compiler, int stepOpCodePos, int stepIndex)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     int stepType;
@@ -661,11 +661,11 @@ public class WalkerFactory
    * @return 32 bits as an integer that give information about the location
    * path as a whole.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   private static int analyze(
           Compiler compiler, int stepOpCodePos, int stepIndex)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     int stepType;
@@ -816,12 +816,12 @@ public class WalkerFactory
    *
    * @return A StepPattern object, which may contain relative StepPatterns.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   static StepPattern loadSteps(
           MatchPatternIterator mpi, Compiler compiler, int stepOpCodePos,
                                                        int stepIndex)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
     if (DEBUG_PATTERN_CREATION)
     {
@@ -975,12 +975,12 @@ public class WalkerFactory
    *
    * @return the head of the list.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   private static StepPattern createDefaultStepPattern(
           Compiler compiler, int opPos, MatchPatternIterator mpi,
           int analysis, StepPattern tail, StepPattern head)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     int stepType = compiler.getOp(opPos);
@@ -1124,10 +1124,10 @@ public class WalkerFactory
    *
    * @return true if step has a predicate.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   static boolean analyzePredicate(Compiler compiler, int opPos, int stepType)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     int argLen;
@@ -1594,7 +1594,7 @@ public class WalkerFactory
    *
    * @return true if the walk can be done in natural order.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   static public boolean isNaturalDocOrder(int analysis)
   {
@@ -1620,11 +1620,11 @@ public class WalkerFactory
    *
    * @return true if the walk can be done in natural order.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   private static boolean isNaturalDocOrder(
           Compiler compiler, int stepOpCodePos, int stepIndex, int analysis)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
     if(canCrissCross(analysis))
       return false;

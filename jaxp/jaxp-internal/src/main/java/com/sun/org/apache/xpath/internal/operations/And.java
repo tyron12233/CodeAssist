@@ -42,9 +42,9 @@ public class And extends Operation
    * @return {@link com.sun.org.apache.xpath.internal.objects.XBoolean#S_TRUE} or
    * {@link com.sun.org.apache.xpath.internal.objects.XBoolean#S_FALSE}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public XObject execute(XPathContext xctxt) throws org.openjdk.javax.xml.transform.TransformerException
+  public XObject execute(XPathContext xctxt) throws javax.xml.transform.TransformerException
   {
 
     XObject expr1 = m_left.execute(xctxt);
@@ -66,10 +66,10 @@ public class And extends Operation
    *
    * @return The result of the operation as a boolean.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean bool(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return (m_left.bool(xctxt) && m_right.bool(xctxt));
   }

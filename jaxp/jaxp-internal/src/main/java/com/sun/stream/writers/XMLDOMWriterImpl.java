@@ -27,11 +27,11 @@ package com.sun.stream.writers;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.namespace.NamespaceContext;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.XMLStreamWriter;
-import org.openjdk.javax.xml.transform.dom.DOMResult;
+import javax.xml.XMLConstants;
+import javax.xml.namespace.NamespaceContext;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamWriter;
+import javax.xml.transform.dom.DOMResult;
 import org.w3c.dom.Attr;
 import org.w3c.dom.CDATASection;
 import org.w3c.dom.Comment;
@@ -71,7 +71,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
     private int depth = 0;
     /**
      * Creates a new instance of XMLDOMwriterImpl
-     * @param result DOMResult object @org.openjdk.javax.xml.transform.dom.DOMResult
+     * @param result DOMResult object @javax.xml.transform.dom.DOMResult
      */
     public XMLDOMWriterImpl(DOMResult result) {
 
@@ -104,7 +104,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
 
     /**
      * This method has no effect when called.
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void close() throws XMLStreamException {
         //no-op
@@ -112,7 +112,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
 
     /**
      * This method has no effect when called.
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void flush() throws XMLStreamException {
         //no-op
@@ -122,14 +122,14 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * {@inheritDoc}
      * @return {@inheritDoc}
      */
-    public org.openjdk.javax.xml.namespace.NamespaceContext getNamespaceContext() {
+    public javax.xml.namespace.NamespaceContext getNamespaceContext() {
         return null;
     }
 
     /**
      * {@inheritDoc}
      * @param namespaceURI {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      * @return {@inheritDoc}
      */
     public String getPrefix(String namespaceURI) throws XMLStreamException {
@@ -153,7 +153,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
     /**
      * Is not supported in this version of the implementation.
      * @param uri {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void setDefaultNamespace(String uri) throws XMLStreamException {
         namespaceContext.declarePrefix(XMLConstants.DEFAULT_NS_PREFIX, uri);
@@ -165,9 +165,9 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
     /**
      * {@inheritDoc}
      * @param namespaceContext {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
-    public void setNamespaceContext(org.openjdk.javax.xml.namespace.NamespaceContext namespaceContext) throws XMLStreamException {
+    public void setNamespaceContext(javax.xml.namespace.NamespaceContext namespaceContext) throws XMLStreamException {
         throw new UnsupportedOperationException();
     }
 
@@ -175,7 +175,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * Is not supported in this version of the implementation.
      * @param prefix {@inheritDoc}
      * @param uri {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void setPrefix(String prefix, String uri) throws XMLStreamException {
         if(prefix == null){
@@ -191,7 +191,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * Creates a DOM Atrribute @see org.w3c.dom.Node and associates it with the current DOM element @see org.w3c.dom.Node.
      * @param localName {@inheritDoc}
      * @param value {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeAttribute(String localName, String value) throws XMLStreamException {
 
@@ -211,7 +211,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * @param namespaceURI {@inheritDoc}
      * @param localName {@inheritDoc}
      * @param value {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeAttribute(String namespaceURI,String localName,String value)throws XMLStreamException {
         if(currentNode.getNodeType() == Node.ELEMENT_NODE){
@@ -253,7 +253,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * @param namespaceURI {@inheritDoc}
      * @param localName {@inheritDoc}
      * @param value {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeAttribute(String prefix,String namespaceURI,String localName,String value)throws XMLStreamException {
         if(currentNode.getNodeType() == Node.ELEMENT_NODE){
@@ -287,7 +287,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
     /**
      * Creates a CDATA object @see org.w3c.dom.CDATASection.
      * @param data {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeCData(String data) throws XMLStreamException {
         if(data == null){
@@ -302,7 +302,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * Creates a character object @see org.w3c.dom.Text and appends it to the current
      * element in the DOM tree.
      * @param charData {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeCharacters(String charData) throws XMLStreamException {
         Text text = ownerDoc.createTextNode(charData);
@@ -315,7 +315,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * @param values {@inheritDoc}
      * @param param {@inheritDoc}
      * @param param2 {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeCharacters(char[] values, int param, int param2) throws XMLStreamException {
 
@@ -327,7 +327,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * Creates a Comment object @see org.w3c.dom.Comment and appends it to the current
      * element in the DOM tree.
      * @param str {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeComment(String str) throws XMLStreamException {
         Comment comment = ownerDoc.createComment(str);
@@ -337,7 +337,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
     /**
      * This method is not supported in this implementation.
      * @param str {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeDTD(String str) throws XMLStreamException {
         throw new UnsupportedOperationException();
@@ -346,7 +346,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
     /**
      * Creates a DOM attribute and adds it to the current element in the DOM tree.
      * @param namespaceURI {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeDefaultNamespace(String namespaceURI) throws XMLStreamException {
         if(currentNode.getNodeType() == Node.ELEMENT_NODE){
@@ -362,7 +362,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
     /**
      * creates a DOM Element and appends it to the current element in the tree.
      * @param localName {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeEmptyElement(String localName) throws XMLStreamException {
         if(ownerDoc != null){
@@ -380,7 +380,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * creates a DOM Element and appends it to the current element in the tree.
      * @param namespaceURI {@inheritDoc}
      * @param localName {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeEmptyElement(String namespaceURI, String localName) throws XMLStreamException {
         if(ownerDoc != null){
@@ -422,7 +422,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * @param prefix {@inheritDoc}
      * @param localName {@inheritDoc}
      * @param namespaceURI {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeEmptyElement(String prefix, String localName, String namespaceURI) throws XMLStreamException {
         if(ownerDoc != null){
@@ -453,7 +453,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
 
     /**
      * Will reset current Node pointer maintained by the implementation.
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeEndDocument() throws XMLStreamException {
         //What do you want me to do eh! :)
@@ -470,7 +470,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
 
     /**
      * Internal current Node pointer will point to the parent of the current Node.
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeEndElement() throws XMLStreamException {
         Node node= currentNode.getParentNode();
@@ -489,7 +489,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
     /**
      * Is not supported in this implementation.
      * @param name {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeEntityRef(String name) throws XMLStreamException {
         EntityReference er = ownerDoc.createEntityReference(name);
@@ -501,7 +501,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * the DOM tree.
      * @param prefix {@inheritDoc}
      * @param namespaceURI {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeNamespace(String prefix, String namespaceURI) throws XMLStreamException {
 
@@ -527,7 +527,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
     /**
      * is not supported in this release.
      * @param target {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeProcessingInstruction(String target) throws XMLStreamException {
         if(target == null){
@@ -541,7 +541,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * is not supported in this release.
      * @param target {@inheritDoc}
      * @param data {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeProcessingInstruction(String target, String data) throws XMLStreamException {
         if(target == null){
@@ -554,7 +554,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
     /**
      * will set version on the Document object when the DOM Node passed to this implementation
      * supports DOM Level3 API's.
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeStartDocument() throws XMLStreamException {
         try{
@@ -572,7 +572,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * will set version on the Document object when the DOM Node passed to this implementation
      * supports DOM Level3 API's.
      * @param version {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeStartDocument(String version) throws XMLStreamException {
         try{
@@ -591,7 +591,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * supports DOM Level3 API's.
      * @param encoding {@inheritDoc}
      * @param version {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeStartDocument(String encoding, String version) throws XMLStreamException {
         try{
@@ -609,7 +609,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
     /**
      * creates a DOM Element and appends it to the current element in the tree.
      * @param localName {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeStartElement(String localName) throws XMLStreamException {
         if(ownerDoc != null){
@@ -631,7 +631,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * creates a DOM Element and appends it to the current element in the tree.
      * @param namespaceURI {@inheritDoc}
      * @param localName {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeStartElement(String namespaceURI, String localName) throws XMLStreamException {
         if(ownerDoc != null){
@@ -678,7 +678,7 @@ public class XMLDOMWriterImpl implements XMLStreamWriter  {
      * @param prefix {@inheritDoc}
      * @param localName {@inheritDoc}
      * @param namespaceURI {@inheritDoc}
-     * @throws org.openjdk.javax.xml.stream.XMLStreamException {@inheritDoc}
+     * @throws javax.xml.stream.XMLStreamException {@inheritDoc}
      */
     public void writeStartElement(String prefix, String localName, String namespaceURI) throws XMLStreamException {
 

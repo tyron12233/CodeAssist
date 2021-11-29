@@ -94,9 +94,9 @@ public abstract class Function extends Expression
    * @param xctxt The execution current context.
    * @return A valid XObject.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public XObject execute(XPathContext xctxt) throws org.openjdk.javax.xml.transform.TransformerException
+  public XObject execute(XPathContext xctxt) throws javax.xml.transform.TransformerException
   {
 
     // Programmer's assert.  (And, no, I don't want the method to be abstract).

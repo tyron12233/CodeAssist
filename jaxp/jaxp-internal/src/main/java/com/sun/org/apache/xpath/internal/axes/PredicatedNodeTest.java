@@ -61,10 +61,10 @@ public abstract class PredicatedNodeTest extends NodeTest implements SubContextL
    * @param stream Input stream to read from
    *
    * @throws java.io.IOException
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   private void readObject(java.io.ObjectInputStream stream)
-          throws java.io.IOException, org.openjdk.javax.xml.transform.TransformerException
+          throws java.io.IOException, javax.xml.transform.TransformerException
   {
     try
     {
@@ -74,7 +74,7 @@ public abstract class PredicatedNodeTest extends NodeTest implements SubContextL
     }
     catch (ClassNotFoundException cnfe)
     {
-      throw new org.openjdk.javax.xml.transform.TransformerException(cnfe);
+      throw new javax.xml.transform.TransformerException(cnfe);
     }
   }
 
@@ -156,10 +156,10 @@ public abstract class PredicatedNodeTest extends NodeTest implements SubContextL
    *                 walker in the op map.
    * @param opPos The op code position of this location step.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   protected void initPredicateInfo(Compiler compiler, int opPos)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     int pos = compiler.getFirstPredicateOpPos(opPos);
@@ -268,9 +268,9 @@ public abstract class PredicatedNodeTest extends NodeTest implements SubContextL
    *
    * @param i The index into the m_proximityPositions array.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public void initProximityPosition(int i) throws org.openjdk.javax.xml.transform.TransformerException
+  public void initProximityPosition(int i) throws javax.xml.transform.TransformerException
   {
     m_proximityPositions[i] = 0;
   }
@@ -318,10 +318,10 @@ public abstract class PredicatedNodeTest extends NodeTest implements SubContextL
    *
    * @return the result of executing the predicate expressions.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   boolean executePredicates(int context, XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     int nPredicates = getPredicateCount();
@@ -485,7 +485,7 @@ public abstract class PredicatedNodeTest extends NodeTest implements SubContextL
         return DTMIterator.FILTER_ACCEPT;
       }
     }
-    catch (org.openjdk.javax.xml.transform.TransformerException se)
+    catch (javax.xml.transform.TransformerException se)
     {
 
       // TODO: Fix this.

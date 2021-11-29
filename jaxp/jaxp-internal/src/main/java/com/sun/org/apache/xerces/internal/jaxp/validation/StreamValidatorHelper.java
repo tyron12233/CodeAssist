@@ -31,16 +31,16 @@ import com.sun.org.apache.xerces.internal.xni.parser.XMLParseException;
 import com.sun.org.apache.xerces.internal.xni.parser.XMLParserConfiguration;
 import java.io.IOException;
 import java.lang.ref.SoftReference;
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.transform.Result;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.TransformerConfigurationException;
-import org.openjdk.javax.xml.transform.TransformerFactory;
-import org.openjdk.javax.xml.transform.TransformerFactoryConfigurationError;
-import org.openjdk.javax.xml.transform.sax.SAXTransformerFactory;
-import org.openjdk.javax.xml.transform.sax.TransformerHandler;
-import org.openjdk.javax.xml.transform.stream.StreamResult;
-import org.openjdk.javax.xml.transform.stream.StreamSource;
+import javax.xml.XMLConstants;
+import javax.xml.transform.Result;
+import javax.xml.transform.Source;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.TransformerFactoryConfigurationError;
+import javax.xml.transform.sax.SAXTransformerFactory;
+import javax.xml.transform.sax.TransformerHandler;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.transform.stream.StreamSource;
 import org.xml.sax.SAXException;
 
 /**

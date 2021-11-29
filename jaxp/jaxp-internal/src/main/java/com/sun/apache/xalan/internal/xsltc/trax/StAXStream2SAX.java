@@ -45,10 +45,10 @@ import com.sun.apache.xalan.internal.xsltc.dom.SAXImpl;
 
 
 
-import org.openjdk.javax.xml.namespace.QName;
-import org.openjdk.javax.xml.stream.XMLStreamReader;
-import org.openjdk.javax.xml.stream.XMLStreamConstants;
-import org.openjdk.javax.xml.stream.XMLStreamException;
+import javax.xml.namespace.QName;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
 
 
 /**

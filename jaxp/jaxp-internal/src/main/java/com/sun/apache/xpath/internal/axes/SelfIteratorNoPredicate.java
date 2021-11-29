@@ -44,10 +44,10 @@ public class SelfIteratorNoPredicate extends LocPathIterator
    * location path expression for this itterator.
    * @param analysis Analysis bits.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   SelfIteratorNoPredicate(Compiler compiler, int opPos, int analysis)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     super(compiler, opPos, analysis, false);
   }
@@ -55,10 +55,10 @@ public class SelfIteratorNoPredicate extends LocPathIterator
   /**
    * Create a SelfIteratorNoPredicate object.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public SelfIteratorNoPredicate()
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     super(null);
   }
@@ -108,7 +108,7 @@ public class SelfIteratorNoPredicate extends LocPathIterator
    * @return the first node out of the nodeset, or DTM.NULL.
    */
   public int asNode(XPathContext xctxt)
-    throws org.openjdk.javax.xml.transform.TransformerException
+    throws javax.xml.transform.TransformerException
   {
     return xctxt.getCurrentNode();
   }

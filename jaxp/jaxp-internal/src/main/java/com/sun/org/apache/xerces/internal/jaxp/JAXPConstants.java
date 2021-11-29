@@ -25,7 +25,7 @@ package com.sun.org.apache.xerces.internal.jaxp;
  * This interface holds JAXP constant property/attribute names and values.
  * Since JAXP 1.2 is a maintenance release of JAXP 1.1, no public
  * signatures are allowed so these values cannot be exposed in the
- * org.openjdk.javax.xml.parsers package.  Once equivalent constants have been defined
+ * javax.xml.parsers package.  Once equivalent constants have been defined
  * in future JAXP spec versions, this interface can be removed.
  *
  * @author Edwin Goei

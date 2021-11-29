@@ -27,9 +27,9 @@ package com.sun.org.apache.xalan.internal.xsltc.trax;
 
 import java.util.Iterator;
 
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.XMLStreamWriter;
-import org.openjdk.javax.xml.stream.XMLEventWriter;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamWriter;
+import javax.xml.stream.XMLEventWriter;
 
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;

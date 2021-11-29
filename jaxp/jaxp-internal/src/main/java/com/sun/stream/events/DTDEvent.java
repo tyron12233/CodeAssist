@@ -25,8 +25,8 @@
 
 package com.sun.stream.events;
 
-import org.openjdk.javax.xml.stream.events.DTD;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.DTD;
+import javax.xml.stream.events.XMLEvent;
 
 /**
  *

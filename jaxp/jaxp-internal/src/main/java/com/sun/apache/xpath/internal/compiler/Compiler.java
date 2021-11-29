@@ -22,9 +22,9 @@
  */
 package com.sun.apache.xpath.internal.compiler;
 
-import org.openjdk.javax.xml.transform.ErrorListener;
-import org.openjdk.javax.xml.transform.SourceLocator;
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.ErrorListener;
+import javax.xml.transform.SourceLocator;
+import javax.xml.transform.TransformerException;
 
 import com.sun.apache.xalan.internal.res.XSLMessages;
 import com.sun.apache.xpath.internal.axes.AxesWalker;

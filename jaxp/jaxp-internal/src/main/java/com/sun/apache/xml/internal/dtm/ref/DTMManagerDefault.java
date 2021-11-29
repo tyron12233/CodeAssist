@@ -28,12 +28,12 @@ import com.sun.apache.xml.internal.dtm.ref.dom2dtm.DOM2DTMdefaultNamespaceDeclar
 import com.sun.apache.xml.internal.dtm.ref.sax2dtm.SAX2DTM;
 import com.sun.apache.xml.internal.dtm.ref.sax2dtm.SAX2RTFDTM;
 
-import org.openjdk.javax.xml.parsers.DocumentBuilder;
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
-import org.openjdk.javax.xml.transform.stream.StreamSource;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.Source;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.stream.StreamSource;
 
 import com.sun.apache.xml.internal.utils.SuballocatedIntVector;
 import com.sun.apache.xml.internal.utils.WrappedRuntimeException;
@@ -563,7 +563,7 @@ public class DTMManagerDefault extends DTMManager
         root = p;
       }
 
-      DOM2DTM dtm = (DOM2DTM) getDTM(new org.openjdk.javax.xml.transform.dom.DOMSource(root),
+      DOM2DTM dtm = (DOM2DTM) getDTM(new javax.xml.transform.dom.DOMSource(root),
                                                                                                                                                  false, null, true, true);
 
       int handle;

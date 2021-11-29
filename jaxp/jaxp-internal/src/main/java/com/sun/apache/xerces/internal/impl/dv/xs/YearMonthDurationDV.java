@@ -21,8 +21,8 @@ package com.sun.apache.xerces.internal.impl.dv.xs;
 
 import java.math.BigInteger;
 
-import org.openjdk.javax.xml.datatype.DatatypeConstants;
-import org.openjdk.javax.xml.datatype.Duration;
+import javax.xml.datatype.DatatypeConstants;
+import javax.xml.datatype.Duration;
 
 import com.sun.apache.xerces.internal.impl.dv.InvalidDatatypeValueException;
 import com.sun.apache.xerces.internal.impl.dv.ValidationContext;

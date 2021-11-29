@@ -22,7 +22,7 @@
  */
 package com.sun.org.apache.xpath.internal;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
+import javax.xml.transform.SourceLocator;
 
 /**
  * A class that implements this interface can construct expressions,

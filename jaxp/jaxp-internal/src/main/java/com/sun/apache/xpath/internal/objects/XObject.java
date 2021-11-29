@@ -86,10 +86,10 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return This object.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return this;
   }
@@ -234,9 +234,9 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return 0.0
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public double num() throws org.openjdk.javax.xml.transform.TransformerException
+  public double num() throws javax.xml.transform.TransformerException
   {
 
     error(XPATHErrorResources.ER_CANT_CONVERT_TO_NUMBER,
@@ -252,7 +252,7 @@ public class XObject extends Expression implements Serializable, Cloneable
    * @return numeric value of the string conversion from the
    * next node in the NodeSetDTM, or NAN if no node was found
    */
-  public double numWithSideEffects()  throws org.openjdk.javax.xml.transform.TransformerException
+  public double numWithSideEffects()  throws javax.xml.transform.TransformerException
   {
     return num();
   }
@@ -262,9 +262,9 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return false
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public boolean bool() throws org.openjdk.javax.xml.transform.TransformerException
+  public boolean bool() throws javax.xml.transform.TransformerException
   {
 
     error(XPATHErrorResources.ER_CANT_CONVERT_TO_NUMBER,
@@ -279,7 +279,7 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return True if there is a next node in the nodeset
    */
-  public boolean boolWithSideEffects() throws org.openjdk.javax.xml.transform.TransformerException
+  public boolean boolWithSideEffects() throws javax.xml.transform.TransformerException
   {
     return bool();
   }
@@ -408,9 +408,9 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return null
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public DTMIterator iter() throws org.openjdk.javax.xml.transform.TransformerException
+  public DTMIterator iter() throws javax.xml.transform.TransformerException
   {
 
     error(XPATHErrorResources.ER_CANT_CONVERT_TO_NODELIST,
@@ -435,9 +435,9 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return null
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public NodeIterator nodeset() throws org.openjdk.javax.xml.transform.TransformerException
+  public NodeIterator nodeset() throws javax.xml.transform.TransformerException
   {
 
     error(XPATHErrorResources.ER_CANT_CONVERT_TO_NODELIST,
@@ -451,9 +451,9 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return null
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public NodeList nodelist() throws org.openjdk.javax.xml.transform.TransformerException
+  public NodeList nodelist() throws javax.xml.transform.TransformerException
   {
 
     error(XPATHErrorResources.ER_CANT_CONVERT_TO_NODELIST,
@@ -468,10 +468,10 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return The object as a NodeSetDTM.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public NodeSetDTM mutableNodeset()
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     error(XPATHErrorResources.ER_CANT_CONVERT_TO_MUTABLENODELIST,
@@ -488,10 +488,10 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return This object as the given type t
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public Object castToType(int t, XPathContext support)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     Object result;
@@ -536,10 +536,10 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return True if this object is less than the given object
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean lessThan(XObject obj2)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     // In order to handle the 'all' semantics of
@@ -560,10 +560,10 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return True if this object is less than or equal to the given object
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean lessThanOrEqual(XObject obj2)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     // In order to handle the 'all' semantics of
@@ -584,10 +584,10 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return True if this object is greater than the given object
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean greaterThan(XObject obj2)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     // In order to handle the 'all' semantics of
@@ -608,10 +608,10 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return True if this object is greater than or equal to the given object
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean greaterThanOrEqual(XObject obj2)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     // In order to handle the 'all' semantics of
@@ -632,7 +632,7 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return True if this object is equal to the given object
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean equals(XObject obj2)
   {
@@ -660,10 +660,10 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @return True if this object is not equal to the given object
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean notEquals(XObject obj2)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     // In order to handle the 'all' semantics of
@@ -681,10 +681,10 @@ public class XObject extends Expression implements Serializable, Cloneable
    *
    * @param msg Error message to issue
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   protected void error(String msg)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     error(msg, null);
   }
@@ -696,10 +696,10 @@ public class XObject extends Expression implements Serializable, Cloneable
    * @param msg Error message to issue
    * @param args Arguments to use in the message
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   protected void error(String msg, Object[] args)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     String fmsg = XSLMessages.createXPATHMessage(msg, args);

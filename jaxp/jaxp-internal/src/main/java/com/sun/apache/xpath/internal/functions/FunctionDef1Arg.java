@@ -47,11 +47,11 @@ public class FunctionDef1Arg extends FunctionOneArg
    * @return The first node of the executed nodeset, or the current context
    *         node if the first argument is null.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if an error occurs while
+   * @throws javax.xml.transform.TransformerException if an error occurs while
    *                                   executing the argument expression.
    */
   protected int getArg0AsNode(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     return (null == m_arg0)
@@ -77,11 +77,11 @@ public class FunctionDef1Arg extends FunctionOneArg
    * @return The string value of the first argument, or the string value of the
    *         current context node if the first argument is null.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if an error occurs while
+   * @throws javax.xml.transform.TransformerException if an error occurs while
    *                                   executing the argument expression.
    */
   protected XMLString getArg0AsString(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     if(null == m_arg0)
     {
@@ -109,11 +109,11 @@ public class FunctionDef1Arg extends FunctionOneArg
    * @return The number value of the first argument, or the number value of the
    *         current context node if the first argument is null.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if an error occurs while
+   * @throws javax.xml.transform.TransformerException if an error occurs while
    *                                   executing the argument expression.
    */
   protected double getArg0AsNumber(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     if(null == m_arg0)

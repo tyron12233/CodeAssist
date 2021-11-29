@@ -24,8 +24,8 @@ package com.sun.apache.xml.internal.dtm.ref.dom2dtm;
 
 import java.util.Vector;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.SourceLocator;
+import javax.xml.transform.dom.DOMSource;
 
 import com.sun.apache.xml.internal.dtm.DTM;
 import com.sun.apache.xml.internal.dtm.DTMManager;

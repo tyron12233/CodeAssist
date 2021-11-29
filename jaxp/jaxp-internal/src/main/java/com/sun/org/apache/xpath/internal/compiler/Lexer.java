@@ -93,9 +93,9 @@ class Lexer
    * elements.
    * @param pat XSLT Expression.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  void tokenize(String pat) throws org.openjdk.javax.xml.transform.TransformerException
+  void tokenize(String pat) throws javax.xml.transform.TransformerException
   {
     tokenize(pat, null);
   }
@@ -106,10 +106,10 @@ class Lexer
    * @param pat XSLT Expression.
    * @param targetStrings Vector to hold Strings, may be null.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   void tokenize(String pat, Vector targetStrings)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     m_compiler.m_currentPattern = pat;
@@ -565,13 +565,13 @@ class Lexer
    * @param posOfNSSep The position of the namespace seperator (':').
    * @param posOfScan The end of the name index.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    *
    * @return -1 always.
    */
   private int mapNSTokens(String pat, int startSubstring, int posOfNSSep,
                           int posOfScan)
-           throws org.openjdk.javax.xml.transform.TransformerException
+           throws javax.xml.transform.TransformerException
  {
 
     String prefix = "";

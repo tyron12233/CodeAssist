@@ -45,7 +45,7 @@ import java.util.Vector;
 import java.net.URL;
 import java.net.MalformedURLException;
 
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import javax.xml.parsers.SAXParserFactory;
 
 /**
  * Represents OASIS Open Catalog files.

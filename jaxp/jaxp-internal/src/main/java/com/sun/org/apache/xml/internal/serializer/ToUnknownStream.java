@@ -28,8 +28,8 @@ import java.io.Writer;
 import java.util.Properties;
 import java.util.Vector;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
-import org.openjdk.javax.xml.transform.Transformer;
+import javax.xml.transform.SourceLocator;
+import javax.xml.transform.Transformer;
 
 import org.w3c.dom.Node;
 import org.xml.sax.Attributes;
@@ -1308,7 +1308,7 @@ public final class ToUnknownStream extends SerializerBase
      * generated an error message.
      * @param locator the source locator
      *
-     * @see ExtendedContentHandler#setSourceLocator(org.openjdk.javax.xml.transform.SourceLocator)
+     * @see ExtendedContentHandler#setSourceLocator(javax.xml.transform.SourceLocator)
      */
     public void setSourceLocator(SourceLocator locator)
     {

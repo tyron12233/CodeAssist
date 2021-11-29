@@ -27,13 +27,13 @@ package com.sun.xml.internal.stream.events ;
 
 import java.io.IOException;
 import java.io.Writer;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
-import org.openjdk.javax.xml.stream.events.Characters;
-import org.openjdk.javax.xml.stream.events.EndElement;
-import org.openjdk.javax.xml.stream.events.StartElement;
-import org.openjdk.javax.xml.namespace.QName;
-import org.openjdk.javax.xml.stream.Location;
-import org.openjdk.javax.xml.stream.XMLStreamException;
+import javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.Characters;
+import javax.xml.stream.events.EndElement;
+import javax.xml.stream.events.StartElement;
+import javax.xml.namespace.QName;
+import javax.xml.stream.Location;
+import javax.xml.stream.XMLStreamException;
 
 /** DummyEvent is an abstract class. It provides functionality for most of the
  * function of XMLEvent.

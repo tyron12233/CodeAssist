@@ -32,11 +32,11 @@ import java.util.Properties;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.transform.Templates;
-import org.openjdk.javax.xml.transform.Transformer;
-import org.openjdk.javax.xml.transform.TransformerConfigurationException;
-import org.openjdk.javax.xml.transform.URIResolver;
+import javax.xml.XMLConstants;
+import javax.xml.transform.Templates;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.URIResolver;
 
 import com.sun.org.apache.xalan.internal.xsltc.DOM;
 import com.sun.org.apache.xalan.internal.xsltc.Translet;

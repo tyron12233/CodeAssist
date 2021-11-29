@@ -25,8 +25,8 @@ package com.sun.org.apache.xml.internal.serializer;
 import java.io.IOException;
 import java.util.Vector;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
-import org.openjdk.javax.xml.transform.Transformer;
+import javax.xml.transform.SourceLocator;
+import javax.xml.transform.Transformer;
 
 import com.sun.org.apache.xml.internal.serializer.utils.MsgKey;
 import com.sun.org.apache.xml.internal.serializer.utils.Utils;
@@ -707,7 +707,7 @@ public abstract class SerializerBase
      * Sets the value coming from the xsl:output media-type stylesheet attribute.
      * @param mediaType the non-null media-type or MIME type associated with the
      * output document.
-     * @see org.openjdk.javax.xml.transform.OutputKeys#MEDIA_TYPE
+     * @see javax.xml.transform.OutputKeys#MEDIA_TYPE
      * @see SerializationHandler#setMediaType(String)
      */
     public void setMediaType(String mediaType)
@@ -1281,7 +1281,7 @@ public abstract class SerializerBase
      * generated an error message.
      * @param locator the source locator
      *
-     * @see ExtendedContentHandler#setSourceLocator(org.openjdk.javax.xml.transform.SourceLocator)
+     * @see ExtendedContentHandler#setSourceLocator(javax.xml.transform.SourceLocator)
      */
     public void setSourceLocator(SourceLocator locator)
     {

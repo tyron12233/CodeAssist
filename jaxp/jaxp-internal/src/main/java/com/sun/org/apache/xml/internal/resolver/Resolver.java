@@ -31,7 +31,7 @@ import java.util.Vector;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.MalformedURLException;
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import javax.xml.parsers.SAXParserFactory;
 import com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl;
 import com.sun.org.apache.xerces.internal.utils.SecuritySupport;
 import com.sun.org.apache.xml.internal.resolver.readers.SAXCatalogReader;

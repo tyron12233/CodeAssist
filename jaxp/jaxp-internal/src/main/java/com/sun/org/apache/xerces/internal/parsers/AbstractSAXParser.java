@@ -48,7 +48,7 @@ import com.sun.org.apache.xerces.internal.xs.ElementPSVI;
 import com.sun.org.apache.xerces.internal.xs.PSVIProvider;
 import java.io.IOException;
 import java.util.Locale;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 import org.xml.sax.AttributeList;
 import org.xml.sax.ContentHandler;
 import org.xml.sax.DTDHandler;

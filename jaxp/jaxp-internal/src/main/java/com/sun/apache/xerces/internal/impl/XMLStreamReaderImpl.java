@@ -39,13 +39,13 @@ import com.sun.stream.StaxErrorReporter;
 import com.sun.stream.XMLEntityStorage;
 import com.sun.stream.events.EntityDeclarationImpl;
 import com.sun.stream.events.NotationDeclarationImpl;
-import org.openjdk.javax.xml.namespace.NamespaceContext;
+import javax.xml.namespace.NamespaceContext;
 import com.sun.apache.xerces.internal.xni.XNIException;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.namespace.QName;
-import org.openjdk.javax.xml.stream.Location;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.XMLConstants;
+import javax.xml.namespace.QName;
+import javax.xml.stream.Location;
+import javax.xml.stream.events.XMLEvent;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -56,11 +56,11 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
-import org.openjdk.javax.xml.stream.XMLInputFactory;
-import org.openjdk.javax.xml.stream.XMLStreamConstants;
-import org.openjdk.javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
 
-/** This class implements org.openjdk.javax.xml.stream.XMLStreamReader. It makes use of XML*Scanner classes to
+/** This class implements javax.xml.stream.XMLStreamReader. It makes use of XML*Scanner classes to
  * derive most of its functionality. If desired, Application can reuse this instance by calling
  * reset() and setInputSource().
  *
@@ -68,7 +68,7 @@ import org.openjdk.javax.xml.stream.XMLStreamException;
  * @author K.Venugopal Sun Microsystems,Inc.
  * @author Sunitha Reddy Sun Microsystems,Inc.
  */
-public class XMLStreamReaderImpl implements org.openjdk.javax.xml.stream.XMLStreamReader {
+public class XMLStreamReaderImpl implements javax.xml.stream.XMLStreamReader {
 
     /** Property identifier: entity manager. */
     protected static final String ENTITY_MANAGER =
@@ -746,13 +746,13 @@ public class XMLStreamReaderImpl implements org.openjdk.javax.xml.stream.XMLStre
      * @return the QName of the attribute
      * @throws IllegalStateException if this is not a START_ELEMENT or ATTRIBUTE
      */
-    public org.openjdk.javax.xml.namespace.QName getAttributeQName(int index) {
+    public javax.xml.namespace.QName getAttributeQName(int index) {
         //State should be either START_ELEMENT or ATTRIBUTE
         if( fEventType == XMLEvent.START_ELEMENT || fEventType == XMLEvent.ATTRIBUTE) {
             // create new object at runtime..
             String localName = fScanner.getAttributeIterator().getLocalName(index) ;
             String uri = fScanner.getAttributeIterator().getURI(index) ;
-            return new org.openjdk.javax.xml.namespace.QName(uri, localName) ;
+            return new javax.xml.namespace.QName(uri, localName) ;
         } else{
             throw new java.lang.IllegalStateException("Current state is not among the states "
                      + getEventTypeString(XMLEvent.START_ELEMENT) + " , "
@@ -922,7 +922,7 @@ public class XMLStreamReaderImpl implements org.openjdk.javax.xml.stream.XMLStre
     /** Returns a QName for the current START_ELEMENT or END_ELEMENT event
      * @return the QName for the current START_ELEMENT or END_ELEMENT event
      */
-    public org.openjdk.javax.xml.namespace.QName getName() {
+    public javax.xml.namespace.QName getName() {
         if(fEventType == XMLEvent.START_ELEMENT || fEventType == XMLEvent.END_ELEMENT)
             return convertXNIQNametoJavaxQName(fScanner.getElementQName());
         else
@@ -1267,13 +1267,13 @@ public class XMLStreamReaderImpl implements org.openjdk.javax.xml.stream.XMLStre
      * @param qname
      * @return
      */
-    public org.openjdk.javax.xml.namespace.QName convertXNIQNametoJavaxQName(com.sun.apache.xerces.internal.xni.QName qname){
+    public javax.xml.namespace.QName convertXNIQNametoJavaxQName(com.sun.apache.xerces.internal.xni.QName qname){
         if (qname == null) return null;
         //xxx: prefix definition ?
         if(qname.prefix == null){
-            return new org.openjdk.javax.xml.namespace.QName(qname.uri, qname.localpart) ;
+            return new javax.xml.namespace.QName(qname.uri, qname.localpart) ;
         } else{
-            return new org.openjdk.javax.xml.namespace.QName(qname.uri, qname.localpart, qname.prefix) ;
+            return new javax.xml.namespace.QName(qname.uri, qname.localpart, qname.prefix) ;
         }
     }
 

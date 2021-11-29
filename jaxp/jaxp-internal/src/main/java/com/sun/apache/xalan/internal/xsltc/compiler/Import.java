@@ -33,7 +33,7 @@ import com.sun.apache.xalan.internal.utils.SecuritySupport;
 import com.sun.apache.xml.internal.utils.SystemIDResolver;
 
 import java.util.Enumeration;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 import org.xml.sax.InputSource;
 import org.xml.sax.XMLReader;
 

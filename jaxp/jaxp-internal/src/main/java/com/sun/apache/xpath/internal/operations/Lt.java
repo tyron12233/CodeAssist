@@ -41,10 +41,10 @@ public class Lt extends Operation
    *
    * @return non-null reference to the XObject that represents the result of the operation.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject operate(XObject left, XObject right)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return left.lessThan(right) ? XBoolean.S_TRUE : XBoolean.S_FALSE;
   }

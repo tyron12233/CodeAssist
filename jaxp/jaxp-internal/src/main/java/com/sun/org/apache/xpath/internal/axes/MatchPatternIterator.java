@@ -71,10 +71,10 @@ public class MatchPatternIterator extends LocPathIterator
    * @param analysis Analysis bits that give general information about the
    * LocationPath.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   MatchPatternIterator(Compiler compiler, int opPos, int analysis)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     super(compiler, opPos, analysis, false);
@@ -316,7 +316,7 @@ public class MatchPatternIterator extends LocPathIterator
       return (score == NodeTest.SCORE_NONE) ? DTMIterator.FILTER_SKIP
                     : DTMIterator.FILTER_ACCEPT;
     }
-    catch (org.openjdk.javax.xml.transform.TransformerException se)
+    catch (javax.xml.transform.TransformerException se)
     {
 
       // TODO: Fix this.

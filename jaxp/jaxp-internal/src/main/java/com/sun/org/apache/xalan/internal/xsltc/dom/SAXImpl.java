@@ -27,8 +27,8 @@ import java.net.URL;
 import java.net.MalformedURLException;
 import java.util.Enumeration;
 
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.Source;
+import javax.xml.transform.dom.DOMSource;
 
 import com.sun.org.apache.xalan.internal.xsltc.DOM;
 import com.sun.org.apache.xalan.internal.xsltc.DOMEnhancedForDTM;

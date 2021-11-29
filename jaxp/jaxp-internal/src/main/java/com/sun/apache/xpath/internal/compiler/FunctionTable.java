@@ -59,7 +59,7 @@ import com.sun.apache.xpath.internal.functions.FuncUnparsedEntityURI;
 import com.sun.apache.xpath.internal.functions.Function;
 
 import java.util.HashMap;
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 /**
  * The function table for XPath.
@@ -359,11 +359,11 @@ public class FunctionTable
    *
    * @return a a new Function instance.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if ClassNotFoundException,
+   * @throws javax.xml.transform.TransformerException if ClassNotFoundException,
    *    IllegalAccessException, or InstantiationException is thrown.
    */
   Function getFunction(int which)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
           try{
               if (which < NUM_BUILT_IN_FUNCS)

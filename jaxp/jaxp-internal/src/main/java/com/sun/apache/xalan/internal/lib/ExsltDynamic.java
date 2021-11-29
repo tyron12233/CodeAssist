@@ -22,9 +22,9 @@
  */
 package com.sun.apache.xalan.internal.lib;
 
-import org.openjdk.javax.xml.parsers.DocumentBuilder;
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.TransformerException;
 
 import com.sun.apache.xalan.internal.extensions.ExpressionContext;
 import com.sun.apache.xalan.internal.res.XSLMessages;

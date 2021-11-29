@@ -25,7 +25,7 @@ package com.sun.apache.xml.internal.serializer;
 import java.util.Hashtable;
 import java.util.Properties;
 
-import org.openjdk.javax.xml.transform.OutputKeys;
+import javax.xml.transform.OutputKeys;
 
 import com.sun.apache.xalan.internal.utils.ObjectFactory;
 import com.sun.apache.xml.internal.serializer.utils.MsgKey;

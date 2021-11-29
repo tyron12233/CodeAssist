@@ -25,8 +25,8 @@
 
 package com.sun.stream;
 
-import org.openjdk.javax.xml.stream.XMLEventReader;
-import org.openjdk.javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.XMLEventReader;
+import javax.xml.stream.XMLStreamReader;
 
 import com.sun.apache.xerces.internal.xni.parser.XMLInputSource;
 

@@ -60,7 +60,7 @@
  */
 package com.sun.org.apache.xerces.internal.util;
 
-import org.openjdk.javax.xml.transform.Source;
+import javax.xml.transform.Source;
 
 import com.sun.org.apache.xerces.internal.impl.XMLEntityManager;
 import com.sun.org.apache.xerces.internal.util.URI.MalformedURIException;

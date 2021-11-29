@@ -26,15 +26,15 @@ import java.io.Reader;
 import java.io.StringReader;
 import java.util.HashMap;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.parsers.FactoryConfigurationError;
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
-import org.openjdk.javax.xml.transform.Result;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.sax.SAXResult;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
-import org.openjdk.javax.xml.validation.TypeInfoProvider;
-import org.openjdk.javax.xml.validation.ValidatorHandler;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.FactoryConfigurationError;
+import javax.xml.parsers.SAXParserFactory;
+import javax.xml.transform.Result;
+import javax.xml.transform.Source;
+import javax.xml.transform.sax.SAXResult;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.validation.TypeInfoProvider;
+import javax.xml.validation.ValidatorHandler;
 
 import com.sun.apache.xerces.internal.parsers.SAXParser;
 import com.sun.apache.xerces.internal.impl.Constants;

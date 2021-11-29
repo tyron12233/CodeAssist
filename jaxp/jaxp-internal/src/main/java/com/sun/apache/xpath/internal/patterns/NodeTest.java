@@ -523,10 +523,10 @@ public class NodeTest extends Expression
    *         {@link NodeTest#SCORE_QNAME}, or
    *         {@link NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt, int context)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     DTM dtm = xctxt.getDTM(context);
@@ -597,11 +597,11 @@ public class NodeTest extends Expression
    *         {@link NodeTest#SCORE_QNAME}, or
    *         {@link NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt, int context,
                          DTM dtm, int expType)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     if (m_whatToShow == DTMFilter.SHOW_ALL)
@@ -668,10 +668,10 @@ public class NodeTest extends Expression
    *         {@link NodeTest#SCORE_QNAME}, or
    *         {@link NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return execute(xctxt, xctxt.getCurrentNode());
   }

@@ -33,10 +33,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import org.openjdk.javax.xml.stream.XMLEventFactory;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.events.*;
-import org.openjdk.javax.xml.stream.XMLEventWriter;
+import javax.xml.stream.XMLEventFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.events.*;
+import javax.xml.stream.XMLEventWriter;
 
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;

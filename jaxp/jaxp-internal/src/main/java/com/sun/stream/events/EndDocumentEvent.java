@@ -25,8 +25,8 @@
 
 package com.sun.stream.events;
 
-import org.openjdk.javax.xml.stream.events.EndDocument;
-import org.openjdk.javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.events.EndDocument;
+import javax.xml.stream.XMLStreamConstants;
 
 /**
  * This class contains information about EndDocument event.

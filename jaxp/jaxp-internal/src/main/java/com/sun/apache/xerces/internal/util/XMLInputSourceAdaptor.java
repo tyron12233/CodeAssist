@@ -60,7 +60,7 @@
  */
 package com.sun.apache.xerces.internal.util;
 
-import org.openjdk.javax.xml.transform.Source;
+import javax.xml.transform.Source;
 
 import com.sun.apache.xerces.internal.xni.parser.XMLInputSource;
 import com.sun.apache.xerces.internal.impl.XMLEntityManager;

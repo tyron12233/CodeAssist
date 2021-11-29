@@ -19,8 +19,8 @@
  */
 package com.sun.apache.xerces.internal.xs.datatypes;
 
-import org.openjdk.javax.xml.datatype.Duration;
-import org.openjdk.javax.xml.datatype.XMLGregorianCalendar;
+import javax.xml.datatype.Duration;
+import javax.xml.datatype.XMLGregorianCalendar;
 
 /**
  * <p>Interface to expose the values for all date-time related types. The following

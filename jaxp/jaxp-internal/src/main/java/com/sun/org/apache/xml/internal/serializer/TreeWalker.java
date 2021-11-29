@@ -410,9 +410,9 @@ public final class TreeWalker
       {
         nextIsRaw = false;
 
-        m_contentHandler.processingInstruction(org.openjdk.javax.xml.transform.Result.PI_DISABLE_OUTPUT_ESCAPING, "");
+        m_contentHandler.processingInstruction(javax.xml.transform.Result.PI_DISABLE_OUTPUT_ESCAPING, "");
         dispatachChars(node);
-        m_contentHandler.processingInstruction(org.openjdk.javax.xml.transform.Result.PI_ENABLE_OUTPUT_ESCAPING, "");
+        m_contentHandler.processingInstruction(javax.xml.transform.Result.PI_ENABLE_OUTPUT_ESCAPING, "");
       }
       else
       {

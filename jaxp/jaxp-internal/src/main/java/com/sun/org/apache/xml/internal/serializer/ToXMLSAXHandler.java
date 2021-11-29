@@ -27,7 +27,7 @@ import java.io.OutputStream;
 import java.io.Writer;
 import java.util.Properties;
 
-import org.openjdk.javax.xml.transform.Result;
+import javax.xml.transform.Result;
 
 import org.w3c.dom.Node;
 import org.xml.sax.Attributes;

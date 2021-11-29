@@ -30,27 +30,27 @@ import java.util.Properties;
 import java.util.ResourceBundle;
 import java.util.Vector;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.parsers.DocumentBuilder;
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.transform.OutputKeys;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.Templates;
-import org.openjdk.javax.xml.transform.Transformer;
-import org.openjdk.javax.xml.transform.TransformerConfigurationException;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.transform.TransformerFactory;
-import org.openjdk.javax.xml.transform.TransformerFactoryConfigurationError;
-import org.openjdk.javax.xml.transform.URIResolver;
-import org.openjdk.javax.xml.transform.dom.DOMResult;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
-import org.openjdk.javax.xml.transform.sax.SAXResult;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
-import org.openjdk.javax.xml.transform.sax.SAXTransformerFactory;
-import org.openjdk.javax.xml.transform.sax.TransformerHandler;
-import org.openjdk.javax.xml.transform.stream.StreamResult;
-import org.openjdk.javax.xml.transform.stream.StreamSource;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Source;
+import javax.xml.transform.Templates;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.TransformerFactoryConfigurationError;
+import javax.xml.transform.URIResolver;
+import javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.sax.SAXResult;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.sax.SAXTransformerFactory;
+import javax.xml.transform.sax.TransformerHandler;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.transform.stream.StreamSource;
 
 import com.sun.org.apache.xalan.internal.Version;
 import com.sun.org.apache.xalan.internal.res.XSLMessages;
@@ -205,7 +205,7 @@ public class Process
       TransformerFactory tfactory;
       if (useXSLTC)
       {
-         String key = "org.openjdk.javax.xml.transform.TransformerFactory";
+         String key = "javax.xml.transform.TransformerFactory";
          String value = "com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl";
          Properties props = System.getProperties();
          props.put(key, value);
@@ -941,8 +941,8 @@ public class Process
               // Use JAXP1.1 ( if possible )
               try
               {
-                org.openjdk.javax.xml.parsers.SAXParserFactory factory =
-                  org.openjdk.javax.xml.parsers.SAXParserFactory.newInstance();
+                javax.xml.parsers.SAXParserFactory factory =
+                  javax.xml.parsers.SAXParserFactory.newInstance();
 
                 factory.setNamespaceAware(true);
 
@@ -955,16 +955,16 @@ public class Process
                   catch (org.xml.sax.SAXException se) {}
                 }
 
-                org.openjdk.javax.xml.parsers.SAXParser jaxpParser =
+                javax.xml.parsers.SAXParser jaxpParser =
                   factory.newSAXParser();
 
                 reader = jaxpParser.getXMLReader();
               }
-              catch (org.openjdk.javax.xml.parsers.ParserConfigurationException ex)
+              catch (javax.xml.parsers.ParserConfigurationException ex)
               {
                 throw new org.xml.sax.SAXException(ex);
               }
-              catch (org.openjdk.javax.xml.parsers.FactoryConfigurationError ex1)
+              catch (javax.xml.parsers.FactoryConfigurationError ex1)
               {
                 throw new org.xml.sax.SAXException(ex1.toString());
               }
@@ -1018,8 +1018,8 @@ public class Process
                 // Use JAXP1.1 ( if possible )
                 try
                 {
-                  org.openjdk.javax.xml.parsers.SAXParserFactory factory =
-                    org.openjdk.javax.xml.parsers.SAXParserFactory.newInstance();
+                  javax.xml.parsers.SAXParserFactory factory =
+                    javax.xml.parsers.SAXParserFactory.newInstance();
 
                   factory.setNamespaceAware(true);
 
@@ -1032,16 +1032,16 @@ public class Process
                     catch (org.xml.sax.SAXException se) {}
                   }
 
-                  org.openjdk.javax.xml.parsers.SAXParser jaxpParser =
+                  javax.xml.parsers.SAXParser jaxpParser =
                     factory.newSAXParser();
 
                   reader = jaxpParser.getXMLReader();
                 }
-                catch (org.openjdk.javax.xml.parsers.ParserConfigurationException ex)
+                catch (javax.xml.parsers.ParserConfigurationException ex)
                 {
                   throw new org.xml.sax.SAXException(ex);
                 }
-                catch (org.openjdk.javax.xml.parsers.FactoryConfigurationError ex1)
+                catch (javax.xml.parsers.FactoryConfigurationError ex1)
                 {
                   throw new org.xml.sax.SAXException(ex1.toString());
                 }

@@ -41,8 +41,8 @@
 
 package com.sun.apache.xpath.internal.domapi;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.SourceLocator;
+import javax.xml.transform.TransformerException;
 
 /**
  *

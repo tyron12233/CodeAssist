@@ -27,8 +27,8 @@ package com.sun.apache.xalan.internal.xsltc.trax;
 import java.util.Stack;
 import java.util.Vector;
 
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
 import com.sun.apache.xalan.internal.xsltc.runtime.Constants;
 import com.sun.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl;

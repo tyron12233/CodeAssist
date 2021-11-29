@@ -21,8 +21,8 @@
 
 package com.sun.apache.xpath.internal.jaxp;
 
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.xpath.XPathVariableResolver;
+import javax.xml.transform.TransformerException;
+import javax.xml.xpath.XPathVariableResolver;
 
 import com.sun.apache.xalan.internal.res.XSLMessages;
 import com.sun.apache.xpath.internal.objects.XObject;
@@ -35,7 +35,7 @@ import com.sun.apache.xpath.internal.res.XPATHErrorResources;
 
 /**
  * Overrides {@link VariableStack} and delegates the call to
- * {@link org.openjdk.javax.xml.xpath.XPathVariableResolver}.
+ * {@link javax.xml.xpath.XPathVariableResolver}.
  *
  * @author Ramesh Mandava ( ramesh.mandava@sun.com )
  */
@@ -57,8 +57,8 @@ public class JAXPVariableStack extends VariableStack {
                 new Object[] {"Variable qname"} );
             throw new IllegalArgumentException( fmsg );
         }
-        org.openjdk.javax.xml.namespace.QName name =
-            new org.openjdk.javax.xml.namespace.QName(
+        javax.xml.namespace.QName name =
+            new javax.xml.namespace.QName(
                 qname.getNamespace(),
                 qname.getLocalPart());
         Object varValue = resolver.resolveVariable( name );

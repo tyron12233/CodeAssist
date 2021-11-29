@@ -68,10 +68,10 @@ public class AxesWalker extends PredicatedNodeTest
    * @param opPos The op code position of this location step.
    * @param stepType  The type of location step.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public void init(Compiler compiler, int opPos, int stepType)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     initPredicateInfo(compiler, opPos);

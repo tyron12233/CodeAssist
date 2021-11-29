@@ -31,7 +31,7 @@ import java.security.PrivilegedAction;
 import java.util.Enumeration;
 import java.util.Properties;
 
-import org.openjdk.javax.xml.transform.OutputKeys;
+import javax.xml.transform.OutputKeys;
 
 import com.sun.org.apache.xml.internal.serializer.utils.MsgKey;
 import com.sun.org.apache.xml.internal.serializer.utils.Utils;

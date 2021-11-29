@@ -32,7 +32,7 @@ import com.sun.apache.xml.internal.dtm.DTMWSFilter;
 import com.sun.apache.xml.internal.utils.NodeVector;
 import com.sun.org.apache.xml.internal.dtm.*;
 
-import org.openjdk.javax.xml.transform.Source;
+import javax.xml.transform.Source;
 
 import com.sun.apache.xml.internal.utils.XMLStringFactory;
 

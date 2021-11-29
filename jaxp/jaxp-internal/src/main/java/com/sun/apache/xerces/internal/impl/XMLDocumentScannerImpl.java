@@ -42,8 +42,8 @@ import com.sun.stream.StaxXMLInputSource;
 import com.sun.stream.dtd.DTDGrammarUtil;
 import java.io.EOFException;
 import java.io.IOException;
-import org.openjdk.javax.xml.stream.XMLInputFactory;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.events.XMLEvent;
 
 
 /**
@@ -62,7 +62,7 @@ import org.openjdk.javax.xml.stream.events.XMLEvent;
  * @author Eric Ye, IBM
  * @author Sunitha Reddy, Sun Microsystems
  *
- * Refer to the table in unit-test org.openjdk.javax.xml.stream.XMLStreamReaderTest.SupportDTD for changes
+ * Refer to the table in unit-test javax.xml.stream.XMLStreamReaderTest.SupportDTD for changes
  * related to property SupportDTD.
  * @author Joe Wang, Sun Microsystems
  * @version $Id: XMLDocumentScannerImpl.java,v 1.17 2010-11-01 04:39:41 joehw Exp $

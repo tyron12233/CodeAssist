@@ -51,11 +51,11 @@ public class WalkingIterator extends LocPathIterator implements ExpressionOwner
    * loaded, or false if this is a derived iterator and
    * it doesn't wish to load child walkers.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   WalkingIterator(
           Compiler compiler, int opPos, int analysis, boolean shouldLoadWalkers)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
     super(compiler, opPos, analysis, shouldLoadWalkers);
 

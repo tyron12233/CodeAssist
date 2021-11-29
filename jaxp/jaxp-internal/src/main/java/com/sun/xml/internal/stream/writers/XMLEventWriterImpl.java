@@ -26,20 +26,20 @@
 package com.sun.xml.internal.stream.writers;
 
 import java.util.Iterator;
-import org.openjdk.javax.xml.namespace.QName;
-import org.openjdk.javax.xml.stream.XMLEventWriter;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.events.Attribute;
-import org.openjdk.javax.xml.stream.events.Characters;
-import org.openjdk.javax.xml.stream.events.Comment;
-import org.openjdk.javax.xml.stream.events.DTD;
-import org.openjdk.javax.xml.stream.events.EntityReference;
-import org.openjdk.javax.xml.stream.events.Namespace;
-import org.openjdk.javax.xml.stream.events.ProcessingInstruction;
-import org.openjdk.javax.xml.stream.events.StartDocument;
-import org.openjdk.javax.xml.stream.events.StartElement;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
-import org.openjdk.javax.xml.stream.XMLStreamWriter;
+import javax.xml.namespace.QName;
+import javax.xml.stream.XMLEventWriter;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.events.Attribute;
+import javax.xml.stream.events.Characters;
+import javax.xml.stream.events.Comment;
+import javax.xml.stream.events.DTD;
+import javax.xml.stream.events.EntityReference;
+import javax.xml.stream.events.Namespace;
+import javax.xml.stream.events.ProcessingInstruction;
+import javax.xml.stream.events.StartDocument;
+import javax.xml.stream.events.StartElement;
+import javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.XMLStreamWriter;
 
 /**
  *
@@ -64,7 +64,7 @@ public class XMLEventWriterImpl implements XMLEventWriter{
      * @param xMLEventReader
      * @throws XMLStreamException
      */
-    public void add(org.openjdk.javax.xml.stream.XMLEventReader xMLEventReader) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public void add(javax.xml.stream.XMLEventReader xMLEventReader) throws javax.xml.stream.XMLStreamException {
         if(xMLEventReader == null) throw new XMLStreamException("Event reader shouldn't be null");
         while(xMLEventReader.hasNext()){
             add(xMLEventReader.nextEvent());
@@ -76,7 +76,7 @@ public class XMLEventWriterImpl implements XMLEventWriter{
      * @param xMLEvent
      * @throws XMLStreamException
      */
-    public void add(org.openjdk.javax.xml.stream.events.XMLEvent xMLEvent) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public void add(javax.xml.stream.events.XMLEvent xMLEvent) throws javax.xml.stream.XMLStreamException {
         int type = xMLEvent.getEventType();
         switch(type){
             case XMLEvent.DTD:{
@@ -199,7 +199,7 @@ public class XMLEventWriterImpl implements XMLEventWriter{
      *
      * @throws XMLStreamException
      */
-    public void close() throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public void close() throws javax.xml.stream.XMLStreamException {
         fStreamWriter.close();
     }
 
@@ -208,7 +208,7 @@ public class XMLEventWriterImpl implements XMLEventWriter{
      * @throws XMLStreamException will inturn call flush on the stream to which data is being
      * written.
      */
-    public void flush() throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public void flush() throws javax.xml.stream.XMLStreamException {
         fStreamWriter.flush();
     }
 
@@ -216,7 +216,7 @@ public class XMLEventWriterImpl implements XMLEventWriter{
      *
      * @return
      */
-    public org.openjdk.javax.xml.namespace.NamespaceContext getNamespaceContext() {
+    public javax.xml.namespace.NamespaceContext getNamespaceContext() {
         return fStreamWriter.getNamespaceContext();
     }
 
@@ -226,7 +226,7 @@ public class XMLEventWriterImpl implements XMLEventWriter{
      * @throws XMLStreamException
      * @return prefix associated with the URI.
      */
-    public String getPrefix(String namespaceURI) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public String getPrefix(String namespaceURI) throws javax.xml.stream.XMLStreamException {
         return fStreamWriter.getPrefix(namespaceURI);
     }
 
@@ -235,7 +235,7 @@ public class XMLEventWriterImpl implements XMLEventWriter{
      * @param uri Namespace URI
      * @throws XMLStreamException
      */
-    public void setDefaultNamespace(String uri) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public void setDefaultNamespace(String uri) throws javax.xml.stream.XMLStreamException {
         fStreamWriter.setDefaultNamespace(uri);
     }
 
@@ -244,7 +244,7 @@ public class XMLEventWriterImpl implements XMLEventWriter{
      * @param namespaceContext Namespace Context
      * @throws XMLStreamException
      */
-    public void setNamespaceContext(org.openjdk.javax.xml.namespace.NamespaceContext namespaceContext) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public void setNamespaceContext(javax.xml.namespace.NamespaceContext namespaceContext) throws javax.xml.stream.XMLStreamException {
         fStreamWriter.setNamespaceContext(namespaceContext);
     }
 
@@ -254,7 +254,7 @@ public class XMLEventWriterImpl implements XMLEventWriter{
      * @param uri Namespace URI
      * @throws XMLStreamException
      */
-    public void setPrefix(String prefix, String uri) throws org.openjdk.javax.xml.stream.XMLStreamException {
+    public void setPrefix(String prefix, String uri) throws javax.xml.stream.XMLStreamException {
         fStreamWriter.setPrefix(prefix, uri);
     }
 

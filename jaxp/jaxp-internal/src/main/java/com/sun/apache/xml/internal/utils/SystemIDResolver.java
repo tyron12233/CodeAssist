@@ -24,7 +24,7 @@ package com.sun.apache.xml.internal.utils;
 
 import java.io.File;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 /**
  * This class is used to resolve relative URIs and SystemID

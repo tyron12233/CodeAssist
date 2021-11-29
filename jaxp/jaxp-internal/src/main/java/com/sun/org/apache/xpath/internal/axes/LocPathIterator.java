@@ -85,10 +85,10 @@ public abstract class LocPathIterator extends PredicatedNodeTest
    * @param opPos The position of this iterator in the
    * opcode list from the compiler.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   protected LocPathIterator(Compiler compiler, int opPos, int analysis)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     this(compiler, opPos, analysis, true);
   }
@@ -106,11 +106,11 @@ public abstract class LocPathIterator extends PredicatedNodeTest
    * loaded, or false if this is a derived iterator and
    * it doesn't wish to load child walkers.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   protected LocPathIterator(
           Compiler compiler, int opPos, int analysis, boolean shouldLoadWalkers)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
     setLocPathIterator(this);
   }
@@ -132,10 +132,10 @@ public abstract class LocPathIterator extends PredicatedNodeTest
    * @param stream Input stream to read from
    *
    * @throws java.io.IOException
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   private void readObject(java.io.ObjectInputStream stream)
-          throws java.io.IOException, org.openjdk.javax.xml.transform.TransformerException
+          throws java.io.IOException, javax.xml.transform.TransformerException
   {
     try
     {
@@ -144,7 +144,7 @@ public abstract class LocPathIterator extends PredicatedNodeTest
     }
     catch (ClassNotFoundException cnfe)
     {
-      throw new org.openjdk.javax.xml.transform.TransformerException(cnfe);
+      throw new javax.xml.transform.TransformerException(cnfe);
     }
   }
 
@@ -203,10 +203,10 @@ public abstract class LocPathIterator extends PredicatedNodeTest
    *
    * @return An XNodeSet reference that holds this iterator.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     XNodeSet iter = new XNodeSet((LocPathIterator)m_clones.getInstance());
@@ -226,13 +226,13 @@ public abstract class LocPathIterator extends PredicatedNodeTest
    *
    * @return The result of the expression in the form of a <code>XObject</code>.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if a runtime exception
+   * @throws javax.xml.transform.TransformerException if a runtime exception
    *         occurs.
    * @throws org.xml.sax.SAXException
    */
   public void executeCharsToContentHandler(
           XPathContext xctxt, org.xml.sax.ContentHandler handler)
-            throws org.openjdk.javax.xml.transform.TransformerException,
+            throws javax.xml.transform.TransformerException,
                    org.xml.sax.SAXException
   {
     LocPathIterator clone = (LocPathIterator)m_clones.getInstance();
@@ -259,12 +259,12 @@ public abstract class LocPathIterator extends PredicatedNodeTest
    * @throws TransformerException thrown if the active ProblemListener decides
    * the error condition is severe enough to halt processing.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    * @xsl.usage experimental
    */
   public DTMIterator asIterator(
           XPathContext xctxt, int contextNode)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
     XNodeSet iter = new XNodeSet((LocPathIterator)m_clones.getInstance());
 
@@ -293,7 +293,7 @@ public abstract class LocPathIterator extends PredicatedNodeTest
    * @return the first node out of the nodeset, or DTM.NULL.
    */
   public int asNode(XPathContext xctxt)
-    throws org.openjdk.javax.xml.transform.TransformerException
+    throws javax.xml.transform.TransformerException
   {
     DTMIterator iter = (DTMIterator)m_clones.getInstance();
 
@@ -314,10 +314,10 @@ public abstract class LocPathIterator extends PredicatedNodeTest
    *
    * @return The result of the operation as a boolean.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean bool(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return (asNode(xctxt) != DTM.NULL);
   }

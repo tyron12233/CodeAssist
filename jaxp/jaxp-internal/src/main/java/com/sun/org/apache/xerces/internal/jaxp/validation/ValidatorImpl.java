@@ -22,15 +22,15 @@ package com.sun.org.apache.xerces.internal.jaxp.validation;
 
 import java.io.IOException;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.transform.Result;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
-import org.openjdk.javax.xml.transform.stax.StAXResult;
-import org.openjdk.javax.xml.transform.stax.StAXSource;
-import org.openjdk.javax.xml.transform.stream.StreamSource;
-import org.openjdk.javax.xml.validation.Validator;
+import javax.xml.XMLConstants;
+import javax.xml.transform.Result;
+import javax.xml.transform.Source;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.stax.StAXResult;
+import javax.xml.transform.stax.StAXSource;
+import javax.xml.transform.stream.StreamSource;
+import javax.xml.validation.Validator;
 
 import com.sun.org.apache.xerces.internal.impl.Constants;
 import com.sun.org.apache.xerces.internal.util.SAXMessageFormatter;

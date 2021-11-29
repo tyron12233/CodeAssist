@@ -103,10 +103,10 @@ public class XNumber extends XObject
    *
    * @return 0.0
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public double num(XPathContext xctxt)
-    throws org.openjdk.javax.xml.transform.TransformerException
+    throws javax.xml.transform.TransformerException
   {
 
     return m_val;
@@ -392,7 +392,7 @@ public class XNumber extends XObject
    *
    * @return true if the two objects are equal
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean equals(XObject obj2)
   {
@@ -410,7 +410,7 @@ public class XNumber extends XObject
                 else
                return m_val == obj2.num();
     }
-    catch(org.openjdk.javax.xml.transform.TransformerException te)
+    catch(javax.xml.transform.TransformerException te)
     {
       throw new WrappedRuntimeException(te);
     }

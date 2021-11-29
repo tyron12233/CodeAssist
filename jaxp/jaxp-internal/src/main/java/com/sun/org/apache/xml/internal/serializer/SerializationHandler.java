@@ -24,7 +24,7 @@ package com.sun.org.apache.xml.internal.serializer;
 
 import java.io.IOException;
 
-import org.openjdk.javax.xml.transform.Transformer;
+import javax.xml.transform.Transformer;
 
 import org.w3c.dom.Node;
 import org.xml.sax.ContentHandler;

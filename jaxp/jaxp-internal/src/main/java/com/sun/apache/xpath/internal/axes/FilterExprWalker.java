@@ -60,10 +60,10 @@ public class FilterExprWalker extends AxesWalker
    * @param opPos positive opcode position for this step.
    * @param stepType The type of step.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public void init(Compiler compiler, int opPos, int stepType)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     super.init(compiler, opPos, stepType);
@@ -178,7 +178,7 @@ public class FilterExprWalker extends AxesWalker
 
       return DTMIterator.FILTER_ACCEPT;
     }
-    catch (org.openjdk.javax.xml.transform.TransformerException se)
+    catch (javax.xml.transform.TransformerException se)
     {
       throw new RuntimeException(se.getMessage());
     }

@@ -74,7 +74,7 @@ import com.sun.org.apache.xerces.internal.xni.XNIException;
 import com.sun.org.apache.xerces.internal.xni.parser.XMLComponentManager;
 import com.sun.org.apache.xerces.internal.xni.parser.XMLConfigurationException;
 import com.sun.org.apache.xerces.internal.xni.parser.XMLDocumentSource;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.XMLEvent;
 
 
 /**

@@ -22,9 +22,9 @@
 
 package com.sun.apache.xpath.internal.jaxp;
 
-import org.openjdk.javax.xml.xpath.XPathFunctionResolver;
-import org.openjdk.javax.xml.xpath.XPathFunction;
-import org.openjdk.javax.xml.xpath.XPathFunctionException;
+import javax.xml.xpath.XPathFunctionResolver;
+import javax.xml.xpath.XPathFunction;
+import javax.xml.xpath.XPathFunctionException;
 
 import com.sun.apache.xalan.internal.res.XSLMessages;
 import com.sun.apache.xalan.internal.utils.FeatureManager;
@@ -37,7 +37,7 @@ import com.sun.apache.xpath.internal.res.XPATHErrorResources;
 
 import java.util.Vector;
 import java.util.ArrayList;
-import org.openjdk.javax.xml.namespace.QName;
+import javax.xml.namespace.QName;
 
 /**
  *
@@ -67,7 +67,7 @@ public class JAXPExtensionsProvider implements ExtensionsProvider {
      */
 
     public boolean functionAvailable(String ns, String funcName)
-          throws org.openjdk.javax.xml.transform.TransformerException {
+          throws javax.xml.transform.TransformerException {
       try {
         if ( funcName == null ) {
             String fmsg = XSLMessages.createXPATHMessage(
@@ -76,8 +76,8 @@ public class JAXPExtensionsProvider implements ExtensionsProvider {
             throw new NullPointerException ( fmsg );
         }
         //Find the XPathFunction corresponding to namespace and funcName
-        org.openjdk.javax.xml.namespace.QName myQName = new QName( ns, funcName );
-        org.openjdk.javax.xml.xpath.XPathFunction xpathFunction =
+        javax.xml.namespace.QName myQName = new QName( ns, funcName );
+        javax.xml.xpath.XPathFunction xpathFunction =
             resolver.resolveFunction ( myQName, 0 );
         if (  xpathFunction == null ) {
             return false;
@@ -95,7 +95,7 @@ public class JAXPExtensionsProvider implements ExtensionsProvider {
      * Is the extension element available?
      */
     public boolean elementAvailable(String ns, String elemName)
-          throws org.openjdk.javax.xml.transform.TransformerException {
+          throws javax.xml.transform.TransformerException {
         return false;
     }
 
@@ -103,7 +103,7 @@ public class JAXPExtensionsProvider implements ExtensionsProvider {
      * Execute the extension function.
      */
     public Object extFunction(String ns, String funcName, Vector argVec,
-        Object methodKey) throws org.openjdk.javax.xml.transform.TransformerException {
+        Object methodKey) throws javax.xml.transform.TransformerException {
         try {
 
             if ( funcName == null ) {
@@ -113,7 +113,7 @@ public class JAXPExtensionsProvider implements ExtensionsProvider {
                 throw new NullPointerException ( fmsg );
             }
             //Find the XPathFunction corresponding to namespace and funcName
-            org.openjdk.javax.xml.namespace.QName myQName = new QName( ns, funcName );
+            javax.xml.namespace.QName myQName = new QName( ns, funcName );
 
             // JAXP 1.3 spec says When XMLConstants.FEATURE_SECURE_PROCESSING
             // feature is set then invocation of extension functions need to
@@ -129,7 +129,7 @@ public class JAXPExtensionsProvider implements ExtensionsProvider {
             // default values )
             int arity = argVec.size();
 
-            org.openjdk.javax.xml.xpath.XPathFunction xpathFunction =
+            javax.xml.xpath.XPathFunction xpathFunction =
                 resolver.resolveFunction ( myQName, arity );
 
             // not using methodKey
@@ -154,7 +154,7 @@ public class JAXPExtensionsProvider implements ExtensionsProvider {
             // further execution by throwing WrappedRuntimeException
             throw new WrappedRuntimeException( xfe );
         } catch ( Exception e ) {
-            throw new org.openjdk.javax.xml.transform.TransformerException ( e );
+            throw new javax.xml.transform.TransformerException ( e );
         }
 
     }
@@ -164,13 +164,13 @@ public class JAXPExtensionsProvider implements ExtensionsProvider {
      */
     public Object extFunction(FuncExtFunction extFunction,
                               Vector argVec)
-        throws org.openjdk.javax.xml.transform.TransformerException {
+        throws javax.xml.transform.TransformerException {
         try {
             String namespace = extFunction.getNamespace();
             String functionName = extFunction.getFunctionName();
             int arity = extFunction.getArgCount();
-            org.openjdk.javax.xml.namespace.QName myQName =
-                new org.openjdk.javax.xml.namespace.QName( namespace, functionName );
+            javax.xml.namespace.QName myQName =
+                new javax.xml.namespace.QName( namespace, functionName );
 
             // JAXP 1.3 spec says  When XMLConstants.FEATURE_SECURE_PROCESSING
             // feature is set then invocation of extension functions need to
@@ -206,7 +206,7 @@ public class JAXPExtensionsProvider implements ExtensionsProvider {
             // further execution by throwing WrappedRuntimeException
             throw new WrappedRuntimeException( xfe );
         } catch ( Exception e ) {
-            throw new org.openjdk.javax.xml.transform.TransformerException ( e );
+            throw new javax.xml.transform.TransformerException ( e );
         }
     }
 

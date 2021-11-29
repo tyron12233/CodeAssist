@@ -24,8 +24,8 @@
 
 package com.sun.org.apache.xalan.internal.xsltc.trax;
 
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.stream.StreamSource;
+import javax.xml.transform.Source;
+import javax.xml.transform.stream.StreamSource;
 
 import com.sun.org.apache.xalan.internal.xsltc.DOM;
 import com.sun.org.apache.xalan.internal.xsltc.StripFilter;
@@ -63,7 +63,7 @@ public final class XSLTCSource implements Source {
     }
 
     /**
-     * Implements org.openjdk.javax.xml.transform.Source.setSystemId()
+     * Implements javax.xml.transform.Source.setSystemId()
      * Set the system identifier for this Source.
      * This Source can get its input either directly from a file (in this case
      * it will instanciate and use a JAXP parser) or it can receive it through
@@ -78,7 +78,7 @@ public final class XSLTCSource implements Source {
     }
 
     /**
-     * Implements org.openjdk.javax.xml.transform.Source.getSystemId()
+     * Implements javax.xml.transform.Source.getSystemId()
      * Get the system identifier that was set with setSystemId.
      * @return The system identifier that was set with setSystemId,
      *         or null if setSystemId was not called.

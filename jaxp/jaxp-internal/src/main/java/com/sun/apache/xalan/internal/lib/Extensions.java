@@ -25,8 +25,8 @@ package com.sun.apache.xalan.internal.lib;
 import java.util.Hashtable;
 import java.util.StringTokenizer;
 
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
 import com.sun.apache.xalan.internal.extensions.ExpressionContext;
 import com.sun.apache.xalan.internal.utils.ObjectFactory;

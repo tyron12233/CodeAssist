@@ -23,7 +23,7 @@
 
 package com.sun.org.apache.xpath.internal.domapi;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import com.sun.org.apache.xml.internal.utils.PrefixResolver;
 import com.sun.org.apache.xpath.internal.XPath;

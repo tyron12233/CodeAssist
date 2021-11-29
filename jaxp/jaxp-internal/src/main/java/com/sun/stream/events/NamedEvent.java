@@ -25,7 +25,7 @@
 
 package com.sun.stream.events;
 
-import org.openjdk.javax.xml.namespace.QName;
+import javax.xml.namespace.QName;
 /**
  *
  *@author Neeraj Bajaj, Sun Microsystems

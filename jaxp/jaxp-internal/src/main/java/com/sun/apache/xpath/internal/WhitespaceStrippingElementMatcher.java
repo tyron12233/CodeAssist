@@ -22,7 +22,7 @@
  */
 package com.sun.apache.xpath.internal;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import org.w3c.dom.Element;
 

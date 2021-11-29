@@ -25,9 +25,9 @@ package com.sun.org.apache.xml.internal.utils;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 
-import org.openjdk.javax.xml.transform.ErrorListener;
-import org.openjdk.javax.xml.transform.SourceLocator;
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.ErrorListener;
+import javax.xml.transform.SourceLocator;
+import javax.xml.transform.TransformerException;
 
 import com.sun.org.apache.xml.internal.res.XMLErrorResources;
 import com.sun.org.apache.xml.internal.res.XMLMessages;
@@ -177,9 +177,9 @@ public class DefaultErrorHandler implements ErrorHandler, ErrorListener
    *
    * @param exception The warning information encapsulated in a
    *                  SAX parse exception.
-   * @throws org.openjdk.javax.xml.transform.TransformerException Any SAX exception, possibly
+   * @throws javax.xml.transform.TransformerException Any SAX exception, possibly
    *            wrapping another exception.
-   * @see org.openjdk.javax.xml.transform.TransformerException
+   * @see javax.xml.transform.TransformerException
    */
   public void warning(TransformerException exception) throws TransformerException
   {
@@ -206,9 +206,9 @@ public class DefaultErrorHandler implements ErrorHandler, ErrorListener
    *
    * @param exception The error information encapsulated in a
    *                  SAX parse exception.
-   * @throws org.openjdk.javax.xml.transform.TransformerException Any SAX exception, possibly
+   * @throws javax.xml.transform.TransformerException Any SAX exception, possibly
    *            wrapping another exception.
-   * @see org.openjdk.javax.xml.transform.TransformerException
+   * @see javax.xml.transform.TransformerException
    */
   public void error(TransformerException exception) throws TransformerException
   {
@@ -239,9 +239,9 @@ public class DefaultErrorHandler implements ErrorHandler, ErrorListener
    *
    * @param exception The error information encapsulated in a
    *                  SAX parse exception.
-   * @throws org.openjdk.javax.xml.transform.TransformerException Any SAX exception, possibly
+   * @throws javax.xml.transform.TransformerException Any SAX exception, possibly
    *            wrapping another exception.
-   * @see org.openjdk.javax.xml.transform.TransformerException
+   * @see javax.xml.transform.TransformerException
    */
   public void fatalError(TransformerException exception) throws TransformerException
   {

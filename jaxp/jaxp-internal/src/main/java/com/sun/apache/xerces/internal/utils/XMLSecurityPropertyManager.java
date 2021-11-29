@@ -26,7 +26,7 @@
 package com.sun.apache.xerces.internal.utils;
 
 import com.sun.apache.xerces.internal.impl.Constants;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 
 /**
  * This class manages security related properties

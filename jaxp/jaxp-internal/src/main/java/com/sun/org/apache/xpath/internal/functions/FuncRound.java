@@ -40,9 +40,9 @@ public class FuncRound extends FunctionOneArg
    * @param xctxt The current execution context.
    * @return A valid XObject.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public XObject execute(XPathContext xctxt) throws org.openjdk.javax.xml.transform.TransformerException
+  public XObject execute(XPathContext xctxt) throws javax.xml.transform.TransformerException
   {
           final XObject obj = m_arg0.execute(xctxt);
           final double val= obj.num();

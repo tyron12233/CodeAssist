@@ -37,8 +37,8 @@ public interface RawCharacterHandler
    * @param start Start index of characters in the array
    * @param length Number of characters in the array
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public void charactersRaw(char ch[], int start, int length)
-    throws org.openjdk.javax.xml.transform.TransformerException;
+    throws javax.xml.transform.TransformerException;
 }

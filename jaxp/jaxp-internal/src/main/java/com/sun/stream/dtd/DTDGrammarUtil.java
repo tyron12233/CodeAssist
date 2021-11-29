@@ -37,7 +37,7 @@ import com.sun.stream.dtd.nonvalidating.XMLAttributeDecl;
 import com.sun.stream.dtd.nonvalidating.XMLElementDecl;
 import com.sun.stream.dtd.nonvalidating.XMLSimpleType;
 
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 
  /*
   * @author Eric Ye, IBM

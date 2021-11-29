@@ -23,12 +23,12 @@
 package com.sun.org.apache.xml.internal.dtm.ref;
 
 import com.sun.org.apache.xalan.internal.utils.FactoryImpl;
-import org.openjdk.javax.xml.parsers.DocumentBuilder;
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
-import org.openjdk.javax.xml.transform.stream.StreamSource;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.Source;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.stream.StreamSource;
 
 import com.sun.org.apache.xml.internal.dtm.DTM;
 import com.sun.org.apache.xml.internal.dtm.DTMException;
@@ -559,7 +559,7 @@ public class DTMManagerDefault extends DTMManager
         root = p;
       }
 
-      DOM2DTM dtm = (DOM2DTM) getDTM(new org.openjdk.javax.xml.transform.dom.DOMSource(root),
+      DOM2DTM dtm = (DOM2DTM) getDTM(new javax.xml.transform.dom.DOMSource(root),
                                                                                                                                                  false, null, true, true);
 
       int handle;

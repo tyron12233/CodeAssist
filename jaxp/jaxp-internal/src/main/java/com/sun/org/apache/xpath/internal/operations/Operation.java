@@ -102,10 +102,10 @@ public class Operation extends Expression implements ExpressionOwner
    *
    * @return The XObject result of the operation.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     XObject left = m_left.execute(xctxt, true);
@@ -126,10 +126,10 @@ public class Operation extends Expression implements ExpressionOwner
    *
    * @return non-null reference to the XObject that represents the result of the operation.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject operate(XObject left, XObject right)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return null;  // no-op
   }

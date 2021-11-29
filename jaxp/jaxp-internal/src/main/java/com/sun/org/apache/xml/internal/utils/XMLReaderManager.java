@@ -28,10 +28,10 @@ import com.sun.org.apache.xalan.internal.utils.SecuritySupport;
 import com.sun.org.apache.xalan.internal.utils.XMLSecurityManager;
 import java.util.HashMap;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.parsers.FactoryConfigurationError;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.FactoryConfigurationError;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParserFactory;
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXNotRecognizedException;
 import org.xml.sax.XMLReader;
@@ -170,7 +170,7 @@ public class XMLReaderManager {
 
         try {
             //reader is cached, but this property might have been reset
-            reader.setProperty(org.openjdk.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, _accessExternalDTD);
+            reader.setProperty(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, _accessExternalDTD);
         } catch (SAXException se) {
             System.err.println("Warning:  " + reader.getClass().getName() + ": "
                         + se.getMessage());
@@ -234,7 +234,7 @@ public class XMLReaderManager {
      * Get property value
      */
     public Object getProperty(String name) {
-        if (name.equals(org.openjdk.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD)) {
+        if (name.equals(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD)) {
             return _accessExternalDTD;
         } else if (name.equals(XalanConstants.SECURITY_MANAGER)) {
             return _xmlSecurityManager;
@@ -246,7 +246,7 @@ public class XMLReaderManager {
      * Set property.
      */
     public void setProperty(String name, Object value) {
-        if (name.equals(org.openjdk.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD)) {
+        if (name.equals(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD)) {
             _accessExternalDTD = (String)value;
         } else if (name.equals(XalanConstants.SECURITY_MANAGER)) {
             _xmlSecurityManager = (XMLSecurityManager)value;

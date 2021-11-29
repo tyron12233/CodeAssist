@@ -25,8 +25,8 @@ package com.sun.apache.xalan.internal.xsltc.dom;
 
 import java.util.Enumeration;
 
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.Source;
+import javax.xml.transform.dom.DOMSource;
 
 import com.sun.apache.xalan.internal.xsltc.runtime.BasisLibrary;
 import com.sun.apache.xalan.internal.xsltc.runtime.Hashtable;

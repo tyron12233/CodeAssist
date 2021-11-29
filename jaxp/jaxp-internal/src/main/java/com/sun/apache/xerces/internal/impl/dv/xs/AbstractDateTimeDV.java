@@ -22,9 +22,9 @@ package com.sun.apache.xerces.internal.impl.dv.xs;
 
 import java.math.BigDecimal;
 
-import org.openjdk.javax.xml.datatype.DatatypeFactory;
-import org.openjdk.javax.xml.datatype.Duration;
-import org.openjdk.javax.xml.datatype.XMLGregorianCalendar;
+import javax.xml.datatype.DatatypeFactory;
+import javax.xml.datatype.Duration;
+import javax.xml.datatype.XMLGregorianCalendar;
 
 import com.sun.apache.xerces.internal.impl.Constants;
 import com.sun.apache.xerces.internal.jaxp.datatype.DatatypeFactoryImpl;

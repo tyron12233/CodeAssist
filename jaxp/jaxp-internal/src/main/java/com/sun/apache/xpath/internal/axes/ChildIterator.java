@@ -47,10 +47,10 @@ public class ChildIterator extends LocPathIterator
    * location path expression for this itterator.
    * @param analysis Analysis bits of the entire pattern.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   ChildIterator(Compiler compiler, int opPos, int analysis)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     super(compiler, opPos, analysis, false);
 
@@ -67,7 +67,7 @@ public class ChildIterator extends LocPathIterator
    * @return the first node out of the nodeset, or DTM.NULL.
    */
   public int asNode(XPathContext xctxt)
-    throws org.openjdk.javax.xml.transform.TransformerException
+    throws javax.xml.transform.TransformerException
   {
     int current = xctxt.getCurrentNode();
 

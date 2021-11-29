@@ -28,7 +28,7 @@ import org.xml.sax.InputSource;
 import org.xml.sax.XMLReader;
 
 /**
- * <p>An <code>XMLInputSource</code> analogue to <code>org.openjdk.javax.xml.transform.sax.SAXSource</code>.</p>
+ * <p>An <code>XMLInputSource</code> analogue to <code>javax.xml.transform.sax.SAXSource</code>.</p>
  *
  */
 public final class SAXInputSource extends XMLInputSource {

@@ -168,8 +168,8 @@ public final class XalanConstants {
 
 
     //System Properties corresponding to ACCESS_EXTERNAL_* properties
-    public static final String SP_ACCESS_EXTERNAL_STYLESHEET = "org.openjdk.javax.xml.accessExternalStylesheet";
-    public static final String SP_ACCESS_EXTERNAL_DTD = "org.openjdk.javax.xml.accessExternalDTD";
+    public static final String SP_ACCESS_EXTERNAL_STYLESHEET = "javax.xml.accessExternalStylesheet";
+    public static final String SP_ACCESS_EXTERNAL_DTD = "javax.xml.accessExternalDTD";
 
     //all access keyword
     public static final String ACCESS_EXTERNAL_ALL = "all";
@@ -192,7 +192,7 @@ public final class XalanConstants {
      */
     public static final String ORACLE_ENABLE_EXTENSION_FUNCTION =
             ORACLE_JAXP_PROPERTY_PREFIX + "enableExtensionFunctions";
-    public static final String SP_ORACLE_ENABLE_EXTENSION_FUNCTION = "org.openjdk.javax.xml.enableExtensionFunctions";
+    public static final String SP_ORACLE_ENABLE_EXTENSION_FUNCTION = "javax.xml.enableExtensionFunctions";
 
     /**
      * Values for a feature

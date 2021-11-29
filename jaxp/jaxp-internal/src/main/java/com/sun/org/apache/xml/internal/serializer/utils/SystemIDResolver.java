@@ -24,7 +24,7 @@ package com.sun.org.apache.xml.internal.serializer.utils;
 
 import java.io.File;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import com.sun.org.apache.xml.internal.serializer.utils.URI.MalformedURIException;
 

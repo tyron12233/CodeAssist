@@ -25,11 +25,11 @@
 
 package com.sun.stream.events;
 
-import org.openjdk.javax.xml.stream.events.Namespace;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
-import org.openjdk.javax.xml.namespace.QName;
+import javax.xml.stream.events.Namespace;
+import javax.xml.stream.events.XMLEvent;
+import javax.xml.namespace.QName;
 
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 /**
  *
  * @author  Neeraj Bajaj,K.Venugopal@sun.com  Sun Microsystems.

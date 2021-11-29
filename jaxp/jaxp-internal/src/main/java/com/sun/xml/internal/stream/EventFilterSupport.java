@@ -26,11 +26,11 @@
 package com.sun.xml.internal.stream;
 
 import java.util.NoSuchElementException;
-import org.openjdk.javax.xml.stream.EventFilter;
-import org.openjdk.javax.xml.stream.XMLEventReader;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
-import org.openjdk.javax.xml.stream.util.EventReaderDelegate;
+import javax.xml.stream.EventFilter;
+import javax.xml.stream.XMLEventReader;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.util.EventReaderDelegate;
 
 /**
  *

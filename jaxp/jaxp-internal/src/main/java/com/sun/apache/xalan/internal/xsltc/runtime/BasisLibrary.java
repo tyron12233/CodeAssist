@@ -31,7 +31,7 @@ import java.text.MessageFormat;
 import java.text.NumberFormat;
 import java.util.Locale;
 import java.util.ResourceBundle;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.dom.DOMSource;
 
 import com.sun.apache.xalan.internal.xsltc.DOM;
 import com.sun.apache.xalan.internal.xsltc.Translet;
@@ -1240,7 +1240,7 @@ public final class BasisLibrary {
                     AbstractTranslet at = (AbstractTranslet) translet;
                     doc = at.newDocument("", "__top__");
                 }
-                catch (org.openjdk.javax.xml.parsers.ParserConfigurationException e) {
+                catch (javax.xml.parsers.ParserConfigurationException e) {
                     runTimeError(RUN_TIME_INTERNAL_ERR, e.getMessage());
                     return null;
                 }

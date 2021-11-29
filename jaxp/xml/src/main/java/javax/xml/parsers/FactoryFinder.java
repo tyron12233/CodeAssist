@@ -25,9 +25,6 @@
 
 package javax.xml.parsers;
 
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
-import org.openjdk.javax.xml.stream.XMLInputFactory;
-
 import java.io.File;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
@@ -35,8 +32,6 @@ import java.util.Iterator;
 import java.util.Properties;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
-
-import javax.xml.stream.XMLInputFactoryWrapper;
 
 /**
  * <p>Implements pluggable Parsers.</p>
@@ -192,13 +187,7 @@ class FactoryFinder {
         try {
             Class<?> providerClass = getProviderClass(className, cl, doFallback, useBSClsLoader);
             if (!type.isAssignableFrom(providerClass)) {
-                if (type.toString().contains("XMLInputFactory")) {
-                    return (T) new XMLInputFactoryWrapper((XMLInputFactory) providerClass.newInstance());
-                }
-                if (type.toString().contains("SAXParserFactory")) {
-                    return (T) new SAXParserFactoryWrapper((SAXParserFactory) providerClass.newInstance());
-                }
-                //throw new ClassCastException(className + " cannot be cast to " + type.getName());
+                throw new ClassCastException(className + " cannot be cast to " + type.getName());
             }
             Object instance = providerClass.newInstance();
             if (debug) {    // Extra check to avoid computing cl strings

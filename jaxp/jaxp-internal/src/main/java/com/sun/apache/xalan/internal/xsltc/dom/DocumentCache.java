@@ -31,11 +31,11 @@ import java.net.URLDecoder;
 import java.util.Date;
 import java.util.Hashtable;
 
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.parsers.SAXParser;
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.sax.SAXSource;
 
 import com.sun.apache.xalan.internal.xsltc.runtime.AbstractTranslet;
 import com.sun.apache.xalan.internal.xsltc.runtime.BasisLibrary;

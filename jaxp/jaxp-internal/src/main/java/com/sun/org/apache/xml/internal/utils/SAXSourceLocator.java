@@ -24,7 +24,7 @@ package com.sun.org.apache.xml.internal.utils;
 
 import java.io.Serializable;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
+import javax.xml.transform.SourceLocator;
 
 import org.xml.sax.Locator;
 import org.xml.sax.SAXParseException;
@@ -71,7 +71,7 @@ public class SAXSourceLocator extends LocatorImpl
    *
    * @param locator Source locator
    */
-  public SAXSourceLocator(org.openjdk.javax.xml.transform.SourceLocator locator)
+  public SAXSourceLocator(javax.xml.transform.SourceLocator locator)
   {
     m_locator = null;
     this.setColumnNumber(locator.getColumnNumber());

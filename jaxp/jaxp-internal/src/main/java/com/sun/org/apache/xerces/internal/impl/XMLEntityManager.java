@@ -52,7 +52,7 @@ import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Stack;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 
 
 /**

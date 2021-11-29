@@ -22,7 +22,7 @@
  */
 package com.sun.apache.xml.internal.dtm.ref.sax2dtm;
 
-import org.openjdk.javax.xml.transform.Source;
+import javax.xml.transform.Source;
 
 import com.sun.apache.xml.internal.dtm.DTM;
 import com.sun.apache.xml.internal.dtm.DTMManager;

@@ -28,10 +28,10 @@ import java.net.URL;
 import java.net.MalformedURLException;
 import java.io.InputStream;
 
-import org.openjdk.javax.xml.transform.URIResolver;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.URIResolver;
+import javax.xml.transform.Source;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.TransformerException;
 
 import org.xml.sax.EntityResolver;
 import org.xml.sax.InputSource;

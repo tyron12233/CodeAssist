@@ -5,6 +5,21 @@
 
 package org.jetbrains.kotlin.com.intellij.openapi.util;
 
+import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.CharsetToolkit;
+import org.jetbrains.kotlin.com.intellij.util.text.CharArrayUtil;
+import org.jetbrains.kotlin.com.intellij.xml.util.XmlStringUtil;
+import org.jetbrains.kotlin.org.jdom.Attribute;
+import org.jetbrains.kotlin.org.jdom.Content;
+import org.jetbrains.kotlin.org.jdom.Element;
+import org.jetbrains.kotlin.org.jdom.JDOMException;
+import org.jetbrains.kotlin.org.jdom.Namespace;
+import org.jetbrains.kotlin.org.jdom.Text;
+import org.jetbrains.kotlin.org.jdom.filter.Filter;
+import org.jetbrains.kotlin.org.jdom.output.Format;
+import org.jetbrains.kotlin.org.jdom.output.Format.TextMode;
+import org.jetbrains.kotlin.org.jdom.output.XMLOutputter;
+
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,24 +35,10 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
+
 import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLInputFactoryWrapper;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
-import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.CharsetToolkit;
-import org.jetbrains.kotlin.com.intellij.util.text.CharArrayUtil;
-import org.jetbrains.kotlin.com.intellij.xml.util.XmlStringUtil;
-import org.jetbrains.kotlin.org.jdom.Attribute;
-import org.jetbrains.kotlin.org.jdom.Content;
-import org.jetbrains.kotlin.org.jdom.Element;
-import org.jetbrains.kotlin.org.jdom.JDOMException;
-import org.jetbrains.kotlin.org.jdom.Namespace;
-import org.jetbrains.kotlin.org.jdom.Text;
-import org.jetbrains.kotlin.org.jdom.filter.Filter;
-import org.jetbrains.kotlin.org.jdom.output.Format;
-import org.jetbrains.kotlin.org.jdom.output.XMLOutputter;
-import org.jetbrains.kotlin.org.jdom.output.Format.TextMode;
 
 public final class JDOMUtil {
     public static final Pattern XPOINTER_PATTERN = Pattern.compile("xpointer\\((.*)\\)");

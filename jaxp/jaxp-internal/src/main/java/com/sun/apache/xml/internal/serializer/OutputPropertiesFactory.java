@@ -35,7 +35,7 @@ import java.security.PrivilegedAction;
 import java.util.Enumeration;
 import java.util.Properties;
 
-import org.openjdk.javax.xml.transform.OutputKeys;
+import javax.xml.transform.OutputKeys;
 
 /**
  * This class is a factory to generate a set of default properties

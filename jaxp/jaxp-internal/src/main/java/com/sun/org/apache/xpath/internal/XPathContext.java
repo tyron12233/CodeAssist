@@ -46,10 +46,10 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Stack;
 import java.util.Vector;
-import org.openjdk.javax.xml.transform.ErrorListener;
-import org.openjdk.javax.xml.transform.SourceLocator;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.transform.URIResolver;
+import javax.xml.transform.ErrorListener;
+import javax.xml.transform.SourceLocator;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.URIResolver;
 import org.xml.sax.XMLReader;
 
 /**
@@ -149,7 +149,7 @@ public class XPathContext extends DTMManager // implements ExpressionContext
    *
    * @return a non-null DTM reference.
    */
-  public DTM getDTM(org.openjdk.javax.xml.transform.Source source, boolean unique,
+  public DTM getDTM(javax.xml.transform.Source source, boolean unique,
                     DTMWSFilter wsfilter,
                     boolean incremental,
                     boolean doIndexing)
@@ -1125,11 +1125,11 @@ public class XPathContext extends DTMManager // implements ExpressionContext
      * Get a variable based on it's qualified name.
      * @param qname The qualified name of the variable.
      * @return The evaluated value of the variable.
-     * @throws org.openjdk.javax.xml.transform.TransformerException
+     * @throws javax.xml.transform.TransformerException
      */
 
     public final XObject getVariableOrParam(com.sun.org.apache.xml.internal.utils.QName qname)
-              throws org.openjdk.javax.xml.transform.TransformerException
+              throws javax.xml.transform.TransformerException
     {
       return m_variableStacks.getVariableOrParam(XPathContext.this, qname);
     }

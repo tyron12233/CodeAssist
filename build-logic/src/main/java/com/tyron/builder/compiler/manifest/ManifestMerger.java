@@ -24,9 +24,9 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.openjdk.javax.xml.xpath.XPath;
-import org.openjdk.javax.xml.xpath.XPathConstants;
-import org.openjdk.javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpressionException;
 
 /**
  * Merges a library manifest into a main application manifest.

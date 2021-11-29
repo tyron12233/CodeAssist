@@ -179,13 +179,13 @@ public class FuncExtFunction extends Function
    * @param xctxt The current execution context.
    * @return A valid XObject.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     if (xctxt.isSecureProcessing())
-      throw new org.openjdk.javax.xml.transform.TransformerException(
+      throw new javax.xml.transform.TransformerException(
         XPATHMessages.createXPATHMessage(
           XPATHErrorResources.ER_EXTENSION_FUNCTION_CANNOT_BE_INVOKED,
           new Object[] {toString()}));

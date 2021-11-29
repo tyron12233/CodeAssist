@@ -44,7 +44,7 @@ import com.sun.org.apache.xalan.internal.utils.SecuritySupport;
  * of DTMs across multiple processes.</p>
  *
  * <p>Note: this class is incomplete right now.  It will be pretty much
- * modeled after org.openjdk.javax.xml.transform.TransformerFactory in terms of its
+ * modeled after javax.xml.transform.TransformerFactory in terms of its
  * factory support.</p>
  *
  * <p>State: In progress!!</p>
@@ -136,7 +136,7 @@ public abstract class DTMManager
    *
    * @return a non-null DTM reference.
    */
-  public abstract DTM getDTM(org.openjdk.javax.xml.transform.Source source,
+  public abstract DTM getDTM(javax.xml.transform.Source source,
                              boolean unique, DTMWSFilter whiteSpaceFilter,
                              boolean incremental, boolean doIndexing);
 

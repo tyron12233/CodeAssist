@@ -24,8 +24,8 @@ package com.sun.org.apache.xml.internal.dtm.ref.sax2dtm;
 
 import java.util.Hashtable;
 import java.util.Vector;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.SourceLocator;
+import javax.xml.transform.Source;
+import javax.xml.transform.SourceLocator;
 
 import com.sun.org.apache.xml.internal.dtm.*;
 import com.sun.org.apache.xml.internal.dtm.ref.*;

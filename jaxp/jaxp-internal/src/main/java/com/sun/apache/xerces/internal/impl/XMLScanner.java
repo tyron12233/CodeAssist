@@ -36,7 +36,7 @@ import com.sun.stream.XMLEntityStorage;
 import java.io.IOException;
 import java.util.ArrayList;
 
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.XMLEvent;
 
 import com.sun.apache.xerces.internal.xni.Augmentations;
 import com.sun.apache.xerces.internal.xni.XMLAttributes;

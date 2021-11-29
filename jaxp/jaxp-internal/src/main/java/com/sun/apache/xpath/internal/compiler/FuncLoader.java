@@ -22,7 +22,7 @@
  */
 package com.sun.apache.xpath.internal.compiler;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import com.sun.apache.xalan.internal.utils.ConfigurationError;
 import com.sun.apache.xalan.internal.utils.ObjectFactory;
@@ -80,7 +80,7 @@ public class FuncLoader
    *
    * @return non-null reference to Function derivative.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if ClassNotFoundException,
+   * @throws javax.xml.transform.TransformerException if ClassNotFoundException,
    *    IllegalAccessException, or InstantiationException is thrown.
    */
   Function getFunction() throws TransformerException

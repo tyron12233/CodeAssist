@@ -29,17 +29,17 @@ import com.sun.apache.xerces.internal.impl.Constants;
 import com.sun.apache.xerces.internal.utils.XMLSecurityManager;
 import java.io.IOException;
 
-import org.openjdk.javax.xml.transform.Result;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.Transformer;
-import org.openjdk.javax.xml.transform.TransformerConfigurationException;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.transform.TransformerFactory;
-import org.openjdk.javax.xml.transform.TransformerFactoryConfigurationError;
-import org.openjdk.javax.xml.transform.sax.SAXResult;
-import org.openjdk.javax.xml.transform.sax.SAXTransformerFactory;
-import org.openjdk.javax.xml.transform.sax.TransformerHandler;
-import org.openjdk.javax.xml.transform.stax.StAXResult;
+import javax.xml.transform.Result;
+import javax.xml.transform.Source;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.TransformerFactoryConfigurationError;
+import javax.xml.transform.sax.SAXResult;
+import javax.xml.transform.sax.SAXTransformerFactory;
+import javax.xml.transform.sax.TransformerHandler;
+import javax.xml.transform.stax.StAXResult;
 
 import org.xml.sax.SAXException;
 

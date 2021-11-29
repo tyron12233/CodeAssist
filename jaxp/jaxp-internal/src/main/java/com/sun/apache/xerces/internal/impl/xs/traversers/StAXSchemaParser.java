@@ -24,16 +24,16 @@ package com.sun.apache.xerces.internal.impl.xs.traversers;
 import java.util.ArrayList;
 import java.util.Iterator;
 
-import org.openjdk.javax.xml.stream.XMLEventReader;
-import org.openjdk.javax.xml.stream.XMLStreamConstants;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.XMLStreamReader;
-import org.openjdk.javax.xml.stream.events.Attribute;
-import org.openjdk.javax.xml.stream.events.EndElement;
-import org.openjdk.javax.xml.stream.events.Namespace;
-import org.openjdk.javax.xml.stream.events.ProcessingInstruction;
-import org.openjdk.javax.xml.stream.events.StartElement;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.XMLEventReader;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.events.Attribute;
+import javax.xml.stream.events.EndElement;
+import javax.xml.stream.events.Namespace;
+import javax.xml.stream.events.ProcessingInstruction;
+import javax.xml.stream.events.StartElement;
+import javax.xml.stream.events.XMLEvent;
 
 import com.sun.apache.xerces.internal.impl.xs.opti.SchemaDOMParser;
 import com.sun.apache.xerces.internal.util.JAXPNamespaceContextWrapper;
@@ -402,7 +402,7 @@ final class StAXSchemaParser {
     }
 
     /** Fills in a QName object. */
-    private void fillQName(QName toFill, org.openjdk.javax.xml.namespace.QName toCopy) {
+    private void fillQName(QName toFill, javax.xml.namespace.QName toCopy) {
         fillQName(toFill, toCopy.getNamespaceURI(), toCopy.getLocalPart(), toCopy.getPrefix());
     }
 

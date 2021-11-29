@@ -104,9 +104,9 @@ public class XNodeSetForDOM extends XNodeSet
    *
    * @return null
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public NodeIterator nodeset() throws org.openjdk.javax.xml.transform.TransformerException
+  public NodeIterator nodeset() throws javax.xml.transform.TransformerException
   {
     return (m_origObj instanceof NodeIterator)
                    ? (NodeIterator)m_origObj : super.nodeset();
@@ -117,9 +117,9 @@ public class XNodeSetForDOM extends XNodeSet
    *
    * @return null
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public NodeList nodelist() throws org.openjdk.javax.xml.transform.TransformerException
+  public NodeList nodelist() throws javax.xml.transform.TransformerException
   {
     return (m_origObj instanceof NodeList)
                    ? (NodeList)m_origObj : super.nodelist();

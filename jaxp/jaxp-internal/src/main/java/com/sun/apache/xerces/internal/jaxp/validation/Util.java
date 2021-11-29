@@ -20,7 +20,7 @@
 
 package com.sun.apache.xerces.internal.jaxp.validation;
 
-import org.openjdk.javax.xml.transform.stream.StreamSource;
+import javax.xml.transform.stream.StreamSource;
 
 import com.sun.apache.xerces.internal.xni.XNIException;
 import com.sun.apache.xerces.internal.xni.parser.XMLInputSource;

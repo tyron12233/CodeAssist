@@ -57,10 +57,10 @@ public class ContextMatchStepPattern extends StepPattern
    *         {@link NodeTest#SCORE_QNAME}, or
    *         {@link NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     if (xctxt.getIteratorRoot() == xctxt.getCurrentNode())
@@ -82,11 +82,11 @@ public class ContextMatchStepPattern extends StepPattern
    *         {@link NodeTest#SCORE_QNAME}, or
    *         {@link NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject executeRelativePathPattern(
           XPathContext xctxt, StepPattern prevStep)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     XObject score = NodeTest.SCORE_NONE;

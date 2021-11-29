@@ -39,7 +39,7 @@ import java.util.Vector;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 
 import com.sun.apache.xalan.internal.xsltc.compiler.util.ErrorMsg;
 import com.sun.apache.xalan.internal.xsltc.compiler.util.Util;

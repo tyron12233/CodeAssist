@@ -40,7 +40,7 @@ import com.sun.apache.xml.internal.res.XMLMessages;
 import com.sun.apache.xml.internal.res.XMLErrorResources;
 import com.sun.apache.xml.internal.serializer.SerializationHandler;
 
-import org.openjdk.javax.xml.transform.Source;
+import javax.xml.transform.Source;
 import java.util.Vector;
 import com.sun.apache.xml.internal.utils.SuballocatedIntVector;
 import org.xml.sax.*;

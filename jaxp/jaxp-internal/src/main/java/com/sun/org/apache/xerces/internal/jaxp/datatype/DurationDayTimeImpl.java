@@ -31,7 +31,7 @@ package com.sun.org.apache.xerces.internal.jaxp.datatype;
 
 import java.math.BigInteger;
 import java.math.BigDecimal;
-import org.openjdk.javax.xml.datatype.DatatypeConstants;
+import javax.xml.datatype.DatatypeConstants;
 
 /**
  * <p>Represent a subtype <code>xdt:dayTimeDuration</code> of a <code>Duration</code>

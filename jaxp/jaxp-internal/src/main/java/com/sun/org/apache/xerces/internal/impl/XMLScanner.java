@@ -26,7 +26,7 @@ import com.sun.xml.internal.stream.XMLEntityStorage;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.XMLEvent;
 import com.sun.org.apache.xerces.internal.impl.msg.XMLMessageFormatter;
 import com.sun.org.apache.xerces.internal.util.SymbolTable;
 import com.sun.org.apache.xerces.internal.util.XMLChar;

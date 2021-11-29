@@ -31,7 +31,7 @@ import com.sun.org.apache.xml.internal.resolver.helpers.PublicId;
 
 import org.xml.sax.*;
 
-import org.openjdk.javax.xml.parsers.*;
+import javax.xml.parsers.*;
 
 /**
  * Parse "xcatalog" XML Catalog files, this is the XML Catalog format

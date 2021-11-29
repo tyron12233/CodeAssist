@@ -29,7 +29,7 @@ import org.xml.sax.ext.EntityResolver2;
 import org.w3c.dom.ls.LSInput;
 import org.w3c.dom.ls.LSResourceResolver;
 
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import javax.xml.parsers.SAXParserFactory;
 
 import com.sun.apache.xerces.internal.xni.parser.XMLEntityResolver;
 import com.sun.apache.xerces.internal.xni.parser.XMLInputSource;

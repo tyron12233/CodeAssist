@@ -139,7 +139,7 @@ public final class Constants {
     /** XML string property ("xml-string"). */
     public static final String XML_STRING_PROPERTY = "xml-string";
 
-    public static final String FEATURE_SECURE_PROCESSING = "http://org.openjdk.javax.xml.XMLConstants/feature/secure-processing";
+    public static final String FEATURE_SECURE_PROCESSING = "http://javax.xml.XMLConstants/feature/secure-processing";
 
     // Oracle Feature:
     /**
@@ -176,9 +176,9 @@ public final class Constants {
     /** JAXP schemaSource language: when used internally may include DTD namespace (DOM) */
     public static final String SCHEMA_LANGUAGE = "schemaLanguage";
 
-    /** JAXP Standard property prefix ("http://org.openjdk.javax.xml.XMLConstants/property/"). */
+    /** JAXP Standard property prefix ("http://javax.xml.XMLConstants/property/"). */
     public static final String JAXPAPI_PROPERTY_PREFIX =
-        "http://org.openjdk.javax.xml.XMLConstants/property/";
+        "http://javax.xml.XMLConstants/property/";
 
     /** Oracle JAXP property prefix ("http://www.oracle.com/xml/jaxp/properties/"). */
     public static final String ORACLE_JAXP_PROPERTY_PREFIX =
@@ -188,8 +188,8 @@ public final class Constants {
             ORACLE_JAXP_PROPERTY_PREFIX + "xmlSecurityPropertyManager";
 
     //System Properties corresponding to ACCESS_EXTERNAL_* properties
-    public static final String SP_ACCESS_EXTERNAL_DTD = "org.openjdk.javax.xml.accessExternalDTD";
-    public static final String SP_ACCESS_EXTERNAL_SCHEMA = "org.openjdk.javax.xml.accessExternalSchema";
+    public static final String SP_ACCESS_EXTERNAL_DTD = "javax.xml.accessExternalDTD";
+    public static final String SP_ACCESS_EXTERNAL_SCHEMA = "javax.xml.accessExternalSchema";
     //all access keyword
     public static final String ACCESS_EXTERNAL_ALL = "all";
 

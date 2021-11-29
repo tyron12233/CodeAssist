@@ -24,10 +24,10 @@
 
 import java.io.IOException;
 
-import org.openjdk.javax.xml.transform.ErrorListener;
-import org.openjdk.javax.xml.transform.Result;
-import org.openjdk.javax.xml.transform.Transformer;
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.ErrorListener;
+import javax.xml.transform.Result;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerException;
 
 import com.sun.apache.xml.internal.serializer.utils.MsgKey;
 import com.sun.apache.xml.internal.serializer.utils.Utils;

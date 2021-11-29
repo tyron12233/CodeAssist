@@ -23,7 +23,7 @@
 
 package com.sun.apache.xalan.internal.lib;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
+import javax.xml.transform.SourceLocator;
 
 import com.sun.apache.xalan.internal.extensions.ExpressionContext;
 import com.sun.apache.xml.internal.dtm.ref.DTMNodeProxy;

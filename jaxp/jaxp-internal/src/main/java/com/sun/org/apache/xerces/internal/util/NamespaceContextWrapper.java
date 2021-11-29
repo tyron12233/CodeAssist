@@ -27,7 +27,7 @@ package com.sun.org.apache.xerces.internal.util;
 
 import java.util.Enumeration;
 import java.util.Vector;
-import org.openjdk.javax.xml.namespace.NamespaceContext;
+import javax.xml.namespace.NamespaceContext;
 
 /**
  * Writing a wrapper to re-use most of the namespace functionality

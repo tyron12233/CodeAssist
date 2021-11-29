@@ -29,7 +29,7 @@ import java.util.Map;
 import java.util.Stack;
 import java.util.Vector;
 import java.util.ArrayList;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 import com.sun.org.apache.xerces.internal.impl.Constants;
 import com.sun.org.apache.xerces.internal.impl.RevalidationHandler;
 import com.sun.org.apache.xerces.internal.impl.XMLEntityManager;

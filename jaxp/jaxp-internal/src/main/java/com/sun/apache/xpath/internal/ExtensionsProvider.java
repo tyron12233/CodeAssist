@@ -38,25 +38,25 @@ public interface ExtensionsProvider
    */
 
   public boolean functionAvailable(String ns, String funcName)
-          throws org.openjdk.javax.xml.transform.TransformerException;
+          throws javax.xml.transform.TransformerException;
 
   /**
    * Is the extension element available?
    */
   public boolean elementAvailable(String ns, String elemName)
-          throws org.openjdk.javax.xml.transform.TransformerException;
+          throws javax.xml.transform.TransformerException;
 
   /**
    * Execute the extension function.
    */
   public Object extFunction(String ns, String funcName,
                             Vector argVec, Object methodKey)
-            throws org.openjdk.javax.xml.transform.TransformerException;
+            throws javax.xml.transform.TransformerException;
 
   /**
    * Execute the extension function.
    */
   public Object extFunction(FuncExtFunction extFunction,
                             Vector argVec)
-            throws org.openjdk.javax.xml.transform.TransformerException;
+            throws javax.xml.transform.TransformerException;
 }

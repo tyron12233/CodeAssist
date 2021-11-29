@@ -40,7 +40,7 @@ import com.sun.org.apache.xerces.internal.xni.XNIException;
 import com.sun.org.apache.xerces.internal.xni.parser.XMLComponentManager;
 import com.sun.org.apache.xerces.internal.xni.parser.XMLConfigurationException;
 import com.sun.org.apache.xerces.internal.xni.parser.XMLDocumentSource;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 
  /*
   * @author Eric Ye, IBM

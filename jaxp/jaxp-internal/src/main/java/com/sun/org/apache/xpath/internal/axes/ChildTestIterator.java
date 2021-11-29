@@ -51,10 +51,10 @@ public class ChildTestIterator extends BasicTestIterator
    * @param opPos The position within the op map, which contains the
    * location path expression for this itterator.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   ChildTestIterator(Compiler compiler, int opPos, int analysis)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     super(compiler, opPos, analysis);
   }
@@ -64,7 +64,7 @@ public class ChildTestIterator extends BasicTestIterator
    *
    * @param traverser Traverser that tells how the KeyIterator is to be handled.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public ChildTestIterator(DTMAxisTraverser traverser)
   {

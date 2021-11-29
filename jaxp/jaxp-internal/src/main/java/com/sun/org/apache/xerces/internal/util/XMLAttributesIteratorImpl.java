@@ -40,8 +40,8 @@ import com.sun.org.apache.xerces.internal.util.XMLAttributesImpl ;
 /**
  * Its better to extend the functionality of existing XMLAttributesImpl and also make it of type Iterator.
  * We can directly  give an object of type iterator from StartElement event. We should also have
- * Attribute object of type org.openjdk.javax.xml.stream.Attribute internally. It would avoid the need of creating
- * new org.openjdk.javax.xml.stream.Attribute object at the later stage.
+ * Attribute object of type javax.xml.stream.Attribute internally. It would avoid the need of creating
+ * new javax.xml.stream.Attribute object at the later stage.
  *
  * Should we change XMLAttributes interface to implement Iteraotr ? I think its better avoid touching XNI as
  * much as possible. - NB.
@@ -64,7 +64,7 @@ public class XMLAttributesIteratorImpl extends XMLAttributesImpl implements Iter
 
     public Object next() {
         if(hasNext()){
-            // should this be of type org.openjdk.javax.xml.stream.Attribute ?
+            // should this be of type javax.xml.stream.Attribute ?
             return fLastReturnedItem = fAttributes[fCurrent++] ;
         }
         else{
@@ -94,7 +94,7 @@ public class XMLAttributesIteratorImpl extends XMLAttributesImpl implements Iter
      *
      */
     /*
-    class AttributeImpl extends com.sun.org.apache.xerces.internal.util.XMLAttributesImpl.Attribute implements org.openjdk.javax.xml.stream.events.Attribute{
+    class AttributeImpl extends com.sun.org.apache.xerces.internal.util.XMLAttributesImpl.Attribute implements javax.xml.stream.events.Attribute{
 
     }
      */

@@ -35,12 +35,12 @@ import org.xml.sax.XMLReader;
 import org.xml.sax.InputSource;
 import org.xml.sax.EntityResolver;
 
-import org.openjdk.javax.xml.transform.sax.SAXSource;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.URIResolver;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.Source;
+import javax.xml.transform.URIResolver;
+import javax.xml.transform.TransformerException;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParserFactory;
 
 import com.sun.apache.xml.internal.resolver.Catalog;
 import com.sun.apache.xml.internal.resolver.CatalogManager;
@@ -57,7 +57,7 @@ import com.sun.apache.xml.internal.resolver.CatalogManager;
  *
  * @see Catalog
  * @see org.xml.sax.EntityResolver
- * @see org.openjdk.javax.xml.transform.URIResolver
+ * @see javax.xml.transform.URIResolver
  *
  * @author Norman Walsh
  * <a href="mailto:Norman.Walsh@Sun.COM">Norman.Walsh@Sun.COM</a>

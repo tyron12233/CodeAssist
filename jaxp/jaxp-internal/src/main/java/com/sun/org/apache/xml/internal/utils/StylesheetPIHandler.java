@@ -25,10 +25,10 @@ package com.sun.org.apache.xml.internal.utils;
 import java.util.StringTokenizer;
 import java.util.Vector;
 
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.transform.URIResolver;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.Source;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.URIResolver;
+import javax.xml.transform.sax.SAXSource;
 
 import com.sun.org.apache.xml.internal.utils.SystemIDResolver;
 

@@ -25,8 +25,8 @@
 
 package com.sun.stream.events;
 
-import org.openjdk.javax.xml.stream.events.Comment;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.Comment;
+import javax.xml.stream.events.XMLEvent;
 
 /**
  * This class contains information about Comment event.

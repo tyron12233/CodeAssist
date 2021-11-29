@@ -20,8 +20,8 @@
 
 package com.sun.apache.xerces.internal.impl.dv.xs;
 
-import org.openjdk.javax.xml.datatype.DatatypeConstants;
-import org.openjdk.javax.xml.datatype.XMLGregorianCalendar;
+import javax.xml.datatype.DatatypeConstants;
+import javax.xml.datatype.XMLGregorianCalendar;
 
 import com.sun.apache.xerces.internal.impl.dv.InvalidDatatypeValueException;
 import com.sun.apache.xerces.internal.impl.dv.ValidationContext;

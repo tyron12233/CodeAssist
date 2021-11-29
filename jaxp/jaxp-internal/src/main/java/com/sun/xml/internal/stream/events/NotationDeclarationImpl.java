@@ -25,8 +25,8 @@
 
 package com.sun.xml.internal.stream.events;
 
-import org.openjdk.javax.xml.stream.events.NotationDeclaration;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.NotationDeclaration;
+import javax.xml.stream.events.XMLEvent;
 import com.sun.xml.internal.stream.dtd.nonvalidating.XMLNotationDecl;
 
 /**

@@ -25,8 +25,6 @@
 
 package javax.xml.stream;
 
-import org.openjdk.javax.xml.stream.XMLInputFactory;
-
 import java.io.File;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
@@ -190,9 +188,6 @@ class FactoryFinder {
         try {
             Class<?> providerClass = getProviderClass(className, cl, doFallback, useBSClsLoader);
             if (!type.isAssignableFrom(providerClass)) {
-                if (type.toString().contains("XMLInputFactory")) {
-                    return (T) new  XMLInputFactoryWrapper((XMLInputFactory) providerClass.newInstance());
-                }
                 throw new ClassCastException(className + " cannot be cast to " + type.getName());
             }
             Object instance = providerClass.newInstance();

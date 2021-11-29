@@ -24,7 +24,7 @@ package com.sun.org.apache.xml.internal.utils;
 
 import java.io.File;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import com.sun.org.apache.xml.internal.utils.URI.MalformedURIException;
 

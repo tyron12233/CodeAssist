@@ -43,10 +43,10 @@ public class Minus extends Operation
    * @return non-null reference to the XObject that represents the
    *         result of the operation.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject operate(XObject left, XObject right)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     return new XNumber(left.num() - right.num());
   }
@@ -58,10 +58,10 @@ public class Minus extends Operation
    *
    * @return The result of the operation as a double.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public double num(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     return (m_left.num(xctxt) - m_right.num(xctxt));

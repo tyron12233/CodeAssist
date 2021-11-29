@@ -40,9 +40,9 @@ public class FuncFloor extends FunctionOneArg
    * @param xctxt The current execution context.
    * @return A valid XObject.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public XObject execute(XPathContext xctxt) throws org.openjdk.javax.xml.transform.TransformerException
+  public XObject execute(XPathContext xctxt) throws javax.xml.transform.TransformerException
   {
     return new XNumber(java.lang.Math.floor(m_arg0.execute(xctxt).num()));
   }

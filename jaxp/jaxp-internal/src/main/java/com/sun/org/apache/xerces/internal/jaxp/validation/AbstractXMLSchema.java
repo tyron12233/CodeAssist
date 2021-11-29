@@ -22,9 +22,9 @@ package com.sun.org.apache.xerces.internal.jaxp.validation;
 
 import java.util.HashMap;
 
-import org.openjdk.javax.xml.validation.Schema;
-import org.openjdk.javax.xml.validation.Validator;
-import org.openjdk.javax.xml.validation.ValidatorHandler;
+import javax.xml.validation.Schema;
+import javax.xml.validation.Validator;
+import javax.xml.validation.ValidatorHandler;
 
 /**
  * <p>Abstract implementation of Schema for W3C XML Schemas.</p>
@@ -57,14 +57,14 @@ abstract class AbstractXMLSchema extends Schema implements
      */
 
     /*
-     * @see org.openjdk.javax.xml.validation.Schema#newValidator()
+     * @see javax.xml.validation.Schema#newValidator()
      */
     public final Validator newValidator() {
         return new ValidatorImpl(this);
     }
 
     /*
-     * @see org.openjdk.javax.xml.validation.Schema#newValidatorHandler()
+     * @see javax.xml.validation.Schema#newValidatorHandler()
      */
     public final ValidatorHandler newValidatorHandler() {
         return new ValidatorHandlerImpl(this);

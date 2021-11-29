@@ -53,10 +53,10 @@ public class DescendantIterator extends LocPathIterator
    * @param opPos The position within the op map, which contains the
    * location path expression for this itterator.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   DescendantIterator(Compiler compiler, int opPos, int analysis)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     super(compiler, opPos, analysis, false);
@@ -296,7 +296,7 @@ public class DescendantIterator extends LocPathIterator
    * @return the first node out of the nodeset, or DTM.NULL.
    */
   public int asNode(XPathContext xctxt)
-    throws org.openjdk.javax.xml.transform.TransformerException
+    throws javax.xml.transform.TransformerException
   {
     if(getPredicateCount() > 0)
       return super.asNode(xctxt);

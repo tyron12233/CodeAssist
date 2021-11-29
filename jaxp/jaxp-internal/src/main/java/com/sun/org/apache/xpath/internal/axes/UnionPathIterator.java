@@ -153,10 +153,10 @@ public class UnionPathIterator extends LocPathIterator
    * @param opPos The position of this iterator in the
    * opcode list from the compiler.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public UnionPathIterator(Compiler compiler, int opPos)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     super();
@@ -176,10 +176,10 @@ public class UnionPathIterator extends LocPathIterator
    *
    * @return Object that is derived from LocPathIterator.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public static LocPathIterator createUnionIterator(Compiler compiler, int opPos)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
         // For the moment, I'm going to first create a full UnionPathIterator, and
         // then see if I can reduce it to a UnionChildIterator.  It would obviously
@@ -254,10 +254,10 @@ public class UnionPathIterator extends LocPathIterator
    * @param stream Input stream to read from
    *
    * @throws java.io.IOException
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   private void readObject(java.io.ObjectInputStream stream)
-          throws java.io.IOException, org.openjdk.javax.xml.transform.TransformerException
+          throws java.io.IOException, javax.xml.transform.TransformerException
   {
     try
     {
@@ -266,7 +266,7 @@ public class UnionPathIterator extends LocPathIterator
     }
     catch (ClassNotFoundException cnfe)
     {
-      throw new org.openjdk.javax.xml.transform.TransformerException(cnfe);
+      throw new javax.xml.transform.TransformerException(cnfe);
     }
   }
 
@@ -307,10 +307,10 @@ public class UnionPathIterator extends LocPathIterator
    *
    * @return New location path iterator.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   protected LocPathIterator createDTMIterator(
-          Compiler compiler, int opPos) throws org.openjdk.javax.xml.transform.TransformerException
+          Compiler compiler, int opPos) throws javax.xml.transform.TransformerException
   {
     LocPathIterator lpi = (LocPathIterator)WalkerFactory.newDTMIterator(compiler, opPos,
                                       (compiler.getLocationPathDepth() <= 0));
@@ -326,10 +326,10 @@ public class UnionPathIterator extends LocPathIterator
    * opcode list from the compiler.
    * @param count The insert position of the iterator.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   protected void loadLocationPaths(Compiler compiler, int opPos, int count)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     // TODO: Handle unwrapped FilterExpr

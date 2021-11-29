@@ -23,11 +23,11 @@
 
 package com.sun.org.apache.xalan.internal.xsltc.trax;
 
-import org.openjdk.javax.xml.transform.Result;
-import org.openjdk.javax.xml.transform.Transformer;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.transform.sax.TransformerHandler;
-import org.openjdk.javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.Result;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.sax.TransformerHandler;
+import javax.xml.transform.dom.DOMResult;
 
 import com.sun.org.apache.xalan.internal.xsltc.StripFilter;
 import com.sun.org.apache.xalan.internal.xsltc.compiler.util.ErrorMsg;
@@ -91,7 +91,7 @@ public class TransformerHandlerImpl implements TransformerHandler, DeclHandler {
     }
 
     /**
-     * Implements org.openjdk.javax.xml.transform.sax.TransformerHandler.getSystemId()
+     * Implements javax.xml.transform.sax.TransformerHandler.getSystemId()
      * Get the base ID (URI or system ID) from where relative URLs will be
      * resolved.
      * @return The systemID that was set with setSystemId(String id)
@@ -102,7 +102,7 @@ public class TransformerHandlerImpl implements TransformerHandler, DeclHandler {
     }
 
     /**
-     * Implements org.openjdk.javax.xml.transform.sax.TransformerHandler.setSystemId()
+     * Implements javax.xml.transform.sax.TransformerHandler.setSystemId()
      * Get the base ID (URI or system ID) from where relative URLs will be
      * resolved.
      * @param id Base URI for this stylesheet
@@ -113,7 +113,7 @@ public class TransformerHandlerImpl implements TransformerHandler, DeclHandler {
     }
 
     /**
-     * Implements org.openjdk.javax.xml.transform.sax.TransformerHandler.getTransformer()
+     * Implements javax.xml.transform.sax.TransformerHandler.getTransformer()
      * Get the Transformer associated with this handler, which is needed in
      * order to set parameters and output properties.
      * @return The Transformer object
@@ -124,7 +124,7 @@ public class TransformerHandlerImpl implements TransformerHandler, DeclHandler {
     }
 
     /**
-     * Implements org.openjdk.javax.xml.transform.sax.TransformerHandler.setResult()
+     * Implements javax.xml.transform.sax.TransformerHandler.setResult()
      * Enables the user of the TransformerHandler to set the to set the Result
      * for the transformation.
      * @param result A Result instance, should not be null

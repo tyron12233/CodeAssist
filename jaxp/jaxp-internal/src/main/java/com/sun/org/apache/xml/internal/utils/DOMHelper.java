@@ -25,10 +25,10 @@ package com.sun.org.apache.xml.internal.utils;
 import java.util.Hashtable;
 import java.util.Vector;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.parsers.DocumentBuilder;
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
 import com.sun.org.apache.xml.internal.dtm.ref.DTMNodeProxy;
 import com.sun.org.apache.xml.internal.res.XMLErrorResources;
@@ -137,11 +137,11 @@ public class DOMHelper
    * @param textNode A text node from the source tree.
    * @return true if the text node should be stripped of extra whitespace.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    * @xsl.usage advanced
    */
   public boolean shouldStripSourceNode(Node textNode)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     // return (null == m_envSupport) ? false : m_envSupport.shouldStripSourceNode(textNode);

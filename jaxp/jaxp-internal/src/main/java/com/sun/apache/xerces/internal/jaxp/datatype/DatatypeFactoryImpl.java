@@ -24,19 +24,19 @@ import java.math.BigInteger;
 import java.math.BigDecimal;
 import java.util.GregorianCalendar;
 
-import org.openjdk.javax.xml.datatype.DatatypeConstants;
-import org.openjdk.javax.xml.datatype.DatatypeFactory;
-import org.openjdk.javax.xml.datatype.Duration;
-import org.openjdk.javax.xml.datatype.XMLGregorianCalendar;
+import javax.xml.datatype.DatatypeConstants;
+import javax.xml.datatype.DatatypeFactory;
+import javax.xml.datatype.Duration;
+import javax.xml.datatype.XMLGregorianCalendar;
 
 /**
- * <p>Factory that creates new <code>org.openjdk.javax.xml.datatype</code> <code>Object</code>s that map XML to/from Java <code>Object</code>s.</p>
+ * <p>Factory that creates new <code>javax.xml.datatype</code> <code>Object</code>s that map XML to/from Java <code>Object</code>s.</p>
  *
  * <p id="DatatypeFactory.newInstance">{@link #newInstance()} is used to create a new <code>DatatypeFactory</code>.
  * The following implementation resolution mechanisms are used in the following order:</p>
  * <ol>
  *    <li>
- *      If the system property specified by {@link #DATATYPEFACTORY_PROPERTY}, "<code>org.openjdk.javax.xml.datatype.DatatypeFactory</code>",
+ *      If the system property specified by {@link #DATATYPEFACTORY_PROPERTY}, "<code>javax.xml.datatype.DatatypeFactory</code>",
  *      exists, a class with the name of the property's value is instantiated.
  *      Any Exception thrown during the instantiation process is wrapped as a {@link DatatypeConfigurationException}.
  *    </li>
@@ -51,7 +51,7 @@ import org.openjdk.javax.xml.datatype.XMLGregorianCalendar;
  *    </li>
  *    <li>
  *      The final mechanism is to attempt to instantiate the <code>Class</code> specified by
- *      {@link #DATATYPEFACTORY_IMPLEMENTATION_CLASS}, "<code>org.openjdk.javax.xml.datatype.DatatypeFactoryImpl</code>".
+ *      {@link #DATATYPEFACTORY_IMPLEMENTATION_CLASS}, "<code>javax.xml.datatype.DatatypeFactoryImpl</code>".
  *      Any Exception thrown during the instantiation process is wrapped as a {@link DatatypeConfigurationException}.
  *    </li>
  * </ol>
@@ -264,7 +264,7 @@ public class DatatypeFactoryImpl
          *
          * <p>The datatype <code>xdt:yearMonthDuration</code> is a subtype of <code>xs:duration</code>
          * whose lexical representation contains only year and month components.
-         * This datatype resides in the namespace {@link org.openjdk.javax.xml.XMLConstants#W3C_XPATH_DATATYPE_NS_URI}.</p>
+         * This datatype resides in the namespace {@link javax.xml.XMLConstants#W3C_XPATH_DATATYPE_NS_URI}.</p>
          *
      * <p>Both values are set and availabe from the created {@link Duration}</p>
          *
@@ -294,7 +294,7 @@ public class DatatypeFactoryImpl
          *
          * <p>The datatype <code>xdt:yearMonthDuration</code> is a subtype of <code>xs:duration</code>
          * whose lexical representation contains only year and month components.
-         * This datatype resides in the namespace {@link org.openjdk.javax.xml.XMLConstants#W3C_XPATH_DATATYPE_NS_URI}.</p>
+         * This datatype resides in the namespace {@link javax.xml.XMLConstants#W3C_XPATH_DATATYPE_NS_URI}.</p>
          *
      * <p>Both values are set by computing their values from the specified milliseconds
      * and are availabe using the <code>get</code> methods of  the created {@link Duration}.
@@ -549,7 +549,7 @@ public class DatatypeFactoryImpl
          *     </tr>
          *     <tr>
          *        <th><code>java.util.GregorianCalendar</code> field</th>
-         *        <th><code>org.openjdk.javax.xml.datatype.XMLGregorianCalendar</code> field</th>
+         *        <th><code>javax.xml.datatype.XMLGregorianCalendar</code> field</th>
          *     </tr>
          *   </thead>
          *   <tbody>

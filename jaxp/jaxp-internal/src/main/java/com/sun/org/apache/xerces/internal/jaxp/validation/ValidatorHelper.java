@@ -22,8 +22,8 @@ package com.sun.org.apache.xerces.internal.jaxp.validation;
 
 import java.io.IOException;
 
-import org.openjdk.javax.xml.transform.Result;
-import org.openjdk.javax.xml.transform.Source;
+import javax.xml.transform.Result;
+import javax.xml.transform.Source;
 
 import org.xml.sax.SAXException;
 

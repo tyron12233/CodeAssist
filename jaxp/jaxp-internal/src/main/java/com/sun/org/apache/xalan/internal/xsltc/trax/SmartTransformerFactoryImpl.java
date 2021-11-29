@@ -24,23 +24,23 @@
 
 package com.sun.org.apache.xalan.internal.xsltc.trax;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.transform.ErrorListener;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.Templates;
-import org.openjdk.javax.xml.transform.Transformer;
-import org.openjdk.javax.xml.transform.TransformerConfigurationException;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.transform.URIResolver;
-import org.openjdk.javax.xml.transform.dom.DOMResult;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
-import org.openjdk.javax.xml.transform.sax.SAXResult;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
-import org.openjdk.javax.xml.transform.sax.SAXTransformerFactory;
-import org.openjdk.javax.xml.transform.sax.TemplatesHandler;
-import org.openjdk.javax.xml.transform.sax.TransformerHandler;
-import org.openjdk.javax.xml.transform.stream.StreamResult;
-import org.openjdk.javax.xml.transform.stream.StreamSource;
+import javax.xml.XMLConstants;
+import javax.xml.transform.ErrorListener;
+import javax.xml.transform.Source;
+import javax.xml.transform.Templates;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.URIResolver;
+import javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.sax.SAXResult;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.sax.SAXTransformerFactory;
+import javax.xml.transform.sax.TemplatesHandler;
+import javax.xml.transform.sax.TransformerHandler;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.transform.stream.StreamSource;
 
 import com.sun.org.apache.xalan.internal.xsltc.compiler.util.ErrorMsg;
 import com.sun.org.apache.xalan.internal.utils.ObjectFactory;
@@ -167,7 +167,7 @@ public class SmartTransformerFactoryImpl extends SAXTransformerFactory
      * It is possible for an <code>TransformerFactory</code> to expose a feature value but be unable to change its state.
      * </p>
      *
-     * <p>See {@link org.openjdk.javax.xml.transform.TransformerFactory} for full documentation of specific features.</p>
+     * <p>See {@link javax.xml.transform.TransformerFactory} for full documentation of specific features.</p>
      *
      * @param name Feature name.
      * @param value Is feature state <code>true</code> or <code>false</code>.
@@ -198,7 +198,7 @@ public class SmartTransformerFactoryImpl extends SAXTransformerFactory
     }
 
     /**
-     * org.openjdk.javax.xml.transform.sax.TransformerFactory implementation.
+     * javax.xml.transform.sax.TransformerFactory implementation.
      * Look up the value of a feature (to see if it is supported).
      * This method must be updated as the various methods and features of this
      * class are implemented.

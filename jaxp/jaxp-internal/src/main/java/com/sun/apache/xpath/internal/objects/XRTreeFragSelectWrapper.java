@@ -62,10 +62,10 @@ public class XRTreeFragSelectWrapper extends XRTreeFrag implements Cloneable
    *
    * @return the result of executing the select expression
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
          XObject m_selected;
      m_selected = ((Expression)m_obj).execute(xctxt);
@@ -96,7 +96,7 @@ public class XRTreeFragSelectWrapper extends XRTreeFrag implements Cloneable
    * @return The result tree fragment as a number or NaN
    */
   public double num()
-    throws org.openjdk.javax.xml.transform.TransformerException
+    throws javax.xml.transform.TransformerException
   {
 
         throw new RuntimeException(XSLMessages.createXPATHMessage(XPATHErrorResources.ER_NUM_NOT_SUPPORTED_XRTREEFRAGSELECTWRAPPER, null)); //"num() not supported by XRTreeFragSelectWrapper!");

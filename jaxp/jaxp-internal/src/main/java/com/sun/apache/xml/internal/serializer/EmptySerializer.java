@@ -29,8 +29,8 @@ import java.util.Hashtable;
 import java.util.Properties;
 import java.util.Vector;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
-import org.openjdk.javax.xml.transform.Transformer;
+import javax.xml.transform.SourceLocator;
+import javax.xml.transform.Transformer;
 
 import org.w3c.dom.Node;
 import org.xml.sax.Attributes;
@@ -214,7 +214,7 @@ public class EmptySerializer implements SerializationHandler
         aMethodIsCalled();
     }
     /**
-     * @see SerializationHandler#setTransformer(org.openjdk.javax.xml.transform.Transformer)
+     * @see SerializationHandler#setTransformer(javax.xml.transform.Transformer)
      */
     public void setTransformer(Transformer transformer)
     {
@@ -697,7 +697,7 @@ public class EmptySerializer implements SerializationHandler
     }
 
     /**
-     * @see ExtendedContentHandler#setSourceLocator(org.openjdk.javax.xml.transform.SourceLocator)
+     * @see ExtendedContentHandler#setSourceLocator(javax.xml.transform.SourceLocator)
      */
     public void setSourceLocator(SourceLocator locator)
     {

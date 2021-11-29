@@ -28,10 +28,10 @@ package com.sun.stream;
 import java.io.InputStream;
 import java.io.Reader;
 
-import org.openjdk.javax.xml.stream.*;
-import org.openjdk.javax.xml.stream.util.XMLEventAllocator ;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.stream.StreamSource;
+import javax.xml.stream.*;
+import javax.xml.stream.util.XMLEventAllocator ;
+import javax.xml.transform.Source;
+import javax.xml.transform.stream.StreamSource;
 
 import com.sun.apache.xerces.internal.impl.Constants;
 import com.sun.apache.xerces.internal.impl.PropertyManager;
@@ -45,7 +45,7 @@ import com.sun.apache.xerces.internal.xni.parser.XMLInputSource;
  */
 
 //xxx: Should we be reusing the XMLInputSource object
-public class XMLInputFactoryImpl extends org.openjdk.javax.xml.stream.XMLInputFactory {
+public class XMLInputFactoryImpl extends javax.xml.stream.XMLInputFactory {
 
 
     //List of supported properties and default values.
@@ -256,7 +256,7 @@ public class XMLInputFactoryImpl extends org.openjdk.javax.xml.stream.XMLInputFa
         fPropertyManager.setProperty(name,value);
     }
 
-    XMLStreamReader getXMLStreamReaderImpl(XMLInputSource inputSource) throws org.openjdk.javax.xml.stream.XMLStreamException{
+    XMLStreamReader getXMLStreamReaderImpl(XMLInputSource inputSource) throws javax.xml.stream.XMLStreamException{
         //1. if the temp reader is null -- create the instance and return
         if(fTempReader == null){
             fPropertyChanged = false;

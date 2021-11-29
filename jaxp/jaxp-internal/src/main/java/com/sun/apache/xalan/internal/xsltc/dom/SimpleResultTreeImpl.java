@@ -44,7 +44,7 @@ import org.w3c.dom.NodeList;
 
 import org.xml.sax.SAXException;
 
-import org.openjdk.javax.xml.transform.SourceLocator;
+import javax.xml.transform.SourceLocator;
 
 /**
  * This class represents a light-weight DOM model for simple result tree fragment(RTF).

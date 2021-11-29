@@ -22,7 +22,7 @@
  */
 package com.sun.org.apache.xpath.internal.operations;
 
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import com.sun.org.apache.xalan.internal.res.XSLMessages;
 import com.sun.org.apache.xml.internal.utils.QName;
@@ -181,11 +181,11 @@ public class Variable extends Expression implements PathComponent
    *
    * @return The result of the expression in the form of a <code>XObject</code>.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if a runtime exception
+   * @throws javax.xml.transform.TransformerException if a runtime exception
    *         occurs.
    */
   public XObject execute(XPathContext xctxt)
-    throws org.openjdk.javax.xml.transform.TransformerException
+    throws javax.xml.transform.TransformerException
   {
         return execute(xctxt, false);
   }
@@ -201,9 +201,9 @@ public class Variable extends Expression implements PathComponent
    *
    * @return The evaluated variable, or an empty nodeset if not found.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
-  public XObject execute(XPathContext xctxt, boolean destructiveOK) throws org.openjdk.javax.xml.transform.TransformerException
+  public XObject execute(XPathContext xctxt, boolean destructiveOK) throws javax.xml.transform.TransformerException
   {
     com.sun.org.apache.xml.internal.utils.PrefixResolver xprefixResolver = xctxt.getNamespaceContext();
 
@@ -250,7 +250,7 @@ public class Variable extends Expression implements PathComponent
 //          return execute(xctxt);
 //              }
 //      }
-//      throw new org.openjdk.javax.xml.transform.TransformerException(XSLMessages.createXPATHMessage(XPATHErrorResources.ER_VAR_NOT_RESOLVABLE, new Object[]{m_qname.toString()})); //"Variable not resolvable: "+m_qname);
+//      throw new javax.xml.transform.TransformerException(XSLMessages.createXPATHMessage(XPATHErrorResources.ER_VAR_NOT_RESOLVABLE, new Object[]{m_qname.toString()})); //"Variable not resolvable: "+m_qname);
 //    }
   }
 

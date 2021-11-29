@@ -49,18 +49,18 @@ import com.sun.org.apache.xalan.internal.xsltc.dom.SAXImpl;
 
 
 
-import org.openjdk.javax.xml.namespace.QName;
-import org.openjdk.javax.xml.stream.XMLStreamReader;
-import org.openjdk.javax.xml.stream.XMLStreamConstants;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.events.Attribute;
-import org.openjdk.javax.xml.stream.events.Characters;
-import org.openjdk.javax.xml.stream.events.EndElement;
-import org.openjdk.javax.xml.stream.events.Namespace;
-import org.openjdk.javax.xml.stream.events.ProcessingInstruction;
-import org.openjdk.javax.xml.stream.events.StartElement;
-import org.openjdk.javax.xml.stream.events.StartDocument;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.namespace.QName;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.events.Attribute;
+import javax.xml.stream.events.Characters;
+import javax.xml.stream.events.EndElement;
+import javax.xml.stream.events.Namespace;
+import javax.xml.stream.events.ProcessingInstruction;
+import javax.xml.stream.events.StartElement;
+import javax.xml.stream.events.StartDocument;
+import javax.xml.stream.events.XMLEvent;
 
 
 

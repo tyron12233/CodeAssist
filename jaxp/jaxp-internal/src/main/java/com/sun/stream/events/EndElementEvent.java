@@ -28,12 +28,12 @@ package com.sun.stream.events;
 import java.util.List;
 import java.util.ArrayList;
 
-import org.openjdk.javax.xml.namespace.QName;
-import org.openjdk.javax.xml.stream.events.EndElement;
-import org.openjdk.javax.xml.stream.events.Namespace;
+import javax.xml.namespace.QName;
+import javax.xml.stream.events.EndElement;
+import javax.xml.stream.events.Namespace;
 
 import java.util.Iterator;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.XMLEvent;
 import com.sun.stream.util.ReadOnlyIterator;
 
 /** Implementation of EndElement event.

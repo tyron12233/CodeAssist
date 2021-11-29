@@ -24,7 +24,7 @@ package com.sun.org.apache.xml.internal.dtm.ref;
 
 import com.sun.org.apache.xml.internal.dtm.*;
 
-import org.openjdk.javax.xml.transform.Source;
+import javax.xml.transform.Source;
 
 import com.sun.org.apache.xml.internal.utils.XMLStringFactory;
 

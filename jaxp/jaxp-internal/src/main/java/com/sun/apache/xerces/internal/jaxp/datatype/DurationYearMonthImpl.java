@@ -26,7 +26,7 @@
 package com.sun.apache.xerces.internal.jaxp.datatype;
 
 import java.math.BigInteger;
-import org.openjdk.javax.xml.datatype.DatatypeConstants;
+import javax.xml.datatype.DatatypeConstants;
 
 
 /**
@@ -110,7 +110,7 @@ class DurationYearMonthImpl
          *
          * <p>The datatype <code>xdt:yearMonthDuration</code> is a subtype of <code>xs:duration</code>
          * whose lexical representation contains only year and month components.
-         * This datatype resides in the namespace {@link org.openjdk.javax.xml.XMLConstants#W3C_XPATH_DATATYPE_NS_URI}.</p>
+         * This datatype resides in the namespace {@link javax.xml.XMLConstants#W3C_XPATH_DATATYPE_NS_URI}.</p>
          *
      * <p>Both values are set by computing their values from the specified milliseconds
      * and are availabe using the <code>get</code> methods of  the created {@link Duration}.
@@ -155,7 +155,7 @@ class DurationYearMonthImpl
          *
          * <p>The datatype <code>xdt:yearMonthDuration</code> is a subtype of <code>xs:duration</code>
          * whose lexical representation contains only year and month components.
-         * This datatype resides in the namespace {@link org.openjdk.javax.xml.XMLConstants#W3C_XPATH_DATATYPE_NS_URI}.</p>
+         * This datatype resides in the namespace {@link javax.xml.XMLConstants#W3C_XPATH_DATATYPE_NS_URI}.</p>
          *
      * <p>Both values are set and availabe from the created {@link Duration}</p>
          *

@@ -75,7 +75,7 @@ import com.sun.apache.xerces.internal.xni.QName;
 import com.sun.apache.xerces.internal.xni.XMLDocumentHandler;
 import com.sun.apache.xerces.internal.xni.XNIException;
 
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.XMLEvent;
 
 
 /**

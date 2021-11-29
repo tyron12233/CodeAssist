@@ -22,13 +22,13 @@
  */
 package com.sun.apache.xalan.internal.xsltc.dom;
 
-import org.openjdk.javax.xml.stream.XMLEventReader;
-import org.openjdk.javax.xml.stream.XMLStreamReader;
-import org.openjdk.javax.xml.transform.Source;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
-import org.openjdk.javax.xml.transform.sax.SAXSource;
-import org.openjdk.javax.xml.transform.stream.StreamSource;
-import org.openjdk.javax.xml.transform.stax.StAXSource;
+import javax.xml.stream.XMLEventReader;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.transform.Source;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.stream.StreamSource;
+import javax.xml.transform.stax.StAXSource;
 
 import com.sun.apache.xalan.internal.xsltc.trax.StAXEvent2SAX;
 import com.sun.apache.xalan.internal.xsltc.trax.StAXStream2SAX;

@@ -25,13 +25,13 @@
 
 package com.sun.apache.xerces.internal.impl;
 
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.stream.Location;
-import org.openjdk.javax.xml.stream.XMLStreamReader;
-import org.openjdk.javax.xml.stream.StreamFilter;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.namespace.QName;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.XMLConstants;
+import javax.xml.stream.Location;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.StreamFilter;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.namespace.QName;
+import javax.xml.stream.events.XMLEvent;
 
 
 /**
@@ -45,7 +45,7 @@ import org.openjdk.javax.xml.stream.events.XMLEvent;
  * event, would have to wait until 1.1 of StAX in which the filtered stream reader would be defined more clearly.
  */
 
-public class XMLStreamFilterImpl implements org.openjdk.javax.xml.stream.XMLStreamReader {
+public class XMLStreamFilterImpl implements javax.xml.stream.XMLStreamReader {
 
     private StreamFilter fStreamFilter = null;
     private XMLStreamReader fStreamReader = null;
@@ -287,7 +287,7 @@ public class XMLStreamFilterImpl implements org.openjdk.javax.xml.stream.XMLStre
      *
      * @return
      */
-    public org.openjdk.javax.xml.stream.Location getLocation() {
+    public javax.xml.stream.Location getLocation() {
         return fStreamReader.getLocation();
     }
 
@@ -295,7 +295,7 @@ public class XMLStreamFilterImpl implements org.openjdk.javax.xml.stream.XMLStre
      *
      * @return
      */
-    public org.openjdk.javax.xml.namespace.QName getName() {
+    public javax.xml.namespace.QName getName() {
         return fStreamReader.getName();
     }
 
@@ -303,7 +303,7 @@ public class XMLStreamFilterImpl implements org.openjdk.javax.xml.stream.XMLStre
      *
      * @return
      */
-    public org.openjdk.javax.xml.namespace.NamespaceContext getNamespaceContext() {
+    public javax.xml.namespace.NamespaceContext getNamespaceContext() {
         return fStreamReader.getNamespaceContext();
     }
 

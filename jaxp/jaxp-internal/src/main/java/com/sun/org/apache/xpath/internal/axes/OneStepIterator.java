@@ -53,10 +53,10 @@ public class OneStepIterator extends ChildTestIterator
    * @param opPos The position within the op map, which contains the
    * location path expression for this itterator.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   OneStepIterator(Compiler compiler, int opPos, int analysis)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     super(compiler, opPos, analysis);
     int firstStepPos = OpMap.getFirstChildPos(opPos);
@@ -72,10 +72,10 @@ public class OneStepIterator extends ChildTestIterator
    * @param iterator The DTM iterator which this iterator will use.
    * @param axis One of Axis.Child, etc., or -1 if the axis is unknown.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public OneStepIterator(DTMAxisIterator iterator, int axis)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
     super(null);
 

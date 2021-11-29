@@ -43,8 +43,8 @@ import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.validation.Schema;
+import javax.xml.XMLConstants;
+import javax.xml.validation.Schema;
 import org.xml.sax.EntityResolver;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.HandlerBase;
@@ -58,14 +58,14 @@ import org.xml.sax.helpers.DefaultHandler;
 
 /**
  * This is the implementation specific class for the
- * <code>org.openjdk.javax.xml.parsers.SAXParser</code>.
+ * <code>javax.xml.parsers.SAXParser</code>.
  *
  * @author Rajiv Mordani
  * @author Edwin Goei
  *
  * @version $Id: SAXParserImpl.java,v 1.7 2010-11-01 04:40:06 joehw Exp $
  */
-public class SAXParserImpl extends org.openjdk.javax.xml.parsers.SAXParser
+public class SAXParserImpl extends javax.xml.parsers.SAXParser
     implements JAXPConstants, PSVIProvider {
 
     /** Feature identifier: namespaces. */

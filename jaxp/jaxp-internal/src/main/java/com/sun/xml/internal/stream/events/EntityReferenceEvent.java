@@ -25,10 +25,10 @@
 
 package com.sun.xml.internal.stream.events ;
 
-import org.openjdk.javax.xml.stream.events.EntityReference;
+import javax.xml.stream.events.EntityReference;
 import java.io.Writer;
-import org.openjdk.javax.xml.stream.events.EntityDeclaration;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.events.EntityDeclaration;
+import javax.xml.stream.events.XMLEvent;
 
 /** Implements EntityReference event.
  *

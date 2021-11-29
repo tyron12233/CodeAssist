@@ -20,7 +20,7 @@
 
 package com.sun.apache.xerces.internal.jaxp.validation;
 
-import org.openjdk.javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.dom.DOMResult;
 
 import com.sun.apache.xerces.internal.xni.XMLDocumentHandler;
 import com.sun.apache.xerces.internal.xni.XNIException;

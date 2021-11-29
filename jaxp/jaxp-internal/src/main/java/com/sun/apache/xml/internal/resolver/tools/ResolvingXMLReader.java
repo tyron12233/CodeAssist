@@ -23,7 +23,7 @@
 
 package com.sun.apache.xml.internal.resolver.tools;
 
-import org.openjdk.javax.xml.parsers.*;
+import javax.xml.parsers.*;
 
 import com.sun.apache.xerces.internal.jaxp.SAXParserFactoryImpl;
 import com.sun.apache.xml.internal.resolver.CatalogManager;

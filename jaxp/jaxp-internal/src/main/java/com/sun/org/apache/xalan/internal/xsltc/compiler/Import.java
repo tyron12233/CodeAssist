@@ -35,7 +35,7 @@ import java.io.File;
 import java.net.URL;
 import java.net.MalformedURLException;
 import java.util.Enumeration;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 import org.xml.sax.InputSource;
 import org.xml.sax.XMLReader;
 

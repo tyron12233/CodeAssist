@@ -22,7 +22,7 @@
 package com.sun.org.apache.xpath.internal.jaxp;
 
 import com.sun.org.apache.xpath.internal.*;
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerException;
 
 import com.sun.org.apache.xpath.internal.objects.XObject;
 import com.sun.org.apache.xml.internal.dtm.DTM;
@@ -32,20 +32,20 @@ import com.sun.org.apache.xalan.internal.res.XSLMessages;
 import com.sun.org.apache.xalan.internal.utils.FactoryImpl;
 import com.sun.org.apache.xalan.internal.utils.FeatureManager;
 
-import org.openjdk.javax.xml.namespace.NamespaceContext;
-import org.openjdk.javax.xml.namespace.QName;
-import org.openjdk.javax.xml.xpath.XPathExpressionException;
-import org.openjdk.javax.xml.xpath.XPathConstants;
-import org.openjdk.javax.xml.xpath.XPathFunctionResolver;
-import org.openjdk.javax.xml.xpath.XPathVariableResolver;
-import org.openjdk.javax.xml.xpath.XPathConstants;
+import javax.xml.namespace.NamespaceContext;
+import javax.xml.namespace.QName;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathFunctionResolver;
+import javax.xml.xpath.XPathVariableResolver;
+import javax.xml.xpath.XPathConstants;
 
 import org.w3c.dom.Node;
 import org.w3c.dom.Document;
 import org.w3c.dom.DOMImplementation;
 import org.w3c.dom.traversal.NodeIterator;
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.DocumentBuilder;
 
 import org.xml.sax.InputSource;
 
@@ -55,7 +55,7 @@ import org.xml.sax.InputSource;
  * @version $Revision: 1.10 $
  * @author  Ramesh Mandava
  */
-public class XPathExpressionImpl  implements org.openjdk.javax.xml.xpath.XPathExpression{
+public class XPathExpressionImpl  implements javax.xml.xpath.XPathExpression{
 
     private XPathFunctionResolver functionResolver;
     private XPathVariableResolver variableResolver;
@@ -105,13 +105,13 @@ public class XPathExpressionImpl  implements org.openjdk.javax.xml.xpath.XPathEx
     }
 
     public Object eval(Object item, QName returnType)
-            throws org.openjdk.javax.xml.transform.TransformerException {
+            throws javax.xml.transform.TransformerException {
         XObject resultObject = eval ( item );
         return getResultAsType( resultObject, returnType );
     }
 
     private XObject eval ( Object contextItem )
-            throws org.openjdk.javax.xml.transform.TransformerException {
+            throws javax.xml.transform.TransformerException {
         com.sun.org.apache.xpath.internal.XPathContext xpathSupport = null;
         if ( functionResolver != null ) {
             JAXPExtensionsProvider jep = new JAXPExtensionsProvider(
@@ -194,10 +194,10 @@ public class XPathExpressionImpl  implements org.openjdk.javax.xml.xpath.XPathEx
             // NullPointerException at this stage for some other reason
             // then we have to reurn XPathException
             throw new XPathExpressionException ( npe );
-        } catch ( org.openjdk.javax.xml.transform.TransformerException te ) {
+        } catch ( javax.xml.transform.TransformerException te ) {
             Throwable nestedException = te.getException();
-            if ( nestedException instanceof org.openjdk.javax.xml.xpath.XPathFunctionException ) {
-                throw (org.openjdk.javax.xml.xpath.XPathFunctionException)nestedException;
+            if ( nestedException instanceof javax.xml.xpath.XPathFunctionException ) {
+                throw (javax.xml.xpath.XPathFunctionException)nestedException;
             } else {
                 // For any other exceptions we need to throw
                 // XPathExpressionException ( as per spec )
@@ -346,7 +346,7 @@ public class XPathExpressionImpl  implements org.openjdk.javax.xml.xpath.XPathEx
      }
 
      private Object getResultAsType( XObject resultObject, QName returnType )
-        throws org.openjdk.javax.xml.transform.TransformerException {
+        throws javax.xml.transform.TransformerException {
         // XPathConstants.STRING
         if ( returnType.equals( XPathConstants.STRING ) ) {
             return resultObject.str();

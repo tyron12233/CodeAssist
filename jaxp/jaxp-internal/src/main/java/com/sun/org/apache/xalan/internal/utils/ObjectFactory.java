@@ -28,7 +28,7 @@ package com.sun.org.apache.xalan.internal.utils;
  * It is package private and therefore is not exposed as part of the JAXP
  * API.
  * <p>
- * This class was moved from the <code>org.openjdk.javax.xml.parsers.ObjectFactory</code>
+ * This class was moved from the <code>javax.xml.parsers.ObjectFactory</code>
  * class and modified to be used as a general utility for creating objects
  * dynamically.
  *

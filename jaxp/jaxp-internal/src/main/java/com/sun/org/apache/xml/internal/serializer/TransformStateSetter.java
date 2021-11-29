@@ -22,7 +22,7 @@
  */
 package com.sun.org.apache.xml.internal.serializer;
 
-import org.openjdk.javax.xml.transform.Transformer;
+import javax.xml.transform.Transformer;
 
 import org.w3c.dom.Node;
 /**

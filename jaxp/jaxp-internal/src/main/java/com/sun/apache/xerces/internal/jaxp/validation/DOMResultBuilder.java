@@ -22,7 +22,7 @@ package com.sun.apache.xerces.internal.jaxp.validation;
 
 import java.util.ArrayList;
 
-import org.openjdk.javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.dom.DOMResult;
 
 import com.sun.apache.xerces.internal.dom.AttrImpl;
 import com.sun.apache.xerces.internal.dom.CoreDocumentImpl;

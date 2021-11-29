@@ -25,7 +25,7 @@ package com.sun.org.apache.xml.internal.resolver.tools;
 
 import org.xml.sax.*;
 
-import org.openjdk.javax.xml.parsers.*;
+import javax.xml.parsers.*;
 
 import com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl;
 import com.sun.org.apache.xml.internal.resolver.*;

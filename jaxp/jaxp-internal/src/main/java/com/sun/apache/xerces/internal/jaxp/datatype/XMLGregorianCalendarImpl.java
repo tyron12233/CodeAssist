@@ -34,10 +34,10 @@ import java.util.GregorianCalendar;
 import java.util.Date;
 import java.util.Locale;
 
-import org.openjdk.javax.xml.datatype.DatatypeConstants;
-import org.openjdk.javax.xml.datatype.Duration;
-import org.openjdk.javax.xml.datatype.XMLGregorianCalendar;
-import org.openjdk.javax.xml.namespace.QName;
+import javax.xml.datatype.DatatypeConstants;
+import javax.xml.datatype.Duration;
+import javax.xml.datatype.XMLGregorianCalendar;
+import javax.xml.namespace.QName;
 import com.sun.apache.xerces.internal.util.DatatypeMessageFormatter;
 import com.sun.apache.xerces.internal.utils.SecuritySupport;
 
@@ -177,7 +177,7 @@ import com.sun.apache.xerces.internal.utils.SecuritySupport;
  *   <li>conversion between this class and <code>java.util.GregorianCalendar</code></li>
  *   <li>partial order relation comparator method, {@link #compare(XMLGregorianCalendar)}</li>
  *   <li>{@link #equals(Object)} defined relative to {@link #compare(XMLGregorianCalendar)}.</li>
- *   <li> addition operation with {@link org.openjdk.javax.xml.datatype.Duration}.
+ *   <li> addition operation with {@link javax.xml.datatype.Duration}.
  * instance as defined in <a href="http://www.w3.org/TR/xmlschema-2/#adding-durations-to-dateTimes">
  * W3C XML Schema 1.0 Part 2, Appendix E, <i>Adding durations to dateTimes</i></a>.</li>
  * </ul>
@@ -187,7 +187,7 @@ import com.sun.apache.xerces.internal.utils.SecuritySupport;
  * @author <a href="mailto:Joseph.Fialli@Sun.com">Joseph Fialli</a>
  * @author <a href="mailto:Sunitha.Reddy@Sun.com">Sunitha Reddy</a>
  * @version $Revision: 1.14 $, $Date: 2010-11-10 07:41:41 $
- * @see org.openjdk.javax.xml.datatype.Duration
+ * @see javax.xml.datatype.Duration
  * @since 1.5
  */
 
@@ -598,7 +598,7 @@ public class XMLGregorianCalendarImpl
          *   </thead>
          *   <tbody>
          *     <tr>
-         *        <th><code>org.openjdk.javax.xml.datatype.XMLGregorianCalendar</code> field</th>
+         *        <th><code>javax.xml.datatype.XMLGregorianCalendar</code> field</th>
          *        <th><code>java.util.GregorianCalendar</code> field</th>
          *     </tr>
          *     <tr>
@@ -2323,7 +2323,7 @@ public class XMLGregorianCalendarImpl
      *   <tbody>
      *     <tr>
      *        <th><code>java.util.GregorianCalendar</code> field</th>
-     *        <th><code>org.openjdk.javax.xml.datatype.XMLGregorianCalendar</code> field</th>
+     *        <th><code>javax.xml.datatype.XMLGregorianCalendar</code> field</th>
      *     </tr>
      *     <tr>
      *       <th><code>ERA</code></th>

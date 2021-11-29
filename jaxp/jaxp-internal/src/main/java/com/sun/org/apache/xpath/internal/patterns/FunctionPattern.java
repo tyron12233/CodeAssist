@@ -99,10 +99,10 @@ public class FunctionPattern extends StepPattern
    *         {@link com.sun.org.apache.xpath.internal.patterns.NodeTest#SCORE_QNAME}, or
    *         {@link com.sun.org.apache.xpath.internal.patterns.NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt, int context)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     DTMIterator nl = m_functionExpr.asIterator(xctxt, context);
@@ -142,11 +142,11 @@ public class FunctionPattern extends StepPattern
    *         {@link com.sun.org.apache.xpath.internal.patterns.NodeTest#SCORE_QNAME}, or
    *         {@link com.sun.org.apache.xpath.internal.patterns.NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt, int context,
                          DTM dtm, int expType)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     DTMIterator nl = m_functionExpr.asIterator(xctxt, context);
@@ -185,10 +185,10 @@ public class FunctionPattern extends StepPattern
    *         {@link com.sun.org.apache.xpath.internal.patterns.NodeTest#SCORE_QNAME}, or
    *         {@link com.sun.org.apache.xpath.internal.patterns.NodeTest#SCORE_OTHER}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public XObject execute(XPathContext xctxt)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     int context = xctxt.getCurrentNode();

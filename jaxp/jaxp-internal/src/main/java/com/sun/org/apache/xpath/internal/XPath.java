@@ -24,9 +24,9 @@ package com.sun.org.apache.xpath.internal;
 
 import java.io.Serializable;
 
-import org.openjdk.javax.xml.transform.ErrorListener;
-import org.openjdk.javax.xml.transform.SourceLocator;
-import org.openjdk.javax.xml.transform.TransformerException;
+import javax.xml.transform.ErrorListener;
+import javax.xml.transform.SourceLocator;
+import javax.xml.transform.TransformerException;
 
 import com.sun.org.apache.xalan.internal.res.XSLMessages;
 import com.sun.org.apache.xml.internal.dtm.DTM;
@@ -160,12 +160,12 @@ public class XPath implements Serializable, ExpressionOwner
    * @param type one of {@link #SELECT} or {@link #MATCH}.
    * @param errorListener The error listener, or null if default should be used.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if syntax or other error.
+   * @throws javax.xml.transform.TransformerException if syntax or other error.
    */
   public XPath(
           String exprString, SourceLocator locator, PrefixResolver prefixResolver, int type,
           ErrorListener errorListener)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
     initFunctionTable();
     if(null == errorListener)
@@ -208,13 +208,13 @@ public class XPath implements Serializable, ExpressionOwner
    * @param type one of {@link #SELECT} or {@link #MATCH}.
    * @param errorListener The error listener, or null if default should be used.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if syntax or other error.
+   * @throws javax.xml.transform.TransformerException if syntax or other error.
    */
   public XPath(
           String exprString, SourceLocator locator,
           PrefixResolver prefixResolver, int type,
           ErrorListener errorListener, FunctionTable aTable)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
     m_funcTable = aTable;
     if(null == errorListener)
@@ -259,11 +259,11 @@ public class XPath implements Serializable, ExpressionOwner
    *                       namespace URIs.
    * @param type one of {@link #SELECT} or {@link #MATCH}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if syntax or other error.
+   * @throws javax.xml.transform.TransformerException if syntax or other error.
    */
   public XPath(
           String exprString, SourceLocator locator, PrefixResolver prefixResolver, int type)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
     this(exprString, locator, prefixResolver, type, null);
   }
@@ -273,7 +273,7 @@ public class XPath implements Serializable, ExpressionOwner
    *
    * @param expr The Expression object.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException if syntax or other error.
+   * @throws javax.xml.transform.TransformerException if syntax or other error.
    */
   public XPath(Expression expr)
   {
@@ -294,13 +294,13 @@ public class XPath implements Serializable, ExpressionOwner
    * @throws TransformerException thrown if
    * the error condition is severe enough to halt processing.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    * @xsl.usage experimental
    */
   public XObject execute(
           XPathContext xctxt, org.w3c.dom.Node contextNode,
           PrefixResolver namespaceContext)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
     return execute(
           xctxt, xctxt.getDTMHandleFromNode(contextNode),
@@ -320,12 +320,12 @@ public class XPath implements Serializable, ExpressionOwner
    * @throws TransformerException thrown if the active ProblemListener decides
    * the error condition is severe enough to halt processing.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    * @xsl.usage experimental
    */
   public XObject execute(
           XPathContext xctxt, int contextNode, PrefixResolver namespaceContext)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     xctxt.pushNamespaceContext(namespaceContext);
@@ -397,12 +397,12 @@ public class XPath implements Serializable, ExpressionOwner
    * @throws TransformerException thrown if the active ProblemListener decides
    * the error condition is severe enough to halt processing.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    * @xsl.usage experimental
    */
   public boolean bool(
           XPathContext xctxt, int contextNode, PrefixResolver namespaceContext)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     xctxt.pushNamespaceContext(namespaceContext);
@@ -475,10 +475,10 @@ public class XPath implements Serializable, ExpressionOwner
    * {@link #MATCH_SCORE_NONE}, {@link #MATCH_SCORE_OTHER},
    * or {@link #MATCH_SCORE_QNAME}.
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public double getMatchScore(XPathContext xctxt, int context)
-          throws org.openjdk.javax.xml.transform.TransformerException
+          throws javax.xml.transform.TransformerException
   {
 
     xctxt.pushCurrentNode(context);
@@ -524,7 +524,7 @@ public class XPath implements Serializable, ExpressionOwner
    */
   public void warn(
           XPathContext xctxt, int sourceNode, String msg, Object[] args)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     String fmsg = XSLMessages.createXPATHWarning(msg, args);
@@ -577,7 +577,7 @@ public class XPath implements Serializable, ExpressionOwner
    */
   public void error(
           XPathContext xctxt, int sourceNode, String msg, Object[] args)
-            throws org.openjdk.javax.xml.transform.TransformerException
+            throws javax.xml.transform.TransformerException
   {
 
     String fmsg = XSLMessages.createXPATHMessage(msg, args);

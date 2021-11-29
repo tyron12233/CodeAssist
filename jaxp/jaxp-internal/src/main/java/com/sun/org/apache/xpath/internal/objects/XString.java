@@ -288,7 +288,7 @@ public class XString extends XObject implements XMLString
    *
    * @return true if the two objects are equal
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean equals(XObject obj2)
   {
@@ -311,7 +311,7 @@ public class XString extends XObject implements XMLString
             else if(XObject.CLASS_NUMBER == t)
                 return obj2.num() == num();
     }
-    catch(org.openjdk.javax.xml.transform.TransformerException te)
+    catch(javax.xml.transform.TransformerException te)
     {
         throw new com.sun.org.apache.xml.internal.utils.WrappedRuntimeException(te);
     }

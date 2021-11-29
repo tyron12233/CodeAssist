@@ -43,8 +43,8 @@ import com.sun.stream.dtd.DTDGrammarUtil;
 
 import java.io.EOFException;
 import java.io.IOException;
-import org.openjdk.javax.xml.stream.XMLInputFactory;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.events.XMLEvent;
 
 import com.sun.apache.xerces.internal.xni.QName;
 import com.sun.apache.xerces.internal.xni.XMLAttributes;
@@ -54,7 +54,7 @@ import com.sun.apache.xerces.internal.xni.XMLString;
 import com.sun.apache.xerces.internal.xni.XNIException;
 import com.sun.apache.xerces.internal.xni.Augmentations;
 
-import org.openjdk.javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamConstants;
 
 /**
  *

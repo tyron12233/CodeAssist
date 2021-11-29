@@ -28,8 +28,8 @@ import com.sun.xml.internal.stream.dtd.DTDGrammarUtil;
 
 import java.io.EOFException;
 import java.io.IOException;
-import org.openjdk.javax.xml.stream.XMLInputFactory;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.events.XMLEvent;
 import com.sun.org.apache.xerces.internal.impl.msg.XMLMessageFormatter;
 import com.sun.org.apache.xerces.internal.util.AugmentationsImpl;
 import com.sun.org.apache.xerces.internal.util.XMLAttributesIteratorImpl;
@@ -58,9 +58,9 @@ import com.sun.org.apache.xerces.internal.utils.XMLSecurityManager.Limit;
 import com.sun.org.apache.xerces.internal.utils.XMLSecurityManager.State;
 import com.sun.org.apache.xerces.internal.utils.XMLSecurityPropertyManager;
 import com.sun.org.apache.xerces.internal.xni.NamespaceContext;
-import org.openjdk.javax.xml.XMLConstants;
-import org.openjdk.javax.xml.stream.XMLStreamConstants;
-import org.openjdk.javax.xml.stream.events.XMLEvent;
+import javax.xml.XMLConstants;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.events.XMLEvent;
 
 /**
  *

@@ -26,10 +26,10 @@
 package com.sun.stream;
 
 import java.io.InputStream;
-import org.openjdk.javax.xml.stream.XMLEventReader;
-import org.openjdk.javax.xml.stream.XMLResolver;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.XMLEventReader;
+import javax.xml.stream.XMLResolver;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
 
 import com.sun.apache.xerces.internal.xni.XMLResourceIdentifier;
 import com.sun.apache.xerces.internal.xni.XNIException;

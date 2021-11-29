@@ -25,9 +25,9 @@
 
 package com.sun.xml.internal.stream.events ;
 
-import org.openjdk.javax.xml.stream.events.StartDocument;
-import org.openjdk.javax.xml.stream.Location;
-import org.openjdk.javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.events.StartDocument;
+import javax.xml.stream.Location;
+import javax.xml.stream.XMLStreamConstants;
 
 /** Implementation of StartDocumentEvent.
  *

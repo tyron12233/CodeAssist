@@ -148,7 +148,7 @@ public class XBoolean extends XObject
    *
    * @return True if the two objects are equal
    *
-   * @throws org.openjdk.javax.xml.transform.TransformerException
+   * @throws javax.xml.transform.TransformerException
    */
   public boolean equals(XObject obj2)
   {
@@ -163,7 +163,7 @@ public class XBoolean extends XObject
     {
       return m_val == obj2.bool();
     }
-    catch(org.openjdk.javax.xml.transform.TransformerException te)
+    catch(javax.xml.transform.TransformerException te)
     {
       throw new WrappedRuntimeException(te);
     }

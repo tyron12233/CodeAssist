@@ -24,7 +24,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
-import org.openjdk.javax.xml.XMLConstants;
+import javax.xml.XMLConstants;
 
 import com.sun.apache.xerces.internal.impl.dtd.XML11DTDProcessor;
 import com.sun.apache.xerces.internal.impl.dtd.XML11DTDValidator;

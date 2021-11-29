@@ -25,7 +25,7 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NamedNodeMap;
 import com.sun.apache.xml.internal.utils.PrefixResolver;
 
-import org.openjdk.javax.xml.namespace.NamespaceContext;
+import javax.xml.namespace.NamespaceContext;
 
 /**
  * <meta name="usage" content="general"/>
