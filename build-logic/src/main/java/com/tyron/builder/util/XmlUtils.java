@@ -40,14 +40,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamReader;
+import org.openjdk.javax.xml.parsers.DocumentBuilder;
+import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
+import org.openjdk.javax.xml.parsers.ParserConfigurationException;
+import org.openjdk.javax.xml.parsers.SAXParser;
+import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import org.openjdk.javax.xml.stream.XMLInputFactory;
+import org.openjdk.javax.xml.stream.XMLStreamException;
+import org.openjdk.javax.xml.stream.XMLStreamReader;
 
 /**
  * XML Utilities.
@@ -62,7 +62,7 @@ public class XmlUtils {
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";  //$NON-NLS-1$
 
     public static final String SAX_PARSER_FACTORY =
-            "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl";
+            "org.openjdk.com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl";
 
     /**
      * Separator for xml namespace and localname

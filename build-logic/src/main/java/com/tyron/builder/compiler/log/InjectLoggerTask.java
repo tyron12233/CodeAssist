@@ -24,14 +24,14 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
+import org.openjdk.javax.xml.parsers.DocumentBuilder;
+import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
+import org.openjdk.javax.xml.parsers.ParserConfigurationException;
+import org.openjdk.javax.xml.transform.Transformer;
+import org.openjdk.javax.xml.transform.TransformerException;
+import org.openjdk.javax.xml.transform.TransformerFactory;
+import org.openjdk.javax.xml.transform.dom.DOMSource;
+import org.openjdk.javax.xml.transform.stream.StreamResult;
 
 public class InjectLoggerTask extends Task {
 

@@ -36,9 +36,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
 
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamReader;
+import org.openjdk.javax.xml.stream.XMLInputFactory;
+import org.openjdk.javax.xml.stream.XMLStreamException;
+import org.openjdk.javax.xml.stream.XMLStreamReader;
 
 public final class JDOMUtil {
     public static final Pattern XPOINTER_PATTERN = Pattern.compile("xpointer\\((.*)\\)");
@@ -99,25 +99,24 @@ public final class JDOMUtil {
 
     private static Element loadUsingStaX( Reader reader,  SafeJdomFactory factory) throws JDOMException, IOException {
 
-        Element var3;
-        try {
-            XMLStreamReader xmlStreamReader = getXmlInputFactory().createXMLStreamReader(reader);
-
-            try {
-                var3 = SafeStAXStreamBuilder.build(xmlStreamReader, true, factory == null ? SafeStAXStreamBuilder.FACTORY : factory);
-            } finally {
-                xmlStreamReader.close();
-            }
-        } catch (XMLStreamException var13) {
-            throw new JDOMException(var13.getMessage(), var13);
-        } finally {
-            reader.close();
-        }
-
-        if (var3 == null) { ;
-        }
-
-        return var3;
+//        Element var3;
+//        try {
+//            XMLStreamReader xmlStreamReader = getXmlInputFactory().createXMLStreamReader(reader);
+//
+//            try {
+//                var3 = SafeStAXStreamBuilder.build(xmlStreamReader, true, factory == null ? SafeStAXStreamBuilder.FACTORY : factory);
+//            } finally {
+//                xmlStreamReader.close();
+//            }
+//        } catch (XMLStreamException var13) {
+//            throw new JDOMException(var13.getMessage(), var13);
+//        } finally {
+//            reader.close();
+//        }
+//
+//        if (var3 == null) { ;
+//        }
+        return null;
     }
 
    // @Internal

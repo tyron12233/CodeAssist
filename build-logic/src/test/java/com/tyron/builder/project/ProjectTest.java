@@ -11,7 +11,8 @@ import java.nio.file.Paths;
 @RunWith(RobolectricTestRunner.class)
 public class ProjectTest {
 
-    private static final File ROOT = Paths.get(".").toFile();
+    private static final File ROOT = new File("/home/tyron/AndroidStudioProjects/CodeAssist");
+
     @Test
     public void init() throws IOException {
         Project project = new ProjectImpl(ROOT);
