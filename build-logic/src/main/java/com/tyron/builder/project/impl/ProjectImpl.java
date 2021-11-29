@@ -1,4 +1,4 @@
-package com.tyron.builder.project;
+package com.tyron.builder.project.impl;
 
 import static com.tyron.builder.project.CommonProjectKeys.ASSETS_DIR_KEY;
 import static com.tyron.builder.project.CommonProjectKeys.CONFIG_FILE_KEY;
@@ -11,6 +11,8 @@ import androidx.annotation.Nullable;
 
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.project.api.FileManager;
+import com.tyron.builder.project.api.Project;
 import com.tyron.common.util.FileUtilsEx;
 
 import org.jetbrains.annotations.NotNull;

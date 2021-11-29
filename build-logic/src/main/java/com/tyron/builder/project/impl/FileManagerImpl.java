@@ -1,8 +1,11 @@
-package com.tyron.builder.project;
+package com.tyron.builder.project.impl;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.builder.project.CommonProjectKeys;
+import com.tyron.builder.project.api.FileManager;
+import com.tyron.builder.project.api.Project;
 import com.tyron.builder.project.indexer.Indexer;
 import com.tyron.builder.project.indexer.JavaFilesIndexer;
 
