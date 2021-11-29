@@ -46,17 +46,17 @@ public class CompletionEngine {
 
         Set<File> paths = project.getFileManager().fileClasspath();
 
-       if (mProvider == null || changed(mCachedPaths, paths)) {
-           mProvider = new JavaCompilerService(project, paths,
-                   Collections.emptySet(), Collections.emptySet());
+        if (mProvider == null || changed(mCachedPaths, paths)) {
+            mProvider = new JavaCompilerService(project, paths,
+                    Collections.emptySet(), Collections.emptySet());
 
-           mCachedPaths.clear();
-           mCachedPaths.addAll(paths);
+            mCachedPaths.clear();
+            mCachedPaths.addAll(paths);
 
-           Log.d(TAG, "Class path changed, creating a new compiler");
-       }
+            Log.d(TAG, "Class path changed, creating a new compiler");
+        }
 
-       return mProvider;
+        return mProvider;
     }
 
     private boolean changed(Set<File> oldFiles, Set<File> newFiles) {
@@ -78,6 +78,7 @@ public class CompletionEngine {
 
         return false;
     }
+
     /**
      * Disable subsequent completions
      */
@@ -110,10 +111,15 @@ public class CompletionEngine {
         List<File> filesToIndex = new ArrayList<>();
         filesToIndex.addAll(project.getJavaFiles().values());
         filesToIndex.addAll(project.getRJavaFiles().values());
-        try (CompileTask task = compiler.compile(filesToIndex.stream().map(File::toPath)
-                .toArray(Path[]::new))) {
-            Log.d(TAG, "Index success.");
+
+        if (!filesToIndex.isEmpty()) {
+            try (CompileTask task = compiler.compile(filesToIndex.stream()
+                    .map(File::toPath)
+                    .toArray(Path[]::new))) {
+                Log.d(TAG, "Index success.");
+            }
         }
+
         setIndexing(false);
         if (callback != null) {
             handler.post(callback);
