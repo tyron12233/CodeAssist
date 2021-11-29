@@ -34,7 +34,9 @@ public class DiagnosticWrapper implements Diagnostic<File> {
 
     public DiagnosticWrapper(Diagnostic<? extends JavaFileObject> obj) {
         this.code = obj.getCode();
-        this.source = new File(obj.getSource().toUri());
+        if (obj.getSource() != null) {
+            this.source = new File(obj.getSource().toUri());
+        }
         this.kind = obj.getKind();
 
         this.position = obj.getPosition();
