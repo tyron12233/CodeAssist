@@ -130,24 +130,25 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 break;
             }
             Integer color = ourMap.get(token);
-            if (color != null) {
-                colors.addIfNeeded(helper.getLine(), helper.getColumn(), color);
-            } else {
+            if (color == null) {
+                color = EditorColorScheme.TEXT_NORMAL;
                 if (token == JavaTokenType.IDENTIFIER) {
                     try {
-                        Span span = colors.getSpanMap().get(helper.getLine() - 1).get(helper.getColumn() - 1);
+                        Span span =
+                                colors.getSpanMap()
+                                        .get(helper.getLine() - 1)
+                                        .get(helper.getColumn() - 2);
                         if (span != null) {
                             if (span.colorId == EditorColorScheme.ANNOTATION) {
-                                colors.addIfNeeded(helper.getLine(), helper.getColumn(), EditorColorScheme.ANNOTATION);
+                                color = EditorColorScheme.ANNOTATION;
                             }
                         }
                     } catch (IndexOutOfBoundsException ignore) {
 
                     }
-                } else {
-                    colors.addIfNeeded(helper.getLine(), helper.getColumn(), EditorColorScheme.TEXT_NORMAL);
                 }
             }
+            colors.addIfNeeded(helper.getLine(), helper.getColumn(), color);
 
             if (token == JavaTokenType.RBRACE) {
                 colors.addIfNeeded(helper.getLine(), helper.getColumn(), EditorColorScheme.OPERATOR);
