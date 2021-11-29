@@ -3,9 +3,16 @@ package com.tyron.builder.project;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
+import com.tyron.builder.project.api.FileManager;
+import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.impl.AndroidModule;
+import com.tyron.builder.project.impl.AndroidModuleManager;
+import com.tyron.builder.project.impl.FileManagerImpl;
+import com.tyron.builder.project.impl.JavaModuleManager;
 import com.tyron.builder.project.impl.ProjectImpl;
 
+import org.json.JSONException;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -18,26 +25,42 @@ import java.util.List;
 @RunWith(RobolectricTestRunner.class)
 public class ProjectTest {
 
+    private FileManager mFileManager;
     private Project mProject;
+    private File mRoot;
 
     @Before
     public void setupProject() {
         String rootPath = getClass().getClassLoader()
                 .getResource("TestProject")
                 .getFile();
-        File rootFile = new File(rootPath);
-        mProject = new ProjectImpl(rootFile);
+        mRoot = new File(rootPath);
+        mFileManager = new FileManagerImpl();
+        mProject = new ProjectImpl(mRoot);
     }
 
     @Test
-    public void init() throws IOException {
-        mProject.open();
+    public void init() throws IOException, JSONException {
+        AndroidProjectManager projectManager = new AndroidProjectManager(mRoot);
+        projectManager.initialize();
+        assertThat(projectManager.getModules())
+                .hasSize(2);
 
-        ManifestData manifestData = mProject.getUserData(CommonProjectKeys.MANIFEST_DATA_KEY);
-        assertThat(manifestData).isNotNull();
+        Module module = projectManager.getModules().get(0);
+        assertThat(module)
+                .isInstanceOf(AndroidModule.class);
 
-        List<File> javaFiles = mProject.getUserData(CommonProjectKeys.JAVA_FILES_KEY);
-        assertThat(javaFiles).isNotEmpty();
-        assertThat(javaFiles).hasSize(1);
+        ManifestData data = module.getData(AndroidModule.MANIFEST_DATA_KEY);
+        assertThat(data).isNotNull();
+        assertThat(data.getPackage())
+                .isEqualTo("com.tyron.test");
+
+        Module module2 = projectManager.getModules().get(1);
+        assertThat(module2).isNotNull();
+
+        data = module2.getData(AndroidModule.MANIFEST_DATA_KEY);
+        assertThat(data).isNotNull();
+        assertThat(data.getPackage())
+                .isEqualTo("com.tyron.module2");
     }
 }

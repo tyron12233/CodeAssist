@@ -1,8 +1,12 @@
 package com.tyron.builder.project.api;
 
-public interface ModuleManager {
+import java.io.IOException;
 
-    void initialize();
+public interface ModuleManager<T extends Module> {
 
+    void initialize() throws IOException;
 
+    void addDependingModule(Module module);
+
+    T getModule();
 }

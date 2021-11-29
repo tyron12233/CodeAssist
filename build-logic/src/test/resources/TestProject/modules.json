@@ -1,0 +1,10 @@
+{
+  "modules": [
+    {
+      "path": "app"
+    },
+    {
+      "path": "module2"
+    }
+  ]
+}

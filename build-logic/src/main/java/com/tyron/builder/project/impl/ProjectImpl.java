@@ -9,9 +9,11 @@ import static com.tyron.builder.project.CommonProjectKeys.ROOT_DIR_KEY;
 
 import androidx.annotation.Nullable;
 
+import com.google.common.collect.ImmutableList;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.FileManager;
+import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.api.Project;
 import com.tyron.common.util.FileUtilsEx;
 
@@ -22,40 +24,40 @@ import org.jetbrains.kotlin.com.intellij.util.keyFMap.KeyFMap;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ProjectImpl implements Project {
+
+    private final List<Module> mModules;
 
     /**
      * Concurrent writes to this field are via CASes only, using the {@link #updater}
      */
     @NotNull
     private volatile KeyFMap myUserMap = KeyFMap.EMPTY_MAP;
+    private final File mRoot;
     private ProjectSettings myProjectSettings;
     private FileManager myFileManager;
 
     public ProjectImpl(File root) {
-        putUserData(ROOT_DIR_KEY, root);
-        putUserData(ASSETS_DIR_KEY, new File(root, "app/src/main/assets"));
-        putUserData(NATIVE_LIBS_DIR_KEY, new File(root, "app/src/main/jniLibs"));
-        putUserData(MANIFEST_FILE_KEY, new File(root, "app/src/main/AndroidManifest.xml"));
+        mRoot = root;
         putUserData(CONFIG_FILE_KEY, new File(root, "app_config.json"));
-
+        mModules = new ArrayList<>();
         myFileManager = new FileManagerImpl();
     }
 
-    @SuppressWarnings("ConstantConditions") // keys are guaranteed to be non null here
     @Override
     public void open() throws IOException {
-        if (!getUserData(ROOT_DIR_KEY).exists()) {
-            throw new IOException("Project root directory does not exist");
-        }
-        myFileManager.open(this);
-        putUserData(MANIFEST_DATA_KEY, AndroidManifestParser.parse(getUserData(MANIFEST_FILE_KEY)));
-        File configFile = getUserData(CONFIG_FILE_KEY);
-        if (!configFile.exists()) {
-            FileUtilsEx.createFile(configFile);
-        }
-        myProjectSettings = new ProjectSettings(configFile);
+
+    }
+
+    public synchronized void addModule(Module module) {
+
+    }
+    @Override
+    public List<Module> getModules() {
+        return ImmutableList.copyOf(mModules);
     }
 
     @Override
@@ -64,8 +66,8 @@ public class ProjectImpl implements Project {
     }
 
     @Override
-    public FileManager getFileManager() {
-        return myFileManager;
+    public File getRootFile() {
+        return mRoot;
     }
 
     @Nullable
