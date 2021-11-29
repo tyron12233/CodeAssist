@@ -42,8 +42,6 @@ dependencies {
     implementation project(path: ':LayoutPreview')
     implementation project(path: ':kotlin-completion')
     implementation project(path: ':code-editor')
-    implementation project(path: ':completion-psi:impl')
-    implementation project(path: ':completion-psi')
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:1.1.5")
 
