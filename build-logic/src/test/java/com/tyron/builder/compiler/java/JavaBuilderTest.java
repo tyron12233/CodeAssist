@@ -2,17 +2,14 @@ package com.tyron.builder.compiler.java;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.google.common.truth.Truth;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.JavaBuilder;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.dex.JavaD8Task;
-import com.tyron.builder.compiler.incremental.dex.IncrementalD8Task;
 import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.api.JavaProject;
 import com.tyron.builder.project.impl.MockAndroidProject;
-import com.tyron.builder.project.impl.MockJavaProject;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
