@@ -4,7 +4,6 @@ import com.tyron.builder.parser.ModuleParser;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.api.ModuleManager;
-import com.tyron.builder.project.api.Project;
 import com.tyron.builder.project.impl.AndroidModuleManager;
 import com.tyron.builder.project.impl.FileManagerImpl;
 import com.tyron.builder.project.impl.ProjectImpl;
@@ -18,7 +17,9 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class AndroidProjectManager {
@@ -26,31 +27,31 @@ public class AndroidProjectManager {
     private final File mRoot;
     private final FileManager mFileManager;
     private final ProjectImpl mProject;
-    private final List<ModuleManager<?>> mModuleManagers;
+    private final Map<String, ModuleManager<?>> mModuleManagers;
 
     public AndroidProjectManager(File root) {
         mRoot = root;
         mFileManager = new FileManagerImpl();
         mProject = new ProjectImpl(root);
-        mModuleManagers = new ArrayList<>();
+        mModuleManagers = new HashMap<>();
     }
 
     public void initialize() throws IOException, JSONException {
         List<File> roots = parseModuleRoots();
-        mModuleManagers.addAll(getModuleManagerFromRoots(roots));
-        for (ModuleManager<?> mModuleManager : mModuleManagers) {
+        mModuleManagers.putAll(getModuleManagerFromRoots(roots));
+        for (ModuleManager<?> mModuleManager : mModuleManagers.values()) {
             mModuleManager.initialize();
         }
     }
 
     public List<Module> getModules() {
-        return mModuleManagers.stream()
+        return mModuleManagers.values().stream()
                 .map(ModuleManager::getModule)
                 .collect(Collectors.toList());
     }
 
-    private List<ModuleManager<?>> getModuleManagerFromRoots(List<File> roots) {
-        List<ModuleManager<?>> moduleManagers = new ArrayList<>();
+    private Map<String, ModuleManager<?>> getModuleManagerFromRoots(List<File> roots) {
+        Map<String, ModuleManager<?>> moduleManagers = new HashMap<>();
         for (File root : roots) {
             if (!root.exists()) {
                 continue;
@@ -60,7 +61,7 @@ public class AndroidProjectManager {
                 String type = new ModuleParser(root).parse();
 
                 if ("AndroidModule".equals(type)) {
-                    moduleManagers.add(new AndroidModuleManager(mFileManager, root));
+                    moduleManagers.put(root.getName(), new AndroidModuleManager(mFileManager, root));
                 }
             } catch (IOException | JSONException e) {
                 e.printStackTrace();
@@ -82,5 +83,9 @@ public class AndroidProjectManager {
             moduleRoots.add(new File(mRoot, path));
         }
         return moduleRoots;
+    }
+
+    private void calculateDependencies() {
+
     }
 }

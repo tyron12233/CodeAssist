@@ -60,8 +60,6 @@ public class ProjectTest {
         assertThat(data.getPackage())
                 .isEqualTo("com.tyron.module2");
 
-        module.getTasks().forEach(task -> {
-            task.getActions().forEach(action -> action.execute(task));
-        });
+        System.out.println(module.getDependingModules());
     }
 }

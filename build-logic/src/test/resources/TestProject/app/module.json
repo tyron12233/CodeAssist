@@ -1,3 +1,10 @@
 {
-  "type": "AndroidModule"
+  "type": "AndroidModule",
+
+  "dependencies": [
+    {
+      "type": "module",
+      "path": "module2"
+    }
+  ]
 }
