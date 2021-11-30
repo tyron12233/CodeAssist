@@ -30,7 +30,7 @@ public abstract class BuilderImpl<T extends Project> implements Builder<T> {
     @Override
     public final void build(BuildType type) throws CompilationFailedException, IOException {
         mTasksRan.clear();
-        for (Task<T> task : getTasks()) {
+        for (Task<T> task : getTasks(type)) {
             getLogger().info("Running " + task.getName());
             task.prepare(type);
             task.run();
@@ -39,7 +39,7 @@ public abstract class BuilderImpl<T extends Project> implements Builder<T> {
         mTasksRan.forEach(Task::clean);
     }
 
-    public abstract List<Task<T>> getTasks();
+    public abstract List<Task<T>> getTasks(BuildType type);
 
     /**
      * Used in tests to check the values of tasks that ran

@@ -15,5 +15,5 @@ public interface Builder<T extends Project> {
 
     ILogger getLogger();
 
-    List<Task<T>> getTasks();
+    List<Task<T>> getTasks(BuildType type);
 }

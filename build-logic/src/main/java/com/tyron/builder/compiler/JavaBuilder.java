@@ -19,7 +19,7 @@ public class JavaBuilder extends BuilderImpl<JavaProject> {
     }
 
     @Override
-    public List<Task<JavaProject>> getTasks() {
+    public List<Task<JavaProject>> getTasks(BuildType type) {
         List<Task<JavaProject>> tasks = new ArrayList<>();
         tasks.add(new IncrementalJavaTask(getProject(), getLogger()));
         tasks.add(new JavaD8Task(getProject(), getLogger()));
