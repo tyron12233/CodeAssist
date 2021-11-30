@@ -134,9 +134,7 @@ public class MergeSymbolsTask extends Task<AndroidProject> {
         }
 
         for (File file : RFiles) {
-            cache.load(file.toPath(),  null, null);
+            cache.load(file.toPath(), null, null);
         }
-
-        Log.d("SymbolProcessor", "Generating symbols took " + (System.currentTimeMillis() - start) + " ms");
     }
 }

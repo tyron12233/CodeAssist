@@ -112,8 +112,6 @@ public class IncrementalAapt2Task extends Task<AndroidProject> {
 
             for (File inside : files) {
                 if (inside.isDirectory() && inside.getName().equals("res")) {
-                    Log.d(TAG, "Compiling library " + parent.getName());
-
                     List<String> args = new ArrayList<>();
                     args.add(getBinary().getAbsolutePath());
                     args.add("compile");
@@ -271,7 +269,6 @@ public class IncrementalAapt2Task extends Task<AndroidProject> {
         for (String resourceType : oldFiles.keySet()) {
             // if the new files doesn't contain the old file then its deleted
             if (!newFiles.containsKey(resourceType)) {
-                Log.d("IncrementalAAPT2", "Deleting resource folder " + resourceType);
                 List<ResourceFile> files = oldFiles.get(resourceType);
                 if (files != null) {
                     for (File file : files) {

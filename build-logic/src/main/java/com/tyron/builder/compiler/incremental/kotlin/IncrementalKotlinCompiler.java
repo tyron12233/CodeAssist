@@ -63,10 +63,10 @@ public class IncrementalKotlinCompiler extends Task<AndroidProject> {
         mFilesToCompile.addAll(getProject().getJavaFiles().values());
         mFilesToCompile.addAll(getProject().getKotlinFiles().values());
 
-        mKotlinHome = new File(BuildModule.getContext().getFilesDir(), "kotlin-home");
-        if (!mKotlinHome.exists() && !mKotlinHome.mkdirs()) {
-            throw new IOException("Unable to create kotlin home directory");
-        }
+//        mKotlinHome = new File(BuildModule.getContext().getFilesDir(), "kotlin-home");
+//        if (!mKotlinHome.exists() && !mKotlinHome.mkdirs()) {
+//            throw new IOException("Unable to create kotlin home directory");
+//        }
 
         mClassOutput = new File(getProject().getBuildDirectory(), "bin/kotlin/classes");
         if (!mClassOutput.exists() && !mClassOutput.mkdirs()) {
