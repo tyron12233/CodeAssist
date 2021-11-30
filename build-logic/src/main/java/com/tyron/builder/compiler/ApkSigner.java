@@ -1,5 +1,7 @@
 package com.tyron.builder.compiler;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.tyron.builder.BuildModule;
 import com.tyron.common.util.Decompress;
 
@@ -46,9 +48,13 @@ public class ApkSigner {
 
 
     private String getTestKeyFilePath() {
+        if (sTestKeyFile != null) {
+            return sTestKeyFile.getAbsolutePath();
+        }
         File check = new File(BuildModule.getContext().getFilesDir() + "/temp/testkey.pk8");
 
         if (check.exists()) {
+            sTestKeyFile = check;
             return check.getAbsolutePath();
         }
 
@@ -59,10 +65,15 @@ public class ApkSigner {
     }
 
     private String getTestCertFilePath() {
+        if (sTestCertFile != null) {
+            return sTestCertFile.getAbsolutePath();
+        }
+
         File check = new File(BuildModule.getContext().getFilesDir() +
                 "/temp/testkey.x509.pem");
 
         if (check.exists()) {
+            sTestCertFile = check;
             return check.getAbsolutePath();
         }
 
@@ -71,5 +82,18 @@ public class ApkSigner {
 
         return check.getAbsolutePath();
     }
+
+    @VisibleForTesting
+    public static void setTestKeyFile(File file) {
+        sTestKeyFile = file;
+    }
+
+    @VisibleForTesting
+    public static void setTestCertFile(File file) {
+        sTestCertFile = file;
+    }
+
+    private static File sTestKeyFile;
+    private static File sTestCertFile;
 
 }
