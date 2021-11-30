@@ -33,6 +33,7 @@ import java.util.concurrent.Executors;
  *  * the necessary operations for building apk files such as compiling resources,
  *  * compiling java files, dexing and merging
  */
+@Deprecated
 public class ApkBuilder {
 
     public interface OnResultListener {
