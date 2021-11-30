@@ -32,7 +32,7 @@ public class MockAndroidProject extends MockJavaProject implements AndroidProjec
 
     @Override
     public File getAndroidResourcesDirectory() {
-        return new File(getResourcesDir(), "app/src/main/res");
+        return new File(getRootFile(), "app/src/main/res");
     }
 
     @Override
