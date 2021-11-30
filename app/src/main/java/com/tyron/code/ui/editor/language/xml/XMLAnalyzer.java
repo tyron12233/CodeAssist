@@ -154,27 +154,27 @@ public class XMLAnalyzer implements CodeAnalyzer {
 				return;
 			}
 
-			Executors.newSingleThreadExecutor().execute(() -> {
-				boolean isResource = ProjectUtils.isLayoutXMLFile(mEditor.getCurrentFile());
-
-				if (isResource) {
-					if (CompletionEngine.isIndexing()) {
-						return;
-					}
-					Project project = ProjectManager.getInstance().getCurrentProject();
-					if (project != null) {
-						project.getFileManager().save(mEditor.getCurrentFile(), mEditor.getText().toString());
-						Task task = new IncrementalAapt2Task();
-						try {
-							task.prepare(BuildType.DEBUG);
-							task.run();
-						} catch (IOException | CompilationFailedException e) {
-							e.printStackTrace();
-						}
-
-					}
-				}
-			});
+//			Executors.newSingleThreadExecutor().execute(() -> {
+//				boolean isResource = ProjectUtils.isLayoutXMLFile(mEditor.getCurrentFile());
+//
+//				if (isResource) {
+//					if (CompletionEngine.isIndexing()) {
+//						return;
+//					}
+//					Project project = ProjectManager.getInstance().getCurrentProject();
+//					if (project != null) {
+//						project.getFileManager().save(mEditor.getCurrentFile(), mEditor.getText().toString());
+//						Task task = new IncrementalAapt2Task();
+//						try {
+//							task.prepare(BuildType.DEBUG);
+//							task.run();
+//						} catch (IOException | CompilationFailedException e) {
+//							e.printStackTrace();
+//						}
+//
+//					}
+//				}
+//			});
 		}
 	}
 }
