@@ -7,9 +7,7 @@ import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.api.Project;
 import com.tyron.builder.project.impl.AndroidModule;
-import com.tyron.builder.project.impl.AndroidModuleManager;
 import com.tyron.builder.project.impl.FileManagerImpl;
-import com.tyron.builder.project.impl.JavaModuleManager;
 import com.tyron.builder.project.impl.ProjectImpl;
 
 import org.json.JSONException;
@@ -20,7 +18,6 @@ import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
 public class ProjectTest {
@@ -62,5 +59,9 @@ public class ProjectTest {
         assertThat(data).isNotNull();
         assertThat(data.getPackage())
                 .isEqualTo("com.tyron.module2");
+
+        module.getTasks().forEach(task -> {
+            task.getActions().forEach(action -> action.execute(task));
+        });
     }
 }

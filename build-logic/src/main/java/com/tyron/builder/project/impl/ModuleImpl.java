@@ -1,6 +1,7 @@
 package com.tyron.builder.project.impl;
 
 import com.google.common.collect.ImmutableList;
+import com.tyron.builder.compiler2.api.Task;
 import com.tyron.builder.project.api.Module;
 
 import org.jetbrains.annotations.NotNull;
@@ -9,6 +10,7 @@ import org.jetbrains.kotlin.com.intellij.util.concurrency.AtomicFieldUpdater;
 import org.jetbrains.kotlin.com.intellij.util.keyFMap.KeyFMap;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class ModuleImpl implements Module {
@@ -41,6 +43,11 @@ public class ModuleImpl implements Module {
                 break;
             }
         }
+    }
+
+    @Override
+    public List<Task> getTasks() {
+        return Collections.emptyList();
     }
 
     private static final AtomicFieldUpdater<ModuleImpl, KeyFMap> updater = AtomicFieldUpdater.forFieldOfType(ModuleImpl.class, KeyFMap.class);
