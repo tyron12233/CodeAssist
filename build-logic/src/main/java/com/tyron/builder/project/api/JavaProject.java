@@ -34,4 +34,17 @@ public interface JavaProject extends Project {
      */
     @NonNull
     File getJavaDirectory();
+
+    /**
+     * This is required if the project uses lambdas
+     *
+     * @return a jar file which contains stubs for lambda compilation
+     */
+    File getLambdaStubsJarFile();
+
+    /**
+     * @return the bootstrap jar file which contains the necessary classes.
+     * This includes {@code java.lang} package and other classes
+     */
+    File getBootstrapJarFile();
 }

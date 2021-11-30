@@ -1,7 +1,5 @@
 package com.tyron.builder.compiler.incremental.java;
 
-import android.util.Log;
-
 import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.compiler.BuildType;
@@ -10,9 +8,7 @@ import com.tyron.builder.compiler.java.JavaTask;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.builder.project.api.JavaProject;
 import com.tyron.common.util.Cache;
 
@@ -131,8 +127,8 @@ public class IncrementalJavaTask extends Task<JavaProject> {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT,
                     Collections.singletonList(mOutputDir));
             standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH,
-                    Arrays.asList(FileManager.getAndroidJar(),
-                            FileManager.getLambdaStubs()));
+                    Arrays.asList(getProject().getBootstrapJarFile(),
+                            getProject().getLambdaStubsJarFile()));
             standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, classpath);
             standardJavaFileManager.setLocation(StandardLocation.SOURCE_PATH, mJavaFiles);
         } catch (IOException e) {
@@ -166,12 +162,9 @@ public class IncrementalJavaTask extends Task<JavaProject> {
                     String classPath = classFile.getAbsolutePath()
                             .replace("build/bin/classes/", "src/main/java/")
                             .replace(".class", ".java");
-                    Log.d(TAG, "Adding class file " +
-                            classFile.getName() + " to cache" + "\n cache:" + classPath);
                     if (classFile.getName().indexOf('$') != -1) {
                         classPath = classPath.substring(0, classPath.indexOf('$'))
                                 + ".java";
-                        Log.d(TAG, "class path: " + classPath);
                     }
                     File file = new File(classPath);
                     if (!file.exists()) {

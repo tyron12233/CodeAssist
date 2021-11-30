@@ -250,8 +250,8 @@ public class IncrementalD8Task extends Task<AndroidProject> {
 
     private List<Path> getLibraryFiles() {
         List<Path> path = new ArrayList<>();
-        path.add(FileManager.getAndroidJar().toPath());
-        path.add(FileManager.getLambdaStubs().toPath());
+        path.add(getProject().getLambdaStubsJarFile().toPath());
+        path.add(getProject().getBootstrapJarFile().toPath());
         return path;
     }
 
