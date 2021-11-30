@@ -121,8 +121,8 @@ public class D8Task extends Task<JavaProject> {
 
 	private List<Path> getLibraryFiles() {
 		List<Path> path = new ArrayList<>();
-		path.add(FileManager.getAndroidJar().toPath());
-		path.add(FileManager.getLambdaStubs().toPath());
+		path.add(getProject().getBootstrapJarFile().toPath());
+		path.add(getProject().getLambdaStubsJarFile().toPath());
 		return path;
 	}
 
