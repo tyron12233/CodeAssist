@@ -90,7 +90,7 @@ public class ApkBuilder {
             try {
                 post(() -> mTaskListener.onTaskStarted(task.getName(), "Task started.",
                         (int) ((currentPos / (float) totalTasks) * 100f)));
-                task.prepare(mProject, log, type);
+                task.prepare(type);
                 task.run();
             } catch (CompilationFailedException | IOException e) {
                 tasksRan.forEach(Task::clean);
@@ -113,43 +113,43 @@ public class ApkBuilder {
 
     private List<Task> getApkTasks(BuildType type) {
         List<Task> task = new ArrayList<>();
-        task.add(new CleanTask());
-        task.add(new ManifestMergeTask());
-        task.add(new GenerateFirebaseConfigTask());
-        if (type == BuildType.DEBUG) {
-            task.add(new InjectLoggerTask());
-        }
-        task.add(new IncrementalAapt2Task());
-        task.add(new MergeSymbolsTask());
-        task.add(new IncrementalKotlinCompiler());
-        task.add(new IncrementalJavaTask());
-        if (mProject.getSettings().getBoolean(ProjectSettings.USE_R8, false) &&
-                type == BuildType.RELEASE) {
-            task.add(new R8Task());
-        } else {
-            task.add(new IncrementalD8Task());
-        }
-        task.add(new PackageTask());
-        task.add(new SignTask());
+//        task.add(new CleanTask(mProject, log));
+//        task.add(new ManifestMergeTask(mProject, log));
+//        task.add(new GenerateFirebaseConfigTask(mProject, log));
+//        if (type == BuildType.DEBUG) {
+//            task.add(new InjectLoggerTask(mProject, log));
+//        }
+//        task.add(new IncrementalAapt2Task(mProject, log, false));
+//        task.add(new MergeSymbolsTask(mProject, log));
+//        task.add(new IncrementalKotlinCompiler(mProject, log));
+//        task.add(new IncrementalJavaTask(mProject, log));
+//        if (mProject.getSettings().getBoolean(ProjectSettings.USE_R8, false) &&
+//                type == BuildType.RELEASE) {
+//            task.add(new R8Task(mProject, log));
+//        } else {
+//            task.add(new IncrementalD8Task(mProject, log));
+//        }
+//        task.add(new PackageTask(mProject, log));
+//        task.add(new SignTask(mProject, log));
         return task;
     }
 
 
     private List<Task> getAabTasks() {
         List<Task> tasks = new ArrayList<>();
-        tasks.add(new CleanTask());
-        tasks.add(new ManifestMergeTask());
-        tasks.add(new GenerateFirebaseConfigTask());
-        tasks.add(new IncrementalAapt2Task(true));
-        tasks.add(new MergeSymbolsTask());
-        tasks.add(new IncrementalKotlinCompiler());
-        tasks.add(new IncrementalJavaTask());
-        if (mProject.getSettings().getBoolean(ProjectSettings.USE_R8, false)) {
-            tasks.add(new R8Task());
-        } else {
-            tasks.add(new IncrementalD8Task());
-        }
-        tasks.add(new AabTask());
+//        tasks.add(new CleanTask(mProject, log));
+//        tasks.add(new ManifestMergeTask(mProject, log));
+//        tasks.add(new GenerateFirebaseConfigTask(mProject, log));
+//        tasks.add(new IncrementalAapt2Task(mProject, log, true));
+//        tasks.add(new MergeSymbolsTask(mProject, log));
+//        tasks.add(new IncrementalKotlinCompiler(mProject, log));
+//        tasks.add(new IncrementalJavaTask(mProject, log));
+//        if (mProject.getSettings().getBoolean(ProjectSettings.USE_R8, false)) {
+//            tasks.add(new R8Task(mProject, log));
+//        } else {
+//            tasks.add(new IncrementalD8Task(mProject, log));
+//        }
+//        tasks.add(new AabTask(mProject, log));
         return tasks;
     }
 }

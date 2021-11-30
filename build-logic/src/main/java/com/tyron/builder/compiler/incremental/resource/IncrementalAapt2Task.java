@@ -9,6 +9,7 @@ import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.common.util.BinaryExecutor;
 
 import org.apache.commons.io.FileUtils;
@@ -24,19 +25,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class IncrementalAapt2Task extends Task {
+public class IncrementalAapt2Task extends Task<AndroidProject> {
 
     private static final String TAG = "IncrementalAAPT2";
 
-    private Project mProject;
-    private ILogger mLogger;
     private final boolean mGenerateProtoFormat;
 
-    public IncrementalAapt2Task() {
-        this(false);
-    }
-
-    public IncrementalAapt2Task(boolean generateProtoFormat) {
+    public IncrementalAapt2Task(AndroidProject project, ILogger logger, boolean generateProtoFormat) {
+        super(project, logger);
         mGenerateProtoFormat = generateProtoFormat;
     }
 
@@ -46,9 +42,8 @@ public class IncrementalAapt2Task extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mProject = project;
-        mLogger = logger;
+    public void prepare(BuildType type) throws IOException {
+
     }
 
     public void run() throws IOException, CompilationFailedException {
@@ -77,7 +72,7 @@ public class IncrementalAapt2Task extends Task {
         }
         args.add("-o");
 
-        File outputCompiled = new File(mProject.getBuildDirectory(), "bin/res/compiled");
+        File outputCompiled = new File(getProject().getBuildDirectory(), "bin/res/compiled");
         if (!outputCompiled.exists() && !outputCompiled.mkdirs()) {
             throw new IOException("Failed to create compiled directory");
         }
@@ -94,9 +89,9 @@ public class IncrementalAapt2Task extends Task {
 
     private void compileLibraries(List<File> libraries)
             throws IOException, CompilationFailedException {
-        mLogger.debug("Compiling libraries.");
+        getLogger().debug("Compiling libraries.");
 
-        File output = new File(mProject.getBuildDirectory(), "bin/res");
+        File output = new File(getProject().getBuildDirectory(), "bin/res");
         if (!output.exists()) {
             if (!output.mkdirs()) {
                 throw new IOException("Failed to create resource output directory");
@@ -136,7 +131,7 @@ public class IncrementalAapt2Task extends Task {
     }
 
     private void link() throws IOException, CompilationFailedException {
-        mLogger.debug("Linking resources");
+        getLogger().debug("Linking resources");
 
         List<String> args = new ArrayList<>();
         args.add(getBinary().getAbsolutePath());
@@ -151,7 +146,7 @@ public class IncrementalAapt2Task extends Task {
         }
         for (File resource : resources) {
             if (!resource.getName().endsWith(".flat")) {
-                mLogger.warning("Unrecognized file " + resource.getName() + " at compiled directory");
+                getLogger().warning("Unrecognized file " + resource.getName() + " at compiled directory");
                 continue;
             }
             args.add(resource.getAbsolutePath());
@@ -162,11 +157,11 @@ public class IncrementalAapt2Task extends Task {
         args.add("--no-version-transitions");
         args.add("--auto-add-overlay");
         args.add("--min-sdk-version");
-        args.add(String.valueOf(mProject.getMinSdk()));
+        args.add(String.valueOf(getProject().getMinSdk()));
         args.add("--target-sdk-version");
-        args.add(String.valueOf(mProject.getTargetSdk()));
+        args.add(String.valueOf(getProject().getTargetSdk()));
         args.add("--proguard");
-        args.add(createNewFile(new File(mProject.getBuildDirectory(), "bin/res"),
+        args.add(createNewFile(new File(getProject().getBuildDirectory(), "bin/res"),
                 "generated-rules.txt").getAbsolutePath());
 
         resources = getOutputPath().listFiles();
@@ -176,12 +171,12 @@ public class IncrementalAapt2Task extends Task {
                     continue;
                 }
                 if (!resource.getName().endsWith(".zip")) {
-                    mLogger.warning("Unrecognized file " + resource.getName());
+                    getLogger().warning("Unrecognized file " + resource.getName());
                     continue;
                 }
 
                 if (resource.length() == 0) {
-                    mLogger.warning("Empty zip file " + resource.getName());
+                    getLogger().warning("Empty zip file " + resource.getName());
                 }
 
                 args.add("-R");
@@ -190,7 +185,7 @@ public class IncrementalAapt2Task extends Task {
         }
 
         args.add("--java");
-        File gen = new File(mProject.getBuildDirectory(), "gen");
+        File gen = new File(getProject().getBuildDirectory(), "gen");
         if (!gen.exists()) {
             if (!gen.mkdirs()) {
                 throw  new CompilationFailedException("Failed to create gen folder");
@@ -199,7 +194,7 @@ public class IncrementalAapt2Task extends Task {
         args.add(gen.getAbsolutePath());
 
         args.add("--manifest");
-        File mergedManifest = new File(mProject.getBuildDirectory(),
+        File mergedManifest = new File(getProject().getBuildDirectory(),
                 "bin/AndroidManifest.xml");
         if (!mergedManifest.exists()) {
             throw new IOException("Unable to get merged manifest file");
@@ -222,9 +217,9 @@ public class IncrementalAapt2Task extends Task {
         }
         args.add(file.getAbsolutePath());
 
-        if (mProject.getAssetsDirectory().exists()) {
+        if (getProject().getAssetsDirectory().exists()) {
             args.add("-A");
-            args.add(mProject.getAssetsDirectory().getAbsolutePath());
+            args.add(getProject().getAssetsDirectory().getAbsolutePath());
         }
 
         BinaryExecutor exec = new BinaryExecutor();
@@ -238,7 +233,8 @@ public class IncrementalAapt2Task extends Task {
      * @return resource files to compile
      */
     public Map<String, List<File>> getFiles() throws IOException {
-        Map<String, List<ResourceFile>> newFiles = findFiles(mProject.getResourceDirectory());
+        Map<String, List<ResourceFile>> newFiles = findFiles(getProject()
+                .getAndroidResourcesDirectory());
         Map<String, List<ResourceFile>> oldFiles = findFiles(getOutputDirectory());
         Map<String, List<File>> filesToCompile = new HashMap<>();
 
@@ -305,7 +301,7 @@ public class IncrementalAapt2Task extends Task {
     }
 
     private void copyMapToDir(Map<String, List<File>> map) throws IOException {
-        File output = new File(mProject.getBuildDirectory(), "intermediate/resources");
+        File output = new File(getProject().getBuildDirectory(), "intermediate/resources");
         if (!output.exists()) {
             if (!output.mkdirs()) {
                 throw new IOException("Failed to create intermediate directory");
@@ -414,7 +410,7 @@ public class IncrementalAapt2Task extends Task {
      * if it contains a zip file with its name, then its most likely the same library
      */
     private List<File> getLibraries()  throws IOException {
-        File resDir = new File(mProject.getBuildDirectory(), "bin/res");
+        File resDir = new File(getProject().getBuildDirectory(), "bin/res");
         if (!resDir.exists()) {
             if (!resDir.mkdirs()) {
                 throw new IOException("Failed to create resource directory");
@@ -423,7 +419,7 @@ public class IncrementalAapt2Task extends Task {
 
         List<File> libraries = new ArrayList<>();
 
-        for (File library : mProject.getLibraries()) {
+        for (File library : getProject().getLibraries()) {
             File parent = library.getParentFile();
             if (parent != null) {
 
@@ -456,7 +452,7 @@ public class IncrementalAapt2Task extends Task {
     }
 
     private File getOutputDirectory() throws IOException {
-        File intermediateDirectory = new File(mProject.getBuildDirectory(), "intermediate");
+        File intermediateDirectory = new File(getProject().getBuildDirectory(), "intermediate");
 
         if (!intermediateDirectory.exists()) {
             if (!intermediateDirectory.mkdirs()) {
@@ -474,7 +470,7 @@ public class IncrementalAapt2Task extends Task {
     }
 
     private File getOutputPath() throws IOException {
-        File file = new File(mProject.getBuildDirectory(), "bin/res");
+        File file = new File(getProject().getBuildDirectory(), "bin/res");
         if (!file.exists()) {
             if (!file.mkdirs()) {
                 throw new IOException("Failed to get resource directory");

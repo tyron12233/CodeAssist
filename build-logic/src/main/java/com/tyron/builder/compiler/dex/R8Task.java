@@ -11,6 +11,8 @@ import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.JavaProject;
 
 import java.io.File;
 import java.io.IOException;
@@ -20,12 +22,13 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
-public class R8Task extends Task {
+public class R8Task extends Task<AndroidProject> {
 
     private static final String TAG = R8Task.class.getSimpleName();
 
-    private Project mProject;
-    private ILogger mLogger;
+    public R8Task(AndroidProject project, ILogger logger) {
+        super(project, logger);
+    }
 
     @Override
     public String getName() {
@@ -33,26 +36,25 @@ public class R8Task extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mProject = project;
-        mLogger = logger;
+    public void prepare(BuildType type) throws IOException {
+
     }
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-        mLogger.debug("Running R8");
+        getLogger().debug("Running R8");
         try {
-            File output = new File(mProject.getBuildDirectory(), "bin");
-            R8Command.Builder command = R8Command.builder(new DexDiagnosticHandler(mLogger))
+            File output = new File(getProject().getBuildDirectory(), "bin");
+            R8Command.Builder command = R8Command.builder(new DexDiagnosticHandler(getLogger()))
                     .addLibraryFiles(getLibraryFiles())
                     .addProgramFiles(getJarFiles())
-                    .addProgramFiles(D8Task.getClassFiles(new File(mProject.getBuildDirectory(),
+                    .addProgramFiles(D8Task.getClassFiles(new File(getProject().getBuildDirectory(),
                             "bin/kotlin/classes")))
-                    .addProgramFiles(D8Task.getClassFiles(new File(mProject.getBuildDirectory(),
+                    .addProgramFiles(D8Task.getClassFiles(new File(getProject().getBuildDirectory(),
                             "bin/java/classes")))
                     .addProguardConfiguration(getDefaultProguardRule(), Origin.unknown())
                     .addProguardConfigurationFiles(getProguardRules())
-                    .setMinApiLevel(mProject.getMinSdk())
+                    .setMinApiLevel(getProject().getMinSdk())
                     .setMode(CompilationMode.RELEASE)
                     .setOutput(output.toPath(), OutputMode.DexIndexed);
             R8.run(command.build());
@@ -88,7 +90,7 @@ public class R8Task extends Task {
 
     private Collection<Path> getJarFiles() {
         Collection<Path> paths = new ArrayList<>();
-        for (File it : mProject.getLibraries()) {
+        for (File it : getProject().getLibraries()) {
             paths.add(it.toPath());
         }
         return paths;
@@ -96,7 +98,7 @@ public class R8Task extends Task {
 
     private List<Path> getProguardRules() {
         List<Path> rules = new ArrayList<>();
-        mProject.getLibraries().forEach(it -> {
+        getProject().getLibraries().forEach(it -> {
             File parent = it.getParentFile();
             if (parent != null) {
                 File proguardFile = new File(parent, "proguard.txt");
@@ -106,12 +108,12 @@ public class R8Task extends Task {
             }
         });
 
-        File proguardRuleTxt = new File(mProject.mRoot, "app/proguard-rules.txt");
+        File proguardRuleTxt = new File(getProject().getRootFile(), "app/proguard-rules.txt");
         if (proguardRuleTxt.exists()) {
             rules.add(proguardRuleTxt.toPath());
         }
 
-        File aapt2Rules = new File(mProject.getBuildDirectory(),
+        File aapt2Rules = new File(getProject().getBuildDirectory(),
                 "bin/res/generated-rules.txt");
         if (aapt2Rules.exists()) {
             rules.add(aapt2Rules.toPath());

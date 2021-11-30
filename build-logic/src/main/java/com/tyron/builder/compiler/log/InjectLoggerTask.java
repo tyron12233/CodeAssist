@@ -6,7 +6,8 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
@@ -33,7 +34,7 @@ import org.openjdk.javax.xml.transform.TransformerFactory;
 import org.openjdk.javax.xml.transform.dom.DOMSource;
 import org.openjdk.javax.xml.transform.stream.StreamResult;
 
-public class InjectLoggerTask extends Task {
+public class InjectLoggerTask extends Task<AndroidProject> {
 
     private static final String TAG = "InjectLogger";
     private static final String APPLICATION_CLASS = "\nimport android.app.Application;\n" +
@@ -131,11 +132,13 @@ public class InjectLoggerTask extends Task {
             "        mContext.sendBroadcast(intent);\n" +
             "    }\n" +
             "}\n";
-    private Project mProject;
-    private ILogger mLogger;
     private File mLoggerFile;
     private File mApplicationFile;
     private String mOriginalApplication;
+
+    public InjectLoggerTask(AndroidProject project, ILogger logger) {
+        super(project, logger);
+    }
 
     @Override
     public String getName() {
@@ -143,12 +146,9 @@ public class InjectLoggerTask extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mProject = project;
-        mLogger = logger;
-
-        project.getJavaFiles();
-        project.getKotlinFiles();
+    public void prepare(BuildType type) throws IOException {
+        getProject().getJavaFiles();
+        getProject().getKotlinFiles();
     }
 
     @Override
@@ -160,16 +160,16 @@ public class InjectLoggerTask extends Task {
 
             String applicationClass = getApplicationClass();
             if (applicationClass == null) {
-                applicationClass = mProject.getPackageName() + ".LoggerApplication";
+                applicationClass = getProject().getPackageName() + ".LoggerApplication";
                 createApplicationClass(applicationClass);
             } else {
                 isNewApplicationClass = false;
             }
 
-            mApplicationFile = mProject.getFileManager()
+            mApplicationFile = getProject()
                     .getJavaFile(applicationClass);
             if (mApplicationFile == null) {
-                mApplicationFile = mProject.getFileManager()
+                mApplicationFile = getProject()
                         .getKotlinFile(applicationClass);
             }
             if (!isNewApplicationClass) {
@@ -178,7 +178,7 @@ public class InjectLoggerTask extends Task {
 
             injectLogger(mApplicationFile);
 
-            mLogger.debug("application class: " + applicationClass);
+            getLogger().debug("application class: " + applicationClass);
         } catch (RuntimeException | XmlPullParserException | ParserConfigurationException | SAXException | TransformerException e) {
             throw new CompilationFailedException(e);
         }
@@ -194,26 +194,26 @@ public class InjectLoggerTask extends Task {
                 }
             } else {
                 try {
-                    mProject.getFileManager().removeJavaFile(StringSearch.packageName(mApplicationFile));
+                    getProject().removeJavaFile(StringSearch.packageName(mApplicationFile));
                     FileUtils.delete(mApplicationFile);
                 } catch (IOException e) {
-                    mLogger.error("Failed to delete application class: " + e.getMessage());
+                    getLogger().error("Failed to delete application class: " + e.getMessage());
                 }
             }
         }
 
         if (mLoggerFile != null) {
             try {
-                mProject.getFileManager().removeJavaFile(StringSearch.packageName(mLoggerFile));
+                getProject().removeJavaFile(StringSearch.packageName(mLoggerFile));
                 FileUtils.delete(mLoggerFile);
             } catch (IOException e) {
-                mLogger.error("Failed to delete logger class: " + e.getMessage());
+                getLogger().error("Failed to delete logger class: " + e.getMessage());
             }
         }
     }
 
     private String getApplicationClass() throws XmlPullParserException, IOException, ParserConfigurationException, SAXException, TransformerException {
-        File manifest = new File(mProject.getBuildDirectory().getAbsolutePath().replaceAll("%20", " "), "bin/AndroidManifest.xml");
+        File manifest = new File(getProject().getBuildDirectory().getAbsolutePath().replaceAll("%20", " "), "bin/AndroidManifest.xml");
         XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
         parser.setInput(new FileInputStream(manifest), null);
 
@@ -235,7 +235,7 @@ public class InjectLoggerTask extends Task {
                     if (pair.first.equals("android:name")) {
                         String name = pair.second;
                         if (name.startsWith(".")) {
-                            return mProject.getPackageName() + name;
+                            return getProject().getPackageName() + name;
                         } else {
                             return name;
                         }
@@ -248,9 +248,9 @@ public class InjectLoggerTask extends Task {
     }
 
     private void createApplicationClass(String name) throws IOException, ParserConfigurationException, TransformerException, SAXException {
-        mLogger.debug("Creating application class " + name);
+        getLogger().debug("Creating application class " + name);
 
-        File manifest = new File(mProject.getBuildDirectory().getAbsolutePath().replaceAll("%20", " "), "bin/AndroidManifest.xml");
+        File manifest = new File(getProject().getBuildDirectory().getAbsolutePath().replaceAll("%20", " "), "bin/AndroidManifest.xml");
 
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         DocumentBuilder documentBuilder = factory.newDocumentBuilder();
@@ -264,23 +264,23 @@ public class InjectLoggerTask extends Task {
         DOMSource source = new DOMSource(document);
         transformer.transform(source, new StreamResult(manifest.getAbsolutePath()));
 
-        File directory = mProject.getJavaDirectory();
+        File directory = getProject().getJavaDirectory();
         File output = new File(directory, name.replace('.', '/') + ".java");
         if (!output.exists() && !output.createNewFile()) {
             throw  new IOException("Unable to create LoggerApplication");
         }
 
-        String classString = "package " + mProject.getPackageName() + ";\n" +
+        String classString = "package " + getProject().getPackageName() + ";\n" +
                 APPLICATION_CLASS;
         FileUtils.writeStringToFile(output, classString, Charset.defaultCharset());
-        mProject.getFileManager()
+        getProject()
                 .addJavaFile(output);
     }
 
     private void injectLogger(File applicationClass) throws IOException, CompilationFailedException {
         String applicationContents = FileUtils.readFileToString(applicationClass, Charset.defaultCharset());
         if (applicationContents.contains("Logger.initialize(this);")) {
-            mLogger.debug("Application class already initializes Logger");
+            getLogger().debug("Application class already initializes Logger");
             return;
         }
 
@@ -298,19 +298,18 @@ public class InjectLoggerTask extends Task {
     }
 
     private void addLoggerClass() throws IOException {
-        mLogger.debug("Creating Logger.java");
+        getLogger().debug("Creating Logger.java");
 
-        File loggerClass = new File(mProject.getJavaDirectory(), mProject.getPackageName()
+        File loggerClass = new File(getProject().getJavaDirectory(), getProject().getPackageName()
         .replace('.', '/') + "/Logger.java");
         if (!loggerClass.exists() && !loggerClass.createNewFile()) {
             throw new IOException("Unable to create Logger.java");
         }
 
-        String loggerString = "package " + mProject.getPackageName() + ";\n" +
+        String loggerString = "package " + getProject().getPackageName() + ";\n" +
                 LOGGER_CLASS;
         FileUtils.writeStringToFile(loggerClass, loggerString, Charset.defaultCharset());
         mLoggerFile = loggerClass;
-        mProject.getFileManager()
-                .addJavaFile(loggerClass);
+        getProject().addJavaFile(loggerClass);
     }
 }

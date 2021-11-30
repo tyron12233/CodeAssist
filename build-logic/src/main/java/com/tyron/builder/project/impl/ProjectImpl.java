@@ -52,6 +52,16 @@ public class ProjectImpl implements Project {
 
     }
 
+    @Override
+    public void clear() {
+
+    }
+
+    @Override
+    public File getBuildDirectory() {
+        return null;
+    }
+
     public synchronized void addModule(Module module) {
 
     }

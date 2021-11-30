@@ -1,0 +1,37 @@
+package com.tyron.builder.project.api;
+
+import androidx.annotation.NonNull;
+
+import java.io.File;
+import java.util.List;
+import java.util.Map;
+
+public interface JavaProject extends Project {
+
+    /**
+     * @return a map of fully qualified name and its java file
+     */
+    @NonNull
+    Map<String, File> getJavaFiles();
+
+    File getJavaFile(@NonNull String packageName);
+
+    void removeJavaFile(@NonNull String packageName);
+
+    void addJavaFile(@NonNull File javaFile);
+
+    List<File> getLibraries();
+
+    /**
+     * @return The resources directory of the project. Note that
+     * this is different from android's res directory
+     */
+    @NonNull
+    File getResourcesDir();
+
+    /**
+     * @return The directory on where java sources will be searched
+     */
+    @NonNull
+    File getJavaDirectory();
+}

@@ -5,6 +5,7 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.project.api.AndroidProject;
 
 import org.apache.commons.io.FileUtils;
 
@@ -15,7 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-public class ManifestMergeTask extends Task {
+public class ManifestMergeTask extends Task<AndroidProject> {
 
     private ManifestMerger2 mMerger;
     private File mOutputFile;
@@ -23,7 +24,9 @@ public class ManifestMergeTask extends Task {
     private File[] mLibraryManifestFiles;
     private String mPackageName;
 
-    private ILogger mLogger;
+    public ManifestMergeTask(AndroidProject project, ILogger logger) {
+        super(project, logger);
+    }
 
     @Override
     public String getName() {
@@ -31,12 +34,10 @@ public class ManifestMergeTask extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mLogger = logger;
+    public void prepare(BuildType type) throws IOException {
+        mPackageName = getApplicationId();
 
-        mPackageName = getApplicationId(project);
-
-        mOutputFile = new File(project.getBuildDirectory(), "bin");
+        mOutputFile = new File(getProject().getBuildDirectory(), "bin");
         if (!mOutputFile.exists()) {
             if (!mOutputFile.mkdirs()) {
                 throw new IOException("Unable to create build directory");
@@ -49,18 +50,18 @@ public class ManifestMergeTask extends Task {
             }
         }
 
-        mMainManifest = project.getManifestFile();
+        mMainManifest = getProject().getManifestFile();
         if (!mMainManifest.exists()) {
             throw new IOException("Unable to find the main manifest file");
         }
 
         List<File> manifests = new ArrayList<>();
-        Set<File> libraries = project.getLibraries();
+        List<File> libraries = getProject().getLibraries();
         // Filter the libraries and add all that has a AndroidManifest.xml file
         for (File library : libraries) {
             File parent = library.getParentFile();
             if (parent == null) {
-                logger.warning("Unable to access parent directory of a library");
+                getLogger().warning("Unable to access parent directory of a library");
                 continue;
             }
 
@@ -86,7 +87,7 @@ public class ManifestMergeTask extends Task {
         }
 
         ManifestMerger2.Invoker<?> invoker = ManifestMerger2.newMerger(mMainManifest,
-                mLogger, ManifestMerger2.MergeType.APPLICATION)
+                getLogger(), ManifestMerger2.MergeType.APPLICATION)
                 .addLibraryManifests(mLibraryManifestFiles);
         invoker.setOverride(ManifestMerger2.SystemProperty.PACKAGE, mPackageName);
         invoker.setOverride(ManifestMerger2.SystemProperty.VERSION_CODE, "1");
@@ -95,7 +96,7 @@ public class ManifestMergeTask extends Task {
         try {
             MergingReport report = invoker.merge();
             if (report.getResult().isError()) {
-                report.log(mLogger);
+                report.log(getLogger());
                 throw new CompilationFailedException(report.getReportString());
             }
             if (report.getMergedDocument().isPresent()) {
@@ -108,8 +109,8 @@ public class ManifestMergeTask extends Task {
         }
     }
 
-    private String getApplicationId(Project project) throws IOException {
-        String packageName = project.getPackageName();
+    private String getApplicationId() throws IOException {
+        String packageName = getProject().getPackageName();
         if (packageName == null) {
             throw new IOException("Failed to parse package name");
         }

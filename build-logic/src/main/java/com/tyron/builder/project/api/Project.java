@@ -2,6 +2,7 @@ package com.tyron.builder.project.api;
 
 import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.FileManager;
+import com.tyron.common.util.Cache;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderEx;
 
@@ -23,4 +24,14 @@ public interface Project extends UserDataHolderEx {
      * Implementations may throw an IOException if something went wrong during parsing
      */
     void open() throws IOException;
+
+    /**
+     * Remove all the indexed files
+     */
+    void clear();
+
+    /**
+     * @return The directory that this project can use to compile files
+     */
+    File getBuildDirectory();
 }

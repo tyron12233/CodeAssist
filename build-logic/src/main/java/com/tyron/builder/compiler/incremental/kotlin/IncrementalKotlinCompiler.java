@@ -13,6 +13,8 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.KotlinProject;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.build.report.ICReporterBase;
@@ -36,17 +38,19 @@ import java.util.stream.Collectors;
 
 import kotlin.jvm.functions.Function0;
 
-public class IncrementalKotlinCompiler extends Task {
+public class IncrementalKotlinCompiler extends Task<AndroidProject> {
 
     private static final String TAG = IncrementalKotlinCompiler.class.getSimpleName();
 
     private File mKotlinHome;
     private File mClassOutput;
-    private Project mProject;
     private List<File> mFilesToCompile;
-    private ILogger mLogger;
 
     private final MessageCollector mCollector = new Collector();
+
+    public IncrementalKotlinCompiler(AndroidProject project, ILogger logger) {
+        super(project, logger);
+    }
 
     @Override
     public String getName() {
@@ -54,21 +58,17 @@ public class IncrementalKotlinCompiler extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mProject = project;
-        mLogger = logger;
-
+    public void prepare(BuildType type) throws IOException {
         mFilesToCompile = new ArrayList<>();
-        mFilesToCompile.addAll(mProject.getJavaFiles().values());
-        mFilesToCompile.addAll(mProject.getRJavaFiles().values());
-        mFilesToCompile.addAll(mProject.getKotlinFiles().values());
+        mFilesToCompile.addAll(getProject().getJavaFiles().values());
+        mFilesToCompile.addAll(getProject().getKotlinFiles().values());
 
         mKotlinHome = new File(BuildModule.getContext().getFilesDir(), "kotlin-home");
         if (!mKotlinHome.exists() && !mKotlinHome.mkdirs()) {
             throw new IOException("Unable to create kotlin home directory");
         }
 
-        mClassOutput = new File(project.getBuildDirectory(), "bin/kotlin/classes");
+        mClassOutput = new File(getProject().getBuildDirectory(), "bin/kotlin/classes");
         if (!mClassOutput.exists() && !mClassOutput.mkdirs()) {
             throw new IOException("Unable to create class output directory");
         }
@@ -77,13 +77,13 @@ public class IncrementalKotlinCompiler extends Task {
     @Override
     public void run() throws IOException, CompilationFailedException {
         if (mFilesToCompile.stream().noneMatch(file -> file.getName().endsWith(".kt"))) {
-            mLogger.info("No kotlin source files, Skipping compilation.");
+            getLogger().info("No kotlin source files, Skipping compilation.");
             return;
         }
         List<File> classpath = new ArrayList<>();
         classpath.add(FileManager.getAndroidJar());
         classpath.add(FileManager.getLambdaStubs());
-        classpath.addAll(mProject.getLibraries());
+        classpath.addAll(getProject().getLibraries());
         List<String> arguments = new ArrayList<>();
         Collections.addAll(arguments, "-cp",
                 classpath.stream()
@@ -91,8 +91,7 @@ public class IncrementalKotlinCompiler extends Task {
                         .collect(Collectors.joining(File.pathSeparator)));
 
         List<File> javaSourceRoots = new ArrayList<>();
-        javaSourceRoots.addAll(mProject.getJavaFiles().values());
-        javaSourceRoots.addAll(mProject.getRJavaFiles().values());
+        javaSourceRoots.addAll(getProject().getJavaFiles().values());
 
         try {
             K2JVMCompiler compiler = new K2JVMCompiler();
@@ -114,19 +113,19 @@ public class IncrementalKotlinCompiler extends Task {
             args.setPluginClasspaths(getPlugins().stream()
                     .map(File::getAbsolutePath)
                     .toArray(String[]::new));
-            File cacheDir = new File(mProject.getBuildDirectory(), "intermediate/kotlin");
+            File cacheDir = new File(getProject().getBuildDirectory(), "intermediate/kotlin");
             IncrementalJvmCompilerRunnerKt.makeIncrementally(cacheDir,
-                    Arrays.asList(mProject.getJavaDirectory(),
-                            new File(mProject.getBuildDirectory(), "gen")),
+                    Arrays.asList(getProject().getJavaDirectory(),
+                            new File(getProject().getBuildDirectory(), "gen")),
                     args, mCollector, new ICReporterBase() {
                         @Override
                         public void report(@NonNull Function0<String> function0) {
-                            mLogger.info(function0.invoke());
+                            getLogger().info(function0.invoke());
                         }
 
                         @Override
                         public void reportVerbose(@NonNull Function0<String> function0) {
-                            mLogger.verbose(function0.invoke());
+                            getLogger().verbose(function0.invoke());
                         }
 
                         @Override
@@ -165,7 +164,7 @@ public class IncrementalKotlinCompiler extends Task {
     }
 
     private List<File> getPlugins() {
-        File pluginDir = new File(mProject.getBuildDirectory(), "plugins");
+        File pluginDir = new File(getProject().getBuildDirectory(), "plugins");
         File[] children = pluginDir.listFiles(c -> c.getName().endsWith(".jar"));
 
         if (children == null) {
@@ -294,17 +293,17 @@ public class IncrementalKotlinCompiler extends Task {
             switch (severity) {
                 case ERROR:
                     mHasErrors = true;
-                    mLogger.error(diagnostic);
+                    getLogger().error(diagnostic);
                     break;
                 case STRONG_WARNING:
                 case WARNING:
-                    mLogger.warning(diagnostic);
+                    getLogger().warning(diagnostic);
                     break;
                 case INFO:
-                    mLogger.info(diagnostic);
+                    getLogger().info(diagnostic);
                     break;
                 default:
-                    mLogger.debug(diagnostic);
+                    getLogger().debug(diagnostic);
             }
         }
     }

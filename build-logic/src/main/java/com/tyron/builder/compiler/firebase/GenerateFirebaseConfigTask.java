@@ -7,6 +7,7 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.AndroidProject;
 
 import org.apache.commons.io.FileUtils;
 import org.json.JSONArray;
@@ -22,24 +23,24 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-public class GenerateFirebaseConfigTask extends Task {
+public class GenerateFirebaseConfigTask extends Task<AndroidProject> {
 
     private static final String TAG = GenerateFirebaseConfigTask.class.getSimpleName();
+
+    public GenerateFirebaseConfigTask(AndroidProject project, ILogger logger) {
+        super(project, logger);
+    }
 
     @Override
     public String getName() {
         return TAG;
     }
 
-    private Project mProject;
-    private ILogger mLogger;
     private File mConfigFile;
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mProject = project;
-        mLogger = logger;
-        mConfigFile = new File(project.mRoot, "app/google-services.json");
+    public void prepare(BuildType type) throws IOException {
+        mConfigFile = new File(getProject().getRootFile(), "app/google-services.json");
     }
 
     /**
@@ -50,13 +51,13 @@ public class GenerateFirebaseConfigTask extends Task {
     @Override
     public void run() throws IOException, CompilationFailedException {
         if (!mConfigFile.exists()) {
-            mLogger.debug("No google-services.json found.");
+            getLogger().debug("No google-services.json found.");
             return;
         }
 
         String contents = FileUtils.readFileToString(mConfigFile, Charset.defaultCharset());
         try {
-            File xmlDirectory = new File(mProject.getResourceDirectory(), "values");
+            File xmlDirectory = new File(getProject().getAndroidResourcesDirectory(), "values");
             if (!xmlDirectory.exists() && !xmlDirectory.mkdirs()) {
                 throw new IOException("Unable to create xml folder");
             }
@@ -66,10 +67,10 @@ public class GenerateFirebaseConfigTask extends Task {
                 throw new IOException("Unable to create secrets.xml file");
             }
 
-            if (doGenerate(contents, mProject.getPackageName(), secretsFile)) {
+            if (doGenerate(contents, getProject().getPackageName(), secretsFile)) {
                 return;
             }
-            throw new CompilationFailedException("Unable to find " + mProject.getPackageName() +
+            throw new CompilationFailedException("Unable to find " + getProject().getPackageName() +
                     " in google-services.json");
         } catch (JSONException e) {
             throw new CompilationFailedException("Failed to parse google-services.json: " +

@@ -11,13 +11,14 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.AndroidProject;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class PackageTask extends Task {
+public class PackageTask extends Task<AndroidProject> {
 
     /**
      * List of extra dex files not including the main dex file
@@ -39,10 +40,11 @@ public class PackageTask extends Task {
      * The output apk file
      */
     private File mApk;
-
-    private Project mProject;
-    private ILogger mLogger;
     private BuildType mBuildType;
+
+    public PackageTask(AndroidProject project, ILogger logger) {
+        super(project, logger);
+    }
 
     @Override
     public String getName() {
@@ -50,12 +52,10 @@ public class PackageTask extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mProject = project;
-        mLogger = logger;
+    public void prepare(BuildType type) throws IOException {
         mBuildType = type;
 
-        File mBinDir = new File(project.getBuildDirectory(), "bin");
+        File mBinDir = new File(getProject().getBuildDirectory(), "bin");
 
         mApk = new File(mBinDir, "generated.apk");
         mDexFile = new File(mBinDir, "classes.dex");
@@ -72,9 +72,9 @@ public class PackageTask extends Task {
             }
         }
 
-        mLibraries.addAll(project.getLibraries());
+        mLibraries.addAll(getProject().getLibraries());
 
-        logger.debug("Packaging APK.");
+        getLogger().debug("Packaging APK.");
     }
 
     @Override
@@ -98,14 +98,14 @@ public class PackageTask extends Task {
                 builder.addResourcesFromJar(library);
             }
 
-            if (mProject.getNativeLibsDirectory().exists()) {
-                builder.addNativeLibraries(mProject.getNativeLibsDirectory());
+            if (getProject().getNativeLibrariesDirectory().exists()) {
+                builder.addNativeLibraries(getProject().getNativeLibrariesDirectory());
             }
 
             if (mBuildType == BuildType.DEBUG) {
                 builder.setDebugMode(true);
                 // For debug mode, dex files are not merged to save up compile time
-                for (File it : mProject.getLibraries()) {
+                for (File it : getProject().getLibraries()) {
                     File parent = it.getParentFile();
                     if (parent != null) {
                         File[] dexFiles = parent.listFiles(c -> c.getName().endsWith(".dex"));

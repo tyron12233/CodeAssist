@@ -2,16 +2,12 @@ package com.tyron.code.ui.editor.language.xml;
 
 import android.graphics.Color;
 import android.os.Handler;
-import android.util.Log;
 
 import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
-import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
-import com.tyron.builder.log.ILogger;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.completion.provider.CompletionEngine;
@@ -19,7 +15,6 @@ import com.tyron.completion.provider.CompletionEngine;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Token;
-import org.openjdk.javax.tools.Diagnostic;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -27,8 +22,6 @@ import java.util.concurrent.Executors;
 
 import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
 import io.github.rosemoe.sora.data.Span;
-import io.github.rosemoe.sora.text.CharPosition;
-import io.github.rosemoe.sora.text.Indexer;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.text.TextAnalyzer;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -173,7 +166,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 						project.getFileManager().save(mEditor.getCurrentFile(), mEditor.getText().toString());
 						Task task = new IncrementalAapt2Task();
 						try {
-							task.prepare(project, ILogger.EMPTY, BuildType.DEBUG);
+							task.prepare(BuildType.DEBUG);
 							task.run();
 						} catch (IOException | CompilationFailedException e) {
 							e.printStackTrace();
