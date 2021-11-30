@@ -67,8 +67,6 @@ public class IncrementalJavaTask extends Task<JavaProject> {
             throw new IOException("Unable to create output directory");
         }
 
-        getProject().clear();
-
         mFilesToCompile = new ArrayList<>();
         mClassCache = getProject().getUserData(CACHE_KEY);
         mJavaFiles = new ArrayList<>(getProject().getJavaFiles().values());
