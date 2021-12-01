@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
+import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.common.util.StringSearch;
@@ -26,6 +27,11 @@ public class MockAndroidProject extends MockJavaProject implements AndroidProjec
 
     public MockAndroidProject(File rootDir, FileManager fileManager) {
         super(rootDir, fileManager);
+    }
+
+    @Override
+    public ProjectSettings getSettings() {
+        return new MockProjectSettings();
     }
 
     @Override
