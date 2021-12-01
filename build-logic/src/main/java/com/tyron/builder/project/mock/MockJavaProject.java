@@ -1,8 +1,9 @@
-package com.tyron.builder.project.impl;
+package com.tyron.builder.project.mock;
 
 import androidx.annotation.NonNull;
 
 import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.JavaProject;
 import com.tyron.builder.project.api.Module;
 import com.tyron.common.util.StringSearch;
@@ -26,14 +27,16 @@ import java.util.Map;
  */
 public class MockJavaProject implements JavaProject {
 
+    private final KeyFMap mDataMap = KeyFMap.EMPTY_MAP;
+    private final Map<String, File> mJavaFiles = new HashMap<>();
+
+    private final FileManager mFileManager;
     private final File mRootDir;
     private File mLambdaStubsJarFile;
     private File mBootstrapJarFile;
-    private final Map<String, File> mJavaFiles = new HashMap<>();
-    private final KeyFMap mDataMap = KeyFMap.EMPTY_MAP;
-
-    public MockJavaProject(File rootDir) {
+    public MockJavaProject(File rootDir, FileManager fileManager) {
         mRootDir = rootDir;
+        mFileManager = fileManager;
     }
 
     @NonNull
@@ -101,6 +104,11 @@ public class MockJavaProject implements JavaProject {
     @Override
     public ProjectSettings getSettings() {
         return null;
+    }
+
+    @Override
+    public FileManager getFileManager() {
+        return mFileManager;
     }
 
     @Override

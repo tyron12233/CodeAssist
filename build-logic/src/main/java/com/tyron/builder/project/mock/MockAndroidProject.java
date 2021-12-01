@@ -1,4 +1,4 @@
-package com.tyron.builder.project.impl;
+package com.tyron.builder.project.mock;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -7,6 +7,7 @@ import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.FileManager;
 import com.tyron.common.util.StringSearch;
 
 import java.io.File;
@@ -23,8 +24,8 @@ public class MockAndroidProject extends MockJavaProject implements AndroidProjec
 
     private ManifestData mManifestData;
 
-    public MockAndroidProject(File rootDir) {
-        super(rootDir);
+    public MockAndroidProject(File rootDir, FileManager fileManager) {
+        super(rootDir, fileManager);
     }
 
     @Override

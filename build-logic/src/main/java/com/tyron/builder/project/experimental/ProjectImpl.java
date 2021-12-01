@@ -1,21 +1,15 @@
-package com.tyron.builder.project.impl;
+package com.tyron.builder.project.experimental;
 
-import static com.tyron.builder.project.CommonProjectKeys.ASSETS_DIR_KEY;
 import static com.tyron.builder.project.CommonProjectKeys.CONFIG_FILE_KEY;
-import static com.tyron.builder.project.CommonProjectKeys.MANIFEST_DATA_KEY;
-import static com.tyron.builder.project.CommonProjectKeys.MANIFEST_FILE_KEY;
-import static com.tyron.builder.project.CommonProjectKeys.NATIVE_LIBS_DIR_KEY;
-import static com.tyron.builder.project.CommonProjectKeys.ROOT_DIR_KEY;
 
 import androidx.annotation.Nullable;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.api.Project;
-import com.tyron.common.util.FileUtilsEx;
+import com.tyron.builder.project.impl.FileManagerImpl;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
