@@ -272,18 +272,26 @@ public class MainFragment extends Fragment {
         mProjectManager = ProjectManager.getInstance();
         logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
         mFilesViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
+
         // If the user has changed projects, clear the current opened files
         if (!mProject.equals(mProjectManager.getCurrentProject())) {
             mFilesViewModel.setFiles(new ArrayList<>());
         }
-        mFilesViewModel.getFiles().observe(getViewLifecycleOwner(),
-                files -> {
-                    mAdapter.submitList(files);
-                    mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
-                });
-        mFilesViewModel.currentPosition.observe(getViewLifecycleOwner(), mPager::setCurrentItem);
-        mFilesViewModel.isIndexing().observe(getViewLifecycleOwner(),
-                indexing -> mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE));
+        mFilesViewModel.getFiles().observe(getViewLifecycleOwner(), files -> {
+            mAdapter.submitList(files);
+            mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
+        });
+        mFilesViewModel.currentPosition.observe(getViewLifecycleOwner(), item -> {
+            if (mRoot.isOpen()) {
+                mRoot.closeDrawer(GravityCompat.START);
+            }
+            mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+            mPager.setCurrentItem(item);
+        });
+        mFilesViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> {
+            mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
+            CompletionEngine.setIndexing(indexing);
+        });
         mFilesViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
         return mRoot;
     }
@@ -504,7 +512,9 @@ public class MainFragment extends Fragment {
 
     /**
      * Tries to open a file and show the given line and column
+     * @deprecated Use MainViewModel#openFile instead
      */
+    @Deprecated
     public void openFile(File file, int lineNumber, int column) {
         if (!LanguageManager.getInstance().supports(file)) {
             return;

@@ -6,6 +6,9 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
+import com.tyron.builder.project.api.Project;
+import com.tyron.code.ui.editor.language.LanguageManager;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -73,10 +76,12 @@ public class MainViewModel extends ViewModel {
         if (files == null) {
             return null;
         }
+
         Integer currentPos = currentPosition.getValue();
         if (currentPos == null) {
             return null;
         }
+
         if (files.size() - 1 < currentPos) {
             return null;
         }
@@ -95,13 +100,36 @@ public class MainViewModel extends ViewModel {
         mFiles.setValue(files);
     }
 
+
+    /**
+     * Opens this file to the editor
+     * @param file The fle to be opened
+     * @return whether the operation was successful
+     */
+    public boolean openFile(File file) {
+        if (!LanguageManager.getInstance().supports(file)) {
+            return false;
+        }
+
+        if (!file.exists()) {
+            return false;
+        }
+
+        int index = getFiles().getValue().indexOf(file);
+        if (index >= 0) {
+            updateCurrentPosition(index);
+        }
+
+        addFile(file);
+        return true;
+    }
+
     public void addFile(File file) {
         List<File> files = getFiles().getValue();
         if (files == null) {
             files = new ArrayList<>();
         }
         files.add(file);
-
         mFiles.setValue(files);
         updateCurrentPosition(files.indexOf(file));
     }
@@ -113,5 +141,9 @@ public class MainViewModel extends ViewModel {
         }
         files.remove(file);
         mFiles.setValue(files);
+    }
+
+    public void initializeProject(Project project) {
+        setIndexing(true);
     }
 }
