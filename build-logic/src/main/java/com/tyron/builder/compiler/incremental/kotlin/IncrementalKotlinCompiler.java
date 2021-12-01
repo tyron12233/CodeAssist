@@ -1,20 +1,16 @@
 package com.tyron.builder.compiler.incremental.kotlin;
 
 import android.text.TextUtils;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.builder.BuildModule;
+import com.google.common.base.Throwables;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.builder.project.api.AndroidProject;
-import com.tyron.builder.project.api.KotlinProject;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.build.report.ICReporterBase;
@@ -108,7 +104,7 @@ public class IncrementalKotlinCompiler extends Task<AndroidProject> {
             args.setJavaSourceRoots(javaSourceRoots.stream()
                     .map(File::getAbsolutePath)
                     .toArray(String[]::new));
-            args.setKotlinHome(mKotlinHome.getAbsolutePath());
+           // args.setKotlinHome(mKotlinHome.getAbsolutePath());
             args.setDestination(mClassOutput.getAbsolutePath());
             args.setPluginClasspaths(getPlugins().stream()
                     .map(File::getAbsolutePath)
@@ -132,11 +128,10 @@ public class IncrementalKotlinCompiler extends Task<AndroidProject> {
                         public void reportCompileIteration(boolean incremental,
                                                            @NonNull Collection<? extends File> sources,
                                                            @NonNull ExitCode exitCode) {
-                            Log.d("IC", "source files: " + sources);
                         }
                     });
         } catch (Exception e) {
-            throw new CompilationFailedException(Log.getStackTraceString(e));
+            throw new CompilationFailedException(Throwables.getStackTraceAsString(e));
         }
 
         if (mCollector.hasErrors()) {
