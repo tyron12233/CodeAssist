@@ -4,9 +4,9 @@ import com.tyron.builder.parser.ModuleParser;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.api.ModuleManager;
-import com.tyron.builder.project.impl.AndroidModuleManager;
+import com.tyron.builder.project.experimental.AndroidModuleManager;
 import com.tyron.builder.project.impl.FileManagerImpl;
-import com.tyron.builder.project.impl.ProjectImpl;
+import com.tyron.builder.project.experimental.ProjectImpl;
 
 import org.apache.commons.io.FileUtils;
 import org.json.JSONArray;

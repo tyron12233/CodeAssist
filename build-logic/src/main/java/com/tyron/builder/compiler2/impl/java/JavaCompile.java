@@ -2,7 +2,7 @@ package com.tyron.builder.compiler2.impl.java;
 
 import com.tyron.builder.compiler2.api.Action;
 import com.tyron.builder.compiler2.api.Task;
-import com.tyron.builder.project.impl.JavaModule;
+import com.tyron.builder.project.experimental.JavaModule;
 
 /**
  * Compiles Java source files.

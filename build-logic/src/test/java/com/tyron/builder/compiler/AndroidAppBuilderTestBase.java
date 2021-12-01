@@ -1,7 +1,8 @@
 package com.tyron.builder.compiler;
 
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
-import com.tyron.builder.project.impl.MockAndroidProject;
+import com.tyron.builder.project.mock.MockAndroidProject;
+import com.tyron.builder.project.mock.MockFileManager;
 
 import org.junit.Before;
 
@@ -9,6 +10,7 @@ import java.io.File;
 
 public class AndroidAppBuilderTestBase {
 
+    protected MockFileManager mFileManager;
     protected MockAndroidProject mProject;
     protected File mResourcesDir;
 
@@ -16,7 +18,9 @@ public class AndroidAppBuilderTestBase {
     public void setup() throws Exception {
         mResourcesDir = TestUtil.getResourcesDirectory();
         File projectDir = new File(mResourcesDir, "TestProject");
-        mProject = new MockAndroidProject(projectDir);
+
+        mFileManager = new MockFileManager(projectDir);
+        mProject = new MockAndroidProject(projectDir, mFileManager);
         mProject.setLambdaStubsJarFile(new File(mResourcesDir, "bootstraps/core-lambda-stubs.jar"));
         mProject.setBootstrapFile(new File(mResourcesDir, "bootstraps/rt.jar"));
 

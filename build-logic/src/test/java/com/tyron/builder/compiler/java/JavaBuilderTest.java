@@ -10,7 +10,8 @@ import com.tyron.builder.compiler.dex.JavaD8Task;
 import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.api.JavaProject;
-import com.tyron.builder.project.impl.MockAndroidProject;
+import com.tyron.builder.project.mock.MockAndroidProject;
+import com.tyron.builder.project.mock.MockFileManager;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -22,13 +23,18 @@ import java.util.List;
 public class JavaBuilderTest {
 
     private File mResourcesDirectory;
+    private MockFileManager mFileManager;
     private MockAndroidProject mJavaProject;
 
     @Before
     public void setup() throws Exception {
         mResourcesDirectory = TestUtil.getResourcesDirectory();
-        mJavaProject = new MockAndroidProject(new File(mResourcesDirectory, "TestProject"));
-        mJavaProject.setLambdaStubsJarFile(new File(mResourcesDirectory, "bootstraps/core-lambda-stubs.jar"));
+
+        File root = new File(mResourcesDirectory, "TestProject");
+        mFileManager = new MockFileManager(root);
+        mJavaProject = new MockAndroidProject(root, mFileManager);
+        mJavaProject.setLambdaStubsJarFile(new File(mResourcesDirectory,
+                "bootstraps/core-lambda-stubs.jar"));
         mJavaProject.setBootstrapFile(new File(mResourcesDirectory, "bootstraps/rt.jar"));
     }
 
