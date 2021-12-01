@@ -13,4 +13,6 @@ public interface KotlinProject extends Project {
 
     @Nullable
     File getKotlinFile(String packageName);
+
+    void addKotlinFile(File file);
 }

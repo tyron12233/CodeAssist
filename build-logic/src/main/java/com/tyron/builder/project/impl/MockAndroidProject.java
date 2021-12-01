@@ -3,16 +3,20 @@ package com.tyron.builder.project.impl;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.common.util.StringSearch;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 public class MockAndroidProject extends MockJavaProject implements AndroidProject {
+
+    private final Map<String, File> mKotlinFiles = new HashMap<>();
 
     private int mTargetSdk = 31;
     private int mMinSdk = 21;
@@ -79,12 +83,17 @@ public class MockAndroidProject extends MockJavaProject implements AndroidProjec
     @NonNull
     @Override
     public Map<String, File> getKotlinFiles() {
-        return Collections.emptyMap();
+        return ImmutableMap.copyOf(mKotlinFiles);
     }
 
     @Nullable
     @Override
     public File getKotlinFile(String packageName) {
-        return null;
+        return mKotlinFiles.get(packageName);
+    }
+
+    @Override
+    public void addKotlinFile(File file) {
+        mKotlinFiles.put(StringSearch.packageName(file), file);
     }
 }
