@@ -1,6 +1,7 @@
 package com.tyron.completion;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.tyron.completion.TestUtil.*;
 
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.AndroidProject;
@@ -22,8 +23,6 @@ import java.util.Set;
 
 @RunWith(RobolectricTestRunner.class)
 public class TestDeleteFile {
-
-    private static final String MODULE_NAME = "completion";
 
     private File mMainClass;
     private File mClassToDelete;
@@ -76,13 +75,5 @@ public class TestDeleteFile {
     private JavaCompilerService getNewService(Set<File> paths) {
         return new JavaCompilerService(mProject, paths,
                 Collections.emptySet(), Collections.emptySet());
-    }
-
-    public static String resolveBasePath() {
-        final String path = "./" + MODULE_NAME + "/src/test/resources";
-        if (Arrays.asList(Objects.requireNonNull(new File("./").list())).contains(MODULE_NAME)) {
-            return path;
-        }
-        return "../" + path;
     }
 }

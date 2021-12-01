@@ -352,7 +352,7 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
     public ParseTask parse(Path file, String contents) {
-        SourceFileObject object = new SourceFileObject(file, contents, Instant.now(), mProject);
+        SourceFileObject object = new SourceFileObject(file, contents, Instant.now());
         Parser parser = Parser.parseJavaFileObject(mProject, object);
         return new ParseTask(parser.task, parser.root);
     }

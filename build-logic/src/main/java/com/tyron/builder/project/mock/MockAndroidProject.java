@@ -32,7 +32,9 @@ public class MockAndroidProject extends MockJavaProject implements AndroidProjec
     public void open() throws IOException {
         super.open();
 
-        mManifestData = AndroidManifestParser.parse(getManifestFile());
+        if (getManifestFile().exists()) {
+            mManifestData = AndroidManifestParser.parse(getManifestFile());
+        }
     }
 
     @Override
