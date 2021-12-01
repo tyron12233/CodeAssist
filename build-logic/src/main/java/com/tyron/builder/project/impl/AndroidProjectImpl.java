@@ -42,20 +42,29 @@ public class AndroidProjectImpl extends JavaProjectImpl implements AndroidProjec
         super.index();
 
         Consumer<File> kotlinConsumer = this::addKotlinFile;
-        FileUtils.iterateFiles(getJavaDirectory(),
-                FileFilterUtils.suffixFileFilter(".kt"),
-                TrueFileFilter.INSTANCE
-        ).forEachRemaining(kotlinConsumer);
-        FileUtils.iterateFiles(getKotlinDirectory(),
-                FileFilterUtils.suffixFileFilter(".kt"),
-                TrueFileFilter.INSTANCE
-        ).forEachRemaining(kotlinConsumer);
+
+        if (getJavaDirectory().exists()) {
+            FileUtils.iterateFiles(getJavaDirectory(),
+                    FileFilterUtils.suffixFileFilter(".kt"),
+                    TrueFileFilter.INSTANCE
+            ).forEachRemaining(kotlinConsumer);
+        }
+
+        if (getKotlinDirectory().exists()) {
+            FileUtils.iterateFiles(getKotlinDirectory(),
+                    FileFilterUtils.suffixFileFilter(".kt"),
+                    TrueFileFilter.INSTANCE
+            ).forEachRemaining(kotlinConsumer);
+        }
 
         // R.java files
-        FileUtils.iterateFiles(new File(getBuildDirectory(), "gen"),
-                FileFilterUtils.suffixFileFilter(".java"),
-                TrueFileFilter.INSTANCE
-        ).forEachRemaining(this::addJavaFile);
+        File gen = new File(getBuildDirectory(), "gen");
+        if (gen.exists()) {
+            FileUtils.iterateFiles(gen,
+                    FileFilterUtils.suffixFileFilter(".java"),
+                    TrueFileFilter.INSTANCE
+            ).forEachRemaining(this::addJavaFile);
+        }
     }
 
     @Override
