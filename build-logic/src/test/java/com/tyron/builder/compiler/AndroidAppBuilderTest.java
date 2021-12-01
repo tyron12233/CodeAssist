@@ -7,12 +7,10 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.impl.MockAndroidProject;
 
 import org.apache.commons.io.FileUtils;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
-import java.io.IOException;
 
 public class AndroidAppBuilderTest {
 
@@ -21,7 +19,7 @@ public class AndroidAppBuilderTest {
 
     @Before
     public void setup() throws Exception {
-        mResourcesDir = ProjectUtil.getResourcesDirectory();
+        mResourcesDir = TestUtil.getResourcesDirectory();
         File projectDir = new File(mResourcesDir, "TestProject");
         mProject = new MockAndroidProject(projectDir);
         mProject.setLambdaStubsJarFile(new File(mResourcesDir, "bootstraps/core-lambda-stubs.jar"));

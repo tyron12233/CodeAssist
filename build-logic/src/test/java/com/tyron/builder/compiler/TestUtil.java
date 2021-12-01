@@ -4,7 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Paths;
 
-public class ProjectUtil {
+public class TestUtil {
 
     public static File getResourcesDirectory() throws IOException {
         File currentDirFile = Paths.get(".").toFile();

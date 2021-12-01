@@ -4,7 +4,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.JavaBuilder;
-import com.tyron.builder.compiler.ProjectUtil;
+import com.tyron.builder.compiler.TestUtil;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.dex.JavaD8Task;
 import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
@@ -17,8 +17,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Paths;
 import java.util.List;
 
 public class JavaBuilderTest {
@@ -28,7 +26,7 @@ public class JavaBuilderTest {
 
     @Before
     public void setup() throws Exception {
-        mResourcesDirectory = ProjectUtil.getResourcesDirectory();
+        mResourcesDirectory = TestUtil.getResourcesDirectory();
         mJavaProject = new MockAndroidProject(new File(mResourcesDirectory, "TestProject"));
         mJavaProject.setLambdaStubsJarFile(new File(mResourcesDirectory, "bootstraps/core-lambda-stubs.jar"));
         mJavaProject.setBootstrapFile(new File(mResourcesDirectory, "bootstraps/rt.jar"));
