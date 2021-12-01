@@ -142,6 +142,11 @@ public class AndroidProjectImpl extends JavaProjectImpl implements AndroidProjec
 
     @Override
     public void addKotlinFile(File file) {
-        mKotlinFiles.put(StringSearch.packageName(file), file);
+        String packageName = StringSearch.packageName(file);
+        if (packageName == null) {
+            packageName = "";
+        }
+        String fqn = packageName + "." + file.getName().replace(".kt", "");
+        mKotlinFiles.put(fqn, file);
     }
 }

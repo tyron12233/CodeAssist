@@ -14,20 +14,26 @@ import org.apache.commons.io.filefilter.TrueFileFilter;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 public class JavaProjectImpl extends ProjectImpl implements JavaProject {
 
+    // Map of fully qualified names and the jar they are contained in
+    private final Map<String, File> mClassFiles;
     private final Map<String, File> mJavaFiles;
     private final Set<File> mLibraries;
 
     public JavaProjectImpl(File root) {
         super(root);
         mJavaFiles = new HashMap<>();
+        mClassFiles = new HashMap<>();
         mLibraries = new HashSet<>();
     }
 
@@ -54,12 +60,50 @@ public class JavaProjectImpl extends ProjectImpl implements JavaProject {
         if (packageName == null) {
             packageName = "";
         }
-        mJavaFiles.put(packageName, javaFile);
+        mJavaFiles.put(packageName + "." + javaFile.getName().replace(".java", ""),
+                javaFile);
     }
 
     @Override
     public List<File> getLibraries() {
-        return ImmutableList.copyOf(mLibraries);
+        return ImmutableList.copyOf(mClassFiles.values());
+    }
+
+    @Override
+    public void addLibrary(@NonNull File jar) {
+        mLibraries.add(jar);
+        try {
+            putJar(jar);
+        } catch (IOException e) {
+            // ignored
+        }
+    }
+
+    private void putJar(File file) throws IOException {
+        if (file == null) {
+            return;
+        }
+        try (JarFile jar = new JarFile(file)) {
+            Enumeration<JarEntry> entries = jar.entries();
+            while (entries.hasMoreElements()) {
+                JarEntry entry = entries.nextElement();
+
+                if (!entry.getName().endsWith(".class")) {
+                    continue;
+                }
+
+                // We only want top level classes, if it contains $ then
+                // its an inner class, we ignore it
+                if (entry.getName().contains("$")) {
+                    continue;
+                }
+
+                String packageName = entry.getName().replace("/", ".")
+                        .substring(0, entry.getName().length() - ".class".length());
+
+                mClassFiles.put(packageName, file);
+            }
+        }
     }
 
     @NonNull
