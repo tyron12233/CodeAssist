@@ -58,7 +58,7 @@ public final class JDOMUtil {
                 if (factory != null) {
                     return factory;
                 } else {
-                    String property = System.setProperty("javax.xml.stream.XMLInputFactory", "com.sun.xml.internal.stream.XMLInputFactoryImpl");
+                    String property = System.setProperty("javax.xml.stream.XMLInputFactory", "org.openjdk.com.sun.xml.internal.stream.XMLInputFactoryImpl");
 
                     try {
                         factory = XMLInputFactory.newFactory();
@@ -98,25 +98,25 @@ public final class JDOMUtil {
 
 
     private static Element loadUsingStaX( Reader reader,  SafeJdomFactory factory) throws JDOMException, IOException {
+        Element var3;
+        try {
+            XMLStreamReader xmlStreamReader = getXmlInputFactory().createXMLStreamReader(reader);
 
-//        Element var3;
-//        try {
-//            XMLStreamReader xmlStreamReader = getXmlInputFactory().createXMLStreamReader(reader);
-//
-//            try {
-//                var3 = SafeStAXStreamBuilder.build(xmlStreamReader, true, factory == null ? SafeStAXStreamBuilder.FACTORY : factory);
-//            } finally {
-//                xmlStreamReader.close();
-//            }
-//        } catch (XMLStreamException var13) {
-//            throw new JDOMException(var13.getMessage(), var13);
-//        } finally {
-//            reader.close();
-//        }
-//
-//        if (var3 == null) { ;
-//        }
-        return null;
+            
+            try {
+                var3 = SafeStAXStreamBuilderWrapper.build(xmlStreamReader,
+                        true, true,
+                        factory == null ? SafeStAXStreamBuilderWrapper.FACTORY : factory);
+            } finally {
+                xmlStreamReader.close();
+            }
+        } catch (XMLStreamException var13) {
+            throw new JDOMException(var13.getMessage(), var13);
+        } finally {
+            reader.close();
+        }
+
+        return var3;
     }
 
    // @Internal

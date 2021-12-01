@@ -140,7 +140,7 @@ public abstract class XMLInputFactory {
   public static final String ALLOCATOR=
     "javax.xml.stream.allocator";
 
-  static final String DEFAULIMPL = "com.sun.xml.internal.stream.XMLInputFactoryImpl";
+  static final String DEFAULIMPL = "org.openjdk.com.sun.xml.internal.stream.XMLInputFactoryImpl";
 
   protected XMLInputFactory(){}
 
