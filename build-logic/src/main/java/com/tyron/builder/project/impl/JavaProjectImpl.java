@@ -58,11 +58,13 @@ public class JavaProjectImpl extends ProjectImpl implements JavaProject {
     @Override
     public void addJavaFile(@NonNull File javaFile) {
         String packageName = StringSearch.packageName(javaFile);
+        String className;
         if (packageName == null) {
-            packageName = "";
+            className = javaFile.getName().replace(".java", "");
+        } else {
+            className = packageName + "." + javaFile.getName().replace(".java", "");
         }
-        mJavaFiles.put(packageName + "." + javaFile.getName().replace(".java", ""),
-                javaFile);
+        mJavaFiles.put(className, javaFile);
     }
 
     @Override

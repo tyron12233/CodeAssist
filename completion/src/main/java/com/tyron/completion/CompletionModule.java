@@ -4,6 +4,8 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.tyron.builder.BuildModule;
 import com.tyron.common.util.Decompress;
 
@@ -56,5 +58,15 @@ public class CompletionModule {
             }
         }
         return sLambdaStubs;
+    }
+
+    @VisibleForTesting
+    public static void setLambdaStubs(File file) {
+        sLambdaStubs = file;
+    }
+
+    @VisibleForTesting
+    public static void setAndroidJar(File file) {
+        sAndroidJar = file;
     }
 }

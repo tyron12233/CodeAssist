@@ -57,7 +57,14 @@ public class MockJavaProject implements JavaProject {
 
     @Override
     public void addJavaFile(@NonNull File javaFile) {
-        mJavaFiles.put(StringSearch.packageName(javaFile), javaFile);
+        String packageName = StringSearch.packageName(javaFile);
+        String className;
+        if (packageName == null) {
+            className = javaFile.getName().replace(".java", "");
+        } else {
+            className = packageName + "." + javaFile.getName().replace(".java", "");
+        }
+        mJavaFiles.put(className, javaFile);
     }
 
     @Override
