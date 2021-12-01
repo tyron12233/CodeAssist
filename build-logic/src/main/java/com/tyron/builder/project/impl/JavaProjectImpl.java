@@ -75,7 +75,7 @@ public class JavaProjectImpl extends ProjectImpl implements JavaProject {
 
     @Override
     public List<File> getLibraries() {
-        return ImmutableList.copyOf(mClassFiles.values());
+        return ImmutableList.copyOf(mLibraries);
     }
 
     @Override
