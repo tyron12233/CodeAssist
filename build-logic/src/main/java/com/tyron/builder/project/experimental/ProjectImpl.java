@@ -70,6 +70,11 @@ public class ProjectImpl implements Project {
     }
 
     @Override
+    public FileManager getFileManager() {
+        return null;
+    }
+
+    @Override
     public File getRootFile() {
         return mRoot;
     }
