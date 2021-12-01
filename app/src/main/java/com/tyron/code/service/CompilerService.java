@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 import com.tyron.builder.compiler.AndroidAppBuilder;
+import com.tyron.builder.compiler.AndroidAppBundleBuilder;
 import com.tyron.builder.compiler.ApkBuilder;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Builder;
@@ -213,6 +214,9 @@ public class CompilerService extends Service {
 
     private Builder<? extends Project> getBuilderForProject(Project project, BuildType type) {
         if (project instanceof AndroidProject) {
+            if (type == BuildType.AAB) {
+                return new AndroidAppBundleBuilder((AndroidProject) project, logger);
+            }
             return new AndroidAppBuilder((AndroidProject) project, logger);
         }
         return null;
