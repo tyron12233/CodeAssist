@@ -48,7 +48,6 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -200,7 +199,9 @@ public class CodeEditorFragment extends Fragment
             } catch (IOException e) {
                 text = "File does not exist: " + e.getMessage();
             }
-            project.getFileManager().openFileForSnapshot(mCurrentFile, text);
+            if (project != null) {
+                project.getFileManager().openFileForSnapshot(mCurrentFile, text);
+            }
             mEditor.setText(text);
         }
 
@@ -392,7 +393,7 @@ public class CodeEditorFragment extends Fragment
         if (mCurrentFile.exists()) {
             String oldContents = "";
             try {
-                oldContents = FileUtils.readFileToString(mCurrentFile, Charset.defaultCharset());
+                oldContents = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -400,10 +401,10 @@ public class CodeEditorFragment extends Fragment
                 return;
             }
 
-            Project currentProject = ProjectManager.getInstance().getCurrentProject();
-            if (currentProject != null) {
-//                currentProject.getFileManager()
-//                        .save(mCurrentFile, mEditor.getText().toString());
+            try {
+                FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString());
+            } catch (IOException e) {
+                // ignored
             }
         }
     }
