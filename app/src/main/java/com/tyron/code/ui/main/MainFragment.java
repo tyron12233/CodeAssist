@@ -407,7 +407,7 @@ public class MainFragment extends Fragment {
 
                     if (project != null) {
                         project.clear();
-                        openProject(project, true);
+                        openProject(project);
                     }
                 }
             } else if (item.getItemId() == R.id.action_build_debug) {
@@ -553,26 +553,18 @@ public class MainFragment extends Fragment {
      * @param file file to open
      */
     public void openFile(File file) {
-        openFile(file, 0, 0);
+        mFilesViewModel.openFile(file);
     }
 
     public void openProject(Project project) {
-        openProject(project, false);
-    }
-
-    public void openProject(Project proj, boolean downloadLibs) {
-
-//        if (!proj.isValidProject()) {
-//            ApplicationLoader.showToast("Invalid project directory: " + proj.mRoot);
-//            return;
-//        }
+        mProject = project;
 
         mFilesViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
 
         Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
         if (fragment instanceof TreeFileManagerFragment) {
-            ((TreeFileManagerFragment) fragment).setRoot(mProject.getRootFile());
+            ((TreeFileManagerFragment) fragment).setRoot(project.getRootFile());
         }
 
         Intent intent = new Intent(requireContext(), IndexService.class);
