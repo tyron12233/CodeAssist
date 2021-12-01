@@ -46,6 +46,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -150,31 +151,7 @@ public class CompletionProvider {
             return new CompletionList();
         }
         CompletionList list = compileAndComplete(file, contents.toString(), index);
-//		list.items.sort((item, item1) -> {
-//		    // workaround for class keyword always at the first completion for now.
-//
-//		    if (item.label.equals("class") || item1.label.equals("class")) {
-//		        if (item.label.equals(item1.label)) {
-//		            return 0;
-//                }
-//
-//                return 1;
-//            }
-//
-//            for (String priority : sPrioritizedPackages) {
-//                if (item.detail.startsWith(priority) && !item1.detail.startsWith(priority)) {
-//                    return -1;
-//                } else if (item1.detail.startsWith(priority) && !item.detail.startsWith(priority)) {
-//                    return 1;
-//                }
-//            }
-//
-//            if (TextUtils.isEmpty(item.detail)) {
-//                return String.CASE_INSENSITIVE_ORDER.compare(item.detail, item1.detail);
-//            } else {
-//                return String.CASE_INSENSITIVE_ORDER.compare(item.label, item1.label);
-//            }
-//        });
+		list.items.sort(Comparator.comparingInt(it -> it.label.length()));
 		//addTopLevelSnippets(task, list);
 		return list;
 	}
