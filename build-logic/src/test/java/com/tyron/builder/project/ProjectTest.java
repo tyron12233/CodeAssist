@@ -8,7 +8,7 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.api.Project;
 import com.tyron.builder.project.experimental.AndroidModule;
 import com.tyron.builder.project.impl.FileManagerImpl;
-import com.tyron.builder.project.experimental.ProjectImpl;
+import com.tyron.builder.project.impl.ProjectImpl;
 
 import org.json.JSONException;
 import org.junit.Before;

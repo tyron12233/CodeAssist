@@ -6,7 +6,7 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.api.ModuleManager;
 import com.tyron.builder.project.experimental.AndroidModuleManager;
 import com.tyron.builder.project.impl.FileManagerImpl;
-import com.tyron.builder.project.experimental.ProjectImpl;
+import com.tyron.builder.project.impl.ProjectImpl;
 
 import org.apache.commons.io.FileUtils;
 import org.json.JSONArray;

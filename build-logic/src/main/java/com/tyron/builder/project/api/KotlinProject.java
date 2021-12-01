@@ -11,6 +11,9 @@ public interface KotlinProject extends Project {
     @NonNull
     Map<String, File> getKotlinFiles();
 
+    @NonNull
+    File getKotlinDirectory();
+
     @Nullable
     File getKotlinFile(String packageName);
 

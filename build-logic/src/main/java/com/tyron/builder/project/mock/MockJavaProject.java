@@ -132,6 +132,11 @@ public class MockJavaProject implements JavaProject {
     }
 
     @Override
+    public void index() {
+
+    }
+
+    @Override
     public File getBuildDirectory() {
         return new File(getRootFile(), "app/build");
     }

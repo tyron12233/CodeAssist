@@ -48,7 +48,7 @@ public class MockFileManager implements FileManager {
         }
 
         try {
-            content = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
+             return Optional.of(FileUtils.readFileToString(file, StandardCharsets.UTF_8));
         } catch (IOException ignore) {
             // fall through
         }

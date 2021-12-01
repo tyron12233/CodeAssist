@@ -30,6 +30,8 @@ public interface Project extends UserDataHolderEx {
      */
     void clear();
 
+    void index();
+
     /**
      * @return The directory that this project can use to compile files
      */

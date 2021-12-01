@@ -1,6 +1,4 @@
-package com.tyron.builder.project.experimental;
-
-import static com.tyron.builder.project.CommonProjectKeys.CONFIG_FILE_KEY;
+package com.tyron.builder.project.impl;
 
 import androidx.annotation.Nullable;
 
@@ -9,7 +7,6 @@ import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.api.Project;
-import com.tyron.builder.project.impl.FileManagerImpl;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
@@ -32,18 +29,17 @@ public class ProjectImpl implements Project {
     private volatile KeyFMap myUserMap = KeyFMap.EMPTY_MAP;
     private final File mRoot;
     private ProjectSettings myProjectSettings;
-    private FileManager myFileManager;
+    private FileManager mFileManager;
 
     public ProjectImpl(File root) {
         mRoot = root;
-        putUserData(CONFIG_FILE_KEY, new File(root, "app_config.json"));
         mModules = new ArrayList<>();
-        myFileManager = new FileManagerImpl();
+        mFileManager = new FileManagerImpl(root);
     }
 
     @Override
     public void open() throws IOException {
-
+        myProjectSettings = new ProjectSettings(new File(getRootFile(), "app_config.json"));
     }
 
     @Override
@@ -52,13 +48,19 @@ public class ProjectImpl implements Project {
     }
 
     @Override
+    public void index() {
+
+    }
+
+    @Override
     public File getBuildDirectory() {
-        return null;
+        File custom = getPathSetting("build_directory");
+        if (custom.exists()) {
+            return custom;
+        }
+        return new File(getRootFile(), "app/build");
     }
 
-    public synchronized void addModule(Module module) {
-
-    }
     @Override
     public List<Module> getModules() {
         return ImmutableList.copyOf(mModules);
@@ -71,7 +73,7 @@ public class ProjectImpl implements Project {
 
     @Override
     public FileManager getFileManager() {
-        return null;
+        return mFileManager;
     }
 
     @Override
@@ -124,6 +126,11 @@ public class ProjectImpl implements Project {
                 return true;
             }
         }
+    }
+
+    protected File getPathSetting(String key) {
+        String path = getSettings().getString(key, "");
+        return new File(path);
     }
 
     private static final AtomicFieldUpdater<ProjectImpl, KeyFMap> updater = AtomicFieldUpdater.forFieldOfType(ProjectImpl.class, KeyFMap.class);
