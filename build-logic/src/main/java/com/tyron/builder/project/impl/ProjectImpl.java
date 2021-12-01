@@ -87,7 +87,8 @@ public class ProjectImpl implements Project {
     public <T> T getUserData(@NotNull Key<T> key) {
         T t = myUserMap.get(key);
         if (t == null && key instanceof KeyWithDefaultValue) {
-            return ((KeyWithDefaultValue<T>) key).getDefaultValue();
+            t = ((KeyWithDefaultValue<T>) key).getDefaultValue();
+            putUserData(key, t);
         }
         return t;
     }
