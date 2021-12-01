@@ -53,13 +53,10 @@ public class D8Task extends Task<JavaProject> {
 	public void compile() throws CompilationFailedException {
 		try {
 			getLogger().debug("Dexing libraries.");
-			long startTime = System.currentTimeMillis();
 			ensureDexedLibraries();
-			Log.d("D8Compiler", "Dexing libraries took " + (System.currentTimeMillis() - startTime) + " ms");
 
 			getLogger().debug("Merging dexes and source files");
 
-			startTime = System.currentTimeMillis();
 			List<Path> libraryDexes = getLibraryDexes();
 
 			D8Command command = D8Command.builder(new DexDiagnosticHandler(getLogger()))
@@ -72,8 +69,6 @@ public class D8Task extends Task<JavaProject> {
 					.build();
 			D8.run(command);
 
-			Log.d("D8Compiler", "Merging dex files took " + (System.currentTimeMillis() - startTime) + " ms");
-
 		} catch (com.android.tools.r8.CompilationFailedException e) {
 			throw new CompilationFailedException(e);
 		}
@@ -85,8 +80,6 @@ public class D8Task extends Task<JavaProject> {
 	 */
 	protected void ensureDexedLibraries() throws com.android.tools.r8.CompilationFailedException {
 		List<File> libraries = getProject().getLibraries();
-
-		Log.d(TAG, "Dexing libraries");
 
 		for (File lib : libraries) {
 			File parentFile = lib.getParentFile();

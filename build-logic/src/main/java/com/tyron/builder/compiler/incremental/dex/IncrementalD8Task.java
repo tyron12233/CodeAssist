@@ -164,8 +164,6 @@ public class IncrementalD8Task extends Task<AndroidProject> {
     }
 
     private void mergeRelease() throws com.android.tools.r8.CompilationFailedException {
-        getLogger().debug("Merging dex files using R8");
-
         File output = new File(getProject().getBuildDirectory(), "bin");
         D8Command command = D8Command.builder(diagnosticsHandler)
                 .addClasspathFiles(getProject().getLibraries().stream().map(File::toPath)
