@@ -6,6 +6,11 @@ import java.nio.file.Paths;
 
 public class TestUtil {
 
+    public static boolean isWindows() {
+        return System.getProperty("os.name", "")
+                .startsWith("Windows");
+    }
+
     public static File getResourcesDirectory() throws IOException {
         File currentDirFile = Paths.get(".").toFile();
         String helper = currentDirFile.getAbsolutePath();
