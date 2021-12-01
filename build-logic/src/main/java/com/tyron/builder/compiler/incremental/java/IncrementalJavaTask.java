@@ -4,7 +4,6 @@ import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
-import com.tyron.builder.compiler.java.JavaTask;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -70,7 +69,6 @@ public class IncrementalJavaTask extends Task<JavaProject> {
         mFilesToCompile = new ArrayList<>();
         mClassCache = getProject().getUserData(CACHE_KEY);
         mJavaFiles = new ArrayList<>(getProject().getJavaFiles().values());
-        mJavaFiles.addAll(JavaTask.getJavaFiles(new File(getProject().getBuildDirectory(), "gen")));
 
         for (Cache.Key<String> key : new HashSet<>(mClassCache.getKeys())) {
             if (!mJavaFiles.contains(key.file.toFile())) {
