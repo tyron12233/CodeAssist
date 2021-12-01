@@ -11,7 +11,6 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
-import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -57,7 +56,7 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        NestedScrollView mRoot = new NestedScrollView(requireContext());
+        FrameLayout mRoot = new FrameLayout(requireContext());
 
         mAdapter = new LogAdapter();
         mAdapter.setListener(diagnostic -> {
@@ -75,7 +74,7 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
         mRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         mRecyclerView.setAdapter(mAdapter);
         mRoot.addView(mRecyclerView,
-                new FrameLayout.LayoutParams(-1, -2));
+                new FrameLayout.LayoutParams(-1, -1));
         return mRoot;
     }
 
