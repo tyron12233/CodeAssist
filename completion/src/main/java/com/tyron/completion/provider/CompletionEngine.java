@@ -7,7 +7,7 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.JavaProject;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.model.CompletionList;
@@ -42,9 +42,11 @@ public class CompletionEngine {
     }
 
     @NonNull
-    public JavaCompilerService getCompiler(Project project) {
+    public JavaCompilerService getCompiler(JavaProject project) {
 
-        Set<File> paths = project.getFileManager().fileClasspath();
+        Set<File> paths = new HashSet<>();
+        paths.addAll(project.getJavaFiles().values());
+        paths.addAll(project.getLibraries());
 
         if (mProvider == null || changed(mCachedPaths, paths)) {
             mProvider = new JavaCompilerService(project, paths,
@@ -93,24 +95,22 @@ public class CompletionEngine {
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @SuppressLint("NewApi")
-    public void index(Project project, Runnable callback) {
-        if (!changed(mCachedPaths, project.getFileManager().fileClasspath())) {
+    public void index(JavaProject project, Runnable callback) {
+
+        Set<File> newSet = new HashSet<>();
+        newSet.addAll(project.getJavaFiles().values());
+        newSet.addAll(project.getLibraries());
+        if (!changed(mCachedPaths, newSet)) {
             setIndexing(false);
             handler.post(callback);
             return;
         }
 
         setIndexing(true);
-        project.clear();
-        project.getKotlinFiles();
-        project.getRJavaFiles();
-        project.getLibraries();
 
         JavaCompilerService compiler = getCompiler(project);
 
-        List<File> filesToIndex = new ArrayList<>();
-        filesToIndex.addAll(project.getJavaFiles().values());
-        filesToIndex.addAll(project.getRJavaFiles().values());
+        List<File> filesToIndex = new ArrayList<>(project.getJavaFiles().values());
 
         if (!filesToIndex.isEmpty()) {
             try (CompileTask task = compiler.compile(filesToIndex.stream()
@@ -127,7 +127,7 @@ public class CompletionEngine {
     }
 
     @NonNull
-    public synchronized CompletionList complete(Project project, File file, String contents, long cursor) throws InterruptedException {
+    public synchronized CompletionList complete(JavaProject project, File file, String contents, long cursor) throws InterruptedException {
         // Do not request for completion if we're indexing
         if (mIndexing) {
             return CompletionList.EMPTY;

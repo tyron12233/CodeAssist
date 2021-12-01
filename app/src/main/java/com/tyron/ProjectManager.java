@@ -9,7 +9,8 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Library;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.util.AndroidUtilities;
@@ -71,31 +72,51 @@ public class ProjectManager {
         mProjectOpenListeners.remove(listener);
     }
 
-    public void openProject(Project proj, boolean downloadLibs, TaskListener mListener, ILogger logger) {
+    public void openProject(Project project,
+                            boolean downloadLibs,
+                            TaskListener listener,
+                            ILogger logger) {
         Executors.newSingleThreadExecutor().execute(() -> {
-            try {
-                proj.open();
-                mCurrentProject = proj;
-
-                proj.getLibraries().clear();
-                if (downloadLibs) {
-                    downloadLibraries(proj, mListener, logger);
-                } else {
-                    checkLibraries(proj, Collections.emptySet());
-                }
-            } catch (IOException e) {
-                mListener.onComplete(false, "Unable to open project: " + e.getMessage());
-                return;
-            }
-            mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
-            //mCompletionEnvironment = CompletionEnvironment.newInstance(proj.getJavaFiles().values(), proj.getKotlinFiles().values(), proj.getLibraries());
-
-            mListener.onTaskStarted("Indexing");
-            CompletionEngine.getInstance().index(proj, () -> mListener.onComplete(true, "Index successful"));
+            doOpenProject(project, downloadLibs, listener, logger);
         });
     }
 
-    private void downloadLibraries(Project project, TaskListener mListener, ILogger logger) throws IOException {
+    private void doOpenProject(Project project,
+                               boolean downloadLibs,
+                               TaskListener mListener,
+                               ILogger logger) {
+        try {
+            project.open();
+        } catch (IOException e) {
+            mListener.onComplete(false, "Unable to open project: " + e.getMessage());
+            return;
+        }
+        project.index();
+
+        mCurrentProject = project;
+
+        if (project instanceof JavaProject) {
+            JavaProject javaProject = (JavaProject) project;
+            try {
+                if (downloadLibs) {
+                    downloadLibraries(javaProject, mListener, logger);
+                } else {
+                    checkLibraries(javaProject, Collections.emptySet());
+                }
+            } catch (IOException e) {
+                logger.error(e.getMessage());
+            }
+        }
+        mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
+
+        if (project instanceof JavaProject) {
+            mListener.onTaskStarted("Indexing");
+            CompletionEngine.getInstance().index((JavaProject) project, () ->
+                    mListener.onComplete(true, "Index successful"));
+        }
+    }
+
+    private void downloadLibraries(JavaProject project, TaskListener mListener, ILogger logger) throws IOException {
         mListener.onTaskStarted("Resolving dependencies");
         // this is the existing libraries from app/libs
         Set<Dependency> libs = new HashSet<>();
@@ -103,7 +124,8 @@ public class ProjectManager {
         // dependencies parsed from the build.gradle file
         Set<Dependency> dependencies = new HashSet<>();
         try {
-            dependencies.addAll(DependencyUtils.parseGradle(new File(project.mRoot, "app/build.gradle")));
+            dependencies.addAll(DependencyUtils.parseGradle(new File(project.getRootFile(),
+                    "app/build.gradle")));
         } catch (Exception exception) {
             //TODO: handle parse error
             mListener.onComplete(false, exception.getMessage());
@@ -126,11 +148,12 @@ public class ProjectManager {
         checkLibraries(project, dependencies);
     }
 
-    private void checkLibraries(Project project, Collection<Dependency> justDownloaded) throws IOException {
+    private void checkLibraries(JavaProject project, Collection<Dependency> justDownloaded) throws IOException {
         Set<Library> libraries = new HashSet<>();
 
         Map<String, Library> fileLibsHashes = new HashMap<>();
-        File[] fileLibraries = project.getLibraryDirectory().listFiles(c -> c.getName().endsWith(".aar") || c.getName().endsWith(".jar"));
+        File[] fileLibraries = project.getLibraryDirectory().listFiles(c ->
+                c.getName().endsWith(".aar") || c.getName().endsWith(".jar"));
         if (fileLibraries != null) {
             for (File fileLibrary : fileLibraries) {
                 Library library = new Library();
@@ -150,7 +173,8 @@ public class ProjectManager {
 
         String librariesString = project.getSettings().getString("libraries", "[]");
         try {
-            List<Library> parsedLibraries = new Gson().fromJson(librariesString, new TypeToken<List<Library>>(){}.getType());
+            List<Library> parsedLibraries = new Gson().fromJson(librariesString, new TypeToken<List<Library>>() {
+            }.getType());
             if (parsedLibraries != null) {
                 for (Library parsedLibrary : parsedLibraries) {
                     if (!libraries.contains(parsedLibrary)) {
@@ -270,6 +294,7 @@ public class ProjectManager {
         return classFile;
     }
 
+    @NonNull
     public static File createClass(File directory, String className, CodeTemplate template) throws IOException {
         if (!directory.isDirectory()) {
             return null;

@@ -32,6 +32,9 @@ dependencies {
     implementation 'com.android.tools:sdklib:25.3.0'
     implementation project(path: ':common')
     implementation 'androidx.test:core:1.4.0'
+
+    // required so internal classes would be included 
+    implementation project(path: ':jaxp:jaxp-internal')
     implementation project(path: ':jaxp:xml')
 
     testImplementation 'junit:junit:4.13.2'

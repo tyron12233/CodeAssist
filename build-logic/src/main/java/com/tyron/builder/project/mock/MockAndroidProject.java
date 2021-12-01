@@ -92,6 +92,12 @@ public class MockAndroidProject extends MockJavaProject implements AndroidProjec
         return ImmutableMap.copyOf(mKotlinFiles);
     }
 
+    @NonNull
+    @Override
+    public File getKotlinDirectory() {
+        return new File(getRootFile(), "app/src/main/kotlin");
+    }
+
     @Nullable
     @Override
     public File getKotlinFile(String packageName) {

@@ -12,7 +12,7 @@ import androidx.core.app.NotificationManagerCompat;
 
 import com.tyron.ProjectManager;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.R;
 
 public class IndexService extends Service {

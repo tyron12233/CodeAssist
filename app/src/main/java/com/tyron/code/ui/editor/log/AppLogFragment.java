@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,7 +21,8 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainFragment;
 
@@ -142,6 +142,9 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
                 }
             }
         };
-        requireActivity().registerReceiver(mLogReceiver, new IntentFilter(ProjectManager.getInstance().getCurrentProject().getPackageName() + ".LOG"));
+        if (project instanceof AndroidProject) {
+            requireActivity().registerReceiver(mLogReceiver,
+                    new IntentFilter(((AndroidProject) project).getPackageName() + ".LOG"));
+        }
     }
 }

@@ -7,8 +7,9 @@ import androidx.preference.PreferenceManager;
 
 import com.tyron.ProjectManager;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
+import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.lint.DefaultLintClient;
 import com.tyron.common.util.Debouncer;
 import com.tyron.completion.CompileTask;
@@ -29,12 +30,12 @@ import org.openjdk.javax.tools.Diagnostic;
 
 import java.io.File;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
@@ -201,19 +202,24 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         // compiling multiple files at the same time
         if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
             Project project = ProjectManager.getInstance().getCurrentProject();
-            if (project != null) {
-                JavaCompilerService service = CompletionEngine.getInstance().getCompiler(project);
+            if (project instanceof JavaProject) {
+                JavaCompilerService service = CompletionEngine.getInstance()
+                        .getCompiler((JavaProject) project);
                 if (service.isReady()) {
                     File currentFile = mEditor.getCurrentFile();
                     try {
-                        try (CompileTask task = service.compile(
-                                Collections.singletonList(new SourceFileObject(currentFile.toPath(),
-                                        project.getFileManager().readFile(currentFile),
-                                        Instant.now())))) {
-                            innerDiagnostics.addAll(task.diagnostics.stream()
-                                    .map(DiagnosticWrapper::new)
-                                    .collect(Collectors.toList())
-                            );
+                        Optional<CharSequence> contents = project.getFileManager()
+                                .getFileContent(currentFile);
+                        Log.d(TAG, "Contents: " + contents);
+                        if (contents.isPresent()) {
+                            try (CompileTask task = service.compile(
+                                    Collections.singletonList(new SourceFileObject(currentFile.toPath(),
+                                            (JavaProject) project)))) {
+                                innerDiagnostics.addAll(task.diagnostics.stream()
+                                        .map(DiagnosticWrapper::new)
+                                        .collect(Collectors.toList())
+                                );
+                            }
                         }
                     } catch (Throwable e) {
                         Log.e("JavaAnalyzer", "Failed compiling the file", e);

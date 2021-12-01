@@ -1,7 +1,7 @@
 package com.tyron.kotlin_completion;
 
-import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.completion.CompletionModule;
 import com.tyron.kotlin_completion.classpath.ClassPathEntry;
 import com.tyron.kotlin_completion.classpath.DefaultClassPathResolver;
 import com.tyron.kotlin_completion.compiler.Compiler;
@@ -23,7 +23,7 @@ public class CompilerClassPath implements Closeable {
     private final Set<Path> mWorkspaceRoots = new HashSet<>();
     private final Set<Path> mJavaSourcePath;
     final Set<ClassPathEntry> mClassPath;
-    private final Project mProject;
+    private final AndroidProject mProject;
 
    // private final CompilerConfiguration mConfiguration;
 
@@ -31,14 +31,14 @@ public class CompilerClassPath implements Closeable {
 
     private final AsyncExecutor asyncExecutor = new AsyncExecutor();
 
-    public CompilerClassPath(Project project) {
+    public CompilerClassPath(AndroidProject project) {
         //mConfiguration = config;
         mProject = project;
 
         mJavaSourcePath = project.getJavaFiles().values().stream().map(File::toPath).collect(Collectors.toSet());
         mJavaSourcePath.addAll(project.getJavaFiles().values().stream().map(File::toPath).collect(Collectors.toSet()));
         mClassPath = project.getLibraries().stream().map(file -> new ClassPathEntry(file.toPath(), null)).collect(Collectors.toSet());
-        mClassPath.add(new ClassPathEntry(FileManager.getAndroidJar().toPath(), null));
+        mClassPath.add(new ClassPathEntry(CompletionModule.getAndroidJar().toPath(), null));
 
         compiler = new Compiler(mJavaSourcePath, mClassPath.stream().map(ClassPathEntry::getCompiledJar).collect(Collectors.toSet()));
         //compiler.updateConfiguration(mConfiguration);

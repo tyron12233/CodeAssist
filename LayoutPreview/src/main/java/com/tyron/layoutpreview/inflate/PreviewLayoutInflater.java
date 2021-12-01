@@ -11,39 +11,31 @@ import com.flipkart.android.proteus.ProteusBuilder;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusLayoutInflater;
 import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.StringManager;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Value;
-import com.google.gson.Gson;
+import com.flipkart.android.proteus.view.UnknownView;
+import com.flipkart.android.proteus.view.UnknownViewGroup;
 import com.google.gson.JsonObject;
-import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.layout.appcompat.AppCompatModule;
 import com.tyron.layout.cardview.CardViewModule;
 import com.tyron.layout.constraintlayout.ConstraintLayoutModule;
 import com.tyron.layoutpreview.ResourceManager;
-import com.flipkart.android.proteus.StringManager;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
 import com.tyron.layoutpreview.manager.ResourceDrawableManager;
 import com.tyron.layoutpreview.manager.ResourceLayoutManager;
 import com.tyron.layoutpreview.manager.ResourceStringManager;
-import com.tyron.layoutpreview.model.CustomView;
-import com.tyron.layoutpreview.parser.CustomViewGroupParser;
-import com.tyron.layoutpreview.parser.CustomViewParser;
-import com.flipkart.android.proteus.view.UnknownView;
-import com.flipkart.android.proteus.view.UnknownViewGroup;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.InputStreamReader;
 import java.io.StringReader;
-import java.util.List;
 
 import dalvik.system.DexClassLoader;
 
@@ -51,7 +43,7 @@ public class PreviewLayoutInflater {
 
     private final Context mBaseContext;
     private final Proteus mProteus;
-    private final Project mProject;
+    private final AndroidProject mProject;
     private ProteusContext mContext;
 
     private final ProteusLayoutInflater.Callback mCallback = new ProteusLayoutInflater.Callback() {
@@ -123,7 +115,7 @@ public class PreviewLayoutInflater {
         }
     };
 
-    public PreviewLayoutInflater(Context base, Project project) {
+    public PreviewLayoutInflater(Context base, AndroidProject project) {
         mBaseContext = base;
         ProteusBuilder builder = new ProteusBuilder();
         builder.register(ConstraintLayoutModule.create());
@@ -144,7 +136,8 @@ public class PreviewLayoutInflater {
     }
 
     public void parseResources() {
-        ResourceManager resourceManager = new ResourceManager(mContext, mProject.getResourceDirectory());
+        ResourceManager resourceManager = new ResourceManager(mContext,
+                mProject.getAndroidResourcesDirectory());
         mStringManager.setStrings(resourceManager.getStrings());
         mDrawableManager.setDrawables(resourceManager.getDrawables());
         mLayoutManager.setLayouts(resourceManager.getLayouts());

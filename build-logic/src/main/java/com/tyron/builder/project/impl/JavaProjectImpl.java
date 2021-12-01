@@ -83,6 +83,15 @@ public class JavaProjectImpl extends ProjectImpl implements JavaProject {
     }
 
     @Override
+    public File getLibraryDirectory() {
+        File custom = getPathSetting("library_directory");
+        if (custom.exists()) {
+            return custom;
+        }
+        return new File(getRootFile(), "app/libs");
+    }
+
+    @Override
     public File getLambdaStubsJarFile() {
         return BuildModule.getLambdaStubs();
     }

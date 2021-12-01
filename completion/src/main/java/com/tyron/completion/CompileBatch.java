@@ -2,13 +2,19 @@ package com.tyron.completion;
 
 import android.util.Log;
 
+import com.tyron.builder.parser.FileManager;
+import com.tyron.common.util.StringSearch;
+
 import org.apache.commons.io.FileUtils;
+import org.openjdk.javax.lang.model.util.Elements;
+import org.openjdk.javax.lang.model.util.Types;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.Trees;
-
-import com.tyron.builder.parser.FileManager;
-import com.tyron.common.util.StringSearch;
+import org.openjdk.tools.javac.api.ClientCodeWrapper;
+import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.io.File;
 import java.io.IOException;
@@ -25,15 +31,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import org.openjdk.javax.lang.model.element.Name;
-import org.openjdk.javax.lang.model.util.Elements;
-import org.openjdk.javax.lang.model.util.Types;
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.tools.javac.api.ClientCodeWrapper;
-import org.openjdk.tools.javac.util.DiagnosticSource;
-import org.openjdk.tools.javac.util.JCDiagnostic;
 
 
 @SuppressWarnings("NewApi")
@@ -164,7 +161,7 @@ public class CompileBatch implements AutoCloseable {
 		JavaCompilerService parent, Collection<? extends JavaFileObject> sources) {
         parent.diagnostics.clear();
         List<String> options = options(parent.classPath, parent.addExports);
-        return parent.compiler.getTask(parent.fileManager, parent.diagnostics::add, options, Collections.emptyList(), sources);
+        return parent.compiler.getTask(parent.mSourceFileManager, parent.diagnostics::add, options, Collections.emptyList(), sources);
     }
 
     /** Combine source path or class path entries using the system separator, for example ':' in unix */
@@ -176,7 +173,8 @@ public class CompileBatch implements AutoCloseable {
         List<String> list = new ArrayList<>();
 
         Collections.addAll(list, "-cp", joinPath(classPath));
-        Collections.addAll(list, "-bootclasspath", joinPath(Arrays.asList(FileManager.getAndroidJar(), FileManager.getLambdaStubs())));
+        Collections.addAll(list, "-bootclasspath", joinPath(
+                Arrays.asList(CompletionModule.getAndroidJar(), CompletionModule.getLambdaStubs())));
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
         //Collections.addAll(list, "-verbose");
         Collections.addAll(list, "-proc:none");

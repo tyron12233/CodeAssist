@@ -6,18 +6,23 @@ import android.util.Log;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.tools.javac.api.JavacTool;
-
+import com.tyron.builder.BuildModule;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
+import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.parser.FileManager;
-import com.tyron.builder.log.ILogger;
-import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.project.api.JavaProject;
+
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.StandardJavaFileManager;
+import org.openjdk.javax.tools.StandardLocation;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.tools.javac.api.JavacTool;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,12 +34,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.StandardJavaFileManager;
-import org.openjdk.javax.tools.StandardLocation;
 
 public class JavaTask extends Task<JavaProject> {
 
@@ -100,8 +99,8 @@ public class JavaTask extends Task<JavaProject> {
         try {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singletonList(outputDir));
             standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, Arrays.asList(
-                    FileManager.getAndroidJar(),
-                    FileManager.getLambdaStubs()
+                    BuildModule.getAndroidJar(),
+                    BuildModule.getLambdaStubs()
             ));
             standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, getProject().getLibraries());
             standardJavaFileManager.setLocation(StandardLocation.SOURCE_PATH, javaFiles);

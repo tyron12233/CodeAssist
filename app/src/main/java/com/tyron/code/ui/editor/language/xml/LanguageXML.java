@@ -10,8 +10,8 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.layoutpreview.convert.ConvertException;
 import com.tyron.layoutpreview.inflate.PreviewLayoutInflater;
@@ -65,11 +65,13 @@ public class LanguageXML implements EditorLanguage {
 	public View showPreview(Context context, ViewGroup container) throws IOException, ConvertException {
 		Project project = ProjectManager.getInstance().getCurrentProject();
 		File currentFile = mEditor.getCurrentFile();
-		if (currentFile == null || !ProjectUtils.isResourceXMLFile(mEditor.getCurrentFile()) ||
-				project == null) {
+		if (currentFile == null || !ProjectUtils.isResourceXMLFile(mEditor.getCurrentFile())) {
 			return null;
 		}
-		PreviewLayoutInflater inflater = new PreviewLayoutInflater(context, project);
+		if (!(project instanceof AndroidProject)) {
+			return null;
+		}
+		PreviewLayoutInflater inflater = new PreviewLayoutInflater(context, (AndroidProject) project);
 		inflater.parseResources();
 		ProteusView inflatedView = inflater.inflateLayout(currentFile.getName().substring(0,  currentFile.getName().lastIndexOf(".")));
 

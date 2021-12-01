@@ -3,7 +3,8 @@ package com.tyron.code.ui.file.action.file;
 import androidx.appcompat.app.AlertDialog;
 
 import com.tyron.ProjectManager;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.R;
 import com.tyron.code.ui.file.action.ActionContext;
 import com.tyron.code.ui.file.action.FileAction;
@@ -43,14 +44,13 @@ public class DeleteFileAction extends FileAction {
                 context.getFragment().getMainViewModel().removeFile(file);
 
                 Project project = ProjectManager.getInstance().getCurrentProject();
-                if (project != null) {
+                if (project instanceof JavaProject) {
                     String packageName = StringSearch.packageName(file);
                     if (packageName != null) {
                         packageName += "." + file.getName()
                                 .substring(0, file.getName().lastIndexOf("."));
-                        project.getFileManager()
-                                .removeJavaFile(packageName);
                     }
+                    ((JavaProject) project).removeJavaFile(packageName);
                 }
             }
         });

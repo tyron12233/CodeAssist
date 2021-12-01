@@ -13,15 +13,19 @@ import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
+import com.tyron.builder.compiler.AndroidAppBuilder;
 import com.tyron.builder.compiler.ApkBuilder;
 import com.tyron.builder.compiler.BuildType;
+import com.tyron.builder.compiler.Builder;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.R;
 import com.tyron.code.util.ApkInstaller;
 
 import java.io.File;
+import java.util.concurrent.Executors;
 
 public class CompilerService extends Service {
 
@@ -156,14 +160,23 @@ public class CompilerService extends Service {
             return;
         }
 
-        ApkBuilder apkBuilder = new ApkBuilder(logger, mProject);
-        apkBuilder.setTaskListener(this::updateNotification);
-        apkBuilder.build(type, (success, message) -> {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            Builder<? extends Project> projectBuilder = getBuilderForProject(project, type);
+            boolean success = true;
+            String message = "";
+
+            try {
+                projectBuilder.build(type);
+            } catch (Exception e) {
+                message = e.getMessage();
+            }
+
             if (onResultListener != null) {
                 onResultListener.onComplete(success, message);
             }
 
-            String projectName = mProject.getName();
+            String projectName = "Project";
+
             stopSelf();
             stopForeground(true);
 
@@ -196,5 +209,12 @@ public class CompilerService extends Service {
             }
 
         });
+    }
+
+    private Builder<? extends Project> getBuilderForProject(Project project, BuildType type) {
+        if (project instanceof AndroidProject) {
+            return new AndroidAppBuilder((AndroidProject) project, logger);
+        }
+        return null;
     }
 }

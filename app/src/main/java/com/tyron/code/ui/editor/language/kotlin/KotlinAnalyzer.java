@@ -5,6 +5,8 @@ import android.graphics.Color;
 import androidx.preference.PreferenceManager;
 
 import com.tyron.ProjectManager;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.kotlin_completion.CompletionEngine;
 
@@ -34,10 +36,13 @@ public class KotlinAnalyzer implements CodeAnalyzer {
 
     @Override
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
-        if (PreferenceManager.getDefaultSharedPreferences(mEditor.getContext())
-                .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
-            CompletionEngine.getInstance(ProjectManager.getInstance().getCurrentProject())
-                    .lintLater(mEditor.getCurrentFile());
+        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+        if (currentProject instanceof AndroidProject) {
+            if (PreferenceManager.getDefaultSharedPreferences(mEditor.getContext())
+                    .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
+                CompletionEngine.getInstance((AndroidProject) currentProject)
+                        .lintLater(mEditor.getCurrentFile());
+            }
         }
         try {
             CodePointCharStream stream = CharStreams.fromString(String.valueOf(content));

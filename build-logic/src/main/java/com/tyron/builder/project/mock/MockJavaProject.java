@@ -78,6 +78,11 @@ public class MockJavaProject implements JavaProject {
     }
 
     @Override
+    public File getLibraryDirectory() {
+        return new File(mRootDir, "app/libs");
+    }
+
+    @Override
     public File getLambdaStubsJarFile() {
         return mLambdaStubsJarFile;
     }

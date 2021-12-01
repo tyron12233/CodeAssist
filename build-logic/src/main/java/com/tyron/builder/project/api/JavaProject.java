@@ -35,6 +35,8 @@ public interface JavaProject extends Project {
     @NonNull
     File getJavaDirectory();
 
+    File getLibraryDirectory();
+
     /**
      * This is required if the project uses lambdas
      *

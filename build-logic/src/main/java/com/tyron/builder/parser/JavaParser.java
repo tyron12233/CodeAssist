@@ -1,8 +1,14 @@
 package com.tyron.builder.parser;
 
+import com.tyron.builder.BuildModule;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.common.util.StringSearch;
 
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticCollector;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.SimpleJavaFileObject;
+import org.openjdk.javax.tools.StandardLocation;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.tools.javac.api.JavacTool;
@@ -17,12 +23,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.DiagnosticCollector;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.SimpleJavaFileObject;
-import org.openjdk.javax.tools.StandardLocation;
 
 
 /**
@@ -55,8 +55,8 @@ public class JavaParser {
         
         fileManager = mTool.getStandardFileManager(diagnostics, Locale.ENGLISH, Charset.defaultCharset());
         try {
-            File file = new File(FileManager.getAndroidJar().getAbsolutePath());
-            fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, Arrays.asList(file, FileManager.getLambdaStubs()));
+            File file = new File(BuildModule.getAndroidJar().getAbsolutePath());
+            fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, Arrays.asList(file, BuildModule.getLambdaStubs()));
             
             
             fileManager.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singletonList(FileManager.getInstance().getCurrentProject().getBuildDirectory()));
@@ -127,7 +127,7 @@ public class JavaParser {
     private List<File> classpath() {
         List<File> files = new ArrayList<>();
         files.addAll(FileManager.getInstance().getLibraries());
-        files.add(FileManager.getLambdaStubs());
+        files.add(BuildModule.getLambdaStubs());
         files.add(FileManager.getInstance().getCurrentProject().getJavaDirectory());
         return files;
     }

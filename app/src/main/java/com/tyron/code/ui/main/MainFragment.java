@@ -35,9 +35,9 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
-import com.tyron.builder.model.Project;
 import com.tyron.builder.model.ProjectSettings;
-import com.tyron.code.ApplicationLoader;
+import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.impl.AndroidProjectImpl;
 import com.tyron.code.R;
 import com.tyron.code.service.CompilerService;
 import com.tyron.code.service.IndexService;
@@ -184,7 +184,7 @@ public class MainFragment extends Fragment {
                             logViewModel.e(LogViewModel.BUILD_LOG, message);
                         } else {
                             if (mProjectManager.getCurrentProject() != null) {
-                                mToolbar.setTitle(mProject.mRoot.getName());
+                                mToolbar.setTitle(mProject.getRootFile().getName());
 
                                 String openedFilesString = mProjectManager.getCurrentProject()
                                         .getSettings()
@@ -236,7 +236,7 @@ public class MainFragment extends Fragment {
         requireActivity().getOnBackPressedDispatcher().addCallback(this, onBackPressedCallback);
 
         String projectPath = requireArguments().getString("project_path");
-        mProject = new Project(new File(projectPath));
+        mProject = new AndroidProjectImpl(new File(projectPath));
     }
 
     @Override
@@ -562,17 +562,17 @@ public class MainFragment extends Fragment {
 
     public void openProject(Project proj, boolean downloadLibs) {
 
-        if (!proj.isValidProject()) {
-            ApplicationLoader.showToast("Invalid project directory: " + proj.mRoot);
-            return;
-        }
+//        if (!proj.isValidProject()) {
+//            ApplicationLoader.showToast("Invalid project directory: " + proj.mRoot);
+//            return;
+//        }
 
         mFilesViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
 
         Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
         if (fragment instanceof TreeFileManagerFragment) {
-            ((TreeFileManagerFragment) fragment).setRoot(mProject.mRoot);
+            ((TreeFileManagerFragment) fragment).setRoot(mProject.getRootFile());
         }
 
         Intent intent = new Intent(requireContext(), IndexService.class);

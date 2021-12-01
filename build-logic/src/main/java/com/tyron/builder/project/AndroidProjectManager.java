@@ -31,7 +31,7 @@ public class AndroidProjectManager {
 
     public AndroidProjectManager(File root) {
         mRoot = root;
-        mFileManager = new FileManagerImpl();
+        mFileManager = new FileManagerImpl(root);
         mProject = new ProjectImpl(root);
         mModuleManagers = new HashMap<>();
     }
