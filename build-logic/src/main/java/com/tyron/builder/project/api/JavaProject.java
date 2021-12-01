@@ -22,6 +22,14 @@ public interface JavaProject extends Project {
 
     List<File> getLibraries();
 
+    void addLibrary(@NonNull File jar);
+
+    /**
+     * @return The fully qualified name of all classes in this projects including its
+     * libraries
+     */
+    List<String> getAllClasses();
+
     /**
      * @return The resources directory of the project. Note that
      * this is different from android's res directory

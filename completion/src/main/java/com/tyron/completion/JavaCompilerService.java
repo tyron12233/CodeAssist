@@ -146,7 +146,7 @@ public class JavaCompilerService implements CompilerProvider {
     @Override
     public List<String> publicTopLevelTypes() {
         List<String> classes = new ArrayList<>();
-        classes.addAll(mProject.getJavaFiles().keySet());
+        classes.addAll(mProject.getAllClasses());
         classes.addAll(Collections.emptyList());
         return classes;
     }

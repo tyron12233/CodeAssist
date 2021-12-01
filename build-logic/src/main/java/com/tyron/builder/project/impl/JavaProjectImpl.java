@@ -14,6 +14,7 @@ import org.apache.commons.io.filefilter.TrueFileFilter;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -62,6 +63,14 @@ public class JavaProjectImpl extends ProjectImpl implements JavaProject {
         }
         mJavaFiles.put(packageName + "." + javaFile.getName().replace(".java", ""),
                 javaFile);
+    }
+
+    @Override
+    public List<String> getAllClasses() {
+        List<String> classes = new ArrayList<>();
+        classes.addAll(mJavaFiles.keySet());
+        classes.addAll(mClassFiles.keySet());
+        return classes;
     }
 
     @Override
@@ -153,10 +162,12 @@ public class JavaProjectImpl extends ProjectImpl implements JavaProject {
 
     @Override
     public void index() {
-        FileUtils.iterateFiles(getJavaDirectory(),
-                FileFilterUtils.suffixFileFilter(".java"),
-                TrueFileFilter.INSTANCE
-        ).forEachRemaining(this::addJavaFile);
+        if (getJavaDirectory().exists()) {
+            FileUtils.iterateFiles(getJavaDirectory(),
+                    FileFilterUtils.suffixFileFilter(".java"),
+                    TrueFileFilter.INSTANCE
+            ).forEachRemaining(this::addJavaFile);
+        }
 
         File[] libraryDirectories = new File(getBuildDirectory(), "libs")
                 .listFiles(File::isDirectory);
@@ -167,6 +178,12 @@ public class JavaProjectImpl extends ProjectImpl implements JavaProject {
                     mLibraries.add(check);
                 }
             }
+        }
+
+        try {
+            putJar(BuildModule.getAndroidJar());
+        } catch (IOException e) {
+            // ignored
         }
     }
 

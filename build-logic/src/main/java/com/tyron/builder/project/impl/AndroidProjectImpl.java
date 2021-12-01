@@ -16,6 +16,7 @@ import org.apache.commons.io.filefilter.TrueFileFilter;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -74,6 +75,13 @@ public class AndroidProjectImpl extends JavaProjectImpl implements AndroidProjec
             return custom;
         }
         return new File(getRootFile(), "app/src/main/res");
+    }
+
+    @Override
+    public List<String> getAllClasses() {
+        List<String> classes = super.getAllClasses();
+        classes.addAll(mKotlinFiles.keySet());
+        return classes;
     }
 
     @Override

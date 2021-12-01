@@ -65,6 +65,16 @@ public class MockJavaProject implements JavaProject {
         return Collections.emptyList();
     }
 
+    @Override
+    public void addLibrary(@NonNull File jar) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<String> getAllClasses() {
+        return Collections.emptyList();
+    }
+
     @NonNull
     @Override
     public File getResourcesDir() {
