@@ -22,14 +22,15 @@
  */
 package org.openjdk.com.sun.org.apache.xalan.internal.xslt;
 
-import java.io.FileOutputStream;
-import java.io.FileWriter;
-import java.io.PrintWriter;
-import java.io.StringReader;
-import java.util.Properties;
-import java.util.ResourceBundle;
-import java.util.Vector;
-
+import org.openjdk.com.sun.org.apache.xalan.internal.Version;
+import org.openjdk.com.sun.org.apache.xalan.internal.res.XSLMessages;
+import org.openjdk.com.sun.org.apache.xalan.internal.res.XSLTErrorResources;
+import org.openjdk.com.sun.org.apache.xalan.internal.utils.ConfigurationError;
+import org.openjdk.com.sun.org.apache.xalan.internal.utils.ObjectFactory;
+import org.openjdk.com.sun.org.apache.xalan.internal.utils.SecuritySupport;
+import org.openjdk.com.sun.org.apache.xml.internal.utils.DefaultErrorHandler;
+import org.openjdk.com.sun.org.apache.xml.internal.utils.WrappedRuntimeException;
+import org.openjdk.com.sun.org.apache.xml.internal.utils.res.XResourceBundle;
 import org.openjdk.javax.xml.XMLConstants;
 import org.openjdk.javax.xml.parsers.DocumentBuilder;
 import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
@@ -51,13 +52,21 @@ import org.openjdk.javax.xml.transform.sax.SAXTransformerFactory;
 import org.openjdk.javax.xml.transform.sax.TransformerHandler;
 import org.openjdk.javax.xml.transform.stream.StreamResult;
 import org.openjdk.javax.xml.transform.stream.StreamSource;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.xml.sax.ContentHandler;
+import org.xml.sax.EntityResolver;
+import org.xml.sax.InputSource;
+import org.xml.sax.XMLReader;
+import org.xml.sax.helpers.XMLReaderFactory;
 
-import org.openjdk.com.sun.org.apache.xalan.internal.Version;
-import org.openjdk.com.sun.org.apache.xalan.internal.res.XSLMessages;
-import org.openjdk.com.sun.org.apache.xalan.internal.res.XSLTErrorResources;
-import org.openjdk.com.sun.org.apache.xalan.internal.utils.ObjectFactory;
-import org.openjdk.com.sun.org.apache.xalan.internal.utils.ConfigurationError;
-import org.openjdk.com.sun.org.apache.xalan.internal.utils.SecuritySupport;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.io.StringReader;
+import java.util.Properties;
+import java.util.ResourceBundle;
+import java.util.Vector;
 
 //J2SE does not support Xalan interpretive
 /*
@@ -65,19 +74,6 @@ import org.openjdk.com.sun.org.apache.xalan.internal.trace.PrintTraceListener;
 import org.openjdk.com.sun.org.apache.xalan.internal.trace.TraceManager;
 import org.openjdk.com.sun.org.apache.xalan.internal.transformer.XalanProperties;
 */
-
-import org.openjdk.com.sun.org.apache.xml.internal.utils.DefaultErrorHandler;
-
-import org.openjdk.com.sun.org.apache.xml.internal.utils.WrappedRuntimeException;
-import org.openjdk.com.sun.org.apache.xml.internal.utils.res.XResourceBundle;
-import org.w3c.dom.Document;
-import org.w3c.dom.Node;
-
-import org.xml.sax.ContentHandler;
-import org.xml.sax.EntityResolver;
-import org.xml.sax.InputSource;
-import org.xml.sax.XMLReader;
-import org.xml.sax.helpers.XMLReaderFactory;
 
 /**
  * The main() method handles the Xalan command-line interface.
@@ -208,7 +204,7 @@ public class Process
       if (useXSLTC)
       {
          String key = "org.openjdk.javax.xml.transform.TransformerFactory";
-         String value = "com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl";
+         String value = "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl";
          Properties props = System.getProperties();
          props.put(key, value);
          System.setProperties(props);

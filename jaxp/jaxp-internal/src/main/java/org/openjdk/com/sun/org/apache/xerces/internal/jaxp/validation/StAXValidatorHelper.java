@@ -27,8 +27,6 @@ package org.openjdk.com.sun.org.apache.xerces.internal.jaxp.validation;
 
 import org.openjdk.com.sun.org.apache.xerces.internal.impl.Constants;
 import org.openjdk.com.sun.org.apache.xerces.internal.utils.XMLSecurityManager;
-import java.io.IOException;
-
 import org.openjdk.javax.xml.transform.Result;
 import org.openjdk.javax.xml.transform.Source;
 import org.openjdk.javax.xml.transform.Transformer;
@@ -40,9 +38,9 @@ import org.openjdk.javax.xml.transform.sax.SAXResult;
 import org.openjdk.javax.xml.transform.sax.SAXTransformerFactory;
 import org.openjdk.javax.xml.transform.sax.TransformerHandler;
 import org.openjdk.javax.xml.transform.stax.StAXResult;
-import org.openjdk.javax.xml.transform.stax.StAXSource;
-
 import org.xml.sax.SAXException;
+
+import java.io.IOException;
 
 /**
  * <p>A validator helper for <code>StAXSource</code>s.</p>
@@ -50,7 +48,7 @@ import org.xml.sax.SAXException;
  * @author <a href="mailto:Sunitha.Reddy@Sun.com">Sunitha Reddy</a>
  */
 public final class StAXValidatorHelper implements ValidatorHelper {
-    private static final String DEFAULT_TRANSFORMER_IMPL = "com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl";
+    private static final String DEFAULT_TRANSFORMER_IMPL = "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl";
 
     /** Component manager. **/
     private XMLSchemaValidatorComponentManager fComponentManager;

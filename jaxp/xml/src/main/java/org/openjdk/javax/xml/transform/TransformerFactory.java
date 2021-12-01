@@ -112,7 +112,7 @@ public abstract class TransformerFactory {
             /* The default property name according to the JAXP spec */
             TransformerFactory.class,
             /* The fallback implementation class name, XSLTC */
-            "com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl");
+            "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl");
     }
 
     /**

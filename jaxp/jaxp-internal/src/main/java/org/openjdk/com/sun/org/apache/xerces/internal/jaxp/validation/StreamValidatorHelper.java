@@ -85,7 +85,7 @@ final class StreamValidatorHelper implements ValidatorHelper {
     private static final String VALIDATION_MANAGER =
         Constants.XERCES_PROPERTY_PREFIX + Constants.VALIDATION_MANAGER_PROPERTY;
 
-    private static final String DEFAULT_TRANSFORMER_IMPL = "com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl";
+    private static final String DEFAULT_TRANSFORMER_IMPL = "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl";
 
     /** Property id: security manager. */
     private static final String SECURITY_MANAGER =
