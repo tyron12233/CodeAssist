@@ -5,8 +5,8 @@ import androidx.annotation.VisibleForTesting;
 import com.tyron.builder.BuildModule;
 import com.tyron.common.util.Decompress;
 
-import java.util.ArrayList;
 import java.io.File;
+import java.util.ArrayList;
 
 
 public class ApkSigner {
@@ -25,11 +25,10 @@ public class ApkSigner {
         commands = new ArrayList<>();
         mApkInputPath = inputPath;
         mApkOutputPath = outputPath;
-
     }
 
     //TODO: Adjust min and max sdk
-    public void sign() throws Exception{
+    public void sign() throws Exception {
         commands.add("sign");
         commands.add("--key");
         commands.add(getTestKeyFilePath());
