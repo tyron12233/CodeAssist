@@ -10,6 +10,7 @@ import com.tyron.builder.project.api.Project;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
+import org.jetbrains.kotlin.com.intellij.openapi.util.KeyWithDefaultValue;
 import org.jetbrains.kotlin.com.intellij.util.concurrency.AtomicFieldUpdater;
 import org.jetbrains.kotlin.com.intellij.util.keyFMap.KeyFMap;
 
@@ -84,7 +85,11 @@ public class ProjectImpl implements Project {
     @Nullable
     @Override
     public <T> T getUserData(@NotNull Key<T> key) {
-        return myUserMap.get(key);
+        T t = myUserMap.get(key);
+        if (t == null && key instanceof KeyWithDefaultValue) {
+            return ((KeyWithDefaultValue<T>) key).getDefaultValue();
+        }
+        return t;
     }
 
     @Override
