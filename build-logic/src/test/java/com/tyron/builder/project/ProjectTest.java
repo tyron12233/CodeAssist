@@ -32,7 +32,7 @@ public class ProjectTest {
                 .getResource("TestProject")
                 .getFile();
         mRoot = new File(rootPath);
-        mFileManager = new FileManagerImpl();
+        mFileManager = new FileManagerImpl(mRoot);
         mProject = new ProjectImpl(mRoot);
     }
 
