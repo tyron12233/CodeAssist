@@ -35,7 +35,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
@@ -207,19 +206,16 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                         .getCompiler((JavaProject) project);
                 if (service.isReady()) {
                     File currentFile = mEditor.getCurrentFile();
+                    String contents = mEditor.getText().toString();
+                    project.getFileManager().setSnapshotContent(currentFile, contents);
                     try {
-                        Optional<CharSequence> contents = project.getFileManager()
-                                .getFileContent(currentFile);
-                        Log.d(TAG, "Contents: " + contents);
-                        if (contents.isPresent()) {
-                            try (CompileTask task = service.compile(
-                                    Collections.singletonList(new SourceFileObject(currentFile.toPath(),
-                                            (JavaProject) project)))) {
-                                innerDiagnostics.addAll(task.diagnostics.stream()
-                                        .map(DiagnosticWrapper::new)
-                                        .collect(Collectors.toList())
-                                );
-                            }
+                        try (CompileTask task = service.compile(
+                                Collections.singletonList(new SourceFileObject(currentFile.toPath(),
+                                        (JavaProject) project)))) {
+                            innerDiagnostics.addAll(task.diagnostics.stream()
+                                    .map(DiagnosticWrapper::new)
+                                    .collect(Collectors.toList())
+                            );
                         }
                     } catch (Throwable e) {
                         Log.e("JavaAnalyzer", "Failed compiling the file", e);
@@ -257,7 +253,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
 
                 int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
-                colors .markProblemRegion(flag, start.line, start.column, end.line, end.column);
+                colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
             } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
                 // Work around for the indexer requiring a sorted positions
                 Log.w(TAG, "Unable to mark problem region: diagnostics " + diagnostics, e);
