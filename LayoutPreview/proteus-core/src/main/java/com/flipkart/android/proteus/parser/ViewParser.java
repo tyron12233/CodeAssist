@@ -29,6 +29,9 @@ import android.view.animation.Animation;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.ProteusConstants;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
@@ -51,9 +54,6 @@ import com.flipkart.android.proteus.value.Value;
 import com.flipkart.android.proteus.view.ProteusAndroidView;
 
 import java.util.Map;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 /**
  * @author kiran.kumar
@@ -315,6 +315,24 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
           if (ProteusConstants.isLoggingEnabled()) {
             Log.e(TAG, "margins can only be applied to views with parent ViewGroup");
           }
+        }
+      }
+    });
+
+    addAttributeProcessor("layout_marginStart", new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+          ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).setMarginStart((int) dimension);
+        }
+      }
+    });
+
+    addAttributeProcessor("layout_marginEnd", new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+          ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).setMarginEnd((int) dimension);
         }
       }
     });
