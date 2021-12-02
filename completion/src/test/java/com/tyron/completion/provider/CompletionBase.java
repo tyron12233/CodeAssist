@@ -3,16 +3,13 @@ package com.tyron.completion.provider;
 import static com.google.common.truth.Truth.assertThat;
 import static com.tyron.completion.TestUtil.resolveBasePath;
 
-import com.google.common.truth.Truth;
 import com.tyron.builder.project.mock.MockAndroidProject;
 import com.tyron.builder.project.mock.MockFileManager;
 import com.tyron.completion.CompletionModule;
 import com.tyron.completion.TestUtil;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.completion.provider.CompletionEngine;
 
 import org.junit.Before;
-import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
@@ -74,7 +71,7 @@ public abstract class CompletionBase {
         File file = new File(mProject.getRootFile(), "completion/" + fileName);
         assertThat(contents)
                 .contains(COMPLETE_IDENTIFIER);
-        long cursor = (long) contents.indexOf(COMPLETE_IDENTIFIER) - 1;
+        long cursor = (long) contents.indexOf(COMPLETE_IDENTIFIER);
         String newContents = contents.replace(COMPLETE_IDENTIFIER, "");
         return complete(file, newContents, cursor);
     }
