@@ -118,6 +118,7 @@ public class MainViewModel extends ViewModel {
         int index = getFiles().getValue().indexOf(file);
         if (index >= 0) {
             updateCurrentPosition(index);
+            return true;
         }
 
         addFile(file);
