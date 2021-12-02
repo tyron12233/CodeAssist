@@ -1,4 +1,4 @@
-package com.tyron.code.ui.file;
+package com.tyron.code.ui.file.dialog;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import java.io.File;
@@ -15,6 +15,7 @@ import com.tyron.code.R;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.activity.OnBackPressedCallback;
 
+import com.tyron.code.ui.file.FileManagerAdapter;
 import com.tyron.code.ui.main.MainFragment;
 
 @SuppressWarnings("FieldCanBeLocal")

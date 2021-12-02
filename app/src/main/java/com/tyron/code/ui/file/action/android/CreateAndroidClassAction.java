@@ -6,7 +6,7 @@ import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.builder.project.api.Project;
 import com.tyron.code.template.android.ActivityTemplate;
 import com.tyron.code.ui.component.tree.TreeNode;
-import com.tyron.code.ui.file.CreateClassDialogFragment;
+import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;
 import com.tyron.code.ui.file.action.ActionContext;
 import com.tyron.code.ui.file.action.java.CreateClassAction;
 import com.tyron.code.ui.file.tree.model.TreeFile;

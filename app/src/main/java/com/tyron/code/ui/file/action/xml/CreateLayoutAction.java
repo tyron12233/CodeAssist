@@ -6,7 +6,7 @@ import com.tyron.code.R;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.template.xml.LayoutTemplate;
 import com.tyron.code.ui.component.tree.TreeNode;
-import com.tyron.code.ui.file.CreateClassDialogFragment;
+import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;
 import com.tyron.code.ui.file.RegexReason;
 import com.tyron.code.ui.file.action.ActionContext;
 import com.tyron.code.ui.file.action.FileAction;

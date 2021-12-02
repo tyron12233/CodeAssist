@@ -12,7 +12,7 @@ import com.tyron.code.template.java.AbstractTemplate;
 import com.tyron.code.template.java.InterfaceTemplate;
 import com.tyron.code.template.java.JavaClassTemplate;
 import com.tyron.code.ui.component.tree.TreeNode;
-import com.tyron.code.ui.file.CreateClassDialogFragment;
+import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;
 import com.tyron.code.ui.file.action.ActionContext;
 import com.tyron.code.ui.file.action.FileAction;
 import com.tyron.code.ui.file.tree.model.TreeFile;

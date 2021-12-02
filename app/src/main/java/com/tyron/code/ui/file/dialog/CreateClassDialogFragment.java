@@ -1,4 +1,4 @@
-package com.tyron.code.ui.file;
+package com.tyron.code.ui.file.dialog;
 
 import android.app.Dialog;
 import android.os.Bundle;
@@ -19,6 +19,7 @@ import com.google.android.material.textfield.TextInputLayout;
 import com.tyron.code.R;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.template.java.JavaClassTemplate;
+import com.tyron.code.ui.file.RegexReason;
 import com.tyron.common.util.SingleTextWatcher;
 
 import org.openjdk.javax.lang.model.SourceVersion;

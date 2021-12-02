@@ -3,6 +3,8 @@ package com.tyron.code.ui.file;
 import android.os.Parcel;
 import android.os.Parcelable;
 
+import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;
+
 /**
  * Class that holds a Regex String and a reason if the regex doesn't match.
  *
