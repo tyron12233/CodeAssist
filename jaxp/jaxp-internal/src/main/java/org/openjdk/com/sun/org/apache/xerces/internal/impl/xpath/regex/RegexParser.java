@@ -96,10 +96,10 @@ class RegexParser {
     public void setLocale(Locale locale) {
         try {
             if (locale != null) {
-                this.resources = SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.xpath.regex.message", locale);
+                this.resources = SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.xpath.regex.message", locale);
             }
             else {
-                this.resources = SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.xpath.regex.message");
+                this.resources = SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.xpath.regex.message");
             }
         }
         catch (MissingResourceException mre) {

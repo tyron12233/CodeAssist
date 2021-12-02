@@ -87,13 +87,13 @@ public class SmartTransformerFactoryImpl extends SAXTransformerFactory
 
     private void createXalanTransformerFactory() {
         final String xalanMessage =
-            "com.sun.org.apache.xalan.internal.xsltc.trax.SmartTransformerFactoryImpl "+
+            "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.trax.SmartTransformerFactoryImpl "+
             "could not create an "+
-            "com.sun.org.apache.xalan.internal.processor.TransformerFactoryImpl.";
+            "org.openjdk.com.sun.org.apache.xalan.internal.processor.TransformerFactoryImpl.";
         // try to create instance of Xalan factory...
         try {
             Class xalanFactClass = ObjectFactory.findProviderClass(
-                "com.sun.org.apache.xalan.internal.processor.TransformerFactoryImpl",
+                "org.openjdk.com.sun.org.apache.xalan.internal.processor.TransformerFactoryImpl",
                 true);
             _xalanFactory = (SAXTransformerFactory)
                 xalanFactClass.newInstance();

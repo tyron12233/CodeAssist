@@ -441,7 +441,7 @@ extends AbstractDOMParser implements LSParser, DOMConfiguration {
                     //XSModel - turn on PSVI augmentation
                     fConfiguration.setFeature (PSVI_AUGMENT, true);
                     fConfiguration.setProperty (DOCUMENT_CLASS_NAME,
-                    "com.sun.org.apache.xerces.internal.dom.PSVIDocumentImpl");
+                    "org.openjdk.com.sun.org.apache.xerces.internal.dom.PSVIDocumentImpl");
                 }
                 else {
                     // Constants.DOM_CHARSET_OVERRIDES_XML_ENCODING feature,

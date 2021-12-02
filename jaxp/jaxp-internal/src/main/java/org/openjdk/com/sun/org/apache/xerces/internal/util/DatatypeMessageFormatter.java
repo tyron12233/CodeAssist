@@ -33,7 +33,7 @@ import java.util.ResourceBundle;
  */
 public class DatatypeMessageFormatter {
 
-    private static final String BASE_NAME = "com.sun.org.apache.xerces.internal.impl.msg.DatatypeMessages";
+    private static final String BASE_NAME = "org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.DatatypeMessages";
 
     /**
      * Formats a message with the specified arguments using the given

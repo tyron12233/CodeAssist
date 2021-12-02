@@ -123,13 +123,13 @@ public class DOMMessageFormatter {
      */
     public static void init(){
         if (locale != null) {
-            domResourceBundle = SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.msg.DOMMessages", locale);
-            serResourceBundle = SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.msg.XMLSerializerMessages", locale);
-            xmlResourceBundle = SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.msg.XMLMessages", locale);
+            domResourceBundle = SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.DOMMessages", locale);
+            serResourceBundle = SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.XMLSerializerMessages", locale);
+            xmlResourceBundle = SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.XMLMessages", locale);
         }else{
-            domResourceBundle = SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.msg.DOMMessages");
-            serResourceBundle = SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.msg.XMLSerializerMessages");
-            xmlResourceBundle = SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.msg.XMLMessages");
+            domResourceBundle = SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.DOMMessages");
+            serResourceBundle = SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.XMLSerializerMessages");
+            xmlResourceBundle = SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.XMLMessages");
         }
     }
 

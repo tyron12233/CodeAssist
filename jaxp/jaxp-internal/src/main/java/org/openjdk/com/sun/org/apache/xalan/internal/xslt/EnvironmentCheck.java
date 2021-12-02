@@ -857,7 +857,7 @@ public class EnvironmentCheck
       // NOTE: This is the old Xalan 2.0, 2.1, 2.2 version class,
       //    is being replaced by class below
       final String XALAN2_VERSION_CLASS =
-        "com.sun.org.apache.xalan.internal.processor.XSLProcessorVersion";
+        "org.openjdk.com.sun.org.apache.xalan.internal.processor.XSLProcessorVersion";
 
       Class clazz = ObjectFactory.findProviderClass(XALAN2_VERSION_CLASS, true);
 
@@ -910,7 +910,7 @@ public class EnvironmentCheck
 
     try
     {
-      final String XERCES1_VERSION_CLASS = "com.sun.org.apache.xerces.internal.framework.Version";
+      final String XERCES1_VERSION_CLASS = "org.openjdk.com.sun.org.apache.xerces.internal.framework.Version";
 
       Class clazz = ObjectFactory.findProviderClass(XERCES1_VERSION_CLASS, true);
 

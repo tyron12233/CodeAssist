@@ -152,13 +152,13 @@ public class AbstractDOMParser extends AbstractXMLDocumentParser {
 
     /** Default document class name. */
     protected static final String DEFAULT_DOCUMENT_CLASS_NAME =
-    "com.sun.org.apache.xerces.internal.dom.DocumentImpl";
+    "org.openjdk.com.sun.org.apache.xerces.internal.dom.DocumentImpl";
 
     protected static final String CORE_DOCUMENT_CLASS_NAME =
-    "com.sun.org.apache.xerces.internal.dom.CoreDocumentImpl";
+    "org.openjdk.com.sun.org.apache.xerces.internal.dom.CoreDocumentImpl";
 
     protected static final String PSVI_DOCUMENT_CLASS_NAME =
-    "com.sun.org.apache.xerces.internal.dom.PSVIDocumentImpl";
+    "org.openjdk.com.sun.org.apache.xerces.internal.dom.PSVIDocumentImpl";
 
     /**
      * If the user stops the process, this exception will be thrown.

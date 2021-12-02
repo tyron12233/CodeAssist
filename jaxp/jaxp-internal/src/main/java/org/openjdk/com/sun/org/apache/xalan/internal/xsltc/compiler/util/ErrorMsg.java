@@ -182,7 +182,7 @@ public final class ErrorMsg {
 
     static {
         _bundle = SecuritySupport.getResourceBundle(
-                          "com.sun.org.apache.xalan.internal.xsltc.compiler.util.ErrorMessages",
+                          "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.compiler.util.ErrorMessages",
                           Locale.getDefault());
     }
 

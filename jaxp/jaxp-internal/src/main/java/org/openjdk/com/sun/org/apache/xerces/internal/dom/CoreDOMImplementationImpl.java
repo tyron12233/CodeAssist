@@ -118,7 +118,7 @@ public class CoreDOMImplementationImpl
                 && (anyVersion || version.equals("3.0"))) {
                 try {
                     Class xpathClass = ObjectFactory.findProviderClass(
-                        "com.sun.org.apache.xpath.internal.domapi.XPathEvaluatorImpl", true);
+                        "org.openjdk.com.sun.org.apache.xpath.internal.domapi.XPathEvaluatorImpl", true);
 
                 // Check if the DOM XPath implementation implements
                 // the interface org.w3c.dom.XPathEvaluator
@@ -284,7 +284,7 @@ public class CoreDOMImplementationImpl
                 if ((feature.equalsIgnoreCase("+XPath"))) {
                     try {
                         Class xpathClass = ObjectFactory.findProviderClass(
-                            "com.sun.org.apache.xpath.internal.domapi.XPathEvaluatorImpl", true);
+                            "org.openjdk.com.sun.org.apache.xpath.internal.domapi.XPathEvaluatorImpl", true);
                         // Check if the DOM XPath implementation implements
                         // the interface org.w3c.dom.XPathEvaluator
                         Class interfaces[] = xpathClass.getInterfaces();
@@ -410,7 +410,7 @@ public class CoreDOMImplementationImpl
             if(freeValidatorIndex < 0) {
                 return (RevalidationHandler) (ObjectFactory
                             .newInstance(
-                                "com.sun.org.apache.xerces.internal.impl.xs.XMLSchemaValidator",
+                                "org.openjdk.com.sun.org.apache.xerces.internal.impl.xs.XMLSchemaValidator",
                                 ObjectFactory.findClassLoader(),
                                 true));
             }
@@ -423,7 +423,7 @@ public class CoreDOMImplementationImpl
             if(freeDTDValidatorIndex < 0) {
                 return (RevalidationHandler) (ObjectFactory
                             .newInstance(
-                                "com.sun.org.apache.xerces.internal.impl.dtd.XMLDTDValidator",
+                                "org.openjdk.com.sun.org.apache.xerces.internal.impl.dtd.XMLDTDValidator",
                                 ObjectFactory.findClassLoader(),
                                 true));
             }

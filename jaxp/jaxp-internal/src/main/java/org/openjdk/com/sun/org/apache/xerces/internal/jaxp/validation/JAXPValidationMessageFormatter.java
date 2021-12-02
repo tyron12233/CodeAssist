@@ -55,11 +55,11 @@ final class JAXPValidationMessageFormatter {
         ResourceBundle resourceBundle = null;
         if (locale != null) {
             resourceBundle =
-                SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.msg.JAXPValidationMessages", locale);
+                SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.JAXPValidationMessages", locale);
         }
         else {
             resourceBundle =
-                SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.msg.JAXPValidationMessages");
+                SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.JAXPValidationMessages");
         }
 
         // format message

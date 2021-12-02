@@ -72,12 +72,12 @@ public class XMLMessageFormatter_de implements MessageFormatter {
 
         if (fResourceBundle == null || locale != fLocale) {
             if (locale != null) {
-                fResourceBundle = SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.msg.XMLMessages", locale);
+                fResourceBundle = SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.XMLMessages", locale);
                 // memorize the most-recent locale
                 fLocale = locale;
             }
             if (fResourceBundle == null)
-                fResourceBundle = SecuritySupport.getResourceBundle("com.sun.org.apache.xerces.internal.impl.msg.XMLMessages");
+                fResourceBundle = SecuritySupport.getResourceBundle("org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.XMLMessages");
         }
 
         // format message

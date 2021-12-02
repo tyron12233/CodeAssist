@@ -1585,7 +1585,7 @@ public final class BasisLibrary {
     public final static String ERROR_MESSAGES_KEY = "error-messages";
 
     static {
-        String resource = "com.sun.org.apache.xalan.internal.xsltc.runtime.ErrorMessages";
+        String resource = "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.runtime.ErrorMessages";
         m_bundle = SecuritySupport.getResourceBundle(resource);
     }
 

@@ -22,25 +22,24 @@
  */
 package org.openjdk.com.sun.org.apache.xml.internal.serializer;
 
+import org.openjdk.com.sun.org.apache.xalan.internal.utils.ObjectFactory;
+import org.openjdk.com.sun.org.apache.xml.internal.serializer.utils.MsgKey;
+import org.openjdk.com.sun.org.apache.xml.internal.serializer.utils.SystemIDResolver;
+import org.openjdk.com.sun.org.apache.xml.internal.serializer.utils.Utils;
+import org.openjdk.com.sun.org.apache.xml.internal.serializer.utils.WrappedRuntimeException;
+import org.openjdk.javax.xml.transform.TransformerException;
+
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.URL;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.PropertyResourceBundle;
 import java.util.ResourceBundle;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
-
-import org.openjdk.javax.xml.transform.TransformerException;
-
-import org.openjdk.com.sun.org.apache.xml.internal.serializer.utils.MsgKey;
-import org.openjdk.com.sun.org.apache.xml.internal.serializer.utils.SystemIDResolver;
-import org.openjdk.com.sun.org.apache.xml.internal.serializer.utils.Utils;
-import org.openjdk.com.sun.org.apache.xml.internal.serializer.utils.WrappedRuntimeException;
-import org.openjdk.com.sun.org.apache.xalan.internal.utils.ObjectFactory;
 
 /**
  * This class provides services that tell if a character should have
@@ -62,14 +61,14 @@ final class CharInfo
      * If specified, the file will be resource loaded with the default class loader.
      */
     public static final String HTML_ENTITIES_RESOURCE =
-                "org.openjdk.com.sun.org.apache.xml.internalserializer.HTMLEntities";
+                "org.openjdk.com.sun.org.apache.xml.internal.serializer.HTMLEntities";
 
     /**
      * The name of the XML entities file.
      * If specified, the file will be resource loaded with the default class loader.
      */
     public static final String XML_ENTITIES_RESOURCE =
-                "org.openjdk.com.sun.org.apache.xml.internalserializer.XMLEntities";
+                "org.openjdk.com.sun.org.apache.xml.internal.serializer.XMLEntities";
 
     /** The horizontal tab character, which the parser should always normalize. */
     public static final char S_HORIZONAL_TAB = 0x09;

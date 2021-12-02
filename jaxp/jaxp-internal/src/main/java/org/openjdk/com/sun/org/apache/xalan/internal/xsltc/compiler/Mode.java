@@ -763,7 +763,7 @@ for (int i = 0; i < _templates.size(); i++) {
                                 argTypes, argNames, functionName(),
                                 getClassName(), mainIL,
                                 classGen.getConstantPool());
-        methodGen.addException("com.sun.org.apache.xalan.internal.xsltc.TransletException");
+        methodGen.addException("org.openjdk.com.sun.org.apache.xalan.internal.xsltc.TransletException");
         // Insert an extra NOP just to keep "current" from appearing as if it
         // has a value before the start of the loop.
         mainIL.append(NOP);
@@ -1127,7 +1127,7 @@ for (int i = 0; i < _templates.size(); i++) {
                                 argTypes, argNames, functionName()+'_'+max,
                                 getClassName(), mainIL,
                                 classGen.getConstantPool());
-        methodGen.addException("com.sun.org.apache.xalan.internal.xsltc.TransletException");
+        methodGen.addException("org.openjdk.com.sun.org.apache.xalan.internal.xsltc.TransletException");
 
         // Create the local variable to hold the current node
         final LocalVariableGen current;

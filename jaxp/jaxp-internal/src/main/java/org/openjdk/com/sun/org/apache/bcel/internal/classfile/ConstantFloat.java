@@ -64,7 +64,7 @@ import java.io.*;
 
 /**
  * This class is derived from the abstract
- * <A HREF="com.sun.org.apache.bcel.internal.classfile.Constant.html">Constant</A> class
+ * <A HREF="org.openjdk.com.sun.org.apache.bcel.internal.classfile.Constant.html">Constant</A> class
  * and represents a reference to a float object.
  *
  * @author  <A HREF="mailto:markus.dahm@berlin.de">M. Dahm</A>

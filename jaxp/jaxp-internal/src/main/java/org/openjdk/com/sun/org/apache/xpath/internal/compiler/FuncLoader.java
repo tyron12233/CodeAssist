@@ -89,12 +89,12 @@ public class FuncLoader
     {
       String className = m_funcName;
       if (className.indexOf(".") < 0) {
-        className = "com.sun.org.apache.xpath.internal.functions." + className;
+        className = "org.openjdk.com.sun.org.apache.xpath.internal.functions." + className;
       }
       //hack for loading only built-in function classes.
       String subString = className.substring(0,className.lastIndexOf('.'));
-      if(!(subString.equals ("com.sun.org.apache.xalan.internal.templates") ||
-           subString.equals ("com.sun.org.apache.xpath.internal.functions"))) {
+      if(!(subString.equals ("org.openjdk.com.sun.org.apache.xalan.internal.templates") ||
+           subString.equals ("org.openjdk.com.sun.org.apache.xpath.internal.functions"))) {
             throw new TransformerException("Application can't install his own xpath function.");
       }
 

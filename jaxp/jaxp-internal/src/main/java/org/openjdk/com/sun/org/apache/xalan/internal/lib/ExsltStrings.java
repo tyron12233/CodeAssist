@@ -52,7 +52,7 @@ import org.w3c.dom.Text;
  */
 public class ExsltStrings extends ExsltBase
 {
-   static final String JDK_DEFAULT_DOM = "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl";
+   static final String JDK_DEFAULT_DOM = "org.openjdk.com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl";
 
   /**
    * The str:align function aligns a string within another string.

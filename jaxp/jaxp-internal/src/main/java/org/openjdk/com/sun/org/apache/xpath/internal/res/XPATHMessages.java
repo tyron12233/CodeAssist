@@ -41,7 +41,7 @@ public class XPATHMessages extends XMLMessages {
      * The class name of the XPath error message string table.
      */
     private static final String XPATH_ERROR_RESOURCES =
-            "com.sun.org.apache.xpath.internal.res.XPATHErrorResources";
+            "org.openjdk.com.sun.org.apache.xpath.internal.res.XPATHErrorResources";
 
     /**
      * Creates a message from the specified key and replacement arguments,

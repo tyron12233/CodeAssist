@@ -265,7 +265,7 @@ public class SchemaGrammar implements XSGrammar, XSNamespaceItem {
     // are immutable.
     public static class BuiltinSchemaGrammar extends SchemaGrammar {
 
-        private static final String EXTENDED_SCHEMA_FACTORY_CLASS = "com.sun.org.apache.xerces.internal.impl.dv.xs.ExtendedSchemaDVFactoryImpl";
+        private static final String EXTENDED_SCHEMA_FACTORY_CLASS = "org.openjdk.com.sun.org.apache.xerces.internal.impl.dv.xs.ExtendedSchemaDVFactoryImpl";
 
         /**
          * Special constructor to create the grammars for the schema namespaces

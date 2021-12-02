@@ -1032,7 +1032,7 @@ public final class Stylesheet extends SyntaxTreeNode {
                                 "topLevel", _className, il,
                                 classGen.getConstantPool());
 
-        toplevel.addException("com.sun.org.apache.xalan.internal.xsltc.TransletException");
+        toplevel.addException("org.openjdk.com.sun.org.apache.xalan.internal.xsltc.TransletException");
 
         // Define and initialize 'current' variable with the root node
         final LocalVariableGen current =
@@ -1196,7 +1196,7 @@ public final class Stylesheet extends SyntaxTreeNode {
                                 "buildKeys", _className, il,
                                 classGen.getConstantPool());
 
-        buildKeys.addException("com.sun.org.apache.xalan.internal.xsltc.TransletException");
+        buildKeys.addException("org.openjdk.com.sun.org.apache.xalan.internal.xsltc.TransletException");
 
         final Enumeration elements = elements();
         while (elements.hasMoreElements()) {
@@ -1254,7 +1254,7 @@ public final class Stylesheet extends SyntaxTreeNode {
                                 _className,
                                 il,
                                 classGen.getConstantPool());
-        transf.addException("com.sun.org.apache.xalan.internal.xsltc.TransletException");
+        transf.addException("org.openjdk.com.sun.org.apache.xalan.internal.xsltc.TransletException");
 
         // Define and initialize current with the root node
         final LocalVariableGen current =

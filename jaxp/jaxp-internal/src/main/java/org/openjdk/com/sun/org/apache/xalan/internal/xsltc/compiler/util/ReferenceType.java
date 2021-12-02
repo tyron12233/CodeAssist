@@ -284,7 +284,7 @@ public final class ReferenceType extends Type {
             il.append(methodGen.loadDOM());
             il.append(new INVOKESTATIC(index));
         }
-        else if (clazz.getName().equals("com.sun.org.apache.xalan.internal.xsltc.DOM")) {
+        else if (clazz.getName().equals("org.openjdk.com.sun.org.apache.xalan.internal.xsltc.DOM")) {
             translateTo(classGen, methodGen, ResultTree);
         }
         else if (clazz == Long.TYPE) {

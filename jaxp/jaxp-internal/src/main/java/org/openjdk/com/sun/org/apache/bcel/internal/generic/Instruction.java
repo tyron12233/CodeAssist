@@ -232,7 +232,7 @@ public abstract class Instruction implements Cloneable, Serializable {
         name = "ICONST";
     } catch(StringIndexOutOfBoundsException e) { System.err.println(e); }
 
-    return "com.sun.org.apache.bcel.internal.generic." + name;
+    return "org.openjdk.com.sun.org.apache.bcel.internal.generic." + name;
   }
 
   /**

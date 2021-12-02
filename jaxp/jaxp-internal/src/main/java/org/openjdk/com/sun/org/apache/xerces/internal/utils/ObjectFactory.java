@@ -39,7 +39,7 @@ public final class ObjectFactory {
     //
     // Constants
     //
-    private static final String DEFAULT_INTERNAL_CLASSES = "com.sun.org.apache.";
+    private static final String DEFAULT_INTERNAL_CLASSES = "org.openjdk.com.sun.org.apache.";
 
     /** Set to true for debugging */
     private static final boolean DEBUG = isDebugEnabled();

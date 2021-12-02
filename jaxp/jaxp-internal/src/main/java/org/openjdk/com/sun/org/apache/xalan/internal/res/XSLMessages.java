@@ -43,7 +43,7 @@ public class XSLMessages extends XPATHMessages {
      * The class name of the Xalan error message string table.
      */
     private static final String XSLT_ERROR_RESOURCES =
-            "com.sun.org.apache.xalan.internal.res.XSLTErrorResources";
+            "org.openjdk.com.sun.org.apache.xalan.internal.res.XSLTErrorResources";
 
     /**
      * Creates a message from the specified key and replacement arguments,

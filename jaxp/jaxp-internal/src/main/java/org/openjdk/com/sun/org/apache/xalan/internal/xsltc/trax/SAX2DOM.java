@@ -316,7 +316,7 @@ public class SAX2DOM implements ContentHandler, LexicalHandler, Constants {
                 }
             } else {
                 _factory = DocumentBuilderFactory.newInstance(
-                  "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl",
+                  "org.openjdk.com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl",
                   SAX2DOM.class.getClassLoader()
                   );
             }

@@ -230,7 +230,7 @@ public final class REUtil {
             if (pattern == null) {
                 pe.printStackTrace();
             } else {
-                System.err.println("com.sun.org.apache.xerces.internal.utils.regex.ParseException: "+pe.getMessage());
+                System.err.println("org.openjdk.com.sun.org.apache.xerces.internal.utils.regex.ParseException: "+pe.getMessage());
                 String indent = "        ";
                 System.err.println(indent+pattern);
                 int loc = pe.getLocation();

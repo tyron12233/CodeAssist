@@ -66,7 +66,7 @@ public class SchemaParsingConfig extends BasicParserConfiguration
     //
 
     protected final static String XML11_DATATYPE_VALIDATOR_FACTORY =
-        "com.sun.org.apache.xerces.internal.impl.dv.dtd.XML11DTDDVFactoryImpl";
+        "org.openjdk.com.sun.org.apache.xerces.internal.impl.dv.dtd.XML11DTDDVFactoryImpl";
 
     // feature identifiers
 

@@ -67,13 +67,13 @@ class XPointerMessageFormatter implements MessageFormatter {
         if (fResourceBundle == null || locale != fLocale) {
             if (locale != null) {
                 fResourceBundle = SecuritySupport.getResourceBundle(
-                        "com.sun.org.apache.xerces.internal.impl.msg.XPointerMessages", locale);
+                        "org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.XPointerMessages", locale);
                 // memorize the most-recent locale
                 fLocale = locale;
             }
             if (fResourceBundle == null)
                 fResourceBundle = SecuritySupport.getResourceBundle(
-                        "com.sun.org.apache.xerces.internal.impl.msg.XPointerMessages");
+                        "org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.XPointerMessages");
         }
 
         String msg = fResourceBundle.getString(key);
@@ -89,7 +89,7 @@ class XPointerMessageFormatter implements MessageFormatter {
         if (msg == null) {
             msg = fResourceBundle.getString("BadMessageKey");
             throw new MissingResourceException(msg,
-                    "com.sun.org.apache.xerces.internal.impl.msg.XPointerMessages", key);
+                    "org.openjdk.com.sun.org.apache.xerces.internal.impl.msg.XPointerMessages", key);
         }
 
         return msg;

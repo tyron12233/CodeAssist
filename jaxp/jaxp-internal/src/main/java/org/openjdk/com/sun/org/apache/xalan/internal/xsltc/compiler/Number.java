@@ -62,9 +62,9 @@ final class Number extends Instruction implements Closure {
     private static final int LEVEL_ANY      = 2;
 
     static final private String[] ClassNames = {
-        "com.sun.org.apache.xalan.internal.xsltc.dom.SingleNodeCounter",          // LEVEL_SINGLE
-        "com.sun.org.apache.xalan.internal.xsltc.dom.MultipleNodeCounter", // LEVEL_MULTIPLE
-        "com.sun.org.apache.xalan.internal.xsltc.dom.AnyNodeCounter"      // LEVEL_ANY
+        "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.dom.SingleNodeCounter",          // LEVEL_SINGLE
+        "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.dom.MultipleNodeCounter", // LEVEL_MULTIPLE
+        "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.dom.AnyNodeCounter"      // LEVEL_ANY
     };
 
     static final private String[] FieldNames = {

@@ -44,7 +44,7 @@ import org.openjdk.com.sun.org.apache.xerces.internal.utils.ObjectFactory;
  */
 public abstract class SchemaDVFactory {
 
-    private static final String DEFAULT_FACTORY_CLASS = "com.sun.org.apache.xerces.internal.impl.dv.xs.SchemaDVFactoryImpl";
+    private static final String DEFAULT_FACTORY_CLASS = "org.openjdk.com.sun.org.apache.xerces.internal.impl.dv.xs.SchemaDVFactoryImpl";
 
     /**
      * Get a default instance of SchemaDVFactory implementation.

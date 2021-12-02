@@ -486,7 +486,7 @@ public class InstructionFactory
 
       String[] short_names = { "C", "F", "D", "B", "S", "I", "L" };
 
-      String name = "com.sun.org.apache.bcel.internal.generic." + short_names[src - Constants.T_CHAR] +
+      String name = "org.openjdk.com.sun.org.apache.bcel.internal.generic." + short_names[src - Constants.T_CHAR] +
         "2" + short_names[dest - Constants.T_CHAR];
 
       Instruction i = null;

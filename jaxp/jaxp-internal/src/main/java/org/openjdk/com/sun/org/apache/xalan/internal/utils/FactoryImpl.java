@@ -34,8 +34,8 @@ import org.openjdk.javax.xml.parsers.SAXParserFactory;
  */
 public class FactoryImpl {
 
-    static final String DBF = "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl";
-    static final String SF = "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl";
+    static final String DBF = "org.openjdk.com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl";
+    static final String SF = "org.openjdk.com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl";
 
     static public DocumentBuilderFactory getDOMFactory(boolean useServicesMechanism) {
         DocumentBuilderFactory dbf =

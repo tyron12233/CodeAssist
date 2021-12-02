@@ -39,8 +39,8 @@ public class ObjectFactory {
     //
     // Constants
     //
-     private static final String XALAN_INTERNAL = "com.sun.org.apache.xalan.internal";
-     private static final String XERCES_INTERNAL = "com.sun.org.apache.xerces.internal";
+     private static final String XALAN_INTERNAL = "org.openjdk.com.sun.org.apache.xalan.internal";
+     private static final String XERCES_INTERNAL = "org.openjdk.com.sun.org.apache.xerces.internal";
 
     /** Set to true for debugging */
     private static final boolean DEBUG = false;

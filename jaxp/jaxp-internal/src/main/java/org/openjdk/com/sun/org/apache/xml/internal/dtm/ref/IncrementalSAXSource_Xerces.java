@@ -103,7 +103,7 @@ public class IncrementalSAXSource_Xerces
 
                         // If we can't get the magic constructor, no need to look further.
                         Class xniConfigClass=ObjectFactory.findProviderClass(
-                            "com.sun.org.apache.xerces.internal.xni.parser.XMLParserConfiguration",
+                            "org.openjdk.com.sun.org.apache.xerces.internal.xni.parser.XMLParserConfiguration",
                             true);
                         Class[] args1={xniConfigClass};
                         Constructor ctor=SAXParser.class.getConstructor(args1);
@@ -112,7 +112,7 @@ public class IncrementalSAXSource_Xerces
                         // happens to implement XMLPullParserConfiguration, which is the API
                         // we're going to want to use.
                         Class xniStdConfigClass=ObjectFactory.findProviderClass(
-                            "com.sun.org.apache.xerces.internal.parsers.StandardParserConfiguration",
+                            "org.openjdk.com.sun.org.apache.xerces.internal.parsers.StandardParserConfiguration",
                             true);
                         fPullParserConfig=xniStdConfigClass.newInstance();
                         Object[] args2={fPullParserConfig};
@@ -122,7 +122,7 @@ public class IncrementalSAXSource_Xerces
                         // all here before we commit to trying to use them, just in case the
                         // API changes again.
                         Class fXniInputSourceClass=ObjectFactory.findProviderClass(
-                            "com.sun.org.apache.xerces.internal.xni.parser.XMLInputSource",
+                            "org.openjdk.com.sun.org.apache.xerces.internal.xni.parser.XMLInputSource",
                             true);
                         Class[] args3={fXniInputSourceClass};
                         fConfigSetInput=xniStdConfigClass.getMethod("setInputSource",args3);

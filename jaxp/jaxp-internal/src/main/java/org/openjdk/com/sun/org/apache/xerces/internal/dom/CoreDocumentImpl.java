@@ -518,7 +518,7 @@ extends ParentNode implements Document  {
 
             try {
                 Class xpathClass = ObjectFactory.findProviderClass (
-                        "com.sun.org.apache.xpath.internal.domapi.XPathEvaluatorImpl", true);
+                        "org.openjdk.com.sun.org.apache.xpath.internal.domapi.XPathEvaluatorImpl", true);
                 Constructor xpathClassConstr =
                     xpathClass.getConstructor(new Class[] { Document.class });
 

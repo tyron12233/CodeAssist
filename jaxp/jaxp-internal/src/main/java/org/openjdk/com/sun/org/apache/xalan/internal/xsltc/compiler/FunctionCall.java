@@ -255,12 +255,12 @@ class FunctionCall extends Expression {
             _java2Internal.put(nodeClass, Type.NodeSet);
 
             // Initialize the extension namespace table
-            _extensionNamespaceTable.put(EXT_XALAN, "com.sun.org.apache.xalan.internal.lib.Extensions");
-            _extensionNamespaceTable.put(EXSLT_COMMON, "com.sun.org.apache.xalan.internal.lib.ExsltCommon");
-            _extensionNamespaceTable.put(EXSLT_MATH, "com.sun.org.apache.xalan.internal.lib.ExsltMath");
-            _extensionNamespaceTable.put(EXSLT_SETS, "com.sun.org.apache.xalan.internal.lib.ExsltSets");
-            _extensionNamespaceTable.put(EXSLT_DATETIME, "com.sun.org.apache.xalan.internal.lib.ExsltDatetime");
-            _extensionNamespaceTable.put(EXSLT_STRINGS, "com.sun.org.apache.xalan.internal.lib.ExsltStrings");
+            _extensionNamespaceTable.put(EXT_XALAN, "org.openjdk.com.sun.org.apache.xalan.internal.lib.Extensions");
+            _extensionNamespaceTable.put(EXSLT_COMMON, "org.openjdk.com.sun.org.apache.xalan.internal.lib.ExsltCommon");
+            _extensionNamespaceTable.put(EXSLT_MATH, "org.openjdk.com.sun.org.apache.xalan.internal.lib.ExsltMath");
+            _extensionNamespaceTable.put(EXSLT_SETS, "org.openjdk.com.sun.org.apache.xalan.internal.lib.ExsltSets");
+            _extensionNamespaceTable.put(EXSLT_DATETIME, "org.openjdk.com.sun.org.apache.xalan.internal.lib.ExsltDatetime");
+            _extensionNamespaceTable.put(EXSLT_STRINGS, "org.openjdk.com.sun.org.apache.xalan.internal.lib.ExsltStrings");
 
             // Initialize the extension function table
             _extensionFunctionTable.put(EXSLT_COMMON + ":nodeSet", "nodeset");

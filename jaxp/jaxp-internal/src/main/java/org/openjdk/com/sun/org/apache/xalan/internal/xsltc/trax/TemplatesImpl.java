@@ -62,7 +62,7 @@ public final class TemplatesImpl implements Templates, Serializable {
      * is the main one.
      */
     private static String ABSTRACT_TRANSLET
-        = "com.sun.org.apache.xalan.internal.xsltc.runtime.AbstractTranslet";
+        = "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.runtime.AbstractTranslet";
 
     /**
      * Name of the main class or default name if unknown.

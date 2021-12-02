@@ -336,7 +336,7 @@ public class DTMManagerDefault extends DTMManager
                      (null != reader)
                      && (reader.getClass()
                                .getName()
-                               .equals("com.sun.org.apache.xerces.internal.parsers.SAXParser") );
+                               .equals("org.openjdk.com.sun.org.apache.xerces.internal.parsers.SAXParser") );
 
           if (haveXercesParser) {
             incremental = true;  // No matter what.  %REVIEW%

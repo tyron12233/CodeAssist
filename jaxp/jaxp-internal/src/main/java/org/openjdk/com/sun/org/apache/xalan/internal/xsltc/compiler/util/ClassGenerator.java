@@ -71,11 +71,11 @@ public class ClassGenerator extends ClassGen {
         _aloadTranslet = new ALOAD(TRANSLET_INDEX);
 
         if (stylesheet.isMultiDocument()) {
-            _domClass = "com.sun.org.apache.xalan.internal.xsltc.dom.MultiDOM";
+            _domClass = "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.dom.MultiDOM";
             _domClassSig = "Lcom/sun/org/apache/xalan/internal/xsltc/dom/MultiDOM;";
         }
         else {
-            _domClass = "com.sun.org.apache.xalan.internal.xsltc.dom.DOMAdapter";
+            _domClass = "org.openjdk.com.sun.org.apache.xalan.internal.xsltc.dom.DOMAdapter";
             _domClassSig = "Lcom/sun/org/apache/xalan/internal/xsltc/dom/DOMAdapter;";
         }
         _applyTemplatesSig = "("

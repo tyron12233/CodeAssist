@@ -86,9 +86,9 @@ public class XMLGrammarPreparser {
 
     static {
         KNOWN_LOADERS.put(XMLGrammarDescription.XML_SCHEMA,
-            "com.sun.org.apache.xerces.internal.impl.xs.XMLSchemaLoader");
+            "org.openjdk.com.sun.org.apache.xerces.internal.impl.xs.XMLSchemaLoader");
         KNOWN_LOADERS.put(XMLGrammarDescription.XML_DTD,
-            "com.sun.org.apache.xerces.internal.impl.dtd.XMLDTDLoader");
+            "org.openjdk.com.sun.org.apache.xerces.internal.impl.dtd.XMLDTDLoader");
     }
 
     /** Recognized properties. */

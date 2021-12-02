@@ -68,7 +68,7 @@ import java.lang.reflect.*;
  * <pre>java com.sun.org.apache.bcel.internal.util.JavaWrapper &lt;real.class.name&gt; [arguments]</pre>
  * <p>
  * To use your own class loader you can set the "bcel.classloader" system property
- * which defaults to "com.sun.org.apache.bcel.internal.util.ClassLoader", e.g., with
+ * which defaults to "org.openjdk.com.sun.org.apache.bcel.internal.util.ClassLoader", e.g., with
  * <pre>java com.sun.org.apache.bcel.internal.util.JavaWrapper -Dbcel.classloader=foo.MyLoader &lt;real.class.name&gt; [arguments]</pre>
  * </p>
  *
@@ -83,7 +83,7 @@ public class JavaWrapper {
     String s = SecuritySupport.getSystemProperty("bcel.classloader");
 
     if((s == null) || "".equals(s))
-      s = "com.sun.org.apache.bcel.internal.util.ClassLoader";
+      s = "org.openjdk.com.sun.org.apache.bcel.internal.util.ClassLoader";
 
     try {
       return (java.lang.ClassLoader)Class.forName(s).newInstance();

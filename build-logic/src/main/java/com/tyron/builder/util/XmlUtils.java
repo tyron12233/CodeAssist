@@ -1,5 +1,7 @@
 package com.tyron.builder.util;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -7,11 +9,20 @@ import com.google.common.base.CharMatcher;
 import com.google.common.base.Charsets;
 import com.google.common.collect.Sets;
 import com.google.common.io.Files;
+import com.tyron.build.BuildConfig;
 import com.tyron.builder.compiler.manifest.SdkConstants;
 import com.tyron.builder.compiler.manifest.blame.SourceFile;
 import com.tyron.builder.compiler.manifest.blame.SourceFilePosition;
 import com.tyron.builder.compiler.manifest.blame.SourcePosition;
 
+import org.openjdk.javax.xml.parsers.DocumentBuilder;
+import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
+import org.openjdk.javax.xml.parsers.ParserConfigurationException;
+import org.openjdk.javax.xml.parsers.SAXParser;
+import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import org.openjdk.javax.xml.stream.XMLInputFactory;
+import org.openjdk.javax.xml.stream.XMLStreamException;
+import org.openjdk.javax.xml.stream.XMLStreamReader;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Comment;
 import org.w3c.dom.Document;
@@ -39,15 +50,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import org.openjdk.javax.xml.parsers.DocumentBuilder;
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.parsers.SAXParser;
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
-import org.openjdk.javax.xml.stream.XMLInputFactory;
-import org.openjdk.javax.xml.stream.XMLStreamException;
-import org.openjdk.javax.xml.stream.XMLStreamReader;
 
 /**
  * XML Utilities.
@@ -574,6 +576,9 @@ public class XmlUtils {
         try {
             return parseDocument(xml, namespaceAware);
         } catch (Exception e) {
+            if (BuildConfig.DEBUG) {
+                Log.d("XmlUtils", "Unable to parse document", e);
+            }
             // pass
             // This method is deliberately silent; will return null
         }

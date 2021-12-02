@@ -338,7 +338,7 @@ public class DOMConfigurationImpl extends ParserConfigurationSettings
             MessageFormatter xmft = null;
             try {
                xmft = (MessageFormatter)(
-                    ObjectFactory.newInstance("com.sun.org.apache.xerces.internal.impl.xs.XSMessageFormatter", true));
+                    ObjectFactory.newInstance("org.openjdk.com.sun.org.apache.xerces.internal.impl.xs.XSMessageFormatter", true));
             } catch (Exception exception){
             }
 

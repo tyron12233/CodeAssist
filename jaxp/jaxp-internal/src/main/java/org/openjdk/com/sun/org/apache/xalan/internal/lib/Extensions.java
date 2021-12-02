@@ -58,7 +58,7 @@ import org.xml.sax.SAXNotSupportedException;
  */
 public class Extensions
 {
-    static final String JDK_DEFAULT_DOM = "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl";
+    static final String JDK_DEFAULT_DOM = "org.openjdk.com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl";
   /**
    * Constructor Extensions
    *

@@ -64,7 +64,7 @@ import  java.io.*;
 
 /**
  * This class is derived from the abstract
- * <A HREF="com.sun.org.apache.bcel.internal.classfile.Constant.html">Constant</A> class
+ * <A HREF="org.openjdk.com.sun.org.apache.bcel.internal.classfile.Constant.html">Constant</A> class
  * and represents a reference to the name and signature
  * of a field or method.
  *

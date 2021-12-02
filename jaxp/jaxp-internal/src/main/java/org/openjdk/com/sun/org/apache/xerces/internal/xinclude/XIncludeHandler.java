@@ -122,7 +122,7 @@ public class XIncludeHandler
     implements XMLComponent, XMLDocumentFilter, XMLDTDFilter {
 
     public final static String XINCLUDE_DEFAULT_CONFIGURATION =
-        "com.sun.org.apache.xerces.internal.parsers.XIncludeParserConfiguration";
+        "org.openjdk.com.sun.org.apache.xerces.internal.parsers.XIncludeParserConfiguration";
     public final static String HTTP_ACCEPT = "Accept";
     public final static String HTTP_ACCEPT_LANGUAGE = "Accept-Language";
     public final static String XPOINTER = "xpointer";
@@ -1634,7 +1634,7 @@ public class XIncludeHandler
 
                 String parserName = XINCLUDE_DEFAULT_CONFIGURATION;
                 if (xpointer != null)
-                        parserName = "com.sun.org.apache.xerces.internal.parsers.XPointerParserConfiguration";
+                        parserName = "org.openjdk.com.sun.org.apache.xerces.internal.parsers.XPointerParserConfiguration";
 
                 fChildConfig =
                     (XMLParserConfiguration)ObjectFactory.newInstance(
