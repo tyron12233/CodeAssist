@@ -336,11 +336,10 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDimension(V view, float dimension) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams layoutParams;
-          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+          ViewGroup.MarginLayoutParams layoutParams = new ViewGroup.MarginLayoutParams(view.getLayoutParams());
           layoutParams.setMarginEnd((int) dimension);
-          layoutParams.resolveLayoutDirection(view.getLayoutDirection());
-          layoutParams.setMargins(layoutParams.leftMargin, layoutParams.topMargin, layoutParams.rightMargin, layoutParams.bottomMargin);
+          layoutParams.setMarginStart(((ViewGroup.MarginLayoutParams) view.getLayoutParams()).getMarginStart());
+          view.setLayoutParams(layoutParams);
         }
       }
     });
