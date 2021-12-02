@@ -166,6 +166,9 @@ public class CompilerService extends Service {
             boolean success = true;
             String message = "";
 
+            project.clear();
+            project.index();
+
             try {
                 projectBuilder.build(type);
             } catch (Exception e) {
