@@ -1,5 +1,7 @@
 package com.tyron.layoutpreview.resource;
 
+import android.util.Log;
+
 import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.ProteusContext;
@@ -8,6 +10,7 @@ import com.flipkart.android.proteus.value.Value;
 import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonReader;
 import com.tyron.builder.project.api.FileManager;
+import com.tyron.layoutpreview.BuildConfig;
 import com.tyron.layoutpreview.convert.ConvertException;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
@@ -23,7 +26,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class ResourceLayoutParser {
-
+    private static final String TAG = ResourceLayoutParser.class.getSimpleName();
 
     private final ProteusContext mContext;
     private final File mResourceDirectory;
@@ -58,7 +61,10 @@ public class ResourceLayoutParser {
                 if (layout != null && layout.isLayout()) {
                     map.put(getName(file), layout.getAsLayout());
                 }
-            } catch (IOException | XmlPullParserException | ConvertException ignore) {
+            } catch (IOException | XmlPullParserException | ConvertException e) {
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "Unable to parse file: " + file.getName(), e);
+                }
             }
         }
 
@@ -69,7 +75,7 @@ public class ResourceLayoutParser {
     private Value parseLayout(File file) throws ConvertException, XmlPullParserException, IOException {
         Optional<CharSequence> fileContent = mFileManager.getFileContent(file);
         if (fileContent.isPresent()) {
-            String contents = fileContent.toString();
+            String contents = fileContent.get().toString();
             JsonObject jsonObject = new XmlToJsonConverter()
                     .convert(contents);
             return new ProteusTypeAdapterFactory(mContext).VALUE_TYPE_ADAPTER

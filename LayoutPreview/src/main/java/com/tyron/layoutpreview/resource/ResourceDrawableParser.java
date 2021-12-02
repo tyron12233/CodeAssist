@@ -82,7 +82,7 @@ public class ResourceDrawableParser {
     private DrawableValue parseXml(File file) throws IOException, ConvertException, XmlPullParserException {
         Optional<CharSequence> contents = mFileManager.getFileContent(file);
         if (contents.isPresent()) {
-            String contentsString = contents.toString();
+            String contentsString = contents.get().toString();
             JsonObject converted = new XmlToJsonConverter()
                     .convert(contentsString);
             Value value = new ProteusTypeAdapterFactory(mContext)
