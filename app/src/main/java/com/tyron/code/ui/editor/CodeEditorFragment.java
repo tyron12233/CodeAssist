@@ -3,7 +3,6 @@ package com.tyron.code.ui.editor;
 import android.app.ProgressDialog;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -11,7 +10,6 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -50,8 +48,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -460,24 +456,23 @@ public class CodeEditorFragment extends Fragment
         if (mEditor != null && mLanguage instanceof LanguageXML) {
             Executors.newSingleThreadExecutor().execute(() -> {
                 try {
-                    Instant start = Instant.now();
-                    View view = ((LanguageXML) mLanguage).showPreview(requireContext(), container);
+                    View view = ((LanguageXML) mLanguage).showPreview(requireContext(), (ViewGroup) requireView());
                     requireActivity().runOnUiThread(() -> {
-                        Toast.makeText(requireContext(), "PreviewTask took: " +
-                                        Duration.between(start, Instant.now()).toMillis() + " ms.",
-                                Toast.LENGTH_SHORT).show();
-                        if (view != null) {
-                            DisplayMetrics displayMetrics =
-                                    requireActivity().getResources().getDisplayMetrics();
-                            FrameLayout root = new FrameLayout(requireContext());
-                            root.addView(view);
-                            container.addView(root, new ViewGroup.LayoutParams((int)
-                                    (displayMetrics.widthPixels * .90),
-                                    (int) (displayMetrics.heightPixels * .90)));
 
-                            new AlertDialog.Builder(requireContext())
+                        if (view != null) {
+                            container.addView(view, new FrameLayout.LayoutParams(-1, -1));
+
+                            AlertDialog show = new AlertDialog.Builder(requireContext())
                                     .setView(container)
-                                    .show();
+                                    .create();
+
+                            show.setOnShowListener(d -> {
+                                show.getWindow().setLayout(-1, requireActivity().getResources()
+                                        .getDisplayMetrics().heightPixels);
+                                view.requestLayout();
+                            });
+
+                            show.show();
                         }
                     });
 

@@ -323,7 +323,11 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDimension(V view, float dimension) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).setMarginStart((int) dimension);
+          ViewGroup.MarginLayoutParams layoutParams;
+          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+          layoutParams.setMarginStart((int) dimension);
+          layoutParams.resolveLayoutDirection(view.getLayoutDirection());
+          layoutParams.setMargins(layoutParams.leftMargin, layoutParams.topMargin, layoutParams.rightMargin, layoutParams.bottomMargin);
         }
       }
     });
@@ -332,7 +336,11 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDimension(V view, float dimension) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).setMarginEnd((int) dimension);
+          ViewGroup.MarginLayoutParams layoutParams;
+          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+          layoutParams.setMarginEnd((int) dimension);
+          layoutParams.resolveLayoutDirection(view.getLayoutDirection());
+          layoutParams.setMargins(layoutParams.leftMargin, layoutParams.topMargin, layoutParams.rightMargin, layoutParams.bottomMargin);
         }
       }
     });
@@ -369,7 +377,6 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void handleValue(V view, Value value) {
         if (value.isPrimitive() && value.getAsPrimitive().isNumber()) {
-          // noinspection ResourceType
           view.setVisibility(value.getAsInt());
         } else {
           process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
@@ -379,21 +386,18 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void handleResource(V view, Resource resource) {
         Integer visibility = resource.getInteger(view.getContext());
-        //noinspection WrongConstant
         view.setVisibility(null != visibility ? visibility : View.GONE);
       }
 
       @Override
       public void handleAttributeResource(V view, AttributeResource attribute) {
         TypedArray a = attribute.apply(view.getContext());
-        //noinspection WrongConstant
         view.setVisibility(a.getInt(0, View.GONE));
       }
 
       @Override
       public void handleStyleResource(V view, StyleResource style) {
         TypedArray a = style.apply(view.getContext());
-        //noinspection WrongConstant
         view.setVisibility(a.getInt(0, View.GONE));
       }
 
