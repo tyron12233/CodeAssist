@@ -31,7 +31,7 @@ public class MainViewModel extends ViewModel {
      */
     private MutableLiveData<String> mCurrentState;
 
-    private MutableLiveData<String> mToolbarTitle;
+    private MutableLiveData<String> mToolbarTitle = new MutableLiveData<>();
 
     /**
      * The current position of the CodeEditor
