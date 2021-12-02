@@ -6,6 +6,7 @@ import com.tyron.layout.appcompat.widget.CollapsingToolbarLayoutParser;
 import com.tyron.layout.appcompat.widget.CoordinatorLayoutParser;
 import com.tyron.layout.appcompat.widget.FloatingActionButtonParser;
 import com.tyron.layout.appcompat.widget.MaterialCardViewParser;
+import com.tyron.layout.appcompat.widget.RecyclerViewParser;
 import com.tyron.layout.appcompat.widget.VisibilityAwareImageButtonParser;
 
 public class AppCompatModule implements ProteusBuilder.Module {
@@ -25,6 +26,7 @@ public class AppCompatModule implements ProteusBuilder.Module {
         builder.register(new MaterialCardViewParser<>());
         builder.register(new VisibilityAwareImageButtonParser<>());
         builder.register(new FloatingActionButtonParser<>());
+        builder.register(new RecyclerViewParser<>());
         AppCompatModuleAttributeHelper.register(builder);
     }
 }

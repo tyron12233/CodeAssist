@@ -20,6 +20,9 @@ import android.graphics.drawable.Drawable;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
@@ -30,9 +33,6 @@ import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.view.ProteusImageView;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 
 /**
@@ -63,6 +63,13 @@ public class ImageViewParser<T extends ImageView> extends ViewTypeParser<T> {
   protected void addAttributeProcessors() {
 
     addAttributeProcessor(Attributes.ImageView.Src, new DrawableResourceProcessor<T>() {
+      @Override
+      public void setDrawable(T view, Drawable drawable) {
+        view.setImageDrawable(drawable);
+      }
+    });
+
+    addAttributeProcessor("app:srcCompat", new DrawableResourceProcessor<T>() {
       @Override
       public void setDrawable(T view, Drawable drawable) {
         view.setImageDrawable(drawable);
