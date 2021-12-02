@@ -6,6 +6,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.builder.project.api.Project;
 import com.tyron.code.ui.editor.language.LanguageManager;
 
@@ -30,10 +31,15 @@ public class MainViewModel extends ViewModel {
      */
     private MutableLiveData<String> mCurrentState;
 
+    private MutableLiveData<String> mToolbarTitle;
+
     /**
      * The current position of the CodeEditor
      */
     public final MutableLiveData<Integer> currentPosition = new MutableLiveData<>(0);
+
+    public MutableLiveData<Integer> mBottomSheetState =
+            new MutableLiveData<>(BottomSheetBehavior.STATE_COLLAPSED);
 
     public MutableLiveData<String> getCurrentState() {
         if (mCurrentState == null) {
@@ -42,8 +48,26 @@ public class MainViewModel extends ViewModel {
         return mCurrentState;
     }
 
+
     public void setCurrentState(@Nullable String message) {
         mCurrentState.setValue(message);
+    }
+
+    public LiveData<String> getToolbarTitle() {
+        return mToolbarTitle;
+    }
+
+    public void setToolbarTitle(String title) {
+        mToolbarTitle.setValue(title);
+    }
+
+    public LiveData<Integer> getBottomSheetState() {
+        return mBottomSheetState;
+    }
+
+
+    public void setBottomSheetState(@BottomSheetBehavior.State int bottomSheetState) {
+        mBottomSheetState.setValue(bottomSheetState);
     }
 
     public MutableLiveData<Boolean> isIndexing() {
@@ -62,6 +86,13 @@ public class MainViewModel extends ViewModel {
             mFiles = new MutableLiveData<>(new ArrayList<>());
         }
         return mFiles;
+    }
+
+    public void setFiles(@NonNull List<File> files) {
+        if (mFiles == null) {
+            mFiles = new MutableLiveData<>(new ArrayList<>());
+        }
+        mFiles.setValue(files);
     }
 
     public void updateCurrentPosition(int pos) {
@@ -91,13 +122,6 @@ public class MainViewModel extends ViewModel {
 
     public void clear() {
         mFiles.setValue(new ArrayList<>());
-    }
-
-    public void setFiles(@NonNull List<File> files) {
-        if (mFiles == null) {
-            mFiles = new MutableLiveData<>(new ArrayList<>());
-        }
-        mFiles.setValue(files);
     }
 
 

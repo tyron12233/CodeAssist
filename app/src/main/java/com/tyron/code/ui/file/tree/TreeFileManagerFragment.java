@@ -15,11 +15,11 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.component.tree.TreeView;
+import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.file.action.FileActionManager;
 import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewBinder.TreeFileNodeListener;
 import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewFactory;
 import com.tyron.code.ui.file.tree.model.TreeFile;
-import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 
 import java.io.File;
@@ -28,6 +28,11 @@ import java.util.concurrent.Executors;
 
 public class TreeFileManagerFragment extends Fragment {
 
+    /**
+     * @deprecated Instantiate this fragment directly without arguments and
+     * use {@link FileViewModel} to update the nodes
+     */
+    @Deprecated
     public static TreeFileManagerFragment newInstance(File root) {
         TreeFileManagerFragment fragment = new TreeFileManagerFragment();
         Bundle args = new Bundle();
@@ -38,6 +43,7 @@ public class TreeFileManagerFragment extends Fragment {
 
     private File mRootFile;
     private MainViewModel mMainViewModel;
+    private FileViewModel mFileViewModel;
     private FileActionManager mActionManager;
     private TreeView<TreeFile> treeView;
 
@@ -47,6 +53,7 @@ public class TreeFileManagerFragment extends Fragment {
 
         mRootFile = (File) requireArguments().getSerializable("rootFile");
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
+        mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
     }
 
     @Nullable
@@ -89,7 +96,7 @@ public class TreeFileManagerFragment extends Fragment {
             @Override
             public void onNodeToggled(TreeNode<TreeFile> treeNode, boolean expanded) {
                 if (treeNode.isLeaf()) {
-                    openFile(treeNode.getContent().getFile());
+                    mMainViewModel.openFile(treeNode.getContent().getFile());
                 }
             }
 
@@ -98,11 +105,12 @@ public class TreeFileManagerFragment extends Fragment {
                 PopupMenu popupMenu = new PopupMenu(requireContext(), view);
                 addMenus(popupMenu, treeNode);
                 popupMenu.show();
-
                 return true;
             }
         }));
-        refresh();
+        mFileViewModel.getNodes().observe(getViewLifecycleOwner(), node -> {
+            treeView.refreshTreeView(node);
+        });
     }
 
     @Override
@@ -126,43 +134,6 @@ public class TreeFileManagerFragment extends Fragment {
 
     public MainViewModel getMainViewModel() {
         return mMainViewModel;
-    }
-
-
-    /**
-     * Sets the tree to be rooted at this file, calls refresh() after
-     *
-     * @param file root file of the tree
-     */
-    public void setRoot(File file) {
-        mRootFile = file;
-        refresh();
-    }
-
-    public void refresh() {
-        if (treeView != null) {
-            Executors.newSingleThreadExecutor().execute(() -> {
-                TreeNode<TreeFile> nodes = TreeNode.root(TreeUtil.getNodes(mRootFile));
-                if (getActivity() != null) {
-                    requireActivity().runOnUiThread(() -> {
-                        treeView.refreshTreeView(nodes);
-                        treeView.updateTreeView();
-                    });
-                }
-            });
-        }
-    }
-
-
-
-    private void openFile(File file) {
-        Fragment parent = getParentFragment();
-
-        if (parent != null) {
-            if (parent instanceof MainFragment) {
-                ((MainFragment) parent).openFile(file);
-            }
-        }
     }
 }
 

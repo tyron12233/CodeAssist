@@ -30,7 +30,6 @@ import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.ILogger;
@@ -41,9 +40,11 @@ import com.tyron.builder.project.impl.AndroidProjectImpl;
 import com.tyron.code.R;
 import com.tyron.code.service.CompilerService;
 import com.tyron.code.service.IndexService;
+import com.tyron.code.service.IndexServiceConnection;
 import com.tyron.code.ui.editor.BottomEditorFragment;
 import com.tyron.code.ui.editor.CodeEditorFragment;
 import com.tyron.code.ui.editor.language.LanguageManager;
+import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.main.adapter.PageAdapter;
 import com.tyron.code.ui.settings.SettingsActivity;
@@ -69,8 +70,11 @@ public class MainFragment extends Fragment {
         return fragment;
     }
 
+    private LogViewModel mLogViewModel;
+    private MainViewModel mMainViewModel;
+    private FileViewModel mFileViewModel;
+
     private ProjectManager mProjectManager;
-    private LogViewModel logViewModel;
     private DrawerLayout mRoot;
     private Toolbar mToolbar;
     private LinearProgressIndicator mProgressBar;
@@ -79,7 +83,6 @@ public class MainFragment extends Fragment {
     private TabLayout mTabLayout;
     private ViewPager2 mPager;
     private PageAdapter mAdapter;
-    private MainViewModel mFilesViewModel;
     OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {
         @Override
         public void handleOnBackPressed() {
@@ -95,23 +98,22 @@ public class MainFragment extends Fragment {
     private Project mProject;
     private BuildType mBuildType;
     private CompilerService.CompilerBinder mBinder;
-    private IndexService.IndexBinder mIndexBinder;
     private final ServiceConnection mServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-            ILogger logger = ILogger.wrap(logViewModel);
+            ILogger logger = ILogger.wrap(mLogViewModel);
 
             mBinder = (CompilerService.CompilerBinder) iBinder;
             mBinder.getCompilerService().setLogger(logger);
             mBinder.getCompilerService().setShouldShowNotification(false);
             mBinder.getCompilerService().setOnResultListener((success, message) ->
                     requireActivity().runOnUiThread(() -> {
-                        mFilesViewModel.setCurrentState(null);
+                        mMainViewModel.setCurrentState(null);
 
                         if (mProgressBar != null) {
                             AndroidUtilities.hideKeyboard(mProgressBar);
                         }
-                        mFilesViewModel.setIndexing(false);
+                        mMainViewModel.setIndexing(false);
 
                         if (!success) {
                             logger.error(message);
@@ -124,7 +126,7 @@ public class MainFragment extends Fragment {
                         if (getActivity() != null) {
                             if (success) {
                                 logger.debug(message);
-                                logViewModel.clear(LogViewModel.APP_LOG);
+                                mLogViewModel.clear(LogViewModel.APP_LOG);
 
                                 File file = new File(mProjectManager.getCurrentProject()
                                         .getBuildDirectory(), "bin/signed.apk");
@@ -148,79 +150,14 @@ public class MainFragment extends Fragment {
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
             mBinder = null;
-            mFilesViewModel.setCurrentState(null);
-            mFilesViewModel.setIndexing(false);
+            mMainViewModel.setCurrentState(null);
+            mMainViewModel.setIndexing(false);
             if (mProgressBar != null) {
                 AndroidUtilities.hideKeyboard(mProgressBar);
             }
         }
     };
-    private final ServiceConnection mIndexServiceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-            mIndexBinder = (IndexService.IndexBinder) iBinder;
-            ProjectManager.TaskListener taskListener = new ProjectManager.TaskListener() {
-                @Override
-                public void onTaskStarted(String message) {
-                    if (getActivity() == null) {
-                        return;
-                    }
-                    requireActivity().runOnUiThread(() -> mFilesViewModel.setCurrentState(message));
-                }
-
-                @Override
-                public void onComplete(boolean success, String message) {
-                    if (getActivity() == null) {
-                        return;
-                    }
-
-                    requireActivity().runOnUiThread(() -> {
-                        mFilesViewModel.setIndexing(false);
-                        mFilesViewModel.setCurrentState(null);
-                        if (!success) {
-                            if (mBehavior.getState() != BottomSheetBehavior.STATE_EXPANDED) {
-                                mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
-                            }
-                            logViewModel.e(LogViewModel.BUILD_LOG, message);
-                        } else {
-                            if (mProjectManager.getCurrentProject() != null) {
-                                mToolbar.setTitle(mProject.getRootFile().getName());
-
-                                String openedFilesString = mProjectManager.getCurrentProject()
-                                        .getSettings()
-                                        .getString(ProjectSettings.SAVED_EDITOR_FILES, null);
-                                if (openedFilesString != null) {
-                                    List<String> paths = new Gson().fromJson(openedFilesString,
-                                            new TypeToken<List<String>>() {
-                                            }.getType());
-                                    List<File> files = paths.stream()
-                                            .map(File::new)
-                                            .filter(File::exists)
-                                            .collect(Collectors.toList());
-                                    mFilesViewModel.setFiles(files);
-                                }
-                            }
-                        }
-                        int pos = mPager.getCurrentItem();
-                        Fragment fragment = getChildFragmentManager()
-                                .findFragmentByTag("f" + mAdapter.getItemId(pos));
-                        if (fragment instanceof CodeEditorFragment) {
-                            ((CodeEditorFragment) fragment).analyze();
-                        }
-                    });
-                }
-            };
-
-            mIndexBinder.index(mProject, taskListener, ILogger.wrap(logViewModel));
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName componentName) {
-            mIndexBinder = null;
-            mFilesViewModel.setIndexing(false);
-            mFilesViewModel.setCurrentState(null);
-        }
-    };
+    private IndexServiceConnection mIndexServiceConnection;
 
     public MainFragment() {
 
@@ -237,6 +174,11 @@ public class MainFragment extends Fragment {
 
         String projectPath = requireArguments().getString("project_path");
         mProject = new AndroidProjectImpl(new File(projectPath));
+        mProjectManager = ProjectManager.getInstance();
+        mLogViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
+        mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
+        mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
+        mIndexServiceConnection = new IndexServiceConnection(mMainViewModel, mLogViewModel);
     }
 
     @Override
@@ -268,31 +210,6 @@ public class MainFragment extends Fragment {
         mToolbar = mRoot.findViewById(R.id.toolbar);
         mToolbar.setNavigationIcon(R.drawable.ic_baseline_menu_24);
         mToolbar.inflateMenu(R.menu.code_editor_menu);
-
-        mProjectManager = ProjectManager.getInstance();
-        logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
-        mFilesViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
-
-        // If the user has changed projects, clear the current opened files
-        if (!mProject.equals(mProjectManager.getCurrentProject())) {
-            mFilesViewModel.setFiles(new ArrayList<>());
-        }
-        mFilesViewModel.getFiles().observe(getViewLifecycleOwner(), files -> {
-            mAdapter.submitList(files);
-            mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
-        });
-        mFilesViewModel.currentPosition.observe(getViewLifecycleOwner(), item -> {
-            if (mRoot.isOpen()) {
-                mRoot.closeDrawer(GravityCompat.START);
-            }
-            mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
-            mPager.setCurrentItem(item);
-        });
-        mFilesViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> {
-            mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
-            CompletionEngine.setIndexing(indexing);
-        });
-        mFilesViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
         return mRoot;
     }
 
@@ -310,7 +227,7 @@ public class MainFragment extends Fragment {
         mRoot.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
             @Override
             public void onDrawerSlide(@NonNull View p1, float p) {
-                File currentFile = mFilesViewModel.getCurrentFile();
+                File currentFile = mMainViewModel.getCurrentFile();
                 if (currentFile != null) {
                     Fragment fragment = getChildFragmentManager()
                             .findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
@@ -351,19 +268,19 @@ public class MainFragment extends Fragment {
                 popup.setOnMenuItemClickListener(item -> {
                     switch (item.getItemId()) {
                         case 0:
-                            mFilesViewModel.removeFile(mFilesViewModel.getCurrentFile());
+                            mMainViewModel.removeFile(mMainViewModel.getCurrentFile());
                             break;
                         case 1:
-                            File currentFile = mFilesViewModel.getCurrentFile();
-                            List<File> files = mFilesViewModel.getFiles().getValue();
+                            File currentFile = mMainViewModel.getCurrentFile();
+                            List<File> files = mMainViewModel.getFiles().getValue();
                             if (files != null) {
                                 files.clear();
                                 files.add(currentFile);
-                                mFilesViewModel.setFiles(files);
+                                mMainViewModel.setFiles(files);
                             }
                             break;
                         case 2:
-                            mFilesViewModel.clear();
+                            mMainViewModel.clear();
                     }
 
                     return true;
@@ -393,15 +310,15 @@ public class MainFragment extends Fragment {
         mPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
-                mFilesViewModel.updateCurrentPosition(position);
-                File current = mFilesViewModel.getCurrentFile();
+                mMainViewModel.updateCurrentPosition(position);
+                File current = mMainViewModel.getCurrentFile();
                 mToolbar.getMenu().findItem(R.id.menu_preview_layout)
                         .setVisible(current != null && ProjectUtils.isResourceXMLFile(current));
             }
         });
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_refresh) {
-                if (mBinder == null && mIndexBinder == null) {
+                if (mBinder == null) {
                     Project project = ProjectManager.getInstance()
                             .getCurrentProject();
 
@@ -431,7 +348,7 @@ public class MainFragment extends Fragment {
                 startActivity(intent);
                 return true;
             } else if (item.getItemId() == R.id.menu_preview_layout) {
-                File currentFile = mFilesViewModel.getCurrentFile();
+                File currentFile = mMainViewModel.getCurrentFile();
                 if (currentFile != null) {
                     Fragment fragment = getChildFragmentManager()
                             .findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
@@ -485,6 +402,28 @@ public class MainFragment extends Fragment {
         if (!mProject.equals(mProjectManager.getCurrentProject())) {
             mRoot.postDelayed(() -> openProject(mProject), 200);
         }
+
+        // If the user has changed projects, clear the current opened files
+        if (!mProject.equals(mProjectManager.getCurrentProject())) {
+            mMainViewModel.setFiles(new ArrayList<>());
+        }
+        mMainViewModel.getFiles().observe(getViewLifecycleOwner(), files -> {
+            mAdapter.submitList(files);
+            mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
+        });
+        mMainViewModel.currentPosition.observe(getViewLifecycleOwner(), item -> {
+            if (mRoot.isOpen()) {
+                mRoot.closeDrawer(GravityCompat.START);
+            }
+            mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+            mPager.setCurrentItem(item);
+        });
+        mMainViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> {
+            mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
+            CompletionEngine.setIndexing(indexing);
+        });
+        mMainViewModel.getBottomSheetState().observe(getViewLifecycleOwner(), mBehavior::setState);
+        mMainViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
     }
 
     @Override
@@ -528,10 +467,10 @@ public class MainFragment extends Fragment {
 
         int pos = mAdapter.getPosition(file);
         if (pos != -1) {
-            mFilesViewModel.updateCurrentPosition(pos);
+            mMainViewModel.updateCurrentPosition(pos);
         } else {
-            mFilesViewModel.addFile(file);
-            mFilesViewModel.updateCurrentPosition(mAdapter.getPosition(file));
+            mMainViewModel.addFile(file);
+            mMainViewModel.updateCurrentPosition(mAdapter.getPosition(file));
             delay = 200;
         }
 
@@ -553,19 +492,19 @@ public class MainFragment extends Fragment {
      * @param file file to open
      */
     public void openFile(File file) {
-        mFilesViewModel.openFile(file);
+        mMainViewModel.openFile(file);
     }
 
     public void openProject(Project project) {
+        if (CompletionEngine.isIndexing()) {
+            return;
+        }
         mProject = project;
-
-        mFilesViewModel.setIndexing(true);
+        mIndexServiceConnection.setProject(project);
+        mMainViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
 
-        Fragment fragment = getChildFragmentManager().findFragmentByTag("file_manager");
-        if (fragment instanceof TreeFileManagerFragment) {
-            ((TreeFileManagerFragment) fragment).setRoot(project.getRootFile());
-        }
+        mFileViewModel.setRootFile(project.getRootFile());
 
         Intent intent = new Intent(requireContext(), IndexService.class);
         requireActivity().startService(intent);
@@ -618,16 +557,16 @@ public class MainFragment extends Fragment {
     }
 
     private void compile(BuildType type) {
-        if (mBinder != null || mIndexBinder != null) {
+        if (mBinder != null || CompletionEngine.isIndexing()) {
             return;
         }
 
         mBuildType = type;
         saveAll();
 
-        mFilesViewModel.setCurrentState("Compiling");
-        mFilesViewModel.setIndexing(true);
-        logViewModel.clear(LogViewModel.BUILD_LOG);
+        mMainViewModel.setCurrentState("Compiling");
+        mMainViewModel.setIndexing(true);
+        mLogViewModel.clear(LogViewModel.BUILD_LOG);
 
         requireActivity().startService(new Intent(requireContext(), CompilerService.class));
         requireActivity().bindService(new Intent(requireContext(), CompilerService.class),
