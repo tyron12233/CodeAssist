@@ -424,6 +424,7 @@ public class MainFragment extends Fragment {
         });
         mMainViewModel.getBottomSheetState().observe(getViewLifecycleOwner(), mBehavior::setState);
         mMainViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
+        mMainViewModel.getToolbarTitle().observe(getViewLifecycleOwner(), mToolbar::setTitle);
     }
 
     @Override
