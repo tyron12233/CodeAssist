@@ -1,16 +1,24 @@
 package com.tyron.builder.compiler.log;
 
+import android.util.Log;
 import android.util.Pair;
 
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.project.api.Project;
 import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
+import org.openjdk.javax.xml.parsers.DocumentBuilder;
+import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
+import org.openjdk.javax.xml.parsers.ParserConfigurationException;
+import org.openjdk.javax.xml.transform.Transformer;
+import org.openjdk.javax.xml.transform.TransformerException;
+import org.openjdk.javax.xml.transform.TransformerFactory;
+import org.openjdk.javax.xml.transform.dom.DOMSource;
+import org.openjdk.javax.xml.transform.stream.StreamResult;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.xml.sax.SAXException;
@@ -24,15 +32,6 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
-
-import org.openjdk.javax.xml.parsers.DocumentBuilder;
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
-import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.openjdk.javax.xml.transform.Transformer;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.openjdk.javax.xml.transform.TransformerFactory;
-import org.openjdk.javax.xml.transform.dom.DOMSource;
-import org.openjdk.javax.xml.transform.stream.StreamResult;
 
 public class InjectLoggerTask extends Task<AndroidProject> {
 
@@ -180,7 +179,7 @@ public class InjectLoggerTask extends Task<AndroidProject> {
 
             getLogger().debug("application class: " + applicationClass);
         } catch (RuntimeException | XmlPullParserException | ParserConfigurationException | SAXException | TransformerException e) {
-            throw new CompilationFailedException(e);
+            throw new CompilationFailedException(Log.getStackTraceString(e));
         }
     }
 

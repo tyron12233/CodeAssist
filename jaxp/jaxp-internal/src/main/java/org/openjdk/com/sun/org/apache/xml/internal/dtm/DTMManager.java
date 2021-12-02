@@ -34,7 +34,7 @@ import org.openjdk.com.sun.org.apache.xml.internal.dtm.ref.DTMManagerDefault;
  * DTMIterator objects, and manage the DTM objects in the system.
  *
  * <p>The system property that determines which Factory implementation
- * to create is named "com.sun.org.apache.xml.internal.utils.DTMFactory". This
+ * to create is named "org.openjdk.com.sun.org.apache.xml.internalutils.DTMFactory". This
  * property names a concrete subclass of the DTMFactory abstract
  *  class. If the property is not defined, a platform default is be used.</p>
  *

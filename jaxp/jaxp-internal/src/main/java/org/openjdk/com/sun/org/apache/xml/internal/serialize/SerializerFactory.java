@@ -40,7 +40,7 @@ public abstract class SerializerFactory
 {
 
 
-    public static final String FactoriesProperty = "com.sun.org.apache.xml.internal.serialize.factories";
+    public static final String FactoriesProperty = "org.openjdk.com.sun.org.apache.xml.internalserialize.factories";
 
 
     private static Hashtable  _factories = new Hashtable();

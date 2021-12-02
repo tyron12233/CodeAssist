@@ -62,14 +62,14 @@ final class CharInfo
      * If specified, the file will be resource loaded with the default class loader.
      */
     public static final String HTML_ENTITIES_RESOURCE =
-                "com.sun.org.apache.xml.internal.serializer.HTMLEntities";
+                "org.openjdk.com.sun.org.apache.xml.internalserializer.HTMLEntities";
 
     /**
      * The name of the XML entities file.
      * If specified, the file will be resource loaded with the default class loader.
      */
     public static final String XML_ENTITIES_RESOURCE =
-                "com.sun.org.apache.xml.internal.serializer.XMLEntities";
+                "org.openjdk.com.sun.org.apache.xml.internalserializer.XMLEntities";
 
     /** The horizontal tab character, which the parser should always normalize. */
     public static final char S_HORIZONAL_TAB = 0x09;

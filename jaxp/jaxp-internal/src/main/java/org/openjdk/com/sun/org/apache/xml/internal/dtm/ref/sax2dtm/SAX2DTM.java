@@ -419,7 +419,7 @@ public class SAX2DTM extends DTMDefaultBaseIterators
   {
 
     if (m_incrementalSAXSource.getClass()
-        .getName().equals("com.sun.org.apache.xml.internal.dtm.ref.IncrementalSAXSource_Filter"))
+        .getName().equals("org.openjdk.com.sun.org.apache.xml.internaldtm.ref.IncrementalSAXSource_Filter"))
       return (ContentHandler) m_incrementalSAXSource;
     else
       return this;
@@ -442,7 +442,7 @@ public class SAX2DTM extends DTMDefaultBaseIterators
   {
 
     if (m_incrementalSAXSource.getClass()
-        .getName().equals("com.sun.org.apache.xml.internal.dtm.ref.IncrementalSAXSource_Filter"))
+        .getName().equals("org.openjdk.com.sun.org.apache.xml.internaldtm.ref.IncrementalSAXSource_Filter"))
       return (LexicalHandler) m_incrementalSAXSource;
     else
       return this;

@@ -41,7 +41,7 @@ public class XMLMessages
 
   /** The class name of the XML error message string table.    */
   private static final String XML_ERROR_RESOURCES =
-    "com.sun.org.apache.xml.internal.res.XMLErrorResources";
+    "org.openjdk.com.sun.org.apache.xml.internalres.XMLErrorResources";
 
   /** String to use if a bad message code is used. */
   protected static final String BAD_CODE = "BAD_CODE";

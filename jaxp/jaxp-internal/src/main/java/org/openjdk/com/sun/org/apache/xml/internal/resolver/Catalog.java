@@ -408,11 +408,11 @@ public class Catalog {
     SAXCatalogReader saxReader = new SAXCatalogReader(spf);
 
     saxReader.setCatalogParser(null, "XMLCatalog",
-                               "com.sun.org.apache.xml.internal.resolver.readers.XCatalogReader");
+                               "org.openjdk.com.sun.org.apache.xml.internalresolver.readers.XCatalogReader");
 
     saxReader.setCatalogParser(OASISXMLCatalogReader.namespaceName,
                                "catalog",
-                               "com.sun.org.apache.xml.internal.resolver.readers.OASISXMLCatalogReader");
+                               "org.openjdk.com.sun.org.apache.xml.internalresolver.readers.OASISXMLCatalogReader");
 
     addReader("application/xml", saxReader);
 

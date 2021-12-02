@@ -20,30 +20,24 @@
 
 package org.openjdk.com.sun.org.apache.xerces.internal.util;
 
-import java.io.IOException;
-
-import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
-import org.xml.sax.ext.EntityResolver2;
-
-import org.w3c.dom.ls.LSInput;
-import org.w3c.dom.ls.LSResourceResolver;
-
-import org.openjdk.javax.xml.parsers.SAXParserFactory;
-
 import org.openjdk.com.sun.org.apache.xerces.internal.dom.DOMInputImpl;
 import org.openjdk.com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl;
-
-import org.openjdk.com.sun.org.apache.xerces.internal.xni.XNIException;
 import org.openjdk.com.sun.org.apache.xerces.internal.xni.XMLResourceIdentifier;
-
+import org.openjdk.com.sun.org.apache.xerces.internal.xni.XNIException;
 import org.openjdk.com.sun.org.apache.xerces.internal.xni.parser.XMLEntityResolver;
 import org.openjdk.com.sun.org.apache.xerces.internal.xni.parser.XMLInputSource;
-
 import org.openjdk.com.sun.org.apache.xml.internal.resolver.Catalog;
 import org.openjdk.com.sun.org.apache.xml.internal.resolver.CatalogManager;
 import org.openjdk.com.sun.org.apache.xml.internal.resolver.readers.OASISXMLCatalogReader;
 import org.openjdk.com.sun.org.apache.xml.internal.resolver.readers.SAXCatalogReader;
+import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import org.w3c.dom.ls.LSInput;
+import org.w3c.dom.ls.LSResourceResolver;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+import org.xml.sax.ext.EntityResolver2;
+
+import java.io.IOException;
 
 /**
  * <p>The catalog resolver handles the resolution of external
@@ -538,7 +532,7 @@ public class XMLCatalogResolver
         fPreferPublic = preferPublic;
         fResolverCatalogManager = new CatalogManager();
         fResolverCatalogManager.setAllowOasisXMLCatalogPI(false);
-        fResolverCatalogManager.setCatalogClassName("com.sun.org.apache.xml.internal.resolver.Catalog");
+        fResolverCatalogManager.setCatalogClassName("org.openjdk.com.sun.org.apache.xml.internalresolver.Catalog");
         fResolverCatalogManager.setCatalogFiles("");
         fResolverCatalogManager.setIgnoreMissingProperties(true);
         fResolverCatalogManager.setPreferPublic(fPreferPublic);
@@ -580,7 +574,7 @@ public class XMLCatalogResolver
 
         SAXCatalogReader saxReader = new SAXCatalogReader(spf);
         saxReader.setCatalogParser(OASISXMLCatalogReader.namespaceName, "catalog",
-            "com.sun.org.apache.xml.internal.resolver.readers.OASISXMLCatalogReader");
+            "org.openjdk.com.sun.org.apache.xml.internalresolver.readers.OASISXMLCatalogReader");
         catalog.addReader("application/xml", saxReader);
     }
 }

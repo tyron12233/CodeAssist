@@ -116,9 +116,9 @@ public interface Constants extends InstructionConstants {
     public static final String NODE
         = "int";
     public static final String NODE_ITERATOR
-        = "com.sun.org.apache.xml.internal.dtm.DTMAxisIterator";
+        = "org.openjdk.com.sun.org.apache.xml.internaldtm.DTMAxisIterator";
     public static final String NODE_ITERATOR_BASE
-        = "com.sun.org.apache.xml.internal.dtm.ref.DTMAxisIteratorBase";
+        = "org.openjdk.com.sun.org.apache.xml.internaldtm.ref.DTMAxisIteratorBase";
     public static final String SORT_ITERATOR
         = "com.sun.org.apache.xalan.internal.xsltc.dom.SortingIterator";
     public static final String SORT_ITERATOR_SIG
@@ -227,10 +227,10 @@ public interface Constants extends InstructionConstants {
         = "(" + NODE_ITERATOR_SIG + ")Lorg/w3c/dom/NodeList;";
 
     public static final String STREAM_XML_OUTPUT
-    = "com.sun.org.apache.xml.internal.serializer.ToXMLStream";
+    = "org.openjdk.com.sun.org.apache.xml.internalserializer.ToXMLStream";
 
     public static final String OUTPUT_BASE
-    = "com.sun.org.apache.xml.internal.serializer.SerializerBase";
+    = "org.openjdk.com.sun.org.apache.xml.internalserializer.SerializerBase";
 
     public static final String LOAD_DOCUMENT_CLASS
         = "com.sun.org.apache.xalan.internal.xsltc.dom.LoadDocument";
@@ -265,7 +265,7 @@ public interface Constants extends InstructionConstants {
         = "com.sun.org.apache.xalan.internal.xsltc.TransletOutputBase";
     // output interface
     public static final String TRANSLET_OUTPUT_INTERFACE
-        = "com.sun.org.apache.xml.internal.serializer.SerializationHandler";
+        = "org.openjdk.com.sun.org.apache.xml.internalserializer.SerializationHandler";
     public static final String BASIS_LIBRARY_CLASS
         = "com.sun.org.apache.xalan.internal.xsltc.runtime.BasisLibrary";
     public static final String ATTRIBUTE_LIST_IMPL_CLASS

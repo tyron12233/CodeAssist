@@ -95,11 +95,11 @@ public class Resolver extends Catalog {
     SAXCatalogReader saxReader = new SAXCatalogReader(spf);
 
     saxReader.setCatalogParser(null, "XMLCatalog",
-                               "com.sun.org.apache.xml.internal.resolver.readers.XCatalogReader");
+                               "org.openjdk.com.sun.org.apache.xml.internalresolver.readers.XCatalogReader");
 
     saxReader.setCatalogParser(OASISXMLCatalogReader.namespaceName,
                                "catalog",
-                               "com.sun.org.apache.xml.internal.resolver.readers.ExtendedXMLCatalogReader");
+                               "org.openjdk.com.sun.org.apache.xml.internalresolver.readers.ExtendedXMLCatalogReader");
 
     addReader("application/xml", saxReader);
 
