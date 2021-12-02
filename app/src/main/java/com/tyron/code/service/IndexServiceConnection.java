@@ -15,7 +15,7 @@ import com.tyron.builder.project.api.Project;
 import com.tyron.code.ui.main.MainViewModel;
 
 import java.io.File;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -61,7 +61,7 @@ public class IndexServiceConnection implements ServiceConnection {
                     .filter(File::exists)
                     .collect(Collectors.toList());
         }
-        return Collections.emptyList();
+        return new ArrayList<>();
     }
 
     private class TaskListener implements ProjectManager.TaskListener {
