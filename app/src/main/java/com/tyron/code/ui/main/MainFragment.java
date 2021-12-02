@@ -388,14 +388,17 @@ public class MainFragment extends Fragment {
 
         if (getChildFragmentManager().findFragmentByTag("file_manager") == null) {
             File root;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                root = requireActivity().getExternalFilesDir(null);
+            if (ProjectManager.getInstance().getCurrentProject() != null) {
+                root = ProjectManager.getInstance().getCurrentProject().getRootFile();
             } else {
-                root = Environment.getExternalStorageDirectory();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    root = requireActivity().getExternalFilesDir(null);
+                } else {
+                    root = Environment.getExternalStorageDirectory();
+                }
             }
             getChildFragmentManager().beginTransaction()
-                    .replace(R.id.nav_root, TreeFileManagerFragment.newInstance(root),
-                            "file_manager")
+                    .replace(R.id.nav_root, TreeFileManagerFragment.newInstance(root), "file_manager")
                     .commit();
         }
 
