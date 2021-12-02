@@ -411,6 +411,9 @@ public class MainFragment extends Fragment {
             mMainViewModel.setFiles(new ArrayList<>());
         }
         mMainViewModel.getFiles().observe(getViewLifecycleOwner(), files -> {
+            if (mRoot.isOpen()) {
+                mRoot.closeDrawer(GravityCompat.START);
+            }
             mAdapter.submitList(files);
             mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
         });
