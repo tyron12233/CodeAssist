@@ -2,6 +2,8 @@ package org.openjdk.tools.javac.file;
 
 import com.github.marschall.com.sun.nio.zipfs.ZipFileSystemProvider;
 
+import org.openjdk.tools.javac.util.Context;
+
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -12,10 +14,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.StringTokenizer;
 import java.util.jar.Attributes;
+import java.util.jar.Attributes.Name;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
-import java.util.jar.Attributes.Name;
-import org.openjdk.tools.javac.util.Context;
 
 public class FSInfo {
     private FileSystemProvider jarFSProvider;

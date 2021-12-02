@@ -4,6 +4,9 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
@@ -18,9 +21,6 @@ import com.flipkart.android.proteus.value.ObjectValue;
 import com.google.android.material.appbar.CollapsingToolbarLayout;
 import com.tyron.layout.appcompat.AppCompatModuleAttributeHelper;
 import com.tyron.layout.appcompat.view.ProteusCollapsingToolbarLayout;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 /**
  * CollapsingToolbarLayoutParser
@@ -51,7 +51,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
     @Override
     protected void addAttributeProcessors() {
 
-        addAttributeProcessor("collapsedTitleGravity", new GravityAttributeProcessor<V>() {
+        addAttributeProcessor("app:collapsedTitleGravity", new GravityAttributeProcessor<V>() {
             @Override
             public void setGravity(V view, @Gravity int gravity) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -60,7 +60,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("contentScrim", new DrawableResourceProcessor<V>() {
+        addAttributeProcessor("app:contentScrim", new DrawableResourceProcessor<V>() {
             @Override
             public void setDrawable(V view, Drawable drawable) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -69,7 +69,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("expandedTitleGravity", new GravityAttributeProcessor<V>() {
+        addAttributeProcessor("app:expandedTitleGravity", new GravityAttributeProcessor<V>() {
             @Override
             public void setGravity(V view, @Gravity int gravity) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -78,7 +78,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("expandedTitleMargin", new DimensionAttributeProcessor<V>() {
+        addAttributeProcessor("app:expandedTitleMargin", new DimensionAttributeProcessor<V>() {
             @Override
             public void setDimension(V view, float dimension) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -87,7 +87,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("expandedTitleMarginBottom", new DimensionAttributeProcessor<V>() {
+        addAttributeProcessor("app:expandedTitleMarginBottom", new DimensionAttributeProcessor<V>() {
             @Override
             public void setDimension(V view, float dimension) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -96,7 +96,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("expandedTitleMarginEnd", new DimensionAttributeProcessor<V>() {
+        addAttributeProcessor("app:expandedTitleMarginEnd", new DimensionAttributeProcessor<V>() {
             @Override
             public void setDimension(V view, float dimension) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -105,7 +105,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("expandedTitleMarginStart", new DimensionAttributeProcessor<V>() {
+        addAttributeProcessor("app:expandedTitleMarginStart", new DimensionAttributeProcessor<V>() {
             @Override
             public void setDimension(V view, float dimension) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -114,7 +114,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("expandedTitleMarginTop", new DimensionAttributeProcessor<V>() {
+        addAttributeProcessor("app:expandedTitleMarginTop", new DimensionAttributeProcessor<V>() {
             @Override
             public void setDimension(V view, float dimension) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -123,7 +123,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("scrimAnimationDuration", new NumberAttributeProcessor<V>() {
+        addAttributeProcessor("app:scrimAnimationDuration", new NumberAttributeProcessor<V>() {
             @Override
             public void setNumber(V view, @NonNull Number value) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -133,7 +133,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
         });
 
 
-        addAttributeProcessor("scrimVisibleHeightTrigger", new DimensionAttributeProcessor<V>() {
+        addAttributeProcessor("app:scrimVisibleHeightTrigger", new DimensionAttributeProcessor<V>() {
             @Override
             public void setDimension(V view, float dimension) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -142,7 +142,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("statusBarScrim", new DrawableResourceProcessor<V>() {
+        addAttributeProcessor("app:statusBarScrim", new DrawableResourceProcessor<V>() {
             @Override
             public void setDrawable(V view, Drawable drawable) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -151,7 +151,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("title", new StringAttributeProcessor<V>() {
+        addAttributeProcessor("app:title", new StringAttributeProcessor<V>() {
             @Override
             public void setString(V view, String value) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -160,7 +160,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("titleEnabled", new BooleanAttributeProcessor<V>() {
+        addAttributeProcessor("app:titleEnabled", new BooleanAttributeProcessor<V>() {
             @Override
             public void setBoolean(V view, boolean value) {
                 if (view instanceof CollapsingToolbarLayout) {
@@ -169,7 +169,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("layout_collapseMode", new StringAttributeProcessor<V>() {
+        addAttributeProcessor("app:layout_collapseMode", new StringAttributeProcessor<V>() {
             @Override
             public void setString(V view, String value) {
                 if (view.getLayoutParams() instanceof CollapsingToolbarLayout.LayoutParams) {
@@ -178,7 +178,7 @@ public class CollapsingToolbarLayoutParser<V extends View> extends ViewTypeParse
             }
         });
 
-        addAttributeProcessor("layout_parallaxMultiplier", new StringAttributeProcessor<V>() {
+        addAttributeProcessor("app:layout_parallaxMultiplier", new StringAttributeProcessor<V>() {
             @Override
             public void setString(V view, String value) {
                 if (view.getLayoutParams() instanceof CollapsingToolbarLayout.LayoutParams) {

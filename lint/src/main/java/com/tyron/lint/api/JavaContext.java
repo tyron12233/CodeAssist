@@ -3,7 +3,7 @@ package com.tyron.lint.api;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.JavaProject;
 import com.tyron.completion.CompileTask;
 import com.tyron.lint.client.Configuration;
 import com.tyron.lint.client.LintDriver;
@@ -23,7 +23,7 @@ public class JavaContext extends Context {
     static final String SUPPRESS_COMMENT_PREFIX = "//noinspection ";
     private CompileTask mCompileTask;
 
-    public JavaContext(LintDriver driver, Project project, File file, Configuration config) {
+    public JavaContext(LintDriver driver, JavaProject project, File file, Configuration config) {
         super(driver, project, file, config);
     }
 

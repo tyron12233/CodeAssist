@@ -2,25 +2,23 @@ package com.tyron.builder.compiler.resource;
 
 import android.util.Log;
 
-import java.io.File;
-import java.io.IOException;
-
 import com.tyron.builder.BuildModule;
-import com.tyron.builder.model.Project;
-
-import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import com.tyron.builder.log.ILogger;
 import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.BinaryExecutor;
 
 import org.apache.commons.io.FileUtils;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class AAPT2Compiler {
 
@@ -110,7 +108,7 @@ public class AAPT2Compiler {
 		args.add(getBinary().getAbsolutePath());
 		args.add("link");
 		args.add("-I");
-		args.add(FileManager.getAndroidJar().getAbsolutePath());
+		args.add(BuildModule.getAndroidJar().getAbsolutePath());
 		args.add("--allow-reserved-package-id");
         args.add("--no-version-vectors");
         args.add("--no-version-transitions");

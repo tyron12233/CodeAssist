@@ -12,7 +12,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.imageview.ShapeableImageView;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.R;
 
 import java.util.ArrayList;
@@ -130,7 +130,7 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
         }
 
         public void bind(Project project) {
-            title.setText(project.mRoot.getName());
+            title.setText(project.getRootFile().getName());
         }
     }
 

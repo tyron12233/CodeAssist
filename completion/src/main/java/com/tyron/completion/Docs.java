@@ -2,17 +2,16 @@ package com.tyron.completion;
 
 import android.content.Context;
 
-import com.tyron.builder.model.Project;
-import com.tyron.completion.SourceFileManager;
+import com.tyron.builder.project.api.JavaProject;
 import com.tyron.common.util.Decompress;
+
+import org.openjdk.javax.tools.StandardLocation;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-
-import org.openjdk.javax.tools.StandardLocation;
 
 /**
  * Main class that holds all the files that ends with "-sources" including
@@ -22,7 +21,7 @@ public class Docs {
 
     public final SourceFileManager fileManager;
 
-    public Docs(Project project, Set<File> docPaths) {
+    public Docs(JavaProject project, Set<File> docPaths) {
         // we include android sources into the list
         fileManager = new SourceFileManager(project);
         File srcZip = androidSourcesZip();

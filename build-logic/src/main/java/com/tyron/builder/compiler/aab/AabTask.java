@@ -5,7 +5,8 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.common.util.BinaryExecutor;
 import com.tyron.common.util.Decompress;
 
@@ -30,12 +31,14 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
-public class AabTask extends Task {
+public class AabTask extends Task<AndroidProject> {
+
+    public AabTask(AndroidProject project, ILogger logger) {
+        super(project, logger);
+    }
 
     private static final String TAG = "AabTask";
 
-    private Project mProject;
-    private ILogger mLogger;
     private File mBinDir;
     private File base;
     private File manifest;
@@ -46,10 +49,8 @@ public class AabTask extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mProject = project;
-        mLogger = logger;
-        mBinDir = new File(project.getBuildDirectory(), "/bin");
+    public void prepare(BuildType type) throws IOException {
+        mBinDir = new File(getProject().getBuildDirectory(), "/bin");
         base = new File(mBinDir.getAbsolutePath(), "/base");
 
         if (!base.exists() && !base.mkdirs()) {
@@ -90,7 +91,7 @@ public class AabTask extends Task {
     }
 
     private void extractApks() throws IOException {
-        mLogger.debug("Extracting Apks");
+        getLogger().debug("Extracting Apks");
         String Apks = mBinDir.getAbsolutePath() + "/App.apks";
         String dApks = mBinDir.getAbsolutePath() + "";
         uApks(Apks, dApks);
@@ -130,7 +131,7 @@ public class AabTask extends Task {
     }
 
     private void buildApks() throws CompilationFailedException {
-        mLogger.debug("Building Apks");
+        getLogger().debug("Building Apks");
         List<String> args = new ArrayList<>();
         args.add("dalvikvm");
         args.add("-Xcompiler-option");
@@ -155,7 +156,7 @@ public class AabTask extends Task {
     }
 
     private void budletool() throws IOException {
-        mLogger.debug("Preparing Bundletool");
+        getLogger().debug("Preparing Bundletool");
 
         File bundletool = new File(BuildModule.getContext().getFilesDir(), "bundletool.jar");
         if (!bundletool.exists()) {
@@ -169,7 +170,7 @@ public class AabTask extends Task {
 
 
     private void aab() throws CompilationFailedException {
-        mLogger.debug("Generating AAB.");
+        getLogger().debug("Generating AAB.");
 
         List<String> args = new ArrayList<>();
         args.add("dalvikvm");
@@ -193,7 +194,7 @@ public class AabTask extends Task {
 
 
     private void baseZip() throws IOException {
-        mLogger.debug("Creating Module Archive");
+        getLogger().debug("Creating Module Archive");
         String folderToZip = base.getAbsolutePath();
         String zipName = mBinDir.getAbsolutePath() + "/Base-Module.zip";
         zipFolder(Paths.get(folderToZip), Paths.get(zipName));
@@ -215,7 +216,7 @@ public class AabTask extends Task {
 
 
     private void copyManifest() throws CompilationFailedException {
-        mLogger.debug("Copying Manifest.");
+        getLogger().debug("Copying Manifest.");
 
         List<String> args = new ArrayList<>();
         args.add("mv");
@@ -242,8 +243,8 @@ public class AabTask extends Task {
     }
 
     private void copyJni() throws IOException {
-        mLogger.debug("Coping JniLibs.");
-        String fromDirectory = mProject.getNativeLibsDirectory().getAbsolutePath();
+        getLogger().debug("Coping JniLibs.");
+        String fromDirectory = getProject().getNativeLibrariesDirectory().getAbsolutePath();
         String toToDirectory = base.getAbsolutePath() + "/lib";
         copyDirectoryFileVisitor(fromDirectory, toToDirectory);
     }
@@ -256,7 +257,7 @@ public class AabTask extends Task {
 
 
     private void unZip() {
-        mLogger.debug("Unzipping proto format.");
+        getLogger().debug("Unzipping proto format.");
         String zipFilePath = mBinDir.getAbsolutePath() + "/proto-format.zip";
         String destDir = base.getAbsolutePath() + "";
         Decompress.unzip(zipFilePath, destDir);

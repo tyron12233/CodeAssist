@@ -1,20 +1,13 @@
 package com.tyron.kotlin_completion.compiler;
 
-import android.util.Log;
-
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys;
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity;
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation;
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector;
-import org.jetbrains.kotlin.cli.jvm.compiler.CliBindingTrace;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
-import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM;
 import org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
-import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
 import org.jetbrains.kotlin.config.ApiVersion;
 import org.jetbrains.kotlin.config.CommonConfigurationKeys;
 import org.jetbrains.kotlin.config.CompilerConfiguration;
@@ -29,8 +22,6 @@ import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.psi.KtPsiFactory;
 import org.jetbrains.kotlin.resolve.BindingTraceContext;
-import org.jetbrains.kotlin.resolve.CompilerEnvironment;
-import org.jetbrains.kotlin.resolve.lazy.declarations.FileBasedDeclarationProviderFactory;
 
 import java.io.Closeable;
 import java.nio.file.Path;
@@ -39,6 +30,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import kotlin.Pair;
 
 public class CompilationEnvironment implements Closeable {
 
@@ -79,18 +72,8 @@ public class CompilationEnvironment implements Closeable {
         return configuration;
     }
 
-    private FileBasedDeclarationProviderFactory mFactory;
-
-    @SuppressWarnings("unchecked")
     public Pair<ComponentProvider, BindingTraceContext> createContainer(Collection<KtFile> sourcePath) {
-        CliBindingTrace trace = new CliBindingTrace();
-        ComponentProvider container = TopDownAnalyzerFacadeForJVM.INSTANCE.createContainer(mEnvironment.getProject(),
-                sourcePath, trace, mEnvironment.getConfiguration(), mEnvironment::createPackagePartProvider,
-                (storageManager, ktFiles) ->
-                  new FileBasedDeclarationProviderFactory(storageManager, (Collection<KtFile>) ktFiles),
-                CompilerEnvironment.INSTANCE, TopDownAnalyzerFacadeForJVM.INSTANCE.newModuleSearchScope(mEnvironment.getProject(), mEnvironment.getSourceFiles()),
-                Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(), Collections.emptyMap());
-        return Pair.create(container, trace);
+        return CompilerKt.createContainer(mEnvironment, sourcePath);
     }
 
     public void updateConfiguration(CompilerConfiguration config) {

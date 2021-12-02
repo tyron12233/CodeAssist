@@ -5,6 +5,21 @@
 
 package org.jetbrains.kotlin.com.intellij.openapi.util;
 
+import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.CharsetToolkit;
+import org.jetbrains.kotlin.com.intellij.util.text.CharArrayUtil;
+import org.jetbrains.kotlin.com.intellij.xml.util.XmlStringUtil;
+import org.jetbrains.kotlin.org.jdom.Attribute;
+import org.jetbrains.kotlin.org.jdom.Content;
+import org.jetbrains.kotlin.org.jdom.Element;
+import org.jetbrains.kotlin.org.jdom.JDOMException;
+import org.jetbrains.kotlin.org.jdom.Namespace;
+import org.jetbrains.kotlin.org.jdom.Text;
+import org.jetbrains.kotlin.org.jdom.filter.Filter;
+import org.jetbrains.kotlin.org.jdom.output.Format;
+import org.jetbrains.kotlin.org.jdom.output.Format.TextMode;
+import org.jetbrains.kotlin.org.jdom.output.XMLOutputter;
+
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,24 +35,10 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLInputFactoryWrapper;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamReader;
-import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.CharsetToolkit;
-import org.jetbrains.kotlin.com.intellij.util.text.CharArrayUtil;
-import org.jetbrains.kotlin.com.intellij.xml.util.XmlStringUtil;
-import org.jetbrains.kotlin.org.jdom.Attribute;
-import org.jetbrains.kotlin.org.jdom.Content;
-import org.jetbrains.kotlin.org.jdom.Element;
-import org.jetbrains.kotlin.org.jdom.JDOMException;
-import org.jetbrains.kotlin.org.jdom.Namespace;
-import org.jetbrains.kotlin.org.jdom.Text;
-import org.jetbrains.kotlin.org.jdom.filter.Filter;
-import org.jetbrains.kotlin.org.jdom.output.Format;
-import org.jetbrains.kotlin.org.jdom.output.XMLOutputter;
-import org.jetbrains.kotlin.org.jdom.output.Format.TextMode;
+
+import org.openjdk.javax.xml.stream.XMLInputFactory;
+import org.openjdk.javax.xml.stream.XMLStreamException;
+import org.openjdk.javax.xml.stream.XMLStreamReader;
 
 public final class JDOMUtil {
     public static final Pattern XPOINTER_PATTERN = Pattern.compile("xpointer\\((.*)\\)");
@@ -57,7 +58,7 @@ public final class JDOMUtil {
                 if (factory != null) {
                     return factory;
                 } else {
-                    String property = System.setProperty("javax.xml.stream.XMLInputFactory", "com.sun.xml.internal.stream.XMLInputFactoryImpl");
+                    String property = System.setProperty("javax.xml.stream.XMLInputFactory", "org.openjdk.com.sun.xml.internal.stream.XMLInputFactoryImpl");
 
                     try {
                         factory = XMLInputFactory.newFactory();
@@ -97,13 +98,15 @@ public final class JDOMUtil {
 
 
     private static Element loadUsingStaX( Reader reader,  SafeJdomFactory factory) throws JDOMException, IOException {
-
         Element var3;
         try {
             XMLStreamReader xmlStreamReader = getXmlInputFactory().createXMLStreamReader(reader);
 
+            
             try {
-                var3 = SafeStAXStreamBuilder.build(xmlStreamReader, true, factory == null ? SafeStAXStreamBuilder.FACTORY : factory);
+                var3 = SafeStAXStreamBuilderWrapper.build(xmlStreamReader,
+                        true, true,
+                        factory == null ? SafeStAXStreamBuilderWrapper.FACTORY : factory);
             } finally {
                 xmlStreamReader.close();
             }
@@ -111,9 +114,6 @@ public final class JDOMUtil {
             throw new JDOMException(var13.getMessage(), var13);
         } finally {
             reader.close();
-        }
-
-        if (var3 == null) { ;
         }
 
         return var3;

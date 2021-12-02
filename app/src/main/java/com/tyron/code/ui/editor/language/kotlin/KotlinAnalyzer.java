@@ -1,7 +1,14 @@
 package com.tyron.code.ui.editor.language.kotlin;
 
 import android.graphics.Color;
-import android.util.Log;
+
+import androidx.preference.PreferenceManager;
+
+import com.tyron.ProjectManager;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.Project;
+import com.tyron.common.SharedPreferenceKeys;
+import com.tyron.kotlin_completion.CompletionEngine;
 
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
@@ -11,17 +18,32 @@ import org.antlr.v4.runtime.TokenSource;
 
 import java.util.Stack;
 
-import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
 import io.github.rosemoe.sora.data.BlockLine;
 import io.github.rosemoe.sora.data.Span;
+import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.text.TextAnalyzer;
+import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.EditorColorScheme;
 
 public class KotlinAnalyzer implements CodeAnalyzer {
 
+    private final CodeEditor mEditor;
+
+    public KotlinAnalyzer(CodeEditor editor) {
+        mEditor = editor;
+    }
+
     @Override
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
+        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+        if (currentProject instanceof AndroidProject) {
+            if (PreferenceManager.getDefaultSharedPreferences(mEditor.getContext())
+                    .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
+                CompletionEngine.getInstance((AndroidProject) currentProject)
+                        .lintLater(mEditor.getCurrentFile());
+            }
+        }
         try {
             CodePointCharStream stream = CharStreams.fromString(String.valueOf(content));
             KotlinLexer lexer = new KotlinLexer(stream);

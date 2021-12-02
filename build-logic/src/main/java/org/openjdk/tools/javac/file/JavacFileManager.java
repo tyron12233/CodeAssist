@@ -1,9 +1,24 @@
-//
-// Source code recreated from a .class file by IntelliJ IDEA
-// (powered by FernFlower decompiler)
-//
-
 package org.openjdk.tools.javac.file;
+
+import org.openjdk.javax.lang.model.SourceVersion;
+import org.openjdk.javax.tools.FileObject;
+import org.openjdk.javax.tools.JavaFileManager;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.JavaFileObject.Kind;
+import org.openjdk.javax.tools.StandardJavaFileManager;
+import org.openjdk.javax.tools.StandardLocation;
+import org.openjdk.tools.javac.file.JRTIndex.Entry;
+import org.openjdk.tools.javac.file.RelativePath.RelativeDirectory;
+import org.openjdk.tools.javac.file.RelativePath.RelativeFile;
+import org.openjdk.tools.javac.util.Assert;
+import org.openjdk.tools.javac.util.Context;
+import org.openjdk.tools.javac.util.JDK9Wrappers.Configuration;
+import org.openjdk.tools.javac.util.JDK9Wrappers.Layer;
+import org.openjdk.tools.javac.util.JDK9Wrappers.Module;
+import org.openjdk.tools.javac.util.JDK9Wrappers.ModuleFinder;
+import org.openjdk.tools.javac.util.JDK9Wrappers.ServiceLoaderHelper;
+import org.openjdk.tools.javac.util.List;
+import org.openjdk.tools.javac.util.ListBuffer;
 
 import java.io.File;
 import java.io.IOException;
@@ -41,27 +56,6 @@ import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.openjdk.javax.lang.model.SourceVersion;
-import org.openjdk.javax.tools.FileObject;
-import org.openjdk.javax.tools.JavaFileManager;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.StandardJavaFileManager;
-import org.openjdk.javax.tools.StandardLocation;
-import org.openjdk.javax.tools.JavaFileManager.Location;
-import org.openjdk.javax.tools.JavaFileObject.Kind;
-import org.openjdk.javax.tools.StandardJavaFileManager.PathFactory;
-import org.openjdk.tools.javac.file.JRTIndex.Entry;
-import org.openjdk.tools.javac.file.RelativePath.RelativeDirectory;
-import org.openjdk.tools.javac.file.RelativePath.RelativeFile;
-import org.openjdk.tools.javac.util.Assert;
-import org.openjdk.tools.javac.util.Context;
-import org.openjdk.tools.javac.util.List;
-import org.openjdk.tools.javac.util.ListBuffer;
-import org.openjdk.tools.javac.util.JDK9Wrappers.Configuration;
-import org.openjdk.tools.javac.util.JDK9Wrappers.Layer;
-import org.openjdk.tools.javac.util.JDK9Wrappers.Module;
-import org.openjdk.tools.javac.util.JDK9Wrappers.ModuleFinder;
-import org.openjdk.tools.javac.util.JDK9Wrappers.ServiceLoaderHelper;
 
 /**
  * I have modified this a bit to use the custom file system manager because
@@ -771,10 +765,10 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
         public ArchiveContainer(Path var2) throws IOException, ProviderNotFoundException, SecurityException {
             this.archivePath = var2;
 //            if (JavacFileManager.this.multiReleaseValue != null && var2.toString().endsWith(".jar")) {
-                Map<String, String> var3 = Collections.singletonMap("multi-release", JavacFileManager.this.multiReleaseValue);
-                FileSystemProvider var4 = JavacFileManager.this.fsInfo.getJarFSProvider();
-                Assert.checkNonNull(var4, "should have been caught before!");
-                this.fileSystem = var4.newFileSystem(var2, var3);
+            Map<String, String> var3 = Collections.singletonMap("multi-release", JavacFileManager.this.multiReleaseValue);
+            FileSystemProvider var4 = JavacFileManager.this.fsInfo.getJarFSProvider();
+            Assert.checkNonNull(var4, "should have been caught before!");
+            this.fileSystem = var4.newFileSystem(var2, var3);
 //            } else {
 //                this.fileSystem = FileSystems.newFileSystem(var2, (ClassLoader)null);
 //            }

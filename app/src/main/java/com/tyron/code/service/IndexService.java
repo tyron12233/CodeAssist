@@ -4,7 +4,9 @@ import android.app.Notification;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 
 import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
@@ -12,13 +14,14 @@ import androidx.core.app.NotificationManagerCompat;
 
 import com.tyron.ProjectManager;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.R;
 
 public class IndexService extends Service {
 
     private static final int NOTIFICATION_ID = 23;
 
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
     private final IndexBinder mBinder = new IndexBinder();
 
     public IndexService() {
@@ -59,12 +62,12 @@ public class IndexService extends Service {
                         .setContentText(message)
                         .build();
                 updateNotification(notification);
-                listener.onTaskStarted(message);
+                mMainHandler.post(() -> listener.onTaskStarted(message));
             }
 
             @Override
             public void onComplete(boolean success, String message) {
-                listener.onComplete(success, message);
+                mMainHandler.post(() -> listener.onComplete(success, message));
                 stopForeground(true);
                 stopSelf();
             }

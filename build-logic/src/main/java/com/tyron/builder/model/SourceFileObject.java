@@ -4,7 +4,11 @@ import android.annotation.SuppressLint;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.JavaProject;
+
+import org.apache.commons.io.FileUtils;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.SimpleJavaFileObject;
 
 import java.io.IOException;
 import java.net.URI;
@@ -12,10 +16,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-
-import org.apache.commons.io.FileUtils;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.SimpleJavaFileObject;
+import java.util.Optional;
 
 @SuppressLint("NewApi")
 public class SourceFileObject extends SimpleJavaFileObject {
@@ -23,13 +24,13 @@ public class SourceFileObject extends SimpleJavaFileObject {
 	public Path mFile;
 	private final Instant modified;
 	private final String mContents;
-	private final Project mProject;
+	private final JavaProject mProject;
 	
 	public SourceFileObject(Path file) {
 		this(file, null, null, null);
 	}
 
-	public SourceFileObject(Path file, Project project) {
+	public SourceFileObject(Path file, JavaProject project) {
 		this(file, null, null, project);
 	}
 
@@ -37,7 +38,7 @@ public class SourceFileObject extends SimpleJavaFileObject {
 		this(file, contents, modified, null);
 	}
 	
-	public SourceFileObject(Path file, String contents, Instant modified, Project project) {
+	public SourceFileObject(Path file, String contents, Instant modified, JavaProject project) {
 		super(file.toUri(), JavaFileObject.Kind.SOURCE);
 		mContents = contents;
 		mFile = file;
@@ -48,7 +49,10 @@ public class SourceFileObject extends SimpleJavaFileObject {
 	@Override
 	public CharSequence getCharContent(boolean ignoreEncodingErrors) {
 		if (mProject != null) {
-			return mProject.getFileManager().readFile(mFile.toFile());
+			Optional<CharSequence> fileContent = mProject.getFileManager().getFileContent(mFile.toFile());
+			if (fileContent.isPresent()) {
+				return fileContent.get();
+			}
 		}
 
 		if (mContents != null) {

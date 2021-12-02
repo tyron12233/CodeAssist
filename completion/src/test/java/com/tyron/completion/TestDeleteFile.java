@@ -1,10 +1,12 @@
 package com.tyron.completion;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.tyron.completion.TestUtil.*;
 
-import com.google.common.truth.Truth;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.FileManager;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.mock.MockAndroidProject;
+import com.tyron.builder.project.mock.MockFileManager;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -13,7 +15,6 @@ import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URL;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -23,31 +24,33 @@ import java.util.Set;
 @RunWith(RobolectricTestRunner.class)
 public class TestDeleteFile {
 
-    private static final String MODULE_NAME = "completion";
-
     private File mMainClass;
     private File mClassToDelete;
 
-    private Project mProject;
+    private AndroidProject mProject;
     private FileManager mFileManager;
     private Set<File> mJavaFiles;
     private JavaCompilerService mService;
 
+    private File mRoot;
+
     @Before
     public void setup() throws IOException {
-        mFileManager = FileManager.getInstance(new File(resolveBasePath(), "classpath/rt.jar"),
-                new File(resolveBasePath(), "classpath/core-lambda-stubs.jar"));
-        mProject = new Project(mFileManager);
-        mFileManager.setCurrentProject(mProject);
+        CompletionModule.setAndroidJar(new File(resolveBasePath(), "classpath/rt.jar"));
+        CompletionModule.setLambdaStubs(new File(resolveBasePath(), "classpath/core-lambda-stubs.jar"));
 
-        mMainClass = new File(resolveBasePath(), "classes/Main.java");
-        mClassToDelete = new File(resolveBasePath(), "classes/MainSecond.java");
+        mRoot = new File(resolveBasePath(), "EmptyProject");
+        mFileManager = new MockFileManager(mRoot);
+        mProject = new MockAndroidProject(mRoot, mFileManager);
+
+        mMainClass = new File(resolveBasePath(), "EmptyProject/classes/Main.java");
+        mClassToDelete = new File(resolveBasePath(), "EmptyProject/classes/MainSecond.java");
 
         mJavaFiles = new HashSet<>();
         mJavaFiles.add(mMainClass);
         mJavaFiles.add(mClassToDelete);
 
-        mJavaFiles.forEach(mFileManager::addJavaFile);
+        mJavaFiles.forEach(mProject::addJavaFile);
     }
 
     @Test
@@ -59,7 +62,7 @@ public class TestDeleteFile {
                     .isEmpty();
         }
 
-        FileManager.getInstance().removeJavaFile("com.test.MainSecond");
+        mProject.removeJavaFile("com.test.MainSecond");
         mJavaFiles.remove(mClassToDelete);
         mService = getNewService(mJavaFiles);
 
@@ -72,13 +75,5 @@ public class TestDeleteFile {
     private JavaCompilerService getNewService(Set<File> paths) {
         return new JavaCompilerService(mProject, paths,
                 Collections.emptySet(), Collections.emptySet());
-    }
-
-    public static String resolveBasePath() {
-        final String path = "./" + MODULE_NAME + "/src/test/resources";
-        if (Arrays.asList(Objects.requireNonNull(new File("./").list())).contains(MODULE_NAME)) {
-            return path;
-        }
-        return "../" + path;
     }
 }

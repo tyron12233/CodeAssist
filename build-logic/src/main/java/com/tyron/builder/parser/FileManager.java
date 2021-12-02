@@ -1,6 +1,5 @@
 package com.tyron.builder.parser;
 
-import android.content.Context;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -9,7 +8,6 @@ import androidx.annotation.VisibleForTesting;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.model.Project;
 import com.tyron.common.util.Cache;
-import com.tyron.common.util.Decompress;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
@@ -53,8 +51,6 @@ public class FileManager {
     }
 
     private static FileManager INSTANCE = null;
-    private static File sAndroidJar;
-    private static File sLambdaStubs;
     private final ExecutorService service = Executors.newFixedThreadPool(4);
 
     private Project mCurrentProject;
@@ -88,9 +84,6 @@ public class FileManager {
 
     @VisibleForTesting
     public FileManager(File androidJar, File lambdaStubs) {
-        sAndroidJar = androidJar;
-        sLambdaStubs = lambdaStubs;
-
         try {
             putJar(androidJar);
         } catch (IOException ignore) {
@@ -235,7 +228,7 @@ public class FileManager {
         }
 
         try {
-            putJar(getAndroidJar());
+            putJar(BuildModule.getAndroidJar());
         } catch (IOException ignore) {
 
         }
@@ -318,6 +311,9 @@ public class FileManager {
 
     public void save(final File file, final String contents) {
         service.submit(() -> {
+            if (mOpenedFiles.get(file) != null) {
+                updateFile(file, contents);
+            }
             try {
                 FileUtils.writeStringToFile(file, contents, Charset.defaultCharset());
             } catch (IOException e) {
@@ -406,40 +402,5 @@ public class FileManager {
 
     public static BufferedReader lines(File file) {
         return bufferedReader(file);
-    }
-
-    @VisibleForTesting
-    public static void setAndroidJar(File androidJar) {
-        sAndroidJar = androidJar;
-    }
-
-    public static File getAndroidJar() {
-        if (sAndroidJar == null) {
-            Context context = BuildModule.getContext();
-            if (context == null) {
-                return null;
-            }
-
-            sAndroidJar = new File(context
-                    .getFilesDir(), "rt.jar");
-            if (!sAndroidJar.exists()) {
-                Decompress.unzipFromAssets(BuildModule.getContext(),
-                        "rt.zip",
-                        sAndroidJar.getParentFile().getAbsolutePath());
-            }
-        }
-
-        return sAndroidJar;
-    }
-
-    public static File getLambdaStubs() {
-        if (sLambdaStubs == null) {
-            sLambdaStubs = new File(BuildModule.getContext().getFilesDir(), "core-lambda-stubs.jar");
-
-            if (!sLambdaStubs.exists()) {
-                Decompress.unzipFromAssets(BuildModule.getContext(), "lambda-stubs.zip", sLambdaStubs.getParentFile().getAbsolutePath());
-            }
-        }
-        return sLambdaStubs;
     }
 }

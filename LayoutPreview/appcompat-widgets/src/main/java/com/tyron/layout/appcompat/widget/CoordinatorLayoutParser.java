@@ -4,6 +4,10 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
+
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
@@ -16,10 +20,6 @@ import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.tyron.layout.appcompat.AppCompatModuleAttributeHelper;
 import com.tyron.layout.appcompat.view.ProteusCoordinatorLayout;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.coordinatorlayout.widget.CoordinatorLayout;
 
 /**
  * CoordinatorLayoutParser
@@ -68,11 +68,31 @@ public class CoordinatorLayoutParser<V extends View> extends ViewTypeParser<V> {
             }
         });
 
-        addAttributeProcessor("layout_behavior", new StringAttributeProcessor<V>() {
+        addAttributeProcessor("app:layout_behavior", new StringAttributeProcessor<V>() {
             @Override
             public void setString(V view, String value) {
                 if (view.getLayoutParams() instanceof CoordinatorLayout.LayoutParams) {
                     AppCompatModuleAttributeHelper.CoordinatorLayoutParamsHelper.setLayoutBehavior(view, value);
+                }
+            }
+        });
+
+        addAttributeProcessor("app:layout_anchor", new StringAttributeProcessor<V>() {
+            @Override
+            public void setString(V view, String value) {
+                if (view.getLayoutParams() instanceof CoordinatorLayout.LayoutParams) {
+                    ((CoordinatorLayout.LayoutParams) view.getLayoutParams()).setAnchorId(
+                            ((ProteusContext) view.getContext()).getInflater().getUniqueViewId(value));
+                }
+            }
+        });
+
+        addAttributeProcessor("app:layout_anchorGravity", new GravityAttributeProcessor<V>() {
+            @Override
+            public void setGravity(V view, int gravity) {
+                if (view.getLayoutParams() instanceof CoordinatorLayout.LayoutParams) {
+                    ((CoordinatorLayout.LayoutParams) view.getLayoutParams()).anchorGravity =
+                            gravity;
                 }
             }
         });

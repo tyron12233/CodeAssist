@@ -6,6 +6,10 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.tyron.builder.project.api.Project;
+import com.tyron.code.ui.editor.language.LanguageManager;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,10 +31,15 @@ public class MainViewModel extends ViewModel {
      */
     private MutableLiveData<String> mCurrentState;
 
+    private MutableLiveData<String> mToolbarTitle = new MutableLiveData<>();
+
     /**
      * The current position of the CodeEditor
      */
     public final MutableLiveData<Integer> currentPosition = new MutableLiveData<>(0);
+
+    public MutableLiveData<Integer> mBottomSheetState =
+            new MutableLiveData<>(BottomSheetBehavior.STATE_COLLAPSED);
 
     public MutableLiveData<String> getCurrentState() {
         if (mCurrentState == null) {
@@ -39,8 +48,26 @@ public class MainViewModel extends ViewModel {
         return mCurrentState;
     }
 
+
     public void setCurrentState(@Nullable String message) {
         mCurrentState.setValue(message);
+    }
+
+    public LiveData<String> getToolbarTitle() {
+        return mToolbarTitle;
+    }
+
+    public void setToolbarTitle(String title) {
+        mToolbarTitle.setValue(title);
+    }
+
+    public LiveData<Integer> getBottomSheetState() {
+        return mBottomSheetState;
+    }
+
+
+    public void setBottomSheetState(@BottomSheetBehavior.State int bottomSheetState) {
+        mBottomSheetState.setValue(bottomSheetState);
     }
 
     public MutableLiveData<Boolean> isIndexing() {
@@ -61,6 +88,13 @@ public class MainViewModel extends ViewModel {
         return mFiles;
     }
 
+    public void setFiles(@NonNull List<File> files) {
+        if (mFiles == null) {
+            mFiles = new MutableLiveData<>(new ArrayList<>());
+        }
+        mFiles.setValue(files);
+    }
+
     public void updateCurrentPosition(int pos) {
         if (pos == currentPosition.getValue()) {
             return;
@@ -73,10 +107,12 @@ public class MainViewModel extends ViewModel {
         if (files == null) {
             return null;
         }
+
         Integer currentPos = currentPosition.getValue();
         if (currentPos == null) {
             return null;
         }
+
         if (files.size() - 1 < currentPos) {
             return null;
         }
@@ -88,11 +124,29 @@ public class MainViewModel extends ViewModel {
         mFiles.setValue(new ArrayList<>());
     }
 
-    public void setFiles(@NonNull List<File> files) {
-        if (mFiles == null) {
-            mFiles = new MutableLiveData<>(new ArrayList<>());
+
+    /**
+     * Opens this file to the editor
+     * @param file The fle to be opened
+     * @return whether the operation was successful
+     */
+    public boolean openFile(File file) {
+        if (!LanguageManager.getInstance().supports(file)) {
+            return false;
         }
-        mFiles.setValue(files);
+
+        if (!file.exists()) {
+            return false;
+        }
+
+        int index = getFiles().getValue().indexOf(file);
+        if (index >= 0) {
+            updateCurrentPosition(index);
+            return true;
+        }
+
+        addFile(file);
+        return true;
     }
 
     public void addFile(File file) {
@@ -101,7 +155,6 @@ public class MainViewModel extends ViewModel {
             files = new ArrayList<>();
         }
         files.add(file);
-
         mFiles.setValue(files);
         updateCurrentPosition(files.indexOf(file));
     }
@@ -113,5 +166,9 @@ public class MainViewModel extends ViewModel {
         }
         files.remove(file);
         mFiles.setValue(files);
+    }
+
+    public void initializeProject(Project project) {
+        setIndexing(true);
     }
 }

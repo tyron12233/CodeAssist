@@ -172,8 +172,9 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
             }
             
             mIcon.setVisibility(View.VISIBLE);
-            mIcon.setImageDrawable(new CircleDrawable(item.item.iconKind));
-
+            if (item.item != null) {
+                mIcon.setImageDrawable(new CircleDrawable(item.item.iconKind));
+            }
         }
     }
 }

@@ -4,6 +4,7 @@ import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Value;
+import com.tyron.builder.project.api.FileManager;
 import com.tyron.layoutpreview.resource.ResourceDrawableParser;
 import com.tyron.layoutpreview.resource.ResourceLayoutParser;
 import com.tyron.layoutpreview.resource.ResourceStringParser;
@@ -15,24 +16,28 @@ public class ResourceManager {
 
     private final File mResourceDir;
     private final ProteusContext mContext;
-    public ResourceManager(ProteusContext context, File resourceDir) {
+    private final FileManager mFileManager;
+
+    public ResourceManager(ProteusContext context, File resourceDir, FileManager fileManager) {
         mContext = context;
         mResourceDir = resourceDir;
+        mFileManager = fileManager;
     }
 
 
     public Map<String, Map<String, Value>> getStrings() {
-        ResourceStringParser parser = new ResourceStringParser(mResourceDir);
+        ResourceStringParser parser = new ResourceStringParser(mResourceDir, mFileManager);
         return parser.getStrings();
     }
 
     public Map<String, DrawableValue> getDrawables() {
-        ResourceDrawableParser parser = new ResourceDrawableParser(mContext, mResourceDir);
+        ResourceDrawableParser parser = new ResourceDrawableParser(mContext, mResourceDir,
+                mFileManager);
         return parser.getDefaultDrawables();
     }
 
     public Map<String, Layout> getLayouts() {
-        ResourceLayoutParser parser = new ResourceLayoutParser(mContext, mResourceDir);
+        ResourceLayoutParser parser = new ResourceLayoutParser(mContext, mResourceDir, mFileManager);
         return parser.getLayouts();
     }
 

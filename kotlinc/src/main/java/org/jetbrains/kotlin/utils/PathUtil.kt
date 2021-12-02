@@ -5,7 +5,6 @@ package org.jetbrains.kotlin.utils
 import org.jetbrains.jps.model.java.impl.JavaSdkUtil
 import org.jetbrains.kotlin.com.intellij.openapi.application.ApplicationManager
 import org.jetbrains.kotlin.com.intellij.openapi.application.PathManager
-
 import java.io.File
 import java.util.regex.Pattern
 
@@ -128,8 +127,12 @@ object PathUtil {
             if (!jar.exists()) return NO_PATH
 
             if (jar.name == KOTLIN_COMPILER_JAR) {
-                val lib = jar.parentFile
-                return lib.parentFile
+                val lib = jar.parentFile ?: return NO_PATH
+                return if (lib.parentFile != null) {
+                    NO_PATH
+                } else {
+                    lib.parentFile!!
+                }
             }
 
             return NO_PATH
@@ -142,7 +145,7 @@ object PathUtil {
 
             if (jar.name == "kotlin-plugin.jar") {
                 val lib = jar.parentFile
-                val pluginHome = lib.parentFile
+                val pluginHome = lib!!.parentFile
 
                 return File(pluginHome, HOME_FOLDER_NAME)
             }
@@ -162,7 +165,7 @@ object PathUtil {
 
     @JvmStatic
     fun getJdkClassesRootsFromCurrentJre(): List<File> =
-        getJdkClassesRootsFromJre(System.getProperty("java.home"))
+        getJdkClassesRootsFromJre(System.getProperty("java.home")!!)
 
     @JvmStatic
     fun getJdkClassesRootsFromJre(javaHome: String): List<File> =

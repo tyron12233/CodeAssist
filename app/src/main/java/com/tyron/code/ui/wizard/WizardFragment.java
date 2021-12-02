@@ -39,7 +39,8 @@ import com.github.angads25.filepicker.view.FilePickerDialog;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.transition.MaterialFadeThrough;
 import com.google.android.material.transition.MaterialSharedAxis;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.impl.AndroidProjectImpl;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.wizard.adapter.WizardTemplateAdapter;
@@ -465,8 +466,8 @@ public class WizardFragment extends Fragment {
                     return;
                 }
 
-                Project project = new Project(new File(savePath));
-                replacePlaceholders(project.mRoot);
+                Project project = new AndroidProjectImpl(new File(savePath));
+                replacePlaceholders(project.getRootFile());
 
                 if (mListener != null) {
                     requireActivity().runOnUiThread(() -> {

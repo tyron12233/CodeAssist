@@ -6,6 +6,28 @@ import org.openjdk.javax.tools.Diagnostic;
 
 public interface ILogger {
 
+    ILogger STD_OUT = new ILogger() {
+        @Override
+        public void info(DiagnosticWrapper wrapper) {
+            System.out.println("[INFO] " + wrapper.toString());
+        }
+
+        @Override
+        public void debug(DiagnosticWrapper wrapper) {
+            System.out.println("[DEBUG] " + wrapper.toString());
+        }
+
+        @Override
+        public void warning(DiagnosticWrapper wrapper) {
+            System.out.println("[WARNING] " + wrapper.toString());
+        }
+
+        @Override
+        public void error(DiagnosticWrapper wrapper) {
+            System.out.println("[ERROR] " + wrapper.toString());
+        }
+    };
+
     ILogger EMPTY = new ILogger() {
         @Override
         public void info(DiagnosticWrapper wrapper) {

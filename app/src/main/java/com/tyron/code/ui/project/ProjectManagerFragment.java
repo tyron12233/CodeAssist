@@ -29,7 +29,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.material.transition.MaterialFade;
 import com.google.android.material.transition.MaterialSharedAxis;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.impl.AndroidProjectImpl;
 import com.tyron.code.R;
 import com.tyron.code.ui.file.FilePickerDialogFixed;
 import com.tyron.code.ui.main.MainFragment;
@@ -205,7 +206,7 @@ public class ProjectManagerFragment extends Fragment {
     }
 
     private void openProject(Project project) {
-        MainFragment fragment = MainFragment.newInstance(project.mRoot.getAbsolutePath());
+        MainFragment fragment = MainFragment.newInstance(project.getRootFile().getAbsolutePath());
         getParentFragmentManager().beginTransaction()
                 .add(R.id.fragment_container, fragment)
                 .addToBackStack(null)
@@ -230,11 +231,11 @@ public class ProjectManagerFragment extends Fragment {
             if (directories != null) {
                 Arrays.sort(directories, Comparator.comparingLong(File::lastModified));
                 for (File directory : directories) {
-                    Project project = new Project(new File(directory.getAbsolutePath()
+                    Project project = new AndroidProjectImpl(new File(directory.getAbsolutePath()
                             .replaceAll("%20", " ")));
-                    if (project.isValidProject()) {
+                   // if (project.isValidProject()) {
                         projects.add(project);
-                    }
+                   // }
                 }
             }
 

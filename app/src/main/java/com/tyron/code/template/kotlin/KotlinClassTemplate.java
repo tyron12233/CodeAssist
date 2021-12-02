@@ -22,14 +22,15 @@ public class KotlinClassTemplate extends CodeTemplate {
     @Override
     public void setup() {
         setContents("package " +
-                CodeTemplate.PACKAGE_NAME +
-                "\n\npublic class " +
-                CodeTemplate.CLASS_NAME +
-                " {\n\t\n}");
+                CodeTemplate.PACKAGE_NAME + "\n" +
+                "\nclass " +
+                CodeTemplate.CLASS_NAME + " {\n" +
+                "\t" + "\n" +
+                "}");
     }
 
     @Override
     public String getExtension() {
-        return ".java";
+        return ".kt";
     }
 }

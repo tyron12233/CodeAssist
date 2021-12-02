@@ -76,6 +76,10 @@
     <!-- Editor settings -->
     <string name="code_engine_title">Completion Engine</string>
     <string name="settings_code_completions">Enable code completions</string>
+    <string name="settings_kotlin_completions">Enable code completions for Kotlin</string>
+    <string name="settings_kotlin_completions_desc">This feature is still experimental and may be slow.
+        Requires a powerful device.
+    </string>
     <string name="code_editor_error_highlight">Enable error highlighting</string>
 
     <string name="editor_settings_title">Code Editor settings</string>
@@ -87,7 +91,12 @@
     <string name="keyboard_enable_suggestions_description">Enable keyboard suggestions</string>
 
     <!-- file manager menu -->
-    <string name="menu_action_new_java_class">Java class file</string>
+    <string name="error">Error</string>
+    <string name="error_resource_name_restriction">Resource names must only contain lowercase a–z, 0–9 or an underscore.</string>
+    <string name="menu_action_new_java_class">Java class </string>
+    <string name="menu_action_new_kotlin_class">Kotlin class</string>
+    <string name="menu_action_new_directory">Directory</string>
+    <string name="directory_name">Directory name</string>
     <string name="menu_new">New</string>
     <string name="menu_refactor">Refactor</string>
     <string name="item_project">Project</string>

@@ -3,9 +3,9 @@ package com.tyron.completion;
 import android.annotation.SuppressLint;
 import android.util.Log;
 
-import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
-import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.FileManager;
+import com.tyron.builder.project.api.JavaProject;
 import com.tyron.common.util.Cache;
 import com.tyron.common.util.StringSearch;
 import com.tyron.completion.provider.CompletionEngine;
@@ -23,7 +23,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -37,11 +36,12 @@ import java.util.regex.Pattern;
 
 public class JavaCompilerService implements CompilerProvider {
 
-    public final SourceFileManager fileManager;
+    private final FileManager mFileManager;
+    public final SourceFileManager mSourceFileManager;
 
     public final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
 
-    private final Project mProject;
+    private final JavaProject mProject;
     public final Set<File> classPath, docPath;
     public final Set<String> addExports;
     public final ReusableCompiler compiler = new ReusableCompiler();
@@ -49,13 +49,14 @@ public class JavaCompilerService implements CompilerProvider {
 
     public final ReentrantLock mLock = new ReentrantLock();
 
-    public JavaCompilerService(Project project, Set<File> classPath, Set<File> docPath, Set<String> addExports) {
+    public JavaCompilerService(JavaProject project, Set<File> classPath, Set<File> docPath, Set<String> addExports) {
         mProject = project;
+        mFileManager = project.getFileManager();
         this.classPath = Collections.unmodifiableSet(classPath);
         this.docPath = Collections.unmodifiableSet(docPath);
         this.addExports = Collections.unmodifiableSet(addExports);
 
-        this.fileManager = new SourceFileManager(project);
+        this.mSourceFileManager = new SourceFileManager(project);
         this.docs = new Docs(project, docPath);
     }
 
@@ -145,7 +146,7 @@ public class JavaCompilerService implements CompilerProvider {
     @Override
     public List<String> publicTopLevelTypes() {
         List<String> classes = new ArrayList<>();
-        classes.addAll(mProject.getFileManager().all());
+        classes.addAll(mProject.getAllClasses());
         classes.addAll(Collections.emptyList());
         return classes;
     }
@@ -249,7 +250,7 @@ public class JavaCompilerService implements CompilerProvider {
 
         String packageName = packageName(className);
         String simpleName = simpleName(className);
-        for (File file : mProject.getFileManager().list(packageName)) {
+        for (File file : SourceFileManager.list(mProject, packageName)) {
             if (containsWord(file.toPath(), simpleName) && containsType(file.toPath(), className)) {
                 if (file.getName().endsWith(".java")) {
                     return file.toPath();
@@ -263,7 +264,7 @@ public class JavaCompilerService implements CompilerProvider {
         JavaFileObject source;
         try {
             source =
-                    fileManager.getJavaFileForInput(
+                    mSourceFileManager.getJavaFileForInput(
                             StandardLocation.SOURCE_PATH, className, JavaFileObject.Kind.SOURCE);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -278,7 +279,7 @@ public class JavaCompilerService implements CompilerProvider {
     public Optional<JavaFileObject> findPublicTypeDeclarationInJdk(String className) {
         JavaFileObject source;
         try {
-            source = fileManager.getJavaFileForInput(
+            source = mSourceFileManager.getJavaFileForInput(
                     StandardLocation.PLATFORM_CLASS_PATH, className, JavaFileObject.Kind.CLASS);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -351,7 +352,7 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
     public ParseTask parse(Path file, String contents) {
-        SourceFileObject object = new SourceFileObject(file, contents, Instant.now(), mProject);
+        SourceFileObject object = new SourceFileObject(file, contents, Instant.now());
         Parser parser = Parser.parseJavaFileObject(mProject, object);
         return new ParseTask(parser.task, parser.root);
     }

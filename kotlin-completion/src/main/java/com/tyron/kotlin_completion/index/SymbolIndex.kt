@@ -35,16 +35,19 @@ private object FqNames : Table() {
 class SymbolIndex {
     private val db = Database.connect("jdbc:h2:mem:symbolindex;DB_CLOSE_DELAY=-1", "org.h2.Driver")
 
+    var indexing: Boolean = false
+
     init {
        transaction (db) {
            SchemaUtils.create(Symbols, FqNames)
        }
     }
 
-    fun refresh(module: ModuleDescriptor, forced: Boolean = false) {
+    fun refresh(module: ModuleDescriptor, forced: Boolean = true) {
         val started = System.currentTimeMillis()
         Log.d("SymbolIndex", "Updating symbol index...");
 
+        indexing = true
         try {
             transaction(db) {
                 if (forced) {
@@ -76,6 +79,8 @@ class SymbolIndex {
                         );
                     }
                 }
+
+                indexing = false
             }
         } catch (e: Exception) {
             Log.e("SymbolIndex", "Error while updating symbol index", e);

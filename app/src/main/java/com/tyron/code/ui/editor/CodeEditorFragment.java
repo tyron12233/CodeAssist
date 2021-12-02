@@ -3,7 +3,6 @@ package com.tyron.code.ui.editor;
 import android.app.ProgressDialog;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -11,7 +10,6 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -22,7 +20,8 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.ProjectManager;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.language.LanguageManager;
@@ -47,11 +46,8 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -194,15 +190,13 @@ public class CodeEditorFragment extends Fragment
         Project project = ProjectManager.getInstance().getCurrentProject();
         if (mCurrentFile.exists()) {
             String text;
+            try {
+                text = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                text = "File does not exist: " + e.getMessage();
+            }
             if (project != null) {
-                project.getFileManager().openFile(mCurrentFile);
-                text = project.getFileManager().readFile(mCurrentFile);
-            } else { // fallback to reading through disk
-                try {
-                    text = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
-                } catch (IOException e) {
-                    text = "File does not exist: " + e.getMessage();
-                }
+                project.getFileManager().openFileForSnapshot(mCurrentFile, text);
             }
             mEditor.setText(text);
         }
@@ -238,22 +232,24 @@ public class CodeEditorFragment extends Fragment
                 }
 
                 if (item.item.action == com.tyron.completion.model.CompletionItem.Kind.IMPORT) {
-                    Parser parser = Parser.parseFile(ProjectManager.getInstance().getCurrentProject(),
-                            mEditor.getCurrentFile().toPath());
-                    ParseTask task = new ParseTask(parser.task, parser.root);
+                    if (project instanceof JavaProject) {
+                        Parser parser = Parser.parseFile((JavaProject) project,
+                                mEditor.getCurrentFile().toPath());
+                        ParseTask task = new ParseTask(parser.task, parser.root);
 
-                    boolean samePackage = false;
-                    //it's either in the same class or it's already imported
-                    if (!item.item.data.contains(".") || task.root.getPackageName().toString()
-                            .equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
-                        samePackage = true;
-                    }
+                        boolean samePackage = false;
+                        //it's either in the same class or it's already imported
+                        if (!item.item.data.contains(".") || task.root.getPackageName().toString()
+                                .equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
+                            samePackage = true;
+                        }
 
-                    if (!samePackage && !CompletionProvider.hasImport(task.root, item.item.data)) {
-                        AddImport imp = new AddImport(new File(""), item.item.data);
-                        Map<File, TextEdit> edits = imp.getText(task);
-                        TextEdit edit = edits.values().iterator().next();
-                        window.applyTextEdit(edit);
+                        if (!samePackage && !CompletionProvider.hasImport(task.root, item.item.data)) {
+                            AddImport imp = new AddImport(new File(""), item.item.data);
+                            Map<File, TextEdit> edits = imp.getText(task);
+                            TextEdit edit = edits.values().iterator().next();
+                            window.applyTextEdit(edit);
+                        }
                     }
                 }
                 window.setCancelShowUp(false);
@@ -373,7 +369,7 @@ public class CodeEditorFragment extends Fragment
 
             private void updateFile(CharSequence contents) {
                 if (project != null) {
-                    project.getFileManager().updateFile(mCurrentFile, contents.toString());
+                    project.getFileManager().setSnapshotContent(mCurrentFile, contents.toString());
                 }
             }
         });
@@ -384,7 +380,7 @@ public class CodeEditorFragment extends Fragment
         super.onDestroy();
         if (ProjectManager.getInstance().getCurrentProject() != null) {
             ProjectManager.getInstance().getCurrentProject().getFileManager()
-                    .closeFile(mCurrentFile, true);
+                    .closeFileForSnapshot(mCurrentFile);
         }
         mPreferences.unregisterOnSharedPreferenceChangeListener(this);
     }
@@ -393,7 +389,7 @@ public class CodeEditorFragment extends Fragment
         if (mCurrentFile.exists()) {
             String oldContents = "";
             try {
-                oldContents = FileUtils.readFileToString(mCurrentFile, Charset.defaultCharset());
+                oldContents = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -401,10 +397,10 @@ public class CodeEditorFragment extends Fragment
                 return;
             }
 
-            Project currentProject = ProjectManager.getInstance().getCurrentProject();
-            if (currentProject != null) {
-                currentProject.getFileManager()
-                        .save(mCurrentFile, mEditor.getText().toString());
+            try {
+                FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString());
+            } catch (IOException e) {
+                // ignored
             }
         }
     }
@@ -460,24 +456,23 @@ public class CodeEditorFragment extends Fragment
         if (mEditor != null && mLanguage instanceof LanguageXML) {
             Executors.newSingleThreadExecutor().execute(() -> {
                 try {
-                    Instant start = Instant.now();
-                    View view = ((LanguageXML) mLanguage).showPreview(requireContext(), container);
+                    View view = ((LanguageXML) mLanguage).showPreview(requireContext(), (ViewGroup) requireView());
                     requireActivity().runOnUiThread(() -> {
-                        Toast.makeText(requireContext(), "PreviewTask took: " +
-                                        Duration.between(start, Instant.now()).toMillis() + " ms.",
-                                Toast.LENGTH_SHORT).show();
-                        if (view != null) {
-                            DisplayMetrics displayMetrics =
-                                    requireActivity().getResources().getDisplayMetrics();
-                            FrameLayout root = new FrameLayout(requireContext());
-                            root.addView(view);
-                            container.addView(root, new ViewGroup.LayoutParams((int)
-                                    (displayMetrics.widthPixels * .90),
-                                    (int) (displayMetrics.heightPixels * .90)));
 
-                            new AlertDialog.Builder(requireContext())
+                        if (view != null) {
+                            container.addView(view, new FrameLayout.LayoutParams(-1, -1));
+
+                            AlertDialog show = new AlertDialog.Builder(requireContext())
                                     .setView(container)
-                                    .show();
+                                    .create();
+
+                            show.setOnShowListener(d -> {
+                                show.getWindow().setLayout(-1, requireActivity().getResources()
+                                        .getDisplayMetrics().heightPixels);
+                                view.requestLayout();
+                            });
+
+                            show.show();
                         }
                     });
 
@@ -498,7 +493,7 @@ public class CodeEditorFragment extends Fragment
         if (mLanguage instanceof JavaLanguage && project != null) {
             final Path current = mEditor.getCurrentFile().toPath();
             CodeActionProvider provider =
-                    new CodeActionProvider(CompletionEngine.getInstance().getCompiler(project));
+                    new CodeActionProvider(CompletionEngine.getInstance().getCompiler((JavaProject) project));
             return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
         }
         return Collections.emptyList();

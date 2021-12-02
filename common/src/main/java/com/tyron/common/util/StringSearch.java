@@ -250,7 +250,6 @@ public class StringSearch {
         try {
             return new BufferedReader(new InputStreamReader(new FileInputStream(file)));
         } catch (FileNotFoundException e) {
-            Log.e("FileManager", Log.getStackTraceString(e));
             return new BufferedReader(new StringReader(""));
         }
     }

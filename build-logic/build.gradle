@@ -33,9 +33,14 @@ dependencies {
     implementation project(path: ':common')
     implementation 'androidx.test:core:1.4.0'
 
+    // required so internal classes would be included 
+    implementation project(path: ':jaxp:jaxp-internal')
+    implementation project(path: ':jaxp:xml')
+
     testImplementation 'junit:junit:4.13.2'
     testImplementation "com.google.truth:truth:1.1.3"
     testImplementation "org.robolectric:robolectric:4.2.1"
+    testImplementation project(path: ':jaxp:jaxp-internal')
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
 

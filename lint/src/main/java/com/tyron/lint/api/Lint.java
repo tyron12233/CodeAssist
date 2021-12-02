@@ -5,14 +5,13 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.JavaProject;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.lint.JavaVisitor;
 import com.tyron.lint.checks.CallSuperDetector;
 import com.tyron.lint.checks.JavaPerformanceDetector;
 import com.tyron.lint.checks.SharedPrefsDetector;
 import com.tyron.lint.checks.ToastDetector;
-import com.tyron.lint.checks.UnusedDetector;
 import com.tyron.lint.client.Configuration;
 import com.tyron.lint.client.IssueRegistry;
 import com.tyron.lint.client.LintClient;
@@ -26,12 +25,12 @@ import java.util.Arrays;
 import java.util.List;
 
 public class Lint {
-    private final Project mProject;
+    private final JavaProject mProject;
     private final JavaCompilerService mCompiler;
     private final List<Detector> mDetectors;
     private final LintClient mClient;
 
-    public Lint(JavaCompilerService compiler, Project project, LintClient client) {
+    public Lint(JavaCompilerService compiler, JavaProject project, LintClient client) {
         mCompiler = compiler;
         mProject = project;
         mClient = client;

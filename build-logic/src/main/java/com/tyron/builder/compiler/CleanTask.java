@@ -1,9 +1,13 @@
 package com.tyron.builder.compiler;
 
+import com.tyron.builder.compiler.incremental.dex.IncrementalD8Task;
+import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
+import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.AndroidProject;
 
 import org.apache.commons.io.FileUtils;
 
@@ -11,13 +15,15 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-public class CleanTask extends Task {
+public class CleanTask extends Task<AndroidProject> {
 
     private static final String TAG = CleanTask.class.getSimpleName();
 
-    private Project mProject;
-    private ILogger mLogger;
     private BuildType mBuildType;
+
+    public CleanTask(AndroidProject project, ILogger logger) {
+        super(project, logger);
+    }
 
     @Override
     public String getName() {
@@ -25,9 +31,7 @@ public class CleanTask extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mProject = project;
-        mLogger = logger;
+    public void prepare(BuildType type) throws IOException {
         mBuildType = type;
     }
 
@@ -42,33 +46,33 @@ public class CleanTask extends Task {
     }
 
     private void cleanRelease() throws IOException {
-        mLogger.info("Release build, clearing intermediate cache");
+        getLogger().info("Release build, clearing intermediate cache");
 
-        File binDirectory = new File(mProject.getBuildDirectory(), "bin");
+        File binDirectory = new File(getProject().getBuildDirectory(), "bin");
         if (binDirectory.exists()) {
             FileUtils.deleteDirectory(binDirectory);
         }
 
-        File genDirectory = new File(mProject.getBuildDirectory(), "gen");
+        File genDirectory = new File(getProject().getBuildDirectory(), "gen");
         if (genDirectory.exists()) {
             FileUtils.deleteDirectory(genDirectory);
         }
 
-        File intermediateDirectory = new File(mProject.getBuildDirectory(), "intermediate");
+        File intermediateDirectory = new File(getProject().getBuildDirectory(), "intermediate");
         if (intermediateDirectory.exists()) {
             FileUtils.deleteDirectory(intermediateDirectory);
         }
 
-        mProject.getFileManager().getClassCache()
+        getProject().getUserData(IncrementalJavaTask.CACHE_KEY)
                 .clear();
-        mProject.getFileManager().getDexCache()
+        getProject().getUserData(IncrementalD8Task.CACHE_KEY)
                 .clear();
-        mProject.getFileManager().getSymbolCache()
+        getProject().getUserData(MergeSymbolsTask.CACHE_KEY)
                 .clear();
     }
     private void cleanClasses() {
 
-        File output = new File(mProject.getBuildDirectory(), "bin/classes/");
+        File output = new File(getProject().getBuildDirectory(), "bin/classes/");
         List<File> classFiles = FileManager.findFilesWithExtension(
                 output,
                 ".class");
@@ -79,21 +83,16 @@ public class CleanTask extends Task {
                     .substring(1)
                     .replace(".class", "");
 
-            String packageName = path;
-            if (path.contains("$")) {
-                path = path.substring(0, path.indexOf("$"));
-            }
-
-            if (mProject.getFileManager().list(path).isEmpty() && !classExists(packageName)) {
+            if (!classExists(path)) {
                 if (file.delete()) {
-                    mLogger.debug("Deleted class file " + file.getName());
+                    getLogger().debug("Deleted class file " + file.getName());
                 };
             }
         }
     }
 
     private void cleanDexFiles() {
-        File output = new File(mProject.getBuildDirectory(), "intermediate/classes");
+        File output = new File(getProject().getBuildDirectory(), "intermediate/classes");
         List<File> classFiles = FileManager.findFilesWithExtension(
                 output,
                 ".dex");
@@ -111,7 +110,7 @@ public class CleanTask extends Task {
                 int start = name.indexOf('$', 3) + 1;
                 int end = name.indexOf('$', start);
                 if (start == -1 || end == -1) {
-                    mLogger.warning("Unrecognized dex file: " + file.getName());
+                    getLogger().warning("Unrecognized dex file: " + file.getName());
                     continue;
                 } else {
                     String className = name.substring(start, end);
@@ -123,17 +122,16 @@ public class CleanTask extends Task {
                 }
             }
 
-            mLogger.debug("Checking path: "+ path + " package: " + packageName);
-            if (mProject.getFileManager().list(path).isEmpty() && !classExists(packageName)) {
+            if (!classExists(packageName)) {
                 if (file.delete()) {
-                    mLogger.debug("Deleted dex file " + path);
+                    getLogger().debug("Deleted dex file " + path);
                 }
             }
         }
     }
 
     private boolean classExists(String fqn) {
-        return mProject.getJavaFiles().get(fqn) != null ||
-                mProject.getKotlinFiles().get(fqn) != null;
+        return getProject().getJavaFiles().get(fqn) != null ||
+                getProject().getKotlinFiles().get(fqn) != null;
     }
 }

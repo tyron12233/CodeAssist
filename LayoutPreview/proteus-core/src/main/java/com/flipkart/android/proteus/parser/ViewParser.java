@@ -29,6 +29,9 @@ import android.view.animation.Animation;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.ProteusConstants;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
@@ -51,9 +54,6 @@ import com.flipkart.android.proteus.value.Value;
 import com.flipkart.android.proteus.view.ProteusAndroidView;
 
 import java.util.Map;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 /**
  * @author kiran.kumar
@@ -319,6 +319,31 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
     });
 
+    addAttributeProcessor("layout_marginStart", new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+          ViewGroup.MarginLayoutParams layoutParams;
+          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+          layoutParams.setMarginStart((int) dimension);
+          layoutParams.resolveLayoutDirection(view.getLayoutDirection());
+          layoutParams.setMargins(layoutParams.leftMargin, layoutParams.topMargin, layoutParams.rightMargin, layoutParams.bottomMargin);
+        }
+      }
+    });
+
+    addAttributeProcessor("layout_marginEnd", new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+          ViewGroup.MarginLayoutParams layoutParams = new ViewGroup.MarginLayoutParams(view.getLayoutParams());
+          layoutParams.setMarginEnd((int) dimension);
+          layoutParams.setMarginStart(((ViewGroup.MarginLayoutParams) view.getLayoutParams()).getMarginStart());
+          view.setLayoutParams(layoutParams);
+        }
+      }
+    });
+
     addAttributeProcessor(Attributes.View.MinHeight, new DimensionAttributeProcessor<V>() {
       @Override
       public void setDimension(V view, float dimension) {
@@ -351,7 +376,6 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void handleValue(V view, Value value) {
         if (value.isPrimitive() && value.getAsPrimitive().isNumber()) {
-          // noinspection ResourceType
           view.setVisibility(value.getAsInt());
         } else {
           process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
@@ -361,21 +385,18 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void handleResource(V view, Resource resource) {
         Integer visibility = resource.getInteger(view.getContext());
-        //noinspection WrongConstant
         view.setVisibility(null != visibility ? visibility : View.GONE);
       }
 
       @Override
       public void handleAttributeResource(V view, AttributeResource attribute) {
         TypedArray a = attribute.apply(view.getContext());
-        //noinspection WrongConstant
         view.setVisibility(a.getInt(0, View.GONE));
       }
 
       @Override
       public void handleStyleResource(V view, StyleResource style) {
         TypedArray a = style.apply(view.getContext());
-        //noinspection WrongConstant
         view.setVisibility(a.getInt(0, View.GONE));
       }
 

@@ -11,14 +11,15 @@ public class AsyncExecutor {
 
     private int threadCount = 0;
 
-    private final ExecutorService workerThread = Executors.newSingleThreadExecutor();
+    private final ExecutorService workerThread = Executors.newSingleThreadExecutor(runnable ->
+            new Thread(runnable, "async" + threadCount++));
 
     public void execute(Runnable task) {
-        CompletableFuture.runAsync(task);
+        CompletableFuture.runAsync(task, workerThread);
     }
 
     public <R> CompletableFuture<R> compute(Function0<R> task) {
-        return CompletableFuture.supplyAsync(task::invoke);
+        return CompletableFuture.supplyAsync(task::invoke, workerThread);
     }
 
     public void shutdown(boolean await) {

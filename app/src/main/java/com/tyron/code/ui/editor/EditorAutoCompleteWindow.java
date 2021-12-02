@@ -14,18 +14,12 @@ import android.widget.Toast;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.tyron.completion.rewrite.AddImport;
 import com.tyron.code.util.AndroidUtilities;
-import com.tyron.completion.ParseTask;
-import com.tyron.completion.Parser;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
-import com.tyron.completion.provider.CompletionProvider;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import io.github.rosemoe.sora.data.CompletionItem;
 import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
@@ -249,6 +243,9 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      */
     @SuppressLint("NewApi")
     public void select(int pos) {
+        if (pos > mAdapter.getItemCount()) {
+            return;
+        }
         CompletionItem item = mAdapter.getItem(pos);
         Cursor cursor = mEditor.getCursor();
         if (!cursor.isSelected()) {

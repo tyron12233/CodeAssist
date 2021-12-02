@@ -1,21 +1,19 @@
 package com.tyron.builder.compiler.incremental.java;
 
-import android.util.Log;
-
 import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
-import com.tyron.builder.compiler.java.JavaTask;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
-import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.JavaProject;
 import com.tyron.common.util.Cache;
 
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
+import org.jetbrains.kotlin.com.intellij.openapi.util.KeyWithDefaultValue;
 import org.openjdk.javax.tools.DiagnosticListener;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.javax.tools.StandardJavaFileManager;
@@ -36,16 +34,25 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-public class IncrementalJavaTask extends Task {
+public class IncrementalJavaTask extends Task<JavaProject> {
 
+    public static final Key<Cache<String, List<File>>> CACHE_KEY = new
+            KeyWithDefaultValue<Cache<String, List<File>>>("javaClasses") {
+                @Override
+                public Cache<String, List<File>> getDefaultValue() {
+                    return new Cache<>();
+                }
+            };
     private static final String TAG = IncrementalJavaTask.class.getSimpleName();
 
     private File mOutputDir;
     private List<File> mJavaFiles;
     private List<File> mFilesToCompile;
     private Cache<String, List<File>> mClassCache;
-    private Project mProject;
-    private ILogger mLogger;
+
+    public IncrementalJavaTask(JavaProject project, ILogger logger) {
+        super(project, logger);
+    }
 
     @Override
     public String getName() {
@@ -53,21 +60,15 @@ public class IncrementalJavaTask extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mProject = project;
-        mLogger = logger;
-
-        mOutputDir = new File(project.getBuildDirectory(), "bin/java/classes");
+    public void prepare(BuildType type) throws IOException {
+        mOutputDir = new File(getProject().getBuildDirectory(), "bin/java/classes");
         if (!mOutputDir.exists() && !mOutputDir.mkdirs()) {
             throw new IOException("Unable to create output directory");
         }
 
-        project.clear();
-
         mFilesToCompile = new ArrayList<>();
-        mClassCache = mProject.getFileManager().getClassCache();
-        mJavaFiles = new ArrayList<>(project.getJavaFiles().values());
-        mJavaFiles.addAll(JavaTask.getJavaFiles(new File(project.getBuildDirectory(), "gen")));
+        mClassCache = getProject().getUserData(CACHE_KEY);
+        mJavaFiles = new ArrayList<>(getProject().getJavaFiles().values());
 
         for (Cache.Key<String> key : new HashSet<>(mClassCache.getKeys())) {
             if (!mJavaFiles.contains(key.file.toFile())) {
@@ -94,16 +95,16 @@ public class IncrementalJavaTask extends Task {
             return;
         }
 
-        mLogger.debug("Compiling java files");
+        getLogger().debug("Compiling java files");
 
         DiagnosticListener<JavaFileObject> diagnosticCollector = diagnostic -> {
             switch (diagnostic.getKind()) {
                 case ERROR:
                     mHasErrors = true;
-                    mLogger.error(new DiagnosticWrapper(diagnostic));
+                    getLogger().error(new DiagnosticWrapper(diagnostic));
                     break;
                 case WARNING:
-                    mLogger.warning(new DiagnosticWrapper(diagnostic));
+                    getLogger().warning(new DiagnosticWrapper(diagnostic));
             }
         };
 
@@ -115,15 +116,15 @@ public class IncrementalJavaTask extends Task {
                 Charset.defaultCharset()
         );
 
-        List<File> classpath = new ArrayList<>(mProject.getFileManager().getLibraries());
+        List<File> classpath = new ArrayList<>(getProject().getLibraries());
         classpath.add(mOutputDir);
 
         try {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT,
                     Collections.singletonList(mOutputDir));
             standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH,
-                    Arrays.asList(FileManager.getAndroidJar(),
-                    FileManager.getLambdaStubs()));
+                    Arrays.asList(getProject().getBootstrapJarFile(),
+                            getProject().getLambdaStubsJarFile()));
             standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, classpath);
             standardJavaFileManager.setLocation(StandardLocation.SOURCE_PATH, mJavaFiles);
         } catch (IOException e) {
@@ -157,12 +158,9 @@ public class IncrementalJavaTask extends Task {
                     String classPath = classFile.getAbsolutePath()
                             .replace("build/bin/classes/", "src/main/java/")
                             .replace(".class", ".java");
-                    Log.d(TAG, "Adding class file " +
-                            classFile.getName() + " to cache" + "\n cache:" + classPath);
                     if (classFile.getName().indexOf('$') != -1) {
                         classPath = classPath.substring(0, classPath.indexOf('$'))
                                 + ".java";
-                        Log.d(TAG, "class path: " + classPath);
                     }
                     File file = new File(classPath);
                     if (!file.exists()) {
@@ -186,7 +184,7 @@ public class IncrementalJavaTask extends Task {
             compiledFiles.forEach((key, values) -> {
                 File sourceFile = new File(key);
                 String name = sourceFile.getName()
-                        .replace(".java","");
+                        .replace(".java", "");
                 File first = values.iterator().next();
                 File parent = first.getParentFile();
                 if (parent != null) {
@@ -202,14 +200,14 @@ public class IncrementalJavaTask extends Task {
                         for (File file : children) {
                             if (!values.contains(file)) {
                                 if (file.delete()) {
-                                    mLogger.debug("Deleted file " + file.getAbsolutePath());
+                                    getLogger().debug("Deleted file " + file.getAbsolutePath());
                                 }
                             }
                         }
                     }
                 }
             });
-        } catch(Exception e) {
+        } catch (Exception e) {
             throw new CompilationFailedException(e);
         }
 

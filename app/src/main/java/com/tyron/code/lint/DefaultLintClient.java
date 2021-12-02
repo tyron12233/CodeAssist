@@ -5,15 +5,15 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.JavaProject;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.lint.api.Context;
 import com.tyron.lint.api.Issue;
+import com.tyron.lint.api.Lint;
 import com.tyron.lint.api.Location;
 import com.tyron.lint.api.Severity;
 import com.tyron.lint.api.TextFormat;
-import com.tyron.lint.api.Lint;
 import com.tyron.lint.client.LintClient;
 
 import java.io.File;
@@ -26,7 +26,7 @@ public class DefaultLintClient extends LintClient {
     private final Lint mLint;
     private final JavaCompilerService mCompiler;
 
-    public DefaultLintClient(Project project) {
+    public DefaultLintClient(JavaProject project) {
         mCompiler = CompletionEngine.getInstance().getCompiler(project);
         mLint = new Lint(mCompiler, project, this);
     }

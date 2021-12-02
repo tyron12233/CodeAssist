@@ -8,6 +8,7 @@ import android.util.Pair;
 
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Value;
+import com.tyron.builder.project.api.FileManager;
 import com.tyron.layoutpreview.convert.ConvertException;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -15,21 +16,23 @@ import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.StringReader;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 public class ResourceStringParser {
 
     private final File mResourceDir;
+    private final FileManager mFileManager;
 
-    public ResourceStringParser(File resourceDir) {
+    public ResourceStringParser(File resourceDir, FileManager fileManager) {
         mResourceDir = resourceDir;
+        mFileManager = fileManager;
     }
 
     public Map<String, Map<String, Value>> getStrings() {
@@ -47,47 +50,63 @@ public class ResourceStringParser {
 
         HashMap<String, Value> strings = new HashMap<>();
         for (File file : xmlFiles) {
-            try {
-                strings.putAll(parseStringXml(new FileInputStream(file)));
-            } catch (FileNotFoundException ignore) {}
+            Optional<CharSequence> contents = mFileManager.getFileContent(file);
+            contents.ifPresent(charSequence ->
+                    strings.putAll(parseStringXml(charSequence.toString())));
         }
 
         return strings;
+    }
+
+    public Map<String, Value> parseStringXml(String input) {
+        XmlPullParser parser = null;
+        try {
+            parser = XmlPullParserFactory.newInstance().newPullParser();
+            parser.setInput(new StringReader(input));
+            return doParseStringXml(parser);
+        } catch (XmlPullParserException | ConvertException | IOException e) {
+            return Collections.emptyMap();
+        }
     }
 
     public Map<String, Value> parseStringXml(InputStream xml) {
         try {
             XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
             parser.setInput(new InputStreamReader(xml));
-            advanceToRootNode(parser);
-
-            HashMap<String, Value> strings = new HashMap<>();
-            while (parser.next() != XmlPullParser.END_TAG) {
-                if (parser.getEventType() != XmlPullParser.START_TAG) {
-                    continue;
-                }
-                String name = parser.getName();
-                if (name.equals("string")) {
-                    Pair<String, Value> pair = parseStringXml(parser);
-                    if (pair != null) {
-                        strings.put(pair.first, pair.second);
-                    }
-                } else if (name.equals("item")) {
-                    Pair<String, Value> pair = parseItemString(parser);
-                    if (pair != null) {
-                        strings.put(pair.first, pair.second);
-                    }
-                } else {
-                    skip(parser);
-                }
-            }
-            return strings;
+            return doParseStringXml(parser);
         } catch (XmlPullParserException | IOException | ConvertException e) {
             return Collections.emptyMap();
         }
     }
 
-    private Pair<String, Value> parseStringXml(XmlPullParser parser) throws IOException, XmlPullParserException {
+    private Map<String, Value> doParseStringXml(XmlPullParser parser) throws ConvertException, XmlPullParserException, IOException {
+        advanceToRootNode(parser);
+
+        HashMap<String, Value> strings = new HashMap<>();
+        while (parser.next() != XmlPullParser.END_TAG) {
+            if (parser.getEventType() != XmlPullParser.START_TAG) {
+                continue;
+            }
+            String name = parser.getName();
+            if (name.equals("string")) {
+                Pair<String, Value> pair = parseStringXmlInternal(parser);
+                if (pair != null) {
+                    strings.put(pair.first, pair.second);
+                }
+            } else if (name.equals("item")) {
+                Pair<String, Value> pair = parseItemString(parser);
+                if (pair != null) {
+                    strings.put(pair.first, pair.second);
+                }
+            } else {
+                skip(parser);
+            }
+        }
+
+        return strings;
+    }
+
+    private Pair<String, Value> parseStringXmlInternal(XmlPullParser parser) throws IOException, XmlPullParserException {
         parser.require(XmlPullParser.START_TAG, null, "string");
         String name = null;
         for (int i = 0; i < parser.getAttributeCount(); i++) {

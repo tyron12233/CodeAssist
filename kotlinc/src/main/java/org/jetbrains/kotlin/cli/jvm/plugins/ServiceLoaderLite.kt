@@ -35,12 +35,14 @@ object ServiceLoaderLite {
             }
         }
 
-        val classpath = classLoader.urLs.joinToString(separator = File.pathSeparator) {
-            it.path
+        if (isDalvik() == true) {
+            val classpath = classLoader.urLs.joinToString(separator = File.pathSeparator) {
+                it.path
+            }
+            val loader = DexClassLoader(classpath, "", "", this::class.java.classLoader)
+            return loadImplementations(service, files, loader)
         }
-        val loader = DexClassLoader(classpath, "", "", this::class.java.classLoader)
-
-        return loadImplementations(service, files, loader)
+        return loadImplementations(service, files, classLoader);
     }
 
     fun <Service> loadImplementations(service: Class<out Service>, files: List<File>, classLoader: ClassLoader): MutableList<Service> {
@@ -121,4 +123,6 @@ object ServiceLoaderLite {
     private fun getClassIdentifier(service: Class<*>): String {
         return service.name
     }
+
+    fun isDalvik() = System.getProperty("java.vm.name")?.contains("Dalvik");
 }

@@ -3,8 +3,8 @@ package com.tyron.completion;
 import android.annotation.SuppressLint;
 import android.util.Log;
 
-import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
+import com.tyron.builder.project.api.JavaProject;
 
 import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.Name;
@@ -31,7 +31,6 @@ import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public class Parser {
@@ -43,12 +42,12 @@ public class Parser {
      * Create a task that compiles a single file
      */
     @SuppressLint("NewApi")
-    private static JavacTask singleFileTask(Project project, JavaFileObject file) {
+    private static JavacTask singleFileTask(JavaProject project, JavaFileObject file) {
         return (JavacTask)
                 COMPILER.getTask(null, getFileManager(project), Parser::ignoreError, Collections.emptyList(), Collections.emptyList(), Collections.singletonList(file));
     }
 
-    private static SourceFileManager getFileManager(Project project) {
+    private static SourceFileManager getFileManager(JavaProject project) {
         return new SourceFileManager(project);
     }
 
@@ -59,7 +58,7 @@ public class Parser {
     public final CompilationUnitTree root;
     public final Trees trees;
 
-    private Parser(Project project, JavaFileObject file) {
+    private Parser(JavaProject project, JavaFileObject file) {
         this.file = file;
         try {
             this.contents = file.getCharContent(false).toString();
@@ -75,7 +74,7 @@ public class Parser {
         this.trees = Trees.instance(task);
     }
 
-    public static Parser parseFile(Project project, Path file) {
+    public static Parser parseFile(JavaProject project, Path file) {
         return parseJavaFileObject(project, new SourceFileObject(file));
     }
 
@@ -89,12 +88,12 @@ public class Parser {
         return false;
     }
 
-    private static void loadParse(Project project, JavaFileObject file) {
+    private static void loadParse(JavaProject project, JavaFileObject file) {
         cachedParse = new Parser(project, file);
         cachedModified = file.getLastModified();
     }
 
-    public static Parser parseJavaFileObject(Project project, JavaFileObject file) {
+    public static Parser parseJavaFileObject(JavaProject project, JavaFileObject file) {
         if (needsParse(file)) {
             Log.d("Parser", "Parsing file " + file.getName());
             loadParse(project, file);

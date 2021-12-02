@@ -1,9 +1,9 @@
 package com.tyron.builder.compiler.manifest.xml;
 
-import com.tyron.builder.compiler.manifest.SdkConstants;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.builder.compiler.manifest.SdkConstants;
 import com.tyron.builder.compiler.manifest.resources.Keyboard;
 import com.tyron.builder.compiler.manifest.resources.Navigation;
 import com.tyron.builder.compiler.manifest.resources.TouchScreen;
@@ -15,12 +15,6 @@ import com.tyron.builder.compiler.manifest.xml.ManifestData.UsesFeature;
 import com.tyron.builder.compiler.manifest.xml.ManifestData.UsesLibrary;
 import com.tyron.builder.util.XmlUtils;
 
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Locale;
 import org.openjdk.javax.xml.parsers.ParserConfigurationException;
 import org.openjdk.javax.xml.parsers.SAXParser;
 import org.openjdk.javax.xml.parsers.SAXParserFactory;
@@ -31,6 +25,14 @@ import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 import org.xml.sax.helpers.DefaultHandler;
+
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * Full Manifest parser that parses the manifest in details, including activities, instrumentations,
@@ -765,6 +767,10 @@ public class AndroidManifestParser {
         }
 
         return null;
+    }
+
+    public static ManifestData parse(@NonNull File manifestFile) throws IOException {
+        return parse(manifestFile.toPath());
     }
 
     @NonNull

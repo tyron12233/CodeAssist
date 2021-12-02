@@ -13,19 +13,25 @@ import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
+import com.tyron.builder.compiler.AndroidAppBuilder;
+import com.tyron.builder.compiler.AndroidAppBundleBuilder;
 import com.tyron.builder.compiler.ApkBuilder;
 import com.tyron.builder.compiler.BuildType;
+import com.tyron.builder.compiler.Builder;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.model.Project;
+import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.R;
 import com.tyron.code.util.ApkInstaller;
 
 import java.io.File;
+import java.util.concurrent.Executors;
 
 public class CompilerService extends Service {
 
     private final CompilerBinder mBinder = new CompilerBinder();
+
     public class CompilerBinder extends Binder {
         public CompilerService getCompilerService() {
             return CompilerService.this;
@@ -155,14 +161,26 @@ public class CompilerService extends Service {
             return;
         }
 
-        ApkBuilder apkBuilder = new ApkBuilder(logger, mProject);
-        apkBuilder.setTaskListener(this::updateNotification);
-        apkBuilder.build(type, (success, message) -> {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            Builder<? extends Project> projectBuilder = getBuilderForProject(project, type);
+            boolean success = true;
+            String message = "";
+
+            project.clear();
+            project.index();
+
+            try {
+                projectBuilder.build(type);
+            } catch (Exception e) {
+                message = e.getMessage();
+            }
+
             if (onResultListener != null) {
                 onResultListener.onComplete(success, message);
             }
 
-            String projectName = mProject.getName();
+            String projectName = "Project";
+
             stopSelf();
             stopForeground(true);
 
@@ -173,23 +191,37 @@ public class CompilerService extends Service {
                     return;
                 }
 
-                Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setDataAndType(ApkInstaller.uriFromFile(this, new File(mProject.getBuildDirectory(), "bin/signed.apk")), "application/vnd.android.package-archive");
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                NotificationCompat.Builder builder =
+                        new NotificationCompat.Builder(this, "Compiler")
+                                .setSmallIcon(R.drawable.ic_launcher)
+                                .setContentTitle(projectName)
+                                .setContentText("Compilation success");
 
-                PendingIntent pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+                if (type != BuildType.AAB) {
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    intent.setDataAndType(ApkInstaller.uriFromFile(this,
+                            new File(mProject.getBuildDirectory(), "bin/signed.apk")),
+                            "application/vnd.android.package-archive");
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    PendingIntent pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+                    builder.addAction(new NotificationCompat.Action(0, "INSTALL", pending));
+                }
 
-                Notification notification = new NotificationCompat.Builder(this, "Compiler")
-                        .setSmallIcon(R.drawable.ic_launcher)
-                        .setContentTitle(projectName)
-                        .setContentText("Compilation success")
-                        .addAction(new NotificationCompat.Action(0, "INSTALL", pending))
-                        .build();
                 NotificationManagerCompat.from(this)
-                        .notify(201, notification);
+                        .notify(201, builder.build());
             }
 
         });
+    }
+
+    private Builder<? extends Project> getBuilderForProject(Project project, BuildType type) {
+        if (project instanceof AndroidProject) {
+            if (type == BuildType.AAB) {
+                return new AndroidAppBundleBuilder((AndroidProject) project, logger);
+            }
+            return new AndroidAppBuilder((AndroidProject) project, logger);
+        }
+        return null;
     }
 }

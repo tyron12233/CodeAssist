@@ -6,17 +6,23 @@ import android.util.Log;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.tools.javac.api.JavacTool;
-
+import com.tyron.builder.BuildModule;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
+import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.model.Project;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.parser.FileManager;
-import com.tyron.builder.log.ILogger;
-import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.project.api.JavaProject;
+
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.StandardJavaFileManager;
+import org.openjdk.javax.tools.StandardLocation;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.tools.javac.api.JavacTool;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,17 +35,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.StandardJavaFileManager;
-import org.openjdk.javax.tools.StandardLocation;
+public class JavaTask extends Task<JavaProject> {
 
-public class JavaTask extends Task {
-
-    private ILogger logViewModel;
-    private Project mProject;
     private List<File> mCompiledFiles;
+
+    public JavaTask(JavaProject project, ILogger logger) {
+        super(project, logger);
+    }
 
     @Override
     public String getName() {
@@ -47,9 +49,8 @@ public class JavaTask extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mProject = project;
-        logViewModel = logger;
+    public void prepare(BuildType type) throws IOException {
+
     }
 
     @Override
@@ -63,9 +64,9 @@ public class JavaTask extends Task {
     public void compile() throws CompilationFailedException {
 
         long startTime = System.currentTimeMillis();
-        logViewModel.debug("Compiling java files.");
+        getLogger().debug("Compiling java files.");
 
-        File outputDir = new File(mProject.getBuildDirectory(), "bin/classes");
+        File outputDir = new File(getProject().getBuildDirectory(), "bin/classes");
         if (outputDir.exists()) {
             FileManager.deleteDir(outputDir);
         }
@@ -73,18 +74,18 @@ public class JavaTask extends Task {
             throw new CompilationFailedException("Cannot create output directory");
         }
 
-        mProject.clear();
-        List<File> javaFiles = new ArrayList<>(mProject.getJavaFiles().values());
-        javaFiles.addAll(getJavaFiles(new File(mProject.getBuildDirectory(), "gen")));
+        getProject().clear();
+        List<File> javaFiles = new ArrayList<>(getProject().getJavaFiles().values());
+        javaFiles.addAll(getJavaFiles(new File(getProject().getBuildDirectory(), "gen")));
         mCompiledFiles = new ArrayList<>();
 
         DiagnosticListener<JavaFileObject> diagnosticCollector = diagnostic -> {
             switch (diagnostic.getKind()) {
                 case ERROR:
-                    logViewModel.error(new DiagnosticWrapper(diagnostic));
+                    getLogger().error(new DiagnosticWrapper(diagnostic));
                     break;
                 case WARNING:
-                    logViewModel.warning(new DiagnosticWrapper(diagnostic));
+                    getLogger().warning(new DiagnosticWrapper(diagnostic));
             }
         };
 
@@ -98,10 +99,10 @@ public class JavaTask extends Task {
         try {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singletonList(outputDir));
             standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, Arrays.asList(
-                    FileManager.getAndroidJar(),
-                    FileManager.getLambdaStubs()
+                    BuildModule.getAndroidJar(),
+                    BuildModule.getLambdaStubs()
             ));
-            standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, mProject.getFileManager().getLibraries());
+            standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, getProject().getLibraries());
             standardJavaFileManager.setLocation(StandardLocation.SOURCE_PATH, javaFiles);
         } catch (IOException e) {
             throw new CompilationFailedException(e);

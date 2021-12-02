@@ -3,6 +3,7 @@ package com.tyron.layoutpreview;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.flipkart.android.proteus.value.Value;
+import com.tyron.builder.project.mock.MockFileManager;
 import com.tyron.layoutpreview.resource.ResourceStringParser;
 
 import org.junit.Test;
@@ -10,8 +11,6 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @RunWith(RobolectricTestRunner.class)
@@ -120,8 +119,9 @@ public class TestResourceManager {
 
     @Test
     public void test() {
-        ResourceStringParser parser = new ResourceStringParser(null);
-        Map<String, Value> stringValueMap = parser.parseStringXml(new ByteArrayInputStream(TEST_XML.getBytes(StandardCharsets.UTF_8)));
+        ResourceStringParser parser = new ResourceStringParser(null,
+                new MockFileManager(null));
+        Map<String, Value> stringValueMap = parser.parseStringXml(TEST_XML);
         assertThat(stringValueMap).isNotNull();
         assertThat(stringValueMap).isNotEmpty();
     }

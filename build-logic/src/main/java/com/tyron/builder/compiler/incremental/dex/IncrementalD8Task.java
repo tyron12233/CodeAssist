@@ -13,9 +13,12 @@ import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.common.util.Cache;
 
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
+import org.jetbrains.kotlin.com.intellij.openapi.util.KeyWithDefaultValue;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,20 +31,29 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class IncrementalD8Task extends Task {
+public class IncrementalD8Task extends Task<AndroidProject> {
 
     private static final String TAG = IncrementalD8Task.class.getSimpleName();
+    public static final Key<Cache<String, List<File>>> CACHE_KEY = new
+            KeyWithDefaultValue<Cache<String, List<File>>>("dexCache") {
+        @Override
+        public Cache<String, List<File>> getDefaultValue() {
+            return new Cache<>();
+        }
+    };
 
     private DiagnosticsHandler diagnosticsHandler;
     private List<Path> mClassFiles;
     private List<Path> mFilesToCompile;
 
     private Cache<String, List<File>> mDexCache;
-    private ILogger mLogger;
-    private Project mProject;
     private Path mOutputPath;
 
     private BuildType mBuildType;
+
+    public IncrementalD8Task(AndroidProject project, ILogger logger) {
+        super(project, logger);
+    }
 
 
     @Override
@@ -50,22 +62,20 @@ public class IncrementalD8Task extends Task {
     }
 
     @Override
-    public void prepare(Project project, ILogger logger, BuildType type) throws IOException {
-        mProject = project;
-        mLogger = logger;
+    public void prepare(BuildType type) throws IOException {
         mBuildType = type;
-        diagnosticsHandler = new DexDiagnosticHandler(logger);
-        mDexCache = mProject.getFileManager().getDexCache();
+        diagnosticsHandler = new DexDiagnosticHandler(getLogger());
+        mDexCache = getProject().getUserData(CACHE_KEY);
 
-        File output = new File(project.getBuildDirectory(), "intermediate/classes");
+        File output = new File(getProject().getBuildDirectory(), "intermediate/classes");
         if (!output.exists() && !output.mkdirs()) {
             throw new IOException("Unable to create output directory");
         }
         mOutputPath = output.toPath();
 
         mFilesToCompile = new ArrayList<>();
-        mClassFiles = new ArrayList<>(D8Task.getClassFiles(new File(project.getBuildDirectory(), "bin/java/classes")));
-        mClassFiles.addAll(D8Task.getClassFiles(new File(project.getBuildDirectory(), "bin/kotlin/classes")));
+        mClassFiles = new ArrayList<>(D8Task.getClassFiles(new File(getProject().getBuildDirectory(), "bin/java/classes")));
+        mClassFiles.addAll(D8Task.getClassFiles(new File(getProject().getBuildDirectory(), "bin/kotlin/classes")));
         for (Cache.Key<String> key : new HashSet<>(mDexCache.getKeys())) {
             if (!mFilesToCompile.contains(key.file)) {
                 File file = mDexCache.get(key.file, "dex").iterator().next();
@@ -99,10 +109,10 @@ public class IncrementalD8Task extends Task {
         try {
             ensureDexedLibraries();
             D8Command command = D8Command.builder(diagnosticsHandler)
-                    .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                    .addClasspathFiles(getProject().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
                     .addProgramFiles(mFilesToCompile)
                     .addLibraryFiles(getLibraryFiles())
-                    .setMinApiLevel(mProject.getMinSdk())
+                    .setMinApiLevel(getProject().getMinSdk())
                     .setMode(CompilationMode.RELEASE)
                     .setIntermediate(true)
                     .setOutput(mOutputPath, OutputMode.DexFilePerClassFile)
@@ -123,10 +133,10 @@ public class IncrementalD8Task extends Task {
             ensureDexedLibraries();
 
             D8Command command = D8Command.builder(diagnosticsHandler)
-                    .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                    .addClasspathFiles(getProject().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
                     .addProgramFiles(mFilesToCompile)
                     .addLibraryFiles(getLibraryFiles())
-                    .setMinApiLevel(mProject.getMinSdk())
+                    .setMinApiLevel(getProject().getMinSdk())
                     .setMode(CompilationMode.DEBUG)
                     .setIntermediate(true)
                     .setOutput(mOutputPath, OutputMode.DexFilePerClassFile)
@@ -140,10 +150,10 @@ public class IncrementalD8Task extends Task {
             D8Command.Builder builder = D8Command.builder(diagnosticsHandler)
                     .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
                     .addLibraryFiles(getLibraryFiles())
-                    .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
-                    .setMinApiLevel(mProject.getMinSdk());
+                    .addClasspathFiles(getProject().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                    .setMinApiLevel(getProject().getMinSdk());
 
-            File output = new File(mProject.getBuildDirectory(), "bin");
+            File output = new File(getProject().getBuildDirectory(), "bin");
             builder.setMode(CompilationMode.DEBUG);
             builder.setOutput(output.toPath(), OutputMode.DexIndexed);
             D8.run(builder.build());
@@ -154,16 +164,14 @@ public class IncrementalD8Task extends Task {
     }
 
     private void mergeRelease() throws com.android.tools.r8.CompilationFailedException {
-        mLogger.debug("Merging dex files using R8");
-
-        File output = new File(mProject.getBuildDirectory(), "bin");
+        File output = new File(getProject().getBuildDirectory(), "bin");
         D8Command command = D8Command.builder(diagnosticsHandler)
-                .addClasspathFiles(mProject.getLibraries().stream().map(File::toPath)
+                .addClasspathFiles(getProject().getLibraries().stream().map(File::toPath)
                         .collect(Collectors.toList()))
                 .addLibraryFiles(getLibraryFiles())
                 .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
                 .addProgramFiles(getLibraryDexes())
-                .setMinApiLevel(mProject.getMinSdk())
+                .setMinApiLevel(getProject().getMinSdk())
                 .setMode(CompilationMode.RELEASE)
                 .setOutput(output.toPath(), OutputMode.DexIndexed)
                 .build();
@@ -172,7 +180,7 @@ public class IncrementalD8Task extends Task {
 
     private List<Path> getLibraryDexes() {
         List<Path> dexes = new ArrayList<>();
-        for (File file : mProject.getLibraries()) {
+        for (File file : getProject().getLibraries()) {
             File parent = file.getParentFile();
             if (parent != null) {
                 File[] dexFiles = parent.listFiles(file1 -> file1.getName().endsWith(".dex"));
@@ -187,13 +195,13 @@ public class IncrementalD8Task extends Task {
 
 
     private File getDexFile(File file) {
-        File output = new File(mProject.getBuildDirectory(), "bin/classes/");
+        File output = new File(getProject().getBuildDirectory(), "bin/classes/");
         String packageName = file.getAbsolutePath()
                 .replace(output.getAbsolutePath(), "")
                 .substring(1)
                 .replace(".class", ".dex");
 
-        File intermediate = new File(mProject.getBuildDirectory(), "intermediate/classes");
+        File intermediate = new File(getProject().getBuildDirectory(), "intermediate/classes");
         File file1 = new File(intermediate, packageName);
         return file1;
     }
@@ -204,7 +212,7 @@ public class IncrementalD8Task extends Task {
      * @throws com.android.tools.r8.CompilationFailedException if the compilation has failed
      */
     protected void ensureDexedLibraries() throws com.android.tools.r8.CompilationFailedException {
-        Set<File> libraries = mProject.getLibraries();
+        List<File> libraries = getProject().getLibraries();
 
         for (File lib : libraries) {
             File parentFile = lib.getParentFile();
@@ -214,7 +222,7 @@ public class IncrementalD8Task extends Task {
             File[] libFiles = lib.getParentFile().listFiles();
             if (libFiles == null) {
                 if (!lib.delete()) {
-                    mLogger.warning("Failed to delete " + lib.getAbsolutePath());
+                    getLogger().warning("Failed to delete " + lib.getAbsolutePath());
                 }
             } else {
                 File dex = new File(lib.getParentFile(), "classes.dex");
@@ -222,12 +230,12 @@ public class IncrementalD8Task extends Task {
                     continue;
                 }
                 if (lib.exists()) {
-                    mLogger.debug("Dexing jar " + parentFile.getName());
+                    getLogger().debug("Dexing jar " + parentFile.getName());
                     D8Command command = D8Command.builder(diagnosticsHandler)
                             .addLibraryFiles(getLibraryFiles())
                             .addClasspathFiles(libraries.stream().map(File::toPath)
                                     .collect(Collectors.toList()))
-                            .setMinApiLevel(mProject.getMinSdk())
+                            .setMinApiLevel(getProject().getMinSdk())
                             .addProgramFiles(lib.toPath())
                             .setMode(CompilationMode.RELEASE)
                             .setOutput(lib.getParentFile().toPath(), OutputMode.DexIndexed)
@@ -240,8 +248,8 @@ public class IncrementalD8Task extends Task {
 
     private List<Path> getLibraryFiles() {
         List<Path> path = new ArrayList<>();
-        path.add(FileManager.getAndroidJar().toPath());
-        path.add(FileManager.getLambdaStubs().toPath());
+        path.add(getProject().getLambdaStubsJarFile().toPath());
+        path.add(getProject().getBootstrapJarFile().toPath());
         return path;
     }
 
