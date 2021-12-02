@@ -21,6 +21,7 @@ import org.openjdk.javax.lang.model.element.TypeElement;
 import org.openjdk.javax.lang.model.element.VariableElement;
 import org.openjdk.javax.lang.model.type.ArrayType;
 import org.openjdk.javax.lang.model.type.DeclaredType;
+import org.openjdk.javax.lang.model.type.PrimitiveType;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.type.TypeVariable;
 import org.openjdk.source.tree.ClassTree;
@@ -325,10 +326,21 @@ public class CompletionProvider {
             return completeTypeVariableMemberSelect(task, scope, (TypeVariable) type, isStatic, partial, endsWithParen);
         } else if (type instanceof DeclaredType) {
             return completeDeclaredTypeMemberSelect(task, scope, (DeclaredType) type, isStatic, partial, endsWithParen);
+        } else if (type instanceof PrimitiveType) {
+            return completePrimitiveMemberSelect(task, scope, (PrimitiveType) type, isStatic, partial, endsWithParen);
         } else {
             return new CompletionList();
         }
     }
+
+    private CompletionList completePrimitiveMemberSelect(CompileTask task, Scope scope, PrimitiveType type, boolean isStatic, String partial, boolean endsWithParen) throws InterruptedException {
+        checkInterrupted();
+
+        CompletionList list = new CompletionList();
+        list.items.add(keyword("class"));
+        return list;
+    }
+
 
     private CompletionList completeArrayMemberSelect(boolean isStatic) throws InterruptedException {
 	    checkInterrupted();
