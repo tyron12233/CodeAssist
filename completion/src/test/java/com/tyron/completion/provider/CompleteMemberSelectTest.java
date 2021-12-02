@@ -21,9 +21,9 @@ public class CompleteMemberSelectTest extends CompletionBase {
 
     @Test
     public void testArraySelect() {
-        CompletionList list = completeInsertHandle("MemberSeelct.java",
+        CompletionList list = completeInsertHandle("MemberSelect.java",
                 "ARRAY.");
-        assertCompletion(list, "class");
+        assertCompletion(list, "length");
     }
 
     @Test
