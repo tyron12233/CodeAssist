@@ -137,7 +137,7 @@ public class PreviewLayoutInflater {
 
     public void parseResources() {
         ResourceManager resourceManager = new ResourceManager(mContext,
-                mProject.getAndroidResourcesDirectory());
+                mProject.getAndroidResourcesDirectory(), mProject.getFileManager());
         mStringManager.setStrings(resourceManager.getStrings());
         mDrawableManager.setDrawables(resourceManager.getDrawables());
         mLayoutManager.setLayouts(resourceManager.getLayouts());

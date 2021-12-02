@@ -1,11 +1,14 @@
 package com.tyron.layoutpreview.resource;
 
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
 import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonReader;
+import com.tyron.builder.project.api.FileManager;
 import com.tyron.layoutpreview.convert.ConvertException;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
@@ -18,18 +21,19 @@ import java.io.StringReader;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 public class ResourceDrawableParser {
 
     private final ProteusContext mContext;
     private final File mResourceDirectory;
-
+    private final FileManager mFileManager;
     private final Map<String, DrawableValue> drawableValueMap = new HashMap<>();
 
-    public ResourceDrawableParser(ProteusContext context, File dir) {
+    public ResourceDrawableParser(ProteusContext context, File dir, FileManager fileManager) {
         mContext = context;
         mResourceDirectory = dir;
-
+        mFileManager = fileManager;
         drawableValueMap.putAll(getDefaultDrawables());
     }
 
@@ -74,13 +78,19 @@ public class ResourceDrawableParser {
         }
     }
 
+    @Nullable
     private DrawableValue parseXml(File file) throws IOException, ConvertException, XmlPullParserException {
-        JsonObject converted = new XmlToJsonConverter()
-                .convert(file);
-        Value value = new ProteusTypeAdapterFactory(mContext)
-                .VALUE_TYPE_ADAPTER.read(new JsonReader(new StringReader(converted.toString())), true);
-        ObjectValue objectValue = value.getAsObject();
-        return DrawableValue.valueOf(objectValue, mContext);
+        Optional<CharSequence> contents = mFileManager.getFileContent(file);
+        if (contents.isPresent()) {
+            String contentsString = contents.toString();
+            JsonObject converted = new XmlToJsonConverter()
+                    .convert(contentsString);
+            Value value = new ProteusTypeAdapterFactory(mContext)
+                    .VALUE_TYPE_ADAPTER.read(new JsonReader(new StringReader(converted.toString())), true);
+            ObjectValue objectValue = value.getAsObject();
+            return DrawableValue.valueOf(objectValue, mContext);
+        }
+        return null;
     }
 
     private boolean isImageFile(File file) {
