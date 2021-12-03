@@ -41,6 +41,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     private String mLastPrefix;
     private AutoCompleteProvider mProvider;
     private boolean mLoading;
+    private int mMaxWidth;
     private int mMaxHeight;
     private final CompletionItemAdapter mAdapter;
 
@@ -68,13 +69,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         mLayoutManager = new LinearLayoutManager(mEditor.getContext());
         mListView = new RecyclerView(mEditor.getContext()) {
             @Override
-            public void onMeasure(int widthSpec, int heightSpec) {
-                // we subtract the height of the shortcuts view so the window wont obscure it
-                int height = (int) (mMaxHeight - mEditor.getDpUnit() * 38);
-                if (height < 1) {
-                    height = mMaxHeight;
-                }
-                heightSpec = MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST);
+            protected void onMeasure(int widthSpec, int heightSpec) {
+                heightSpec = MeasureSpec.makeMeasureSpec(mMaxHeight, MeasureSpec.AT_MOST);
                 super.onMeasure(widthSpec, heightSpec);
             }
         };
@@ -98,10 +94,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
 
         applyColorScheme();
         setLoading(true);
-        setWindowLayoutMode(ViewGroup.LayoutParams.MATCH_PARENT,
+        setWindowLayoutMode(ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
-
-
     }
 
     /**
@@ -314,6 +308,10 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         mPreviousThread.start();
     }
 
+    public void setMaxWidth(int maxWidth) {
+        mMaxWidth = maxWidth;
+    }
+
     public void setMaxHeight(int height) {
         mMaxHeight = height;
     }
@@ -343,8 +341,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             mAdapter.setSelection(0);
 
             if (!isShowing()) {
-                show();
-                update();
+                int newHeight = 300;
+                update(getWidth(), Math.min(newHeight, mMaxHeight));
             }
         });
     }
