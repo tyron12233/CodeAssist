@@ -8,6 +8,16 @@ import com.tyron.completion.CompileTask;
 import com.tyron.lint.client.Configuration;
 import com.tyron.lint.client.LintDriver;
 
+import org.jetbrains.kotlin.com.intellij.psi.PsiAnnotation;
+import org.jetbrains.kotlin.com.intellij.psi.PsiAnonymousClass;
+import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
+import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiField;
+import org.jetbrains.kotlin.com.intellij.psi.PsiLabeledStatement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
+import org.jetbrains.kotlin.com.intellij.psi.PsiMethodCallExpression;
+import org.jetbrains.kotlin.com.intellij.psi.PsiNewExpression;
+import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.IdentifierTree;
@@ -68,6 +78,36 @@ public class JavaContext extends Context {
             }
         } else {
             return null;
+        }
+        return null;
+    }
+
+    /**
+     * Searches for a name node corresponding to the given node
+     * @return the name node to use, if applicable
+     */
+    @Nullable
+    public static PsiElement findNameElement(@NonNull PsiElement element) {
+        if (element instanceof PsiClass) {
+            if (element instanceof PsiAnonymousClass) {
+                return ((PsiAnonymousClass)element).getBaseClassReference();
+            }
+            return ((PsiClass) element).getNameIdentifier();
+        } else if (element instanceof PsiMethod) {
+            return ((PsiMethod) element).getNameIdentifier();
+        } else if (element instanceof PsiMethodCallExpression) {
+            return ((PsiMethodCallExpression) element).getMethodExpression().
+                    getReferenceNameElement();
+        } else if (element instanceof PsiNewExpression) {
+            return ((PsiNewExpression) element).getClassReference();
+        } else if (element instanceof PsiField) {
+            return ((PsiField)element).getNameIdentifier();
+        } else if (element instanceof PsiAnnotation) {
+            return ((PsiAnnotation)element).getNameReferenceElement();
+        } else if (element instanceof PsiReferenceExpression) {
+            return ((PsiReferenceExpression) element).getReferenceNameElement();
+        } else if (element instanceof PsiLabeledStatement) {
+            return ((PsiLabeledStatement)element).getLabelIdentifier();
         }
         return null;
     }
