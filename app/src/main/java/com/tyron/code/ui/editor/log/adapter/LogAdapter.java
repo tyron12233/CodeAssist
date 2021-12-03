@@ -14,13 +14,11 @@ import android.widget.TextView;
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
-import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.R;
-import com.tyron.code.ui.main.MainFragment;
 
 import org.openjdk.javax.tools.Diagnostic;
 
@@ -112,9 +110,17 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.ViewHolder>{
         public void bind(DiagnosticWrapper diagnostic) {
             SpannableStringBuilder builder = new SpannableStringBuilder();
             if (diagnostic.getKind() != null) {
-                builder.append(diagnostic.getKind().name() + ": ", new ForegroundColorSpan(getColor(diagnostic.getKind())), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                builder.append(diagnostic.getKind().name() + ": ",
+                        new ForegroundColorSpan(getColor(diagnostic.getKind())),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
-            builder.append(diagnostic.getMessage(Locale.getDefault()));
+            if (diagnostic.getKind() == Diagnostic.Kind.ERROR) {
+                builder.append(diagnostic.getMessage(Locale.getDefault()),
+                        new ForegroundColorSpan(getColor(diagnostic.getKind())),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            } else {
+                builder.append(diagnostic.getMessage(Locale.getDefault()));
+            }
             if (diagnostic.getSource() != null) {
                 builder.append(' ');
                 addClickableFile(builder, diagnostic);
