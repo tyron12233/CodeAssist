@@ -75,7 +75,11 @@
 
     <!-- Editor settings -->
     <string name="code_engine_title">Движок автозавершения</string>
-    <string name="settings_code_completions">Включить автозавершение кода</string>
+    <string name="settings_code_completions">Автозавершение кода</string>
+    <string name="settings_kotlin_completions">Автозавершение кода для Kotlin</string>
+    <string name="settings_kotlin_completions_desc">Эта функция экспериментальная и может работать медленно.
+        Требуется мощное устройство.
+    </string>
     <string name="code_editor_error_highlight">Включить выделение ошибок</string>
 
     <string name="editor_settings_title">Настройки редактора кода</string>
@@ -87,7 +91,12 @@
     <string name="keyboard_enable_suggestions_description">Включить подсказки клавиатуры</string>
 
     <!-- file manager menu -->
-    <string name="menu_action_new_java_class">Файл класса Java</string>
+    <string name="error">Error</string>
+    <string name="error_resource_name_restriction">Имена ресурсов должны содержать только строчные буквы a–z, 0–9 и знаки подчеркивания.</string>
+    <string name="menu_action_new_java_class">Класс Java </string>
+    <string name="menu_action_new_kotlin_class">Класс Kotlin</string>
+    <string name="menu_action_new_directory">Директория</string>
+    <string name="directory_name">Имя директории</string>
     <string name="menu_new">Новый</string>
     <string name="menu_refactor">Рефакторинг</string>
     <string name="item_project">Проект</string>
@@ -102,6 +111,7 @@
     <string name="menu_preview_layout">Предпросмотр интерфейса</string>
     <string name="action_menu_build_release">Собрать release APK</string>
     <string name="action_menu_build_debug">Собрать debug APK</string>
+    <string name="action_menu_build_aab">Собрать AAB</string>
 
     <string name="project_manager_projects">Проекты</string>
     <string name="project_manager_empty">Отсутствуют проекты</string>
