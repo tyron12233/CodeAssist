@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:id="@+id/content"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tablayout"
+            android:background="#ff212121"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start"
+            app:tabMode="scrollable"/>
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/viewpager"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            tools:background="#ff2b2b2b"/>
+    </LinearLayout>
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/persistent_sheet"
+        android:layout_height="match_parent"
+        android:layout_width="match_parent"
+        android:background="#2e2e2e"
+        app:behavior_hideable="false"
+        app:behavior_peekHeight="38dp"
+        app:layout_behavior="@string/bottom_sheet_behavior"
+        android:name="com.tyron.code.ui.editor.BottomEditorFragment"
+        tools:layout="@layout/bottom_editor_fragment" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
