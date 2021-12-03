@@ -41,6 +41,7 @@ import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.completion.provider.CompletionProvider;
 import com.tyron.completion.rewrite.AddImport;
+import com.tyron.layoutpreview.BoundaryDrawingFrameLayout;
 
 import org.apache.commons.io.FileUtils;
 
@@ -453,7 +454,7 @@ public class CodeEditorFragment extends Fragment
 
     public void preview() {
 
-        final FrameLayout container = new FrameLayout(requireContext());
+        final FrameLayout container = new BoundaryDrawingFrameLayout(requireContext());
         container.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
         if (mEditor != null && mLanguage instanceof LanguageXML) {
             Executors.newSingleThreadExecutor().execute(() -> {

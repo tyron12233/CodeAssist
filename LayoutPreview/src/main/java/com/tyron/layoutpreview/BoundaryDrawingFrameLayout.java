@@ -42,7 +42,7 @@ public class BoundaryDrawingFrameLayout extends FrameLayout {
         mPaint.setColor(Color.GRAY);
         mPaint.setStyle(Paint.Style.STROKE);
         mPaint.setPathEffect(new DashPathEffect(new float[]{20f, 20f}, 0f));
-        mPaint.setStrokeWidth(context.getResources().getDisplayMetrics().density * 4);
+        mPaint.setStrokeWidth(context.getResources().getDisplayMetrics().density * 2);
     }
 
 
@@ -69,7 +69,7 @@ public class BoundaryDrawingFrameLayout extends FrameLayout {
         view.getGlobalVisibleRect(mTempRect);
         canvas.drawLine(mTempRect.left, mTempRect.top, mTempRect.right, mTempRect.top, mPaint);
         canvas.drawLine(mTempRect.right, mTempRect.top, mTempRect.left, mTempRect.bottom, mPaint);
-        canvas.drawLine(mTempRect.right, mTempRect.bottom, mTempRect.left, mTempRect.bottom, mPaint);
+        canvas.drawLine(mTempRect.right, mTempRect.bottom, mTempRect.right, mTempRect.bottom, mPaint);
         canvas.drawLine(mTempRect.left, mTempRect.bottom, mTempRect.left, mTempRect.top, mPaint);
     }
 }
