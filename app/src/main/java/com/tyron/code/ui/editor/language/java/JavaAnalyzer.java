@@ -211,8 +211,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                         .getCompiler((JavaProject) project);
                 if (service.isReady()) {
                     File currentFile = mEditor.getCurrentFile();
-                    String contents = mEditor.getText().toString();
-                    project.getFileManager().setSnapshotContent(currentFile, contents);
                     try {
                         try (CompileTask task = service.compile(
                                 Collections.singletonList(new SourceFileObject(currentFile.toPath(),
