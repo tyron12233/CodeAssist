@@ -172,6 +172,18 @@ public class MainViewModel extends ViewModel {
         mFiles.setValue(files);
     }
 
+    /**
+     * Remove all the files except the given file
+     */
+    public void removeOthers(File file) {
+        List<File> files = getFiles().getValue();
+        if (files != null) {
+            files.clear();
+            files.add(file);
+            setFiles(files);
+        }
+    }
+
     public void initializeProject(Project project) {
         setIndexing(true);
     }

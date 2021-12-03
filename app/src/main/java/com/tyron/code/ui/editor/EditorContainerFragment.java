@@ -92,18 +92,11 @@ public class EditorContainerFragment extends Fragment {
                             mMainViewModel.removeFile(mMainViewModel.getCurrentFile());
                             break;
                         case 1:
-                            File currentFile = mMainViewModel.getCurrentFile();
-                            List<File> files = mMainViewModel.getFiles().getValue();
-                            if (files != null) {
-                                files.clear();
-                                files.add(currentFile);
-                                mMainViewModel.setFiles(files);
-                            }
+                           mMainViewModel.removeOthers(mMainViewModel.getCurrentFile());
                             break;
                         case 2:
                             mMainViewModel.clear();
                     }
-
                     return true;
                 });
                 popup.show();
