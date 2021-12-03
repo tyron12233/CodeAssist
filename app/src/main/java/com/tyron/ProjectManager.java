@@ -91,7 +91,6 @@ public class ProjectManager {
             mListener.onComplete(false, "Unable to open project: " + e.getMessage());
             return;
         }
-        project.index();
 
         mCurrentProject = project;
 
@@ -107,6 +106,9 @@ public class ProjectManager {
                 logger.error(e.getMessage());
             }
         }
+
+        // Index the project after downloading dependencies so it will get added to classpath
+        project.index();
         mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
 
         if (project instanceof JavaProject) {
