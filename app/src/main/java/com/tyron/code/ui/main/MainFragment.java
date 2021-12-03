@@ -309,7 +309,7 @@ public class MainFragment extends Fragment {
             return;
         }
 
-        mBuildType = type;
+        mServiceConnection.setBuildType(type);
         saveAll();
 
         mMainViewModel.setCurrentState("Compiling");
