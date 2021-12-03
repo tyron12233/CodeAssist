@@ -36,9 +36,9 @@ public class MainViewModel extends ViewModel {
     /**
      * The current position of the CodeEditor
      */
-    public final MutableLiveData<Integer> currentPosition = new MutableLiveData<>(0);
+    private final MutableLiveData<Integer> currentPosition = new MutableLiveData<>(0);
 
-    public MutableLiveData<Integer> mBottomSheetState =
+    private MutableLiveData<Integer> mBottomSheetState =
             new MutableLiveData<>(BottomSheetBehavior.STATE_COLLAPSED);
 
     public MutableLiveData<String> getCurrentState() {
@@ -93,6 +93,10 @@ public class MainViewModel extends ViewModel {
             mFiles = new MutableLiveData<>(new ArrayList<>());
         }
         mFiles.setValue(files);
+    }
+
+    public LiveData<Integer> getCurrentPosition() {
+        return currentPosition;
     }
 
     public void updateCurrentPosition(int pos) {

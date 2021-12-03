@@ -4,30 +4,22 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.IBinder;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
-import androidx.appcompat.widget.PopupMenu;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
-import com.google.android.material.tabs.TabLayout;
-import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.google.gson.Gson;
 import com.tyron.ProjectManager;
@@ -41,21 +33,18 @@ import com.tyron.code.R;
 import com.tyron.code.service.CompilerService;
 import com.tyron.code.service.IndexService;
 import com.tyron.code.service.IndexServiceConnection;
-import com.tyron.code.ui.editor.BottomEditorFragment;
 import com.tyron.code.ui.editor.CodeEditorFragment;
-import com.tyron.code.ui.editor.language.LanguageManager;
+import com.tyron.code.ui.editor.EditorContainerFragment;
 import com.tyron.code.ui.file.FileViewModel;
-import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
-import com.tyron.code.ui.main.adapter.PageAdapter;
 import com.tyron.code.ui.settings.SettingsActivity;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.ApkInstaller;
-import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.provider.CompletionEngine;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class MainFragment extends Fragment {
@@ -75,23 +64,17 @@ public class MainFragment extends Fragment {
     private FileViewModel mFileViewModel;
 
     private ProjectManager mProjectManager;
-    private DrawerLayout mRoot;
+    private View mRoot;
     private Toolbar mToolbar;
     private LinearProgressIndicator mProgressBar;
-    private FrameLayout mBottomContainer;
-    private BottomSheetBehavior<View> mBehavior;
-    private TabLayout mTabLayout;
-    private ViewPager2 mPager;
-    private PageAdapter mAdapter;
-    OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {
+
+    private final OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {
         @Override
         public void handleOnBackPressed() {
-            if (mRoot.isOpen()) {
-                mRoot.closeDrawer(GravityCompat.START, true);
-                return;
-            }
-            if (mBehavior != null) {
-                mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+            if (mRoot instanceof DrawerLayout) {
+                if (((DrawerLayout) mRoot).isOpen()) {
+                    ((DrawerLayout) mRoot).closeDrawer(GravityCompat.START, true);
+                }
             }
         }
     };
@@ -118,8 +101,9 @@ public class MainFragment extends Fragment {
                         if (!success) {
                             logger.error(message);
 
-                            if (mBehavior.getState() == BottomSheetBehavior.STATE_COLLAPSED) {
-                                mBehavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                            if (BottomSheetBehavior.STATE_COLLAPSED ==
+                                    Objects.requireNonNull(mMainViewModel.getBottomSheetState().getValue())) {
+                                mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HALF_EXPANDED);
                             }
                         }
 
@@ -183,29 +167,11 @@ public class MainFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        mRoot = (DrawerLayout) inflater.inflate(R.layout.main_fragment, container, false);
-
-        LinearLayout mContent = mRoot.findViewById(R.id.content);
-        mBottomContainer = mRoot.findViewById(R.id.persistent_sheet);
-
-        mTabLayout = new TabLayout(requireContext());
-        mTabLayout.setBackgroundColor(0xff212121);
-        mTabLayout.setSelectedTabIndicatorColor(0xffcc7832);
-        mTabLayout.setTabTextColors(0xffffffff, 0xffcc7832);
-        mTabLayout.setTabMode(TabLayout.MODE_SCROLLABLE);
-        mContent.addView(mTabLayout, new LinearLayout.LayoutParams(-1, -2));
+        mRoot = inflater.inflate(R.layout.main_fragment, container, false);
 
         mProgressBar = mRoot.findViewById(R.id.progressbar);
         mProgressBar.setIndeterminate(true);
         mProgressBar.setVisibility(View.GONE);
-
-        mAdapter = new PageAdapter(getChildFragmentManager(), getLifecycle());
-
-        mPager = new ViewPager2(requireContext());
-        mPager.setAdapter(mAdapter);
-        mPager.setUserInputEnabled(false);
-        mPager.setBackgroundColor(0xff2b2b2b);
-        mContent.addView(mPager, new LinearLayout.LayoutParams(-1, -1, 1));
 
         mToolbar = mRoot.findViewById(R.id.toolbar);
         mToolbar.setNavigationIcon(R.drawable.ic_baseline_menu_24);
@@ -217,105 +183,47 @@ public class MainFragment extends Fragment {
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        mToolbar.setNavigationOnClickListener(v -> {
-            if (mRoot.isDrawerOpen(GravityCompat.START)) {
-                mRoot.closeDrawer(GravityCompat.START, true);
-            } else if (!mRoot.isDrawerOpen(GravityCompat.START)) {
-                mRoot.openDrawer(GravityCompat.START);
-            }
-        });
-        mRoot.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
-            @Override
-            public void onDrawerSlide(@NonNull View p1, float p) {
-                File currentFile = mMainViewModel.getCurrentFile();
-                if (currentFile != null) {
-                    Fragment fragment = getChildFragmentManager()
-                            .findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
-                    if (fragment instanceof CodeEditorFragment) {
-                        ((CodeEditorFragment) fragment).hideEditorWindows();
+        if (mRoot instanceof DrawerLayout) {
+            DrawerLayout drawerLayout = (DrawerLayout) mRoot;
+            mToolbar.setNavigationOnClickListener(v -> {
+                if (mRoot instanceof DrawerLayout) {
+                    if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                        drawerLayout.closeDrawer(GravityCompat.START, true);
+                    } else if (!drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                        drawerLayout.openDrawer(GravityCompat.START);
                     }
                 }
-            }
-
-            @Override
-            public void onDrawerOpened(@NonNull View p1) {
-                onBackPressedCallback.setEnabled(true);
-            }
-
-            @Override
-            public void onDrawerClosed(@NonNull View p1) {
-                onBackPressedCallback.setEnabled(mBehavior.getState() ==
-                        BottomSheetBehavior.STATE_EXPANDED);
-            }
-        });
-
-        mTabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
-            @Override
-            public void onTabUnselected(TabLayout.Tab p1) {
-                Fragment fragment = getChildFragmentManager()
-                        .findFragmentByTag("f" + mAdapter.getItemId(p1.getPosition()));
-                if (fragment instanceof CodeEditorFragment) {
-                    ((CodeEditorFragment) fragment).save();
-                }
-            }
-
-            @Override
-            public void onTabReselected(TabLayout.Tab p1) {
-                PopupMenu popup = new PopupMenu(requireActivity(), p1.view);
-                popup.getMenu().add(0, 0, 1, "Close");
-                popup.getMenu().add(0, 1, 2, "Close others");
-                popup.getMenu().add(0, 2, 3, "Close all");
-                popup.setOnMenuItemClickListener(item -> {
-                    switch (item.getItemId()) {
-                        case 0:
-                            mMainViewModel.removeFile(mMainViewModel.getCurrentFile());
-                            break;
-                        case 1:
-                            File currentFile = mMainViewModel.getCurrentFile();
-                            List<File> files = mMainViewModel.getFiles().getValue();
-                            if (files != null) {
-                                files.clear();
-                                files.add(currentFile);
-                                mMainViewModel.setFiles(files);
-                            }
-                            break;
-                        case 2:
-                            mMainViewModel.clear();
+            });
+            drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
+                @Override
+                public void onDrawerSlide(@NonNull View p1, float p) {
+                    File currentFile = mMainViewModel.getCurrentFile();
+                    if (currentFile != null) {
+                        Fragment fragment = getChildFragmentManager()
+                                .findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
+                        if (fragment instanceof CodeEditorFragment) {
+                            ((CodeEditorFragment) fragment).hideEditorWindows();
+                        }
                     }
-
-                    return true;
-                });
-                popup.show();
-            }
-
-            @Override
-            public void onTabSelected(TabLayout.Tab p1) {
-                Fragment fragment = getChildFragmentManager()
-                        .findFragmentByTag("f" + mAdapter.getItemId(p1.getPosition()));
-                if (fragment instanceof CodeEditorFragment) {
-                    ((CodeEditorFragment) fragment).analyze();
                 }
-            }
-        });
-        mTabLayout.setVisibility(View.GONE);
-        new TabLayoutMediator(mTabLayout, mPager, (tab, pos) -> {
-            File file = mAdapter.getItem(pos);
-            if (file != null) {
-                tab.setText(file.getName());
-            } else {
-                tab.setText("Unknown");
-            }
-        }).attach();
 
-        mPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
-            @Override
-            public void onPageSelected(int position) {
-                mMainViewModel.updateCurrentPosition(position);
-                File current = mMainViewModel.getCurrentFile();
-                mToolbar.getMenu().findItem(R.id.menu_preview_layout)
-                        .setVisible(current != null && ProjectUtils.isResourceXMLFile(current));
-            }
-        });
+                @Override
+                public void onDrawerOpened(@NonNull View p1) {
+                    onBackPressedCallback.setEnabled(true);
+                }
+
+                @Override
+                public void onDrawerClosed(@NonNull View p1) {
+                    //noinspection ConstantConditions
+                    onBackPressedCallback.setEnabled(mMainViewModel.getBottomSheetState().getValue() ==
+                            BottomSheetBehavior.STATE_EXPANDED);
+                }
+            });
+        } else {
+            mToolbar.setNavigationIcon(null);
+        }
+
+//
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_refresh) {
                 if (mBinder == null) {
@@ -334,7 +242,7 @@ public class MainFragment extends Fragment {
             } else if (item.getItemId() == R.id.action_build_aab) {
                 compile(BuildType.AAB);
             } else if (item.getItemId() == R.id.action_format) {
-                File file = mAdapter.getItem(mPager.getCurrentItem());
+                File file = mMainViewModel.getCurrentFile();
                 if (file != null) {
                     CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager()
                             .findFragmentByTag("f" + file.getAbsolutePath().hashCode());
@@ -361,46 +269,21 @@ public class MainFragment extends Fragment {
             return false;
         });
 
-        final BottomEditorFragment bottomEditorFragment = BottomEditorFragment.newInstance();
-        mBehavior = BottomSheetBehavior.from(mBottomContainer);
-        mBehavior.setFitToContents(false);
-        mBehavior.setHalfExpandedRatio(0.3f);
-        mBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
-            @Override
-            public void onStateChanged(@NonNull View p1, int state) {
-                if (state == BottomSheetBehavior.STATE_COLLAPSED) {
-                    onBackPressedCallback.setEnabled(false);
-                } else if (state == BottomSheetBehavior.STATE_EXPANDED) {
-                    onBackPressedCallback.setEnabled(true);
-                }
-            }
-
-            @Override
-            public void onSlide(@NonNull View bottomSheet, float slideOffset) {
-                bottomEditorFragment.setOffset(slideOffset);
-            }
-        });
-
-        // Display the persistent fragment
-        getChildFragmentManager().beginTransaction()
-                .replace(R.id.persistent_sheet, bottomEditorFragment)
-                .commit();
-
-        if (getChildFragmentManager().findFragmentByTag("file_manager") == null) {
-            File root;
-            if (ProjectManager.getInstance().getCurrentProject() != null) {
-                root = ProjectManager.getInstance().getCurrentProject().getRootFile();
-            } else {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    root = requireActivity().getExternalFilesDir(null);
-                } else {
-                    root = Environment.getExternalStorageDirectory();
-                }
-            }
-            getChildFragmentManager().beginTransaction()
-                    .replace(R.id.nav_root, TreeFileManagerFragment.newInstance(root), "file_manager")
-                    .commit();
-        }
+//        if (getChildFragmentManager().findFragmentByTag("file_manager") == null) {
+//            File root;
+//            if (ProjectManager.getInstance().getCurrentProject() != null) {
+//                root = ProjectManager.getInstance().getCurrentProject().getRootFile();
+//            } else {
+//                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+//                    root = requireActivity().getExternalFilesDir(null);
+//                } else {
+//                    root = Environment.getExternalStorageDirectory();
+//                }
+//            }
+//            getChildFragmentManager().beginTransaction()
+//                    .replace(R.id.nav_root, TreeFileManagerFragment.newInstance(root), "file_manager")
+//                    .commit();
+//        }
 
         if (!mProject.equals(mProjectManager.getCurrentProject())) {
             mRoot.postDelayed(() -> openProject(mProject), 200);
@@ -410,25 +293,10 @@ public class MainFragment extends Fragment {
         if (!mProject.equals(mProjectManager.getCurrentProject())) {
             mMainViewModel.setFiles(new ArrayList<>());
         }
-        mMainViewModel.getFiles().observe(getViewLifecycleOwner(), files -> {
-            if (mRoot.isOpen()) {
-                mRoot.closeDrawer(GravityCompat.START);
-            }
-            mAdapter.submitList(files);
-            mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
-        });
-        mMainViewModel.currentPosition.observe(getViewLifecycleOwner(), item -> {
-            if (mRoot.isOpen()) {
-                mRoot.closeDrawer(GravityCompat.START);
-            }
-            mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
-            mPager.setCurrentItem(item);
-        });
         mMainViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> {
             mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
             CompletionEngine.setIndexing(indexing);
         });
-        mMainViewModel.getBottomSheetState().observe(getViewLifecycleOwner(), mBehavior::setState);
         mMainViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
         mMainViewModel.getToolbarTitle().observe(getViewLifecycleOwner(), mToolbar::setTitle);
     }
@@ -458,39 +326,12 @@ public class MainFragment extends Fragment {
 
     /**
      * Tries to open a file and show the given line and column
+     *
      * @deprecated Use MainViewModel#openFile instead
      */
     @Deprecated
     public void openFile(File file, int lineNumber, int column) {
-        if (!LanguageManager.getInstance().supports(file)) {
-            return;
-        }
 
-        if (!file.exists()) {
-            return;
-        }
-
-        int delay = 0;
-
-        int pos = mAdapter.getPosition(file);
-        if (pos != -1) {
-            mMainViewModel.updateCurrentPosition(pos);
-        } else {
-            mMainViewModel.addFile(file);
-            mMainViewModel.updateCurrentPosition(mAdapter.getPosition(file));
-            delay = 200;
-        }
-
-        mPager.postDelayed(() -> {
-            Fragment fragment = getChildFragmentManager()
-                    .findFragmentByTag("f" + file.getAbsolutePath().hashCode());
-            if (fragment instanceof CodeEditorFragment) {
-                ((CodeEditorFragment) fragment).setCursorPosition(lineNumber, column);
-            }
-        }, delay);
-
-        mRoot.closeDrawer(GravityCompat.START, true);
-        mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
     }
 
     /**
@@ -519,48 +360,33 @@ public class MainFragment extends Fragment {
                 mIndexServiceConnection, Context.BIND_IMPORTANT);
     }
 
-    /**
-     * Saves the current opened editor
-     */
-    private void saveCurrent() {
-        int position = mPager.getCurrentItem();
-        String tag = "f" + mAdapter.getItemId(position);
-        CodeEditorFragment fragment =
-                (CodeEditorFragment) getChildFragmentManager().findFragmentByTag(tag);
-        if (fragment != null) {
-            fragment.save();
-        }
-    }
-
     private void saveAll() {
         if (mProject == null) {
             return;
         }
+
         if (CompletionEngine.isIndexing()) {
             return;
         }
 
-        List<File> items = mAdapter.getItems();
-        for (File file : items) {
-            CodeEditorFragment fragment =
-                    (CodeEditorFragment) getChildFragmentManager()
-                            .findFragmentByTag("f" + file.getAbsolutePath().hashCode());
-            if (fragment != null) {
-                fragment.save();
-            }
-        }
+        getChildFragmentManager().setFragmentResult(EditorContainerFragment.SAVE_ALL_KEY,
+                Bundle.EMPTY);
 
         ProjectSettings settings = mProject.getSettings();
         if (settings == null) {
             return;
         }
-        String itemString = new Gson()
-                .toJson(items.stream()
-                        .map(File::getAbsolutePath)
-                        .collect(Collectors.toList()));
-        settings.edit()
-                .putString("editor_opened_files", itemString)
-                .apply();
+
+        List<File> items = mMainViewModel.getFiles().getValue();
+        if (items != null) {
+            String itemString = new Gson()
+                    .toJson(items.stream()
+                            .map(File::getAbsolutePath)
+                            .collect(Collectors.toList()));
+            settings.edit()
+                    .putString("editor_opened_files", itemString)
+                    .apply();
+        }
     }
 
     private void compile(BuildType type) {

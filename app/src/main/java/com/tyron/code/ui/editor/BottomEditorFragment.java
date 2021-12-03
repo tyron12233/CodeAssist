@@ -38,6 +38,8 @@ import java.util.stream.Collectors;
 @SuppressWarnings("FieldCanBeLocal")
 public class BottomEditorFragment extends Fragment {
 
+    public static final String OFFSET_KEY = "offsetKey";
+
     public static BottomEditorFragment newInstance() {
         return new BottomEditorFragment();
     }
@@ -95,10 +97,13 @@ public class BottomEditorFragment extends Fragment {
             }
         });
 
-        setOffset(0f);
+        getParentFragmentManager().setFragmentResultListener(OFFSET_KEY, getViewLifecycleOwner(),
+                ((requestKey, result) -> {
+            setOffset(result.getFloat("offset", 0f));
+        }));
     }
 
-    public void setOffset(float offset) {
+    private void setOffset(float offset) {
         if (mRowLayout == null) {
             return;
         }
@@ -132,9 +137,9 @@ public class BottomEditorFragment extends Fragment {
         Collections.addAll(items,
                 new ShortcutItem(Collections.singletonList(new UndoAction()), "⬿", UndoAction.KIND),
                 new ShortcutItem(Collections.singletonList(new RedoAction()), "⤳", RedoAction.KIND),
-                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.UP, 1)),"↑", CursorMoveAction.KIND),
-                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.DOWN, 1)),"↓", CursorMoveAction.KIND),
-                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.LEFT, 1)),"←", CursorMoveAction.KIND),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.UP, 1)), "↑", CursorMoveAction.KIND),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.DOWN, 1)), "↓", CursorMoveAction.KIND),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.LEFT, 1)), "←", CursorMoveAction.KIND),
                 new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.RIGHT, 1)), "→", CursorMoveAction.KIND)
         );
 
@@ -143,7 +148,7 @@ public class BottomEditorFragment extends Fragment {
 
     @SuppressWarnings("deprecation")
     private static class PageAdapter extends FragmentStatePagerAdapter {
-        
+
         public PageAdapter(FragmentManager parent) {
             super(parent);
         }

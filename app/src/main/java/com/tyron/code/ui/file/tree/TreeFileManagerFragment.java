@@ -41,7 +41,6 @@ public class TreeFileManagerFragment extends Fragment {
         return fragment;
     }
 
-    private File mRootFile;
     private MainViewModel mMainViewModel;
     private FileViewModel mFileViewModel;
     private FileActionManager mActionManager;
@@ -51,7 +50,6 @@ public class TreeFileManagerFragment extends Fragment {
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        mRootFile = (File) requireArguments().getSerializable("rootFile");
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
     }
@@ -60,6 +58,7 @@ public class TreeFileManagerFragment extends Fragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         FrameLayout root = new FrameLayout(requireContext());
+        root.setBackgroundColor(0xff212121);
         root.setLayoutParams(
                 new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));

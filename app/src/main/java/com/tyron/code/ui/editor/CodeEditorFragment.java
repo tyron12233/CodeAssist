@@ -62,7 +62,7 @@ import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class CodeEditorFragment extends Fragment
-        implements SharedPreferences.OnSharedPreferenceChangeListener {
+        implements Savable, SharedPreferences.OnSharedPreferenceChangeListener {
 
     private LinearLayout mRoot;
     private LinearLayout mContent;
@@ -385,6 +385,7 @@ public class CodeEditorFragment extends Fragment
         mPreferences.unregisterOnSharedPreferenceChangeListener(this);
     }
 
+    @Override
     public void save() {
         if (mCurrentFile.exists()) {
             String oldContents = "";

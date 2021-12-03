@@ -1,5 +1,6 @@
 <androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:fitsSystemWindows="true"
     android:background="@color/colorBackground"
     android:layout_width="match_parent"
@@ -29,36 +30,23 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"/>
 
-        <androidx.coordinatorlayout.widget.CoordinatorLayout 
+        <androidx.fragment.app.FragmentContainerView
             android:id="@+id/root"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:name="com.tyron.code.ui.editor.EditorContainerFragment"
+            tools:layout="@layout/editor_container_fragment">
 
-            <LinearLayout
-                android:id="@+id/content"
-                app:layout_behavior="@string/appbar_scrolling_view_behavior"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical">
-
-
-            </LinearLayout>
-            <FrameLayout
-                android:id="@+id/persistent_sheet"
-                android:layout_height="match_parent"
-                android:layout_width="match_parent"
-                android:background="#2e2e2e"
-                app:behavior_hideable="false"
-                app:behavior_peekHeight="38dp"
-                app:layout_behavior="@string/bottom_sheet_behavior"/>
-        </androidx.coordinatorlayout.widget.CoordinatorLayout>
+        </androidx.fragment.app.FragmentContainerView>
     </LinearLayout>
-    <LinearLayout
-        android:orientation="vertical"
+
+    <androidx.fragment.app.FragmentContainerView
         android:background="#2b2b2b"
         android:id="@+id/nav_root"
         android:layout_width="300dp"
         android:layout_height="match_parent"
-        android:layout_gravity="start"/>
+        android:layout_gravity="start"
+        android:name="com.tyron.code.ui.file.tree.TreeFileManagerFragment" />
+
 </androidx.drawerlayout.widget.DrawerLayout>
