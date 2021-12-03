@@ -109,6 +109,11 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
 
+        if (ProjectManager.getInstance().getCurrentProject() != null) {
+            ProjectManager.getInstance().getCurrentProject().getFileManager()
+                    .setSnapshotContent(mEditor.getCurrentFile(), String.valueOf(content));
+        }
+
         IElementType token;
         LineNumberCalculator helper = new LineNumberCalculator(content);
 
