@@ -243,14 +243,8 @@ public class MainFragment extends Fragment {
             } else if (item.getItemId() == R.id.action_build_aab) {
                 compile(BuildType.AAB);
             } else if (item.getItemId() == R.id.action_format) {
-                File file = mMainViewModel.getCurrentFile();
-                if (file != null) {
-                    CodeEditorFragment fragment = (CodeEditorFragment) getChildFragmentManager()
-                            .findFragmentByTag("f" + file.getAbsolutePath().hashCode());
-                    if (fragment != null) {
-                        fragment.format();
-                    }
-                }
+                getChildFragmentManager().setFragmentResult(EditorContainerFragment.FORMAT_KEY,
+                        Bundle.EMPTY);
             } else if (item.getItemId() == R.id.menu_settings) {
                 Intent intent = new Intent();
                 intent.setClass(requireActivity(), SettingsActivity.class);
