@@ -4,7 +4,9 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.IBinder;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -263,21 +265,18 @@ public class MainFragment extends Fragment {
             return false;
         });
 
-//        if (getChildFragmentManager().findFragmentByTag("file_manager") == null) {
-//            File root;
-//            if (ProjectManager.getInstance().getCurrentProject() != null) {
-//                root = ProjectManager.getInstance().getCurrentProject().getRootFile();
-//            } else {
-//                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-//                    root = requireActivity().getExternalFilesDir(null);
-//                } else {
-//                    root = Environment.getExternalStorageDirectory();
-//                }
-//            }
-//            getChildFragmentManager().beginTransaction()
-//                    .replace(R.id.nav_root, TreeFileManagerFragment.newInstance(root), "file_manager")
-//                    .commit();
-//        }
+        File root;
+        if (ProjectManager.getInstance().getCurrentProject() != null) {
+            root = ProjectManager.getInstance().getCurrentProject().getRootFile();
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                root = requireActivity().getExternalFilesDir(null);
+            } else {
+                root = Environment.getExternalStorageDirectory();
+            }
+        }
+        mFileViewModel.refreshNode(root);
+
 
         if (!mProject.equals(mProjectManager.getCurrentProject())) {
             mRoot.postDelayed(() -> openProject(mProject), 200);

@@ -465,15 +465,16 @@ public class CodeEditorFragment extends Fragment
                             container.addView(view, new FrameLayout.LayoutParams(-1, -1));
 
                             AlertDialog show = new AlertDialog.Builder(requireContext())
-                                    .setView(container)
+                                    .setView(R.layout.preview_view)
                                     .create();
-
                             show.setOnShowListener(d -> {
-                                show.getWindow().setLayout(-1, requireActivity().getResources()
-                                        .getDisplayMetrics().heightPixels);
+                                LinearLayout linearLayout = show.findViewById(R.id.root);
+                                linearLayout.getLayoutParams().height = requireActivity().getResources()
+                                    .getDisplayMetrics().heightPixels;
+                                linearLayout.requestLayout();
+                                linearLayout.addView(container, new ViewGroup.LayoutParams(-1, -1));
                                 view.requestLayout();
                             });
-
                             show.show();
                         }
                     });
