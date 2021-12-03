@@ -256,14 +256,8 @@ public class MainFragment extends Fragment {
                 startActivity(intent);
                 return true;
             } else if (item.getItemId() == R.id.menu_preview_layout) {
-                File currentFile = mMainViewModel.getCurrentFile();
-                if (currentFile != null) {
-                    Fragment fragment = getChildFragmentManager()
-                            .findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
-                    if (fragment instanceof CodeEditorFragment) {
-                        ((CodeEditorFragment) fragment).preview();
-                    }
-                }
+                getChildFragmentManager().setFragmentResult(EditorContainerFragment.PREVIEW_KEY,
+                        Bundle.EMPTY);
             }
 
             return false;

@@ -27,6 +27,7 @@ import java.util.Objects;
 public class EditorContainerFragment extends Fragment {
 
     public static final String SAVE_ALL_KEY = "saveAllEditors";
+    public static final String PREVIEW_KEY = "previewEditor";
 
     private TabLayout mTabLayout;
     private ViewPager2 mPager;
@@ -158,6 +159,16 @@ public class EditorContainerFragment extends Fragment {
 
         getParentFragmentManager().setFragmentResultListener(SAVE_ALL_KEY,
                 getViewLifecycleOwner(), (requestKey, result) -> saveAll());
+        getParentFragmentManager().setFragmentResultListener(PREVIEW_KEY,
+                getViewLifecycleOwner(), ((requestKey, result) -> previewCurrent()));
+    }
+
+    private void previewCurrent() {
+        String tag = "f" + mAdapter.getItemId(mPager.getCurrentItem());
+        Fragment fragment = getChildFragmentManager().findFragmentByTag(tag);
+        if (fragment instanceof CodeEditorFragment) {
+            ((CodeEditorFragment) fragment).preview();
+        }
     }
 
     private void saveAll() {

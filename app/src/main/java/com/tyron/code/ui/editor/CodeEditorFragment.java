@@ -454,10 +454,11 @@ public class CodeEditorFragment extends Fragment
     public void preview() {
 
         final FrameLayout container = new FrameLayout(requireContext());
+        container.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
         if (mEditor != null && mLanguage instanceof LanguageXML) {
             Executors.newSingleThreadExecutor().execute(() -> {
                 try {
-                    View view = ((LanguageXML) mLanguage).showPreview(requireContext(), (ViewGroup) requireView());
+                    View view = ((LanguageXML) mLanguage).showPreview(requireContext(), container);
                     requireActivity().runOnUiThread(() -> {
 
                         if (view != null) {
