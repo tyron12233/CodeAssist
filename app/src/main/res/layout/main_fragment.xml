@@ -1,15 +1,17 @@
 <androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:fitsSystemWindows="true"
-    android:background="@color/colorBackground"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground"
+    android:clickable="true"
+    android:fitsSystemWindows="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
+
         <com.google.android.material.appbar.AppBarLayout
             android:id="@+id/app_bar"
             android:layout_width="match_parent"
@@ -19,34 +21,34 @@
             app:elevation="0dp">
 
             <androidx.appcompat.widget.Toolbar
+                android:id="@+id/toolbar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-				android:theme="@style/CodeEditorThemeOverlay"
-                android:id="@+id/toolbar" />
+                android:theme="@style/CodeEditorThemeOverlay" />
         </com.google.android.material.appbar.AppBarLayout>
 
         <com.google.android.material.progressindicator.LinearProgressIndicator
             android:id="@+id/progressbar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
+            android:layout_height="wrap_content" />
 
         <androidx.fragment.app.FragmentContainerView
             android:id="@+id/root"
+            android:name="com.tyron.code.ui.editor.EditorContainerFragment"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:name="com.tyron.code.ui.editor.EditorContainerFragment"
             tools:layout="@layout/editor_container_fragment">
 
         </androidx.fragment.app.FragmentContainerView>
     </LinearLayout>
 
     <androidx.fragment.app.FragmentContainerView
-        android:background="#2b2b2b"
         android:id="@+id/nav_root"
+        android:name="com.tyron.code.ui.file.tree.TreeFileManagerFragment"
         android:layout_width="300dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:name="com.tyron.code.ui.file.tree.TreeFileManagerFragment" />
+        android:background="#2b2b2b" />
 
 </androidx.drawerlayout.widget.DrawerLayout>
