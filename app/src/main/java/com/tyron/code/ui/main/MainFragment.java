@@ -33,6 +33,7 @@ import com.tyron.builder.project.api.Project;
 import com.tyron.builder.project.impl.AndroidProjectImpl;
 import com.tyron.code.R;
 import com.tyron.code.service.CompilerService;
+import com.tyron.code.service.CompilerServiceConnection;
 import com.tyron.code.service.IndexService;
 import com.tyron.code.service.IndexServiceConnection;
 import com.tyron.code.ui.editor.CodeEditorFragment;
@@ -82,67 +83,7 @@ public class MainFragment extends Fragment {
     };
     private Project mProject;
     private BuildType mBuildType;
-    private CompilerService.CompilerBinder mBinder;
-    private final ServiceConnection mServiceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-            ILogger logger = ILogger.wrap(mLogViewModel);
-
-            mBinder = (CompilerService.CompilerBinder) iBinder;
-            mBinder.getCompilerService().setLogger(logger);
-            mBinder.getCompilerService().setShouldShowNotification(false);
-            mBinder.getCompilerService().setOnResultListener((success, message) ->
-                    requireActivity().runOnUiThread(() -> {
-                        mMainViewModel.setCurrentState(null);
-
-                        if (mProgressBar != null) {
-                            AndroidUtilities.hideKeyboard(mProgressBar);
-                        }
-                        mMainViewModel.setIndexing(false);
-
-                        if (!success) {
-                            logger.error(message);
-
-                            if (BottomSheetBehavior.STATE_COLLAPSED ==
-                                    Objects.requireNonNull(mMainViewModel.getBottomSheetState().getValue())) {
-                                mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HALF_EXPANDED);
-                            }
-                        }
-
-                        if (getActivity() != null) {
-                            if (success) {
-                                logger.debug(message);
-                                mLogViewModel.clear(LogViewModel.APP_LOG);
-
-                                File file = new File(mProjectManager.getCurrentProject()
-                                        .getBuildDirectory(), "bin/signed.apk");
-                                if (file.exists() && mBuildType != BuildType.AAB) {
-                                    mProgressBar.postDelayed(() ->
-                                            ApkInstaller.installApplication(requireContext()
-                                                    , file.getAbsolutePath()), 400);
-                                }
-                            }
-
-                            mBinder = null;
-                            requireActivity().unbindService(this);
-                        }
-                    }));
-
-            if (mBuildType != null) {
-                mBinder.getCompilerService().compile(mProjectManager.getCurrentProject(), mBuildType);
-            }
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName componentName) {
-            mBinder = null;
-            mMainViewModel.setCurrentState(null);
-            mMainViewModel.setIndexing(false);
-            if (mProgressBar != null) {
-                AndroidUtilities.hideKeyboard(mProgressBar);
-            }
-        }
-    };
+    private CompilerServiceConnection mServiceConnection;
     private IndexServiceConnection mIndexServiceConnection;
 
     public MainFragment() {
@@ -165,6 +106,7 @@ public class MainFragment extends Fragment {
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
         mIndexServiceConnection = new IndexServiceConnection(mMainViewModel, mLogViewModel);
+        mServiceConnection = new CompilerServiceConnection(mMainViewModel, mLogViewModel);
     }
 
     @Override
@@ -227,7 +169,7 @@ public class MainFragment extends Fragment {
 
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_refresh) {
-                if (mBinder == null) {
+                if (mServiceConnection.isCompiling()) {
                     Project project = ProjectManager.getInstance()
                             .getCurrentProject();
 
@@ -270,7 +212,6 @@ public class MainFragment extends Fragment {
         }
         mFileViewModel.refreshNode(root);
 
-
         if (!mProject.equals(mProjectManager.getCurrentProject())) {
             mRoot.postDelayed(() -> openProject(mProject), 200);
         }
@@ -299,9 +240,7 @@ public class MainFragment extends Fragment {
     public void onPause() {
         super.onPause();
 
-        if (mBinder != null) {
-            mBinder.getCompilerService().setShouldShowNotification(true);
-        }
+        mServiceConnection.setShouldShowNotification(true);
     }
 
     @Override
@@ -366,7 +305,7 @@ public class MainFragment extends Fragment {
     }
 
     private void compile(BuildType type) {
-        if (mBinder != null || CompletionEngine.isIndexing()) {
+        if (mServiceConnection.isCompiling() || CompletionEngine.isIndexing()) {
             return;
         }
 

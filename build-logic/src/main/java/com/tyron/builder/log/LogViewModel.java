@@ -49,6 +49,9 @@ public class LogViewModel extends ViewModel {
         add(id, diagnostic);
     }
 
+    public void d(int id, String message) {
+        d(id, wrap(message, Diagnostic.Kind.OTHER));
+    }
     public void d(int id, DiagnosticWrapper diagnosticWrapper) {
         add(id, diagnosticWrapper);
     }
