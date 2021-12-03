@@ -177,7 +177,7 @@ public class JavaProjectImpl extends ProjectImpl implements JavaProject {
             for (File directory : libraryDirectories) {
                 File check = new File(directory, "classes.jar");
                 if (check.exists()) {
-                    mLibraries.add(check);
+                    addLibrary(check);
                 }
             }
         }
