@@ -23,7 +23,7 @@ import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.builder.project.api.Project;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
-import com.tyron.code.ui.main.MainFragment;
+import com.tyron.code.ui.main.MainViewModel;
 
 import org.openjdk.javax.tools.Diagnostic;
 
@@ -40,6 +40,7 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
     }
 
     private int id;
+    private MainViewModel mMainViewModel;
     private LogViewModel mModel;
     private LogAdapter mAdapter;
     private RecyclerView mRecyclerView;
@@ -52,6 +53,9 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         id = requireArguments().getInt("id");
+
+        mModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
+        mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     }
 
     @Override
@@ -60,14 +64,8 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
 
         mAdapter = new LogAdapter();
         mAdapter.setListener(diagnostic -> {
-            // MainFragment -> BottomEditorFragment -> AppLogFragment
-            Fragment parent = getParentFragment();
-            if (parent != null) {
-                Fragment main = parent.getParentFragment();
-                if (main instanceof MainFragment) {
-                    ((MainFragment) main).openFile(diagnostic.getSource(),
-                            (int) diagnostic.getLineNumber() - 1, 0);
-                }
+            if (diagnostic.getSource() != null) {
+                mMainViewModel.openFile(diagnostic.getSource());
             }
         });
         mRecyclerView = new RecyclerView(requireContext());
@@ -84,10 +82,7 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        mModel = new ViewModelProvider(requireActivity())
-                .get(LogViewModel.class);
         mModel.getLogs(id).observe(getViewLifecycleOwner(), this::process);
-
         if (id == LogViewModel.APP_LOG) {
             ProjectManager.getInstance().addOnProjectOpenListener(this);
         }

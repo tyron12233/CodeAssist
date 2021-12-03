@@ -225,7 +225,6 @@ public class MainFragment extends Fragment {
             mToolbar.setNavigationIcon(null);
         }
 
-//
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_refresh) {
                 if (mBinder == null) {
@@ -315,16 +314,6 @@ public class MainFragment extends Fragment {
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         saveAll();
-    }
-
-    /**
-     * Tries to open a file and show the given line and column
-     *
-     * @deprecated Use MainViewModel#openFile instead
-     */
-    @Deprecated
-    public void openFile(File file, int lineNumber, int column) {
-
     }
 
     /**
