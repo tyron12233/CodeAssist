@@ -123,5 +123,18 @@ public class Layout extends Value {
     protected Attribute copy() {
       return new Attribute(id, value.copy());
     }
+
+    @Override
+    public int hashCode() {
+      return Integer.hashCode(id);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      Attribute attribute = (Attribute) o;
+      return id == attribute.id;
+    }
   }
 }

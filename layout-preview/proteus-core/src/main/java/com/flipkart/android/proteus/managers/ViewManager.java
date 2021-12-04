@@ -25,6 +25,7 @@ import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
+import com.flipkart.android.proteus.value.Value;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -139,6 +140,21 @@ public class ViewManager implements ProteusView.Manager {
       dataContext.update(context, data);
     } else {
       dataContext.setData(data);
+    }
+  }
+
+  private void updateAttribute(String name, Value value) {
+    int attributeId = parser.getAttributeId(name);
+    if (attributeId != -1) {
+      boolean contains = false;
+      if (layout.attributes.contains(new Layout.Attribute(attributeId, null))) {
+        layout.attributes.remove(new Layout.Attribute(attributeId, null));
+      }
+      layout.attributes.add(new Layout.Attribute(attributeId, value));
+      //noinspection unchecked
+      parser.handleAttribute(view, attributeId, value);
+    } else {
+      layout.extras.addProperty(name, value.getAsString());
     }
   }
 
