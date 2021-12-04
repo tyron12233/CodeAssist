@@ -107,6 +107,11 @@ public class CodeEditorFragment extends Fragment
         super.onPause();
 
         hideEditorWindows();
+
+        if (ProjectManager.getInstance().getCurrentProject() != null) {
+            ProjectManager.getInstance().getCurrentProject().getFileManager()
+                    .setSnapshotContent(mCurrentFile, mEditor.getText().toString());
+        }
     }
 
     @Override
