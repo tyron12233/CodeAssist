@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationChannelCompat;
@@ -30,6 +31,7 @@ import java.util.concurrent.Executors;
 
 public class CompilerService extends Service {
 
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
     private final CompilerBinder mBinder = new CompilerBinder();
 
     public class CompilerBinder extends Binder {
@@ -152,7 +154,7 @@ public class CompilerService extends Service {
 
         if (mProject == null) {
             if (onResultListener != null) {
-                new Handler().post(() -> onResultListener.onComplete(false, "Failed to open project  (Have you opened a project?)"));
+                mMainHandler.post(() -> onResultListener.onComplete(false, "Failed to open project  (Have you opened a project?)"));
             }
 
             if (shouldShowNotification) {
@@ -163,21 +165,20 @@ public class CompilerService extends Service {
 
         Executors.newSingleThreadExecutor().execute(() -> {
             Builder<? extends Project> projectBuilder = getBuilderForProject(project, type);
-            boolean success = true;
-            String message = "";
 
             project.clear();
             project.index();
 
+            boolean success = true;
+
             try {
                 projectBuilder.build(type);
             } catch (Exception e) {
-                message = e.getMessage();
+                mMainHandler.post(() -> onResultListener.onComplete(false, e.getMessage()));
+                success = false;
             }
 
-            if (onResultListener != null) {
-                onResultListener.onComplete(success, message);
-            }
+            projectBuilder.setTaskListener(this::updateNotification);
 
             String projectName = "Project";
 
@@ -191,27 +192,28 @@ public class CompilerService extends Service {
                     return;
                 }
 
-                NotificationCompat.Builder builder =
-                        new NotificationCompat.Builder(this, "Compiler")
-                                .setSmallIcon(R.drawable.ic_launcher)
-                                .setContentTitle(projectName)
-                                .setContentText("Compilation success");
+                mMainHandler.post(() -> {
+                    NotificationCompat.Builder builder =
+                            new NotificationCompat.Builder(this, "Compiler")
+                                    .setSmallIcon(R.drawable.ic_launcher)
+                                    .setContentTitle(projectName)
+                                    .setContentText("Compilation success");
 
-                if (type != BuildType.AAB) {
-                    Intent intent = new Intent(Intent.ACTION_VIEW);
-                    intent.setDataAndType(ApkInstaller.uriFromFile(this,
-                            new File(mProject.getBuildDirectory(), "bin/signed.apk")),
-                            "application/vnd.android.package-archive");
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    PendingIntent pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
-                    builder.addAction(new NotificationCompat.Action(0, "INSTALL", pending));
-                }
+                    if (type != BuildType.AAB) {
+                        Intent intent = new Intent(Intent.ACTION_VIEW);
+                        intent.setDataAndType(ApkInstaller.uriFromFile(this,
+                                new File(mProject.getBuildDirectory(), "bin/signed.apk")),
+                                "application/vnd.android.package-archive");
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        PendingIntent pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+                        builder.addAction(new NotificationCompat.Action(0, "INSTALL", pending));
+                    }
 
-                NotificationManagerCompat.from(this)
-                        .notify(201, builder.build());
+                    NotificationManagerCompat.from(this)
+                            .notify(201, builder.build());
+                });
             }
-
         });
     }
 

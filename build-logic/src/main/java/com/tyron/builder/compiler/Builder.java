@@ -1,5 +1,7 @@
 package com.tyron.builder.compiler;
 
+import androidx.annotation.MainThread;
+
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.api.Project;
@@ -8,6 +10,13 @@ import java.io.IOException;
 import java.util.List;
 
 public interface Builder<T extends Project> {
+
+    interface TaskListener {
+        @MainThread
+        void onTaskStarted(String name, String message, int progress);
+    }
+
+    void setTaskListener(TaskListener taskListener);
 
     T getProject();
 
