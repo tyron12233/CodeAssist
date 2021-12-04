@@ -112,6 +112,10 @@ public class MainFragment extends Fragment {
         mToolbar = mRoot.findViewById(R.id.toolbar);
         mToolbar.setNavigationIcon(R.drawable.ic_baseline_menu_24);
         mToolbar.inflateMenu(R.menu.code_editor_menu);
+
+        if (savedInstanceState != null) {
+            restoreViewState(savedInstanceState);
+        }
         return mRoot;
     }
 
@@ -228,14 +232,25 @@ public class MainFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
-
         mServiceConnection.setShouldShowNotification(true);
     }
 
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
         saveAll();
+        if (mRoot instanceof DrawerLayout) {
+            outState.putBoolean("start_drawer_state",
+                    ((DrawerLayout) mRoot).isDrawerOpen(GravityCompat.START));
+        }
         super.onSaveInstanceState(outState);
+    }
+
+    private void restoreViewState(@NonNull Bundle state) {
+        if (mRoot instanceof DrawerLayout) {
+            if (state.getBoolean("start_drawer_state", false)) {
+                ((DrawerLayout) mRoot).openDrawer(GravityCompat.START);
+            }
+        }
     }
 
     /**

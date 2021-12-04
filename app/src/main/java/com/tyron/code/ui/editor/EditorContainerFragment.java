@@ -50,6 +50,13 @@ public class EditorContainerFragment extends Fragment {
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     }
 
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+
+        outState.putInt("bottom_sheet_state", mBehavior.getState());
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
@@ -91,7 +98,7 @@ public class EditorContainerFragment extends Fragment {
                             mMainViewModel.removeFile(mMainViewModel.getCurrentFile());
                             break;
                         case 1:
-                           mMainViewModel.removeOthers(mMainViewModel.getCurrentFile());
+                            mMainViewModel.removeOthers(mMainViewModel.getCurrentFile());
                             break;
                         case 2:
                             mMainViewModel.clear();
@@ -137,7 +144,20 @@ public class EditorContainerFragment extends Fragment {
         });
         mBehavior.setHalfExpandedRatio(0.3f);
 
+        if (savedInstanceState != null) {
+            restoreViewState(savedInstanceState);
+        }
         return root;
+    }
+
+    private void restoreViewState(@NonNull Bundle state) {
+        int behaviorState = state.getInt("bottom_sheet_state", BottomSheetBehavior.STATE_COLLAPSED);
+        mBehavior.setState(behaviorState);
+        Bundle floatOffset = new Bundle();
+        floatOffset.putFloat("offset", behaviorState == BottomSheetBehavior.STATE_EXPANDED
+                ? 1
+                : 0f);
+        getChildFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY, floatOffset);
     }
 
     @Override
