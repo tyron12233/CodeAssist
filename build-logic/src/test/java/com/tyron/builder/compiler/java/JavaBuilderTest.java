@@ -47,7 +47,7 @@ public class JavaBuilderTest {
         try {
             FileUtils.deleteDirectory(mJavaProject.getBuildDirectory());
         } catch (IOException e) {
-            if (TestUtil.isWindows()) {
+            if (!TestUtil.isWindows()) {
                 throw e;
             }
         }
