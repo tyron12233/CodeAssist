@@ -6,9 +6,12 @@ import com.tyron.builder.log.ILogger;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
 
+@RunWith(RobolectricTestRunner.class)
 public class AndroidAppBuilderTest extends AndroidAppBuilderTestBase {
 
     @Test

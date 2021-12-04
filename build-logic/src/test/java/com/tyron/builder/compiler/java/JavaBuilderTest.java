@@ -16,10 +16,14 @@ import com.tyron.builder.project.mock.MockFileManager;
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
+@RunWith(RobolectricTestRunner.class)
 public class JavaBuilderTest {
 
     private File mResourcesDirectory;
@@ -40,7 +44,13 @@ public class JavaBuilderTest {
 
     @Test
     public void testBuild() throws Exception {
-        FileUtils.deleteDirectory(mJavaProject.getBuildDirectory());
+        try {
+            FileUtils.deleteDirectory(mJavaProject.getBuildDirectory());
+        } catch (IOException e) {
+            if (TestUtil.isWindows()) {
+                throw e;
+            }
+        }
 
         mJavaProject.addJavaFile(new File(mJavaProject.getJavaDirectory(),
                 "com/tyron/test/Test.java"));
