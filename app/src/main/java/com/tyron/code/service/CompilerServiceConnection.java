@@ -38,7 +38,9 @@ public class CompilerServiceConnection implements ServiceConnection {
     }
 
     public void setShouldShowNotification(boolean val) {
-        mService.setShouldShowNotification(val);
+        if (mService != null) {
+            mService.setShouldShowNotification(val);
+        }
     }
 
     @Override

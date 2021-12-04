@@ -1,13 +1,10 @@
 package com.tyron.code.ui.main;
 
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.ServiceConnection;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.IBinder;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,7 +23,6 @@ import com.google.android.material.transition.MaterialSharedAxis;
 import com.google.gson.Gson;
 import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
-import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.Project;
@@ -40,14 +36,11 @@ import com.tyron.code.ui.editor.CodeEditorFragment;
 import com.tyron.code.ui.editor.EditorContainerFragment;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.settings.SettingsActivity;
-import com.tyron.code.util.AndroidUtilities;
-import com.tyron.code.util.ApkInstaller;
 import com.tyron.completion.provider.CompletionEngine;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class MainFragment extends Fragment {
@@ -82,7 +75,6 @@ public class MainFragment extends Fragment {
         }
     };
     private Project mProject;
-    private BuildType mBuildType;
     private CompilerServiceConnection mServiceConnection;
     private IndexServiceConnection mIndexServiceConnection;
 
