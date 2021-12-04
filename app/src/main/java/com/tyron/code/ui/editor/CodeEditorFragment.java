@@ -15,6 +15,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentContainerView;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
@@ -30,6 +31,7 @@ import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.main.MainViewModel;
+import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.ParseTask;
 import com.tyron.completion.Parser;
@@ -65,14 +67,20 @@ import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 public class CodeEditorFragment extends Fragment
         implements Savable, SharedPreferences.OnSharedPreferenceChangeListener {
 
-    private LinearLayout mRoot;
-    private LinearLayout mContent;
+    private static final String LAYOUT_EDITOR_PREFIX = "editor_";
+
     private CodeEditor mEditor;
 
     private EditorLanguage mLanguage;
     private File mCurrentFile = new File("");
     private MainViewModel mMainViewModel;
     private SharedPreferences mPreferences;
+
+    /**
+     * Non null if there is a layout editor open, will be used to restore the fragment
+     * using with this tag on activity recreation
+     */
+    private String mCurrentEditorTag;
 
     public static CodeEditorFragment newInstance(File file) {
         CodeEditorFragment fragment = new CodeEditorFragment();
@@ -88,6 +96,16 @@ public class CodeEditorFragment extends Fragment
 
         mCurrentFile = new File(requireArguments().getString("path", ""));
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+
+        if (ProjectManager.getInstance().getCurrentProject() != null) {
+            ProjectManager.getInstance().getCurrentProject().getFileManager()
+                    .setSnapshotContent(mCurrentFile, mEditor.getText().toString());
+        }
     }
 
     @Override
@@ -124,10 +142,9 @@ public class CodeEditorFragment extends Fragment
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         mPreferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
 
-        mRoot = (LinearLayout) inflater.inflate(R.layout.code_editor_fragment, container, false);
-        mContent = mRoot.findViewById(R.id.content);
+        View root = inflater.inflate(R.layout.code_editor_fragment, container, false);
 
-        mEditor = mRoot.findViewById(R.id.code_editor);
+        mEditor = root.findViewById(R.id.code_editor);
         mEditor.setEditorLanguage(mLanguage =
                 LanguageManager.getInstance().get(mEditor, mCurrentFile));
         mEditor.setColorScheme(new SchemeDarcula());
@@ -152,9 +169,8 @@ public class CodeEditorFragment extends Fragment
                     EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
                     EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         }
-
         mPreferences.registerOnSharedPreferenceChangeListener(this);
-        return mRoot;
+        return root;
     }
 
     @Override
@@ -453,6 +469,16 @@ public class CodeEditorFragment extends Fragment
 
     public void preview() {
 
+//        File currentFile = mEditor.getCurrentFile();
+//        if (ProjectUtils.isLayoutXMLFile(currentFile)) {
+//            mCurrentEditorTag = LAYOUT_EDITOR_PREFIX + currentFile.getName();
+//            getChildFragmentManager().beginTransaction()
+//                    .add(R.id.fragment_container, LayoutEditorFragment.newInstance(currentFile))
+//                    .addToBackStack(mCurrentEditorTag)
+//                    .commit();
+//        } else {
+//            // TODO: handle unknown files
+//        }
         final FrameLayout container = new BoundaryDrawingFrameLayout(requireContext());
         container.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
         if (mEditor != null && mLanguage instanceof LanguageXML) {

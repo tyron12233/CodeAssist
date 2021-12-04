@@ -1,5 +1,8 @@
 package com.tyron.builder.project.impl;
 
+import android.util.Log;
+
+import com.tyron.build.BuildConfig;
 import com.tyron.builder.project.api.FileManager;
 
 import org.apache.commons.io.FileUtils;
@@ -10,14 +13,20 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class FileManagerImpl implements FileManager {
 
+    private static final String TAG = FileManagerImpl.class.getSimpleName();
+
+    private final ExecutorService mService;
     private final File mRoot;
     private final Map<File, String> mSnapshots;
 
     public FileManagerImpl(File root) {
         mRoot = root;
+        mService = Executors.newSingleThreadExecutor();
         mSnapshots = new HashMap<>();
     }
 
@@ -33,7 +42,16 @@ public class FileManagerImpl implements FileManager {
 
     @Override
     public void closeFileForSnapshot(File file) {
-        mSnapshots.remove(file);
+        if (mSnapshots.containsKey(file)) {
+            try {
+                FileUtils.writeStringToFile(file, mSnapshots.get(file), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "Failed to save file " + file.getName(), e);
+                }
+            }
+            mSnapshots.remove(file);
+        }
     }
 
     @Override
@@ -53,6 +71,12 @@ public class FileManagerImpl implements FileManager {
 
     @Override
     public void shutdown() {
-        mSnapshots.clear();
+        mSnapshots.forEach((k, v) -> mService.execute(() -> {
+            try {
+                FileUtils.writeStringToFile(k, v, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                // ignored
+            }
+        }));
     }
 }

@@ -36,6 +36,7 @@ import com.tyron.layoutpreview.manager.ResourceStringManager;
 
 import java.io.File;
 import java.io.StringReader;
+import java.util.concurrent.CompletableFuture;
 
 import dalvik.system.DexClassLoader;
 
@@ -135,13 +136,13 @@ public class PreviewLayoutInflater {
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
     }
 
-    public void parseResources() {
+    public CompletableFuture<PreviewLayoutInflater> parseResources() {
         ResourceManager resourceManager = new ResourceManager(mContext,
                 mProject.getAndroidResourcesDirectory(), mProject.getFileManager());
         mStringManager.setStrings(resourceManager.getStrings());
         mDrawableManager.setDrawables(resourceManager.getDrawables());
         mLayoutManager.setLayouts(resourceManager.getLayouts());
-
+        return CompletableFuture.completedFuture(this);
     }
 
     public StringManager getStringManager() {

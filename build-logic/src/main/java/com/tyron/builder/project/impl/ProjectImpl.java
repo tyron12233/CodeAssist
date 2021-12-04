@@ -139,5 +139,18 @@ public class ProjectImpl implements Project {
         return new File(path);
     }
 
+    @Override
+    public int hashCode() {
+        return mRoot.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof ProjectImpl)) return false;
+        ProjectImpl project = (ProjectImpl) o;
+        return mRoot.equals(project.mRoot);
+    }
+
     private static final AtomicFieldUpdater<ProjectImpl, KeyFMap> updater = AtomicFieldUpdater.forFieldOfType(ProjectImpl.class, KeyFMap.class);
 }

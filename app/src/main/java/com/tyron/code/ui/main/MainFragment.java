@@ -223,9 +223,6 @@ public class MainFragment extends Fragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
-
-        ProjectManager.getInstance()
-                .closeProject(mProject);
     }
 
     @Override
@@ -237,8 +234,8 @@ public class MainFragment extends Fragment {
 
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
-        super.onSaveInstanceState(outState);
         saveAll();
+        super.onSaveInstanceState(outState);
     }
 
     /**
