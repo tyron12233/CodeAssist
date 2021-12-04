@@ -5,5 +5,8 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
     
-   
+   <io.github.rosemoe.sora.widget.CodeEditor
+       android:id="@+id/code_editor"
+       android:layout_width="match_parent"
+       android:layout_height="match_parent"/>
 </LinearLayout>

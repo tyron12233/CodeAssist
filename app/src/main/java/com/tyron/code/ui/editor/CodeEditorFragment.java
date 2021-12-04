@@ -127,7 +127,7 @@ public class CodeEditorFragment extends Fragment
         mRoot = (LinearLayout) inflater.inflate(R.layout.code_editor_fragment, container, false);
         mContent = mRoot.findViewById(R.id.content);
 
-        mEditor = new CodeEditor(requireActivity());
+        mEditor = mRoot.findViewById(R.id.code_editor);
         mEditor.setEditorLanguage(mLanguage =
                 LanguageManager.getInstance().get(mEditor, mCurrentFile));
         mEditor.setColorScheme(new SchemeDarcula());
@@ -152,7 +152,6 @@ public class CodeEditorFragment extends Fragment
                     EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
                     EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         }
-        mContent.addView(mEditor, new FrameLayout.LayoutParams(-1, -1));
 
         mPreferences.registerOnSharedPreferenceChangeListener(this);
         return mRoot;
