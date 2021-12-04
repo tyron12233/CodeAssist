@@ -76,12 +76,6 @@ public class CodeEditorFragment extends Fragment
     private MainViewModel mMainViewModel;
     private SharedPreferences mPreferences;
 
-    /**
-     * Non null if there is a layout editor open, will be used to restore the fragment
-     * using with this tag on activity recreation
-     */
-    private String mCurrentEditorTag;
-
     public static CodeEditorFragment newInstance(File file) {
         CodeEditorFragment fragment = new CodeEditorFragment();
         Bundle args = new Bundle();
