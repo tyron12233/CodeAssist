@@ -68,8 +68,8 @@ public class BoundaryDrawingFrameLayout extends FrameLayout {
     private void drawView(View view, Canvas canvas) {
         view.getGlobalVisibleRect(mTempRect);
         canvas.drawLine(mTempRect.left, mTempRect.top, mTempRect.right, mTempRect.top, mPaint);
-        canvas.drawLine(mTempRect.right, mTempRect.top, mTempRect.left, mTempRect.bottom, mPaint);
-        canvas.drawLine(mTempRect.right, mTempRect.bottom, mTempRect.right, mTempRect.bottom, mPaint);
+        canvas.drawLine(mTempRect.right, mTempRect.top, mTempRect.right, mTempRect.bottom, mPaint);
+        canvas.drawLine(mTempRect.right, mTempRect.bottom, mTempRect.left, mTempRect.bottom, mPaint);
         canvas.drawLine(mTempRect.left, mTempRect.bottom, mTempRect.left, mTempRect.top, mPaint);
     }
 }
