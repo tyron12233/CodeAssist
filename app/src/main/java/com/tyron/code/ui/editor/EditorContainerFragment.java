@@ -21,7 +21,6 @@ import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.main.adapter.PageAdapter;
 
 import java.io.File;
-import java.util.List;
 import java.util.Objects;
 
 public class EditorContainerFragment extends Fragment {
@@ -111,7 +110,7 @@ public class EditorContainerFragment extends Fragment {
                 }
             }
         });
-        new TabLayoutMediator(mTabLayout, mPager, (tab, pos) -> {
+        new TabLayoutMediator(mTabLayout, mPager, true, false, (tab, pos) -> {
             File current = Objects.requireNonNull(mMainViewModel.getFiles().getValue()).get(pos);
             tab.setText(current != null ? current.getName() : "Unknown");
         }).attach();
