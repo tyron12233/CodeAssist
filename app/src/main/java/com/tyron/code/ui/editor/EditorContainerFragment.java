@@ -57,7 +57,7 @@ public class EditorContainerFragment extends Fragment {
                              @Nullable Bundle savedInstanceState) {
         View root = inflater.inflate(R.layout.editor_container_fragment, container, false);
 
-        mAdapter = new PageAdapter(getChildFragmentManager(), getViewLifecycleOwner().getLifecycle());
+        mAdapter = new PageAdapter(getChildFragmentManager(), getLifecycle());
         mPager = root.findViewById(R.id.viewpager);
         mPager.setAdapter(mAdapter);
         mPager.setUserInputEnabled(false);
