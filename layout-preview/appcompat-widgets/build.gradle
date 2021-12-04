@@ -6,7 +6,7 @@ android {
     compileSdk 31
 
     defaultConfig {
-        minSdk 21
+        minSdk 26
         targetSdk 31
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -27,8 +27,9 @@ android {
 
 dependencies {
 
-    compileOnly 'androidx.cardview:cardview:1.0.0'
-    compileOnly project(path: ':LayoutPreview:proteus-core')
+    compileOnly 'androidx.appcompat:appcompat:1.3.1'
+    compileOnly 'com.google.android.material:material:1.4.0'
+    compileOnly project(path: ':layout-preview:proteus-core')
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
