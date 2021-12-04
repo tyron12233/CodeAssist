@@ -328,6 +328,14 @@ public abstract class ViewTypeParser<V extends View> {
       }
     }
 
+    public Map<String, Attribute> getAttributes() {
+      Map<String, Attribute> attributeMap = new HashMap<>(attributes);
+      if (parent != null) {
+        attributeMap.putAll(parent.getAttributes());
+      }
+      return attributeMap;
+    }
+
     int getOffset() {
       return offset;
     }
