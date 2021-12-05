@@ -181,17 +181,12 @@ public class CompilerService extends Service {
             projectBuilder.setTaskListener(this::updateNotification);
 
             String projectName = "Project";
-
-            stopSelf();
-            stopForeground(true);
-
             if (!success) {
                 updateNotification(projectName, "Compilation failed", -1);
             } else {
                 if (!shouldShowNotification) {
                     return;
                 }
-
                 mMainHandler.post(() -> {
                     NotificationCompat.Builder builder =
                             new NotificationCompat.Builder(this, "Compiler")
@@ -206,14 +201,21 @@ public class CompilerService extends Service {
                                 "application/vnd.android.package-archive");
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        PendingIntent pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
-                        builder.addAction(new NotificationCompat.Action(0, "INSTALL", pending));
+                        PendingIntent pending = PendingIntent.getActivity(this,
+                                0,
+                                intent,
+                                PendingIntent.FLAG_IMMUTABLE);
+                        builder.addAction(new NotificationCompat.Action(0,
+                                "INSTALL",
+                                pending));
                     }
-
                     NotificationManagerCompat.from(this)
                             .notify(201, builder.build());
                 });
             }
+
+            stopSelf();
+            stopForeground(true);
         });
     }
 
