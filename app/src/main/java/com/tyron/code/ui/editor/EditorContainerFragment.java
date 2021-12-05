@@ -168,7 +168,11 @@ public class EditorContainerFragment extends Fragment {
         });
         mMainViewModel.getCurrentPosition().observe(getViewLifecycleOwner(), pos -> {
             mPager.setCurrentItem(pos);
+            if (mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {
+                mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_COLLAPSED);
+            }
         });
+        mMainViewModel.getBottomSheetState().observe(getViewLifecycleOwner(), mBehavior::setState);
 
         getParentFragmentManager().setFragmentResultListener(SAVE_ALL_KEY,
                 getViewLifecycleOwner(), (requestKey, result) -> saveAll());
