@@ -3,8 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:weightSum="100"
-    android:background="@color/colorBackground">
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:background="@color/colorBackground"
+    android:weightSum="100">
 
     <LinearLayout
         android:id="@+id/palette_layout"
@@ -22,15 +23,41 @@
     </LinearLayout>
 
     <View
-        android:background="@color/cardview_shadow_start_color"
         android:layout_width="2dp"
-        android:layout_height="match_parent"/>
+        android:layout_height="match_parent"
+        android:background="@color/cardview_shadow_start_color" />
 
-    <LinearLayout
+    <FrameLayout
         android:id="@+id/editor_layout"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="65"
-        android:orientation="vertical" />
+        android:orientation="vertical">
+
+        <com.tyron.layoutpreview.BoundaryDrawingFrameLayout
+            android:id="@+id/editor_root"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <LinearLayout
+            android:id="@+id/loading_root"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:indeterminate="true"/>
+
+            <TextView
+                android:id="@+id/loading_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                tools:text="arsing"/>
+        </LinearLayout>
+    </FrameLayout>
 
 </LinearLayout>

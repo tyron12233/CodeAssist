@@ -21,6 +21,7 @@ import org.antlr.v4.runtime.Token;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.Executors;
 
 import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
@@ -72,7 +73,7 @@ public class LanguageXML implements EditorLanguage {
 			return null;
 		}
 		PreviewLayoutInflater inflater = new PreviewLayoutInflater(context, (AndroidProject) project);
-		inflater.parseResources();
+		inflater.parseResources(Executors.newSingleThreadExecutor());
 		ProteusView inflatedView = inflater.inflateLayout(currentFile.getName().substring(0,  currentFile.getName().lastIndexOf(".")));
 
 		return inflatedView.getAsView();

@@ -37,6 +37,7 @@ import com.tyron.layoutpreview.manager.ResourceStringManager;
 import java.io.File;
 import java.io.StringReader;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 import dalvik.system.DexClassLoader;
 
@@ -136,13 +137,15 @@ public class PreviewLayoutInflater {
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
     }
 
-    public CompletableFuture<PreviewLayoutInflater> parseResources() {
-        ResourceManager resourceManager = new ResourceManager(mContext,
-                mProject.getAndroidResourcesDirectory(), mProject.getFileManager());
-        mStringManager.setStrings(resourceManager.getStrings());
-        mDrawableManager.setDrawables(resourceManager.getDrawables());
-        mLayoutManager.setLayouts(resourceManager.getLayouts());
-        return CompletableFuture.completedFuture(this);
+    public CompletableFuture<PreviewLayoutInflater> parseResources(Executor executor) {
+        return CompletableFuture.supplyAsync(() -> {
+            ResourceManager resourceManager = new ResourceManager(mContext,
+                    mProject.getAndroidResourcesDirectory(), mProject.getFileManager());
+            mStringManager.setStrings(resourceManager.getStrings());
+            mDrawableManager.setDrawables(resourceManager.getDrawables());
+            mLayoutManager.setLayouts(resourceManager.getLayouts());
+            return this;
+        }, executor);
     }
 
     public StringManager getStringManager() {
@@ -168,6 +171,7 @@ public class PreviewLayoutInflater {
 
     /**
      * Convenience method to inflate a layout using a {@link JsonObject}
+     *
      * @param object The json object to inflate
      * @return The inflated view
      */

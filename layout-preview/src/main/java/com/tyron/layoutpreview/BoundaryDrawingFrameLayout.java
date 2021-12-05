@@ -7,6 +7,8 @@ import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -41,10 +43,9 @@ public class BoundaryDrawingFrameLayout extends FrameLayout {
         mPaint = new Paint();
         mPaint.setColor(Color.GRAY);
         mPaint.setStyle(Paint.Style.STROKE);
-        mPaint.setPathEffect(new DashPathEffect(new float[]{20f, 20f}, 0f));
+        mPaint.setPathEffect(new DashPathEffect(new float[]{10f, 10f}, 0f));
         mPaint.setStrokeWidth(context.getResources().getDisplayMetrics().density * 2);
     }
-
 
     @Override
     protected void onDraw(Canvas canvas) {
@@ -66,7 +67,8 @@ public class BoundaryDrawingFrameLayout extends FrameLayout {
     private final Rect mTempRect = new Rect();
 
     private void drawView(View view, Canvas canvas) {
-        view.getLocalVisibleRect(mTempRect);
+        view.getDrawingRect(mTempRect);
+        this.offsetDescendantRectToMyCoords(view, mTempRect);
         canvas.drawLine(mTempRect.left, mTempRect.top, mTempRect.right, mTempRect.top, mPaint);
         canvas.drawLine(mTempRect.right, mTempRect.top, mTempRect.right, mTempRect.bottom, mPaint);
         canvas.drawLine(mTempRect.right, mTempRect.bottom, mTempRect.left, mTempRect.bottom, mPaint);
