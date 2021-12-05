@@ -1,7 +1,5 @@
 package com.tyron.builder.compiler.incremental.resource;
 
-import android.util.Log;
-
 import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.BuildModule;
@@ -9,12 +7,12 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.common.util.BinaryExecutor;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.filefilter.FileFilterUtils;
+import org.apache.commons.io.filefilter.TrueFileFilter;
 
 import java.io.File;
 import java.io.IOException;
@@ -56,6 +54,18 @@ public class IncrementalAapt2Task extends Task<AndroidProject> {
         compileLibraries(librariesToCompile);
 
         link();
+
+        updateJavaFiles();
+    }
+
+    private void updateJavaFiles() {
+        File genFolder = new File(getProject().getBuildDirectory(), "gen");
+        if (genFolder.exists()) {
+            FileUtils.iterateFiles(genFolder,
+                    FileFilterUtils.suffixFileFilter(".java"),
+                    TrueFileFilter.INSTANCE
+            ).forEachRemaining(getProject()::addJavaFile);
+        }
     }
 
     private void compileProject(Map<String, List<File>> files)
