@@ -216,6 +216,13 @@ public class MainFragment extends Fragment {
         if (!mProject.equals(mProjectManager.getCurrentProject())) {
             mMainViewModel.setFiles(new ArrayList<>());
         }
+        mMainViewModel.getCurrentPosition().observe(getViewLifecycleOwner(), pos -> {
+            if (mRoot instanceof DrawerLayout) {
+                if (((DrawerLayout) mRoot).isDrawerOpen(GravityCompat.START)) {
+                    ((DrawerLayout) mRoot).closeDrawer(GravityCompat.START);
+                }
+            }
+        });
         mMainViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> {
             mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
             CompletionEngine.setIndexing(indexing);
