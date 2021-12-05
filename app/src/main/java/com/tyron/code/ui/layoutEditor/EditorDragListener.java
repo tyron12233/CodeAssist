@@ -72,7 +72,7 @@ public class EditorDragListener implements View.OnDragListener {
                 continue;
             }
 
-            if (child.getRight() < dropX) {
+            if (getMiddle(child.getLeft(), child.getRight()) < dropX) {
                 index++;
             }
         }
@@ -90,10 +90,16 @@ public class EditorDragListener implements View.OnDragListener {
                 continue;
             }
 
-            if (child.getTop() < dropY) {
+            if (getMiddle(child.getTop(), child.getBottom()) < dropY) {
                 index++;
             }
         }
         return index;
+    }
+
+    private int getMiddle(int lower, int higher) {
+        int length = higher - lower;
+        int middle = length / 2;
+        return lower + middle;
     }
 }
