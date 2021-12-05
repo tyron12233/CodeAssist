@@ -1,30 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:weightSum="100">
+    android:weightSum="100"
+    android:background="@color/colorBackground">
 
     <LinearLayout
         android:id="@+id/palette_layout"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_weight="30"
+        android:layout_weight="35"
         android:orientation="vertical">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/palette_recyclerview"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            tools:listitem="@layout/editor_palette_item"/>
+            tools:listitem="@layout/editor_palette_item" />
 
     </LinearLayout>
+
+    <View
+        android:background="@color/cardview_shadow_start_color"
+        android:layout_width="2dp"
+        android:layout_height="match_parent"/>
 
     <LinearLayout
         android:id="@+id/editor_layout"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_weight="70"
+        android:layout_weight="65"
         android:orientation="vertical" />
 
 </LinearLayout>
