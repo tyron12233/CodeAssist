@@ -15,7 +15,6 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentContainerView;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
@@ -31,7 +30,6 @@ import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.main.MainViewModel;
-import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.ParseTask;
 import com.tyron.completion.Parser;
@@ -43,7 +41,6 @@ import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.completion.provider.CompletionProvider;
 import com.tyron.completion.rewrite.AddImport;
-import com.tyron.layoutpreview.BoundaryDrawingFrameLayout;
 
 import org.apache.commons.io.FileUtils;
 
@@ -467,13 +464,12 @@ public class CodeEditorFragment extends Fragment
     }
 
     public void preview() {
-
+//
 //        File currentFile = mEditor.getCurrentFile();
 //        if (ProjectUtils.isLayoutXMLFile(currentFile)) {
-//            mCurrentEditorTag = LAYOUT_EDITOR_PREFIX + currentFile.getName();
 //            getChildFragmentManager().beginTransaction()
 //                    .add(R.id.fragment_container, LayoutEditorFragment.newInstance(currentFile))
-//                    .addToBackStack(mCurrentEditorTag)
+//                    .addToBackStack(null)
 //                    .commit();
 //        } else {
 //            // TODO: handle unknown files
