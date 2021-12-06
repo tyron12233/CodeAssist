@@ -11,8 +11,7 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.transition.TransitionManager;
 
 import com.flipkart.android.proteus.ProteusView;
@@ -25,8 +24,10 @@ import com.flipkart.android.proteus.value.Value;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.ProjectManager;
 import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.Project;
 import com.tyron.code.R;
 import com.tyron.code.ui.layoutEditor.model.ViewPalette;
+import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.layoutpreview.BoundaryDrawingFrameLayout;
 import com.tyron.layoutpreview.inflate.PreviewLayoutInflater;
 
@@ -38,7 +39,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class LayoutEditorFragment extends Fragment {
+public class LayoutEditorFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
 
     /**
      * Creates a new LayoutEditorFragment instance for a layout xml file.
@@ -54,8 +55,9 @@ public class LayoutEditorFragment extends Fragment {
     }
 
     private final ExecutorService mService = Executors.newSingleThreadExecutor();
+    private LayoutEditorViewModel mEditorViewModel;
+
     private File mCurrentFile;
-    private ViewPaletteAdapter mAdapter;
     private PreviewLayoutInflater mInflater;
     private BoundaryDrawingFrameLayout mEditorRoot;
     private EditorDragListener mDragListener;
@@ -63,11 +65,16 @@ public class LayoutEditorFragment extends Fragment {
     private LinearLayout mLoadingLayout;
     private TextView mLoadingText;
 
+    private boolean isDumb;
+
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         mCurrentFile = (File) requireArguments().getSerializable("file");
+        isDumb = ProjectManager.getInstance().getCurrentProject() == null ||
+                CompletionEngine.isIndexing();
+        mEditorViewModel = new ViewModelProvider(this).get(LayoutEditorViewModel.class);
     }
 
     @Nullable
@@ -76,11 +83,6 @@ public class LayoutEditorFragment extends Fragment {
                              @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View root = inflater.inflate(R.layout.layout_editor_fragment, container, false);
-
-        mAdapter = new ViewPaletteAdapter();
-        RecyclerView paletteRecyclerView = root.findViewById(R.id.palette_recyclerview);
-        paletteRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
-        paletteRecyclerView.setAdapter(mAdapter);
 
         mLoadingLayout = root.findViewById(R.id.loading_root);
         mLoadingText = root.findViewById(R.id.loading_text);
@@ -115,9 +117,12 @@ public class LayoutEditorFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        mAdapter.submitList(populatePalettes());
-
-        createInflater();
+        mEditorViewModel.setPalettes(populatePalettes());
+        if (isDumb) {
+            setLoadingText("Indexing");
+        } else {
+            createInflater();
+        }
     }
 
     private void createInflater() {
@@ -182,11 +187,11 @@ public class LayoutEditorFragment extends Fragment {
         return palettes;
     }
 
-    private ViewPalette createPalette(String className, @DrawableRes int icon) {
+    private ViewPalette createPalette(@NonNull String className, @DrawableRes int icon) {
         return createPalette(className, icon, Collections.emptyMap());
     }
 
-    private ViewPalette createPalette(String className,
+    private ViewPalette createPalette(@NonNull String className,
                                       @DrawableRes int icon,
                                       Map<String, Value> attributes) {
         String name = className.substring(className.lastIndexOf('.') + 1);
@@ -197,9 +202,14 @@ public class LayoutEditorFragment extends Fragment {
                 .addDefaultValue(Attributes.View.MinHeight, Dimension.valueOf("25dp"))
                 .addDefaultValue(Attributes.View.MinWidth, Dimension.valueOf("50dp"));
 
-        attributes.forEach((key, value) -> {
-            builder.addDefaultValue(key, value);
-        });
+        attributes.forEach(builder::addDefaultValue);
         return builder.build();
+    }
+
+    @Override
+    public void onProjectOpen(Project project) {
+        if (isDumb) {
+            createInflater();
+        }
     }
 }

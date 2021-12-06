@@ -7,20 +7,16 @@
     android:background="@color/colorBackground"
     android:weightSum="100">
 
-    <LinearLayout
-        android:id="@+id/palette_layout"
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/palette_container"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="35"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:name="com.tyron.code.ui.layoutEditor.ViewPaletteFragment"
+        tools:layout="@layout/view_palette_fragment">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/palette_recyclerview"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            tools:listitem="@layout/editor_palette_item" />
-
-    </LinearLayout>
+    </androidx.fragment.app.FragmentContainerView>
 
     <View
         android:layout_width="2dp"
