@@ -194,7 +194,7 @@ public class LayoutEditorFragment extends Fragment {
                 .setClassName(className)
                 .setName(name)
                 .setIcon(icon)
-                .addDefaultValue(Attributes.View.MinHeight, Dimension.valueOf("50dp"))
+                .addDefaultValue(Attributes.View.MinHeight, Dimension.valueOf("25dp"))
                 .addDefaultValue(Attributes.View.MinWidth, Dimension.valueOf("50dp"));
 
         attributes.forEach((key, value) -> {
