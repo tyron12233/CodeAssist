@@ -16,6 +16,9 @@
 
 package com.flipkart.android.proteus.value;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.toolbox.Utils;
 
 import java.util.ArrayList;
@@ -23,9 +26,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 /**
  * Layout
@@ -111,6 +111,12 @@ public class Layout extends Value {
     }
 
     return new Layout(type, attributes, data, extras);
+  }
+
+  @NonNull
+  @Override
+  public String toString() {
+    return type;
   }
 
   /**

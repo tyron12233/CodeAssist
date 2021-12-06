@@ -16,13 +16,14 @@
 
 package com.flipkart.android.proteus.value;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import java.util.stream.Collectors;
 
 /**
  * Array
@@ -209,6 +210,15 @@ public class Array extends Value {
    */
   public Value get(int i) {
     return values.get(i);
+  }
+
+  @NonNull
+  @Override
+  public String toString() {
+    String items = values.stream()
+            .map(Value::toString)
+            .collect(Collectors.joining(", "));
+    return "[" + items + "]";
   }
 
   @Override
