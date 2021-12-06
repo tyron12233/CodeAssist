@@ -20,7 +20,9 @@ import android.content.res.XmlResourceParser;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.flipkart.android.proteus.R;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.managers.ViewManager;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.value.Layout;
@@ -34,9 +36,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 /**
  * @author adityasharat
@@ -241,6 +240,14 @@ public abstract class ViewTypeParser<V extends View> {
     }
   }
 
+  public void addLayoutParamsAttributeProcessor(String name, AttributeProcessor<V> processor) {
+    addAttributeProcessor(processor);
+    attributes.put(name,
+            new AttributeSet.Attribute(getAttributeId(processors.length - 1),
+                    processor,
+                    true));
+  }
+
   /**
    * @param name
    * @param processor
@@ -342,14 +349,20 @@ public abstract class ViewTypeParser<V extends View> {
 
     public static class Attribute {
 
+      public final boolean isLayoutParams;
       public final int id;
 
       @NonNull
       public final AttributeProcessor processor;
 
       Attribute(int id, @NonNull AttributeProcessor processor) {
+        this(id, processor, false);
+      }
+
+      Attribute(int id, @NonNull AttributeProcessor processor, boolean isLayoutParams) {
         this.processor = processor;
         this.id = id;
+        this.isLayoutParams = isLayoutParams;
       }
     }
   }
