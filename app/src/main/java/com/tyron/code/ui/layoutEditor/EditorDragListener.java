@@ -62,6 +62,7 @@ public class EditorDragListener implements View.OnDragListener {
                 addView(hostView, mEditorShadow, event);
                 break;
             case DragEvent.ACTION_DRAG_EXITED:
+                break;
             case DragEvent.ACTION_DROP:
                 ensureNoParent(mEditorShadow);
 
