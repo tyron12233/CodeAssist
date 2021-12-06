@@ -43,8 +43,8 @@ public class BoundaryDrawingFrameLayout extends FrameLayout {
         mPaint = new Paint();
         mPaint.setColor(Color.GRAY);
         mPaint.setStyle(Paint.Style.STROKE);
-        mPaint.setPathEffect(new DashPathEffect(new float[]{10f, 10f}, 0f));
-        mPaint.setStrokeWidth(context.getResources().getDisplayMetrics().density * 2);
+       // mPaint.setPathEffect(new DashPathEffect(new float[]{10f, 10f}, 0f));
+        mPaint.setStrokeWidth(context.getResources().getDisplayMetrics().density * 1);
     }
 
     @Override
