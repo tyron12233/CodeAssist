@@ -1,6 +1,5 @@
 package com.tyron.code.ui.layoutEditor;
 
-import android.util.Log;
 import android.view.DragEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -59,6 +58,9 @@ public class EditorDragListener implements View.OnDragListener {
             case DragEvent.ACTION_DRAG_LOCATION:
             case DragEvent.ACTION_DRAG_ENTERED:
                 ensureNoParent(mEditorShadow);
+                if (event.getLocalState() instanceof ProteusView) {
+                    ensureNoParent(((ProteusView) event.getLocalState()).getAsView());
+                }
                 addView(hostView, mEditorShadow, event);
                 break;
             case DragEvent.ACTION_DRAG_EXITED:
@@ -123,7 +125,7 @@ public class EditorDragListener implements View.OnDragListener {
             View child = parent.getChildAt(i);
 
             if (mEditorShadow.equals(child)) {
-                // dont count the shadow as a child view
+                // do not count the shadow as a child view
                 continue;
             }
 

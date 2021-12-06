@@ -18,6 +18,9 @@ package com.flipkart.android.proteus.managers;
 
 import android.view.View;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.BoundAttribute;
 import com.flipkart.android.proteus.DataContext;
 import com.flipkart.android.proteus.ProteusContext;
@@ -29,9 +32,7 @@ import com.flipkart.android.proteus.value.Value;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import java.util.Map;
 
 /**
  * ViewManager
@@ -40,126 +41,142 @@ import androidx.annotation.Nullable;
  */
 public class ViewManager implements ProteusView.Manager {
 
-  @NonNull
-  protected final ProteusContext context;
+    @NonNull
+    protected final ProteusContext context;
 
-  @NonNull
-  protected final View view;
+    @NonNull
+    protected final View view;
 
-  @NonNull
-  protected final Layout layout;
+    @NonNull
+    protected final Layout layout;
 
-  @NonNull
-  protected final DataContext dataContext;
+    @NonNull
+    protected final DataContext dataContext;
 
-  @NonNull
-  protected final ViewTypeParser parser;
+    @NonNull
+    protected final ViewTypeParser parser;
 
-  @Nullable
-  protected final List<BoundAttribute> boundAttributes;
+    @Nullable
+    protected final List<BoundAttribute> boundAttributes;
 
-  @Nullable
-  protected Object extras;
+    @Nullable
+    protected Object extras;
 
-  public ViewManager(@NonNull ProteusContext context, @NonNull ViewTypeParser parser,
-                     @NonNull View view, @NonNull Layout layout, @NonNull DataContext dataContext) {
-    this.context = context;
-    this.parser = parser;
-    this.view = view;
-    this.layout = layout;
-    this.dataContext = dataContext;
+    public ViewManager(@NonNull ProteusContext context, @NonNull ViewTypeParser parser,
+                       @NonNull View view, @NonNull Layout layout, @NonNull DataContext dataContext) {
+        this.context = context;
+        this.parser = parser;
+        this.view = view;
+        this.layout = layout;
+        this.dataContext = dataContext;
 
-    if (null != layout.attributes) {
-      List<BoundAttribute> boundAttributes = new ArrayList<>();
-      for (Layout.Attribute attribute : layout.attributes) {
-        if (attribute.value.isBinding()) {
-          boundAttributes.add(new BoundAttribute(attribute.id, attribute.value.getAsBinding()));
+        if (null != layout.attributes) {
+            List<BoundAttribute> boundAttributes = new ArrayList<>();
+            for (Layout.Attribute attribute : layout.attributes) {
+                if (attribute.value.isBinding()) {
+                    boundAttributes.add(new BoundAttribute(attribute.id, attribute.value.getAsBinding()));
+                }
+            }
+            if (boundAttributes.size() > 0) {
+                this.boundAttributes = boundAttributes;
+            } else {
+                this.boundAttributes = null;
+            }
+        } else {
+            this.boundAttributes = null;
         }
-      }
-      if (boundAttributes.size() > 0) {
-        this.boundAttributes = boundAttributes;
-      } else {
-        this.boundAttributes = null;
-      }
-    } else {
-      this.boundAttributes = null;
-    }
-  }
-
-  @Override
-  public void update(@Nullable ObjectValue data) {
-    // update the data context so all child views can refer to new data
-    if (data != null) {
-      updateDataContext(data);
     }
 
-    // update the bound attributes of this view
-    if (this.boundAttributes != null) {
-      for (BoundAttribute boundAttribute : this.boundAttributes) {
-        this.handleBinding(boundAttribute);
-      }
+    @Override
+    public void update(@Nullable ObjectValue data) {
+        // update the data context so all child views can refer to new data
+        if (data != null) {
+            updateDataContext(data);
+        }
+
+        // update the bound attributes of this view
+        if (this.boundAttributes != null) {
+            for (BoundAttribute boundAttribute : this.boundAttributes) {
+                this.handleBinding(boundAttribute);
+            }
+        }
     }
-  }
 
-  @Nullable
-  @Override
-  public View findViewById(@NonNull String id) {
-    return view.findViewById(context.getInflater().getUniqueViewId(id));
-  }
-
-  @NonNull
-  @Override
-  public ProteusContext getContext() {
-    return this.context;
-  }
-
-  @NonNull
-  @Override
-  public Layout getLayout() {
-    return this.layout;
-  }
-
-  @NonNull
-  public DataContext getDataContext() {
-    return dataContext;
-  }
-
-  @Nullable
-  @Override
-  public Object getExtras() {
-    return this.extras;
-  }
-
-  @Override
-  public void setExtras(@Nullable Object extras) {
-    this.extras = extras;
-  }
-
-  private void updateDataContext(ObjectValue data) {
-    if (dataContext.hasOwnProperties()) {
-      dataContext.update(context, data);
-    } else {
-      dataContext.setData(data);
+    @Nullable
+    @Override
+    public View findViewById(@NonNull String id) {
+        return view.findViewById(context.getInflater().getUniqueViewId(id));
     }
-  }
 
-  public void updateAttribute(String name, Value value) {
-    int attributeId = parser.getAttributeId(name);
-    if (attributeId != -1) {
-      boolean contains = false;
-      if (layout.attributes.contains(new Layout.Attribute(attributeId, null))) {
-        layout.attributes.remove(new Layout.Attribute(attributeId, null));
-      }
-      layout.attributes.add(new Layout.Attribute(attributeId, value));
-      //noinspection unchecked
-      parser.handleAttribute(view, attributeId, value);
-    } else {
-      layout.extras.addProperty(name, value.getAsString());
+    @NonNull
+    @Override
+    public ProteusContext getContext() {
+        return this.context;
     }
-  }
 
-  private void handleBinding(BoundAttribute boundAttribute) {
-    //noinspection unchecked
-    parser.handleAttribute(view, boundAttribute.attributeId, boundAttribute.binding);
-  }
+    @NonNull
+    @Override
+    public Layout getLayout() {
+        return this.layout;
+    }
+
+    @NonNull
+    public DataContext getDataContext() {
+        return dataContext;
+    }
+
+    @Nullable
+    @Override
+    public Object getExtras() {
+        return this.extras;
+    }
+
+    @Override
+    public void setExtras(@Nullable Object extras) {
+        this.extras = extras;
+    }
+
+    private void updateDataContext(ObjectValue data) {
+        if (dataContext.hasOwnProperties()) {
+            dataContext.update(context, data);
+        } else {
+            dataContext.setData(data);
+        }
+    }
+
+    @Override
+    public Map<String, ViewTypeParser.AttributeSet.Attribute> getAvailableAttributes() {
+        return parser.getAttributeSet().getAttributes();
+    }
+
+    public void updateAttribute(String name, Value value) {
+        int attributeId = parser.getAttributeId(name);
+        if (attributeId != -1) {
+            boolean contains = false;
+            if (layout.attributes.contains(new Layout.Attribute(attributeId, null))) {
+                layout.attributes.remove(new Layout.Attribute(attributeId, null));
+            }
+            layout.attributes.add(new Layout.Attribute(attributeId, value));
+            //noinspection unchecked
+            parser.handleAttribute(view, attributeId, value);
+        } else {
+            layout.extras.addProperty(name, value.getAsString());
+        }
+    }
+
+    public String getAttributeName(int id) {
+        for (Map.Entry<String, ViewTypeParser.AttributeSet.Attribute> entry : parser.getAttributeSet().getAttributes().entrySet()) {
+            String k = entry.getKey();
+            ViewTypeParser.AttributeSet.Attribute v = entry.getValue();
+            if (v.id == id) {
+                return k;
+            }
+        }
+        return "Unknown";
+    }
+
+    private void handleBinding(BoundAttribute boundAttribute) {
+        //noinspection unchecked
+        parser.handleAttribute(view, boundAttribute.attributeId, boundAttribute.binding);
+    }
 }

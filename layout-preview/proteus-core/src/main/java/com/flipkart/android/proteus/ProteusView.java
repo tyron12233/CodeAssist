@@ -18,12 +18,15 @@ package com.flipkart.android.proteus;
 
 import android.view.View;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import java.util.Collections;
+import java.util.Map;
 
 /**
  * ProteusView
@@ -71,6 +74,14 @@ public interface ProteusView {
 
     default void updateAttribute(String name, Value value) {
 
+    }
+
+    default String getAttributeName(int id) {
+      return "Unknown";
+    }
+
+    default Map<String, ViewTypeParser.AttributeSet.Attribute> getAvailableAttributes() {
+      return Collections.emptyMap();
     }
 
     /**

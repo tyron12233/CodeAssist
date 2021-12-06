@@ -1,5 +1,6 @@
 package com.tyron.code.ui.layoutEditor;
 
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -10,6 +11,7 @@ import android.widget.TextView;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.view.ViewCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.transition.TransitionManager;
@@ -38,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 public class LayoutEditorFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
 
@@ -66,6 +69,35 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     private TextView mLoadingText;
 
     private boolean isDumb;
+
+    private View.OnLongClickListener mOnLongClickListener = v -> {
+        View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v);
+        ViewCompat.startDragAndDrop(v, null, shadowBuilder, v, 0);
+        return true;
+    };
+
+    private View.OnClickListener mOnClickListener = v -> {
+        if (v instanceof ProteusView) {
+            ProteusView view = (ProteusView) v;
+
+            new AlertDialog.Builder(v.getContext())
+                    .setTitle("Debug: View Attributes")
+                    .setMessage(view.getViewManager().getLayout().attributes.stream()
+                            .map(it -> view.getViewManager().getAttributeName(it.id) + ":" +
+                                    " " + it.value)
+                            .collect(Collectors.joining("\n")) + "\n" +
+                            view.getViewManager().getLayout().extras.toString())
+                    .setNeutralButton("Show available attrs", (d, which) -> {
+                        new AlertDialog.Builder(v.getContext())
+                                .setTitle("Available attributes")
+                                .setMessage(String.join("\n",
+                                        view.getViewManager().getAvailableAttributes()
+                                                .keySet()))
+                                .show();
+                    })
+                    .show();
+        }
+    };
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -105,6 +137,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                 if (view instanceof ViewGroup) {
                     setDragListeners(((ViewGroup) view));
                 }
+                setClickListeners(view);
             }
 
             @Override
@@ -150,6 +183,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         mEditorRoot.removeAllViews();
         mEditorRoot.addView(inflatedView.getAsView());
         setDragListeners(mEditorRoot);
+        setClickListeners(mEditorRoot);
     }
 
     private void setDragListeners(ViewGroup viewGroup) {
@@ -158,6 +192,18 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             View child = viewGroup.getChildAt(i);
             if (child instanceof ViewGroup) {
                 setDragListeners(((ViewGroup) child));
+            }
+        }
+    }
+
+    private void setClickListeners(View view) {
+        view.setOnLongClickListener(mOnLongClickListener);
+        view.setOnClickListener(mOnClickListener);
+        if (view instanceof ViewGroup) {
+            ViewGroup parent = (ViewGroup) view;
+            for (int i = 0; i < parent.getChildCount(); i++) {
+                View child = parent.getChildAt(i);
+                setClickListeners(child);
             }
         }
     }
