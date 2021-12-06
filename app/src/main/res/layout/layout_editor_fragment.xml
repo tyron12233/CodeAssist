@@ -1,30 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    xmlns:tools="http://schemas.android.com/tools"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:background="@color/colorBackground"
     android:weightSum="100">
 
     <LinearLayout
         android:id="@+id/palette_layout"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_weight="30"
+        android:layout_weight="35"
         android:orientation="vertical">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/palette_recyclerview"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            tools:listitem="@layout/editor_palette_item"/>
+            tools:listitem="@layout/editor_palette_item" />
 
     </LinearLayout>
 
-    <LinearLayout
+    <View
+        android:layout_width="2dp"
+        android:layout_height="match_parent"
+        android:background="@color/cardview_shadow_start_color" />
+
+    <FrameLayout
         android:id="@+id/editor_layout"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_weight="70"
-        android:orientation="vertical" />
+        android:layout_weight="65"
+        android:orientation="vertical">
+
+        <com.tyron.layoutpreview.BoundaryDrawingFrameLayout
+            android:id="@+id/editor_root"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <LinearLayout
+            android:id="@+id/loading_root"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:indeterminate="true"/>
+
+            <TextView
+                android:id="@+id/loading_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                tools:text="arsing"/>
+        </LinearLayout>
+    </FrameLayout>
 
 </LinearLayout>
