@@ -19,6 +19,9 @@ package com.flipkart.android.proteus.managers;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.flipkart.android.proteus.DataContext;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
@@ -26,8 +29,7 @@ import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import java.util.Map;
 
 /**
  * ViewGroupManager
@@ -49,6 +51,11 @@ public class ViewGroupManager extends ViewManager {
   public void update(@Nullable ObjectValue data) {
     super.update(data);
     updateChildren();
+  }
+
+  @Override
+  public Map<String, ViewTypeParser.AttributeSet.Attribute> getLayoutParamsAttributes() {
+    return parser.getAttributeSet().getLayoutParamsAttributes();
   }
 
   protected void updateChildren() {

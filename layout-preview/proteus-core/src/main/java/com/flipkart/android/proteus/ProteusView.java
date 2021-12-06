@@ -80,6 +80,10 @@ public interface ProteusView {
       return "Unknown";
     }
 
+    default Map<String, ViewTypeParser.AttributeSet.Attribute> getLayoutParamsAttributes() {
+      return Collections.emptyMap();
+    }
+
     default Map<String, ViewTypeParser.AttributeSet.Attribute> getAvailableAttributes() {
       return Collections.emptyMap();
     }

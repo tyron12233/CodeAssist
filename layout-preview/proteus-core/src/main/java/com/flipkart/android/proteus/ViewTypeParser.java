@@ -335,8 +335,28 @@ public abstract class ViewTypeParser<V extends View> {
       }
     }
 
+    public Map<String, Attribute> getLayoutParamsAttributes() {
+      Map<String, Attribute> attributeMap = new HashMap<>();
+
+      for (Map.Entry<String, Attribute> attr : attributes.entrySet()) {
+        if (attr.getValue().isLayoutParams) {
+          attributeMap.put(attr.getKey(), attr.getValue());
+        }
+      }
+      if (parent != null) {
+        attributeMap.putAll(parent.getLayoutParamsAttributes());
+      }
+      return attributeMap;
+    }
+
     public Map<String, Attribute> getAttributes() {
-      Map<String, Attribute> attributeMap = new HashMap<>(attributes);
+      Map<String, Attribute> attributeMap = new HashMap<>();
+
+      for (Map.Entry<String, Attribute> attr : attributes.entrySet()) {
+        if (!attr.getValue().isLayoutParams) {
+          attributeMap.put(attr.getKey(), attr.getValue());
+        }
+      }
       if (parent != null) {
         attributeMap.putAll(parent.getAttributes());
       }

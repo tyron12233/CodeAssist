@@ -17,6 +17,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.transition.TransitionManager;
 
 import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.value.Dimension;
 import com.flipkart.android.proteus.value.Layout;
@@ -36,6 +37,7 @@ import com.tyron.layoutpreview.inflate.PreviewLayoutInflater;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -77,22 +79,26 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     };
 
     private View.OnClickListener mOnClickListener = v -> {
+        Map<String, ViewTypeParser.AttributeSet.Attribute> parentAttributes = new HashMap<>();
+        if (v.getParent() instanceof ProteusView) {
+            parentAttributes.putAll(((ProteusView) v.getParent()).getViewManager().getLayoutParamsAttributes());
+        }
         if (v instanceof ProteusView) {
             ProteusView view = (ProteusView) v;
 
             new AlertDialog.Builder(v.getContext())
                     .setTitle("Debug: View Attributes")
                     .setMessage(view.getViewManager().getLayout().attributes.stream()
-                            .map(it -> view.getViewManager().getAttributeName(it.id) + ":" +
-                                    " " + it.value)
+                            .map(it -> view.getViewManager().getAttributeName(it.id) + ": " + it.value)
                             .collect(Collectors.joining("\n")) + "\n" +
                             view.getViewManager().getLayout().extras.toString())
                     .setNeutralButton("Show available attrs", (d, which) -> {
                         new AlertDialog.Builder(v.getContext())
                                 .setTitle("Available attributes")
                                 .setMessage(String.join("\n",
-                                        view.getViewManager().getAvailableAttributes()
-                                                .keySet()))
+                                        view.getViewManager().getAvailableAttributes().keySet()) +
+                                        "\n parent:" +
+                                        String.join("\n", parentAttributes.keySet()))
                                 .show();
                     })
                     .show();
