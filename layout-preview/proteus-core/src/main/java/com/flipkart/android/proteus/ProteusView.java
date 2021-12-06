@@ -20,6 +20,7 @@ import android.view.View;
 
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
+import com.flipkart.android.proteus.value.Value;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -67,6 +68,10 @@ public interface ProteusView {
      * @param data New data for the view
      */
     void update(@Nullable ObjectValue data);
+
+    default void updateAttribute(String name, Value value) {
+
+    }
 
     /**
      * Look for a child view with the given id.  If this view has the given

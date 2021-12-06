@@ -143,7 +143,7 @@ public class ViewManager implements ProteusView.Manager {
     }
   }
 
-  private void updateAttribute(String name, Value value) {
+  public void updateAttribute(String name, Value value) {
     int attributeId = parser.getAttributeId(name);
     if (attributeId != -1) {
       boolean contains = false;

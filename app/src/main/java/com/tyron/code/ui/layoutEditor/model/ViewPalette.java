@@ -3,8 +3,11 @@ package com.tyron.code.ui.layoutEditor.model;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 
+import com.flipkart.android.proteus.value.Value;
 import com.google.errorprone.annotations.Immutable;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -21,11 +24,16 @@ public class ViewPalette {
     private final String mClassName;
     private final String mName;
     private final int mIcon;
+    private final Map<String, Value> mDefaultValues;
 
-    private ViewPalette(String className, String name, @DrawableRes int icon) {
+    private ViewPalette(String className,
+                        String name,
+                        @DrawableRes int icon,
+                        Map<String, Value> defaultValues) {
         mClassName = className;
         mName = name;
         mIcon = icon;
+        mDefaultValues = defaultValues;
     }
 
     /**
@@ -42,6 +50,13 @@ public class ViewPalette {
     @DrawableRes
     public int getIcon() {
         return mIcon;
+    }
+
+    /**
+     * @return The default values that can be used when this palette is inflated
+     */
+    public Map<String, Value> getDefaultValues() {
+        return mDefaultValues;
     }
 
     @Override
@@ -61,6 +76,7 @@ public class ViewPalette {
         private String className;
         private String name;
         private int icon;
+        private final Map<String, Value> defaultValues = new HashMap<>();
 
         public Builder setClassName(String name) {
             this.className = name;
@@ -77,8 +93,13 @@ public class ViewPalette {
             return this;
         }
 
+        public Builder addDefaultValue(@NonNull String name, @NonNull Value value) {
+            this.defaultValues.put(name, value);
+            return this;
+        }
+
         public ViewPalette build() {
-            return new ViewPalette(className, name, icon);
+            return new ViewPalette(className, name, icon, defaultValues);
         }
     }
 }

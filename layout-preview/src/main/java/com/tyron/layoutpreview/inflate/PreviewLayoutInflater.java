@@ -6,6 +6,8 @@ import android.view.InflateException;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+
 import com.flipkart.android.proteus.Proteus;
 import com.flipkart.android.proteus.ProteusBuilder;
 import com.flipkart.android.proteus.ProteusContext;
@@ -146,6 +148,11 @@ public class PreviewLayoutInflater {
             mLayoutManager.setLayouts(resourceManager.getLayouts());
             return this;
         }, executor);
+    }
+
+    @NonNull
+    public ProteusContext getContext() {
+        return mContext;
     }
 
     public StringManager getStringManager() {

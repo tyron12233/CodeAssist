@@ -1,7 +1,6 @@
 package com.tyron.code.ui.layoutEditor;
 
 import android.os.Bundle;
-import android.view.DragEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,6 +16,13 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.transition.TransitionManager;
 
 import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.toolbox.Attributes;
+import com.flipkart.android.proteus.value.Dimension;
+import com.flipkart.android.proteus.value.Layout;
+import com.flipkart.android.proteus.value.ObjectValue;
+import com.flipkart.android.proteus.value.Primitive;
+import com.flipkart.android.proteus.value.Value;
+import com.google.common.collect.ImmutableMap;
 import com.tyron.ProjectManager;
 import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.code.R;
@@ -26,7 +32,9 @@ import com.tyron.layoutpreview.inflate.PreviewLayoutInflater;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -79,6 +87,29 @@ public class LayoutEditorFragment extends Fragment {
 
         mEditorRoot = root.findViewById(R.id.editor_root);
         mDragListener = new EditorDragListener(mEditorRoot);
+        mDragListener.setInflateCallback((parent, palette) -> {
+            Layout layout = new Layout(palette.getClassName());
+            ProteusView inflated = mInflater.getContext()
+                    .getInflater()
+                    .inflate(layout, new ObjectValue(), parent, 0);
+            palette.getDefaultValues().forEach((key, value) -> {
+                inflated.getViewManager().updateAttribute(key, value);
+            });
+            return inflated;
+        });
+        mDragListener.setDelegate(new EditorDragListener.Delegate() {
+            @Override
+            public void onAddView(ViewGroup parent, View view) {
+                if (view instanceof ViewGroup) {
+                    setDragListeners(((ViewGroup) view));
+                }
+            }
+
+            @Override
+            public void onRemoveView(ViewGroup parent, View view) {
+
+            }
+        });
         return root;
     }
 
@@ -145,16 +176,30 @@ public class LayoutEditorFragment extends Fragment {
     private List<ViewPalette> populatePalettes() {
         List<ViewPalette> palettes = new ArrayList<>();
         palettes.add(createPalette("android.widget.LinearLayout", R.drawable.crash_ic_close));
-        palettes.add(createPalette("android.widget.TextView", R.drawable.crash_ic_bug_report));
+        palettes.add(createPalette("android.widget.TextView",
+                R.drawable.crash_ic_bug_report,
+                ImmutableMap.of(Attributes.TextView.Text, new Primitive("TextView"))));
         return palettes;
     }
 
     private ViewPalette createPalette(String className, @DrawableRes int icon) {
+        return createPalette(className, icon, Collections.emptyMap());
+    }
+
+    private ViewPalette createPalette(String className,
+                                      @DrawableRes int icon,
+                                      Map<String, Value> attributes) {
         String name = className.substring(className.lastIndexOf('.') + 1);
-        return ViewPalette.builder()
+        ViewPalette.Builder builder = ViewPalette.builder()
                 .setClassName(className)
                 .setName(name)
                 .setIcon(icon)
-                .build();
+                .addDefaultValue(Attributes.View.MinHeight, Dimension.valueOf("50dp"))
+                .addDefaultValue(Attributes.View.MinWidth, Dimension.valueOf("50dp"));
+
+        attributes.forEach((key, value) -> {
+            builder.addDefaultValue(key, value);
+        });
+        return builder.build();
     }
 }

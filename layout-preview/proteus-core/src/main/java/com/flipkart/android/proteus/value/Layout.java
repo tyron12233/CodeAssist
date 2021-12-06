@@ -19,6 +19,7 @@ package com.flipkart.android.proteus.value;
 import com.flipkart.android.proteus.toolbox.Utils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +47,14 @@ public class Layout extends Value {
   @Nullable
   public final ObjectValue extras;
 
-  public Layout(@NonNull String type, @Nullable List<Attribute> attributes, @Nullable Map<String, Value> data, @Nullable ObjectValue extras) {
+  public Layout(@NonNull String type) {
+    this(type, new ArrayList<>(), new HashMap<>(), new ObjectValue());
+  }
+
+  public Layout(@NonNull String type,
+                @Nullable List<Attribute> attributes,
+                @Nullable Map<String, Value> data,
+                @Nullable ObjectValue extras) {
     this.type = type;
     this.attributes = attributes;
     this.data = data;
