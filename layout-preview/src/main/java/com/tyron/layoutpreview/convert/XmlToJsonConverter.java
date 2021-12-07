@@ -27,7 +27,7 @@ public class XmlToJsonConverter {
     public static final String ID_PREFIX = "@id/";
     public static final String ANDROID_NS_PREFIX = "android";
 
-    private final Set<String> mAttributesToSkip = new HashSet<>(Arrays.asList("xmlns:tools", "tools:context", "xmlns:tools", "xmlns:android", "style"));
+    private final Set<String> mAttributesToSkip = new HashSet<>();
 
     private final String[] ANDROID_WIDGET = new String[] {"TextView", "Button", "ImageView",
             "ImageButton", "LinearLayout", "FrameLayout", "AbsoluteLayout", "RelativeLayout", "ListView",
