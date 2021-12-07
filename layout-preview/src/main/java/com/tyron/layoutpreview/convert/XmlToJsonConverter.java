@@ -140,13 +140,13 @@ public class XmlToJsonConverter {
 //                name = name.substring(ANDROID_NS_PREFIX.length() + 1); // android:
 //            }
 
-            if (value.startsWith(INTEGER_PREFIX)) {
-                value = value.substring(INTEGER_PREFIX.length());
-            } else if (value.startsWith(ID_PREFIX)) {
-                value = value.substring(ID_PREFIX.length());
-            } else if (value.startsWith(ID_NEW_PREFIX)) {
-                value = value.substring(ID_NEW_PREFIX.length());
-            }
+//            if (value.startsWith(INTEGER_PREFIX)) {
+//                value = value.substring(INTEGER_PREFIX.length());
+//            } else if (value.startsWith(ID_PREFIX)) {
+//                value = value.substring(ID_PREFIX.length());
+//            } else if (value.startsWith(ID_NEW_PREFIX)) {
+//                value = value.substring(ID_NEW_PREFIX.length());
+//            }
 
             json.addProperty(name, value);
         }
