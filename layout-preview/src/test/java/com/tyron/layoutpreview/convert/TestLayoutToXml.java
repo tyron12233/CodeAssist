@@ -35,12 +35,25 @@ public class TestLayoutToXml {
     private static final String TEST_LAYOUT =
             "<androidx.constraintlayout.widget.ConstraintLayout xmlns:android=\"http://schemas.android.com/apk/res/android\"\n" +
             "    xmlns:app=\"http://schemas.android.com/apk/res-auto\"\n" +
-            "    xmlns:tools=\"http://schemas.android.com/tools\"\n" +
+            "    xmlns:tools=\"htt" +
+                    "p://schemas.android.com/tools\"\n" +
             "    android:layout_width=\"match_parent\"\n" +
-            "    android:layout_height=\"match_parent\">\n" +
-            "\n" +
-            "    <com.google.android.material.textfield.TextInputLayout\n" +
-            "        android:id=\"@+id/til_class_name\"\n" +
+                    "    android:layout_height=\"match_parent\">\n" +
+                    "    \n" +
+                    "    <android.widget.LinearLayout\n" +
+                    "        android:id=\"@+id/regularAndroidView\"\n" +
+                    "        android:layout_width=\"wrap_content\"\n" +
+                    "        android:layout_height=\"wrap_content\">\n" +
+                    "        \n" +
+                    "        <android.view.View\n" +
+                    "            android:id=\"@+id/androidView\"\n" +
+                    "            android:layout_width=\"match_parent\"\n" +
+                    "            android:layout_height=\"match_parent\" />\n" +
+                    "    " +
+                    "</android.widget.LinearLayout>\n" +
+                    "\n" +
+                    "    <com.google.android.material.textfield.TextInputLayout\n" +
+                    "        android:id=\"@+id/til_class_name\"\n" +
             "        style=\"@style/Widget.MaterialComponents.TextInputLayout.FilledBox.Dense\"\n" +
             "        android:layout_width=\"0dp\"\n" +
             "        android:layout_height=\"wrap_content\"\n" +
@@ -136,7 +149,6 @@ public class TestLayoutToXml {
         String result = XmlPrettyPrinter.prettyPrint(convert, XmlFormatPreferences.defaults(),
                 XmlFormatStyle.LAYOUT, "\n");
 
-        String difference = StringUtils.difference(expected, result);
         Truth.assertThat(result)
                 .isEqualTo(expected);
     }
