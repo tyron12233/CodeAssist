@@ -136,9 +136,9 @@ public class XmlToJsonConverter {
             String name = attribute.first;
             String value = attribute.second;
 
-            if (name.startsWith(ANDROID_NS_PREFIX)) {
-                name = name.substring(ANDROID_NS_PREFIX.length() + 1); // android:
-            }
+//            if (name.startsWith(ANDROID_NS_PREFIX)) {
+//                name = name.substring(ANDROID_NS_PREFIX.length() + 1); // android:
+//            }
 
             if (value.startsWith(INTEGER_PREFIX)) {
                 value = value.substring(INTEGER_PREFIX.length());
