@@ -14,6 +14,7 @@ import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.SimpleLayoutInflater;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
+import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
@@ -84,7 +85,7 @@ public class TestInflateXml {
         Map<String, ViewTypeParser.AttributeSet.Attribute> attributes = context.getParser("android.widget.FrameLayout")
                 .getAttributeSet()
                 .getAttributes();
-        ViewTypeParser.AttributeSet.Attribute attribute = attributes.get("layout_gravity");
+        ViewTypeParser.AttributeSet.Attribute attribute = attributes.get(Attributes.View.Width);
         AttributeProcessor processor = attribute.processor;
         String name = processor.getClass().getSuperclass().getName();
         assert inflate != null;
