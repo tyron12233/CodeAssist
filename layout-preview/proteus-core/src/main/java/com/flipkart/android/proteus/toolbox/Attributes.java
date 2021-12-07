@@ -212,7 +212,7 @@ public class Attributes {
     public static final String Progress = "android:progress";
     public static final String Max = "android:max";
     public static final String ProgressTint = "android:progressTint";
-    public static final String IndetermineTint = "android:indeterminateTint";
+    public static final String IndeterminateTint = "android:indeterminateTint";
     public static final String SecondaryProgressTint = "android:secondaryProgressTint";
   }
 }
