@@ -218,8 +218,8 @@ public class ParseHelper {
     return returnGravity;
   }
 
-  public static Primitive getGravity(String value) {
-    return new Primitive(parseGravity(value));
+  public static com.flipkart.android.proteus.value.Gravity getGravity(String value) {
+    return new com.flipkart.android.proteus.value.Gravity(parseGravity(value));
   }
 
   public static int parseDividerMode(String attributeValue) {

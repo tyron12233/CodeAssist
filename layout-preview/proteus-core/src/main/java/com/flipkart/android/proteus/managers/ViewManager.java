@@ -26,8 +26,10 @@ import com.flipkart.android.proteus.DataContext;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
+import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
+import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Value;
 
 import java.util.ArrayList;
@@ -149,7 +151,14 @@ public class ViewManager implements ProteusView.Manager {
         return parser.getAttributeSet().getAttributes();
     }
 
-    public void updateAttribute(String name, Value value) {
+    public void updateAttribute(String name, String string) {
+        Primitive primitive = new Primitive(string);
+        Value value = AttributeProcessor.staticPreCompile(primitive,
+                context,
+                context.getFunctionManager());
+        if (value == null) {
+            value = primitive;
+        }
         int attributeId = parser.getAttributeId(name);
         if (attributeId != -1) {
             boolean contains = false;

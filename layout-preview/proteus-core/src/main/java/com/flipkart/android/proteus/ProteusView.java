@@ -72,7 +72,7 @@ public interface ProteusView {
      */
     void update(@Nullable ObjectValue data);
 
-    default void updateAttribute(String name, Value value) {
+    default void updateAttribute(String name, String value) {
 
     }
 

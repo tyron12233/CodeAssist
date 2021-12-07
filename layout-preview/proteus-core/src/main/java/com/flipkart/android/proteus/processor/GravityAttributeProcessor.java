@@ -22,6 +22,7 @@ import android.view.View;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.parser.ParseHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
+import com.flipkart.android.proteus.value.Gravity;
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Resource;
 import com.flipkart.android.proteus.value.StyleResource;
@@ -48,15 +49,20 @@ import static java.lang.annotation.ElementType.TYPE;
 
 public abstract class GravityAttributeProcessor<V extends View> extends AttributeProcessor<V> {
 
-  public static final Primitive NO_GRAVITY = new Primitive(android.view.Gravity.NO_GRAVITY);
+  public static final com.flipkart.android.proteus.value.Gravity NO_GRAVITY =
+          new com.flipkart.android.proteus.value.Gravity(android.view.Gravity.NO_GRAVITY);
 
   @Override
   public void handleValue(V view, Value value) {
     int gravity = android.view.Gravity.NO_GRAVITY;
-    if (value.isPrimitive() && value.getAsPrimitive().isNumber()) {
+    if (value instanceof com.flipkart.android.proteus.value.Gravity) {
       gravity = value.getAsInt();
-    } else if (value.isPrimitive()) {
-      gravity = ParseHelper.parseGravity(value.getAsString());
+    } else {
+      if (value.isPrimitive() && value.getAsPrimitive().isNumber()) {
+        gravity = value.getAsInt();
+      } else if (value.isPrimitive()) {
+        gravity = ParseHelper.parseGravity(value.getAsString());
+      }
     }
     //noinspection WrongConstant
     setGravity(view, gravity);
@@ -82,7 +88,6 @@ public abstract class GravityAttributeProcessor<V extends View> extends Attribut
   }
 
   private void set(V view, TypedArray a) {
-    //noinspection WrongConstant
     setGravity(view, a.getInt(0, android.view.Gravity.NO_GRAVITY));
   }
 

@@ -1,18 +1,22 @@
 package com.tyron.code.ui.layoutEditor;
 
+import android.animation.LayoutTransition;
 import android.app.AlertDialog;
 import android.os.Bundle;
+import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentResultListener;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.transition.TransitionManager;
 
@@ -29,6 +33,8 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.builder.project.api.Project;
 import com.tyron.code.R;
+import com.tyron.code.ui.layoutEditor.attributeEditor.AttributeEditorDialogFragment;
+import com.tyron.code.ui.layoutEditor.attributeEditor.AttributeEditorViewModel;
 import com.tyron.code.ui.layoutEditor.model.ViewPalette;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.layoutpreview.BoundaryDrawingFrameLayout;
@@ -40,6 +46,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
@@ -61,6 +68,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private final ExecutorService mService = Executors.newSingleThreadExecutor();
     private LayoutEditorViewModel mEditorViewModel;
+    private AttributeEditorViewModel mAttributeEditorViewModel;
 
     private File mCurrentFile;
     private PreviewLayoutInflater mInflater;
@@ -86,22 +94,21 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         if (v instanceof ProteusView) {
             ProteusView view = (ProteusView) v;
 
-            new AlertDialog.Builder(v.getContext())
-                    .setTitle("Debug: View Attributes")
-                    .setMessage(view.getViewManager().getLayout().attributes.stream()
-                            .map(it -> view.getViewManager().getAttributeName(it.id) + ": " + it.value)
-                            .collect(Collectors.joining("\n")) + "\n" +
-                            view.getViewManager().getLayout().extras.toString())
-                    .setNeutralButton("Show available attrs", (d, which) -> {
-                        new AlertDialog.Builder(v.getContext())
-                                .setTitle("Available attributes")
-                                .setMessage(String.join("\n",
-                                        view.getViewManager().getAvailableAttributes().keySet()) +
-                                        "\n parent:" +
-                                        String.join("\n", parentAttributes.keySet()))
-                                .show();
-                    })
-                    .show();
+            ArrayList<Pair<String, String>> attributes = new ArrayList<>();
+            for (Layout.Attribute attribute :
+                    Objects.requireNonNull(view.getViewManager().getLayout().attributes)) {
+                String name = view.getViewManager().getAttributeName(attribute.id);
+                attributes.add(Pair.create(name, attribute.value.toString()));
+            }
+            AttributeEditorDialogFragment.newInstance(attributes)
+                    .show(getChildFragmentManager(), null);
+
+            getChildFragmentManager().setFragmentResultListener(
+                    AttributeEditorDialogFragment.KEY_ATTRIBUTE_CHANGED,
+                    getViewLifecycleOwner(),
+                    (requestKey, result) ->
+                            view.getViewManager().updateAttribute(result.getString("key"),
+                                    result.getString("value")));
         }
     };
 
@@ -113,6 +120,8 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         isDumb = ProjectManager.getInstance().getCurrentProject() == null ||
                 CompletionEngine.isIndexing();
         mEditorViewModel = new ViewModelProvider(this).get(LayoutEditorViewModel.class);
+        mAttributeEditorViewModel = new ViewModelProvider(this)
+                .get(AttributeEditorViewModel.class);
     }
 
     @Nullable
@@ -133,7 +142,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                     .getInflater()
                     .inflate(layout, new ObjectValue(), parent, 0);
             palette.getDefaultValues().forEach((key, value) -> {
-                inflated.getViewManager().updateAttribute(key, value);
+                inflated.getViewManager().updateAttribute(key, value.toString());
             });
             return inflated;
         });
@@ -194,6 +203,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private void setDragListeners(ViewGroup viewGroup) {
         viewGroup.setOnDragListener(mDragListener);
+        viewGroup.setLayoutTransition(new LayoutTransition());
         for (int i = 0; i < viewGroup.getChildCount(); i++) {
             View child = viewGroup.getChildAt(i);
             if (child instanceof ViewGroup) {

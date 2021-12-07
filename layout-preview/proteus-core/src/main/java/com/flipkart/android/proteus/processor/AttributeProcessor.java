@@ -22,8 +22,10 @@ import com.flipkart.android.proteus.DataContext;
 import com.flipkart.android.proteus.FunctionManager;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.parser.ParseHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Binding;
+import com.flipkart.android.proteus.value.Gravity;
 import com.flipkart.android.proteus.value.NestedBinding;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
@@ -79,7 +81,9 @@ public abstract class AttributeProcessor<V extends View> {
   @Nullable
   public static Value staticPreCompile(Primitive value, ProteusContext context, FunctionManager manager) {
     String string = value.getAsString();
-    if (Binding.isBindingValue(string)) {
+    if (Gravity.isGravity(string)) {
+      return Gravity.of(ParseHelper.parseGravity(string));
+    } else if (Binding.isBindingValue(string)) {
       return Binding.valueOf(string, context, manager);
     } else if (Resource.isResource(string)) {
       return Resource.valueOf(string, null, context);
