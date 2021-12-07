@@ -103,7 +103,7 @@ public class EditorDragListener implements View.OnDragListener {
                 index = getHorizontalIndexForEvent(parent, event);
             }
         }
-        
+
         if (mEditorShadow.equals(child)) {
             LayoutTransition transition = parent.getLayoutTransition();
             parent.setLayoutTransition(null);
@@ -111,9 +111,6 @@ public class EditorDragListener implements View.OnDragListener {
             parent.setLayoutTransition(transition);
         } else {
             parent.addView(child, index);
-        }
-
-        if (!mEditorShadow.equals(child)) {
             if (mDelegate != null) {
                 mDelegate.onAddView(parent, child);
             }
@@ -130,6 +127,9 @@ public class EditorDragListener implements View.OnDragListener {
                 parent.setLayoutTransition(transition);
             } else {
                 parent.removeView(view);
+                if (mDelegate != null) {
+                    mDelegate.onRemoveView(parent, view);
+                }
             }
         }
     }

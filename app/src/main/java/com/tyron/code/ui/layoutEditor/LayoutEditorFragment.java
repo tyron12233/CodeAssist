@@ -21,6 +21,7 @@ import androidx.transition.TransitionManager;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.toolbox.Attributes;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.Dimension;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
@@ -154,12 +155,24 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                 setClickListeners(view);
                 mEditorRoot.postDelayed(() -> {
                     mEditorRoot.requestLayout();
-                }, 500);
+                }, 100);
+
+                if (parent instanceof ProteusView && view instanceof ProteusView) {
+                    ProteusView proteusParent = (ProteusView) parent;
+                    ProteusView proteusChild = (ProteusView) view;
+                    ProteusHelper.addChildToLayout(proteusParent, proteusChild);
+                }
             }
 
             @Override
             public void onRemoveView(ViewGroup parent, View view) {
-
+                if (parent instanceof ProteusView && view instanceof ProteusView) {
+                    ProteusView proteusParent = (ProteusView) parent;
+                    ProteusView proteusChild = (ProteusView) view;
+                    ProteusHelper.removeChildFromLayout(proteusParent, proteusChild);
+                    Layout layout = proteusParent.getViewManager().getLayout();
+                    return;
+                }
             }
         });
         return root;
