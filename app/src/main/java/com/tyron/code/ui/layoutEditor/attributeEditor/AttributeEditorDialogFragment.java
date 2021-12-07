@@ -62,12 +62,12 @@ public class AttributeEditorDialogFragment extends DialogFragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         mAdapter.setItemClickListener(attribute -> {
             EditText editText = new EditText(requireContext());
-            editText.setText(attribute.second);
+            editText.setText(attribute.getSecond());
             new MaterialAlertDialogBuilder(requireContext())
                     .setView(editText)
                     .setPositiveButton("apply", (d, w) -> {
                         Bundle bundle = new Bundle();
-                        bundle.putString("key", attribute.first);
+                        bundle.putString("key", attribute.getFirst());
                         bundle.putString("value", editText.getText().toString());
                         getParentFragmentManager().setFragmentResult(KEY_ATTRIBUTE_CHANGED,
                                 bundle);
