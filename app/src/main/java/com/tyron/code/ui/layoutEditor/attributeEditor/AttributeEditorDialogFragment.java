@@ -1,19 +1,16 @@
 package com.tyron.code.ui.layoutEditor.attributeEditor;
 
-import android.app.Dialog;
 import android.os.Bundle;
 import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.DialogFragment;
-import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -25,7 +22,7 @@ public class AttributeEditorDialogFragment extends DialogFragment {
 
     public static final String KEY_ATTRIBUTE_CHANGED = "ATTRIBUTE_CHANGED";
 
-    public static AttributeEditorDialogFragment newInstance(ArrayList<Pair<String, String>> attributes) {
+    public static AttributeEditorDialogFragment newInstance(ArrayList<kotlin.Pair<String, String>> attributes) {
         Bundle args = new Bundle();
         args.putSerializable("attributes", attributes);
         AttributeEditorDialogFragment fragment = new AttributeEditorDialogFragment();
@@ -34,14 +31,14 @@ public class AttributeEditorDialogFragment extends DialogFragment {
     }
 
     private AttributeEditorAdapter mAdapter;
-    private ArrayList<Pair<String, String>> mAttributes;
+    private ArrayList<kotlin.Pair<String, String>> mAttributes;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         //noinspection unchecked
-        mAttributes = (ArrayList<Pair<String, String>>)
+        mAttributes = (ArrayList<kotlin.Pair<String, String>>)
                 requireArguments().getSerializable("attributes");
         if (mAttributes == null) {
             mAttributes = new ArrayList<>();

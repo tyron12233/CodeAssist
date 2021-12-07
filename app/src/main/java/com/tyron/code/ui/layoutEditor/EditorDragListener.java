@@ -1,5 +1,6 @@
 package com.tyron.code.ui.layoutEditor;
 
+import android.animation.LayoutTransition;
 import android.view.DragEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -102,7 +103,15 @@ public class EditorDragListener implements View.OnDragListener {
                 index = getHorizontalIndexForEvent(parent, event);
             }
         }
-        parent.addView(child, index);
+        
+        if (mEditorShadow.equals(child)) {
+            LayoutTransition transition = parent.getLayoutTransition();
+            parent.setLayoutTransition(null);
+            parent.addView(child, index);
+            parent.setLayoutTransition(transition);
+        } else {
+            parent.addView(child, index);
+        }
 
         if (!mEditorShadow.equals(child)) {
             if (mDelegate != null) {
@@ -114,7 +123,14 @@ public class EditorDragListener implements View.OnDragListener {
     private void ensureNoParent(View view) {
         ViewGroup parent = (ViewGroup) view.getParent();
         if (parent != null) {
-            parent.removeView(view);
+            if (view.equals(mEditorShadow)) {
+                LayoutTransition transition = parent.getLayoutTransition();
+                parent.setLayoutTransition(null);
+                parent.removeView(view);
+                parent.setLayoutTransition(transition);
+            } else {
+                parent.removeView(view);
+            }
         }
     }
 

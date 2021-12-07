@@ -1,25 +1,18 @@
 package com.tyron.code.ui.layoutEditor.attributeEditor;
 
-import android.text.Editable;
-import android.util.Pair;
+import kotlin.Pair;
+
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
 import android.widget.FrameLayout;
-import android.widget.ListView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.flipkart.android.proteus.value.Primitive;
-import com.flipkart.android.proteus.value.Value;
-import com.google.android.material.textfield.TextInputEditText;
-import com.google.android.material.textfield.TextInputLayout;
 import com.tyron.code.R;
-import com.tyron.common.util.SingleTextWatcher;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +22,7 @@ public class AttributeEditorAdapter extends RecyclerView.Adapter<AttributeEditor
     public interface OnItemClickListener {
         void onItemClick(Pair<String, String> attribute);
     }
+
     private List<Pair<String, String>> mAttributes = new ArrayList<>();
 
     public AttributeEditorAdapter() {
@@ -41,7 +35,7 @@ public class AttributeEditorAdapter extends RecyclerView.Adapter<AttributeEditor
         mItemClickListener = listener;
     }
 
-    public void submitList(List<Pair<String, String>> newList) {
+    public void submitList(List<kotlin.Pair<String, String>> newList) {
         DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
             @Override
             public int getOldListSize() {
@@ -55,20 +49,21 @@ public class AttributeEditorAdapter extends RecyclerView.Adapter<AttributeEditor
 
             @Override
             public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
-                return mAttributes.get(oldItemPosition).first
-                        .equals(newList.get(newItemPosition).first);
+                return mAttributes.get(oldItemPosition).getFirst()
+                        .equals(newList.get(newItemPosition).getFirst());
             }
 
             @Override
             public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
-                return mAttributes.get(oldItemPosition).second
-                        .equals(newList.get(newItemPosition).second);
+                return mAttributes.get(oldItemPosition).getSecond()
+                        .equals(newList.get(newItemPosition).getSecond());
             }
         });
         mAttributes.clear();
         mAttributes.addAll(newList);
         result.dispatchUpdatesTo(this);
     }
+
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -111,8 +106,8 @@ public class AttributeEditorAdapter extends RecyclerView.Adapter<AttributeEditor
         }
 
         public void bind(Pair<String, String> item) {
-            mKeyText.setText(item.first);
-            mValueText.setText(item.second);
+            mKeyText.setText(item.getFirst());
+            mValueText.setText(item.getSecond());
         }
     }
 }

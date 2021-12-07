@@ -1,22 +1,20 @@
 package com.tyron.code.ui.layoutEditor;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.LayoutTransition;
-import android.app.AlertDialog;
 import android.os.Bundle;
-import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
 import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentResultListener;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.transition.TransitionManager;
 
@@ -49,7 +47,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
+
+import kotlin.Pair;
 
 public class LayoutEditorFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
 
@@ -98,7 +97,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             for (Layout.Attribute attribute :
                     Objects.requireNonNull(view.getViewManager().getLayout().attributes)) {
                 String name = view.getViewManager().getAttributeName(attribute.id);
-                attributes.add(Pair.create(name, attribute.value.toString()));
+                attributes.add(new Pair<>(name, attribute.value.toString()));
             }
             AttributeEditorDialogFragment.newInstance(attributes)
                     .show(getChildFragmentManager(), null);
@@ -153,6 +152,9 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                     setDragListeners(((ViewGroup) view));
                 }
                 setClickListeners(view);
+                mEditorRoot.postDelayed(() -> {
+                    mEditorRoot.requestLayout();
+                }, 500);
             }
 
             @Override
@@ -203,6 +205,24 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private void setDragListeners(ViewGroup viewGroup) {
         viewGroup.setOnDragListener(mDragListener);
+
+        LayoutTransition transition = new LayoutTransition();
+        transition.addTransitionListener(new LayoutTransition.TransitionListener() {
+            @Override
+            public void startTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
+                transition.getAnimator(transitionType).addListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        mEditorRoot.postDelayed(() -> mEditorRoot.invalidate(), 70);
+                    }
+                });
+            }
+
+            @Override
+            public void endTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
+
+            }
+        });
         viewGroup.setLayoutTransition(new LayoutTransition());
         for (int i = 0; i < viewGroup.getChildCount(); i++) {
             View child = viewGroup.getChildAt(i);
