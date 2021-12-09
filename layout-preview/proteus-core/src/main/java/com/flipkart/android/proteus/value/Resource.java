@@ -239,8 +239,14 @@ public class Resource extends Value {
 
     @Nullable
     public String getString(ProteusContext context) {
-        String value;
+        String value = null;
         if (name != null) {
+            if (name.startsWith(ANDROID_RESOURCE_PREFIX_STRING)) {
+                value = getString(resId, context);
+            }
+            if (value != null) {
+                return value;
+            }
             Value string = context.getProteusResources()
                     .getString(name.replace(RESOURCE_PREFIX_STRING, ""));
             value = null != string ? string.getAsString() : null;
