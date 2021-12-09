@@ -119,7 +119,8 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         mCurrentFile = (File) requireArguments().getSerializable("file");
         isDumb = ProjectManager.getInstance().getCurrentProject() == null ||
                 CompletionEngine.isIndexing();
-        mEditorViewModel = new ViewModelProvider(this).get(LayoutEditorViewModel.class);
+        mEditorViewModel = new ViewModelProvider(this)
+                .get(LayoutEditorViewModel.class);
         mAttributeEditorViewModel = new ViewModelProvider(this)
                 .get(AttributeEditorViewModel.class);
     }
