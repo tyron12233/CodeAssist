@@ -47,6 +47,13 @@ public class Resource extends Value {
     public static final String RESOURCE_PREFIX_DRAWABLE = "@drawable/";
     public static final String RESOURCE_PREFIX_STRING = "@string/";
 
+    public static final String ANDROID_RESOURCE_PREFIX_ANIMATION = "@android:anim/";
+    public static final String ANDROID_RESOURCE_PREFIX_BOOLEAN = "@android:bool/";
+    public static final String ANDROID_RESOURCE_PREFIX_COLOR = "@android:color/";
+    public static final String ANDROID_RESOURCE_PREFIX_DIMENSION = "@android:dimen/";
+    public static final String ANDROID_RESOURCE_PREFIX_DRAWABLE = "@android:drawable/";
+    public static final String ANDROID_RESOURCE_PREFIX_STRING = "@android:string/";
+
     public static final String ANIM = "anim";
     public static final String BOOLEAN = "bool";
     public static final String COLOR = "color";
@@ -69,27 +76,33 @@ public class Resource extends Value {
     }
 
     public static boolean isAnimation(String string) {
-        return string.startsWith(RESOURCE_PREFIX_ANIMATION);
+        return string.startsWith(RESOURCE_PREFIX_ANIMATION) ||
+                string.startsWith(ANDROID_RESOURCE_PREFIX_ANIMATION);
     }
 
     public static boolean isBoolean(String string) {
-        return string.startsWith(RESOURCE_PREFIX_BOOLEAN);
+        return string.startsWith(RESOURCE_PREFIX_BOOLEAN) ||
+                string.startsWith(ANDROID_RESOURCE_PREFIX_BOOLEAN);
     }
 
     public static boolean isColor(String string) {
-        return string.startsWith(RESOURCE_PREFIX_COLOR);
+        return string.startsWith(RESOURCE_PREFIX_COLOR) ||
+                string.startsWith(ANDROID_RESOURCE_PREFIX_COLOR);
     }
 
     public static boolean isDimension(String string) {
-        return string.startsWith(RESOURCE_PREFIX_DIMENSION);
+        return string.startsWith(RESOURCE_PREFIX_DIMENSION) ||
+                string.startsWith(ANDROID_RESOURCE_PREFIX_DIMENSION);
     }
 
     public static boolean isDrawable(String string) {
-        return string.startsWith(RESOURCE_PREFIX_DRAWABLE);
+        return string.startsWith(RESOURCE_PREFIX_DRAWABLE) ||
+                string.startsWith(ANDROID_RESOURCE_PREFIX_DRAWABLE);
     }
 
     public static boolean isString(String string) {
-        return string.startsWith(RESOURCE_PREFIX_STRING);
+        return string.startsWith(RESOURCE_PREFIX_STRING) ||
+                string.startsWith(ANDROID_RESOURCE_PREFIX_STRING);
     }
 
     public static boolean isResource(String string) {
