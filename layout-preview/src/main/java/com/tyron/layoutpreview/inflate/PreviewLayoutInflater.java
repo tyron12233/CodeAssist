@@ -71,6 +71,7 @@ public class PreviewLayoutInflater {
             ViewTypeParser<View> viewParser = context.getParser("android.view.View");
             if (viewParser != null && layout != null && layout.extras != null) {
 
+                viewParser.createViewManager(context, view, layout, data, viewParser, parent, 0);
                 // create layout params for this view
                 viewParser.onAfterCreateView(view, parent, -1);
                 layout.extras.entrySet().forEach(entry -> {
