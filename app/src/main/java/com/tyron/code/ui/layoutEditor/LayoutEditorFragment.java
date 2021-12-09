@@ -122,7 +122,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                 CompletionEngine.isIndexing();
         mEditorViewModel = new ViewModelProvider(this)
                 .get(LayoutEditorViewModel.class);
-        requireActivity().getOnBackPressedDispatcher().addCallback(new OnBackPressedCallback(true) {
+        requireActivity().getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
                 new MaterialAlertDialogBuilder(requireContext())
@@ -133,7 +133,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                             if (converted == null) {
                                 new MaterialAlertDialogBuilder(requireContext())
                                         .setTitle("Error")
-                                        .setMessage("An unknown error has occured during layout conversion")
+                                        .setMessage("An unknown error has occurred during layout conversion")
                                         .show();
                             } else {
                                 Bundle args = new Bundle();
