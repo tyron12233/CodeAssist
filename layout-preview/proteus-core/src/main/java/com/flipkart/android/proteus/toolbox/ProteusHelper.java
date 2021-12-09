@@ -1,6 +1,7 @@
 package com.flipkart.android.proteus.toolbox;
 
 import android.view.View;
+import android.view.ViewGroup;
 
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
@@ -17,8 +18,10 @@ public class ProteusHelper {
         if (attribute == null) {
             return;
         }
+
+        int index = ((ViewGroup) parent).indexOfChild(child.getAsView());
         Array array = attribute.value.getAsArray();
-        array.add(child.getViewManager().getLayout());
+        array.add(index, child.getViewManager().getLayout());
     }
 
     public static void removeChildFromLayout(ProteusView parent, ProteusView child) {
