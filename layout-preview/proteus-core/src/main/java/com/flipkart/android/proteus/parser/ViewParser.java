@@ -167,21 +167,6 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
         }
       }
     });
-    addAttributeProcessor(Attributes.View.Weight, new StringAttributeProcessor<V>() {
-      @Override
-      public void setString(V view, String value) {
-        LinearLayout.LayoutParams layoutParams;
-        if (view.getLayoutParams() instanceof LinearLayout.LayoutParams) {
-          layoutParams = (LinearLayout.LayoutParams) view.getLayoutParams();
-          layoutParams.weight = ParseHelper.parseFloat(value);
-          view.setLayoutParams(layoutParams);
-        } else {
-          if (ProteusConstants.isLoggingEnabled()) {
-            Log.e(TAG, "'weight' is only supported for LinearLayouts");
-          }
-        }
-      }
-    });
 
     addAttributeProcessor(Attributes.View.LayoutGravity, new GravityAttributeProcessor<V>() {
       @Override

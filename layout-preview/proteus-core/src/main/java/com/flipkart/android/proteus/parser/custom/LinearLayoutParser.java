@@ -18,10 +18,12 @@ package com.flipkart.android.proteus.parser.custom;
 
 import android.annotation.SuppressLint;
 import android.graphics.drawable.Drawable;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 
+import com.flipkart.android.proteus.ProteusConstants;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
@@ -126,6 +128,22 @@ public class LinearLayoutParser<T extends View> extends ViewTypeParser<T> {
       public void setString(T view, String value) {
         if (view instanceof LinearLayout) {
           ((LinearLayout) view).setWeightSum(ParseHelper.parseFloat(value));
+        }
+      }
+    });
+
+    addLayoutParamsAttributeProcessor(Attributes.View.Weight, new StringAttributeProcessor<T>() {
+      @Override
+      public void setString(View view, String value) {
+        LinearLayout.LayoutParams layoutParams;
+        if (view.getLayoutParams() instanceof LinearLayout.LayoutParams) {
+          layoutParams = (LinearLayout.LayoutParams) view.getLayoutParams();
+          layoutParams.weight = ParseHelper.parseFloat(value);
+          view.setLayoutParams(layoutParams);
+        } else {
+          if (ProteusConstants.isLoggingEnabled()) {
+            Log.e("LinearLayoutParser", "'weight' is only supported for LinearLayouts");
+          }
         }
       }
     });
