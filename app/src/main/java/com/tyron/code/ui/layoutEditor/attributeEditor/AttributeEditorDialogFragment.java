@@ -1,7 +1,6 @@
 package com.tyron.code.ui.layoutEditor.attributeEditor;
 
 import android.os.Bundle;
-import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,6 +16,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
+import java.util.List;
+
+import kotlin.Pair;
 
 public class AttributeEditorDialogFragment extends DialogFragment {
 
@@ -60,12 +62,17 @@ public class AttributeEditorDialogFragment extends DialogFragment {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        mAdapter.setItemClickListener(attribute -> {
+        mAdapter.setItemClickListener((pos, attribute) -> {
             EditText editText = new EditText(requireContext());
             editText.setText(attribute.getSecond());
             new MaterialAlertDialogBuilder(requireContext())
                     .setView(editText)
                     .setPositiveButton("apply", (d, w) -> {
+                        List<Pair<String, String>> attributes = mAdapter.getAttributes();
+                        attributes.set(pos,
+                                new Pair<>(attribute.getFirst(), editText.getText().toString()));
+                        mAdapter.submitList(attributes);
+
                         Bundle bundle = new Bundle();
                         bundle.putString("key", attribute.getFirst());
                         bundle.putString("value", editText.getText().toString());
