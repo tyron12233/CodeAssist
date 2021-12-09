@@ -69,7 +69,7 @@ public class PreviewLayoutInflater {
 
             // since we don't know what this view is, we can only apply attributes for an android.view.View
             ViewTypeParser<View> viewParser = context.getParser("android.view.View");
-            if (viewParser != null && layout != null && layout.extras != null) {
+            if (viewParser != null && layout.extras != null) {
 
                 ProteusView.Manager viewManager =
                         viewParser.createViewManager(context, view, layout, data, viewParser, parent, 0);
