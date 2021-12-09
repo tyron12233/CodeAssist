@@ -661,6 +661,12 @@ public abstract class DrawableValue extends Value {
                 }
             });
         }
+
+        @NonNull
+        @Override
+        public String toString() {
+            return url;
+        }
     }
 
     /**
