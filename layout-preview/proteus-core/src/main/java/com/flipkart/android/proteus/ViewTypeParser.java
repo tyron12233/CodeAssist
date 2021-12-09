@@ -177,6 +177,10 @@ public abstract class ViewTypeParser<V extends View> {
         if (parent == null) {
           return false;
         }
+
+        if (parent.getViewManager().getLayout().type.equals(getType())) {
+          return false;
+        }
         //noinspection unchecked
         return parent.getViewManager().getViewTypeParser().handleAttribute(view, attributeId, value);
       } else {

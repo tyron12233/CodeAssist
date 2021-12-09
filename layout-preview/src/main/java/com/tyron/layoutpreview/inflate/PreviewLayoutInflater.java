@@ -115,7 +115,7 @@ public class PreviewLayoutInflater {
         if (name.startsWith("@drawable")) {
             DrawableValue value = mDrawableManager.get(name.substring("@drawable".length() + 1));
             if (value != null) {
-                value.apply(view, mContext, null, callback::setDrawable);
+                value.apply(view, mContext, null, (view::setBackground));
             }
         } else if (name.startsWith("@null")) {
             callback.setDrawable(null);
