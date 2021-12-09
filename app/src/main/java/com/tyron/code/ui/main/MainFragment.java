@@ -68,8 +68,9 @@ public class MainFragment extends Fragment {
         @Override
         public void handleOnBackPressed() {
             if (mRoot instanceof DrawerLayout) {
-                if (((DrawerLayout) mRoot).isOpen()) {
-                    ((DrawerLayout) mRoot).closeDrawer(GravityCompat.START, true);
+                //noinspection ConstantConditions
+                if (mMainViewModel.getDrawerState().getValue()) {
+                    mMainViewModel.setDrawerState(false);
                 }
             }
         }
@@ -116,6 +117,7 @@ public class MainFragment extends Fragment {
         if (savedInstanceState != null) {
             restoreViewState(savedInstanceState);
         }
+
         return mRoot;
     }
 
@@ -216,19 +218,21 @@ public class MainFragment extends Fragment {
         if (!mProject.equals(mProjectManager.getCurrentProject())) {
             mMainViewModel.setFiles(new ArrayList<>());
         }
-        mMainViewModel.getCurrentPosition().observe(getViewLifecycleOwner(), pos -> {
-            if (mRoot instanceof DrawerLayout) {
-                if (((DrawerLayout) mRoot).isDrawerOpen(GravityCompat.START)) {
-                    ((DrawerLayout) mRoot).closeDrawer(GravityCompat.START);
-                }
-            }
-        });
         mMainViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> {
             mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
             CompletionEngine.setIndexing(indexing);
         });
         mMainViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
         mMainViewModel.getToolbarTitle().observe(getViewLifecycleOwner(), mToolbar::setTitle);
+        if (mRoot instanceof DrawerLayout) {
+            mMainViewModel.getDrawerState().observe(getViewLifecycleOwner(), isOpen -> {
+                if (isOpen) {
+                    ((DrawerLayout) mRoot).open();
+                } else {
+                    ((DrawerLayout) mRoot).close();
+                }
+            });
+        }
     }
 
     @Override
@@ -254,9 +258,8 @@ public class MainFragment extends Fragment {
 
     private void restoreViewState(@NonNull Bundle state) {
         if (mRoot instanceof DrawerLayout) {
-            if (state.getBoolean("start_drawer_state", false)) {
-                ((DrawerLayout) mRoot).openDrawer(GravityCompat.START);
-            }
+            boolean b = state.getBoolean("start_drawer_state", false);
+            mMainViewModel.setDrawerState(b);
         }
     }
 

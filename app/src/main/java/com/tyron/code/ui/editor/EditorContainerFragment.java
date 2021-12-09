@@ -150,16 +150,6 @@ public class EditorContainerFragment extends Fragment {
         return root;
     }
 
-    private void restoreViewState(@NonNull Bundle state) {
-        int behaviorState = state.getInt("bottom_sheet_state", BottomSheetBehavior.STATE_COLLAPSED);
-        mBehavior.setState(behaviorState);
-        Bundle floatOffset = new Bundle();
-        floatOffset.putFloat("offset", behaviorState == BottomSheetBehavior.STATE_EXPANDED
-                ? 1
-                : 0f);
-        getChildFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY, floatOffset);
-    }
-
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         mMainViewModel.getFiles().observe(getViewLifecycleOwner(), files -> {
@@ -180,6 +170,16 @@ public class EditorContainerFragment extends Fragment {
                 getViewLifecycleOwner(), ((requestKey, result) -> previewCurrent()));
         getParentFragmentManager().setFragmentResultListener(FORMAT_KEY,
                 getViewLifecycleOwner(), (((requestKey, result) -> formatCurrent())));
+    }
+
+    private void restoreViewState(@NonNull Bundle state) {
+        int behaviorState = state.getInt("bottom_sheet_state", BottomSheetBehavior.STATE_COLLAPSED);
+        mMainViewModel.setBottomSheetState(behaviorState);
+        Bundle floatOffset = new Bundle();
+        floatOffset.putFloat("offset", behaviorState == BottomSheetBehavior.STATE_EXPANDED
+                ? 1
+                : 0f);
+        getChildFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY, floatOffset);
     }
 
     private void formatCurrent() {
