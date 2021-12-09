@@ -19,7 +19,6 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.transition.TransitionManager;
 
 import com.flipkart.android.proteus.ProteusView;
-import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.Dimension;
@@ -33,7 +32,6 @@ import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.builder.project.api.Project;
 import com.tyron.code.R;
 import com.tyron.code.ui.layoutEditor.attributeEditor.AttributeEditorDialogFragment;
-import com.tyron.code.ui.layoutEditor.attributeEditor.AttributeEditorViewModel;
 import com.tyron.code.ui.layoutEditor.model.ViewPalette;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.layoutpreview.BoundaryDrawingFrameLayout;
@@ -42,10 +40,8 @@ import com.tyron.layoutpreview.inflate.PreviewLayoutInflater;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -68,7 +64,6 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private final ExecutorService mService = Executors.newSingleThreadExecutor();
     private LayoutEditorViewModel mEditorViewModel;
-    private AttributeEditorViewModel mAttributeEditorViewModel;
 
     private File mCurrentFile;
     private PreviewLayoutInflater mInflater;
@@ -80,23 +75,23 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private boolean isDumb;
 
-    private View.OnLongClickListener mOnLongClickListener = v -> {
+    private final View.OnLongClickListener mOnLongClickListener = v -> {
         View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v);
         ViewCompat.startDragAndDrop(v, null, shadowBuilder, v, 0);
         return true;
     };
 
-    private View.OnClickListener mOnClickListener = v -> {
-        Map<String, ViewTypeParser.AttributeSet.Attribute> parentAttributes = new HashMap<>();
-        if (v.getParent() instanceof ProteusView) {
-            parentAttributes.putAll(((ProteusView) v.getParent()).getViewManager().getLayoutParamsAttributes());
-        }
+    private final View.OnClickListener mOnClickListener = v -> {
+//        Map<String, ViewTypeParser.AttributeSet.Attribute> parentAttributes = new HashMap<>();
+//        if (v.getParent() instanceof ProteusView) {
+//            parentAttributes.putAll(((ProteusView) v.getParent()).getViewManager().getLayoutParamsAttributes());
+//        }
         if (v instanceof ProteusView) {
             ProteusView view = (ProteusView) v;
 
             ArrayList<Pair<String, String>> attributes = new ArrayList<>();
             for (Layout.Attribute attribute :
-                    Objects.requireNonNull(view.getViewManager().getLayout().attributes)) {
+                    view.getViewManager().getLayout().getAttributes()) {
                 String name = view.getViewManager().getAttributeName(attribute.id);
                 attributes.add(new Pair<>(name, attribute.value.toString()));
             }
@@ -121,8 +116,6 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                 CompletionEngine.isIndexing();
         mEditorViewModel = new ViewModelProvider(this)
                 .get(LayoutEditorViewModel.class);
-        mAttributeEditorViewModel = new ViewModelProvider(this)
-                .get(AttributeEditorViewModel.class);
     }
 
     @Nullable
@@ -153,9 +146,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                     setDragListeners(((ViewGroup) view));
                 }
                 setClickListeners(view);
-                mEditorRoot.postDelayed(() -> {
-                    mEditorRoot.requestLayout();
-                }, 100);
+                mEditorRoot.postDelayed(() -> mEditorRoot.requestLayout(), 100);
 
                 if (parent instanceof ProteusView && view instanceof ProteusView) {
                     ProteusView proteusParent = (ProteusView) parent;
@@ -190,11 +181,9 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         mInflater = new PreviewLayoutInflater(requireContext(),
                 (AndroidProject) ProjectManager.getInstance().getCurrentProject());
         setLoadingText("Parsing xml files");
-        mInflater.parseResources(mService).whenComplete((inflater, exception) -> {
-            requireActivity().runOnUiThread(() -> {
-                afterParse(inflater);
-            });
-        });
+        mInflater.parseResources(mService).whenComplete((inflater, exception) ->
+                requireActivity().runOnUiThread(() ->
+                        afterParse(inflater)));
     }
 
     private void afterParse(PreviewLayoutInflater inflater) {
@@ -278,6 +267,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     private List<ViewPalette> populatePalettes() {
         List<ViewPalette> palettes = new ArrayList<>();
         palettes.add(createPalette("android.widget.LinearLayout", R.drawable.crash_ic_close));
+        palettes.add(createPalette("android.widget.FrameLayout", R.drawable.ic_baseline_add_24));
         palettes.add(createPalette("android.widget.TextView",
                 R.drawable.crash_ic_bug_report,
                 ImmutableMap.of(Attributes.TextView.Text, new Primitive("TextView"))));
