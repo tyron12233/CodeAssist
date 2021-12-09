@@ -391,6 +391,10 @@ public class CodeEditorFragment extends Fragment
                 }
             }
         });
+        getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
+                getViewLifecycleOwner(), ((requestKey, result) -> {
+            mEditor.setText(result.getString("text", mEditor.getText().toString()));
+        }));
     }
 
     @Override

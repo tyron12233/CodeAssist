@@ -1,10 +1,12 @@
 package com.tyron.layoutpreview.convert;
 
+import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 
 import com.flipkart.android.proteus.ProteusContext;
+import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.Array;
 import com.flipkart.android.proteus.value.Layout;
@@ -65,14 +67,18 @@ public class LayoutToXmlConverter {
         }
 
         for (Layout.Attribute attribute : layout.attributes) {
-            if (attribute.id == mChildrenAttributeId) {
-                Array array = attribute.value.getAsArray();
-                for (int i = 0; i < array.size(); i++) {
-                    Value child = array.get(i);
-                    if (!child.isLayout()) {
-                        continue;
+            if (isChildrenAttribute(layout, attribute)) {
+                if (attribute.value.isArray()) {
+                    Array array = attribute.value.getAsArray();
+                    for (int i = 0; i < array.size(); i++) {
+                        Value child = array.get(i);
+                        if (!child.isLayout()) {
+                            continue;
+                        }
+                        addChildren(element, child.getAsLayout());
                     }
-                    addChildren(element, child.getAsLayout());
+                } else {
+                    String notAnArray ="";
                 }
                 continue;
             }
@@ -112,5 +118,17 @@ public class LayoutToXmlConverter {
         addAttributes(newElement, child);
         addExtraAttributes(newElement, child);
         element.appendChild(newElement);
+    }
+
+    private boolean isChildrenAttribute(Layout layout, Layout.Attribute attribute) {
+        ViewTypeParser<View> parser = mContext.getParser(layout.type);
+        if (parser == null) {
+            return false;
+        }
+        ViewTypeParser.AttributeSet.Attribute children = parser.getAttributeSet().getAttribute("children");
+        if (children == null) {
+            return false;
+        }
+        return children.id == attribute.id;
     }
 }

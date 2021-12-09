@@ -4,6 +4,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.LayoutTransition;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,6 +28,7 @@ import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Value;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.ProjectManager;
 import com.tyron.builder.project.api.AndroidProject;
@@ -36,6 +38,7 @@ import com.tyron.code.ui.layoutEditor.attributeEditor.AttributeEditorDialogFragm
 import com.tyron.code.ui.layoutEditor.model.ViewPalette;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.layoutpreview.BoundaryDrawingFrameLayout;
+import com.tyron.layoutpreview.convert.LayoutToXmlConverter;
 import com.tyron.layoutpreview.inflate.PreviewLayoutInflater;
 
 import java.io.File;
@@ -49,6 +52,8 @@ import java.util.concurrent.Executors;
 import kotlin.Pair;
 
 public class LayoutEditorFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
+
+    public static final String KEY_SAVE = "KEY_SAVE";
 
     /**
      * Creates a new LayoutEditorFragment instance for a layout xml file.
@@ -120,7 +125,29 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         requireActivity().getOnBackPressedDispatcher().addCallback(new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                getParentFragmentManager().popBackStack();
+                new MaterialAlertDialogBuilder(requireContext())
+                        .setTitle("Save to xml")
+                        .setMessage("Do you want to save the layout?")
+                        .setPositiveButton(android.R.string.yes, (d, w) -> {
+                            String converted = convertLayoutToXml();
+                            if (converted == null) {
+                                new MaterialAlertDialogBuilder(requireContext())
+                                        .setTitle("Error")
+                                        .setMessage("An unknown error has occured during layout conversion")
+                                        .show();
+                            } else {
+                                Bundle args = new Bundle();
+                                args.putString("text", converted);
+                                getParentFragmentManager().setFragmentResult(KEY_SAVE,
+                                        args);
+                            }
+
+                            getParentFragmentManager().popBackStack();
+                        })
+                        .setNegativeButton(android.R.string.no, (d, w) -> {
+                            getParentFragmentManager().popBackStack();
+                        })
+                        .show();
             }
         });
     }
@@ -305,5 +332,21 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         if (isDumb) {
             createInflater();
         }
+    }
+
+    private String convertLayoutToXml() {
+        LayoutToXmlConverter converter =
+                new LayoutToXmlConverter(mInflater.getContext());
+        ProteusView view = (ProteusView) mEditorRoot.getChildAt(0);
+        if (view != null) {
+            Layout layout = view.getViewManager().getLayout();
+            try {
+                return converter.convert(layout.getAsLayout());
+            } catch (Exception e) {
+                String stackTrace = Log.getStackTraceString(e);
+                return null;
+            }
+        }
+        return null;
     }
 }
