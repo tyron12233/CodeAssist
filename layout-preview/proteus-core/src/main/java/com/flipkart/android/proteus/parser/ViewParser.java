@@ -88,7 +88,29 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
   @Override
   protected void addAttributeProcessors() {
 
-    addAttributeProcessor("outlineProvider", new StringAttributeProcessor<V>() {
+    addLayoutParamsAttributeProcessor(Attributes.View.Width, new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
+        if (layoutParams != null) {
+          layoutParams.width = (int) dimension;
+          view.setLayoutParams(layoutParams);
+        }
+      }
+    });
+
+    addLayoutParamsAttributeProcessor(Attributes.View.Height, new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
+        if (layoutParams != null) {
+          layoutParams.height = (int) dimension;
+          view.setLayoutParams(layoutParams);
+        }
+      }
+    });
+
+    addAttributeProcessor("android:outlineProvider", new StringAttributeProcessor<V>() {
       @Override
       public void setString(V view, String value) {
         switch (value) {
@@ -143,28 +165,6 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDrawable(V view, Drawable drawable) {
         view.setBackground(drawable);
-      }
-    });
-
-    addAttributeProcessor(Attributes.View.Height, new DimensionAttributeProcessor<V>() {
-      @Override
-      public void setDimension(V view, float dimension) {
-        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-        if (layoutParams != null) {
-          layoutParams.height = (int) dimension;
-          view.setLayoutParams(layoutParams);
-        }
-      }
-    });
-
-    addAttributeProcessor(Attributes.View.Width, new DimensionAttributeProcessor<V>() {
-      @Override
-      public void setDimension(V view, float dimension) {
-        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-        if (layoutParams != null) {
-          layoutParams.width = (int) dimension;
-          view.setLayoutParams(layoutParams);
-        }
       }
     });
 
