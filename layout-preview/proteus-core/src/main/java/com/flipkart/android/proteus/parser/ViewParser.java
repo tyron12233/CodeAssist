@@ -411,7 +411,9 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setString(final V view, String value) {
         if (view.getContext() instanceof ProteusContext) {
-          view.setId(((ProteusContext) view.getContext()).getInflater().getUniqueViewId(value));
+          view.setId(((ProteusContext) view.getContext())
+                  .getInflater()
+                  .getUniqueViewId(ParseHelper.parseViewId(value)));
         }
         // set view id resource name
         final String resourceName = value;
