@@ -343,7 +343,6 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             try {
                 return converter.convert(layout.getAsLayout());
             } catch (Exception e) {
-                String stackTrace = Log.getStackTraceString(e);
                 return null;
             }
         }

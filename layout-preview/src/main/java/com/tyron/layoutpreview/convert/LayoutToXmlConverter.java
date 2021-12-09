@@ -34,12 +34,11 @@ import java.util.Objects;
 public class LayoutToXmlConverter {
 
     private final ProteusContext mContext;
-    private final int mChildrenAttributeId;
     private Document mDocument;
 
     public LayoutToXmlConverter(ProteusContext context) {
         mContext = context;
-        mChildrenAttributeId = Objects.requireNonNull(mContext.getParser(ViewGroup.class.getName()))
+        int mChildrenAttributeId = Objects.requireNonNull(mContext.getParser(ViewGroup.class.getName()))
                 .getAttributeId("children");
     }
 
@@ -77,8 +76,6 @@ public class LayoutToXmlConverter {
                         }
                         addChildren(element, child.getAsLayout());
                     }
-                } else {
-                    String notAnArray ="";
                 }
                 continue;
             }
