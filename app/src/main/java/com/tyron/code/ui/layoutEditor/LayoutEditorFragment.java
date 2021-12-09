@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -116,6 +117,12 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                 CompletionEngine.isIndexing();
         mEditorViewModel = new ViewModelProvider(this)
                 .get(LayoutEditorViewModel.class);
+        requireActivity().getOnBackPressedDispatcher().addCallback(new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                getParentFragmentManager().popBackStack();
+            }
+        });
     }
 
     @Nullable
