@@ -21,6 +21,9 @@ import androidx.preference.PreferenceManager;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.ProjectManager;
+import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
+import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
+import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.builder.project.api.JavaProject;
 import com.tyron.builder.project.api.Project;
 import com.tyron.code.ApplicationLoader;
@@ -393,8 +396,11 @@ public class CodeEditorFragment extends Fragment
         });
         getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
                 getViewLifecycleOwner(), ((requestKey, result) -> {
-            mEditor.setText(result.getString("text", mEditor.getText().toString()));
-        }));
+                    String xml = result.getString("text", mEditor.getText().toString());
+                    xml = XmlPrettyPrinter.prettyPrint(xml, XmlFormatPreferences.defaults(),
+                            XmlFormatStyle.LAYOUT, "\n");
+                    mEditor.setText(xml);
+                }));
     }
 
     @Override
