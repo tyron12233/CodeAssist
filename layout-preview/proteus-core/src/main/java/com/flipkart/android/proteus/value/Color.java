@@ -275,6 +275,12 @@ public abstract class Color extends Value {
     public Result apply(Context context) {
       return Result.color(value);
     }
+
+    @NonNull
+    @Override
+    public String toString() {
+      return "#" + Integer.toHexString(value);
+    }
   }
 
   public static class StateList extends Color {

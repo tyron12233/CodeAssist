@@ -256,4 +256,9 @@ public class Resource extends Value {
     private static class ResourceCache {
         static final LruCache<String, Resource> cache = new LruCache<>(64);
     }
+
+    @Override
+    public String toString() {
+        return name;
+    }
 }
