@@ -195,6 +195,12 @@ public abstract class DrawableValue extends Value {
             Drawable drawable = new ColorDrawable(ColorResourceProcessor.evaluate(color, view).color);
             callback.apply(drawable);
         }
+
+        @NonNull
+        @Override
+        public String toString() {
+            return color.toString();
+        }
     }
 
     public static class ShapeValue extends DrawableValue {
