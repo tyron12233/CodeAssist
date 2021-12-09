@@ -16,6 +16,7 @@
 
 package com.flipkart.android.proteus;
 
+import android.content.Context;
 import android.content.res.XmlResourceParser;
 import android.view.View;
 import android.view.ViewGroup;
@@ -170,7 +171,17 @@ public abstract class ViewTypeParser<V extends View> {
   public boolean handleAttribute(V view, int attributeId, Value value) {
     int position = getPosition(attributeId);
     if (position < 0) {
-      return null != parent && parent.handleAttribute(view, attributeId, value);
+      boolean b = null != parent && parent.handleAttribute(view, attributeId, value);
+      if (!b && view.getParent() != null) {
+        ProteusView parent = (ProteusView) view.getParent();
+        if (parent == null) {
+          return false;
+        }
+        //noinspection unchecked
+        return parent.getViewManager().getViewTypeParser().handleAttribute(view, attributeId, value);
+      } else {
+        return false;
+      }
     }
     //noinspection unchecked
     AttributeProcessor<V> attributeProcessor = processors[position];

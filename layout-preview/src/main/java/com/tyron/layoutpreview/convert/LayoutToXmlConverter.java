@@ -49,8 +49,8 @@ public class LayoutToXmlConverter {
                 .newDocument();
         Element element = mDocument.createElement(layout.type);
         mDocument.appendChild(element);
-        addAttributes(element, layout);
-        addExtraAttributes(element, layout);
+        addAttributes(element, null, layout);
+        addExtraAttributes(element, null, layout);
 
         Transformer transformer = TransformerFactory.newInstance().newTransformer();
         DOMSource source = new DOMSource(mDocument);
@@ -60,7 +60,7 @@ public class LayoutToXmlConverter {
         return writer.toString();
     }
 
-    private void addAttributes(Element element, Layout layout) {
+    private void addAttributes(Element element, Layout parent, Layout layout) {
         if (layout.attributes == null) {
             return;
         }
@@ -74,27 +74,27 @@ public class LayoutToXmlConverter {
                         if (!child.isLayout()) {
                             continue;
                         }
-                        addChildren(element, child.getAsLayout());
+                        addChildren(element, parent, child.getAsLayout());
                     }
                 }
                 continue;
             }
-            String key = ProteusHelper.getAttributeName(mContext, layout.type, attribute.id);
+            String key = ProteusHelper.getAttributeName(mContext, parent, layout.type, attribute.id);
             element.setAttribute(key, attribute.value.toString());
         }
     }
 
-    private void addExtraAttributes(Element element, Layout layout) {
+    private void addExtraAttributes(Element element, Layout parent, Layout layout) {
         if (layout.extras == null) {
             return;
         }
 
         for (Map.Entry<String, Value> entry : layout.extras.entrySet()) {
-           addAttribute(element, entry.getKey(), entry.getValue());
+           addAttribute(element, parent, entry.getKey(), entry.getValue());
         }
     }
 
-    private void addAttribute(Element element, String key, Value value) {
+    private void addAttribute(Element element, Layout parent, String key, Value value) {
         if (value.isPrimitive()) {
             element.setAttribute(key, value.toString());
             return;
@@ -104,16 +104,16 @@ public class LayoutToXmlConverter {
             for (int i = 0; i < array.size(); i++) {
                 Value child = array.get(i);
                 if (child.isLayout()) {
-                    addChildren(element, child.getAsLayout());
+                    addChildren(element, parent, child.getAsLayout());
                 }
             }
         }
     }
 
-    private void addChildren(Element element, Layout child) {
+    private void addChildren(Element element, Layout parent, Layout child) {
         Element newElement = mDocument.createElement(child.type);
-        addAttributes(newElement, child);
-        addExtraAttributes(newElement, child);
+        addAttributes(newElement, parent, child);
+        addExtraAttributes(newElement, parent, child);
         element.appendChild(newElement);
     }
 

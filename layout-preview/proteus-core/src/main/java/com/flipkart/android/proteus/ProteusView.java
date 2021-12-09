@@ -65,6 +65,10 @@ public interface ProteusView {
    */
   interface Manager {
 
+    default ViewTypeParser getViewTypeParser() {
+      return null;
+    }
+
     /**
      * Update the {@link View} with new data.
      *

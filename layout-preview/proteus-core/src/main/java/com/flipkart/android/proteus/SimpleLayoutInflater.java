@@ -207,15 +207,15 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
 
         boolean success = parser.handleAttribute(view.getAsView(), attribute, value);
 
-        if (!success) {
-            ViewTypeParser parentParser = context.getParser(getType(parent));
-            if (parentParser != null) {
-                boolean found = parentParser.handleAttribute(view.getAsView(), attribute, value);
-                if (found) {
-                    return true;
-                }
-            }
-        }
+//        if (!success) {
+//            ViewTypeParser parentParser = context.getParser(getType(parent));
+//            if (parentParser != null) {
+//                boolean found = parentParser.handleAttribute(view.getAsView(), attribute, value);
+//                if (found) {
+//                    return true;
+//                }
+//            }
+//        }
 
         return success;
     }
