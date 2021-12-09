@@ -103,7 +103,10 @@ public class RelativeLayoutParser<T extends View> extends ViewTypeParser<T> {
       @Override
       public void setString(T view, String value) {
         if (view instanceof ProteusView) {
-          int id = ((ProteusView) view).getViewManager().getContext().getInflater().getUniqueViewId(value);
+          int id = ((ProteusView) view).getViewManager()
+                  .getContext()
+                  .getInflater()
+                  .getUniqueViewId(ParseHelper.parseViewId(value));
           ParseHelper.addRelativeLayoutRule(view, rule, id);
         }
       }

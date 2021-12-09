@@ -77,6 +77,9 @@ public class ParseHelper {
   private static final String TEXT_ALIGNMENT_VIEW_END = "viewEnd";
 
   private static final String TWEEN_LOCAL_RESOURCE_STR = "@anim/";
+  private static final String ID_STRING_START_PATTERN = "@+id/";
+  private static final String ID_STRING_START_PATTERN1 = "@id/";
+  private static final String ID_STRING_NORMALIZED_PATTERN = ":id/";
 
   private static final Map<Integer, Primitive> sVisibilityMap = new HashMap<>();
   private static final Map<String, Primitive> sGravityMap = new HashMap<>();
@@ -204,6 +207,16 @@ public class ParseHelper {
       number = 0;
     }
     return number;
+  }
+
+  public static String parseViewId(String id) {
+    if (id.startsWith(ID_STRING_START_PATTERN)) {
+      return id.substring(ID_STRING_START_PATTERN.length());
+    }
+    if (id.startsWith(ID_STRING_START_PATTERN1)) {
+      return id.substring(ID_STRING_START_PATTERN1.length());
+    }
+    return id;
   }
 
   public static int parseGravity(String value) {
