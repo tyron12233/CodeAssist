@@ -141,9 +141,8 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             ProteusView inflated = mInflater.getContext()
                     .getInflater()
                     .inflate(layout, new ObjectValue(), parent, 0);
-            palette.getDefaultValues().forEach((key, value) -> {
-                inflated.getViewManager().updateAttribute(key, value.toString());
-            });
+            palette.getDefaultValues().forEach((key, value) ->
+                    inflated.getViewManager().updateAttribute(key, value.toString()));
             return inflated;
         });
         mDragListener.setDelegate(new EditorDragListener.Delegate() {
@@ -170,8 +169,6 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                     ProteusView proteusParent = (ProteusView) parent;
                     ProteusView proteusChild = (ProteusView) view;
                     ProteusHelper.removeChildFromLayout(proteusParent, proteusChild);
-                    Layout layout = proteusParent.getViewManager().getLayout();
-                    return;
                 }
             }
         });
@@ -219,24 +216,28 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     private void setDragListeners(ViewGroup viewGroup) {
         viewGroup.setOnDragListener(mDragListener);
 
-        LayoutTransition transition = new LayoutTransition();
-        transition.addTransitionListener(new LayoutTransition.TransitionListener() {
-            @Override
-            public void startTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
-                transition.getAnimator(transitionType).addListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        mEditorRoot.postDelayed(() -> mEditorRoot.invalidate(), 70);
-                    }
-                });
-            }
+        try {
+            LayoutTransition transition = new LayoutTransition();
+            transition.addTransitionListener(new LayoutTransition.TransitionListener() {
+                @Override
+                public void startTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
+                    transition.getAnimator(transitionType).addListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            mEditorRoot.postDelayed(() -> mEditorRoot.invalidate(), 70);
+                        }
+                    });
+                }
 
-            @Override
-            public void endTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
+                @Override
+                public void endTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
 
-            }
-        });
-        viewGroup.setLayoutTransition(new LayoutTransition());
+                }
+            });
+            viewGroup.setLayoutTransition(new LayoutTransition());
+        } catch (Throwable e) {
+            // ignored, some ViewGroup's may not allow layout transitions
+        }
         for (int i = 0; i < viewGroup.getChildCount(); i++) {
             View child = viewGroup.getChildAt(i);
             if (child instanceof ViewGroup) {
