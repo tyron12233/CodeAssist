@@ -2,12 +2,16 @@ package com.tyron.builder.compiler.manifest;
 
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
+import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
+import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
+import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.project.api.AndroidProject;
 
 import org.apache.commons.io.FileUtils;
+import org.w3c.dom.Document;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,7 +22,6 @@ import java.util.Set;
 
 public class ManifestMergeTask extends Task<AndroidProject> {
 
-    private ManifestMerger2 mMerger;
     private File mOutputFile;
     private File mMainManifest;
     private File[] mLibraryManifestFiles;
@@ -57,6 +60,7 @@ public class ManifestMergeTask extends Task<AndroidProject> {
 
         List<File> manifests = new ArrayList<>();
         List<File> libraries = getProject().getLibraries();
+
         // Filter the libraries and add all that has a AndroidManifest.xml file
         for (File library : libraries) {
             File parent = library.getParentFile();
@@ -100,8 +104,20 @@ public class ManifestMergeTask extends Task<AndroidProject> {
                 throw new CompilationFailedException(report.getReportString());
             }
             if (report.getMergedDocument().isPresent()) {
+                Document document = report.getMergedDocument().get()
+                        .getXml();
+                // inject the tools namespace, some libraries may use the tools attribute but
+                // the main manifest may not have it defined
+                document.getDocumentElement()
+                        .setAttribute(SdkConstants.XMLNS_PREFIX + SdkConstants.TOOLS_PREFIX,
+                                SdkConstants.TOOLS_URI);
+                String contents = XmlPrettyPrinter.prettyPrint(document,
+                        XmlFormatPreferences.defaults(),
+                        XmlFormatStyle.get(document),
+                        null,
+                        false);
                 FileUtils.writeStringToFile(mOutputFile,
-                        report.getMergedDocument().get().prettyPrint(),
+                        contents,
                         Charset.defaultCharset());
             }
         } catch (ManifestMerger2.MergeFailureException e) {
