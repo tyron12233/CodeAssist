@@ -35,6 +35,7 @@ import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
 import com.tyron.layoutpreview.manager.ResourceDrawableManager;
 import com.tyron.layoutpreview.manager.ResourceLayoutManager;
 import com.tyron.layoutpreview.manager.ResourceStringManager;
+import com.tyron.layoutpreview.manager.ResourceStyleManager;
 
 import java.io.File;
 import java.io.StringReader;
@@ -110,6 +111,7 @@ public class PreviewLayoutInflater {
     private final ResourceStringManager mStringManager = new ResourceStringManager();
     private final ResourceDrawableManager mDrawableManager = new ResourceDrawableManager();
     private final ResourceLayoutManager mLayoutManager = new ResourceLayoutManager();
+    private final ResourceStyleManager mStyleManager = new ResourceStyleManager();
 
     private ProteusLayoutInflater.ImageLoader mImageLoader = (view, name, callback) -> {
         if (name.startsWith("@drawable")) {
@@ -137,6 +139,7 @@ public class PreviewLayoutInflater {
                 .setStringManager(mStringManager)
                 .setDrawableManager(mDrawableManager)
                 .setImageLoader(mImageLoader)
+                .setStyleManager(mStyleManager)
                 .setLayoutManager(mLayoutManager)
                 .build();
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
