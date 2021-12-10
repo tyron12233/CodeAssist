@@ -99,12 +99,17 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     private DefaultLintClient mClient;
     private final SharedPreferences mPreferences;
 
-    private final Stack<BlockLine> mBlockStack = new Stack<>();
-    private final List<NavigationItem> mNavigationList = new ArrayList<>();
+    private final Stack<BlockLine> mBlockStack;
+    private final List<NavigationItem> mNavigationList;
+
+    private LexerPosition mPreviousState;
 
     public JavaAnalyzer(CodeEditor editor) {
         mEditor = editor;
         mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
+
+        mBlockStack = new Stack<>();
+        mNavigationList = new ArrayList<>();
     }
 
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
@@ -122,17 +127,17 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         int maxSwitch = 1;
         int currSwitch = 0;
 
-        Object prevState = colors.getExtra();
-        if (prevState instanceof LexerPosition) {
-            mLexer.restore(((LexerPosition) prevState));
-        } else {
-            mLexer.start(content);
-        }
+        mLexer.start(content);
 
         while (delegate.shouldAnalyze()) {
             token = mLexer.getTokenType();
             if (token == null) {
                 break;
+            }
+            if (token == JavaTokenType.WHITE_SPACE) {
+                helper.update(mLexer.getTokenEnd() - mLexer.getTokenStart());
+                mLexer.advance();
+                continue;
             }
             Integer color = ourMap.get(token);
             if (color == null) {
@@ -141,8 +146,8 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     try {
                         Span span =
                                 colors.getSpanMap()
-                                        .get(helper.getLine() - 1)
-                                        .get(helper.getColumn() - 2);
+                                        .get(helper.getLine())
+                                        .get(helper.getColumn() - 1);
                         if (span != null) {
                             if (span.colorId == EditorColorScheme.ANNOTATION) {
                                 color = EditorColorScheme.ANNOTATION;
@@ -180,7 +185,10 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 block.startColumn = helper.getColumn();
                 mBlockStack.push(block);
             }
-            helper.update(mLexer.getTokenEnd() - mLexer.getTokenStart());
+
+            int end = mLexer.getTokenEnd();
+            int start = mLexer.getTokenStart();
+            helper.update(end - start);
             mLexer.advance();
         }
 
@@ -192,7 +200,8 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         colors.determine(helper.getLine());
         colors.setSuppressSwitch(maxSwitch + 10);
         colors.setNavigation(mNavigationList);
-        colors.setExtra(mLexer.getCurrentPosition());
+
+        mPreviousState = mLexer.getCurrentPosition();
 
         analyzeInBackground(() -> false, colors);
     }
