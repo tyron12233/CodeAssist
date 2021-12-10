@@ -25,6 +25,8 @@ public class MockAndroidProject extends MockJavaProject implements AndroidProjec
 
     private ManifestData mManifestData;
 
+    private File mAndroidResourcesDir;
+
     public MockAndroidProject(File rootDir, FileManager fileManager) {
         super(rootDir, fileManager);
     }
@@ -48,8 +50,15 @@ public class MockAndroidProject extends MockJavaProject implements AndroidProjec
 
     }
 
+    public void setAndroidResourcesDirectory(File dir) {
+        mAndroidResourcesDir = dir;
+    }
+
     @Override
     public File getAndroidResourcesDirectory() {
+        if (mAndroidResourcesDir != null) {
+            return mAndroidResourcesDir;
+        }
         return new File(getRootFile(), "app/src/main/res");
     }
 

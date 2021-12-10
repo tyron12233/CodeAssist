@@ -66,7 +66,11 @@ public class Resource extends Value {
     public final int resId;
     private final String name;
 
-    private Resource(int resId, String name) {
+    /**
+     * @param resId only provide this for android resources
+     * @param name the name of the resource, including the prefix
+     */
+    public Resource(int resId, String name) {
         this.resId = resId;
         this.name = name;
     }
