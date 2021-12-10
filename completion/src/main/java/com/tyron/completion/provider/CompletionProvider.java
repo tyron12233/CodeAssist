@@ -55,6 +55,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * Main entry point for getting completions
@@ -151,16 +152,19 @@ public class CompletionProvider {
 		    Log.w(TAG, "Unable to insert semicolon at the end of line, skipping completion", e);
             return new CompletionList();
         }
-        CompletionList list = compileAndComplete(file, contents.toString(), index);
-		list.items.sort(Comparator.comparingInt(it -> it.label.length()));
+        String partial = partialIdentifier(contents.toString(), (int) index);
+        CompletionList list = compileAndComplete(file, contents.toString(), partial, index);
+        list.items = list.items.stream()
+                .filter(item -> StringSearch.matchesPartialName(item.label, partial))
+                .sorted(Comparator.comparingInt(it -> it.label.length()))
+                .collect(Collectors.toList());
 		//addTopLevelSnippets(task, list);
 		return list;
 	}
 
-	public CompletionList compileAndComplete(File file, String contents, long cursor) throws InterruptedException {
+	public CompletionList compileAndComplete(File file, String contents, String partial, long cursor) throws InterruptedException {
 		Instant start = Instant.now();
 		SourceFileObject source = new SourceFileObject(file.toPath(), contents, start);
-		String partial = partialIdentifier(contents, (int) cursor);
 		boolean endsWithParen = endsWithParen(contents, (int) cursor);
 
 		checkInterrupted();
