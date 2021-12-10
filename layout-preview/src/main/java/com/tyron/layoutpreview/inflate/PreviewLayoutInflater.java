@@ -78,20 +78,20 @@ public class PreviewLayoutInflater {
                 // create layout params for this view
                 viewParser.onAfterCreateView(view, parent, -1);
                 layout.extras.entrySet().forEach(entry -> {
-                    String name = entry.getKey();
-                    int id = viewParser.getAttributeId(name);
-                    if (id != -1) {
-                        // try first on the view attribute handers
-                        viewParser.handleAttribute(view.getAsView(), id, entry.getValue());
-                    } else {
-                        // use the parent parser in case this view has layout params attributes
-                        if (parent != null) {
-                            ViewTypeParser<View> parentParser = context.getParser(parent.getClass().getName());
-                            if (parentParser != null) {
-                                parentParser.handleAttribute(view.getAsView(), parentParser.getAttributeId(name), entry.getValue());
-                            }
-                        }
-                    }
+                   int id = viewParser.getAttributeId(entry.getKey());
+                   if (id != -1) {
+                       viewParser.handleAttribute(view.getAsView(), id, entry.getValue());
+                   } else {
+                       if (parent != null) {
+                           //noinspection unchecked
+                           ViewTypeParser<View> parser = ((ProteusView) parent)
+                                   .getViewManager().getViewTypeParser();
+                           id = parser.getAttributeId(entry.getKey());
+                           if (id != -1) {
+                               parser.handleAttribute(view.getAsView(), id, entry.getValue());
+                           }
+                       }
+                   }
                 });
 
                 if (children != null) {
