@@ -8,9 +8,8 @@ import com.google.common.collect.Multimap;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.resource.AAPT2Compiler;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.log.ILogger;
 import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.common.util.Cache;
 
@@ -58,9 +57,6 @@ public class MergeSymbolsTask extends Task<AndroidProject> {
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-
-        long start = System.currentTimeMillis();
-
         Cache<Void, Void> cache = getProject().getUserData(CACHE_KEY);
 
         SymbolLoader fullSymbolValues = null;
@@ -135,6 +131,7 @@ public class MergeSymbolsTask extends Task<AndroidProject> {
 
         for (File file : RFiles) {
             cache.load(file.toPath(), null, null);
+            getProject().addJavaFile(file);
         }
     }
 }
