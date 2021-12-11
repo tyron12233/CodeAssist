@@ -30,7 +30,7 @@ public class CreateLayoutAction extends FileAction {
 
     @Override
     public void addMenu(ActionContext context) {
-        context.getMenu().addSubMenu("New")
+        context.addSubMenu("new", context.getFragment().getString(R.string.menu_new))
                 .add("Create layout")
                 .setOnMenuItemClickListener(item -> {
                     CreateClassDialogFragment dialogFragment =

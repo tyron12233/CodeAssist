@@ -23,7 +23,7 @@ public class ActionContext {
     private final Menu mMenu;
 
     private final Map<String, Integer> mIds = new HashMap<>();
-    private int mIdCount;
+    private int mIdCount = 40;
 
     public ActionContext(TreeFileManagerFragment mFragment, TreeView<TreeFile> mTreeView, TreeNode<TreeFile> mCurrentNode, Menu mMenu) {
         this.mFragment = mFragment;
@@ -74,7 +74,7 @@ public class ActionContext {
         int id = getMenuId(name);
         MenuItem item = getMenu().findItem(id);
         if (item == null || item.getSubMenu() == null) {
-            return getMenu().addSubMenu(id, Menu.NONE, Menu.NONE, title);
+            return getMenu().addSubMenu(Menu.NONE, id, Menu.NONE, title);
         } else {
             return item.getSubMenu();
         }
