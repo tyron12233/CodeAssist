@@ -2,12 +2,13 @@ package com.tyron.builder.compiler.manifest;
 
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
+import com.tyron.builder.compiler.manifest.ManifestMerger2.SystemProperty;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.log.ILogger;
 import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.AndroidProject;
 
 import org.apache.commons.io.FileUtils;
@@ -18,7 +19,6 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 public class ManifestMergeTask extends Task<AndroidProject> {
 
@@ -90,12 +90,22 @@ public class ManifestMergeTask extends Task<AndroidProject> {
             return;
         }
 
+        ProjectSettings settings = getProject().getSettings();
+
         ManifestMerger2.Invoker<?> invoker = ManifestMerger2.newMerger(mMainManifest,
-                getLogger(), ManifestMerger2.MergeType.APPLICATION)
-                .addLibraryManifests(mLibraryManifestFiles);
-        invoker.setOverride(ManifestMerger2.SystemProperty.PACKAGE, mPackageName);
-        invoker.setOverride(ManifestMerger2.SystemProperty.VERSION_CODE, "1");
-        invoker.setOverride(ManifestMerger2.SystemProperty.VERSION_NAME, "1.0");
+                getLogger(), ManifestMerger2.MergeType.APPLICATION);
+        invoker.setOverride(SystemProperty.PACKAGE, mPackageName);
+        invoker.setOverride(SystemProperty.MIN_SDK_VERSION,
+                String.valueOf(settings.getInt(ProjectSettings.MIN_SDK_VERSION, 21)));
+        invoker.setOverride(SystemProperty.TARGET_SDK_VERSION,
+                String.valueOf(settings.getInt(ProjectSettings.TARGET_SDK_VERSION, 30)));
+        invoker.setOverride(SystemProperty.VERSION_CODE,
+                String.valueOf(settings.getInt(ProjectSettings.VERSION_CODE, 1)));
+        invoker.setOverride(SystemProperty.VERSION_NAME,
+                settings.getString(ProjectSettings.VERSION_NAME, "1.0"));
+        if (mLibraryManifestFiles != null) {
+            invoker.addLibraryManifests(mLibraryManifestFiles);
+        }
         invoker.setVerbose(false);
         try {
             MergingReport report = invoker.merge();
