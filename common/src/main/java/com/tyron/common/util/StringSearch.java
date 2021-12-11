@@ -212,7 +212,11 @@ public class StringSearch {
             if (candidate.charAt(i) != partialName.charAt(i)) return false;
         }
         return true;*/
-        return similarity(candidate.toString(), partialName.toString()) > 0.5;
+        if (candidate.length() > partialName.length()) {
+            candidate = candidate.subSequence(0, partialName.length());
+        }
+        double similarity = similarity(candidate.toString(), partialName.toString());
+        return similarity > 0.5;
     }
     
     public static String packageName(File file) {
@@ -256,9 +260,6 @@ public class StringSearch {
     }
 
     public static double similarity(String s1, String s2) {
-        if (s2.length() < s1.length()) {
-            s1 = s1.substring(0, s2.length());
-        }
         String longer = s1, shorter = s2;
         if (s1.length() < s2.length()) { // longer should always have greater length
             longer = s2;

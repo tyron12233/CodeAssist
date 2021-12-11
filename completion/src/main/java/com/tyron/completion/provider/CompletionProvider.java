@@ -57,6 +57,8 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import me.xdrop.fuzzywuzzy.FuzzySearch;
+
 /**
  * Main entry point for getting completions
  */
@@ -155,14 +157,20 @@ public class CompletionProvider {
         String partial = partialIdentifier(contents.toString(), (int) index);
         CompletionList list = compileAndComplete(file, contents.toString(), partial, index);
         list.items = list.items.stream()
-                .filter(item -> StringSearch.matchesPartialName(item.label, partial))
-                .sorted(Comparator.comparingDouble(it -> StringSearch.similarity(partial, it.label)))
+                .sorted(Comparator.<CompletionItem>comparingInt(it -> {
+                    String label = it.label;
+                    if (label.contains("(")) {
+                        label = label.substring(0, label.indexOf('('));
+                    }
+                    return FuzzySearch.ratio(label, partial);
+                }).reversed())
                 .collect(Collectors.toList());
-		//addTopLevelSnippets(task, list);
 		return list;
 	}
 
-	public CompletionList compileAndComplete(File file, String contents, String partial, long cursor) throws InterruptedException {
+	public CompletionList compileAndComplete(File file, String contents,
+                                             String partial,
+                                             long cursor) throws InterruptedException {
 		Instant start = Instant.now();
 		SourceFileObject source = new SourceFileObject(file.toPath(), contents, start);
 		boolean endsWithParen = endsWithParen(contents, (int) cursor);
@@ -301,7 +309,10 @@ public class CompletionProvider {
 
 		return false;
 	}
-    private CompletionList completeIdentifier(CompileTask task, TreePath path, final String partial, boolean endsWithParen) throws InterruptedException {
+    private CompletionList completeIdentifier(CompileTask task,
+                                              TreePath path,
+                                              final String partial,
+                                              boolean endsWithParen) throws InterruptedException {
 	    checkInterrupted();
 
         CompletionList list = new CompletionList();
@@ -314,7 +325,10 @@ public class CompletionProvider {
         return list;
     }
 
-    private CompletionList completeMemberSelect(CompileTask task, TreePath path, String partial, boolean endsWithParen) throws InterruptedException {
+    private CompletionList completeMemberSelect(CompileTask task,
+                                                TreePath path,
+                                                String partial,
+                                                boolean endsWithParen) throws InterruptedException {
 	    checkInterrupted();
 
         MemberSelectTree select = (MemberSelectTree) path.getLeaf();
@@ -413,14 +427,23 @@ public class CompletionProvider {
     }
 
 
-    private List<CompletionItem> completeUsingScope(CompileTask task, TreePath path, final String partial, boolean endsWithParen) throws InterruptedException {
+    private List<CompletionItem> completeUsingScope(CompileTask task,
+                                                    TreePath path,
+                                                    final String partial,
+                                                    boolean endsWithParen) throws InterruptedException {
 	    checkInterrupted();
 
         Trees trees = Trees.instance(task.task);
         List<CompletionItem> list = new ArrayList<>();
         Scope scope = trees.getScope(path);
 
-        Predicate<CharSequence> filter = p1 -> StringSearch.matchesPartialName(String.valueOf(p1), partial);
+        Predicate<CharSequence> filter = p1 -> {
+            String label = p1.toString();
+            if (label.contains("(")) {
+                label = label.substring(0, label.indexOf('('));
+            }
+            return FuzzySearch.partialRatio(label, partial) > 90;
+        };
 
         if (path.getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
             list.addAll(addLambda(task, path.getParentPath(), partial));
@@ -777,7 +800,7 @@ public class CompletionProvider {
             uniques.add(className);
         }
         for (String className : compiler.publicTopLevelTypes()) {
-            if (!StringSearch.matchesPartialName(simpleName(className), partial)) continue;
+            if (FuzzySearch.partialRatio(className, partial) > 90) continue;
             if (uniques.contains(className)) continue;
             if (list.items.size() > MAX_COMPLETION_ITEMS) {
                 list.isIncomplete = true;
