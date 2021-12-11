@@ -86,17 +86,33 @@ public class ProjectSettings implements SharedPreferences {
 
     @Override
     public int getInt(String s, int i) {
-        return (int) mConfigMap.getOrDefault(s, i);
+        Object o = mConfigMap.get(s);
+        if (o == null) {
+            return i;
+        }
+        String stringValue = String.valueOf(o);
+        if (stringValue.contains(".")) {
+            stringValue = stringValue.substring(0, stringValue.indexOf("."));
+        }
+        return Integer.parseInt(stringValue);
     }
 
     @Override
     public long getLong(String s, long l) {
-        return (long) mConfigMap.getOrDefault(s, l);
+        Object o = mConfigMap.get(s);
+        if (o == null) {
+            return l;
+        }
+        return Long.parseLong(String.valueOf(o));
     }
 
     @Override
-    public float getFloat(String s, float v) {
-        return (float) mConfigMap.getOrDefault(s, v);
+    public float getFloat(String s, float f) {
+        Object o = mConfigMap.get(s);
+        if (o == null) {
+            return f;
+        }
+        return Float.parseFloat(String.valueOf(o));
     }
 
     @Override
