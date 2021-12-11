@@ -31,17 +31,17 @@ public class MainViewModel extends ViewModel {
      */
     private MutableLiveData<String> mCurrentState;
 
-    private MutableLiveData<String> mToolbarTitle = new MutableLiveData<>();
+    private final MutableLiveData<String> mToolbarTitle = new MutableLiveData<>();
 
     /**
      * The current position of the CodeEditor
      */
     private final MutableLiveData<Integer> currentPosition = new MutableLiveData<>(0);
 
-    private MutableLiveData<Integer> mBottomSheetState =
+    private final MutableLiveData<Integer> mBottomSheetState =
             new MutableLiveData<>(BottomSheetBehavior.STATE_COLLAPSED);
 
-    private MutableLiveData<Boolean> mDrawerState =
+    private final MutableLiveData<Boolean> mDrawerState =
             new MutableLiveData<>(false);
 
     public MutableLiveData<String> getCurrentState() {
@@ -110,7 +110,8 @@ public class MainViewModel extends ViewModel {
     }
 
     public void updateCurrentPosition(int pos) {
-        if (pos == currentPosition.getValue()) {
+        Integer value = currentPosition.getValue();
+        if (value != null && value.equals(pos)) {
             return;
         }
         currentPosition.setValue(pos);
@@ -153,12 +154,17 @@ public class MainViewModel extends ViewModel {
             return false;
         }
 
-        int index = getFiles().getValue().indexOf(file);
+        setDrawerState(false);
+
+        int index = -1;
+        List<File> value = getFiles().getValue();
+        if (value != null) {
+            index = value.indexOf(file);
+        }
         if (index >= 0) {
             updateCurrentPosition(index);
             return true;
         }
-        setDrawerState(true);
         addFile(file);
         return true;
     }
