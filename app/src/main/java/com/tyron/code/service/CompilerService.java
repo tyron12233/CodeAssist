@@ -131,7 +131,7 @@ public class CompilerService extends Service {
 
     private String createNotificationChannel() {
         NotificationChannelCompat channel = new NotificationChannelCompat.Builder("Compiler",
-                NotificationManagerCompat.IMPORTANCE_NONE)
+                NotificationManagerCompat.IMPORTANCE_HIGH)
                 .setName("Compiler service")
                 .setDescription("Foreground notification for the compiler")
                 .build();
