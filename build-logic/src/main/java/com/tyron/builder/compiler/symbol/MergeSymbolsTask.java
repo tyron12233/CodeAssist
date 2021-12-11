@@ -2,7 +2,6 @@ package com.tyron.builder.compiler.symbol;
 
 import android.util.Log;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.tyron.builder.compiler.BuildType;
@@ -65,7 +64,10 @@ public class MergeSymbolsTask extends Task<AndroidProject> {
         List<File> RFiles = new ArrayList<>();
         for (File library : getProject().getLibraries()) {
             File parent = library.getParentFile();
-            Preconditions.checkNotNull(parent, "Unable to access parent directory for " + library);
+            if (parent == null) {
+                getLogger().error("Unable to access parent directory for " + library);
+                continue;
+            }
 
             String packageName = AAPT2Compiler.getPackageName(new File(parent, "AndroidManifest.xml"));
             if (packageName == null) {
@@ -100,7 +102,10 @@ public class MergeSymbolsTask extends Task<AndroidProject> {
             }
 
             File parent = rFile.getParentFile();
-            Preconditions.checkNotNull(parent, "Unable to access parent directory for " + rFile);
+            if (parent == null) {
+                getLogger().error("Unable to access parent directory for " + rFile);
+                continue;
+            }
 
             String packageName = AAPT2Compiler.getPackageName(new File(parent, "AndroidManifest.xml"));
             if (packageName == null) {
