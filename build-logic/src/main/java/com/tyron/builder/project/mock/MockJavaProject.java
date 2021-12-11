@@ -6,6 +6,7 @@ import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.JavaProject;
 import com.tyron.builder.project.api.Module;
+import com.tyron.builder.project.impl.ProjectImpl;
 import com.tyron.common.util.StringSearch;
 
 import org.jetbrains.annotations.NotNull;
@@ -25,7 +26,7 @@ import java.util.Map;
  * Used for testing, java files can be added manually and
  * files are specified manually
  */
-public class MockJavaProject implements JavaProject {
+public class MockJavaProject extends ProjectImpl implements JavaProject {
 
     private final KeyFMap mDataMap = KeyFMap.EMPTY_MAP;
     private final Map<String, File> mJavaFiles = new HashMap<>();
@@ -35,6 +36,7 @@ public class MockJavaProject implements JavaProject {
     private File mLambdaStubsJarFile;
     private File mBootstrapJarFile;
     public MockJavaProject(File rootDir, FileManager fileManager) {
+        super(rootDir);
         mRootDir = rootDir;
         mFileManager = fileManager;
     }
