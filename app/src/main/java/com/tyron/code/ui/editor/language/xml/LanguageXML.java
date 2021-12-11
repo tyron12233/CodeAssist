@@ -51,16 +51,23 @@ public class LanguageXML implements EditorLanguage {
 	public CharSequence format(CharSequence text) {
 		XmlFormatPreferences preferences = XmlFormatPreferences.defaults();
 		File file = mEditor.getCurrentFile();
+		CharSequence formatted = null;
 		if ("AndroidManifest.xml".equals(file.getName())) {
-			return XmlPrettyPrinter.prettyPrint(String.valueOf(text), preferences, XmlFormatStyle.MANIFEST, "\n");
+			formatted = XmlPrettyPrinter.prettyPrint(String.valueOf(text),
+					preferences, XmlFormatStyle.MANIFEST, "\n");
 		} else {
 			if (ProjectUtils.isLayoutXMLFile(file)) {
-				return XmlPrettyPrinter.prettyPrint(String.valueOf(text), preferences, XmlFormatStyle.LAYOUT, "\n");
+				formatted = XmlPrettyPrinter.prettyPrint(String.valueOf(text),
+						preferences, XmlFormatStyle.LAYOUT, "\n");
 			} else if (ProjectUtils.isResourceXMLFile(file)) {
-				return XmlPrettyPrinter.prettyPrint(String.valueOf(text), preferences, XmlFormatStyle.RESOURCE, "\n");
+				formatted = XmlPrettyPrinter.prettyPrint(String.valueOf(text),
+						preferences, XmlFormatStyle.RESOURCE, "\n");
 			}
 		}
-		return text;
+		if (formatted == null) {
+			formatted = text;
+		}
+		return formatted;
 	}
 
 	public View showPreview(Context context, ViewGroup container) throws IOException, ConvertException {
