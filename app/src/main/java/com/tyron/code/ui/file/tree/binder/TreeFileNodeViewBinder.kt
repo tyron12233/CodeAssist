@@ -35,10 +35,8 @@ class TreeFileNodeViewBinder(
 
         viewHolder.dirName.text = file.name
 
-        if (file.isDirectory) {
-            viewHolder.icon.setImageResource(R.drawable.round_folder_24)
-        } else {
-            viewHolder.icon.setImageResource(R.drawable.round_insert_drive_file_24)
+        with(viewHolder.icon) {
+            setImageDrawable(treeNode.content.getIcon(context))
         }
     }
 
