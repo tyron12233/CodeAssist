@@ -1,16 +1,13 @@
 package com.tyron.builder.compiler.symbol;
 
 
-import com.google.common.base.Charsets;
 import com.google.common.base.Splitter;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Table;
-import com.google.common.io.Files;
 
 import org.apache.commons.io.FileUtils;
 
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
@@ -68,9 +65,7 @@ public class SymbolWriter {
         }
         file = new File(file, "R.java");
 
-        StringWriter writer = null;
-        try {
-            writer = new StringWriter();
+        try (StringWriter writer = new StringWriter()) {
 
             writer.write("/* AUTO-GENERATED FILE. DO NOT MODIFY. \n");
             writer.write(" *\n");
@@ -134,14 +129,6 @@ public class SymbolWriter {
                 if (!oldContents.equals(writer.toString())) {
                     FileUtils.writeStringToFile(file, writer.toString(), Charset.defaultCharset());
                 }
-            }
-        } finally {
-            try {
-                if (writer != null) {
-                    writer.close();
-                }
-            } catch (IOException ignore) {
-
             }
         }
     }
