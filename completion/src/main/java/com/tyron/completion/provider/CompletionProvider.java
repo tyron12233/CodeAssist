@@ -800,7 +800,7 @@ public class CompletionProvider {
             uniques.add(className);
         }
         for (String className : compiler.publicTopLevelTypes()) {
-            if (FuzzySearch.partialRatio(className, partial) > 90) continue;
+            if (FuzzySearch.partialRatio(className, partial) < 90) continue;
             if (uniques.contains(className)) continue;
             if (list.items.size() > MAX_COMPLETION_ITEMS) {
                 list.isIncomplete = true;
