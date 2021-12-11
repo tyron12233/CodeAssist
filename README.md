@@ -1,4 +1,6 @@
 # CodeAssist
+[![stability-alpha](https://img.shields.io/badge/stabiliy-alpha-f4d03f.svg)](https://github.com/mkenney/software-guides/blob/master/STABILITY-BADGES.md#alpha)
+[![Chat](https://img.shields.io/badge/chat-on%20discord-7289a)](https://discord.gg/pffnyE6prs)
 A Code Completion engine based on javac APIs.
 
 ## Note
