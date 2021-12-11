@@ -56,7 +56,7 @@ public class JavaD8Task extends Task<JavaProject> {
     public void prepare(BuildType type) throws IOException {
         mBuildType = type;
         diagnosticsHandler = new DexDiagnosticHandler(getLogger());
-        mDexCache = getProject().getUserData(IncrementalD8Task.CACHE_KEY);
+        mDexCache = getProject().getCache(IncrementalD8Task.CACHE_KEY, new Cache<>());
 
         File output = new File(getProject().getBuildDirectory(), "intermediate/classes");
         if (!output.exists() && !output.mkdirs()) {
