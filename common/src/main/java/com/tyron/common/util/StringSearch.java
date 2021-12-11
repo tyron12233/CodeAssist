@@ -212,7 +212,7 @@ public class StringSearch {
             if (candidate.charAt(i) != partialName.charAt(i)) return false;
         }
         return true;*/
-        return similarity(candidate, partialName) > 0.5;
+        return similarity(candidate.toString(), partialName.toString()) > 0.5;
     }
     
     public static String packageName(File file) {
