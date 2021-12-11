@@ -2,6 +2,7 @@ package com.tyron.resolver;
 
 import android.util.Log;
 
+import com.tyron.builder.log.ILogger;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.resolver.model.Dependency;
 
@@ -24,6 +25,7 @@ public class DependencyDownloader {
     private File mOutputDir;
     private Set<Dependency> mDownloadedLibraries;
     private Listener mListener;
+    private ILogger mLogger;
 
     public DependencyDownloader(Set <Dependency> downloaded, File file) {
         mOutputDir = file;
@@ -34,6 +36,9 @@ public class DependencyDownloader {
         mListener = listener;
     }
 
+    public void setLogger(ILogger logger) {
+        mLogger = logger;
+    }
 
     public void download(Set<Dependency> libraries) throws IOException {
         if (!mOutputDir.exists()) {
@@ -77,11 +82,12 @@ public class DependencyDownloader {
         }
 
         if (is == null) {
-            Log.d(TAG, "Failed to find download link for library: " + library);
+            if (mLogger != null) {
+                mLogger.error("Failed to find download link for library " + library);
+            }
             return false;
         }
 
-        Log.d(TAG, "Downloading library: " + library.getFileName());
         saveToCache(library, is, isAar);
 
         is.close();
@@ -181,7 +187,9 @@ public class DependencyDownloader {
         }
 
         if (is == null) {
-            Log.d(TAG, "Failed to find download link for library: " + library);
+            if (mLogger != null) {
+                mLogger.error("Failed to find download link for library " + library);
+            }
             return;
         }
 
@@ -241,7 +249,6 @@ public class DependencyDownloader {
             }
         }
 
-        Log.d(TAG, "Saving library " + library + " to cache");
         FileUtils.copyFile(library, libraryFile);
     }
 

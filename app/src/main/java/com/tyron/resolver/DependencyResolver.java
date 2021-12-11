@@ -7,6 +7,7 @@ import androidx.annotation.VisibleForTesting;
 import com.google.common.base.Charsets;
 import com.google.common.io.CharStreams;
 import com.google.common.io.Closeables;
+import com.tyron.builder.log.ILogger;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.parser.POMParser;
@@ -42,6 +43,7 @@ public class DependencyResolver {
     private File mPomCacheDir;
     private Listener mListener;
     private final Set<Dependency> library;
+    private ILogger mLogger;
 
     public DependencyResolver(Dependency library) {
         this(Collections.singleton(library));
@@ -53,6 +55,10 @@ public class DependencyResolver {
 
     public void setListener(Listener listener) {
         mListener = listener;
+    }
+
+    public void setLogger(ILogger logger) {
+        mLogger = logger;
     }
 
     /**
@@ -131,7 +137,9 @@ public class DependencyResolver {
                     resolveDependency(dep);
                 }
             } catch (IOException | XmlPullParserException e) {
-                Log.d(TAG, "Failed to resolve " + parent + ", " + e.getMessage());
+                if (mLogger != null) {
+                    mLogger.error("Failed to resolve " + parent + ", " + e.getMessage());
+                }
             }
 
             mResolvedLibraries.put(parent, parent.getVersion());
@@ -141,6 +149,9 @@ public class DependencyResolver {
         InputStream is = getInputStream(parent);
 
         if (is == null) {
+            if (mLogger != null) {
+                mLogger.warning("Unable to get pom file for dependency " + parent);
+            }
             return;
         }
 
@@ -164,14 +175,18 @@ public class DependencyResolver {
                 resolveDependency(dep);
             }
         } catch (IOException | XmlPullParserException e) {
-            Log.d(TAG, "Failed to resolve " + parent + ", " + e.getMessage());
+            if (mLogger != null) {
+                mLogger.error("Failed to resolve " + parent + ", " + e.getMessage());
+            }
         }
 
         mResolvedLibraries.put(parent, parent.getVersion());
         try {
             saveToCache(contents, parent);
         } catch (IOException e) {
-            Log.w(TAG, "Unable to save dependency to cache: ", e);
+            if (mLogger != null) {
+                mLogger.warning("Unable to save dependency to cache: " + e.getMessage());
+            }
         }
 
         Log.d(TAG, "Resolved " + parent + " took: " + (System.currentTimeMillis() - start));
@@ -293,7 +308,7 @@ public class DependencyResolver {
                     return is;
                 }
             } catch (IOException ignored) {
-                Exception e = ignored;
+
             }
         }
         return null;

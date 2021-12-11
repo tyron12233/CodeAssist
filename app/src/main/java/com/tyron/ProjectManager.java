@@ -136,11 +136,13 @@ public class ProjectManager {
         DependencyResolver resolver = new DependencyResolver(dependencies);
         resolver.addResolvedLibraries(libs);
         resolver.setListener(d -> mListener.onTaskStarted("Resolving " + d.toString()));
+        resolver.setLogger(logger);
         dependencies = resolver.resolveMain();
 
         mListener.onTaskStarted("Downloading dependencies");
         DependencyDownloader downloader = new DependencyDownloader(libs, project.getLibraryDirectory());
         downloader.setListener(d -> mListener.onTaskStarted("Downloading " + d.toString()));
+        downloader.setLogger(logger);
         try {
             downloader.cache(dependencies);
         } catch (IOException e) {
