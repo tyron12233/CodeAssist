@@ -156,7 +156,7 @@ public class CompletionProvider {
         CompletionList list = compileAndComplete(file, contents.toString(), partial, index);
         list.items = list.items.stream()
                 .filter(item -> StringSearch.matchesPartialName(item.label, partial))
-                .sorted(Comparator.comparingInt(it -> it.label.length()))
+                .sorted(Comparator.comparingDouble(it -> StringSeach.similarity(partial, it.label)))
                 .collect(Collectors.toList());
 		//addTopLevelSnippets(task, list);
 		return list;
