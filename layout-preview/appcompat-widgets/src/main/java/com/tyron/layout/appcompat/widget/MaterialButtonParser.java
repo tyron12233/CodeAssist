@@ -30,7 +30,11 @@ public class MaterialButtonParser<V extends View> extends ViewTypeParser<V> {
 
     @NonNull
     @Override
-    public ProteusView createView(@NonNull ProteusContext context, @NonNull Layout layout, @NonNull ObjectValue data, @Nullable ViewGroup parent, int dataIndex) {
+    public ProteusView createView(@NonNull ProteusContext context,
+                                  @NonNull Layout layout,
+                                  @NonNull ObjectValue data,
+                                  @Nullable ViewGroup parent,
+                                  int dataIndex) {
         return new ProteusMaterialButton(context);
     }
 
