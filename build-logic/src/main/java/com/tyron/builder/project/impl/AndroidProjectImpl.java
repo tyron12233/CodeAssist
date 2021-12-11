@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
+import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.common.util.StringSearch;
 
@@ -118,12 +119,12 @@ public class AndroidProjectImpl extends JavaProjectImpl implements AndroidProjec
 
     @Override
     public int getTargetSdk() {
-        return mManifestData.getTargetSdkVersion();
+        return getSettings().getInt(ProjectSettings.TARGET_SDK_VERSION, 30);
     }
 
     @Override
     public int getMinSdk() {
-        return mManifestData.getMinSdkVersion();
+        return getSettings().getInt(ProjectSettings.MIN_SDK_VERSION, 21);
     }
 
     @NonNull

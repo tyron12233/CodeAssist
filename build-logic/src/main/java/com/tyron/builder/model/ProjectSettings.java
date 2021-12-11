@@ -28,6 +28,10 @@ public class ProjectSettings implements SharedPreferences {
     public static final String LIBRARY_LIST = "libraries";
     public static final String SAVED_EDITOR_FILES = "editor_opened_files";
     public static final String USE_R8 = "useR8";
+    public static final String TARGET_SDK_VERSION = "targetSdkVersion";
+    public static final String MIN_SDK_VERSION = "minSdkVersion";
+    public static final String VERSION_NAME = "versionName";
+    public static final String VERSION_CODE = "versionCode";
 
     private final File mConfigFile;
     private final Map<String, Object> mConfigMap;
@@ -51,6 +55,10 @@ public class ProjectSettings implements SharedPreferences {
     private Map<String, Object> getDefaults() {
         Map<String, Object> map = new HashMap<>();
         map.put(USE_R8, false);
+        map.put(MIN_SDK_VERSION, 21);
+        map.put(TARGET_SDK_VERSION, 30);
+        map.put(VERSION_NAME, "1.0");
+        map.put(VERSION_CODE, 1);
         return map;
     }
 
