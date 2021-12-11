@@ -484,7 +484,7 @@ public class CodeEditorFragment extends Fragment
         File currentFile = mEditor.getCurrentFile();
         if (ProjectUtils.isLayoutXMLFile(currentFile)) {
             getChildFragmentManager().beginTransaction()
-                    .add(R.id.fragment_container, LayoutEditorFragment.newInstance(currentFile))
+                    .add(R.id.layout_editor_container, LayoutEditorFragment.newInstance(currentFile))
                     .addToBackStack(null)
                     .commit();
             mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HIDDEN);
