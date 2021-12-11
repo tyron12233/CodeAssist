@@ -130,9 +130,9 @@ public class MainFragment extends Fragment {
             mToolbar.setNavigationOnClickListener(v -> {
                 if (mRoot instanceof DrawerLayout) {
                     if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-                        drawerLayout.closeDrawer(GravityCompat.START, true);
+                        mMainViewModel.setDrawerState(false);
                     } else if (!drawerLayout.isDrawerOpen(GravityCompat.START)) {
-                        drawerLayout.openDrawer(GravityCompat.START);
+                        mMainViewModel.setDrawerState(true);
                     }
                 }
             });
@@ -167,10 +167,9 @@ public class MainFragment extends Fragment {
 
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_refresh) {
-                if (mServiceConnection.isCompiling()) {
+                if (!mServiceConnection.isCompiling()) {
                     Project project = ProjectManager.getInstance()
                             .getCurrentProject();
-
                     if (project != null) {
                         project.clear();
                         openProject(project);
@@ -281,7 +280,7 @@ public class MainFragment extends Fragment {
         mMainViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
 
-        mFileViewModel.setRootFile(project.getRootFile());
+        mFileViewModel.refreshNode(project.getRootFile());
 
         Intent intent = new Intent(requireContext(), IndexService.class);
         requireActivity().startService(intent);
