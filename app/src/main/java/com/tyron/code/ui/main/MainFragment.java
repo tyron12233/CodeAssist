@@ -17,7 +17,6 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
-import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.google.gson.Gson;
@@ -32,7 +31,6 @@ import com.tyron.code.service.CompilerService;
 import com.tyron.code.service.CompilerServiceConnection;
 import com.tyron.code.service.IndexService;
 import com.tyron.code.service.IndexServiceConnection;
-import com.tyron.code.ui.editor.CodeEditorFragment;
 import com.tyron.code.ui.editor.EditorContainerFragment;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.settings.SettingsActivity;
@@ -138,27 +136,15 @@ public class MainFragment extends Fragment {
             });
             drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
                 @Override
-                public void onDrawerSlide(@NonNull View p1, float p) {
-                    File currentFile = mMainViewModel.getCurrentFile();
-                    if (currentFile != null) {
-                        Fragment fragment = getChildFragmentManager()
-                                .findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
-                        if (fragment instanceof CodeEditorFragment) {
-                            ((CodeEditorFragment) fragment).hideEditorWindows();
-                        }
-                    }
-                }
-
-                @Override
                 public void onDrawerOpened(@NonNull View p1) {
+                    mMainViewModel.setDrawerState(true);
                     onBackPressedCallback.setEnabled(true);
                 }
 
                 @Override
                 public void onDrawerClosed(@NonNull View p1) {
-                    //noinspection ConstantConditions
-                    onBackPressedCallback.setEnabled(mMainViewModel.getBottomSheetState().getValue() ==
-                            BottomSheetBehavior.STATE_EXPANDED);
+                    mMainViewModel.setDrawerState(false);
+                   onBackPressedCallback.setEnabled(false);
                 }
             });
         } else {

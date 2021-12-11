@@ -48,6 +48,8 @@ public class EditorContainerFragment extends Fragment {
         super.onCreate(savedInstanceState);
 
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
+        requireActivity().getOnBackPressedDispatcher().addCallback(this,
+                mOnBackPressedCallback);
     }
 
     @Override
@@ -127,11 +129,7 @@ public class EditorContainerFragment extends Fragment {
         mBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
             @Override
             public void onStateChanged(@NonNull View p1, int state) {
-                if (state == BottomSheetBehavior.STATE_COLLAPSED) {
-                    mOnBackPressedCallback.setEnabled(false);
-                } else if (state == BottomSheetBehavior.STATE_EXPANDED) {
-                    mOnBackPressedCallback.setEnabled(true);
-                }
+                mMainViewModel.setBottomSheetState(state);
             }
 
             @Override
@@ -162,7 +160,10 @@ public class EditorContainerFragment extends Fragment {
                 mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_COLLAPSED);
             }
         });
-        mMainViewModel.getBottomSheetState().observe(getViewLifecycleOwner(), mBehavior::setState);
+        mMainViewModel.getBottomSheetState().observe(getViewLifecycleOwner(), state -> {
+            mBehavior.setState(state);
+            mOnBackPressedCallback.setEnabled(state == BottomSheetBehavior.STATE_EXPANDED);
+        });
 
         getParentFragmentManager().setFragmentResultListener(SAVE_ALL_KEY,
                 getViewLifecycleOwner(), (requestKey, result) -> saveAll());
