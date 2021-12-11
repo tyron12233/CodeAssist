@@ -10,7 +10,7 @@ android {
         minSdkVersion 26
         targetSdkVersion 31
         versionCode 1
-        versionName "1.0"
+        versionName "0.1 ALPHA"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -42,6 +42,8 @@ dependencies {
     implementation project(path: ':layout-preview')
     implementation project(path: ':kotlin-completion')
     implementation project(path: ':code-editor')
+    implementation project(path: ':jaxp:jaxp-internal')
+    implementation project(path: ':jaxp:xml')
 
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:1.1.5")

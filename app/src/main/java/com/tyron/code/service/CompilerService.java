@@ -178,40 +178,43 @@ public class CompilerService extends Service {
                 success = false;
             }
 
+            if (success) {
+                mMainHandler.post(() -> onResultListener.onComplete(true, "Success"));
+            }
+
             projectBuilder.setTaskListener(this::updateNotification);
 
             String projectName = "Project";
             if (!success) {
                 updateNotification(projectName, "Compilation failed", -1);
             } else {
-                if (!shouldShowNotification) {
-                    return;
-                }
-                mMainHandler.post(() -> {
-                    NotificationCompat.Builder builder =
-                            new NotificationCompat.Builder(this, "Compiler")
-                                    .setSmallIcon(R.drawable.ic_launcher)
-                                    .setContentTitle(projectName)
-                                    .setContentText("Compilation success");
+                if (shouldShowNotification) {
+                    mMainHandler.post(() -> {
+                        NotificationCompat.Builder builder =
+                                new NotificationCompat.Builder(this, "Compiler")
+                                        .setSmallIcon(R.drawable.ic_launcher)
+                                        .setContentTitle(projectName)
+                                        .setContentText("Compilation success");
 
-                    if (type != BuildType.AAB) {
-                        Intent intent = new Intent(Intent.ACTION_VIEW);
-                        intent.setDataAndType(ApkInstaller.uriFromFile(this,
-                                new File(mProject.getBuildDirectory(), "bin/signed.apk")),
-                                "application/vnd.android.package-archive");
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        PendingIntent pending = PendingIntent.getActivity(this,
-                                0,
-                                intent,
-                                PendingIntent.FLAG_IMMUTABLE);
-                        builder.addAction(new NotificationCompat.Action(0,
-                                "INSTALL",
-                                pending));
-                    }
-                    NotificationManagerCompat.from(this)
-                            .notify(201, builder.build());
-                });
+                        if (type != BuildType.AAB) {
+                            Intent intent = new Intent(Intent.ACTION_VIEW);
+                            intent.setDataAndType(ApkInstaller.uriFromFile(this,
+                                    new File(mProject.getBuildDirectory(), "bin/signed.apk")),
+                                    "application/vnd.android.package-archive");
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                            PendingIntent pending = PendingIntent.getActivity(this,
+                                    0,
+                                    intent,
+                                    PendingIntent.FLAG_IMMUTABLE);
+                            builder.addAction(new NotificationCompat.Action(0,
+                                    "INSTALL",
+                                    pending));
+                        }
+                        NotificationManagerCompat.from(this)
+                                .notify(201, builder.build());
+                    });
+                }
             }
 
             stopSelf();

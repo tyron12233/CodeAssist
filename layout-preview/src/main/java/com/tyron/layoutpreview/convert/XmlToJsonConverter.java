@@ -32,7 +32,7 @@ public class XmlToJsonConverter {
     private final String[] ANDROID_WIDGET = new String[] {"TextView", "Button", "ImageView",
             "ImageButton", "LinearLayout", "FrameLayout", "AbsoluteLayout", "RelativeLayout", "ListView",
             "ScrollView", "HorizontalScrollView", "CheckBox", "RatingBar", "ProgressBar", "HorizontalProgressBar",
-            "EditText", "AbsListView"};
+            "EditText", "AbsListView", "Spinner"};
 
     private final String[] ANDROID_VIEW = new String[] {"View", "ViewGroup"};
 

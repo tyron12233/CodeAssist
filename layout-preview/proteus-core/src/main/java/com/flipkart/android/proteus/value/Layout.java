@@ -22,6 +22,7 @@ import androidx.annotation.Nullable;
 import com.flipkart.android.proteus.toolbox.Utils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -117,6 +118,14 @@ public class Layout extends Value {
   @Override
   public String toString() {
     return type;
+  }
+
+  @NonNull
+  public List<Attribute> getAttributes() {
+    if (null == attributes) {
+      return Collections.emptyList();
+    }
+    return attributes;
   }
 
   /**

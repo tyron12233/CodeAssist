@@ -18,8 +18,12 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.ProjectManager;
+import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
+import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
+import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.builder.project.api.JavaProject;
 import com.tyron.builder.project.api.Project;
 import com.tyron.code.ApplicationLoader;
@@ -119,6 +123,9 @@ public class CodeEditorFragment extends Fragment
 
         if (!CompletionEngine.isIndexing()) {
             mEditor.analyze();
+        }
+        if (BottomSheetBehavior.STATE_HIDDEN == mMainViewModel.getBottomSheetState().getValue()) {
+            mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_COLLAPSED);
         }
     }
 
@@ -387,6 +394,13 @@ public class CodeEditorFragment extends Fragment
                 }
             }
         });
+        getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
+                getViewLifecycleOwner(), ((requestKey, result) -> {
+                    String xml = result.getString("text", mEditor.getText().toString());
+                    xml = XmlPrettyPrinter.prettyPrint(xml, XmlFormatPreferences.defaults(),
+                            XmlFormatStyle.LAYOUT, "\n");
+                    mEditor.setText(xml);
+                }));
     }
 
     @Override
@@ -473,6 +487,7 @@ public class CodeEditorFragment extends Fragment
                     .add(R.id.fragment_container, LayoutEditorFragment.newInstance(currentFile))
                     .addToBackStack(null)
                     .commit();
+            mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HIDDEN);
         } else {
             // TODO: handle unknown files
         }

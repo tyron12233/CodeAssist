@@ -151,6 +151,11 @@ public class ViewManager implements ProteusView.Manager {
         return parser.getAttributeSet().getAttributes();
     }
 
+    @Override
+    public ViewTypeParser<?> getViewTypeParser() {
+        return parser;
+    }
+
     public void updateAttribute(String name, String string) {
         Primitive primitive = new Primitive(string);
         Value value = AttributeProcessor.staticPreCompile(primitive,
@@ -179,6 +184,19 @@ public class ViewManager implements ProteusView.Manager {
             ViewTypeParser.AttributeSet.Attribute v = entry.getValue();
             if (v.id == id) {
                 return k;
+            }
+        }
+
+        if (view.getParent() instanceof ProteusView) {
+            ProteusView parent = (ProteusView) view.getParent();
+            //noinspection rawtypes
+            ViewTypeParser parser = parent.getViewManager().getViewTypeParser();
+            for (Map.Entry<String, ViewTypeParser.AttributeSet.Attribute> entry : parser.getAttributeSet().getAttributes().entrySet()) {
+                String k = entry.getKey();
+                ViewTypeParser.AttributeSet.Attribute v = entry.getValue();
+                if (v.id == id) {
+                    return k;
+                }
             }
         }
         return "Unknown";

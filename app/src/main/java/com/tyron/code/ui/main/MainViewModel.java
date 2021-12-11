@@ -41,6 +41,9 @@ public class MainViewModel extends ViewModel {
     private MutableLiveData<Integer> mBottomSheetState =
             new MutableLiveData<>(BottomSheetBehavior.STATE_COLLAPSED);
 
+    private MutableLiveData<Boolean> mDrawerState =
+            new MutableLiveData<>(false);
+
     public MutableLiveData<String> getCurrentState() {
         if (mCurrentState == null) {
             mCurrentState = new MutableLiveData<>(null);
@@ -48,9 +51,16 @@ public class MainViewModel extends ViewModel {
         return mCurrentState;
     }
 
-
     public void setCurrentState(@Nullable String message) {
         mCurrentState.setValue(message);
+    }
+
+    public LiveData<Boolean> getDrawerState() {
+        return mDrawerState;
+    }
+
+    public void setDrawerState(boolean isOpen) {
+        mDrawerState.setValue(isOpen);
     }
 
     public LiveData<String> getToolbarTitle() {
@@ -148,7 +158,7 @@ public class MainViewModel extends ViewModel {
             updateCurrentPosition(index);
             return true;
         }
-
+        setDrawerState(true);
         addFile(file);
         return true;
     }

@@ -26,7 +26,10 @@
         android:background="#212121"
         app:tabSelectedTextColor="#FFCC7832"
         app:tabTextColor="@android:color/white"
-        app:tabIndicatorColor="#FFCC7832"
+        app:tabIndicator="@drawable/tab_indicator"
+        app:tabIndicatorColor="@color/colorPrimary"
+        app:tabIndicatorFullWidth="false"
+        app:tabInlineLabel="true"
         android:layout_width="match_parent"
         android:layout_height="50dp"
         >

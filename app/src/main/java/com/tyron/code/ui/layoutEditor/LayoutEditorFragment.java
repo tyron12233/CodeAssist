@@ -33,6 +33,7 @@ import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.builder.project.api.Project;
 import com.tyron.code.R;
 import com.tyron.code.ui.layoutEditor.attributeEditor.AttributeEditorDialogFragment;
+import com.tyron.code.ui.layoutEditor.attributeEditor.AttributeEditorViewModel;
 import com.tyron.code.ui.layoutEditor.model.ViewPalette;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.layoutpreview.BoundaryDrawingFrameLayout;
@@ -67,6 +68,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private final ExecutorService mService = Executors.newSingleThreadExecutor();
     private LayoutEditorViewModel mEditorViewModel;
+    private AttributeEditorViewModel mAttributeEditorViewModel;
 
     private File mCurrentFile;
     private PreviewLayoutInflater mInflater;

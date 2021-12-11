@@ -35,6 +35,7 @@ import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
 import com.tyron.layoutpreview.manager.ResourceDrawableManager;
 import com.tyron.layoutpreview.manager.ResourceLayoutManager;
 import com.tyron.layoutpreview.manager.ResourceStringManager;
+import com.tyron.layoutpreview.manager.ResourceStyleManager;
 
 import java.io.File;
 import java.io.StringReader;
@@ -69,25 +70,28 @@ public class PreviewLayoutInflater {
 
             // since we don't know what this view is, we can only apply attributes for an android.view.View
             ViewTypeParser<View> viewParser = context.getParser("android.view.View");
-            if (viewParser != null && layout != null && layout.extras != null) {
+            if (viewParser != null && layout.extras != null) {
 
+                ProteusView.Manager viewManager =
+                        viewParser.createViewManager(context, view, layout, data, viewParser, parent, 0);
+                view.setViewManager(viewManager);
                 // create layout params for this view
                 viewParser.onAfterCreateView(view, parent, -1);
                 layout.extras.entrySet().forEach(entry -> {
-                    String name = entry.getKey();
-                    int id = viewParser.getAttributeId(name);
-                    if (id != -1) {
-                        // try first on the view attribute handers
-                        viewParser.handleAttribute(view.getAsView(), id, entry.getValue());
-                    } else {
-                        // use the parent parser in case this view has layout params attributes
-                        if (parent != null) {
-                            ViewTypeParser<View> parentParser = context.getParser(parent.getClass().getName());
-                            if (parentParser != null) {
-                                parentParser.handleAttribute(view.getAsView(), parentParser.getAttributeId(name), entry.getValue());
-                            }
-                        }
-                    }
+                   int id = viewParser.getAttributeId(entry.getKey());
+                   if (id != -1) {
+                       viewParser.handleAttribute(view.getAsView(), id, entry.getValue());
+                   } else {
+                       if (parent != null) {
+                           //noinspection unchecked
+                           ViewTypeParser<View> parser = ((ProteusView) parent)
+                                   .getViewManager().getViewTypeParser();
+                           id = parser.getAttributeId(entry.getKey());
+                           if (id != -1) {
+                               parser.handleAttribute(view.getAsView(), id, entry.getValue());
+                           }
+                       }
+                   }
                 });
 
                 if (children != null) {
@@ -107,12 +111,13 @@ public class PreviewLayoutInflater {
     private final ResourceStringManager mStringManager = new ResourceStringManager();
     private final ResourceDrawableManager mDrawableManager = new ResourceDrawableManager();
     private final ResourceLayoutManager mLayoutManager = new ResourceLayoutManager();
+    private final ResourceStyleManager mStyleManager = new ResourceStyleManager();
 
     private ProteusLayoutInflater.ImageLoader mImageLoader = (view, name, callback) -> {
         if (name.startsWith("@drawable")) {
             DrawableValue value = mDrawableManager.get(name.substring("@drawable".length() + 1));
             if (value != null) {
-                value.apply(view, mContext, null, callback::setDrawable);
+                value.apply(view, mContext, null, (view::setBackground));
             }
         } else if (name.startsWith("@null")) {
             callback.setDrawable(null);
@@ -134,6 +139,7 @@ public class PreviewLayoutInflater {
                 .setStringManager(mStringManager)
                 .setDrawableManager(mDrawableManager)
                 .setImageLoader(mImageLoader)
+                .setStyleManager(mStyleManager)
                 .setLayoutManager(mLayoutManager)
                 .build();
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);

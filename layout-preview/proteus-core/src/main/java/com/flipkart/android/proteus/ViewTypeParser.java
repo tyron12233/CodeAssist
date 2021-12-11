@@ -16,6 +16,7 @@
 
 package com.flipkart.android.proteus;
 
+import android.content.Context;
 import android.content.res.XmlResourceParser;
 import android.view.View;
 import android.view.ViewGroup;
@@ -40,13 +41,15 @@ import java.util.Map;
 /**
  * @author adityasharat
  */
+@SuppressWarnings("JavaDoc")
 public abstract class ViewTypeParser<V extends View> {
 
   private static XmlResourceParser sParser = null;
 
   @Nullable
-  public ViewTypeParser parent;
+  public ViewTypeParser<V> parent;
 
+  @SuppressWarnings({"rawtypes"})
   private AttributeProcessor[] processors = new AttributeProcessor[0];
 
   private Map<String, AttributeSet.Attribute> attributes = new HashMap<>();
@@ -91,7 +94,7 @@ public abstract class ViewTypeParser<V extends View> {
   @NonNull
   public ProteusView.Manager createViewManager(@NonNull ProteusContext context, @NonNull ProteusView view,
                                                @NonNull Layout layout, @NonNull ObjectValue data,
-                                               @Nullable ViewTypeParser caller, @Nullable ViewGroup parent,
+                                               @Nullable ViewTypeParser<V> caller, @Nullable ViewGroup parent,
                                                int dataIndex) {
     if (null != this.parent && caller != this.parent) {
       return this.parent.createViewManager(context, view, layout, data, caller, parent, dataIndex);
@@ -147,7 +150,8 @@ public abstract class ViewTypeParser<V extends View> {
       if (parent != null) {
         layoutParams = generateDefaultLayoutParams(parent);
       } else {
-        layoutParams = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        layoutParams = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
       }
       v.setLayoutParams(layoutParams);
     }
@@ -167,11 +171,24 @@ public abstract class ViewTypeParser<V extends View> {
   public boolean handleAttribute(V view, int attributeId, Value value) {
     int position = getPosition(attributeId);
     if (position < 0) {
-      //noinspection unchecked
-      return null != parent && parent.handleAttribute(view, attributeId, value);
+      boolean b = null != parent && parent.handleAttribute(view, attributeId, value);
+      if (!b && view.getParent() != null) {
+        ProteusView parent = (ProteusView) view.getParent();
+        if (parent == null) {
+          return false;
+        }
+
+        if (parent.getViewManager().getLayout().type.equals(getType())) {
+          return false;
+        }
+        //noinspection unchecked
+        return parent.getViewManager().getViewTypeParser().handleAttribute(view, attributeId, value);
+      } else {
+        return false;
+      }
     }
-    AttributeProcessor attributeProcessor = processors[position];
     //noinspection unchecked
+    AttributeProcessor<V> attributeProcessor = processors[position];
     attributeProcessor.process(view, value);
     return true;
   }
@@ -182,7 +199,6 @@ public abstract class ViewTypeParser<V extends View> {
    * @return
    */
   public boolean handleChildren(V view, Value children) {
-    //noinspection unchecked
     return null != parent && parent.handleChildren(view, children);
   }
 
@@ -201,7 +217,7 @@ public abstract class ViewTypeParser<V extends View> {
    * @return
    */
   @NonNull
-  public AttributeSet prepare(@Nullable ViewTypeParser parent, @Nullable Map<String, AttributeProcessor<V>> extras) {
+  public AttributeSet prepare(@Nullable ViewTypeParser<V> parent, @Nullable Map<String, AttributeProcessor<V>> extras) {
     this.parent = parent;
     this.processors = new AttributeProcessor[0];
     this.attributes = new HashMap<>();
@@ -274,6 +290,7 @@ public abstract class ViewTypeParser<V extends View> {
     return position - getOffset();
   }
 
+  @SuppressWarnings("DanglingJavadoc")
   private ViewGroup.LayoutParams generateDefaultLayoutParams(@NonNull ViewGroup parent) {
 
     /**
@@ -308,7 +325,7 @@ public abstract class ViewTypeParser<V extends View> {
    */
   public static class AttributeSet {
 
-    @Nullable
+    @NonNull
     private final Map<String, Attribute> attributes;
 
     @Nullable
@@ -317,7 +334,7 @@ public abstract class ViewTypeParser<V extends View> {
     private final int offset;
 
     AttributeSet(@Nullable Map<String, Attribute> attributes, @Nullable AttributeSet parent, int offset) {
-      this.attributes = attributes;
+      this.attributes = null != attributes ? attributes : new HashMap<>();
       this.parent = parent;
       int parentOffset = null != parent ? parent.getOffset() : 0;
       this.offset = parentOffset - offset;
@@ -325,7 +342,7 @@ public abstract class ViewTypeParser<V extends View> {
 
     @Nullable
     public Attribute getAttribute(String name) {
-      Attribute attribute = null != attributes ? attributes.get(name) : null;
+      Attribute attribute = attributes.get(name);
       if (null != attribute) {
         return attribute;
       } else if (null != parent) {
@@ -373,13 +390,13 @@ public abstract class ViewTypeParser<V extends View> {
       public final int id;
 
       @NonNull
-      public final AttributeProcessor processor;
+      public final AttributeProcessor<?> processor;
 
-      Attribute(int id, @NonNull AttributeProcessor processor) {
+      Attribute(int id, @NonNull AttributeProcessor<?> processor) {
         this(id, processor, false);
       }
 
-      Attribute(int id, @NonNull AttributeProcessor processor, boolean isLayoutParams) {
+      Attribute(int id, @NonNull AttributeProcessor<?> processor, boolean isLayoutParams) {
         this.processor = processor;
         this.id = id;
         this.isLayoutParams = isLayoutParams;

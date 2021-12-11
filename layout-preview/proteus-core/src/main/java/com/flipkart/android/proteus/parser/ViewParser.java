@@ -88,7 +88,29 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
   @Override
   protected void addAttributeProcessors() {
 
-    addAttributeProcessor("outlineProvider", new StringAttributeProcessor<V>() {
+    addLayoutParamsAttributeProcessor(Attributes.View.Width, new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
+        if (layoutParams != null) {
+          layoutParams.width = (int) dimension;
+          view.setLayoutParams(layoutParams);
+        }
+      }
+    });
+
+    addLayoutParamsAttributeProcessor(Attributes.View.Height, new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
+        if (layoutParams != null) {
+          layoutParams.height = (int) dimension;
+          view.setLayoutParams(layoutParams);
+        }
+      }
+    });
+
+    addAttributeProcessor("android:outlineProvider", new StringAttributeProcessor<V>() {
       @Override
       public void setString(V view, String value) {
         switch (value) {
@@ -143,43 +165,6 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDrawable(V view, Drawable drawable) {
         view.setBackground(drawable);
-      }
-    });
-
-    addAttributeProcessor(Attributes.View.Height, new DimensionAttributeProcessor<V>() {
-      @Override
-      public void setDimension(V view, float dimension) {
-        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-        if (layoutParams != null) {
-          layoutParams.height = (int) dimension;
-          view.setLayoutParams(layoutParams);
-        }
-      }
-    });
-
-    addAttributeProcessor(Attributes.View.Width, new DimensionAttributeProcessor<V>() {
-      @Override
-      public void setDimension(V view, float dimension) {
-        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-        if (layoutParams != null) {
-          layoutParams.width = (int) dimension;
-          view.setLayoutParams(layoutParams);
-        }
-      }
-    });
-    addAttributeProcessor(Attributes.View.Weight, new StringAttributeProcessor<V>() {
-      @Override
-      public void setString(V view, String value) {
-        LinearLayout.LayoutParams layoutParams;
-        if (view.getLayoutParams() instanceof LinearLayout.LayoutParams) {
-          layoutParams = (LinearLayout.LayoutParams) view.getLayoutParams();
-          layoutParams.weight = ParseHelper.parseFloat(value);
-          view.setLayoutParams(layoutParams);
-        } else {
-          if (ProteusConstants.isLoggingEnabled()) {
-            Log.e(TAG, "'weight' is only supported for LinearLayouts");
-          }
-        }
       }
     });
 
@@ -411,7 +396,9 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setString(final V view, String value) {
         if (view.getContext() instanceof ProteusContext) {
-          view.setId(((ProteusContext) view.getContext()).getInflater().getUniqueViewId(value));
+          view.setId(((ProteusContext) view.getContext())
+                  .getInflater()
+                  .getUniqueViewId(ParseHelper.parseViewId(value)));
         }
         // set view id resource name
         final String resourceName = value;

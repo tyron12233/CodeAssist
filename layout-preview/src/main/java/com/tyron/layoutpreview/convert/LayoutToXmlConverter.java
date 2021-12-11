@@ -1,10 +1,12 @@
 package com.tyron.layoutpreview.convert;
 
+import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 
 import com.flipkart.android.proteus.ProteusContext;
+import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.Array;
 import com.flipkart.android.proteus.value.Layout;
@@ -32,12 +34,11 @@ import java.util.Objects;
 public class LayoutToXmlConverter {
 
     private final ProteusContext mContext;
-    private final int mChildrenAttributeId;
     private Document mDocument;
 
     public LayoutToXmlConverter(ProteusContext context) {
         mContext = context;
-        mChildrenAttributeId = Objects.requireNonNull(mContext.getParser(ViewGroup.class.getName()))
+        int mChildrenAttributeId = Objects.requireNonNull(mContext.getParser(ViewGroup.class.getName()))
                 .getAttributeId("children");
     }
 
@@ -48,8 +49,8 @@ public class LayoutToXmlConverter {
                 .newDocument();
         Element element = mDocument.createElement(layout.type);
         mDocument.appendChild(element);
-        addAttributes(element, layout);
-        addExtraAttributes(element, layout);
+        addAttributes(element, null, layout);
+        addExtraAttributes(element, null, layout);
 
         Transformer transformer = TransformerFactory.newInstance().newTransformer();
         DOMSource source = new DOMSource(mDocument);
@@ -59,39 +60,41 @@ public class LayoutToXmlConverter {
         return writer.toString();
     }
 
-    private void addAttributes(Element element, Layout layout) {
+    private void addAttributes(Element element, Layout parent, Layout layout) {
         if (layout.attributes == null) {
             return;
         }
 
         for (Layout.Attribute attribute : layout.attributes) {
-            if (attribute.id == mChildrenAttributeId) {
-                Array array = attribute.value.getAsArray();
-                for (int i = 0; i < array.size(); i++) {
-                    Value child = array.get(i);
-                    if (!child.isLayout()) {
-                        continue;
+            if (isChildrenAttribute(layout, attribute)) {
+                if (attribute.value.isArray()) {
+                    Array array = attribute.value.getAsArray();
+                    for (int i = 0; i < array.size(); i++) {
+                        Value child = array.get(i);
+                        if (!child.isLayout()) {
+                            continue;
+                        }
+                        addChildren(element, parent, child.getAsLayout());
                     }
-                    addChildren(element, child.getAsLayout());
                 }
                 continue;
             }
-            String key = ProteusHelper.getAttributeName(mContext, layout.type, attribute.id);
+            String key = ProteusHelper.getAttributeName(mContext, parent, layout.type, attribute.id);
             element.setAttribute(key, attribute.value.toString());
         }
     }
 
-    private void addExtraAttributes(Element element, Layout layout) {
+    private void addExtraAttributes(Element element, Layout parent, Layout layout) {
         if (layout.extras == null) {
             return;
         }
 
         for (Map.Entry<String, Value> entry : layout.extras.entrySet()) {
-           addAttribute(element, entry.getKey(), entry.getValue());
+           addAttribute(element, parent, entry.getKey(), entry.getValue());
         }
     }
 
-    private void addAttribute(Element element, String key, Value value) {
+    private void addAttribute(Element element, Layout parent, String key, Value value) {
         if (value.isPrimitive()) {
             element.setAttribute(key, value.toString());
             return;
@@ -101,16 +104,28 @@ public class LayoutToXmlConverter {
             for (int i = 0; i < array.size(); i++) {
                 Value child = array.get(i);
                 if (child.isLayout()) {
-                    addChildren(element, child.getAsLayout());
+                    addChildren(element, parent, child.getAsLayout());
                 }
             }
         }
     }
 
-    private void addChildren(Element element, Layout child) {
+    private void addChildren(Element element, Layout parent, Layout child) {
         Element newElement = mDocument.createElement(child.type);
-        addAttributes(newElement, child);
-        addExtraAttributes(newElement, child);
+        addAttributes(newElement, parent, child);
+        addExtraAttributes(newElement, parent, child);
         element.appendChild(newElement);
+    }
+
+    private boolean isChildrenAttribute(Layout layout, Layout.Attribute attribute) {
+        ViewTypeParser<View> parser = mContext.getParser(layout.type);
+        if (parser == null) {
+            return false;
+        }
+        ViewTypeParser.AttributeSet.Attribute children = parser.getAttributeSet().getAttribute("children");
+        if (children == null) {
+            return false;
+        }
+        return children.id == attribute.id;
     }
 }

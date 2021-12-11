@@ -20,7 +20,7 @@ import java.util.List;
 public class AttributeEditorAdapter extends RecyclerView.Adapter<AttributeEditorAdapter.ViewHolder> {
 
     public interface OnItemClickListener {
-        void onItemClick(Pair<String, String> attribute);
+        void onItemClick(int pos, Pair<String, String> attribute);
     }
 
     private List<Pair<String, String>> mAttributes = new ArrayList<>();
@@ -31,6 +31,9 @@ public class AttributeEditorAdapter extends RecyclerView.Adapter<AttributeEditor
 
     private OnItemClickListener mItemClickListener;
 
+    public List<Pair<String, String>> getAttributes() {
+        return new ArrayList<>(mAttributes);
+    }
     public void setItemClickListener(OnItemClickListener listener) {
         mItemClickListener = listener;
     }
@@ -73,7 +76,7 @@ public class AttributeEditorAdapter extends RecyclerView.Adapter<AttributeEditor
             if (mItemClickListener != null) {
                 int position = viewHolder.getBindingAdapterPosition();
                 if (position != RecyclerView.NO_POSITION) {
-                    mItemClickListener.onItemClick(mAttributes.get(position));
+                    mItemClickListener.onItemClick(position, mAttributes.get(position));
                 }
             }
         });
