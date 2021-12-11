@@ -15,8 +15,11 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.ViewPager;
+import androidx.viewpager2.adapter.FragmentStateAdapter;
+import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.tabs.TabLayoutMediator;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.log.AppLogFragment;
@@ -48,7 +51,7 @@ public class BottomEditorFragment extends Fragment {
 
     private TabLayout mTabLayout;
     private LinearLayout mRowLayout;
-    private ViewPager mPager;
+    private ViewPager2 mPager;
     private PageAdapter mAdapter;
 
     private RecyclerView mShortcutsRecyclerView;
@@ -76,9 +79,22 @@ public class BottomEditorFragment extends Fragment {
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        mAdapter = new PageAdapter(getChildFragmentManager());
+        mAdapter = new PageAdapter(this);
         mPager.setAdapter(mAdapter);
-        mTabLayout.setupWithViewPager(mPager);
+        mPager.setUserInputEnabled(false);
+        new TabLayoutMediator(mTabLayout, mPager, (tab, position) -> {
+            switch (position) {
+                case 0:
+                    tab.setText("Build Logs");
+                    break;
+                default:
+                case 1:
+                    tab.setText("App Logs");
+                    break;
+                case 2:
+                    tab.setText("Debug");
+            }
+        }).attach();
 
         ShortcutsAdapter adapter = new ShortcutsAdapter(getShortcuts());
         LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext(),
@@ -147,15 +163,15 @@ public class BottomEditorFragment extends Fragment {
     }
 
     @SuppressWarnings("deprecation")
-    private static class PageAdapter extends FragmentStatePagerAdapter {
+    private static class PageAdapter extends FragmentStateAdapter {
 
-        public PageAdapter(FragmentManager parent) {
-            super(parent);
+        public PageAdapter(@NonNull Fragment fragment) {
+            super(fragment);
         }
 
         @NonNull
         @Override
-        public Fragment getItem(int position) {
+        public Fragment createFragment(int position) {
             switch (position) {
                 case 0:
                     return AppLogFragment.newInstance(LogViewModel.BUILD_LOG);
@@ -168,22 +184,8 @@ public class BottomEditorFragment extends Fragment {
         }
 
         @Override
-        public int getCount() {
+        public int getItemCount() {
             return 3;
-        }
-
-        @Nullable
-        @Override
-        public CharSequence getPageTitle(int position) {
-            switch (position) {
-                case 0:
-                    return "Build logs";
-                default:
-                case 1:
-                    return "App logs";
-                case 2:
-                    return "DEBUG";
-            }
         }
     }
 }

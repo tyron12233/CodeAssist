@@ -4,8 +4,6 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-
-
     <LinearLayout
         android:id="@+id/row_layout"
         android:layout_width="match_parent"
@@ -20,6 +18,7 @@
             android:layout_height="38dp"/>
 
     </LinearLayout>
+
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tablayout"
         app:theme="@style/CodeEditorActionBar"
@@ -35,11 +34,8 @@
         >
     </com.google.android.material.tabs.TabLayout>
 
-    <androidx.viewpager.widget.ViewPager
+    <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/viewpager"
         android:layout_height="match_parent"
         android:layout_width="match_parent"/>
-
-
-
 </LinearLayout>
