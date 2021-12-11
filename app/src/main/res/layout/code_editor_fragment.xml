@@ -2,16 +2,15 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/content"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="horizontal">
+    android:layout_height="match_parent">
 
    <io.github.rosemoe.sora.widget.CodeEditor
        android:id="@+id/code_editor"
        android:layout_width="match_parent"
        android:layout_height="match_parent"/>
 
-   <androidx.fragment.app.FragmentContainerView
-       android:id="@+id/fragment_container"
+   <FrameLayout
+       android:id="@+id/layout_editor_container"
        android:layout_width="match_parent"
        android:layout_height="match_parent"/>
 </FrameLayout>

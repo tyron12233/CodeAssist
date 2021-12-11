@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -19,7 +20,6 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.transition.TransitionManager;
 
 import com.flipkart.android.proteus.ProteusView;
-import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.Dimension;
@@ -27,31 +27,32 @@ import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Value;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.ProjectManager;
 import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.builder.project.api.Project;
 import com.tyron.code.R;
 import com.tyron.code.ui.layoutEditor.attributeEditor.AttributeEditorDialogFragment;
-import com.tyron.code.ui.layoutEditor.attributeEditor.AttributeEditorViewModel;
 import com.tyron.code.ui.layoutEditor.model.ViewPalette;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.layoutpreview.BoundaryDrawingFrameLayout;
+import com.tyron.layoutpreview.convert.LayoutToXmlConverter;
 import com.tyron.layoutpreview.inflate.PreviewLayoutInflater;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import kotlin.Pair;
 
 public class LayoutEditorFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
+
+    public static final String KEY_SAVE = "KEY_SAVE";
 
     /**
      * Creates a new LayoutEditorFragment instance for a layout xml file.
@@ -68,7 +69,6 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private final ExecutorService mService = Executors.newSingleThreadExecutor();
     private LayoutEditorViewModel mEditorViewModel;
-    private AttributeEditorViewModel mAttributeEditorViewModel;
 
     private File mCurrentFile;
     private PreviewLayoutInflater mInflater;
@@ -80,23 +80,23 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private boolean isDumb;
 
-    private View.OnLongClickListener mOnLongClickListener = v -> {
+    private final View.OnLongClickListener mOnLongClickListener = v -> {
         View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v);
         ViewCompat.startDragAndDrop(v, null, shadowBuilder, v, 0);
         return true;
     };
 
-    private View.OnClickListener mOnClickListener = v -> {
-        Map<String, ViewTypeParser.AttributeSet.Attribute> parentAttributes = new HashMap<>();
-        if (v.getParent() instanceof ProteusView) {
-            parentAttributes.putAll(((ProteusView) v.getParent()).getViewManager().getLayoutParamsAttributes());
-        }
+    private final View.OnClickListener mOnClickListener = v -> {
+//        Map<String, ViewTypeParser.AttributeSet.Attribute> parentAttributes = new HashMap<>();
+//        if (v.getParent() instanceof ProteusView) {
+//            parentAttributes.putAll(((ProteusView) v.getParent()).getViewManager().getLayoutParamsAttributes());
+//        }
         if (v instanceof ProteusView) {
             ProteusView view = (ProteusView) v;
 
             ArrayList<Pair<String, String>> attributes = new ArrayList<>();
             for (Layout.Attribute attribute :
-                    Objects.requireNonNull(view.getViewManager().getLayout().attributes)) {
+                    view.getViewManager().getLayout().getAttributes()) {
                 String name = view.getViewManager().getAttributeName(attribute.id);
                 attributes.add(new Pair<>(name, attribute.value.toString()));
             }
@@ -119,7 +119,36 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         mCurrentFile = (File) requireArguments().getSerializable("file");
         isDumb = ProjectManager.getInstance().getCurrentProject() == null ||
                 CompletionEngine.isIndexing();
-        mEditorViewModel = new ViewModelProvider(this).get(LayoutEditorViewModel.class);
+        mEditorViewModel = new ViewModelProvider(this)
+                .get(LayoutEditorViewModel.class);
+        requireActivity().getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                new MaterialAlertDialogBuilder(requireContext())
+                        .setTitle("Save to xml")
+                        .setMessage("Do you want to save the layout?")
+                        .setPositiveButton(android.R.string.yes, (d, w) -> {
+                            String converted = convertLayoutToXml();
+                            if (converted == null) {
+                                new MaterialAlertDialogBuilder(requireContext())
+                                        .setTitle("Error")
+                                        .setMessage("An unknown error has occurred during layout conversion")
+                                        .show();
+                            } else {
+                                Bundle args = new Bundle();
+                                args.putString("text", converted);
+                                getParentFragmentManager().setFragmentResult(KEY_SAVE,
+                                        args);
+                            }
+
+                            getParentFragmentManager().popBackStack();
+                        })
+                        .setNegativeButton(android.R.string.no, (d, w) -> {
+                            getParentFragmentManager().popBackStack();
+                        })
+                        .show();
+            }
+        });
     }
 
     @Nullable
@@ -139,9 +168,8 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             ProteusView inflated = mInflater.getContext()
                     .getInflater()
                     .inflate(layout, new ObjectValue(), parent, 0);
-            palette.getDefaultValues().forEach((key, value) -> {
-                inflated.getViewManager().updateAttribute(key, value.toString());
-            });
+            palette.getDefaultValues().forEach((key, value) ->
+                    inflated.getViewManager().updateAttribute(key, value.toString()));
             return inflated;
         });
         mDragListener.setDelegate(new EditorDragListener.Delegate() {
@@ -151,9 +179,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                     setDragListeners(((ViewGroup) view));
                 }
                 setClickListeners(view);
-                mEditorRoot.postDelayed(() -> {
-                    mEditorRoot.requestLayout();
-                }, 100);
+                mEditorRoot.postDelayed(() -> mEditorRoot.requestLayout(), 100);
 
                 if (parent instanceof ProteusView && view instanceof ProteusView) {
                     ProteusView proteusParent = (ProteusView) parent;
@@ -168,8 +194,6 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                     ProteusView proteusParent = (ProteusView) parent;
                     ProteusView proteusChild = (ProteusView) view;
                     ProteusHelper.removeChildFromLayout(proteusParent, proteusChild);
-                    Layout layout = proteusParent.getViewManager().getLayout();
-                    return;
                 }
             }
         });
@@ -190,11 +214,9 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         mInflater = new PreviewLayoutInflater(requireContext(),
                 (AndroidProject) ProjectManager.getInstance().getCurrentProject());
         setLoadingText("Parsing xml files");
-        mInflater.parseResources(mService).whenComplete((inflater, exception) -> {
-            requireActivity().runOnUiThread(() -> {
-                afterParse(inflater);
-            });
-        });
+        mInflater.parseResources(mService).whenComplete((inflater, exception) ->
+                requireActivity().runOnUiThread(() ->
+                        afterParse(inflater)));
     }
 
     private void afterParse(PreviewLayoutInflater inflater) {
@@ -217,24 +239,28 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     private void setDragListeners(ViewGroup viewGroup) {
         viewGroup.setOnDragListener(mDragListener);
 
-        LayoutTransition transition = new LayoutTransition();
-        transition.addTransitionListener(new LayoutTransition.TransitionListener() {
-            @Override
-            public void startTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
-                transition.getAnimator(transitionType).addListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        mEditorRoot.postDelayed(() -> mEditorRoot.invalidate(), 70);
-                    }
-                });
-            }
+        try {
+            LayoutTransition transition = new LayoutTransition();
+            transition.addTransitionListener(new LayoutTransition.TransitionListener() {
+                @Override
+                public void startTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
+                    transition.getAnimator(transitionType).addListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            mEditorRoot.postDelayed(() -> mEditorRoot.invalidate(), 70);
+                        }
+                    });
+                }
 
-            @Override
-            public void endTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
+                @Override
+                public void endTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
 
-            }
-        });
-        viewGroup.setLayoutTransition(new LayoutTransition());
+                }
+            });
+            viewGroup.setLayoutTransition(new LayoutTransition());
+        } catch (Throwable e) {
+            // ignored, some ViewGroup's may not allow layout transitions
+        }
         for (int i = 0; i < viewGroup.getChildCount(); i++) {
             View child = viewGroup.getChildAt(i);
             if (child instanceof ViewGroup) {
@@ -274,6 +300,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     private List<ViewPalette> populatePalettes() {
         List<ViewPalette> palettes = new ArrayList<>();
         palettes.add(createPalette("android.widget.LinearLayout", R.drawable.crash_ic_close));
+        palettes.add(createPalette("android.widget.FrameLayout", R.drawable.ic_baseline_add_24));
         palettes.add(createPalette("android.widget.TextView",
                 R.drawable.crash_ic_bug_report,
                 ImmutableMap.of(Attributes.TextView.Text, new Primitive("TextView"))));
@@ -304,5 +331,20 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         if (isDumb) {
             createInflater();
         }
+    }
+
+    private String convertLayoutToXml() {
+        LayoutToXmlConverter converter =
+                new LayoutToXmlConverter(mInflater.getContext());
+        ProteusView view = (ProteusView) mEditorRoot.getChildAt(0);
+        if (view != null) {
+            Layout layout = view.getViewManager().getLayout();
+            try {
+                return converter.convert(layout.getAsLayout());
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return null;
     }
 }
