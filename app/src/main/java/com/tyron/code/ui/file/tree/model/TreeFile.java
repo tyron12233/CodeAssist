@@ -1,5 +1,7 @@
 package com.tyron.code.ui.file.tree.model;
 
+import android.graphics.drawable.Drawable;
+
 import java.io.File;
 
 public class TreeFile {
@@ -18,4 +20,7 @@ public class TreeFile {
         return mFile;
     }
 
+    public Drawable getIcon() {
+        return null;
+    }
 }
