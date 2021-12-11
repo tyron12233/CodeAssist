@@ -83,13 +83,6 @@ public class ManifestMergeTask extends Task<AndroidProject> {
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-
-        if (mLibraryManifestFiles == null || mLibraryManifestFiles.length == 0) {
-            // no libraries to merge, just copy the manifest file to the output
-            FileUtils.copyFile(mMainManifest, mOutputFile);
-            return;
-        }
-
         ProjectSettings settings = getProject().getSettings();
 
         ManifestMerger2.Invoker<?> invoker = ManifestMerger2.newMerger(mMainManifest,
