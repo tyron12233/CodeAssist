@@ -5,6 +5,7 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Table;
+import com.tyron.builder.project.api.AndroidProject;
 
 import org.apache.commons.io.FileUtils;
 
@@ -28,11 +29,13 @@ public class SymbolWriter {
     private final String mPackageName;
     private final List<SymbolLoader> mSymbols = Lists.newArrayList();
     private final SymbolLoader mValues;
+    private final AndroidProject mProject;
 
-    public SymbolWriter(String outFolder, String packageName, SymbolLoader values) {
+    public SymbolWriter(String outFolder, String packageName, SymbolLoader values, AndroidProject project) {
         mOutFolder = outFolder;
         mPackageName = packageName;
         mValues = values;
+        mProject = project;
     }
 
     public void addSymbolsToWrite(SymbolLoader symbols) {
@@ -130,6 +133,7 @@ public class SymbolWriter {
                     FileUtils.writeStringToFile(file, writer.toString(), Charset.defaultCharset());
                 }
             }
+            mProject.addJavaFile(file);
         }
     }
 }

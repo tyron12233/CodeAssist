@@ -127,7 +127,7 @@ public class MergeSymbolsTask extends Task<AndroidProject> {
             Collection<SymbolLoader> symbols = libMap.get(packageName);
 
             SymbolWriter writer = new SymbolWriter(mSymbolOutputDir.getAbsolutePath(), packageName,
-                    fullSymbolValues);
+                    fullSymbolValues, getProject());
             for (SymbolLoader loader : symbols) {
                 writer.addSymbolsToWrite(loader);
             }
@@ -136,7 +136,6 @@ public class MergeSymbolsTask extends Task<AndroidProject> {
 
         for (File file : RFiles) {
             cache.load(file.toPath(), null, null);
-            getProject().addJavaFile(file);
         }
     }
 }
