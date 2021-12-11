@@ -10,11 +10,10 @@ import com.tyron.builder.compiler.resource.AAPT2Compiler;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.cache.CacheHolder;
 import com.tyron.common.util.Cache;
 
 import org.apache.commons.io.FileUtils;
-import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
-import org.jetbrains.kotlin.com.intellij.openapi.util.KeyWithDefaultValue;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,13 +28,9 @@ import java.util.List;
  */
 public class MergeSymbolsTask extends Task<AndroidProject> {
 
-    public static final Key<Cache<Void, Void>> CACHE_KEY =
-            new KeyWithDefaultValue<Cache<Void, Void>>("symbolsCache") {
-        @Override
-        public Cache<Void, Void> getDefaultValue() {
-            return new Cache<>();
-        }
-    };
+    public static final CacheHolder.CacheKey<Void, Void> CACHE_KEY =
+            new CacheHolder.CacheKey<>("mergeSymbolsCache");
+
     private File mSymbolOutputDir;
     private File mFullResourceFile;
 
@@ -56,8 +51,7 @@ public class MergeSymbolsTask extends Task<AndroidProject> {
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-        Cache<Void, Void> cache = getProject().getUserData(CACHE_KEY);
-
+        Cache<Void, Void> cache = getProject().getCache(CACHE_KEY, new Cache<>());
         SymbolLoader fullSymbolValues = null;
         Multimap<String, SymbolLoader> libMap = ArrayListMultimap.create();
 

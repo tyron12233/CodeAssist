@@ -9,11 +9,10 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.cache.CacheHolder;
 import com.tyron.common.util.Cache;
 
 import org.apache.commons.io.FileUtils;
-import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
-import org.jetbrains.kotlin.com.intellij.openapi.util.KeyWithDefaultValue;
 import org.openjdk.javax.tools.DiagnosticListener;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.javax.tools.StandardJavaFileManager;
@@ -36,13 +35,8 @@ import java.util.Objects;
 
 public class IncrementalJavaTask extends Task<JavaProject> {
 
-    public static final Key<Cache<String, List<File>>> CACHE_KEY = new
-            KeyWithDefaultValue<Cache<String, List<File>>>("javaClasses") {
-                @Override
-                public Cache<String, List<File>> getDefaultValue() {
-                    return new Cache<>();
-                }
-            };
+    public static final CacheHolder.CacheKey<String, List<File>> CACHE_KEY =
+            new CacheHolder.CacheKey<>("javaCache");
     private static final String TAG = IncrementalJavaTask.class.getSimpleName();
 
     private File mOutputDir;
@@ -67,7 +61,8 @@ public class IncrementalJavaTask extends Task<JavaProject> {
         }
 
         mFilesToCompile = new ArrayList<>();
-        mClassCache = getProject().getUserData(CACHE_KEY);
+        mClassCache = getProject().getCache(CACHE_KEY, new Cache<>());
+
         mJavaFiles = new ArrayList<>(getProject().getJavaFiles().values());
 
         for (Cache.Key<String> key : new HashSet<>(mClassCache.getKeys())) {

@@ -7,6 +7,7 @@ import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.api.Project;
+import com.tyron.common.util.Cache;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
@@ -17,7 +18,9 @@ import org.jetbrains.kotlin.com.intellij.util.keyFMap.KeyFMap;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ProjectImpl implements Project {
 
@@ -153,4 +156,22 @@ public class ProjectImpl implements Project {
     }
 
     private static final AtomicFieldUpdater<ProjectImpl, KeyFMap> updater = AtomicFieldUpdater.forFieldOfType(ProjectImpl.class, KeyFMap.class);
+
+    private final Map<CacheKey<?, ?>, Cache<?, ?>> mCacheMap = new HashMap<>();
+
+    @Override
+    public <K, V> Cache<K, V> getCache(CacheKey<K, V> key, Cache<K, V> defaultValue) {
+        Object o = mCacheMap.get(key);
+        if (o == null) {
+            put(key, defaultValue);
+            return defaultValue;
+        }
+        //noinspection unchecked
+        return (Cache<K, V>) o;
+    }
+
+    @Override
+    public <K, V> void put(CacheKey<K, V> key, Cache<K, V> value) {
+        mCacheMap.put(key, value);
+    }
 }

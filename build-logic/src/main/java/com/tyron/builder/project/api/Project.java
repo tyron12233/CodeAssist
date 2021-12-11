@@ -1,6 +1,7 @@
 package com.tyron.builder.project.api;
 
 import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.project.cache.CacheHolder;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderEx;
 
@@ -8,7 +9,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-public interface Project extends UserDataHolderEx {
+public interface Project extends UserDataHolderEx, CacheHolder {
 
     ProjectSettings getSettings();
 

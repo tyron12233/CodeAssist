@@ -5,9 +5,9 @@ import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
 import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.common.util.Cache;
 
 import org.apache.commons.io.FileUtils;
 
@@ -63,11 +63,11 @@ public class CleanTask extends Task<AndroidProject> {
             FileUtils.deleteDirectory(intermediateDirectory);
         }
 
-        getProject().getUserData(IncrementalJavaTask.CACHE_KEY)
+        getProject().getCache(IncrementalJavaTask.CACHE_KEY, new Cache<>())
                 .clear();
-        getProject().getUserData(IncrementalD8Task.CACHE_KEY)
+        getProject().getCache(IncrementalD8Task.CACHE_KEY, new Cache<>())
                 .clear();
-        getProject().getUserData(MergeSymbolsTask.CACHE_KEY)
+        getProject().getCache(MergeSymbolsTask.CACHE_KEY, new Cache<>())
                 .clear();
     }
     private void cleanClasses() {

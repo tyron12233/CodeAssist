@@ -11,14 +11,11 @@ import com.tyron.builder.compiler.dex.D8Task;
 import com.tyron.builder.compiler.dex.DexDiagnosticHandler;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
 import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.cache.CacheHolder;
 import com.tyron.common.util.Cache;
 
 import org.apache.commons.io.FileUtils;
-import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
-import org.jetbrains.kotlin.com.intellij.openapi.util.KeyWithDefaultValue;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,19 +25,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class IncrementalD8Task extends Task<AndroidProject> {
 
     private static final String TAG = IncrementalD8Task.class.getSimpleName();
-    public static final Key<Cache<String, List<File>>> CACHE_KEY = new
-            KeyWithDefaultValue<Cache<String, List<File>>>("dexCache") {
-        @Override
-        public Cache<String, List<File>> getDefaultValue() {
-            return new Cache<>();
-        }
-    };
+    public static final CacheHolder.CacheKey<String, List<File>> CACHE_KEY =
+            new CacheHolder.CacheKey<>("dexCache");
 
     private DiagnosticsHandler diagnosticsHandler;
     private List<Path> mClassFiles;
@@ -65,7 +56,7 @@ public class IncrementalD8Task extends Task<AndroidProject> {
     public void prepare(BuildType type) throws IOException {
         mBuildType = type;
         diagnosticsHandler = new DexDiagnosticHandler(getLogger());
-        mDexCache = getProject().getUserData(CACHE_KEY);
+        mDexCache = getProject().getCache(CACHE_KEY, new Cache<>());
 
         File output = new File(getProject().getBuildDirectory(), "intermediate/classes");
         if (!output.exists() && !output.mkdirs()) {
