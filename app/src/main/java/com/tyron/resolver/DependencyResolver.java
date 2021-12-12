@@ -128,6 +128,7 @@ public class DependencyResolver {
         if (cache != null) {
 
             POMParser parser = new POMParser();
+            boolean resolved = false;
             try {
                 for (Dependency dep : parser.parse(cache)) {
                     // skip test dependencies as its not important for now
@@ -135,6 +136,7 @@ public class DependencyResolver {
                         continue;
                     }
                     resolveDependency(dep);
+                    resolved = true;
                 }
             } catch (IOException | XmlPullParserException e) {
                 if (mLogger != null) {
@@ -142,8 +144,10 @@ public class DependencyResolver {
                 }
             }
 
-            mResolvedLibraries.put(parent, parent.getVersion());
-            return;
+            if (resolved) {
+                mResolvedLibraries.put(parent, parent.getVersion());
+                return;
+            }
         }
 
         InputStream is = getInputStream(parent);
