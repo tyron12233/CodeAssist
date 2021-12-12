@@ -1,6 +1,5 @@
 package org.jetbrains.kotlin.cli.jvm.plugins
 
-import android.util.Log
 import dalvik.system.DexClassLoader
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil.isJavaIdentifierPart
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil.isJavaIdentifierStart

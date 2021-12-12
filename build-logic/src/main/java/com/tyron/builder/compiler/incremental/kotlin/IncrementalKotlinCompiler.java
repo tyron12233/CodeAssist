@@ -86,8 +86,7 @@ public class IncrementalKotlinCompiler extends Task<AndroidProject> {
                         .map(File::getAbsolutePath)
                         .collect(Collectors.joining(File.pathSeparator)));
 
-        List<File> javaSourceRoots = new ArrayList<>();
-        javaSourceRoots.addAll(getProject().getJavaFiles().values());
+        List<File> javaSourceRoots = new ArrayList<>(getProject().getJavaFiles().values());
 
         try {
             K2JVMCompiler compiler = new K2JVMCompiler();
@@ -101,6 +100,7 @@ public class IncrementalKotlinCompiler extends Task<AndroidProject> {
             args.setModuleName("codeassist-kotlin");
             args.setNoReflect(true);
             args.setNoStdlib(true);
+            args.setSuppressWarnings(false);
             args.setJavaSourceRoots(javaSourceRoots.stream()
                     .map(File::getAbsolutePath)
                     .toArray(String[]::new));
@@ -110,6 +110,7 @@ public class IncrementalKotlinCompiler extends Task<AndroidProject> {
                     .map(File::getAbsolutePath)
                     .toArray(String[]::new));
             File cacheDir = new File(getProject().getBuildDirectory(), "intermediate/kotlin");
+
             IncrementalJvmCompilerRunnerKt.makeIncrementally(cacheDir,
                     Arrays.asList(getProject().getJavaDirectory(),
                             new File(getProject().getBuildDirectory(), "gen")),
