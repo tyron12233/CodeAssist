@@ -184,8 +184,8 @@ public class MainFragment extends Fragment {
         });
 
         File root;
-        if (ProjectManager.getInstance().getCurrentProject() != null) {
-            root = ProjectManager.getInstance().getCurrentProject().getRootFile();
+        if (mProject != null) {
+            root = mProject.getRootFile();
         } else {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 root = requireActivity().getExternalFilesDir(null);
