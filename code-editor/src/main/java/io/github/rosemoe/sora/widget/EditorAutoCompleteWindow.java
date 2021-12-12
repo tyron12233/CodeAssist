@@ -340,7 +340,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             mCurrent = 0;
             mAdapter.setSelection(0);
 
-            if (!isShowing()) {
+            if (isShowing()) {
                 int newHeight = 300;
                 update(getWidth(), Math.min(newHeight, mMaxHeight));
             }
