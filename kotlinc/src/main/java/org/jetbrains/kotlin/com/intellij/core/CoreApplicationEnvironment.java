@@ -232,7 +232,7 @@ public class CoreApplicationEnvironment {
         }
     }
 
-    public <T> void registerApplicationDynamicExtensionPoint(String name, Class<T> clazz) {
+    public static <T> void registerApplicationDynamicExtensionPoint(String name, Class<T> clazz) {
         registerExtensionPoint(Extensions.getRootArea(), name, clazz);
     }
 
