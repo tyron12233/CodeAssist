@@ -85,7 +85,7 @@ public class CleanTask extends Task<AndroidProject> {
 
             if (!classExists(path)) {
                 if (file.delete()) {
-                    getLogger().debug("Deleted class file " + file.getName());
+                    getLogger().verbose("Deleted class file " + file.getName());
                 };
             }
         }
@@ -124,7 +124,7 @@ public class CleanTask extends Task<AndroidProject> {
 
             if (!classExists(packageName)) {
                 if (file.delete()) {
-                    getLogger().debug("Deleted dex file " + path);
+                    getLogger().verbose("Deleted dex file " + path);
                 }
             }
         }
