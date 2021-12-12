@@ -175,10 +175,7 @@ public class CoreApplicationEnvironment {
         if (implementation instanceof Disposable) {
             Disposer.register(this.myApplication, (Disposable) implementation);
         }
-
     }
-
-
 
     public void registerFileType(FileType fileType, String extension) {
         this.myFileTypeRegistry.registerFileType(fileType, extension);
@@ -232,8 +229,17 @@ public class CoreApplicationEnvironment {
         }
     }
 
+    public static <T> void registerDynamicExtensionPoint(ExtensionsArea area,
+                                                         String name,
+                                                         Class<? extends T> aClass) {
+        if (!area.hasExtensionPoint(name)) {
+            Kind kind = !aClass.isInterface() && !Modifier.isAbstract(aClass.getModifiers()) ? Kind.BEAN_CLASS : Kind.INTERFACE;
+            area.registerDynamicExtensionPoint(name, aClass.getName(), kind);
+        }
+    }
+
     public static <T> void registerApplicationDynamicExtensionPoint(String name, Class<T> clazz) {
-        registerExtensionPoint(Extensions.getRootArea(), name, clazz);
+        registerDynamicExtensionPoint(Extensions.getRootArea(), name, clazz);
     }
 
     public static <T> void registerApplicationExtensionPoint(ExtensionPointName<T> extensionPointName, Class<? extends T> aClass) {
