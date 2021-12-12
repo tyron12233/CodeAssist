@@ -681,14 +681,15 @@ public class WizardFragment extends Fragment {
     }
 
     private void extractTemplates() throws IOException {
-        File templatesDir = requireContext().getExternalFilesDir(null);
+        File templatesDir = new File(requireContext().getExternalFilesDir(null),
+                "templates");
         if (templatesDir.exists()) {
             FileUtils.deleteDirectory(templatesDir);
         }
 
         Decompress.unzipFromAssets(requireContext(), "templates.zip",
                 templatesDir.getAbsolutePath());
-        File hashFile = new File(new File(templatesDir, "templates"), "hash");
+        File hashFile = new File(templatesDir, "hash");
         if (!hashFile.createNewFile()) {
             throw new IOException("Unable to create hash file");
         }
