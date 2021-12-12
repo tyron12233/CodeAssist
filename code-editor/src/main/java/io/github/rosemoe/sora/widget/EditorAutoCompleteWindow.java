@@ -361,6 +361,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         private final boolean mInner;
         private final TextAnalyzeResult mColors;
         private final int mLine;
+        private final int mColumn;
         private final AutoCompleteProvider mLocalProvider = mProvider;
 
         public MatchThread(long requestTime, String prefix) {
@@ -368,13 +369,14 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             mPrefix = prefix;
             mColors = mEditor.getTextAnalyzeResult();
             mLine = mEditor.getCursor().getLeftLine();
+            mColumn = mEditor.getCursor().getLeftColumn();
             mInner = (!mEditor.isHighlightCurrentBlock()) || (mEditor.getBlockIndex() != -1);
         }
 
         @Override
         public void run() {
             try {
-                displayResults(mLocalProvider.getAutoCompleteItems(mPrefix, mColors, mLine, mCurrent), mTime);
+                displayResults(mLocalProvider.getAutoCompleteItems(mPrefix, mColors, mLine, mColumn), mTime);
             } catch (InterruptedException e) {
                 Log.d("MatchThread", "Thread is interrupted, exiting");
             }

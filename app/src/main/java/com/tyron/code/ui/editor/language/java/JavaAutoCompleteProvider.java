@@ -52,6 +52,9 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
                         .complete((JavaProject) currentProject,
                                 mEditor.getCurrentFile(),
                                 content.get().toString(),
+                                prefix,
+                                line,
+                                column,
                                 mEditor.getCursor().getLeft());
 
                 for (com.tyron.completion.model.CompletionItem item : completionList.items) {
