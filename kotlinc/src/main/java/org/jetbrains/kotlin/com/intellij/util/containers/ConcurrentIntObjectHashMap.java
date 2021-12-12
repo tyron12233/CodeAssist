@@ -2198,7 +2198,7 @@ public final class ConcurrentIntObjectHashMap<V> implements ConcurrentIntObjectM
 
         static {
             try {
-                Unsafe unsafe = Unsafe.getUnsafe();
+                Unsafe unsafe = UnsafeUtil.findUnsafe();
                 Class<?> k = TreeBin.class;
                 LOCKSTATE = unsafe.objectFieldOffset(k.getDeclaredField("lockState"));
             }
@@ -2768,7 +2768,7 @@ public final class ConcurrentIntObjectHashMap<V> implements ConcurrentIntObjectM
 
     static {
         try {
-            theUnsafe = findUnsafe();
+            theUnsafe = UnsafeUtil.findUnsafe();
             Class<?> k = ConcurrentIntObjectHashMap.class;
             SIZECTL = theUnsafe.objectFieldOffset(k.getDeclaredField("sizeCtl"));
             TRANSFERINDEX = theUnsafe.objectFieldOffset(k.getDeclaredField("transferIndex"));
@@ -2786,33 +2786,6 @@ public final class ConcurrentIntObjectHashMap<V> implements ConcurrentIntObjectM
         }
         catch (Throwable e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    private static Unsafe findUnsafe() {
-        try {
-            return Unsafe.getUnsafe();
-        } catch (SecurityException se) {
-            return AccessController.doPrivileged((PrivilegedAction<Unsafe>) () -> {
-                try {
-                    Class<Unsafe> type = Unsafe.class;
-                    try {
-                        Field field = type.getDeclaredField("theUnsafe");
-                        field.setAccessible(true);
-                        return type.cast(field.get(type));
-                    } catch (Exception e) {
-                        for (Field field : type.getDeclaredFields()) {
-                            if (type.isAssignableFrom(field.getType())) {
-                                field.setAccessible(true);
-                                return type.cast(field.get(type));
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    throw new RuntimeException("Unsafe unavailable", e);
-                }
-                throw new RuntimeException("Unsafe unavailable");
-            });
         }
     }
 
