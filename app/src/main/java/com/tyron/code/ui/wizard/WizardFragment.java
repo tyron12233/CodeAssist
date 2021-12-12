@@ -688,7 +688,7 @@ public class WizardFragment extends Fragment {
         }
 
         Decompress.unzipFromAssets(requireContext(), "templates.zip",
-                templatesDir.getAbsolutePath());
+                templatesDir.getParent());
         File hashFile = new File(templatesDir, "hash");
         if (!hashFile.createNewFile()) {
             throw new IOException("Unable to create hash file");
