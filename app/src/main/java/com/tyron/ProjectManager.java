@@ -41,7 +41,7 @@ public class ProjectManager {
     public interface TaskListener {
         void onTaskStarted(String message);
 
-        void onComplete(boolean success, String message);
+        void onComplete(Project project, boolean success, String message);
     }
 
     public interface OnProjectOpenListener {
@@ -88,7 +88,7 @@ public class ProjectManager {
         try {
             project.open();
         } catch (IOException e) {
-            mListener.onComplete(false, "Unable to open project: " + e.getMessage());
+            mListener.onComplete(project,false, "Unable to open project: " + e.getMessage());
             return;
         }
 
@@ -114,7 +114,7 @@ public class ProjectManager {
         if (project instanceof JavaProject) {
             mListener.onTaskStarted("Indexing");
             CompletionEngine.getInstance().index((JavaProject) project, () ->
-                    mListener.onComplete(true, "Index successful"));
+                    mListener.onComplete(project,true, "Index successful"));
         }
     }
 
@@ -130,7 +130,7 @@ public class ProjectManager {
                     "app/build.gradle")));
         } catch (Exception exception) {
             //TODO: handle parse error
-            mListener.onComplete(false, exception.getMessage());
+            mListener.onComplete(project,false, exception.getMessage());
         }
 
         DependencyResolver resolver = new DependencyResolver(dependencies);

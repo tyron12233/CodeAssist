@@ -66,8 +66,8 @@ public class IndexService extends Service {
             }
 
             @Override
-            public void onComplete(boolean success, String message) {
-                mMainHandler.post(() -> listener.onComplete(success, message));
+            public void onComplete(Project project, boolean success, String message) {
+                mMainHandler.post(() -> listener.onComplete(project, success, message));
                 stopForeground(true);
                 stopSelf();
             }

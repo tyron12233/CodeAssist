@@ -73,12 +73,12 @@ public class IndexServiceConnection implements ServiceConnection {
 
         @SuppressWarnings("ConstantConditions")
         @Override
-        public void onComplete(boolean success, String message) {
+        public void onComplete(Project project, boolean success, String message) {
             mMainViewModel.setIndexing(false);
             mMainViewModel.setCurrentState(null);
             if (success) {
-                Project project = ProjectManager.getInstance().getCurrentProject();
-                if (project != null) {
+                Project currentProject = ProjectManager.getInstance().getCurrentProject();
+                if (project.equals(currentProject)) {
                     mMainViewModel.setToolbarTitle(project.getRootFile().getName());
                     mMainViewModel.setFiles(getOpenedFiles(project.getSettings()));
                 }
