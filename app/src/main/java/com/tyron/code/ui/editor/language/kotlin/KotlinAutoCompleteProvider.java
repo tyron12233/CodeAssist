@@ -70,6 +70,9 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
         // waiting for code editor to support async code completions
         mTask = engine.complete(mEditor.getCurrentFile(),
                 mEditor.getText().toString(),
+                prefix,
+                line,
+                column,
                 mEditor.getCursor().getLeft());
 
         try {

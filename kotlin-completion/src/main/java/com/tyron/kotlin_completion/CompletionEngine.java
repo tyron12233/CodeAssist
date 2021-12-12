@@ -6,6 +6,7 @@ import android.util.Pair;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.common.util.Debouncer;
+import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.completion.Completions;
 import com.tyron.kotlin_completion.diagnostic.ConvertDiagnosticKt;
@@ -35,6 +36,7 @@ public class CompletionEngine {
     private final SourcePath sp;
     private final CompilerClassPath classPath;
     private final AsyncExecutor async = new AsyncExecutor();
+    private CachedCompletion cachedCompletion;
 
     private Debouncer debounceLint = new Debouncer(Duration.ofMillis(500));
     private Set<File> lintTodo = new HashSet<>();
@@ -98,6 +100,77 @@ public class CompletionEngine {
             Pair<CompiledFile, Integer> pair = recover(file, contents, Recompile.NEVER, cursor);
             return new Completions().completions(pair.first, cursor, sp.getIndex());
         });
+    }
+
+    public CompletableFuture<CompletionList> complete(File file,
+                                                      String contents,
+                                                      String prefix,
+                                                      int line,
+                                                      int column,
+                                                      int cursor) {
+        if (isIndexing()) {
+            return CompletableFuture.completedFuture(CompletionList.EMPTY);
+        }
+
+        Recompile recompile;
+        if (isIncrementalCompletion(cachedCompletion, file, partialIdentifier(prefix, prefix.length()), line, column)) {
+            recompile = Recompile.NEVER;
+            Log.d("Kotlin completion", "Using incremental completion");
+        } else {
+            recompile = Recompile.ALWAYS;
+        }
+        return async.compute(() -> {
+            Pair<CompiledFile, Integer> pair = recover(file, contents, recompile, cursor);
+            CompletionList completions = new Completions().completions(pair.first, cursor, sp.getIndex());
+            cachedCompletion = new CachedCompletion(file, line, column, partialIdentifier(prefix, prefix.length()), completions);
+            return completions;
+        });
+    }
+
+    private String partialIdentifier(String contents, int end) {
+        int start = end;
+        while (start > 0 && Character.isJavaIdentifierPart(contents.charAt(start - 1))) {
+            start--;
+        }
+        return contents.substring(start, end);
+    }
+
+    private boolean isIncrementalCompletion(CachedCompletion cachedCompletion,
+                                            File file,
+                                            String prefix,
+                                            int line, int column) {
+        prefix = partialIdentifier(prefix, prefix.length());;
+
+        if (cachedCompletion == null) {
+            return false;
+        }
+
+        if (!file.equals(cachedCompletion.getFile())) {
+            return false;
+        }
+
+        if (prefix.endsWith(".")) {
+            return false;
+        }
+
+        if (cachedCompletion.getLine() != line) {
+            return false;
+        }
+
+        if (cachedCompletion.getColumn() > column) {
+            return false;
+        }
+
+        if (!prefix.startsWith(cachedCompletion.getPrefix())) {
+            return false;
+        }
+
+        if (prefix.length() - cachedCompletion.getPrefix().length() !=
+                column - cachedCompletion.getColumn()) {
+            return false;
+        }
+
+        return true;
     }
 
     private List<File> clearLint() {

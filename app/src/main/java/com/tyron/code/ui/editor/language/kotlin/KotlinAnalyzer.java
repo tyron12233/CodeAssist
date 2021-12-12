@@ -36,14 +36,14 @@ public class KotlinAnalyzer implements CodeAnalyzer {
 
     @Override
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
-        Project currentProject = ProjectManager.getInstance().getCurrentProject();
-        if (currentProject instanceof AndroidProject) {
-            if (PreferenceManager.getDefaultSharedPreferences(mEditor.getContext())
-                    .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
-                CompletionEngine.getInstance((AndroidProject) currentProject)
-                        .lintLater(mEditor.getCurrentFile());
-            }
-        }
+//        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+//        if (currentProject instanceof AndroidProject) {
+//            if (PreferenceManager.getDefaultSharedPreferences(mEditor.getContext())
+//                    .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
+//                CompletionEngine.getInstance((AndroidProject) currentProject)
+//                        .lintLater(mEditor.getCurrentFile());
+//            }
+//        }
         try {
             CodePointCharStream stream = CharStreams.fromString(String.valueOf(content));
             KotlinLexer lexer = new KotlinLexer(stream);
