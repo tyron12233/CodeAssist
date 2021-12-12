@@ -85,7 +85,7 @@ public class CleanTask extends Task<AndroidProject> {
 
             if (!classExists(path)) {
                 if (file.delete()) {
-                    getLogger().verbose("Deleted class file " + file.getName());
+                    getLogger().debug("Deleted class file " + file.getName());
                 };
             }
         }
@@ -124,13 +124,16 @@ public class CleanTask extends Task<AndroidProject> {
 
             if (!classExists(packageName)) {
                 if (file.delete()) {
-                    getLogger().verbose("Deleted dex file " + path);
+                    getLogger().debug("Deleted dex file " + path);
                 }
             }
         }
     }
 
     private boolean classExists(String fqn) {
+        if (fqn.contains("$")) {
+            fqn = fqn.substring(0, fqn.indexOf('$'));
+        }
         return getProject().getJavaFiles().get(fqn) != null ||
                 getProject().getKotlinFiles().get(fqn) != null;
     }
