@@ -307,10 +307,10 @@ public class CompletionProvider {
 
         CompletionList list = new CompletionList();
         list.items = completeUsingScope(task, path, partial, endsWithParen);
-        addStaticImports(task, path.getCompilationUnit(), partial, endsWithParen, list);
         if (partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
             addClassNames(path.getCompilationUnit(), partial, list);
         }
+        addStaticImports(task, path.getCompilationUnit(), partial, endsWithParen, list);
         addKeywords(path, partial, list);
         return list;
     }
@@ -374,7 +374,12 @@ public class CompletionProvider {
         }
     }
 
-    private CompletionList completeDeclaredTypeMemberSelect(CompileTask task, Scope scope, DeclaredType type, boolean isStatic, String partial, boolean endsWithParen) throws InterruptedException {
+    private CompletionList completeDeclaredTypeMemberSelect(CompileTask task,
+                                                            Scope scope,
+                                                            DeclaredType type,
+                                                            boolean isStatic,
+                                                            String partial,
+                                                            boolean endsWithParen) throws InterruptedException {
 	    checkInterrupted();
 
         Trees trees = Trees.instance(task.task);
@@ -443,10 +448,6 @@ public class CompletionProvider {
             list.addAll(addAnonymous(task, path.getParentPath(), partial));
         }
         for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
-            if (list.size() > MAX_COMPLETION_ITEMS) {
-                break;
-            }
-
             if (element.getKind() == ElementKind.METHOD) {
                 ExecutableElement executableElement = (ExecutableElement) element;
                 list.addAll(method(Collections.singletonList(executableElement), endsWithParen));
@@ -603,10 +604,6 @@ public class CompletionProvider {
                 } else {
                     list.items.add(item(member));
                 }
-                if (list.items.size() + methods.size() > MAX_COMPLETION_ITEMS) {
-                    list.isIncomplete = true;
-                    break outer;
-                }
             }
         }
         for (List<ExecutableElement> overloads : methods.values()) {
@@ -662,10 +659,6 @@ public class CompletionProvider {
                     list.items.add(classItem(className));
                 } else {
                     list.items.add(packageItem(segment));
-                }
-                if (list.items.size() > MAX_COMPLETION_ITEMS) {
-                    list.isIncomplete = true;
-                    return list;
                 }
             }
         }
@@ -734,10 +727,6 @@ public class CompletionProvider {
             } else {
                 list.add(item(member));
             }
-
-            if (list.size() > MAX_COMPLETION_ITEMS) {
-                break;
-            }
         }
         for (List<ExecutableElement> overloads : methods.values()) {
             list.addAll(method(overloads, false, true));
@@ -791,10 +780,6 @@ public class CompletionProvider {
         for (String className : compiler.publicTopLevelTypes()) {
             if (FuzzySearch.partialRatio(className, partial) < 90) continue;
             if (uniques.contains(className)) continue;
-            if (list.items.size() > MAX_COMPLETION_ITEMS) {
-                list.isIncomplete = true;
-                break;
-            }
             list.items.add(classItem(className));
             uniques.add(className);
         }
@@ -877,7 +862,7 @@ public class CompletionProvider {
         for (ExecutableElement first : overloads) {
             CompletionItem item = new CompletionItem();
             item.label = getMethodLabel(first) + getThrowsType(first);
-            item.commitText = first.getSimpleName().toString() + (methodRef ? "" : "()");
+            item.commitText = first.getSimpleName().toString() + ((methodRef || endsWithParen) ? "" : "()");
             item.detail = simpleType(first.getReturnType());
             item.iconKind = CircleDrawable.Kind.Method;
             item.cursorOffset = item.commitText.length();
