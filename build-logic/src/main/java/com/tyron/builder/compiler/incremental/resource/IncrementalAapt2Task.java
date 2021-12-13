@@ -189,6 +189,7 @@ public class IncrementalAapt2Task extends Task<AndroidProject> {
                 getLogger().warning("Unrecognized file " + resource.getName() + " at compiled directory");
                 continue;
             }
+            args.add("-R");
             args.add(resource.getAbsolutePath());
         }
 
