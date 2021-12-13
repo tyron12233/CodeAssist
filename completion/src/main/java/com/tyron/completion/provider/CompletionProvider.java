@@ -171,13 +171,11 @@ public class CompletionProvider {
 	public CompletionList compileAndComplete(File file, String contents,
                                              String partial,
                                              long cursor) throws InterruptedException {
-		Instant start = Instant.now();
-		SourceFileObject source = new SourceFileObject(file.toPath(), contents, start);
+		SourceFileObject source = new SourceFileObject(file.toPath(), contents, Instant.now());
 		boolean endsWithParen = endsWithParen(contents, (int) cursor);
 
 		checkInterrupted();
 		try (CompileTask task = compiler.compile(Collections.singletonList(source))) {
-			Log.d(TAG, "Compiled in: " + Duration.between(start, Instant.now()).toMillis() + "ms");
 			TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
             switch (path.getLeaf().getKind()) {
 				case IDENTIFIER:             
@@ -197,14 +195,6 @@ public class CompletionProvider {
 			}
 		}
 	}
-
-	/**
-	 * Use compileAndComplete instead for incremental compilation
-	 */
-	@Deprecated
-    public CompletionList complete(CompilationUnitTree root, int index) {
-        return null;
-    }
 
 	private void addTopLevelSnippets(ParseTask task, CompletionList list) {
         Path file = Paths.get(task.root.getSourceFile().toUri());
@@ -318,7 +308,7 @@ public class CompletionProvider {
         CompletionList list = new CompletionList();
         list.items = completeUsingScope(task, path, partial, endsWithParen);
         addStaticImports(task, path.getCompilationUnit(), partial, endsWithParen, list);
-        if (!list.isIncomplete && partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
+        if (partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
             addClassNames(path.getCompilationUnit(), partial, list);
         }
         addKeywords(path, partial, list);
@@ -452,7 +442,6 @@ public class CompletionProvider {
         if (path.getParentPath().getLeaf().getKind() == Tree.Kind.NEW_CLASS) {
             list.addAll(addAnonymous(task, path.getParentPath(), partial));
         }
-
         for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
             if (list.size() > MAX_COMPLETION_ITEMS) {
                 break;
