@@ -58,6 +58,11 @@ public abstract class BuilderImpl<T extends Project> implements Builder<T> {
                 task.prepare(type);
                 task.run();
             } catch (Throwable e) {
+                if (e instanceof OutOfMemoryError) {
+                    tasks.clear();
+                    mTasksRan.clear();
+                    throw new CompilationFailedException("Builder ran out of memory", e);
+                }
                 task.clean();
                 mTasksRan.forEach(Task::clean);
                 throw e;
