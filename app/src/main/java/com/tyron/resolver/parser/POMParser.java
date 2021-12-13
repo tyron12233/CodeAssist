@@ -169,6 +169,7 @@ public class POMParser {
                 version = property;
             }
         }
+
         parser.require(XmlPullParser.END_TAG, ns, "version");
         return version;
     }
