@@ -89,9 +89,7 @@ public class CoreApplicationEnvironment {
         DisabledPluginsState.dontLoadDisabledPlugins();
         this.myFileTypeRegistry = new CoreFileTypeRegistry();
         this.myApplication = this.createApplication(this.myParentDisposable);
-        ApplicationManager.setApplication(this.myApplication, () -> {
-            return this.myFileTypeRegistry;
-        }, this.myParentDisposable);
+        ApplicationManager.setApplication(this.myApplication, () -> this.myFileTypeRegistry, this.myParentDisposable);
         this.myLocalFileSystem = this.createLocalFileSystem();
         this.myJarFileSystem = this.createJarFileSystem();
         this.myJrtFileSystem = this.createJrtFileSystem();
