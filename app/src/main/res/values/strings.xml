@@ -115,6 +115,10 @@
     <string name="action_menu_build_debug">Build debug APK</string>
     <string name="action_menu_build_aab">Build AAB</string>
 
+    <string name="project_manager_alpha_notice_title">Alpha notice</string>
+    <string name="project_manager_alpha_notice">CodeAssist is still in alpha,
+        you may encounter crashes, bugs and incomplete features.\nYou
+        can report these issues at https://github.com/tyron12233/CodeAssist/issues</string>
     <string name="project_manager_save_location_title">Select save location</string>
     <string name="project_manager_permission_denied">Permission denied</string>
     <string name="project_manager_button_request_again">Request again</string>
@@ -128,7 +132,7 @@
     <string name="project_manager_android11_notice">Projects will be saved to the app\'s internal storage directory.
         Backup your projects before uninstalling the app.</string>
     <string name="project_manager_projects">Projects</string>
-    <string name="project_manager_empty">Projects are empty</string>
+    <string name="project_manager_empty">Projects are empty</string>`
     <string name="project_manager_create_project">Create project</string>
 
     <!-- Compiler Service -->
