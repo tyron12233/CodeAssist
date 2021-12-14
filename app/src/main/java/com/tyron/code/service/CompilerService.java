@@ -186,7 +186,9 @@ public class CompilerService extends Service {
 
             String projectName = "Project";
             if (!success) {
-                updateNotification(projectName, "Compilation failed", -1);
+                updateNotification(projectName,
+                        getString(R.string.compilation_result_failed),
+                        -1);
             } else {
                 if (shouldShowNotification) {
                     mMainHandler.post(() -> {
@@ -194,7 +196,7 @@ public class CompilerService extends Service {
                                 new NotificationCompat.Builder(this, "Compiler")
                                         .setSmallIcon(R.drawable.ic_launcher)
                                         .setContentTitle(projectName)
-                                        .setContentText("Compilation success");
+                                        .setContentText(getString(R.string.compilation_result_success));
 
                         if (type != BuildType.AAB) {
                             Intent intent = new Intent(Intent.ACTION_VIEW);
@@ -208,7 +210,7 @@ public class CompilerService extends Service {
                                     intent,
                                     PendingIntent.FLAG_IMMUTABLE);
                             builder.addAction(new NotificationCompat.Action(0,
-                                    "INSTALL",
+                                    getString(R.string.compilation_button_install),
                                     pending));
                         }
                         NotificationManagerCompat.from(this)

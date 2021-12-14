@@ -67,14 +67,13 @@ public class ProjectManagerFragment extends Fragment {
         mPermissionLauncher = registerForActivityResult(mPermissionsContract, isGranted -> {
             if (isGranted.containsValue(false)) {
                 new MaterialAlertDialogBuilder(requireContext())
-                        .setTitle("Permission denied")
-                        .setMessage("Projects will be saved to the app's internal storage directory. " +
-                                "Backup your projects before uninstalling the app.")
-                        .setPositiveButton("Request again", (d, which) -> {
+                        .setTitle(R.string.project_manager_permission_denied)
+                        .setMessage(R.string.project_manager_android11_notice)
+                        .setPositiveButton(R.string.project_manager_button_request_again, (d, which) -> {
                             mShowDialogOnPermissionGrant = true;
                             requestPermissions();
                         })
-                        .setNegativeButton("Continue", (d, which) -> {
+                        .setNegativeButton(R.string.project_manager_button_continue, (d, which) -> {
                             mShowDialogOnPermissionGrant = false;
                             setSavePath(Environment.getExternalStorageDirectory().getAbsolutePath());
                         })
@@ -144,18 +143,15 @@ public class ProjectManagerFragment extends Fragment {
             } else if (shouldShowRequestPermissionRationale()) {
                 if (shouldShowRequestPermissionRationale()) {
                     new MaterialAlertDialogBuilder(requireContext())
-                            .setMessage("The application needs storage permissions in order to " +
-                                    "save project files that will not be deleted when you uninstall " +
-                                    "the app. Alternatively you can choose to " +
-                                    "save project files into the app's internal storage.")
-                            .setPositiveButton("Allow", (d, which) -> {
+                            .setMessage(R.string.project_manager_permission_rationale)
+                            .setPositiveButton(R.string.project_manager_button_allow, (d, which) -> {
                                 mShowDialogOnPermissionGrant = true;
                                 requestPermissions();
                             })
-                            .setNegativeButton("Use internal storage", (d, which) -> {
+                            .setNegativeButton(R.string.project_manager_button_use_internal, (d, which) -> {
                                 setSavePath(Environment.getExternalStorageDirectory().getAbsolutePath());
                             })
-                            .setTitle("Storage permissions")
+                            .setTitle(R.string.project_manager_rationale_title)
                             .show();
                 }
             } else {
@@ -179,7 +175,7 @@ public class ProjectManagerFragment extends Fragment {
         properties.selection_mode = DialogConfigs.SINGLE_MODE;
         properties.root = Environment.getExternalStorageDirectory();
         FilePickerDialogFixed dialogFixed = new FilePickerDialogFixed(requireContext(), properties);
-        dialogFixed.setTitle("Select save location");
+        dialogFixed.setTitle(R.string.project_manager_save_location_title);
         dialogFixed.setDialogSelectionListener(files -> {
             setSavePath(files[0]);
             loadProjects();

@@ -500,7 +500,7 @@ public class WizardFragment extends Fragment {
                     replacePlaceholders(child);
                     continue;
                 }
-                if (child.getName().equals("build.gradle")) {
+                if (child.getName().endsWith(".gradle")) {
                     replacePlaceholder(child);
                 } else if (child.getName().endsWith(".java") || child.getName().endsWith(".kt")) {
                     replacePlaceholder(child);
@@ -519,7 +519,7 @@ public class WizardFragment extends Fragment {
     private void replacePlaceholder(File file) throws IOException {
         String string;
         try {
-            string = org.apache.commons.io.FileUtils.readFileToString(file, Charset.defaultCharset());
+            string = FileUtils.readFileToString(file, Charset.defaultCharset());
         } catch (IOException e) {
             return;
         }
@@ -565,7 +565,7 @@ public class WizardFragment extends Fragment {
         }
         FileUtils.copyDirectory(sourcesDir, projectRoot);
         FileUtils.deleteDirectory(new File(projectRoot, "app/src/main/java/$packagename"));
-        org.apache.commons.io.FileUtils.copyDirectory(new File(sourcesDir,
+        FileUtils.copyDirectory(new File(sourcesDir,
                 "app/src/main/java/$packagename"), targetSourceDir);
     }
 

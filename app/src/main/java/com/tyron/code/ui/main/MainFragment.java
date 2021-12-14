@@ -298,7 +298,7 @@ public class MainFragment extends Fragment {
                             .map(File::getAbsolutePath)
                             .collect(Collectors.toList()));
             settings.edit()
-                    .putString("editor_opened_files", itemString)
+                    .putString(ProjectSettings.SAVED_EDITOR_FILES, itemString)
                     .apply();
         }
     }
@@ -311,7 +311,7 @@ public class MainFragment extends Fragment {
         mServiceConnection.setBuildType(type);
         saveAll();
 
-        mMainViewModel.setCurrentState("Compiling");
+        mMainViewModel.setCurrentState(getString(R.string.compilation_state_compiling));
         mMainViewModel.setIndexing(true);
         mLogViewModel.clear(LogViewModel.BUILD_LOG);
 

@@ -7,7 +7,7 @@
     <item name="copy" type="string">Copy</item>
     <item name="selectAll" formatted="true" type="string">Select All</item>
     <item name="saveToProject" translatable="false" type="string">Project</item>
-    <item name="cut" type="string">Cut</item>
+    <item name="cut" type="string" translatable="false">Cut</item>
     <item name="last" type="string">Last</item>
     <item name="next" type="string">Next</item>
     <item name="replace" type="string">Replace</item>
@@ -96,7 +96,9 @@
     <string name="menu_action_new_java_class">Java class </string>
     <string name="menu_action_new_kotlin_class">Kotlin class</string>
     <string name="menu_action_new_directory">Directory</string>
+    <string name="menu_action_new_file">File</string>
     <string name="directory_name">Directory name</string>
+    <string name="file_name">File name</string>
     <string name="menu_new">New</string>
     <string name="menu_refactor">Refactor</string>
     <string name="item_project">Project</string>
@@ -113,7 +115,25 @@
     <string name="action_menu_build_debug">Build debug APK</string>
     <string name="action_menu_build_aab">Build AAB</string>
 
+    <string name="project_manager_save_location_title">Select save location</string>
+    <string name="project_manager_permission_denied">Permission denied</string>
+    <string name="project_manager_button_request_again">Request again</string>
+    <string name="project_manager_button_continue">Continue</string>
+    <string name="project_manager_rationale_title">Storage permissions</string>
+    <string name="project_manager_button_allow">Allow</string>
+    <string name="project_manager_button_use_internal">Use internal storage</string>
+    <string name="project_manager_permission_rationale">The application needs storage permissions
+        in order to save project files that will not be deleted when you uninstall the
+        app. Alternatively you can choose to save project files into the app\'s internal storage.</string>
+    <string name="project_manager_android11_notice">Projects will be saved to the app\'s internal storage directory.
+        Backup your projects before uninstalling the app.</string>
     <string name="project_manager_projects">Projects</string>
     <string name="project_manager_empty">Projects are empty</string>
     <string name="project_manager_create_project">Create project</string>
+
+    <!-- Compiler Service -->
+    <string name="compilation_state_compiling">Compiling</string>
+    <string name="compilation_button_install">INSTALL</string>
+    <string name="compilation_result_success">Compilation success</string>
+    <string name="compilation_result_failed">Compilation failed</string>
 </resources>

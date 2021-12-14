@@ -491,42 +491,6 @@ public class CodeEditorFragment extends Fragment
         } else {
             // TODO: handle unknown files
         }
-//        final FrameLayout container = new FrameLayout(requireContext());
-//        container.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
-//        if (mEditor != null && mLanguage instanceof LanguageXML) {
-//            Executors.newSingleThreadExecutor().execute(() -> {
-//                try {
-//                    View view = ((LanguageXML) mLanguage).showPreview(requireContext(), container);
-//                    requireActivity().runOnUiThread(() -> {
-//
-//                        if (view != null) {
-//                            container.addView(view, new FrameLayout.LayoutParams(-1, -1));
-//
-//                            AlertDialog show = new AlertDialog.Builder(requireContext())
-//                                    .setView(R.layout.preview_view)
-//                                    .create();
-//                            show.setOnShowListener(d -> {
-//                                LinearLayout linearLayout = show.findViewById(R.id.root);
-//                                linearLayout.getLayoutParams().height = requireActivity().getResources()
-//                                    .getDisplayMetrics().heightPixels;
-//                                linearLayout.requestLayout();
-//                                linearLayout.addView(container, new ViewGroup.LayoutParams(-1, -1));
-//                                view.requestLayout();
-//                            });
-//                            show.show();
-//                        }
-//                    });
-//
-//                } catch (Exception e) {
-//                    requireActivity().runOnUiThread(() ->
-//                            new MaterialAlertDialogBuilder(requireContext())
-//                                    .setTitle("Unable to preview")
-//                                    .setMessage(Log.getStackTraceString(e))
-//                                    .setPositiveButton(android.R.string.ok, null)
-//                                    .show());
-//                }
-//            });
-//        }
     }
 
     private List<CodeActionList> getCodeActions() {
