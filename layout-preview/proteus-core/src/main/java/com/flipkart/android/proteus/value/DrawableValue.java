@@ -552,11 +552,11 @@ public abstract class DrawableValue extends Value {
 
     public static class RippleValue extends DrawableValue {
 
-        public static final String COLOR = "color";
+        public static final String COLOR = "android:color";
         public static final String MASK = "mask";
-        public static final String CONTENT = "content";
-        public static final String DEFAULT_BACKGROUND = "defaultBackground";
-
+        public static final String CONTENT = "android:content";
+        public static final String DEFAULT_BACKGROUND = "android:defaultBackground";
+        public static final String MASK_ID = "@android:id/mask";
         @NonNull
         public final Value color;
 
@@ -578,9 +578,39 @@ public abstract class DrawableValue extends Value {
 
         private RippleValue(ObjectValue object, ProteusContext context) {
             color = object.get(COLOR);
-            mask = DrawableResourceProcessor.staticCompile(object.get(MASK), context);
+            mask = getMask(object, context);
             content = DrawableResourceProcessor.staticCompile(object.get(CONTENT), context);
             defaultBackground = DrawableResourceProcessor.staticCompile(object.get(DEFAULT_BACKGROUND), context);
+        }
+
+        private Value getMask(ObjectValue object, ProteusContext context) {
+            Array children = object.getAsArray("children");
+            for (int i = 0; i < children.size(); i++) {
+                Value child = children.get(i);
+                if (child.isObject()) {
+                    ObjectValue childObject = child.getAsObject();
+                    String type = childObject.getAsString("type");
+                    String id = childObject.getAsString("android:id");
+                    if ("item".equals(type) && MASK_ID.equals(id)) {
+                        return getMaskItem(childObject, context);
+                    }
+                }
+            }
+            return null;
+        }
+
+        private Value getMaskItem(ObjectValue object, ProteusContext context) {
+            Array children = object.getAsArray("children");
+            if (children == null) {
+                return null;
+            }
+            for (int i = 0; i < children.size(); i++) {
+                Value child = children.get(i);
+                if (child.isObject()) {
+                    return DrawableResourceProcessor.staticCompile(child, context);
+                }
+            }
+            return null;
         }
 
         public static RippleValue valueOf(@NonNull Value color, @Nullable Value mask, @Nullable Value content, @Nullable Value defaultBackground) {
@@ -690,15 +720,15 @@ public abstract class DrawableValue extends Value {
 
     public static class Gradient extends DrawableElement {
 
-        public static final String ANGLE = "angle";
-        public static final String CENTER_X = "centerX";
-        public static final String CENTER_Y = "centerY";
-        public static final String CENTER_COLOR = "centerColor";
-        public static final String END_COLOR = "endColor";
-        public static final String GRADIENT_RADIUS = "gradientRadius";
-        public static final String START_COLOR = "startColor";
-        public static final String GRADIENT_TYPE = "gradientType";
-        public static final String USE_LEVEL = "useLevel";
+        public static final String ANGLE = "android:angle";
+        public static final String CENTER_X = "android:centerX";
+        public static final String CENTER_Y = "android:centerY";
+        public static final String CENTER_COLOR = "android:centerColor";
+        public static final String END_COLOR = "android:endColor";
+        public static final String GRADIENT_RADIUS = "android:gradientRadius";
+        public static final String START_COLOR = "android:startColor";
+        public static final String GRADIENT_TYPE = "android:gradientType";
+        public static final String USE_LEVEL = "android:useLevel";
 
         private static final int GRADIENT_TYPE_NONE = -1;
 
@@ -866,11 +896,11 @@ public abstract class DrawableValue extends Value {
 
     public static class Corners extends DrawableElement {
 
-        public static final String RADIUS = "radius";
-        public static final String TOP_LEFT_RADIUS = "topLeftRadius";
-        public static final String TOP_RIGHT_RADIUS = "topRightRadius";
-        public static final String BOTTOM_LEFT_RADIUS = "bottomLeftRadius";
-        public static final String BOTTOM_RIGHT_RADIUS = "bottomRightRadius";
+        public static final String RADIUS = "android:radius";
+        public static final String TOP_LEFT_RADIUS = "android:topLeftRadius";
+        public static final String TOP_RIGHT_RADIUS = "android:topRightRadius";
+        public static final String BOTTOM_LEFT_RADIUS = "android:bottomLeftRadius";
+        public static final String BOTTOM_RIGHT_RADIUS = "android:bottomRightRadius";
 
         @Nullable
         private final Value radius;
@@ -920,7 +950,7 @@ public abstract class DrawableValue extends Value {
 
     public static class Solid extends DrawableElement {
 
-        public static final String COLOR = "color";
+        public static final String COLOR = "android:color";
 
         private final Value color;
 
@@ -945,8 +975,8 @@ public abstract class DrawableValue extends Value {
 
     public static class Size extends DrawableElement {
 
-        private static final String WIDTH = "width";
-        private static final String HEIGHT = "height";
+        private static final String WIDTH = "android:width";
+        private static final String HEIGHT = "android:height";
 
         private final Value width;
         private final Value height;
@@ -968,10 +998,10 @@ public abstract class DrawableValue extends Value {
 
     public static class Stroke extends DrawableElement {
 
-        public static final String WIDTH = "width";
-        public static final String COLOR = "color";
-        public static final String DASH_WIDTH = "dashWidth";
-        public static final String DASH_GAP = "dashGap";
+        public static final String WIDTH = "android:width";
+        public static final String COLOR = "android:color";
+        public static final String DASH_WIDTH = "android:dashWidth";
+        public static final String DASH_GAP = "android:dashGap";
 
         public final Value width;
         public final Value color;
