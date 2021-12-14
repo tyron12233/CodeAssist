@@ -63,7 +63,7 @@ public class FindHelper {
             if (!isSameMethodType(method, erasedParameterTypes)) continue;
             return method;
         }
-        throw new RuntimeException("no method: " + methodName + " in: " + className + " with parameters: " + Arrays.toString(erasedParameterTypes));
+        return null;
     }
 
     public static VariableTree findField(ParseTask task, String className, String memberName) {

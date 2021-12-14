@@ -48,6 +48,9 @@ public class OverrideInheritedMethod implements Rewrite {
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
         Position insertPoint = insertNearCursor(compiler);
         String insertText = insertText(compiler);
+        if (insertText == null) {
+            return Rewrite.CANCELLED;
+        }
         TextEdit[] edits = {new TextEdit(new Range(insertPoint, insertPoint), insertText)};
         return Collections.singletonMap(file, edits);
     }
@@ -57,6 +60,10 @@ public class OverrideInheritedMethod implements Rewrite {
             Types types = task.task.getTypes();
             Trees trees = Trees.instance(task.task);
             ExecutableElement superMethod = FindHelper.findMethod(task, superClassName, methodName, erasedParameterTypes);
+            if (superMethod == null) {
+                return null;
+            }
+
             ClassTree thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), (long) insertPosition);
             TreePath thisPath = trees.getPath(task.root(), thisTree);
             TypeElement thisClass = (TypeElement) trees.getElement(thisPath);
@@ -67,7 +74,11 @@ public class OverrideInheritedMethod implements Rewrite {
             if (sourceFile.isPresent()) {
                 ParseTask parse = compiler.parse(sourceFile.get());
                 MethodTree source = FindHelper.findMethod(parse, superClassName, methodName, erasedParameterTypes);
-                text = EditHelper.printMethod(superMethod, parameterizedType, source);
+                if (source == null) {
+                    text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
+                } else {
+                    text = EditHelper.printMethod(superMethod, parameterizedType, source);
+                }
             } else {
                 text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
             }
