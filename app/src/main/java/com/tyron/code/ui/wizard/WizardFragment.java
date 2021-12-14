@@ -434,6 +434,11 @@ public class WizardFragment extends Fragment {
     private void verifyPackageName(Editable editable) {
         String packageName = editable.toString();
         String[] packages = packageName.split("\\.");
+        for (String name : packages) {
+            if (name.isEmpty()) {
+                mPackageNameLayout.setError(getString(R.string.wizard_package_illegal));
+            }
+        }
         if (packages == null) {
             mPackageNameLayout.setError(getString(R.string.wizard_package_empty));
         } else if (packages.length == 1) {
