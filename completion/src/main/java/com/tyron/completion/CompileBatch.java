@@ -79,7 +79,7 @@ public class CompileBatch implements AutoCloseable {
     public Set<Path> needsAdditionalSources() {
         // Check for "class not found errors" that refer to package private classes
         Set<Path> addFiles = new HashSet<>();
-        for (Diagnostic<? extends JavaFileObject> err : parent.diagnostics) {
+        for (Diagnostic<? extends JavaFileObject> err : parent.getDiagnostics()) {
             if (!err.getCode().equals("compiler.err.cant.resolve.location")) {
                 continue;
             }
@@ -159,9 +159,13 @@ public class CompileBatch implements AutoCloseable {
 
     private static ReusableCompiler.Borrow batchTask(
 		JavaCompilerService parent, Collection<? extends JavaFileObject> sources) {
-        parent.diagnostics.clear();
+        parent.clearDiagnostics();
         List<String> options = options(parent.classPath, parent.addExports);
-        return parent.compiler.getTask(parent.mSourceFileManager, parent.diagnostics::add, options, Collections.emptyList(), sources);
+        return parent.compiler.getTask(parent.mSourceFileManager,
+                parent::addDiagnostic,
+                options,
+                Collections.emptyList(),
+                sources);
     }
 
     /** Combine source path or class path entries using the system separator, for example ':' in unix */

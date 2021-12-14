@@ -39,7 +39,8 @@ public class JavaCompilerService implements CompilerProvider {
     private final FileManager mFileManager;
     public final SourceFileManager mSourceFileManager;
 
-    public final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
+    private final List<Diagnostic<? extends JavaFileObject>> diagnostics =
+            new ArrayList<>();
 
     private final JavaProject mProject;
     public final Set<File> classPath, docPath;
@@ -135,7 +136,18 @@ public class JavaCompilerService implements CompilerProvider {
         return cachedCompile;
 
     }
+    
+    public void clearDiagnostics() {
+        diagnostics.clear();
+    }
 
+    public void addDiagnostic(Diagnostic<? extends JavaFileObject> diagnostic) {
+        diagnostics.add(diagnostic);
+    }
+
+    public List<Diagnostic<? extends JavaFileObject>> getDiagnostics() {
+        return diagnostics;
+    }
 
     @Override
     public Set<String> imports() {
@@ -405,5 +417,4 @@ public class JavaCompilerService implements CompilerProvider {
         }
         return cachedCompile.closed;
     }
-
 }
