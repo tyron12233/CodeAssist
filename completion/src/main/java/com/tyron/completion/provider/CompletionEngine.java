@@ -7,6 +7,11 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.builder.compiler.BuildType;
+import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
+import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.api.AndroidProject;
 import com.tyron.builder.project.api.JavaProject;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
@@ -18,6 +23,7 @@ import org.openjdk.javax.tools.DiagnosticListener;
 import org.openjdk.javax.tools.JavaFileObject;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -121,7 +127,16 @@ public class CompletionEngine {
 
     @SuppressLint("NewApi")
     public void index(JavaProject project, Runnable callback) {
-
+        if (project instanceof AndroidProject) {
+            IncrementalAapt2Task task = new IncrementalAapt2Task((AndroidProject) project,
+                    ILogger.EMPTY, false);
+            try {
+                task.prepare(BuildType.DEBUG);
+                task.generateResourceClasses();
+            } catch (IOException | CompilationFailedException e) {
+                Log.e(TAG, "Failed to index with aapt2", e);
+            }
+        }
         Set<File> newSet = new HashSet<>();
         newSet.addAll(project.getJavaFiles().values());
         newSet.addAll(project.getLibraries());

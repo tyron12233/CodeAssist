@@ -140,6 +140,96 @@ public class IncrementalAapt2Task extends Task<AndroidProject> {
         }
     }
 
+    /**
+     * Used to generate R.java files for new projects, not used for compilation
+     */
+    public void generateResourceClasses() throws IOException, CompilationFailedException {
+        Map<String, List<File>> filesToCompile = getFiles();
+        List<File> librariesToCompile = getLibraries();
+
+        compileProject(filesToCompile);
+        compileLibraries(librariesToCompile);
+
+        List<String> args = new ArrayList<>();
+        args.add(getBinary().getAbsolutePath());
+        args.add("link");
+        args.add("-I");
+        args.add(getProject().getBootstrapJarFile().getAbsolutePath());  File files = new File(getOutputPath(), "compiled");
+        args.add("--allow-reserved-package-id");
+        args.add("--no-version-vectors");
+        args.add("--no-version-transitions");
+        args.add("--auto-add-overlay");
+        args.add("--min-sdk-version");
+        args.add(String.valueOf(getProject().getMinSdk()));
+        args.add("--target-sdk-version");
+        args.add(String.valueOf(getProject().getTargetSdk()));
+        File[] libraryResources = getOutputPath().listFiles();
+        if (libraryResources != null) {
+            for (File resource : libraryResources) {
+                if (resource.isDirectory()) {
+                    continue;
+                }
+                if (!resource.getName().endsWith(".zip")) {
+                    getLogger().warning("Unrecognized file " + resource.getName());
+                    continue;
+                }
+
+                if (resource.length() == 0) {
+                    getLogger().warning("Empty zip file " + resource.getName());
+                }
+
+                args.add("-R");
+                args.add(resource.getAbsolutePath());
+            }
+        }
+
+        File[] resources = files.listFiles();
+        if (resources == null) {
+            throw new CompilationFailedException("No files to compile");
+        }
+        for (File resource : resources) {
+            if (!resource.getName().endsWith(".flat")) {
+                getLogger().warning("Unrecognized file " + resource.getName() + " at compiled directory");
+                continue;
+            }
+            args.add("-R");
+            args.add(resource.getAbsolutePath());
+        }
+        args.add("--java");
+        File gen = new File(getProject().getBuildDirectory(), "gen");
+        if (!gen.exists()) {
+            if (!gen.mkdirs()) {
+                throw  new CompilationFailedException("Failed to create gen folder");
+            }
+        }
+        args.add(gen.getAbsolutePath());
+        args.add("-o");
+        args.add(getOutputPath().getParent() + "/generated.apk.res");
+
+        args.add("--output-text-symbols");
+        File file = new File(getOutputPath(), "R.txt");
+        Files.deleteIfExists(file.toPath());
+        if (!file.createNewFile()) {
+            throw new IOException("Unable to create R.txt file");
+        }
+        args.add(file.getAbsolutePath());
+
+        if (getProject().getAssetsDirectory().exists()) {
+            args.add("-A");
+            args.add(getProject().getAssetsDirectory().getAbsolutePath());
+        }
+        args.add("--manifest");
+        args.add(getProject().getManifestFile().getAbsolutePath());
+
+        BinaryExecutor exec = new BinaryExecutor();
+        exec.setCommands(args);
+        if (!exec.execute().trim().isEmpty()) {
+            throw new CompilationFailedException(exec.getLog());
+        }
+
+        updateJavaFiles();
+    }
+
     private void link() throws IOException, CompilationFailedException {
         getLogger().debug("Linking resources");
 
@@ -181,16 +271,15 @@ public class IncrementalAapt2Task extends Task<AndroidProject> {
         }
 
         File[] resources = files.listFiles();
-        if (resources == null) {
-            throw new CompilationFailedException("No files to compile");
-        }
-        for (File resource : resources) {
-            if (!resource.getName().endsWith(".flat")) {
-                getLogger().warning("Unrecognized file " + resource.getName() + " at compiled directory");
-                continue;
+        if (resources != null) {
+            for (File resource : resources) {
+                if (!resource.getName().endsWith(".flat")) {
+                    getLogger().warning("Unrecognized file " + resource.getName() + " at compiled directory");
+                    continue;
+                }
+                args.add("-R");
+                args.add(resource.getAbsolutePath());
             }
-            args.add("-R");
-            args.add(resource.getAbsolutePath());
         }
 
         args.add("--java");
