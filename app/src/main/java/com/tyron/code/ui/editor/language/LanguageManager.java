@@ -2,6 +2,7 @@ package com.tyron.code.ui.editor.language;
 
 import com.tyron.code.ui.editor.language.groovy.Groovy;
 import com.tyron.code.ui.editor.language.java.Java;
+import com.tyron.code.ui.editor.language.json.Json;
 import com.tyron.code.ui.editor.language.kotlin.Kotlin;
 import com.tyron.code.ui.editor.language.xml.Xml;
 
@@ -36,7 +37,8 @@ public class LanguageManager {
                         new Xml(),
                         new Java(),
                         new Kotlin(),
-                        new Groovy()));
+                        new Groovy(),
+                        new Json()));
     }
 
     public boolean supports(File file) {
