@@ -263,6 +263,8 @@ public class MainFragment extends Fragment {
         }
         mProject = project;
         mIndexServiceConnection.setProject(project);
+
+        mMainViewModel.setToolbarTitle(project.getRootFile().getName());
         mMainViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
 
