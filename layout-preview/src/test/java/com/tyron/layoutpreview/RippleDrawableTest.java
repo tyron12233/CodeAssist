@@ -21,6 +21,7 @@ public class RippleDrawableTest extends BaseTest {
         assertThat(rippleValue.color).isNotNull();
         assertThat(rippleValue.mask).isNotNull();
         assertThat(rippleValue.mask).isInstanceOf(DrawableValue.ShapeValue.class);
+        
         DrawableValue.ShapeValue mask = (DrawableValue.ShapeValue) rippleValue.mask;
         assertThat(mask.gradient).isNull();
     }
