@@ -88,7 +88,9 @@ public class ResourceDrawableParser {
             Value value = new ProteusTypeAdapterFactory(mContext)
                     .VALUE_TYPE_ADAPTER.read(new JsonReader(new StringReader(converted.toString())), true);
             ObjectValue objectValue = value.getAsObject();
-            return DrawableValue.valueOf(objectValue, mContext);
+            if (objectValue != null) {
+                return DrawableValue.valueOf(objectValue, mContext);
+            }
         }
         return null;
     }
