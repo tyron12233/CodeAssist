@@ -134,6 +134,7 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.ViewHolder>{
         switch (kind) {
             case ERROR:
                 return 0xffcf6679;
+            case MANDATORY_WARNING:
             case WARNING:
                 return Color.YELLOW;
             case NOTE:

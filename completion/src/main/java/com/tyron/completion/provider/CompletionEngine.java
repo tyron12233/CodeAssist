@@ -14,6 +14,9 @@ import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileObject;
+
 import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -28,7 +31,9 @@ import me.xdrop.fuzzywuzzy.FuzzySearch;
 public class CompletionEngine {
     private static final String TAG = CompletionEngine.class.getSimpleName();
 
-    private final Set<File> mCachedPaths = new HashSet<>();
+    private final List<DiagnosticListener<? super JavaFileObject>> mDiagnosticListeners;
+    private final DiagnosticListener<? super JavaFileObject> mInternalListener;
+    private final Set<File> mCachedPaths;
     private CachedCompletion cachedCompletion;
 
     public static volatile CompletionEngine Instance = null;
@@ -44,7 +49,21 @@ public class CompletionEngine {
     private static boolean mIndexing;
 
     private CompletionEngine() {
+        mDiagnosticListeners = new ArrayList<>();
+        mCachedPaths = new HashSet<>();
+        mInternalListener = d -> {
+            for (DiagnosticListener<? super JavaFileObject> listener : mDiagnosticListeners) {
+                listener.report(d);
+            }
+        };
+    }
 
+    public void addDiagnosticListener(DiagnosticListener<? super JavaFileObject> listener) {
+        mDiagnosticListeners.add(listener);
+    }
+
+    public void removeDiagnosticListener(DiagnosticListener<? super JavaFileObject> listener) {
+        mDiagnosticListeners.remove(listener);
     }
 
     @NonNull
@@ -60,7 +79,7 @@ public class CompletionEngine {
 
             mCachedPaths.clear();
             mCachedPaths.addAll(paths);
-
+            mProvider.setDiagnosticListener(mInternalListener);
             Log.d(TAG, "Class path changed, creating a new compiler");
         }
 
@@ -138,7 +157,7 @@ public class CompletionEngine {
                                                 String prefix,
                                                 int line,
                                                 int column,
-                                                long index ) throws InterruptedException {
+                                                long index) throws InterruptedException {
         if (mIndexing) {
             return CompletionList.EMPTY;
         }
@@ -215,7 +234,8 @@ public class CompletionEngine {
                                             File file,
                                             String prefix,
                                             int line, int column) {
-        prefix = partialIdentifier(prefix, prefix.length());;
+        prefix = partialIdentifier(prefix, prefix.length());
+        ;
 
         if (cachedCompletion == null) {
             return false;

@@ -21,15 +21,20 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.JavaProject;
 import com.tyron.builder.project.api.Project;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainViewModel;
+import com.tyron.completion.provider.CompletionEngine;
 
 import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileObject;
 
 import java.util.List;
 
-public class AppLogFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
+public class AppLogFragment extends Fragment
+        implements ProjectManager.OnProjectOpenListener {
 
     public static AppLogFragment newInstance(int id) {
         AppLogFragment fragment = new AppLogFragment();
@@ -77,6 +82,7 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
     }
 
     private BroadcastReceiver mLogReceiver;
+    private DiagnosticListener<? super JavaFileObject> mDiagnosticListener;
 
     @Override
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
@@ -84,6 +90,8 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
 
         mModel.getLogs(id).observe(getViewLifecycleOwner(), this::process);
         if (id == LogViewModel.APP_LOG) {
+            ProjectManager.getInstance().addOnProjectOpenListener(this);
+        } else if (id == LogViewModel.DEBUG) {
             ProjectManager.getInstance().addOnProjectOpenListener(this);
         }
     }
@@ -95,6 +103,9 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
         ProjectManager.getInstance().removeOnProjectOpenListener(this);
         if (mLogReceiver != null) {
             requireActivity().unregisterReceiver(mLogReceiver);
+        }
+        if (mDiagnosticListener != null) {
+            CompletionEngine.getInstance().removeDiagnosticListener(mDiagnosticListener);
         }
     }
 
@@ -108,6 +119,21 @@ public class AppLogFragment extends Fragment implements ProjectManager.OnProject
 
     @Override
     public void onProjectOpen(Project project) {
+        if (id == LogViewModel.DEBUG) {
+            if (project instanceof JavaProject) {
+                mDiagnosticListener = d -> {
+                    List<Diagnostic<? extends JavaFileObject>> diagnostics =
+                            CompletionEngine.getInstance()
+                                    .getCompiler((JavaProject) project)
+                                    .getDiagnostics();
+                    requireActivity().runOnUiThread(() ->
+                            mModel.updateLogs(id, diagnostics));
+                };
+                CompletionEngine.getInstance().addDiagnosticListener(mDiagnosticListener);
+            }
+            return;
+        }
+
         if (mLogReceiver != null) {
             requireActivity().unregisterReceiver(mLogReceiver);
         }

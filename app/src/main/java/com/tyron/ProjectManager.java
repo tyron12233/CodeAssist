@@ -65,6 +65,9 @@ public class ProjectManager {
     }
 
     public void addOnProjectOpenListener(OnProjectOpenListener listener) {
+        if (!CompletionEngine.isIndexing() && mCurrentProject != null) {
+            listener.onProjectOpen(mCurrentProject);
+        }
         mProjectOpenListeners.add(listener);
     }
 

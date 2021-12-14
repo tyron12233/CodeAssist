@@ -10,12 +10,14 @@ import androidx.lifecycle.ViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 
 import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class LogViewModel extends ViewModel {
-    
+
     private static int totalCount;
     public static final int APP_LOG = totalCount++;
     public static final int BUILD_LOG = totalCount++;
@@ -24,14 +26,24 @@ public class LogViewModel extends ViewModel {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private List<MutableLiveData<List<DiagnosticWrapper>>> log;
-    
+
     public LiveData<List<DiagnosticWrapper>> getLogs(int id) {
         if (log == null) {
             log = init();
         }
         return log.get(id);
     }
-    
+
+    public void updateLogs(int id, List<Diagnostic<? extends JavaFileObject>> diagnostics) {
+        if (log == null) {
+            log = init();
+        }
+        MutableLiveData<List<DiagnosticWrapper>> logData = this.log.get(id);
+        logData.setValue(diagnostics.stream()
+                .map(DiagnosticWrapper::new)
+                .collect(Collectors.toList()));
+    }
+
     private List<MutableLiveData<List<DiagnosticWrapper>>> init() {
         List<MutableLiveData<List<DiagnosticWrapper>>> list = new ArrayList<>();
         for (int i = 0; i < totalCount; i++) {
@@ -39,7 +51,7 @@ public class LogViewModel extends ViewModel {
         }
         return list;
     }
-    
+
     public void clear(int id) {
         MutableLiveData<List<DiagnosticWrapper>> data = (MutableLiveData<List<DiagnosticWrapper>>) getLogs(id);
         data.setValue(new ArrayList<>());
@@ -52,6 +64,7 @@ public class LogViewModel extends ViewModel {
     public void d(int id, String message) {
         d(id, wrap(message, Diagnostic.Kind.OTHER));
     }
+
     public void d(int id, DiagnosticWrapper diagnosticWrapper) {
         add(id, diagnosticWrapper);
     }
@@ -77,7 +90,8 @@ public class LogViewModel extends ViewModel {
 
     /**
      * Convenience method to add a diagnostic to a ViewModel
-     * @param id the log id to set to
+     *
+     * @param id                the log id to set to
      * @param diagnosticWrapper the DiagnosticWrapper to add
      */
     private void add(int id, DiagnosticWrapper diagnosticWrapper) {
@@ -91,13 +105,14 @@ public class LogViewModel extends ViewModel {
 
     /**
      * Checks if the current thread is the main thread and does not post it if so
-     * @param id log id to set the value to
+     *
+     * @param id      log id to set the value to
      * @param current Value to set to the ViewModel
      */
     private void maybePost(int id, List<DiagnosticWrapper> current) {
         if (Thread.currentThread() != Looper.getMainLooper().getThread()) {
             // Using postValue will ignore all values except the last one, we don't want that
-            mainHandler.post(() ->  log.get(id).setValue(current));
+            mainHandler.post(() -> log.get(id).setValue(current));
         } else {
             log.get(id).setValue(current);
         }

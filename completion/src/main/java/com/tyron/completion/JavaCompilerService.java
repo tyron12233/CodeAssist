@@ -3,6 +3,7 @@ package com.tyron.completion;
 import android.annotation.SuppressLint;
 import android.util.Log;
 
+import com.google.common.collect.ImmutableList;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.JavaProject;
@@ -11,6 +12,7 @@ import com.tyron.common.util.StringSearch;
 import com.tyron.completion.provider.CompletionEngine;
 
 import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticListener;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.javax.tools.StandardLocation;
 import org.openjdk.source.tree.CompilationUnitTree;
@@ -36,6 +38,7 @@ import java.util.regex.Pattern;
 
 public class JavaCompilerService implements CompilerProvider {
 
+    private DiagnosticListener<? super JavaFileObject> mDiagnosticListener;
     private final FileManager mFileManager;
     public final SourceFileManager mSourceFileManager;
 
@@ -139,14 +142,24 @@ public class JavaCompilerService implements CompilerProvider {
     
     public void clearDiagnostics() {
         diagnostics.clear();
+        if (mDiagnosticListener != null) {
+            mDiagnosticListener.report(null);
+        }
     }
 
     public void addDiagnostic(Diagnostic<? extends JavaFileObject> diagnostic) {
         diagnostics.add(diagnostic);
+        if (mDiagnosticListener != null) {
+            mDiagnosticListener.report(diagnostic);
+        }
+    }
+
+    public void setDiagnosticListener(DiagnosticListener<? super JavaFileObject> listener) {
+        mDiagnosticListener = listener;
     }
 
     public List<Diagnostic<? extends JavaFileObject>> getDiagnostics() {
-        return diagnostics;
+        return ImmutableList.copyOf(diagnostics);
     }
 
     @Override
