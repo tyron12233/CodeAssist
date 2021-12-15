@@ -4,31 +4,26 @@ import android.os.Parcel;
 
 import com.tyron.code.template.CodeTemplate;
 
-public class KotlinClassTemplate extends CodeTemplate {
+public class KotlinAbstractClassTemplate extends KotlinClassTemplate {
 
-    public KotlinClassTemplate() {
+    public KotlinAbstractClassTemplate() {
 
     }
 
-    public KotlinClassTemplate(Parcel in) {
+    public KotlinAbstractClassTemplate(Parcel in) {
         super(in);
     }
 
     @Override
     public String getName() {
-        return "Kotlin class";
+        return "Kotlin Abstract Class";
     }
 
     @Override
     public void setup() {
         setContents("package " + CodeTemplate.PACKAGE_NAME + "\n\n" +
-                "class " + CodeTemplate.CLASS_NAME + " {\n" +
+                "abstract class " + CodeTemplate.CLASS_NAME + " {\n" +
                 "\t" + "\n" +
                 "}");
-    }
-
-    @Override
-    public String getExtension() {
-        return ".kt";
     }
 }
