@@ -125,7 +125,6 @@ public class EditorContainerFragment extends Fragment {
         }).attach();
 
         mBehavior = BottomSheetBehavior.from(root.findViewById(R.id.persistent_sheet));
-        mBehavior.setFitToContents(true);
         mBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
             @Override
             public void onStateChanged(@NonNull View p1, int state) {
