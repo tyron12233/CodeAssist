@@ -25,6 +25,7 @@ import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.parser.ParseHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Binding;
+import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Gravity;
 import com.flipkart.android.proteus.value.NestedBinding;
 import com.flipkart.android.proteus.value.ObjectValue;
@@ -86,7 +87,7 @@ public abstract class AttributeProcessor<V extends View> {
     } else if (Binding.isBindingValue(string)) {
       return Binding.valueOf(string, context, manager);
     } else if (Resource.isResource(string)) {
-      return Resource.valueOf(string, null, context);
+      return Resource.valueOf(string, context);
     } else if (AttributeResource.isAttributeResource(string)) {
       return AttributeResource.valueOf(string, context);
     } else if (StyleResource.isStyleResource(string)) {

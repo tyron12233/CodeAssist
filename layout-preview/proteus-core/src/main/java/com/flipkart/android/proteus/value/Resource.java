@@ -189,13 +189,64 @@ public class Resource extends Value {
         if (null == value) {
             return null;
         }
+        value = removeAfterSlash(value);
         Resource resource = ResourceCache.cache.get(value);
         if (null == resource) {
-            int resId = context.getResources().getIdentifier(value, type, context.getPackageName());
+            int resId = context.getResources().getIdentifier(value, type, "android");
             resource = resId == 0 ? NOT_FOUND : new Resource(resId, value);
             ResourceCache.cache.put(value, resource);
         }
         return NOT_FOUND == resource ? null : resource;
+    }
+
+    public static String removeAfterSlash(@NonNull String value) {
+        if (!value.contains("/")) {
+            return value;
+        }
+        int index = value.indexOf('/');
+        if (index + 1 > value.length()) {
+            return value;
+        }
+        return value.substring(index + 1);
+    }
+
+    public static Resource valueOf(String value, ProteusContext context) {
+        if (isAndroid(value)) {
+            return valueOf(value, getResourceType(value), context);
+        } else {
+            return xmlValueOf(value, getResourceType(value), context);
+        }
+    }
+
+    @ResourceType
+    public static String getResourceType(String value) {
+        if (isDrawable(value)) {
+            return DRAWABLE;
+        }
+        if (isString(value)) {
+            return STRING;
+        }
+        if (isColor(value)) {
+            return COLOR;
+        }
+        if (isBoolean(value)) {
+            return BOOLEAN;
+        }
+        return null;
+    }
+
+    public static Resource xmlValueOf(String value, String type, ProteusContext context) {
+        Resource resource = ResourceCache.cache.get(value);
+        if (resource != null) {
+            return resource;
+        }
+        resource = new Resource(-1, value);
+        ResourceCache.cache.put(value, resource);
+        return resource;
+    }
+
+    public static boolean isAndroid(@NonNull String value) {
+        return value.startsWith("@android");
     }
 
     @NonNull
@@ -220,8 +271,9 @@ public class Resource extends Value {
 
     public DrawableValue getProteusDrawable(ProteusContext context) {
         if (name != null) {
+            String drawableName = removeAfterSlash(name);
             return context.getProteusResources()
-                    .getDrawable(name);
+                    .getDrawable(drawableName);
         }
         return null;
     }
@@ -245,7 +297,7 @@ public class Resource extends Value {
     public String getString(ProteusContext context) {
         String value = null;
         if (name != null) {
-            if (name.startsWith(ANDROID_RESOURCE_PREFIX_STRING)) {
+            if (isAndroid(name)) {
                 value = getString(resId, context);
             }
             if (value != null) {
@@ -254,11 +306,9 @@ public class Resource extends Value {
             Value string = context.getProteusResources()
                     .getString(name.replace(RESOURCE_PREFIX_STRING, ""));
             value = null != string ? string.getAsString() : null;
-        } else {
-            value = getString(resId, context);
         }
 
-        return value == null ? name : value;
+        return value == null ? getString(resId, context) : value;
     }
 
     @Nullable

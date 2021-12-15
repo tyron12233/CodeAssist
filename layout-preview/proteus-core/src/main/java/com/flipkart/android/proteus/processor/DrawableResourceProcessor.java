@@ -78,9 +78,7 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
         ProteusContext context = (ProteusContext) view.getContext();
         ProteusLayoutInflater.ImageLoader loader = context.getLoader();
         d.apply(view, context, loader, drawable -> {
-          if (null != drawable) {
-            setDrawable(view, drawable);
-          }
+          setDrawable(view, drawable);
         });
       }
     } else {
