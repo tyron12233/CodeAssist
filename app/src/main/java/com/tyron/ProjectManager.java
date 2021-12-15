@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.zip.ZipFile;
 
 public class ProjectManager {
 
@@ -104,7 +105,7 @@ public class ProjectManager {
                 if (downloadLibs) {
                     downloadLibraries(javaProject, mListener, logger);
                 } else {
-                    checkLibraries(javaProject, Collections.emptySet());
+                    checkLibraries(javaProject, logger, Collections.emptySet());
                 }
             } catch (IOException e) {
                 logger.error(e.getMessage());
@@ -159,10 +160,12 @@ public class ProjectManager {
             logger.warning("Unable to download dependencies: " + e.getMessage());
         }
 
-        checkLibraries(project, dependencies);
+        checkLibraries(project, logger, dependencies);
     }
 
-    private void checkLibraries(JavaProject project, Collection<Dependency> justDownloaded) throws IOException {
+    private void checkLibraries(JavaProject project,
+                                ILogger logger,
+                                Collection<Dependency> justDownloaded) throws IOException {
         Set<Library> libraries = new HashSet<>();
 
         Map<String, Library> fileLibsHashes = new HashMap<>();
@@ -170,9 +173,16 @@ public class ProjectManager {
                 c.getName().endsWith(".aar") || c.getName().endsWith(".jar"));
         if (fileLibraries != null) {
             for (File fileLibrary : fileLibraries) {
-                Library library = new Library();
-                library.setSourceFile(fileLibrary);
-                fileLibsHashes.put(AndroidUtilities.calculateMD5(fileLibrary), library);
+                try {
+                    ZipFile zipFile = new ZipFile(fileLibrary);
+                    Library library = new Library();
+                    library.setSourceFile(fileLibrary);
+                    fileLibsHashes.put(AndroidUtilities.calculateMD5(fileLibrary), library);
+                } catch (IOException e) {
+                    String message = "File " + fileLibrary +
+                            " is corrupt! Ignoring.";
+                    logger.warning(message);
+                }
             }
         }
 
