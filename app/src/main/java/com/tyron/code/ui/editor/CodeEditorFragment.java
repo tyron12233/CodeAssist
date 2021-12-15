@@ -3,16 +3,12 @@ package com.tyron.code.ui.editor;
 import android.app.ProgressDialog;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
-import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -30,7 +26,6 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
-import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.layoutEditor.LayoutEditorFragment;
@@ -487,7 +482,6 @@ public class CodeEditorFragment extends Fragment
                     .add(R.id.layout_editor_container, LayoutEditorFragment.newInstance(currentFile))
                     .addToBackStack(null)
                     .commit();
-            mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HIDDEN);
         } else {
             // TODO: handle unknown files
         }
