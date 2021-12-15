@@ -109,6 +109,16 @@ public class AppLogFragment extends Fragment
         }
     }
 
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+
+        if (mDiagnosticListener != null) {
+            CompletionEngine.getInstance().removeDiagnosticListener(mDiagnosticListener);
+            mDiagnosticListener = null;
+        }
+    }
+
     private void process(List<DiagnosticWrapper> texts) {
         mAdapter.submitList(texts);
 
