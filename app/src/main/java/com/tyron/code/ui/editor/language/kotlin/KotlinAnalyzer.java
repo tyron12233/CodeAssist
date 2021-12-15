@@ -2,14 +2,6 @@ package com.tyron.code.ui.editor.language.kotlin;
 
 import android.graphics.Color;
 
-import androidx.preference.PreferenceManager;
-
-import com.tyron.ProjectManager;
-import com.tyron.builder.project.api.AndroidProject;
-import com.tyron.builder.project.api.Project;
-import com.tyron.common.SharedPreferenceKeys;
-import com.tyron.kotlin_completion.CompletionEngine;
-
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
@@ -119,6 +111,7 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                     case KotlinLexer.THIS:
                     case KotlinLexer.INIT:
                     case KotlinLexer.OBJECT:
+                    case KotlinLexer.INTERFACE:
                         colors.addIfNeeded(line, column, EditorColorScheme.KEYWORD);
                         break;
                     case KotlinLexer.Identifier:
