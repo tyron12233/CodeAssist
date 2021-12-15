@@ -585,6 +585,9 @@ public abstract class DrawableValue extends Value {
 
         private Value getMask(ObjectValue object, ProteusContext context) {
             Array children = object.getAsArray("children");
+            if (children == null) {
+                return null;
+            }
             for (int i = 0; i < children.size(); i++) {
                 Value child = children.get(i);
                 if (child.isObject()) {
