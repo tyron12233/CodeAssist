@@ -6,6 +6,8 @@ import androidx.annotation.NonNull;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
+import com.google.common.graph.Graph;
+import com.google.common.graph.GraphBuilder;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
@@ -214,9 +216,8 @@ public class ProjectManager {
 
 
         Map<String, Library> md5Map = new HashMap<>();
-        libraries.forEach(it -> {
-            md5Map.put(AndroidUtilities.calculateMD5(it.getSourceFile()), it);
-        });
+        libraries.forEach(it ->
+                md5Map.put(AndroidUtilities.calculateMD5(it.getSourceFile()), it));
 
         File buildLibs = new File(project.getBuildDirectory(), "libs");
         File[] buildLibraryDirs = buildLibs.listFiles(File::isDirectory);
@@ -267,7 +268,7 @@ public class ProjectManager {
     }
 
     private File getFromCache(Dependency dependency) {
-        File librariesFolder = new File(ApplicationLoader.applicationContext.getCacheDir(),
+        File librariesFolder = new File(ApplicationLoader.applicationContext.getExternalFilesDir("library-cache"),
                 "libraries");
         if (!librariesFolder.exists()) {
             return null;

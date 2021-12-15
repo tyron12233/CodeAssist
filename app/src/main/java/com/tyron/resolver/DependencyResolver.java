@@ -197,7 +197,7 @@ public class DependencyResolver {
     }
 
     private void saveToCache(String contents, Dependency dependency) throws IOException {
-        File pomCacheDir = new File(ApplicationLoader.applicationContext.getCacheDir(), "pom");
+        File pomCacheDir = getPomCacheDir();
 
         if (!pomCacheDir.exists()) {
             if (!pomCacheDir.mkdir()) {
@@ -257,7 +257,9 @@ public class DependencyResolver {
 
     private File getPomCacheDir() {
         if (mPomCacheDir == null) {
-            return new File(ApplicationLoader.applicationContext.getCacheDir(), "pom");
+            File externalFilesDir = ApplicationLoader.applicationContext
+                    .getExternalFilesDir("library-cache");
+            return new File(externalFilesDir, "pom");
         }
         return mPomCacheDir;
 

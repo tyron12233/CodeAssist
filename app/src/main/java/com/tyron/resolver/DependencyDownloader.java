@@ -22,7 +22,7 @@ public class DependencyDownloader {
 
     private static final String TAG = DependencyDownloader.class.getSimpleName();
 
-    private File mOutputDir;
+    private final File mOutputDir;
     private Set<Dependency> mDownloadedLibraries;
     private Listener mListener;
     private ILogger mLogger;
@@ -213,7 +213,7 @@ public class DependencyDownloader {
      * @return null if it doesn't exist on the cache otherwise it returns the file
      */
     private File getFromCache(Dependency dependency) {
-        File libraryCacheDir = new File(ApplicationLoader.applicationContext.getCacheDir(), "libraries");
+        File libraryCacheDir = getCacheDir();
         if (!libraryCacheDir.exists()) {
             return null;
         }
@@ -235,7 +235,7 @@ public class DependencyDownloader {
             return;
         }
 
-        File libraryCacheDir = new File(ApplicationLoader.applicationContext.getCacheDir(), "libraries");
+        File libraryCacheDir = getCacheDir();
         if (!libraryCacheDir.exists()) {
             if (!libraryCacheDir.mkdir()) {
                 throw new IOException("Unable to create library cache directory");
@@ -253,7 +253,7 @@ public class DependencyDownloader {
     }
 
     private void saveToCache(Dependency library, InputStream inputStream, boolean isAar) throws IOException {
-        File libraryCacheDir = new File(ApplicationLoader.applicationContext.getCacheDir(), "libraries");
+        File libraryCacheDir = getCacheDir();
         if (!libraryCacheDir.exists()) {
             if (!libraryCacheDir.mkdir()) {
                 throw new IOException("Unable to create library cache directory");
@@ -268,5 +268,10 @@ public class DependencyDownloader {
         }
 
         FileUtils.copyInputStreamToFile(inputStream, libraryFile);
+    }
+
+    private File getCacheDir() {
+        File cacheDir = ApplicationLoader.applicationContext.getExternalFilesDir("library-cache");
+        return new File(cacheDir, "libraries");
     }
 }
