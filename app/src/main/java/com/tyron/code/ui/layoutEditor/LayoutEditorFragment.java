@@ -204,10 +204,18 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         mEditorViewModel.setPalettes(populatePalettes());
         if (isDumb) {
+            ProjectManager.getInstance().addOnProjectOpenListener(this);
             setLoadingText("Indexing");
         } else {
             createInflater();
         }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+
+        ProjectManager.getInstance().removeOnProjectOpenListener(this);
     }
 
     private void createInflater() {
@@ -215,8 +223,18 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                 (AndroidProject) ProjectManager.getInstance().getCurrentProject());
         setLoadingText("Parsing xml files");
         mInflater.parseResources(mService).whenComplete((inflater, exception) ->
-                requireActivity().runOnUiThread(() ->
-                        afterParse(inflater)));
+                requireActivity().runOnUiThread(() -> {
+                    if (inflater == null) {
+                        new MaterialAlertDialogBuilder(requireActivity())
+                                .setTitle(R.string.error)
+                                .setMessage("Unable to inflate layout: " + exception)
+                                .setPositiveButton(android.R.string.ok, null)
+                                .show();
+                        getParentFragmentManager().popBackStack();
+                    } else {
+                        afterParse(inflater);
+                    }
+                }));
     }
 
     private void afterParse(PreviewLayoutInflater inflater) {
