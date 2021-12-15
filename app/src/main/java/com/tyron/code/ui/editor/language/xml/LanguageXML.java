@@ -1,27 +1,16 @@
 package com.tyron.code.ui.editor.language.xml;
 
-import android.content.Context;
 import android.util.Log;
-import android.view.View;
-import android.view.ViewGroup;
 
-import com.flipkart.android.proteus.ProteusView;
-import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
-import com.tyron.builder.project.api.AndroidProject;
-import com.tyron.builder.project.api.Project;
 import com.tyron.code.util.ProjectUtils;
-import com.tyron.layoutpreview.convert.ConvertException;
-import com.tyron.layoutpreview.inflate.PreviewLayoutInflater;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
 
 import java.io.File;
-import java.io.IOException;
-import java.util.concurrent.Executors;
 
 import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
@@ -68,22 +57,6 @@ public class LanguageXML implements EditorLanguage {
 			formatted = text;
 		}
 		return formatted;
-	}
-
-	public View showPreview(Context context, ViewGroup container) throws IOException, ConvertException {
-		Project project = ProjectManager.getInstance().getCurrentProject();
-		File currentFile = mEditor.getCurrentFile();
-		if (currentFile == null || !ProjectUtils.isResourceXMLFile(mEditor.getCurrentFile())) {
-			return null;
-		}
-		if (!(project instanceof AndroidProject)) {
-			return null;
-		}
-		PreviewLayoutInflater inflater = new PreviewLayoutInflater(context, (AndroidProject) project);
-		inflater.parseResources(Executors.newSingleThreadExecutor());
-		ProteusView inflatedView = inflater.inflateLayout(currentFile.getName().substring(0,  currentFile.getName().lastIndexOf(".")));
-
-		return inflatedView.getAsView();
 	}
 
 	@Override
