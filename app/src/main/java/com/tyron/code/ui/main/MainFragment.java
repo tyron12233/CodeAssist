@@ -153,6 +153,7 @@ public class MainFragment extends Fragment {
 
         mToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.debug_refresh) {
+                saveAll();
                 if (!mServiceConnection.isCompiling()) {
                     Project project = ProjectManager.getInstance()
                             .getCurrentProject();
