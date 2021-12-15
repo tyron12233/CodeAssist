@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -140,7 +141,6 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                                 getParentFragmentManager().setFragmentResult(KEY_SAVE,
                                         args);
                             }
-
                             getParentFragmentManager().popBackStack();
                         })
                         .setNegativeButton(android.R.string.no, (d, w) -> {
@@ -226,14 +226,23 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     }
 
     private void inflateFile(File file) {
-        ProteusView inflatedView = mInflater.inflateLayout(file.getName()
+        Optional<ProteusView> optionalView = mInflater.inflateLayout(file.getName()
                 .replace(".xml", ""));
         setLoadingText(null);
 
-        mEditorRoot.removeAllViews();
-        mEditorRoot.addView(inflatedView.getAsView());
-        setDragListeners(mEditorRoot);
-        setClickListeners(mEditorRoot);
+        if (optionalView.isPresent()) {
+            mEditorRoot.removeAllViews();
+            mEditorRoot.addView(optionalView.get().getAsView());
+            setDragListeners(mEditorRoot);
+            setClickListeners(mEditorRoot);
+        } else {
+            new MaterialAlertDialogBuilder(requireActivity())
+                    .setTitle(R.string.error)
+                    .setMessage("Unable to inflate layout.")
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show();
+            getParentFragmentManager().popBackStack();
+        }
     }
 
     private void setDragListeners(ViewGroup viewGroup) {
