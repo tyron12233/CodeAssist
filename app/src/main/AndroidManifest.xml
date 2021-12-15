@@ -24,11 +24,11 @@
         <service
             android:name=".service.IndexService"
             android:enabled="true"
-            android:exported="false"></service>
+            android:exported="false" />
 
         <activity
             android:name=".ui.settings.SettingsActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="@string/title_activity_settings" />
         <activity
             android:name=".MainActivity"
