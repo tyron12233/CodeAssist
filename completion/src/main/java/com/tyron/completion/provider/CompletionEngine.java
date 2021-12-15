@@ -19,6 +19,7 @@ import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
+import org.apache.commons.io.FileUtils;
 import org.openjdk.javax.tools.DiagnosticListener;
 import org.openjdk.javax.tools.JavaFileObject;
 
@@ -30,6 +31,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.jar.JarFile;
 import java.util.stream.Collectors;
 
 import me.xdrop.fuzzywuzzy.FuzzySearch;
@@ -126,7 +128,7 @@ public class CompletionEngine {
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @SuppressLint("NewApi")
-    public void index(JavaProject project, Runnable callback) {
+    public void index(JavaProject project, ILogger logger, Runnable callback) {
         if (project instanceof AndroidProject) {
             IncrementalAapt2Task task = new IncrementalAapt2Task((AndroidProject) project,
                     ILogger.EMPTY, false);
@@ -137,9 +139,18 @@ public class CompletionEngine {
                 Log.e(TAG, "Failed to index with aapt2", e);
             }
         }
-        Set<File> newSet = new HashSet<>();
-        newSet.addAll(project.getJavaFiles().values());
-        newSet.addAll(project.getLibraries());
+        Set<File> newSet = new HashSet<>(project.getJavaFiles().values());
+
+        for (File library : project.getLibraries()) {
+            try {
+                JarFile jarFile = new JarFile(library);
+                newSet.add(library);
+            } catch (IOException e) {
+                FileUtils.deleteQuietly(library);
+                logger.warning("Library is corrupt, deleting jar file! " + library);
+            }
+        }
+
         if (!changed(mCachedPaths, newSet)) {
             setIndexing(false);
             handler.post(callback);

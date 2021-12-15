@@ -116,7 +116,7 @@ public class ProjectManager {
 
         if (project instanceof JavaProject) {
             mListener.onTaskStarted("Indexing");
-            CompletionEngine.getInstance().index((JavaProject) project, () ->
+            CompletionEngine.getInstance().index((JavaProject) project, logger, () ->
                     mListener.onComplete(project,true, "Index successful"));
         }
     }
