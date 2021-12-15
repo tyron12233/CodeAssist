@@ -5,6 +5,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 
 import com.google.common.base.Charsets;
+import com.google.common.base.Throwables;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
@@ -116,8 +117,14 @@ public class ProjectManager {
 
         if (project instanceof JavaProject) {
             mListener.onTaskStarted("Indexing");
-            CompletionEngine.getInstance().index((JavaProject) project, logger, () ->
-                    mListener.onComplete(project,true, "Index successful"));
+            try {
+                CompletionEngine.getInstance().index((JavaProject) project, logger, () ->
+                        mListener.onComplete(project, true, "Index successful"));
+            } catch (Throwable e) {
+                String message = "Failure indexing project.\n" +
+                        Throwables.getStackTraceAsString(e);
+                mListener.onComplete(project, false, message);
+            }
         }
     }
 
