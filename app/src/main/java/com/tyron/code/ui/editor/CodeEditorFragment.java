@@ -2,6 +2,7 @@ package com.tyron.code.ui.editor;
 
 import android.app.ProgressDialog;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -158,6 +159,7 @@ public class CodeEditorFragment extends Fragment
         mEditor.setLigatureEnabled(true);
         mEditor.setHighlightCurrentBlock(true);
         mEditor.setAllowFullscreen(false);
+        mEditor.setEdgeEffectColor(Color.TRANSPARENT);
         mEditor.setWordwrap(mPreferences.getBoolean(SharedPreferenceKeys.EDITOR_WORDWRAP, false));
         mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         if (mPreferences.getBoolean(SharedPreferenceKeys.KEYBOARD_ENABLE_SUGGESTIONS, false)) {
