@@ -39,6 +39,7 @@ import com.tyron.layoutpreview.manager.ResourceStyleManager;
 
 import java.io.File;
 import java.io.StringReader;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -165,10 +166,17 @@ public class PreviewLayoutInflater {
         return mStringManager;
     }
 
-    public ProteusView inflateLayout(String name) {
+    public Optional<ProteusView> inflateLayout(@NonNull String name) {
+        ProteusLayoutInflater inflater = mContext.getInflater();
+        if (inflater == null) {
+            return Optional.empty();
+        }
+        if (mContext.getLayout(name) == null) {
+            return Optional.empty();
+        }
         ObjectValue value = new ObjectValue();
         value.add("layout_name", new Primitive(name));
-        return mContext.getInflater().inflate(name, value);
+        return Optional.of(inflater.inflate(name, value));
     }
 
     @Deprecated
