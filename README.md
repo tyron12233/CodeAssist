@@ -1,5 +1,5 @@
 # CodeAssist
-[![stability-alpha](https://img.shields.io/badge/stabiliy-alpha-f4d03f.svg)](https://github.com/mkenney/software-guides/blob/master/STABILITY-BADGES.md#alpha)
+[![stability-alpha](https://img.shields.io/badge/stability-alpha-f4d03f.svg)](https://github.com/mkenney/software-guides/blob/master/STABILITY-BADGES.md#alpha)
 [![Chat](https://img.shields.io/badge/chat-on%20discord-7289da)](https://discord.gg/pffnyE6prs)
 
 A javac APIs-based code editor that supports building Android apps.
@@ -20,6 +20,10 @@ CodeAssist does not use gradle. Editing the build.gradle file will not do anythi
 - [ ] Layout Editor
 - [ ] Debugger
 - [ ] Lint 
+
+## CodeAssist Community
+English-language chat in Telegram: https://t.me/code_assist
+Russian-language (русскоязычный) chat in Telegram: https://t.me/codeassist_chat
 
 ## Issues
 Issues are disabled until the next release as most issues has been fixed and there have been many changes so the issues on the previous apk may not be valid with the current apk.
