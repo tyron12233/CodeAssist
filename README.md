@@ -23,6 +23,7 @@ CodeAssist does not use gradle. Editing the build.gradle file will not do anythi
 
 ## CodeAssist Community
 English-language chat in Telegram: https://t.me/code_assist
+
 Russian-language (русскоязычный) chat in Telegram: https://t.me/codeassist_chat
 
 ## Issues
