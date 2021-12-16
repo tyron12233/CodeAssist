@@ -27,6 +27,7 @@ import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Value;
+import com.flipkart.android.proteus.view.UnknownViewGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.ProjectManager;
@@ -306,7 +307,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     private void setClickListeners(View view) {
         view.setOnLongClickListener(mOnLongClickListener);
         view.setOnClickListener(mOnClickListener);
-        if (view instanceof ViewGroup) {
+        if (view instanceof ViewGroup && !(view instanceof UnknownViewGroup)) {
             ViewGroup parent = (ViewGroup) view;
             for (int i = 0; i < parent.getChildCount(); i++) {
                 View child = parent.getChildAt(i);

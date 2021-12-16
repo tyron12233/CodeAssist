@@ -71,32 +71,34 @@ public class PreviewLayoutInflater {
 
             // since we don't know what this view is, we can only apply attributes for an android.view.View
             ViewTypeParser<View> viewParser = context.getParser("android.view.View");
-            if (viewParser != null && layout.extras != null) {
+            if (viewParser != null) {
 
                 ProteusView.Manager viewManager =
                         viewParser.createViewManager(context, view, layout, data, viewParser, parent, 0);
                 view.setViewManager(viewManager);
                 // create layout params for this view
                 viewParser.onAfterCreateView(view, parent, -1);
-                layout.extras.entrySet().forEach(entry -> {
-                   int id = viewParser.getAttributeId(entry.getKey());
-                   if (id != -1) {
-                       viewParser.handleAttribute(view.getAsView(), id, entry.getValue());
-                   } else {
-                       if (parent != null) {
-                           //noinspection unchecked
-                           ViewTypeParser<View> parser = ((ProteusView) parent)
-                                   .getViewManager().getViewTypeParser();
-                           id = parser.getAttributeId(entry.getKey());
-                           if (id != -1) {
-                               parser.handleAttribute(view.getAsView(), id, entry.getValue());
-                           }
-                       }
-                   }
-                });
 
-                if (children != null) {
-                    layout.extras.add("children", children);
+                if (layout.extras != null) {
+                    layout.extras.entrySet().forEach(entry -> {
+                        int id = viewParser.getAttributeId(entry.getKey());
+                        if (id != -1) {
+                            viewParser.handleAttribute(view.getAsView(), id, entry.getValue());
+                        } else {
+                            if (parent != null) {
+                                //noinspection unchecked
+                                ViewTypeParser<View> parser = ((ProteusView) parent)
+                                        .getViewManager().getViewTypeParser();
+                                id = parser.getAttributeId(entry.getKey());
+                                if (id != -1) {
+                                    parser.handleAttribute(view.getAsView(), id, entry.getValue());
+                                }
+                            }
+                        }
+                    });
+                    if (children != null) {
+                        layout.extras.add("children", children);
+                    }
                 }
             }
 
