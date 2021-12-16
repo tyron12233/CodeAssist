@@ -114,7 +114,7 @@ public class ProjectManager {
         manager.resolve(project, listener, logger);
     }
 
-    public void closeProject(@NonNull Module module) {
+    public void closeProject(@NonNull Project module) {
         if (module.equals(mCurrentProject)) {
             mCurrentProject = null;
         }

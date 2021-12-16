@@ -7,6 +7,7 @@ import com.tyron.builder.project.mock.MockProjectSettings;
 
 import java.io.File;
 import java.util.List;
+import java.util.Objects;
 
 public class Project {
 
@@ -34,5 +35,18 @@ public class Project {
     public Module getModule(File file) {
         // TODO: implement this on modular project
         return getMainModule();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Project project = (Project) o;
+        return mRoot.equals(project.mRoot);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mRoot);
     }
 }
