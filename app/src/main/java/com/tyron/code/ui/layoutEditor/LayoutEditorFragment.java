@@ -88,17 +88,13 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     };
 
     private final View.OnClickListener mOnClickListener = v -> {
-//        Map<String, ViewTypeParser.AttributeSet.Attribute> parentAttributes = new HashMap<>();
-//        if (v.getParent() instanceof ProteusView) {
-//            parentAttributes.putAll(((ProteusView) v.getParent()).getViewManager().getLayoutParamsAttributes());
-//        }
         if (v instanceof ProteusView) {
             ProteusView view = (ProteusView) v;
 
             ArrayList<Pair<String, String>> attributes = new ArrayList<>();
             for (Layout.Attribute attribute :
                     view.getViewManager().getLayout().getAttributes()) {
-                String name = view.getViewManager().getAttributeName(attribute.id);
+                String name = ProteusHelper.getAttributeName(view, view.getViewManager().getLayout().type, attribute.id);
                 attributes.add(new Pair<>(name, attribute.value.toString()));
             }
             AttributeEditorDialogFragment.newInstance(attributes)
