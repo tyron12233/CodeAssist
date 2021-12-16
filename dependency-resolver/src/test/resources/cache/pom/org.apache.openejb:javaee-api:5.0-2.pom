@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <parent>
+    <artifactId>deps</artifactId>
+    <groupId>org.apache.openejb</groupId>
+    <version>3.1.1</version>
+  </parent>
+  <modelVersion>4.0.0</modelVersion>
+  <artifactId>javaee-api</artifactId>
+  <name>OpenEJB :: Dependencies :: JavaEE API</name>
+  <version>5.0-2</version>
+  <build>
+    <plugins>
+      <plugin>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>1.2</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <filters>
+                <filter>
+                  <artifact>org.apache.geronimo.specs:geronimo-ejb_3.0_spec</artifact>
+                  <includes>
+                    <include>javax/ejb/**</include>
+                  </includes>
+                </filter>
+              </filters>
+              <transformers>
+                <transformer>
+                  <manifestEntries>
+                    <Bundle-Name>${artifactId}</Bundle-Name>
+                    <Bundle-SymbolicName>${openejb.osgi.symbolic.name}</Bundle-SymbolicName>
+                    <Implementation-Title>Apache OpenEJB</Implementation-Title>
+                    <Implementation-Version>${project.version}</Implementation-Version>
+                    <Export-Package>javax.xml, javax.xml.ws, javax.xml.ws.handler, javax.xml.ws.handler.soap, javax.xml.ws.spi, javax.xml.ws.http, javax.xml.ws.soap,javax.xml.soap, javax.xml.namespace, javax.xml.registry, javax.xml.registry.infomodel, javax.xml.rpc, javax.xml.rpc.encoding, javax.xml.rpc.handler, javax.xml.rpc.handler.soap, javax.xml.rpc.holders, javax.xml.rpc.server, javax.xml.rpc.soap, javax.xml.stream, javax.xml.stream.events, javax.xml.stream.util, javax.xml.bind, javax.xml.bind.annotation, javax.xml.bind.annotation.adapters, javax.xml.bind.attachment, javax.xml.bind.helpers, javax.xml.bind.util, javax.mail, javax.mail.event, javax.mail.internet, javax.mail.search, javax.mail.util, javax.activation, javax.annotation, javax.annotation.security, javax.ejb, javax.ejb.spi, javax.interceptor, javax.resource, javax.resource.cci, javax.resource.spi, javax.resource.spi.endpoint, javax.resource.spi.security, javax.resource.spi.work, javax.enterprise, javax.enterprise.deploy, javax.enterprise.deploy.model, javax.enterprise.deploy.model.exceptions, javax.enterprise.deploy.shared, javax.enterprise.deploy.shared.factories, javax.enterprise.deploy.spi, javax.enterprise.deploy.spi.exceptions, javax.enterprise.deploy.spi.factories, javax.enterprise.deploy.spi.status, javax.management, javax.management.j2ee, javax.management.j2ee.statistics, javax.security, javax.security.jacc, javax.jms, javax.persistence, javax.persistence.spi, javax.transaction, javax.transaction.xa, javax.servlet, javax.servlet.http, javax.servlet.resources, javax.jws, javax.jws.soap, org.apache.geronimo, org.apache.geronimo.mail, org.apache.geronimo.mail.handlers, org.apache.geronimo.mail.util</Export-Package>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <tasks>
+                <unzip />
+              </tasks>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+

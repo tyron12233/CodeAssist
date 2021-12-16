@@ -4,7 +4,6 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.JavaBuilder;
-import com.tyron.builder.compiler.TestUtil;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.dex.JavaD8Task;
 import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
@@ -12,6 +11,7 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.api.JavaProject;
 import com.tyron.builder.project.mock.MockAndroidProject;
 import com.tyron.builder.project.mock.MockFileManager;
+import com.tyron.common.TestUtil;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
