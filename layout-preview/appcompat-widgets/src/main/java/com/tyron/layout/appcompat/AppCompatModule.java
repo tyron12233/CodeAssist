@@ -3,6 +3,7 @@ package com.tyron.layout.appcompat;
 import com.flipkart.android.proteus.ProteusBuilder;
 import com.tyron.layout.appcompat.widget.AppBarLayoutParser;
 import com.tyron.layout.appcompat.widget.AppCompatButtonParser;
+import com.tyron.layout.appcompat.widget.AppCompatToolbarParser;
 import com.tyron.layout.appcompat.widget.CollapsingToolbarLayoutParser;
 import com.tyron.layout.appcompat.widget.CoordinatorLayoutParser;
 import com.tyron.layout.appcompat.widget.FloatingActionButtonParser;
@@ -31,6 +32,7 @@ public class AppCompatModule implements ProteusBuilder.Module {
         builder.register(new RecyclerViewParser<>());
         builder.register(new AppCompatButtonParser<>());
         builder.register(new MaterialButtonParser<>());
+        builder.register(new AppCompatToolbarParser<>());
         AppCompatModuleAttributeHelper.register(builder);
     }
 }
