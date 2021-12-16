@@ -16,6 +16,8 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.flipkart.android.proteus.view.UnknownViewGroup;
+
 /**
  * FrameLayout subclass that draws the boundaries of all of its child views.
  */
@@ -58,7 +60,7 @@ public class BoundaryDrawingFrameLayout extends FrameLayout {
         for (int i = 0; i < viewGroup.getChildCount(); i++) {
             View child = viewGroup.getChildAt(i);
             drawView(child, canvas);
-            if (child instanceof ViewGroup) {
+            if (child instanceof ViewGroup && !(child instanceof UnknownViewGroup)) {
                 drawViewGroup((ViewGroup) child, canvas);
             }
         };
