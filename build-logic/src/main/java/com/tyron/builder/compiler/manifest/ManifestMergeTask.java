@@ -40,7 +40,7 @@ public class ManifestMergeTask extends Task<AndroidModule> {
     public void prepare(BuildType type) throws IOException {
         mPackageName = getApplicationId();
 
-        mOutputFile = new File(getProject().getBuildDirectory(), "bin");
+        mOutputFile = new File(getModule().getBuildDirectory(), "bin");
         if (!mOutputFile.exists()) {
             if (!mOutputFile.mkdirs()) {
                 throw new IOException("Unable to create build directory");
@@ -53,13 +53,13 @@ public class ManifestMergeTask extends Task<AndroidModule> {
             }
         }
 
-        mMainManifest = getProject().getManifestFile();
+        mMainManifest = getModule().getManifestFile();
         if (!mMainManifest.exists()) {
             throw new IOException("Unable to find the main manifest file");
         }
 
         List<File> manifests = new ArrayList<>();
-        List<File> libraries = getProject().getLibraries();
+        List<File> libraries = getModule().getLibraries();
 
         // Filter the libraries and add all that has a AndroidManifest.xml file
         for (File library : libraries) {
@@ -83,7 +83,7 @@ public class ManifestMergeTask extends Task<AndroidModule> {
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-        ModuleSettings settings = getProject().getSettings();
+        ModuleSettings settings = getModule().getSettings();
 
         ManifestMerger2.Invoker<?> invoker = ManifestMerger2.newMerger(mMainManifest,
                 getLogger(), ManifestMerger2.MergeType.APPLICATION);
@@ -129,7 +129,7 @@ public class ManifestMergeTask extends Task<AndroidModule> {
     }
 
     private String getApplicationId() throws IOException {
-        String packageName = getProject().getPackageName();
+        String packageName = getModule().getPackageName();
         if (packageName == null) {
             throw new IOException("Failed to parse package name");
         }

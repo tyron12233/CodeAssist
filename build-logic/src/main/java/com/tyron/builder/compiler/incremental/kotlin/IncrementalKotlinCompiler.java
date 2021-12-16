@@ -56,15 +56,15 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
     @Override
     public void prepare(BuildType type) throws IOException {
         mFilesToCompile = new ArrayList<>();
-        mFilesToCompile.addAll(getProject().getJavaFiles().values());
-        mFilesToCompile.addAll(getProject().getKotlinFiles().values());
+        mFilesToCompile.addAll(getModule().getJavaFiles().values());
+        mFilesToCompile.addAll(getModule().getKotlinFiles().values());
 
 //        mKotlinHome = new File(BuildModule.getContext().getFilesDir(), "kotlin-home");
 //        if (!mKotlinHome.exists() && !mKotlinHome.mkdirs()) {
 //            throw new IOException("Unable to create kotlin home directory");
 //        }
 
-        mClassOutput = new File(getProject().getBuildDirectory(), "bin/kotlin/classes");
+        mClassOutput = new File(getModule().getBuildDirectory(), "bin/kotlin/classes");
         if (!mClassOutput.exists() && !mClassOutput.mkdirs()) {
             throw new IOException("Unable to create class output directory");
         }
@@ -77,16 +77,16 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
             return;
         }
         List<File> classpath = new ArrayList<>();
-        classpath.add(getProject().getBootstrapJarFile());
-        classpath.add(getProject().getLambdaStubsJarFile());
-        classpath.addAll(getProject().getLibraries());
+        classpath.add(getModule().getBootstrapJarFile());
+        classpath.add(getModule().getLambdaStubsJarFile());
+        classpath.addAll(getModule().getLibraries());
         List<String> arguments = new ArrayList<>();
         Collections.addAll(arguments, "-cp",
                 classpath.stream()
                         .map(File::getAbsolutePath)
                         .collect(Collectors.joining(File.pathSeparator)));
 
-        List<File> javaSourceRoots = new ArrayList<>(getProject().getJavaFiles().values());
+        List<File> javaSourceRoots = new ArrayList<>(getModule().getJavaFiles().values());
 
         try {
             K2JVMCompiler compiler = new K2JVMCompiler();
@@ -109,11 +109,11 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
             args.setPluginClasspaths(getPlugins().stream()
                     .map(File::getAbsolutePath)
                     .toArray(String[]::new));
-            File cacheDir = new File(getProject().getBuildDirectory(), "intermediate/kotlin");
+            File cacheDir = new File(getModule().getBuildDirectory(), "intermediate/kotlin");
 
             IncrementalJvmCompilerRunnerKt.makeIncrementally(cacheDir,
-                    Arrays.asList(getProject().getJavaDirectory(),
-                            new File(getProject().getBuildDirectory(), "gen")),
+                    Arrays.asList(getModule().getJavaDirectory(),
+                            new File(getModule().getBuildDirectory(), "gen")),
                     args, mCollector, new ICReporterBase() {
                         @Override
                         public void report(@NonNull Function0<String> function0) {
@@ -160,7 +160,7 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
     }
 
     private List<File> getPlugins() {
-        File pluginDir = new File(getProject().getBuildDirectory(), "plugins");
+        File pluginDir = new File(getModule().getBuildDirectory(), "plugins");
         File[] children = pluginDir.listFiles(c -> c.getName().endsWith(".jar"));
 
         if (children == null) {

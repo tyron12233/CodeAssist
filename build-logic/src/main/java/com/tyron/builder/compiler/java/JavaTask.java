@@ -66,7 +66,7 @@ public class JavaTask extends Task<JavaModule> {
         long startTime = System.currentTimeMillis();
         getLogger().debug("Compiling java files.");
 
-        File outputDir = new File(getProject().getBuildDirectory(), "bin/classes");
+        File outputDir = new File(getModule().getBuildDirectory(), "bin/classes");
         if (outputDir.exists()) {
             FileManager.deleteDir(outputDir);
         }
@@ -74,9 +74,9 @@ public class JavaTask extends Task<JavaModule> {
             throw new CompilationFailedException("Cannot create output directory");
         }
 
-        getProject().clear();
-        List<File> javaFiles = new ArrayList<>(getProject().getJavaFiles().values());
-        javaFiles.addAll(getJavaFiles(new File(getProject().getBuildDirectory(), "gen")));
+        getModule().clear();
+        List<File> javaFiles = new ArrayList<>(getModule().getJavaFiles().values());
+        javaFiles.addAll(getJavaFiles(new File(getModule().getBuildDirectory(), "gen")));
         mCompiledFiles = new ArrayList<>();
 
         DiagnosticListener<JavaFileObject> diagnosticCollector = diagnostic -> {
@@ -102,7 +102,7 @@ public class JavaTask extends Task<JavaModule> {
                     BuildModule.getAndroidJar(),
                     BuildModule.getLambdaStubs()
             ));
-            standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, getProject().getLibraries());
+            standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, getModule().getLibraries());
             standardJavaFileManager.setLocation(StandardLocation.SOURCE_PATH, javaFiles);
         } catch (IOException e) {
             throw new CompilationFailedException(e);

@@ -39,7 +39,7 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
 
     @Override
     public void prepare(BuildType type) throws IOException {
-        mConfigFile = new File(getProject().getRootFile(), "app/google-services.json");
+        mConfigFile = new File(getModule().getRootFile(), "app/google-services.json");
     }
 
     /**
@@ -56,7 +56,7 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
 
         String contents = FileUtils.readFileToString(mConfigFile, Charset.defaultCharset());
         try {
-            File xmlDirectory = new File(getProject().getAndroidResourcesDirectory(), "values");
+            File xmlDirectory = new File(getModule().getAndroidResourcesDirectory(), "values");
             if (!xmlDirectory.exists() && !xmlDirectory.mkdirs()) {
                 throw new IOException("Unable to create xml folder");
             }
@@ -66,10 +66,10 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
                 throw new IOException("Unable to create secrets.xml file");
             }
 
-            if (doGenerate(contents, getProject().getPackageName(), secretsFile)) {
+            if (doGenerate(contents, getModule().getPackageName(), secretsFile)) {
                 return;
             }
-            throw new CompilationFailedException("Unable to find " + getProject().getPackageName() +
+            throw new CompilationFailedException("Unable to find " + getModule().getPackageName() +
                     " in google-services.json");
         } catch (JSONException e) {
             throw new CompilationFailedException("Failed to parse google-services.json: " +

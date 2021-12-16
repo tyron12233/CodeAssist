@@ -146,8 +146,8 @@ public class InjectLoggerTask extends Task<AndroidModule> {
 
     @Override
     public void prepare(BuildType type) throws IOException {
-        getProject().getJavaFiles();
-        getProject().getKotlinFiles();
+        getModule().getJavaFiles();
+        getModule().getKotlinFiles();
     }
 
     @Override
@@ -159,16 +159,16 @@ public class InjectLoggerTask extends Task<AndroidModule> {
 
             String applicationClass = getApplicationClass();
             if (applicationClass == null) {
-                applicationClass = getProject().getPackageName() + ".LoggerApplication";
+                applicationClass = getModule().getPackageName() + ".LoggerApplication";
                 createApplicationClass(applicationClass);
             } else {
                 isNewApplicationClass = false;
             }
 
-            mApplicationFile = getProject()
+            mApplicationFile = getModule()
                     .getJavaFile(applicationClass);
             if (mApplicationFile == null) {
-                mApplicationFile = getProject()
+                mApplicationFile = getModule()
                         .getKotlinFile(applicationClass);
             }
             if (!isNewApplicationClass) {
@@ -193,7 +193,7 @@ public class InjectLoggerTask extends Task<AndroidModule> {
                 }
             } else {
                 try {
-                    getProject().removeJavaFile(StringSearch.packageName(mApplicationFile));
+                    getModule().removeJavaFile(StringSearch.packageName(mApplicationFile));
                     FileUtils.delete(mApplicationFile);
                 } catch (IOException e) {
                     getLogger().error("Failed to delete application class: " + e.getMessage());
@@ -203,7 +203,7 @@ public class InjectLoggerTask extends Task<AndroidModule> {
 
         if (mLoggerFile != null) {
             try {
-                getProject().removeJavaFile(StringSearch.packageName(mLoggerFile));
+                getModule().removeJavaFile(StringSearch.packageName(mLoggerFile));
                 FileUtils.delete(mLoggerFile);
             } catch (IOException e) {
                 getLogger().error("Failed to delete logger class: " + e.getMessage());
@@ -212,7 +212,7 @@ public class InjectLoggerTask extends Task<AndroidModule> {
     }
 
     private String getApplicationClass() throws XmlPullParserException, IOException, ParserConfigurationException, SAXException, TransformerException {
-        File manifest = new File(getProject().getBuildDirectory().getAbsolutePath().replaceAll("%20", " "), "bin/AndroidManifest.xml");
+        File manifest = new File(getModule().getBuildDirectory().getAbsolutePath().replaceAll("%20", " "), "bin/AndroidManifest.xml");
         XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
         parser.setInput(new FileInputStream(manifest), null);
 
@@ -234,7 +234,7 @@ public class InjectLoggerTask extends Task<AndroidModule> {
                     if (pair.first.equals("android:name")) {
                         String name = pair.second;
                         if (name.startsWith(".")) {
-                            return getProject().getPackageName() + name;
+                            return getModule().getPackageName() + name;
                         } else {
                             return name;
                         }
@@ -249,7 +249,7 @@ public class InjectLoggerTask extends Task<AndroidModule> {
     private void createApplicationClass(String name) throws IOException, ParserConfigurationException, TransformerException, SAXException {
         getLogger().debug("Creating application class " + name);
 
-        File manifest = new File(getProject().getBuildDirectory().getAbsolutePath().replaceAll("%20", " "), "bin/AndroidManifest.xml");
+        File manifest = new File(getModule().getBuildDirectory().getAbsolutePath().replaceAll("%20", " "), "bin/AndroidManifest.xml");
 
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         DocumentBuilder documentBuilder = factory.newDocumentBuilder();
@@ -263,16 +263,16 @@ public class InjectLoggerTask extends Task<AndroidModule> {
         DOMSource source = new DOMSource(document);
         transformer.transform(source, new StreamResult(manifest.getAbsolutePath()));
 
-        File directory = getProject().getJavaDirectory();
+        File directory = getModule().getJavaDirectory();
         File output = new File(directory, name.replace('.', '/') + ".java");
         if (!output.exists() && !output.createNewFile()) {
             throw  new IOException("Unable to create LoggerApplication");
         }
 
-        String classString = "package " + getProject().getPackageName() + ";\n" +
+        String classString = "package " + getModule().getPackageName() + ";\n" +
                 APPLICATION_CLASS;
         FileUtils.writeStringToFile(output, classString, Charset.defaultCharset());
-        getProject()
+        getModule()
                 .addJavaFile(output);
     }
 
@@ -299,16 +299,16 @@ public class InjectLoggerTask extends Task<AndroidModule> {
     private void addLoggerClass() throws IOException {
         getLogger().debug("Creating Logger.java");
 
-        File loggerClass = new File(getProject().getJavaDirectory(), getProject().getPackageName()
+        File loggerClass = new File(getModule().getJavaDirectory(), getModule().getPackageName()
         .replace('.', '/') + "/Logger.java");
         if (!loggerClass.exists() && !loggerClass.createNewFile()) {
             throw new IOException("Unable to create Logger.java");
         }
 
-        String loggerString = "package " + getProject().getPackageName() + ";\n" +
+        String loggerString = "package " + getModule().getPackageName() + ";\n" +
                 LOGGER_CLASS;
         FileUtils.writeStringToFile(loggerClass, loggerString, Charset.defaultCharset());
         mLoggerFile = loggerClass;
-        getProject().addJavaFile(loggerClass);
+        getModule().addJavaFile(loggerClass);
     }
 }

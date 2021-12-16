@@ -54,7 +54,7 @@ public class PackageTask extends Task<AndroidModule> {
     public void prepare(BuildType type) throws IOException {
         mBuildType = type;
 
-        File mBinDir = new File(getProject().getBuildDirectory(), "bin");
+        File mBinDir = new File(getModule().getBuildDirectory(), "bin");
 
         mApk = new File(mBinDir, "generated.apk");
         mDexFile = new File(mBinDir, "classes.dex");
@@ -71,7 +71,7 @@ public class PackageTask extends Task<AndroidModule> {
             }
         }
 
-        mLibraries.addAll(getProject().getLibraries());
+        mLibraries.addAll(getModule().getLibraries());
 
         getLogger().debug("Packaging APK.");
     }
@@ -97,14 +97,14 @@ public class PackageTask extends Task<AndroidModule> {
                 builder.addResourcesFromJar(library);
             }
 
-            if (getProject().getNativeLibrariesDirectory().exists()) {
-                builder.addNativeLibraries(getProject().getNativeLibrariesDirectory());
+            if (getModule().getNativeLibrariesDirectory().exists()) {
+                builder.addNativeLibraries(getModule().getNativeLibrariesDirectory());
             }
 
             if (mBuildType == BuildType.DEBUG) {
                 builder.setDebugMode(true);
                 // For debug mode, dex files are not merged to save up compile time
-                for (File it : getProject().getLibraries()) {
+                for (File it : getModule().getLibraries()) {
                     File parent = it.getParentFile();
                     if (parent != null) {
                         File[] dexFiles = parent.listFiles(c -> c.getName().endsWith(".dex"));

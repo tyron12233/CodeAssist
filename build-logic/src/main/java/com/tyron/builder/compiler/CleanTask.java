@@ -48,31 +48,31 @@ public class CleanTask extends Task<AndroidModule> {
     private void cleanRelease() throws IOException {
         getLogger().info("Release build, clearing intermediate cache");
 
-        File binDirectory = new File(getProject().getBuildDirectory(), "bin");
+        File binDirectory = new File(getModule().getBuildDirectory(), "bin");
         if (binDirectory.exists()) {
             FileUtils.deleteDirectory(binDirectory);
         }
 
-        File genDirectory = new File(getProject().getBuildDirectory(), "gen");
+        File genDirectory = new File(getModule().getBuildDirectory(), "gen");
         if (genDirectory.exists()) {
             FileUtils.deleteDirectory(genDirectory);
         }
 
-        File intermediateDirectory = new File(getProject().getBuildDirectory(), "intermediate");
+        File intermediateDirectory = new File(getModule().getBuildDirectory(), "intermediate");
         if (intermediateDirectory.exists()) {
             FileUtils.deleteDirectory(intermediateDirectory);
         }
 
-        getProject().getCache(IncrementalJavaTask.CACHE_KEY, new Cache<>())
+        getModule().getCache(IncrementalJavaTask.CACHE_KEY, new Cache<>())
                 .clear();
-        getProject().getCache(IncrementalD8Task.CACHE_KEY, new Cache<>())
+        getModule().getCache(IncrementalD8Task.CACHE_KEY, new Cache<>())
                 .clear();
-        getProject().getCache(MergeSymbolsTask.CACHE_KEY, new Cache<>())
+        getModule().getCache(MergeSymbolsTask.CACHE_KEY, new Cache<>())
                 .clear();
     }
     private void cleanClasses() {
 
-        File output = new File(getProject().getBuildDirectory(), "bin/classes/");
+        File output = new File(getModule().getBuildDirectory(), "bin/classes/");
         List<File> classFiles = FileManager.findFilesWithExtension(
                 output,
                 ".class");
@@ -92,7 +92,7 @@ public class CleanTask extends Task<AndroidModule> {
     }
 
     private void cleanDexFiles() {
-        File output = new File(getProject().getBuildDirectory(), "intermediate/classes");
+        File output = new File(getModule().getBuildDirectory(), "intermediate/classes");
         List<File> classFiles = FileManager.findFilesWithExtension(
                 output,
                 ".dex");
@@ -134,7 +134,7 @@ public class CleanTask extends Task<AndroidModule> {
         if (fqn.contains("$")) {
             fqn = fqn.substring(0, fqn.indexOf('$'));
         }
-        return getProject().getJavaFiles().get(fqn) != null ||
-                getProject().getKotlinFiles().get(fqn) != null;
+        return getModule().getJavaFiles().get(fqn) != null ||
+                getModule().getKotlinFiles().get(fqn) != null;
     }
 }

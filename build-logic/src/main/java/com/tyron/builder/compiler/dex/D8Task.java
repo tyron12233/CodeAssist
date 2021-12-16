@@ -55,12 +55,12 @@ public class D8Task extends Task<JavaModule> {
 			List<Path> libraryDexes = getLibraryDexes();
 
 			D8Command command = D8Command.builder(new DexDiagnosticHandler(getLogger()))
-					.addClasspathFiles(getProject().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+					.addClasspathFiles(getModule().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
 					.setMinApiLevel(21)
 					.addLibraryFiles(getLibraryFiles())
-					.addProgramFiles(getClassFiles(new File(getProject().getBuildDirectory(), "bin/classes")))
+					.addProgramFiles(getClassFiles(new File(getModule().getBuildDirectory(), "bin/classes")))
 					.addProgramFiles(libraryDexes)
-					.setOutput(new File(getProject().getBuildDirectory(), "bin").toPath(), OutputMode.DexIndexed)
+					.setOutput(new File(getModule().getBuildDirectory(), "bin").toPath(), OutputMode.DexIndexed)
 					.build();
 			D8.run(command);
 
@@ -74,7 +74,7 @@ public class D8Task extends Task<JavaModule> {
 	 * @throws com.android.tools.r8.CompilationFailedException if the compilation has failed
 	 */
 	protected void ensureDexedLibraries() throws com.android.tools.r8.CompilationFailedException {
-		List<File> libraries = getProject().getLibraries();
+		List<File> libraries = getModule().getLibraries();
 
 		for (File lib : libraries) {
 			File parentFile = lib.getParentFile();
@@ -109,8 +109,8 @@ public class D8Task extends Task<JavaModule> {
 
 	private List<Path> getLibraryFiles() {
 		List<Path> path = new ArrayList<>();
-		path.add(getProject().getBootstrapJarFile().toPath());
-		path.add(getProject().getLambdaStubsJarFile().toPath());
+		path.add(getModule().getBootstrapJarFile().toPath());
+		path.add(getModule().getLambdaStubsJarFile().toPath());
 		return path;
 	}
 
@@ -120,7 +120,7 @@ public class D8Task extends Task<JavaModule> {
 	 */
 	private	 List<Path> getLibraryDexes() {
 		List<Path> dexes = new ArrayList<>();
-		for (File file : getProject().getLibraries()) {
+		for (File file : getModule().getLibraries()) {
 			File parent = file.getParentFile();
 			if (parent != null) {
 				File[] dexFiles = parent.listFiles(file1 -> file1.getName().endsWith(".dex"));

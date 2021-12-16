@@ -56,17 +56,17 @@ public class JavaD8Task extends Task<JavaModule> {
     public void prepare(BuildType type) throws IOException {
         mBuildType = type;
         diagnosticsHandler = new DexDiagnosticHandler(getLogger());
-        mDexCache = getProject().getCache(IncrementalD8Task.CACHE_KEY, new Cache<>());
+        mDexCache = getModule().getCache(IncrementalD8Task.CACHE_KEY, new Cache<>());
 
-        File output = new File(getProject().getBuildDirectory(), "intermediate/classes");
+        File output = new File(getModule().getBuildDirectory(), "intermediate/classes");
         if (!output.exists() && !output.mkdirs()) {
             throw new IOException("Unable to create output directory");
         }
         mOutputPath = output.toPath();
 
         mFilesToCompile = new ArrayList<>();
-        mClassFiles = new ArrayList<>(D8Task.getClassFiles(new File(getProject().getBuildDirectory(), "bin/java/classes")));
-        mClassFiles.addAll(D8Task.getClassFiles(new File(getProject().getBuildDirectory(), "bin/kotlin/classes")));
+        mClassFiles = new ArrayList<>(D8Task.getClassFiles(new File(getModule().getBuildDirectory(), "bin/java/classes")));
+        mClassFiles.addAll(D8Task.getClassFiles(new File(getModule().getBuildDirectory(), "bin/kotlin/classes")));
         for (Cache.Key<String> key : new HashSet<>(mDexCache.getKeys())) {
             if (!mFilesToCompile.contains(key.file)) {
                 File file = mDexCache.get(key.file, "dex").iterator().next();
@@ -100,7 +100,7 @@ public class JavaD8Task extends Task<JavaModule> {
         try {
             ensureDexedLibraries();
             D8Command command = D8Command.builder(diagnosticsHandler)
-                    .addClasspathFiles(getProject().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                    .addClasspathFiles(getModule().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
                     .addProgramFiles(mFilesToCompile)
                     .addLibraryFiles(getLibraryFiles())
                     .setMinApiLevel(21)
@@ -124,7 +124,7 @@ public class JavaD8Task extends Task<JavaModule> {
             ensureDexedLibraries();
 
             D8Command command = D8Command.builder(diagnosticsHandler)
-                    .addClasspathFiles(getProject().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                    .addClasspathFiles(getModule().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
                     .addProgramFiles(mFilesToCompile)
                     .addLibraryFiles(getLibraryFiles())
                     .setMinApiLevel(21)
@@ -141,10 +141,10 @@ public class JavaD8Task extends Task<JavaModule> {
             D8Command.Builder builder = D8Command.builder(diagnosticsHandler)
                     .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
                     .addLibraryFiles(getLibraryFiles())
-                    .addClasspathFiles(getProject().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                    .addClasspathFiles(getModule().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
                     .setMinApiLevel(21);
 
-            File output = new File(getProject().getBuildDirectory(), "bin");
+            File output = new File(getModule().getBuildDirectory(), "bin");
             builder.setMode(CompilationMode.DEBUG);
             builder.setOutput(output.toPath(), OutputMode.DexIndexed);
             D8.run(builder.build());
@@ -157,9 +157,9 @@ public class JavaD8Task extends Task<JavaModule> {
     private void mergeRelease() throws com.android.tools.r8.CompilationFailedException {
         getLogger().debug("Merging dex files using R8");
 
-        File output = new File(getProject().getBuildDirectory(), "bin");
+        File output = new File(getModule().getBuildDirectory(), "bin");
         D8Command command = D8Command.builder(diagnosticsHandler)
-                .addClasspathFiles(getProject().getLibraries().stream().map(File::toPath)
+                .addClasspathFiles(getModule().getLibraries().stream().map(File::toPath)
                         .collect(Collectors.toList()))
                 .addLibraryFiles(getLibraryFiles())
                 .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
@@ -178,7 +178,7 @@ public class JavaD8Task extends Task<JavaModule> {
 
     private List<Path> getLibraryDexes() {
         List<Path> dexes = new ArrayList<>();
-        for (File file : getProject().getLibraries()) {
+        for (File file : getModule().getLibraries()) {
             File parent = file.getParentFile();
             if (parent != null) {
                 File[] dexFiles = parent.listFiles(file1 -> file1.getName().endsWith(".dex"));
@@ -193,13 +193,13 @@ public class JavaD8Task extends Task<JavaModule> {
 
 
     private File getDexFile(File file) {
-        File output = new File(getProject().getBuildDirectory(), "bin/classes/");
+        File output = new File(getModule().getBuildDirectory(), "bin/classes/");
         String packageName = file.getAbsolutePath()
                 .replace(output.getAbsolutePath(), "")
                 .substring(1)
                 .replace(".class", ".dex");
 
-        File intermediate = new File(getProject().getBuildDirectory(), "intermediate/classes");
+        File intermediate = new File(getModule().getBuildDirectory(), "intermediate/classes");
         File file1 = new File(intermediate, packageName);
         return file1;
     }
@@ -210,7 +210,7 @@ public class JavaD8Task extends Task<JavaModule> {
      * @throws com.android.tools.r8.CompilationFailedException if the compilation has failed
      */
     protected void ensureDexedLibraries() throws com.android.tools.r8.CompilationFailedException {
-        List<File> libraries = getProject().getLibraries();
+        List<File> libraries = getModule().getLibraries();
 
         for (File lib : libraries) {
             File parentFile = lib.getParentFile();
@@ -246,8 +246,8 @@ public class JavaD8Task extends Task<JavaModule> {
 
     private List<Path> getLibraryFiles() {
         List<Path> path = new ArrayList<>();
-        path.add(getProject().getLambdaStubsJarFile().toPath());
-        path.add(getProject().getBootstrapJarFile().toPath());
+        path.add(getModule().getLambdaStubsJarFile().toPath());
+        path.add(getModule().getBootstrapJarFile().toPath());
         return path;
     }
 

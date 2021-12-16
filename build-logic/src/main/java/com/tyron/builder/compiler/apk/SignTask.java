@@ -26,8 +26,8 @@ public class SignTask extends Task<AndroidModule> {
 
     @Override
     public void prepare(BuildType type) throws IOException {
-        mInputApk = new File(getProject().getBuildDirectory(), "bin/generated.apk");
-        mOutputApk = new File(getProject().getBuildDirectory(), "bin/signed.apk");
+        mInputApk = new File(getModule().getBuildDirectory(), "bin/generated.apk");
+        mOutputApk = new File(getModule().getBuildDirectory(), "bin/signed.apk");
         if (!mInputApk.exists()) {
             throw new IOException("Unable to find generated apk file.");
         }

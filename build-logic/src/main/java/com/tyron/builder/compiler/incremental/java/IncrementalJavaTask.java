@@ -55,15 +55,15 @@ public class IncrementalJavaTask extends Task<JavaModule> {
 
     @Override
     public void prepare(BuildType type) throws IOException {
-        mOutputDir = new File(getProject().getBuildDirectory(), "bin/java/classes");
+        mOutputDir = new File(getModule().getBuildDirectory(), "bin/java/classes");
         if (!mOutputDir.exists() && !mOutputDir.mkdirs()) {
             throw new IOException("Unable to create output directory");
         }
 
         mFilesToCompile = new ArrayList<>();
-        mClassCache = getProject().getCache(CACHE_KEY, new Cache<>());
+        mClassCache = getModule().getCache(CACHE_KEY, new Cache<>());
 
-        mJavaFiles = new ArrayList<>(getProject().getJavaFiles().values());
+        mJavaFiles = new ArrayList<>(getModule().getJavaFiles().values());
 
         for (Cache.Key<String> key : new HashSet<>(mClassCache.getKeys())) {
             if (!mJavaFiles.contains(key.file.toFile())) {
@@ -111,15 +111,15 @@ public class IncrementalJavaTask extends Task<JavaModule> {
                 Charset.defaultCharset()
         );
 
-        List<File> classpath = new ArrayList<>(getProject().getLibraries());
+        List<File> classpath = new ArrayList<>(getModule().getLibraries());
         classpath.add(mOutputDir);
 
         try {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT,
                     Collections.singletonList(mOutputDir));
             standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH,
-                    Arrays.asList(getProject().getBootstrapJarFile(),
-                            getProject().getLambdaStubsJarFile()));
+                    Arrays.asList(getModule().getBootstrapJarFile(),
+                            getModule().getLambdaStubsJarFile()));
             standardJavaFileManager.setLocation(StandardLocation.CLASS_PATH, classpath);
             standardJavaFileManager.setLocation(StandardLocation.SOURCE_PATH, mJavaFiles);
         } catch (IOException e) {

@@ -59,12 +59,12 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
     }
 
     private void updateJavaFiles() {
-        File genFolder = new File(getProject().getBuildDirectory(), "gen");
+        File genFolder = new File(getModule().getBuildDirectory(), "gen");
         if (genFolder.exists()) {
             FileUtils.iterateFiles(genFolder,
                     FileFilterUtils.suffixFileFilter(".java"),
                     TrueFileFilter.INSTANCE
-            ).forEachRemaining(getProject()::addJavaFile);
+            ).forEachRemaining(getModule()::addJavaFile);
         }
     }
 
@@ -84,7 +84,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         }
         args.add("-o");
 
-        File outputCompiled = new File(getProject().getBuildDirectory(), "bin/res/compiled");
+        File outputCompiled = new File(getModule().getBuildDirectory(), "bin/res/compiled");
         if (!outputCompiled.exists() && !outputCompiled.mkdirs()) {
             throw new IOException("Failed to create compiled directory");
         }
@@ -103,7 +103,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
             throws IOException, CompilationFailedException {
         getLogger().debug("Compiling libraries.");
 
-        File output = new File(getProject().getBuildDirectory(), "bin/res");
+        File output = new File(getModule().getBuildDirectory(), "bin/res");
         if (!output.exists()) {
             if (!output.mkdirs()) {
                 throw new IOException("Failed to create resource output directory");
@@ -154,15 +154,15 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         args.add(getBinary().getAbsolutePath());
         args.add("link");
         args.add("-I");
-        args.add(getProject().getBootstrapJarFile().getAbsolutePath());  File files = new File(getOutputPath(), "compiled");
+        args.add(getModule().getBootstrapJarFile().getAbsolutePath());  File files = new File(getOutputPath(), "compiled");
         args.add("--allow-reserved-package-id");
         args.add("--no-version-vectors");
         args.add("--no-version-transitions");
         args.add("--auto-add-overlay");
         args.add("--min-sdk-version");
-        args.add(String.valueOf(getProject().getMinSdk()));
+        args.add(String.valueOf(getModule().getMinSdk()));
         args.add("--target-sdk-version");
-        args.add(String.valueOf(getProject().getTargetSdk()));
+        args.add(String.valueOf(getModule().getTargetSdk()));
         File[] libraryResources = getOutputPath().listFiles();
         if (libraryResources != null) {
             for (File resource : libraryResources) {
@@ -196,7 +196,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
             args.add(resource.getAbsolutePath());
         }
         args.add("--java");
-        File gen = new File(getProject().getBuildDirectory(), "gen");
+        File gen = new File(getModule().getBuildDirectory(), "gen");
         if (!gen.exists()) {
             if (!gen.mkdirs()) {
                 throw  new CompilationFailedException("Failed to create gen folder");
@@ -214,12 +214,12 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         }
         args.add(file.getAbsolutePath());
 
-        if (getProject().getAssetsDirectory().exists()) {
+        if (getModule().getAssetsDirectory().exists()) {
             args.add("-A");
-            args.add(getProject().getAssetsDirectory().getAbsolutePath());
+            args.add(getModule().getAssetsDirectory().getAbsolutePath());
         }
         args.add("--manifest");
-        args.add(getProject().getManifestFile().getAbsolutePath());
+        args.add(getModule().getManifestFile().getAbsolutePath());
 
         BinaryExecutor exec = new BinaryExecutor();
         exec.setCommands(args);
@@ -237,17 +237,17 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         args.add(getBinary().getAbsolutePath());
         args.add("link");
         args.add("-I");
-        args.add(getProject().getBootstrapJarFile().getAbsolutePath());  File files = new File(getOutputPath(), "compiled");
+        args.add(getModule().getBootstrapJarFile().getAbsolutePath());  File files = new File(getOutputPath(), "compiled");
         args.add("--allow-reserved-package-id");
         args.add("--no-version-vectors");
         args.add("--no-version-transitions");
         args.add("--auto-add-overlay");
         args.add("--min-sdk-version");
-        args.add(String.valueOf(getProject().getMinSdk()));
+        args.add(String.valueOf(getModule().getMinSdk()));
         args.add("--target-sdk-version");
-        args.add(String.valueOf(getProject().getTargetSdk()));
+        args.add(String.valueOf(getModule().getTargetSdk()));
         args.add("--proguard");
-        args.add(createNewFile(new File(getProject().getBuildDirectory(), "bin/res"),
+        args.add(createNewFile(new File(getModule().getBuildDirectory(), "bin/res"),
                 "generated-rules.txt").getAbsolutePath());
 
         File[] libraryResources = getOutputPath().listFiles();
@@ -283,7 +283,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         }
 
         args.add("--java");
-        File gen = new File(getProject().getBuildDirectory(), "gen");
+        File gen = new File(getModule().getBuildDirectory(), "gen");
         if (!gen.exists()) {
             if (!gen.mkdirs()) {
                 throw  new CompilationFailedException("Failed to create gen folder");
@@ -292,7 +292,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         args.add(gen.getAbsolutePath());
 
         args.add("--manifest");
-        File mergedManifest = new File(getProject().getBuildDirectory(),
+        File mergedManifest = new File(getModule().getBuildDirectory(),
                 "bin/AndroidManifest.xml");
         if (!mergedManifest.exists()) {
             throw new IOException("Unable to get merged manifest file");
@@ -315,9 +315,9 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         }
         args.add(file.getAbsolutePath());
 
-        if (getProject().getAssetsDirectory().exists()) {
+        if (getModule().getAssetsDirectory().exists()) {
             args.add("-A");
-            args.add(getProject().getAssetsDirectory().getAbsolutePath());
+            args.add(getModule().getAssetsDirectory().getAbsolutePath());
         }
 
         BinaryExecutor exec = new BinaryExecutor();
@@ -331,7 +331,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
      * @return resource files to compile
      */
     public Map<String, List<File>> getFiles() throws IOException {
-        Map<String, List<ResourceFile>> newFiles = findFiles(getProject()
+        Map<String, List<ResourceFile>> newFiles = findFiles(getModule()
                 .getAndroidResourcesDirectory());
         Map<String, List<ResourceFile>> oldFiles = findFiles(getOutputDirectory());
         Map<String, List<File>> filesToCompile = new HashMap<>();
@@ -398,7 +398,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
     }
 
     private void copyMapToDir(Map<String, List<File>> map) throws IOException {
-        File output = new File(getProject().getBuildDirectory(), "intermediate/resources");
+        File output = new File(getModule().getBuildDirectory(), "intermediate/resources");
         if (!output.exists()) {
             if (!output.mkdirs()) {
                 throw new IOException("Failed to create intermediate directory");
@@ -507,7 +507,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
      * if it contains a zip file with its name, then its most likely the same library
      */
     private List<File> getLibraries()  throws IOException {
-        File resDir = new File(getProject().getBuildDirectory(), "bin/res");
+        File resDir = new File(getModule().getBuildDirectory(), "bin/res");
         if (!resDir.exists()) {
             if (!resDir.mkdirs()) {
                 throw new IOException("Failed to create resource directory");
@@ -516,7 +516,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
 
         List<File> libraries = new ArrayList<>();
 
-        for (File library : getProject().getLibraries()) {
+        for (File library : getModule().getLibraries()) {
             File parent = library.getParentFile();
             if (parent != null) {
 
@@ -549,7 +549,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
     }
 
     private File getOutputDirectory() throws IOException {
-        File intermediateDirectory = new File(getProject().getBuildDirectory(), "intermediate");
+        File intermediateDirectory = new File(getModule().getBuildDirectory(), "intermediate");
 
         if (!intermediateDirectory.exists()) {
             if (!intermediateDirectory.mkdirs()) {
@@ -567,7 +567,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
     }
 
     private File getOutputPath() throws IOException {
-        File file = new File(getProject().getBuildDirectory(), "bin/res");
+        File file = new File(getModule().getBuildDirectory(), "bin/res");
         if (!file.exists()) {
             if (!file.mkdirs()) {
                 throw new IOException("Failed to get resource directory");

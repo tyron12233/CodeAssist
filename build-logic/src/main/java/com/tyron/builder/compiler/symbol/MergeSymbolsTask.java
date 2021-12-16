@@ -45,18 +45,18 @@ public class MergeSymbolsTask extends Task<AndroidModule> {
 
     @Override
     public void prepare(BuildType type) throws IOException {
-        mSymbolOutputDir = new File(getProject().getBuildDirectory(), "gen");
-        mFullResourceFile = new File(getProject().getBuildDirectory(), "bin/res/R.txt");
+        mSymbolOutputDir = new File(getModule().getBuildDirectory(), "gen");
+        mFullResourceFile = new File(getModule().getBuildDirectory(), "bin/res/R.txt");
     }
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-        Cache<Void, Void> cache = getProject().getCache(CACHE_KEY, new Cache<>());
+        Cache<Void, Void> cache = getModule().getCache(CACHE_KEY, new Cache<>());
         SymbolLoader fullSymbolValues = null;
         Multimap<String, SymbolLoader> libMap = ArrayListMultimap.create();
 
         List<File> RFiles = new ArrayList<>();
-        for (File library : getProject().getLibraries()) {
+        for (File library : getModule().getLibraries()) {
             File parent = library.getParentFile();
             if (parent == null) {
                 getLogger().error("Unable to access parent directory for " + library);
@@ -68,7 +68,7 @@ public class MergeSymbolsTask extends Task<AndroidModule> {
                 continue;
             }
 
-            if (packageName.equals(getProject().getPackageName())) {
+            if (packageName.equals(getModule().getPackageName())) {
                 // only generate libraries
                 continue;
             }
@@ -121,7 +121,7 @@ public class MergeSymbolsTask extends Task<AndroidModule> {
             Collection<SymbolLoader> symbols = libMap.get(packageName);
 
             SymbolWriter writer = new SymbolWriter(mSymbolOutputDir.getAbsolutePath(), packageName,
-                    fullSymbolValues, getProject());
+                    fullSymbolValues, getModule());
             for (SymbolLoader loader : symbols) {
                 writer.addSymbolsToWrite(loader);
             }

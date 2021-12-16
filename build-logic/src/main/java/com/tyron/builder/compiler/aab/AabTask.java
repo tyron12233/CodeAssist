@@ -49,7 +49,7 @@ public class AabTask extends Task<AndroidModule> {
 
     @Override
     public void prepare(BuildType type) throws IOException {
-        mBinDir = new File(getProject().getBuildDirectory(), "/bin");
+        mBinDir = new File(getModule().getBuildDirectory(), "/bin");
         base = new File(mBinDir.getAbsolutePath(), "/base");
 
         if (!base.exists() && !base.mkdirs()) {
@@ -243,7 +243,7 @@ public class AabTask extends Task<AndroidModule> {
 
     private void copyJni() throws IOException {
         getLogger().debug("Coping JniLibs.");
-        String fromDirectory = getProject().getNativeLibrariesDirectory().getAbsolutePath();
+        String fromDirectory = getModule().getNativeLibrariesDirectory().getAbsolutePath();
         String toToDirectory = base.getAbsolutePath() + "/lib";
         copyDirectoryFileVisitor(fromDirectory, toToDirectory);
     }
