@@ -176,7 +176,9 @@ public class CompileBatch implements AutoCloseable {
     private static List<String> options(Set<File> classPath, Set<String> addExports) {
         List<String> list = new ArrayList<>();
 
-        Collections.addAll(list, "-cp", joinPath(classPath));
+        if (!classPath.isEmpty()) {
+            Collections.addAll(list, "-cp", joinPath(classPath));
+        }
         Collections.addAll(list, "-bootclasspath", joinPath(
                 Arrays.asList(CompletionModule.getAndroidJar(), CompletionModule.getLambdaStubs())));
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
