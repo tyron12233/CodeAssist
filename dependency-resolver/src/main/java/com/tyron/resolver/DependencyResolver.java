@@ -4,6 +4,7 @@ import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
 import com.tyron.resolver.repository.PomRepository;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,7 +24,7 @@ public class DependencyResolver {
      * Resolve the list of given dependencies, prioritizing the latest versions of
      * the conflicting libraries
      */
-    public Collection<Pom> resolve(List<Pom> declaredDependencies) {
+    public List<Pom> resolve(List<Pom> declaredDependencies) {
         Map<Integer, Pom> resolved = new HashMap<>();
         for (Pom pom : declaredDependencies) {
             for (Pom resolvedPom : resolve(pom).values()) {
@@ -37,7 +38,7 @@ public class DependencyResolver {
                 }
             }
         }
-        return resolved.values();
+        return new ArrayList<>(resolved.values());
     }
 
     private Map<Integer, Pom> resolve(Pom pom) {
