@@ -15,8 +15,6 @@ public interface Project extends UserDataHolderEx, CacheHolder {
 
     FileManager getFileManager();
 
-    List<Module> getModules();
-
     File getRootFile();
 
     /**

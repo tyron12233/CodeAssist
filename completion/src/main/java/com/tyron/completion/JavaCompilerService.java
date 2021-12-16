@@ -64,6 +64,10 @@ public class JavaCompilerService implements CompilerProvider {
         this.docs = new Docs(project, docPath);
     }
 
+    public JavaProject getProject() {
+        return mProject;
+    }
+
     public CompileBatch cachedCompile;
     private final Map<JavaFileObject, Long> cachedModified = new HashMap<>();
 
