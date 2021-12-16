@@ -40,7 +40,9 @@ public class CreateAndroidClassAction extends CreateClassAction {
                             context.getFragment().getMainViewModel()
                                     .addFile(createdFile);
 
-                            Module currentModule = ProjectManager.getInstance().getCurrentProject();
+                            Module currentModule = ProjectManager.getInstance()
+                                    .getCurrentProject()
+                                    .getModule(context.getCurrentNode().getContent().getFile());
                             if (currentModule instanceof AndroidModule) {
                                 ((AndroidModule) currentModule).addJavaFile(createdFile);
                             }

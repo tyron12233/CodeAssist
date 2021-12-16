@@ -14,6 +14,7 @@ import androidx.core.app.NotificationManagerCompat;
 
 import com.tyron.ProjectManager;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
 
@@ -28,8 +29,8 @@ public class IndexService extends Service {
     }
 
     public class IndexBinder extends Binder {
-        public void index(Module module, ProjectManager.TaskListener listener, ILogger logger) {
-            IndexService.this.index(module, listener, logger);
+        public void index(Project project, ProjectManager.TaskListener listener, ILogger logger) {
+            IndexService.this.index(project, listener, logger);
         }
     }
 
@@ -51,7 +52,7 @@ public class IndexService extends Service {
         return START_STICKY;
     }
 
-    private void index(Module module, ProjectManager.TaskListener listener, ILogger logger) {
+    private void index(Project project, ProjectManager.TaskListener listener, ILogger logger) {
         ProjectManager.TaskListener delegate = new ProjectManager.TaskListener() {
             @Override
             public void onTaskStarted(String message) {
@@ -66,7 +67,7 @@ public class IndexService extends Service {
             }
 
             @Override
-            public void onComplete(Module project, boolean success, String message) {
+            public void onComplete(Project project, boolean success, String message) {
                 mMainHandler.post(() -> listener.onComplete(project, success, message));
                 stopForeground(true);
                 stopSelf();
@@ -75,7 +76,7 @@ public class IndexService extends Service {
 
         try {
             ProjectManager.getInstance()
-                    .openProject(module, true, delegate, logger);
+                    .openProject(project, true, delegate, logger);
         } catch (Throwable e) {
             stopForeground(true);
             Notification notification = new NotificationCompat.Builder(IndexService.this, "Index")

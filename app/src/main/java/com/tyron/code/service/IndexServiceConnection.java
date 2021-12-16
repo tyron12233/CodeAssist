@@ -11,6 +11,7 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ui.main.MainViewModel;
 
@@ -27,7 +28,7 @@ public class IndexServiceConnection implements ServiceConnection {
     private final MainViewModel mMainViewModel;
     private final LogViewModel mLogViewModel;
     private final ILogger mLogger;
-    private Module mModule;
+    private Project mProject;
 
     public IndexServiceConnection(MainViewModel mainViewModel, LogViewModel logViewModel) {
         mMainViewModel = mainViewModel;
@@ -35,14 +36,14 @@ public class IndexServiceConnection implements ServiceConnection {
         mLogger = ILogger.wrap(logViewModel);
     }
 
-    public void setProject(Module module) {
-        mModule = module;
+    public void setProject(Project project) {
+        mProject = project;
     }
 
     @Override
     public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
         IndexService.IndexBinder binder = (IndexService.IndexBinder) iBinder;
-        binder.index(mModule, new TaskListener(), mLogger);
+        binder.index(mProject, new TaskListener(), mLogger);
     }
 
     @Override
@@ -73,14 +74,14 @@ public class IndexServiceConnection implements ServiceConnection {
 
         @SuppressWarnings("ConstantConditions")
         @Override
-        public void onComplete(Module module, boolean success, String message) {
+        public void onComplete(Project project, boolean success, String message) {
             mMainViewModel.setIndexing(false);
             mMainViewModel.setCurrentState(null);
             if (success) {
-                Module currentModule = ProjectManager.getInstance().getCurrentProject();
-                if (module.equals(currentModule)) {
-                    mMainViewModel.setToolbarTitle(module.getRootFile().getName());
-                    mMainViewModel.setFiles(getOpenedFiles(module.getSettings()));
+                Project currentProject = ProjectManager.getInstance().getCurrentProject();
+                if (project.equals(currentProject)) {
+                    mMainViewModel.setToolbarTitle(project.getRootFile().getName());
+                    mMainViewModel.setFiles(getOpenedFiles(project.getSettings()));
                 }
             } else {
                 if (mMainViewModel.getBottomSheetState().getValue()

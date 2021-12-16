@@ -20,6 +20,7 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
@@ -128,7 +129,7 @@ public class AppLogFragment extends Fragment
     }
 
     @Override
-    public void onProjectOpen(Module module) {
+    public void onProjectOpen(Project module) {
         if (id == LogViewModel.DEBUG) {
             if (module instanceof JavaModule) {
                 mDiagnosticListener = d -> {

@@ -21,6 +21,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Builder;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
@@ -40,7 +41,7 @@ public class CompilerService extends Service {
         }
     }
 
-    private Module mModule;
+    private Project mProject;
     private ApkBuilder.OnResultListener onResultListener;
     private ILogger external;
     /**
@@ -148,11 +149,11 @@ public class CompilerService extends Service {
         return mBinder;
     }
 
-    public void compile(Module module, BuildType type) {
-        mModule = module;
+    public void compile(Project project, BuildType type) {
+        mProject = project;
 
 
-        if (mModule == null) {
+        if (mProject == null) {
             if (onResultListener != null) {
                 mMainHandler.post(() -> onResultListener.onComplete(false, "Failed to open project  (Have you opened a project?)"));
             }
@@ -164,6 +165,7 @@ public class CompilerService extends Service {
         }
 
         Executors.newSingleThreadExecutor().execute(() -> {
+            Module module = project.getMainModule();
             Builder<? extends Module> projectBuilder = getBuilderForProject(module, type);
 
             module.clear();
@@ -201,7 +203,7 @@ public class CompilerService extends Service {
                         if (type != BuildType.AAB) {
                             Intent intent = new Intent(Intent.ACTION_VIEW);
                             intent.setDataAndType(ApkInstaller.uriFromFile(this,
-                                    new File(mModule.getBuildDirectory(), "bin/signed.apk")),
+                                    new File(module.getBuildDirectory(), "bin/signed.apk")),
                                     "application/vnd.android.package-archive");
                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);

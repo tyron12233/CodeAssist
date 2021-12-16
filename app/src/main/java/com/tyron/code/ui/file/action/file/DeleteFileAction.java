@@ -43,7 +43,9 @@ public class DeleteFileAction extends FileAction {
             if (file.getName().endsWith(".java")) { // todo: add .kt and .xml checks
                 context.getFragment().getMainViewModel().removeFile(file);
 
-                Module module = ProjectManager.getInstance().getCurrentProject();
+                Module module = ProjectManager.getInstance()
+                        .getCurrentProject()
+                        .getModule(context.getCurrentNode().getContent().getFile());
                 if (module instanceof JavaModule) {
                     String packageName = StringSearch.packageName(file);
                     if (packageName != null) {

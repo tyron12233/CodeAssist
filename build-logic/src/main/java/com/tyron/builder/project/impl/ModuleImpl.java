@@ -58,7 +58,7 @@ public class ModuleImpl implements Module {
         if (custom.exists()) {
             return custom;
         }
-        return new File(getRootFile(), "app/build");
+        return new File(getRootFile(), "build");
     }
 
     @Override

@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import androidx.preference.PreferenceManager;
 
 import com.tyron.ProjectManager;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.common.SharedPreferenceKeys;
@@ -55,8 +56,14 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
             return null;
         }
 
-        Module currentModule = ProjectManager.getInstance()
+        Project project = ProjectManager.getInstance()
                 .getCurrentProject();
+        if (project == null) {
+            return null;
+        }
+
+        Module currentModule = project.getModule(mEditor.getCurrentFile());
+
         if (!(currentModule instanceof AndroidModule)) {
             return null;
         }

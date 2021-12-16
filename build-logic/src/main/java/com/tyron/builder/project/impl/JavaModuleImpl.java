@@ -124,7 +124,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
         if (custom.exists()) {
             return custom;
         }
-        return new File(getRootFile(), "app/src/main/resources");
+        return new File(getRootFile(), "src/main/resources");
     }
 
     @NonNull
@@ -134,7 +134,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
         if (custom.exists()) {
             return custom;
         }
-        return new File(getRootFile(), "app/src/main/java");
+        return new File(getRootFile(), "src/main/java");
     }
 
     @Override
@@ -143,7 +143,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
         if (custom.exists()) {
             return custom;
         }
-        return new File(getRootFile(), "app/libs");
+        return new File(getRootFile(), "libs");
     }
 
     @Override

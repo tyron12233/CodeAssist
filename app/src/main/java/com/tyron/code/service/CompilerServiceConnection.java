@@ -57,7 +57,7 @@ public class CompilerServiceConnection implements ServiceConnection {
                 mLogViewModel.clear(LogViewModel.APP_LOG);
 
                 File file = new File(ProjectManager.getInstance().getCurrentProject()
-                        .getBuildDirectory(), "bin/signed.apk");
+                        .getMainModule().getBuildDirectory(), "bin/signed.apk");
                 if (file.exists() && mBuildType != BuildType.AAB) {
                     ApkInstaller.installApplication(mService,
                             file.getAbsolutePath());

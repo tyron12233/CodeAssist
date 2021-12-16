@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.imageview.ShapeableImageView;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
 
@@ -24,10 +25,10 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
     private static final int TYPE_ITEM = 1;
 
     public interface OnProjectSelectedListener {
-        void onProjectSelect(Module module);
+        void onProjectSelect(Project module);
     }
 
-    private final List<Module> mModules = new ArrayList<>();
+    private final List<Project> mProjects = new ArrayList<>();
     private OnProjectSelectedListener mListener;
 
     public ProjectManagerAdapter() {
@@ -38,30 +39,30 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
         mListener = listener;
     }
 
-    public void submitList(@NonNull List<Module> modules) {
+    public void submitList(@NonNull List<Project> projects) {
         DiffUtil.DiffResult diffResult = DiffUtil.calculateDiff(new DiffUtil.Callback() {
             @Override
             public int getOldListSize() {
-                return mModules.size();
+                return mProjects.size();
             }
 
             @Override
             public int getNewListSize() {
-                return modules.size();
+                return projects.size();
             }
 
             @Override
             public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
-                return mModules.get(oldItemPosition).equals(modules.get(newItemPosition));
+                return mProjects.get(oldItemPosition).equals(projects.get(newItemPosition));
             }
 
             @Override
             public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
-                return mModules.get(oldItemPosition).equals(modules.get(newItemPosition));
+                return mProjects.get(oldItemPosition).equals(projects.get(newItemPosition));
             }
         });
-        mModules.clear();
-        mModules.addAll(modules);
+        mProjects.clear();
+        mProjects.addAll(projects);
         diffResult.dispatchUpdatesTo(this);
     }
 
@@ -82,7 +83,7 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
            if (mListener != null) {
                int position = holder.getBindingAdapterPosition();
                if (position != RecyclerView.NO_POSITION) {
-                   mListener.onProjectSelect(mModules.get(position));
+                   mListener.onProjectSelect(mProjects.get(position));
                }
            }
         });
@@ -92,18 +93,18 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         if (holder.getItemViewType() == TYPE_ITEM) {
-            ((ItemViewHolder) holder).bind(mModules.get(position));
+            ((ItemViewHolder) holder).bind(mProjects.get(position));
         }
     }
 
     @Override
     public int getItemCount() {
-        return mModules.size();
+        return mProjects.size();
     }
 
     @Override
     public int getItemViewType(int position) {
-        if (mModules.isEmpty()) {
+        if (mProjects.isEmpty()) {
             return TYPE_EMPTY;
         }
 
@@ -129,7 +130,7 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
             title = view.findViewById(R.id.title);
         }
 
-        public void bind(Module module) {
+        public void bind(Project module) {
             title.setText(module.getRootFile().getName());
         }
     }

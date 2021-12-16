@@ -75,7 +75,7 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         if (custom.exists()) {
             return custom;
         }
-        return new File(getRootFile(), "app/src/main/res");
+        return new File(getRootFile(), "src/main/res");
     }
 
     @Override
@@ -91,7 +91,7 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         if (custom.exists()) {
             return custom;
         }
-        return new File(getRootFile(), "app/src/main/jniLibs");
+        return new File(getRootFile(), "src/main/jniLibs");
     }
 
     @Override
@@ -100,7 +100,7 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         if (custom.exists()) {
             return custom;
         }
-        return new File(getRootFile(), "app/src/main/assets");
+        return new File(getRootFile(), "src/main/assets");
     }
 
     @Override
@@ -114,7 +114,7 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         if (custom.exists()) {
             return custom;
         }
-        return new File(getRootFile(), "app/src/main/AndroidManifest.xml");
+        return new File(getRootFile(), "src/main/AndroidManifest.xml");
     }
 
     @Override
@@ -140,7 +140,7 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         if (custom.exists()) {
             return custom;
         }
-        return new File(getRootFile(), "app/src/main/kotlin");
+        return new File(getRootFile(), "src/main/kotlin");
     }
 
     @Nullable

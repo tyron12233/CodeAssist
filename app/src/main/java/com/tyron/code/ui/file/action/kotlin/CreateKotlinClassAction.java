@@ -59,7 +59,9 @@ public class CreateKotlinClassAction extends FileAction {
                             context.getFragment().getMainViewModel()
                                     .addFile(createdFile);
 
-                            Module currentModule = ProjectManager.getInstance().getCurrentProject();
+                            Module currentModule = ProjectManager.getInstance()
+                                    .getCurrentProject()
+                                    .getModule(context.getCurrentNode().getContent().getFile());
                             if (currentModule instanceof KotlinModule) {
                                 ((KotlinModule) currentModule).addKotlinFile(createdFile);
                             }

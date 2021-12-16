@@ -24,6 +24,7 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
 import com.tyron.code.R;
@@ -73,7 +74,7 @@ public class MainFragment extends Fragment {
             }
         }
     };
-    private Module mModule;
+    private Project mProject;
     private CompilerServiceConnection mServiceConnection;
     private IndexServiceConnection mIndexServiceConnection;
 
@@ -91,7 +92,7 @@ public class MainFragment extends Fragment {
         requireActivity().getOnBackPressedDispatcher().addCallback(this, onBackPressedCallback);
 
         String projectPath = requireArguments().getString("project_path");
-        mModule = new AndroidModuleImpl(new File(projectPath));
+        mProject = new Project(new File(projectPath));
         mProjectManager = ProjectManager.getInstance();
         mLogViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
@@ -155,11 +156,10 @@ public class MainFragment extends Fragment {
             if (item.getItemId() == R.id.debug_refresh) {
                 saveAll();
                 if (!mServiceConnection.isCompiling()) {
-                    Module module = ProjectManager.getInstance()
+                    Project project = ProjectManager.getInstance()
                             .getCurrentProject();
-                    if (module != null) {
-                        module.clear();
-                        openProject(module);
+                    if (project != null) {
+                        openProject(project);
                     }
                 }
             } else if (item.getItemId() == R.id.action_build_debug) {
@@ -185,8 +185,8 @@ public class MainFragment extends Fragment {
         });
 
         File root;
-        if (mModule != null) {
-            root = mModule.getRootFile();
+        if (mProject != null) {
+            root = mProject.getRootFile();
         } else {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 root = requireActivity().getExternalFilesDir(null);
@@ -196,12 +196,12 @@ public class MainFragment extends Fragment {
         }
         mFileViewModel.refreshNode(root);
 
-        if (!mModule.equals(mProjectManager.getCurrentProject())) {
-            mRoot.postDelayed(() -> openProject(mModule), 200);
+        if (!mProject.equals(mProjectManager.getCurrentProject())) {
+            mRoot.postDelayed(() -> openProject(mProject), 200);
         }
 
         // If the user has changed projects, clear the current opened files
-        if (!mModule.equals(mProjectManager.getCurrentProject())) {
+        if (!mProject.equals(mProjectManager.getCurrentProject())) {
             mMainViewModel.setFiles(new ArrayList<>());
         }
         mMainViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> {
@@ -258,18 +258,18 @@ public class MainFragment extends Fragment {
         mMainViewModel.openFile(file);
     }
 
-    public void openProject(Module module) {
+    public void openProject(Project project) {
         if (CompletionEngine.isIndexing()) {
             return;
         }
-        mModule = module;
-        mIndexServiceConnection.setProject(module);
+        mProject = project;
+        mIndexServiceConnection.setProject(project);
 
-        mMainViewModel.setToolbarTitle(module.getRootFile().getName());
+        mMainViewModel.setToolbarTitle(project.getRootFile().getName());
         mMainViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
 
-        mFileViewModel.refreshNode(module.getRootFile());
+        mFileViewModel.refreshNode(project.getRootFile());
 
         Intent intent = new Intent(requireContext(), IndexService.class);
         requireActivity().startService(intent);
@@ -278,7 +278,7 @@ public class MainFragment extends Fragment {
     }
 
     private void saveAll() {
-        if (mModule == null) {
+        if (mProject == null) {
             return;
         }
 
@@ -289,7 +289,7 @@ public class MainFragment extends Fragment {
         getChildFragmentManager().setFragmentResult(EditorContainerFragment.SAVE_ALL_KEY,
                 Bundle.EMPTY);
 
-        ProjectSettings settings = mModule.getSettings();
+        ProjectSettings settings = mProject.getSettings();
         if (settings == null) {
             return;
         }

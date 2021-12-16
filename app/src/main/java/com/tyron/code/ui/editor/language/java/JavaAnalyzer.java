@@ -8,6 +8,7 @@ import androidx.preference.PreferenceManager;
 import com.tyron.ProjectManager;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.SourceFileObject;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.lint.DefaultLintClient;
@@ -256,19 +257,22 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         // do not compile the file if it not yet closed as it will cause issues when
         // compiling multiple files at the same time
         if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
-            Module module = ProjectManager.getInstance().getCurrentProject();
-            if (module != null) {
-                JavaCompilerService service = CompletionEngine.getInstance().
-                        getCompiler((JavaModule) module);
-                if (service.isReady()) {
-                    try {
-                        try (CompileTask task = service.compile(
-                                Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
-                            innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
+            Project project = ProjectManager.getInstance().getCurrentProject();
+            if (project != null) {
+                Module module = project.getModule(mEditor.getCurrentFile());
+                if (module != null) {
+                    JavaCompilerService service = CompletionEngine.getInstance().
+                            getCompiler((JavaModule) module);
+                    if (service.isReady()) {
+                        try {
+                            try (CompileTask task = service.compile(
+                                    Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
+                                innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
+                            }
+                        } catch (RuntimeException e) {
+                            Log.e("JavaAnalyzer", "Failed compiling the file", e);
+                            service.close();
                         }
-                    } catch (RuntimeException e) {
-                        Log.e("JavaAnalyzer", "Failed compiling the file", e);
-                        service.close();
                     }
                 }
             }

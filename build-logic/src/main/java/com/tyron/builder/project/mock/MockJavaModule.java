@@ -135,11 +135,6 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public List<Module> getModules() {
-        return Collections.emptyList();
-    }
-
-    @Override
     public File getRootFile() {
         return mRootDir;
     }

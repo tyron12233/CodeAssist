@@ -21,6 +21,7 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
@@ -96,7 +97,8 @@ public class CodeEditorFragment extends Fragment
         super.onSaveInstanceState(outState);
 
         if (ProjectManager.getInstance().getCurrentProject() != null) {
-            ProjectManager.getInstance().getCurrentProject().getFileManager()
+            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile)
+                    .getFileManager()
                     .setSnapshotContent(mCurrentFile, mEditor.getText().toString());
         }
     }
@@ -108,7 +110,8 @@ public class CodeEditorFragment extends Fragment
         hideEditorWindows();
 
         if (ProjectManager.getInstance().getCurrentProject() != null) {
-            ProjectManager.getInstance().getCurrentProject().getFileManager()
+            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile)
+                    .getFileManager()
                     .setSnapshotContent(mCurrentFile, mEditor.getText().toString());
         }
     }
@@ -205,7 +208,13 @@ public class CodeEditorFragment extends Fragment
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        Module module = ProjectManager.getInstance().getCurrentProject();
+        Module module;
+        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+        if (currentProject != null) {
+            module = currentProject.getModule(mCurrentFile);
+        } else {
+            module = null;
+        }
         if (mCurrentFile.exists()) {
             String text;
             try {
@@ -404,7 +413,8 @@ public class CodeEditorFragment extends Fragment
     public void onDestroy() {
         super.onDestroy();
         if (ProjectManager.getInstance().getCurrentProject() != null) {
-            ProjectManager.getInstance().getCurrentProject().getFileManager()
+            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile)
+                    .getFileManager()
                     .closeFileForSnapshot(mCurrentFile);
         }
         mPreferences.unregisterOnSharedPreferenceChangeListener(this);
@@ -490,7 +500,8 @@ public class CodeEditorFragment extends Fragment
     }
 
     private List<CodeActionList> getCodeActions() {
-        Module module = ProjectManager.getInstance().getCurrentProject();
+        Module module = ProjectManager.getInstance().getCurrentProject()
+                .getModule(mCurrentFile);
         if (mLanguage instanceof JavaLanguage && module != null) {
             final Path current = mEditor.getCurrentFile().toPath();
             CodeActionProvider provider =

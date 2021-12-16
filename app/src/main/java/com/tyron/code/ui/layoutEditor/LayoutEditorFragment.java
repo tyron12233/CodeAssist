@@ -30,6 +30,7 @@ import com.flipkart.android.proteus.value.Value;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.ProjectManager;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
@@ -350,7 +351,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     }
 
     @Override
-    public void onProjectOpen(Module module) {
+    public void onProjectOpen(Project module) {
         if (isDumb) {
             createInflater();
         }

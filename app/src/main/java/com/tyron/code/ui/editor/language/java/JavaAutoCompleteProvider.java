@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import androidx.preference.PreferenceManager;
 
 import com.tyron.ProjectManager;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.completion.model.CompletionList;
@@ -40,7 +41,13 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
             return null;
         }
 
-        Module currentModule = ProjectManager.getInstance().getCurrentProject();
+        Project project = ProjectManager.getInstance().getCurrentProject();
+
+        if (project == null) {
+            return null;
+        }
+
+        Module currentModule = project.getModule(mEditor.getCurrentFile());
 
         if (currentModule instanceof JavaModule) {
             List<CompletionItem> result = new ArrayList<>();
