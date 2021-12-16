@@ -129,7 +129,8 @@ public class AppLogFragment extends Fragment
     }
 
     @Override
-    public void onProjectOpen(Project module) {
+    public void onProjectOpen(Project project) {
+        Module module = project.getMainModule();
         if (id == LogViewModel.DEBUG) {
             if (module instanceof JavaModule) {
                 mDiagnosticListener = d -> {
@@ -149,31 +150,31 @@ public class AppLogFragment extends Fragment
             requireActivity().unregisterReceiver(mLogReceiver);
         }
 
-        mLogReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                String type = intent.getExtras().getString("type", "DEBUG");
-                String message = intent.getExtras().getString("message", "No message provided");
-                DiagnosticWrapper wrapped = ILogger.wrap(message);
-
-                switch (type) {
-                    case "DEBUG":
-                    case "INFO":
-                        wrapped.setKind(Diagnostic.Kind.NOTE);
-                        mModel.d(LogViewModel.APP_LOG, wrapped);
-                        break;
-                    case "ERROR":
-                        wrapped.setKind(Diagnostic.Kind.ERROR);
-                        mModel.e(LogViewModel.APP_LOG, wrapped);
-                        break;
-                    case "WARNING":
-                        wrapped.setKind(Diagnostic.Kind.WARNING);
-                        mModel.w(LogViewModel.APP_LOG, wrapped);
-                        break;
-                }
-            }
-        };
         if (module instanceof AndroidModule) {
+            mLogReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    String type = intent.getExtras().getString("type", "DEBUG");
+                    String message = intent.getExtras().getString("message", "No message provided");
+                    DiagnosticWrapper wrapped = ILogger.wrap(message);
+
+                    switch (type) {
+                        case "DEBUG":
+                        case "INFO":
+                            wrapped.setKind(Diagnostic.Kind.NOTE);
+                            mModel.d(LogViewModel.APP_LOG, wrapped);
+                            break;
+                        case "ERROR":
+                            wrapped.setKind(Diagnostic.Kind.ERROR);
+                            mModel.e(LogViewModel.APP_LOG, wrapped);
+                            break;
+                        case "WARNING":
+                            wrapped.setKind(Diagnostic.Kind.WARNING);
+                            mModel.w(LogViewModel.APP_LOG, wrapped);
+                            break;
+                    }
+                }
+            };
             requireActivity().registerReceiver(mLogReceiver,
                     new IntentFilter(((AndroidModule) module).getPackageName() + ".LOG"));
         }
