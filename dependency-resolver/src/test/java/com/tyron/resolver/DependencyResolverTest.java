@@ -35,6 +35,9 @@ public class DependencyResolverTest {
 
         Pom newerFragment = Pom.valueOf("androidx.fragment", "fragment", "300");
 
+        // this does not actually get the newer fragment, the equals implementation of
+        // Pom is that if the artifactId and groupId is the same, it is equal
+        // so this should return the older fragment
         Pom pom = resolvedPoms.get(resolvedPoms.indexOf(newerFragment));
         assert pom != null;
         assert pom.getVersionName().equals("1.1.0");
