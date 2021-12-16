@@ -39,8 +39,8 @@ import com.github.angads25.filepicker.view.FilePickerDialog;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.transition.MaterialFadeThrough;
 import com.google.android.material.transition.MaterialSharedAxis;
-import com.tyron.builder.project.api.Project;
-import com.tyron.builder.project.impl.AndroidProjectImpl;
+import com.tyron.builder.project.api.Module;
+import com.tyron.builder.project.impl.AndroidModuleImpl;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.wizard.adapter.WizardTemplateAdapter;
@@ -67,7 +67,7 @@ import java.util.concurrent.Executors;
 public class WizardFragment extends Fragment {
 
     public interface OnProjectCreatedListener {
-        void onProjectCreated(Project project);
+        void onProjectCreated(Module module);
     }
 
     private Button mNavigateButton;
@@ -471,12 +471,12 @@ public class WizardFragment extends Fragment {
                     return;
                 }
 
-                Project project = new AndroidProjectImpl(new File(savePath));
-                replacePlaceholders(project.getRootFile());
+                Module module = new AndroidModuleImpl(new File(savePath));
+                replacePlaceholders(module.getRootFile());
 
                 if (mListener != null) {
                     requireActivity().runOnUiThread(() -> {
-                        mListener.onProjectCreated(project);
+                        mListener.onProjectCreated(module);
                         getParentFragmentManager().beginTransaction()
                                 .remove(WizardFragment.this)
                                 .commit();

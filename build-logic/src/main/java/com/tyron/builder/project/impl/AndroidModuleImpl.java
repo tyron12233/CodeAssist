@@ -7,7 +7,7 @@ import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.model.ProjectSettings;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
@@ -21,12 +21,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-public class AndroidProjectImpl extends JavaProjectImpl implements AndroidProject {
+public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
 
     private ManifestData mManifestData;
     private final Map<String, File> mKotlinFiles;
 
-    public AndroidProjectImpl(File root) {
+    public AndroidModuleImpl(File root) {
         super(root);
 
         mKotlinFiles = new HashMap<>();

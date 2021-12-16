@@ -6,7 +6,7 @@ import java.io.File;
 import java.util.List;
 import java.util.Map;
 
-public interface JavaProject extends Project {
+public interface JavaModule extends Module {
 
     /**
      * @return a map of fully qualified name and its java file

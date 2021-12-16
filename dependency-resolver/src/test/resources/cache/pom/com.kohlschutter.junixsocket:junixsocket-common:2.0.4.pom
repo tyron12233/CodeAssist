@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<module xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <artifactId>junixsocket-common</artifactId>
   <packaging>jar</packaging>
@@ -11,7 +11,7 @@
   </parent>
   <name>junixsocket-common</name>
   <properties>
-    <kohlschutter.project.base.directory>${project.parent.basedir}</kohlschutter.project.base.directory>
+    <kohlschutter.module.base.directory>${module.parent.basedir}</kohlschutter.module.base.directory>
   </properties>
   <build>
     <plugins>
@@ -28,7 +28,7 @@
             </library>
           </libraries>
           <javah>
-            <jniDirectory>${kohlschutter.project.base.directory}/junixsocket-native/src/main/c</jniDirectory>
+            <jniDirectory>${kohlschutter.module.base.directory}/junixsocket-native/src/main/c</jniDirectory>
           </javah>
         </configuration>
       </plugin>
@@ -36,4 +36,4 @@
   </build>
   <dependencies>
   </dependencies>
-</project>
+</module>

@@ -1,22 +1,38 @@
 package com.tyron.builder.project.api;
 
+import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.project.cache.CacheHolder;
+
+import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderEx;
+
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
-public interface Module {
+public interface Module extends UserDataHolderEx, CacheHolder {
 
-    enum ModuleType {
-        LIBRARY,
-        ANDROID
-    }
+    ProjectSettings getSettings();
 
-    ModuleType getModuleType();
+    FileManager getFileManager();
 
-    List<Module> getDependingModules();
+    File getRootFile();
 
     /**
-     * Add a module that this module depends on
+     * Start parsing the project contents such as manifest data, project settings, etc.
+     *
+     * Implementations may throw an IOException if something went wrong during parsing
      */
-    void addDependingModule(Module module);
+    void open() throws IOException;
 
-    Project getProject();
+    /**
+     * Remove all the indexed files
+     */
+    void clear();
+
+    void index();
+
+    /**
+     * @return The directory that this project can use to compile files
+     */
+    File getBuildDirectory();
 }

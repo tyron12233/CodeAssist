@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<module xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <parent>
     <artifactId>byte-buddy-parent</artifactId>
     <groupId>net.bytebuddy</groupId>
@@ -69,7 +69,7 @@
         <version>${version.plugin.jar}</version>
         <configuration>
           <archive>
-            <manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
+            <manifestFile>${module.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
           </archive>
         </configuration>
       </plugin>
@@ -121,7 +121,7 @@
                             net.bytebuddy.utility.privilege,
                             net.bytebuddy.utility.visitor,
                             ${shade.target}</Export-Package>
-            <Automatic-Module-Name>${project.groupId}</Automatic-Module-Name>
+            <Automatic-Module-Name>${module.groupId}</Automatic-Module-Name>
           </instructions>
         </configuration>
       </plugin>
@@ -199,5 +199,5 @@
     <shade.source>org.objectweb.asm</shade.source>
     <shade.target>net.bytebuddy.jar.asm</shade.target>
   </properties>
-</project>
+</module>
 

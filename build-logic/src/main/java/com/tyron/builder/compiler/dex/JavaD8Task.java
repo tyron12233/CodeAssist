@@ -12,7 +12,7 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.incremental.dex.IncrementalD8Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.util.Cache;
 
 import org.apache.commons.io.FileUtils;
@@ -28,12 +28,12 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Task for dexing a {@link JavaProject} this is copied from {@link IncrementalD8Task}
+ * Task for dexing a {@link JavaModule} this is copied from {@link IncrementalD8Task}
  * but with the minimum API levels hardcoded to 21
  */
-public class JavaD8Task extends Task<JavaProject> {
+public class JavaD8Task extends Task<JavaModule> {
 
-    public JavaD8Task(JavaProject project, ILogger logger) {
+    public JavaD8Task(JavaModule project, ILogger logger) {
         super(project, logger);
     }
 

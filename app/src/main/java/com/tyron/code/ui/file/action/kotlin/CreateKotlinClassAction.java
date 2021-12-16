@@ -4,8 +4,8 @@ import android.view.SubMenu;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.ProjectManager;
-import com.tyron.builder.project.api.KotlinProject;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.KotlinModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.template.kotlin.KotlinAbstractClassTemplate;
@@ -59,9 +59,9 @@ public class CreateKotlinClassAction extends FileAction {
                             context.getFragment().getMainViewModel()
                                     .addFile(createdFile);
 
-                            Project currentProject = ProjectManager.getInstance().getCurrentProject();
-                            if (currentProject instanceof KotlinProject) {
-                                ((KotlinProject) currentProject).addKotlinFile(createdFile);
+                            Module currentModule = ProjectManager.getInstance().getCurrentProject();
+                            if (currentModule instanceof KotlinModule) {
+                                ((KotlinModule) currentModule).addKotlinFile(createdFile);
                             }
                         } catch (IOException e) {
                             new MaterialAlertDialogBuilder(context.getFragment().requireContext())

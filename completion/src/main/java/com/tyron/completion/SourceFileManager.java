@@ -3,7 +3,7 @@ package com.tyron.completion;
 import android.text.TextUtils;
 
 import com.tyron.builder.model.SourceFileObject;
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.util.StringSearch;
 
 import org.openjdk.javax.tools.Diagnostic;
@@ -26,9 +26,9 @@ import java.util.stream.Stream;
 
 public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFileManager> {
 
-    private final JavaProject mProject;
+    private final JavaModule mProject;
 
-	public SourceFileManager(JavaProject project) {
+	public SourceFileManager(JavaModule project) {
 		super(createDelegateFileManager());
         mProject = project;
 	}
@@ -113,7 +113,7 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
 	    fileManager.setLocation(location, path);
     }
 
-    public static List<File> list(JavaProject project, String packageName) {
+    public static List<File> list(JavaModule project, String packageName) {
 	    List<File> list = new ArrayList<>();
         for (String file : project.getJavaFiles().keySet()) {
             String name = file;

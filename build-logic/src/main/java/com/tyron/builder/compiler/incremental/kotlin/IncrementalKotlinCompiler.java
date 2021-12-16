@@ -10,7 +10,7 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.build.report.ICReporterBase;
@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 
 import kotlin.jvm.functions.Function0;
 
-public class IncrementalKotlinCompiler extends Task<AndroidProject> {
+public class IncrementalKotlinCompiler extends Task<AndroidModule> {
 
     private static final String TAG = IncrementalKotlinCompiler.class.getSimpleName();
 
@@ -44,7 +44,7 @@ public class IncrementalKotlinCompiler extends Task<AndroidProject> {
 
     private final MessageCollector mCollector = new Collector();
 
-    public IncrementalKotlinCompiler(AndroidProject project, ILogger logger) {
+    public IncrementalKotlinCompiler(AndroidModule project, ILogger logger) {
         super(project, logger);
     }
 

@@ -1,6 +1,6 @@
 package com.tyron.kotlin_completion;
 
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.completion.CompletionModule;
 import com.tyron.kotlin_completion.classpath.ClassPathEntry;
 import com.tyron.kotlin_completion.classpath.DefaultClassPathResolver;
@@ -23,7 +23,7 @@ public class CompilerClassPath implements Closeable {
     private final Set<Path> mWorkspaceRoots = new HashSet<>();
     private final Set<Path> mJavaSourcePath;
     final Set<ClassPathEntry> mClassPath;
-    private final AndroidProject mProject;
+    private final AndroidModule mProject;
 
    // private final CompilerConfiguration mConfiguration;
 
@@ -31,7 +31,7 @@ public class CompilerClassPath implements Closeable {
 
     private final AsyncExecutor asyncExecutor = new AsyncExecutor();
 
-    public CompilerClassPath(AndroidProject project) {
+    public CompilerClassPath(AndroidModule project) {
         //mConfiguration = config;
         mProject = project;
 

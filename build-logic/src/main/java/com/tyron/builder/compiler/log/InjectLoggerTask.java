@@ -7,7 +7,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
@@ -33,7 +33,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 
-public class InjectLoggerTask extends Task<AndroidProject> {
+public class InjectLoggerTask extends Task<AndroidModule> {
 
     private static final String TAG = "InjectLogger";
     private static final String APPLICATION_CLASS = "\nimport android.app.Application;\n" +
@@ -135,7 +135,7 @@ public class InjectLoggerTask extends Task<AndroidProject> {
     private File mApplicationFile;
     private String mOriginalApplication;
 
-    public InjectLoggerTask(AndroidProject project, ILogger logger) {
+    public InjectLoggerTask(AndroidModule project, ILogger logger) {
         super(project, logger);
     }
 

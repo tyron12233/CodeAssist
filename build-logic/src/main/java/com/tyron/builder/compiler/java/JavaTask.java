@@ -14,7 +14,7 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.parser.FileManager;
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.JavaModule;
 
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.DiagnosticListener;
@@ -35,11 +35,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-public class JavaTask extends Task<JavaProject> {
+public class JavaTask extends Task<JavaModule> {
 
     private List<File> mCompiledFiles;
 
-    public JavaTask(JavaProject project, ILogger logger) {
+    public JavaTask(JavaModule project, ILogger logger) {
         super(project, logger);
     }
 

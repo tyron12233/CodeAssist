@@ -7,7 +7,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.BinaryExecutor;
 
 import org.apache.commons.io.FileUtils;
@@ -25,13 +25,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class IncrementalAapt2Task extends Task<AndroidProject> {
+public class IncrementalAapt2Task extends Task<AndroidModule> {
 
     private static final String TAG = "IncrementalAAPT2";
 
     private final boolean mGenerateProtoFormat;
 
-    public IncrementalAapt2Task(AndroidProject project, ILogger logger, boolean generateProtoFormat) {
+    public IncrementalAapt2Task(AndroidModule project, ILogger logger, boolean generateProtoFormat) {
         super(project, logger);
         mGenerateProtoFormat = generateProtoFormat;
     }

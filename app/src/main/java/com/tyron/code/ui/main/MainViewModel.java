@@ -7,7 +7,7 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.ui.editor.language.LanguageManager;
 
 import java.io.File;
@@ -200,7 +200,7 @@ public class MainViewModel extends ViewModel {
         }
     }
 
-    public void initializeProject(Project project) {
+    public void initializeProject(Module module) {
         setIndexing(true);
     }
 }

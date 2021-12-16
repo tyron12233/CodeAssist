@@ -5,8 +5,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.project.api.AndroidProject;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.BinaryExecutor;
 import com.tyron.common.util.Decompress;
 
@@ -31,9 +30,9 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
-public class AabTask extends Task<AndroidProject> {
+public class AabTask extends Task<AndroidModule> {
 
-    public AabTask(AndroidProject project, ILogger logger) {
+    public AabTask(AndroidModule project, ILogger logger) {
         super(project, logger);
     }
 

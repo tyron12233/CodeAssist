@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<module xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <parent>
     <artifactId>junixsocket-parent</artifactId>
     <groupId>com.kohlschutter.junixsocket</groupId>
@@ -45,7 +45,7 @@
         <dependency>
           <groupId>com.kohlschutter.junixsocket</groupId>
           <artifactId>junixsocket-native</artifactId>
-          <version>${project.version}</version>
+          <version>${module.version}</version>
           <type>nar</type>
           <classifier>x86_64-MacOSX-gpp-jni</classifier>
         </dependency>
@@ -57,7 +57,7 @@
         <dependency>
           <groupId>com.kohlschutter.junixsocket</groupId>
           <artifactId>junixsocket-native</artifactId>
-          <version>${project.version}</version>
+          <version>${module.version}</version>
           <type>nar</type>
           <classifier>amd64-Linux-gpp-jni</classifier>
         </dependency>
@@ -106,7 +106,7 @@
     </dependency>
   </dependencies>
   <properties>
-    <kohlschutter.project.base.directory>${project.parent.basedir}</kohlschutter.project.base.directory>
+    <kohlschutter.module.base.directory>${module.parent.basedir}</kohlschutter.module.base.directory>
   </properties>
-</project>
+</module>
 

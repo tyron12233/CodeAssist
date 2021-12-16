@@ -3,7 +3,7 @@ package com.tyron.completion.provider;
 import static com.google.common.truth.Truth.assertThat;
 import static com.tyron.completion.TestUtil.resolveBasePath;
 
-import com.tyron.builder.project.mock.MockAndroidProject;
+import com.tyron.builder.project.mock.MockAndroidModule;
 import com.tyron.builder.project.mock.MockFileManager;
 import com.tyron.completion.CompletionModule;
 import com.tyron.completion.TestUtil;
@@ -27,7 +27,7 @@ public abstract class CompletionBase {
 
     private File mRoot;
     private MockFileManager mFileManager;
-    private MockAndroidProject mProject;
+    private MockAndroidModule mProject;
     private CompletionEngine mCompletionEngine;
 
     @Before
@@ -37,7 +37,7 @@ public abstract class CompletionBase {
 
         mRoot = new File(TestUtil.resolveBasePath(), "EmptyProject");
         mFileManager = new MockFileManager(mRoot);
-        mProject = new MockAndroidProject(mRoot, mFileManager);
+        mProject = new MockAndroidModule(mRoot, mFileManager);
         mProject.open();
 
         File[] testFiles = new File(mRoot, "completion").listFiles(c ->

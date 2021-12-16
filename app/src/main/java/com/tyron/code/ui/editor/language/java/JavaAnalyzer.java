@@ -8,34 +8,20 @@ import androidx.preference.PreferenceManager;
 import com.tyron.ProjectManager;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.SourceFileObject;
-import com.tyron.builder.project.api.JavaProject;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.lint.DefaultLintClient;
-import com.tyron.common.util.Debouncer;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.provider.CompletionEngine;
 
-import org.jetbrains.kotlin.com.intellij.lang.java.lexer.JavaLexer;
-import org.jetbrains.kotlin.com.intellij.lexer.Lexer;
-import org.jetbrains.kotlin.com.intellij.lexer.LexerPosition;
-import org.jetbrains.kotlin.com.intellij.pom.java.LanguageLevel;
-import org.jetbrains.kotlin.com.intellij.psi.JavaDocTokenType;
-import org.jetbrains.kotlin.com.intellij.psi.JavaTokenType;
-import org.jetbrains.kotlin.com.intellij.psi.impl.source.tree.ElementType;
-import org.jetbrains.kotlin.com.intellij.psi.impl.source.tree.JavaDocElementType;
-import org.jetbrains.kotlin.com.intellij.psi.tree.IElementType;
-import org.jetbrains.kotlin.com.intellij.psi.tree.TokenSet;
 import org.openjdk.javax.tools.Diagnostic;
 
-import java.io.File;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
@@ -52,8 +38,6 @@ import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.text.TextAnalyzer;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.EditorColorScheme;
-import kotlin.Unit;
-import kotlin.jvm.functions.Function0;
 
 public class JavaAnalyzer extends JavaCodeAnalyzer {
 
@@ -272,10 +256,10 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         // do not compile the file if it not yet closed as it will cause issues when
         // compiling multiple files at the same time
         if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
-            Project project = ProjectManager.getInstance().getCurrentProject();
-            if (project != null) {
+            Module module = ProjectManager.getInstance().getCurrentProject();
+            if (module != null) {
                 JavaCompilerService service = CompletionEngine.getInstance().
-                        getCompiler((JavaProject) project);
+                        getCompiler((JavaModule) module);
                 if (service.isReady()) {
                     try {
                         try (CompileTask task = service.compile(

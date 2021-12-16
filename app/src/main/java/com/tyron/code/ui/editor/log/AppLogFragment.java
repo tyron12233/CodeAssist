@@ -20,9 +20,9 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.project.api.AndroidProject;
-import com.tyron.builder.project.api.JavaProject;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.completion.provider.CompletionEngine;
@@ -128,13 +128,13 @@ public class AppLogFragment extends Fragment
     }
 
     @Override
-    public void onProjectOpen(Project project) {
+    public void onProjectOpen(Module module) {
         if (id == LogViewModel.DEBUG) {
-            if (project instanceof JavaProject) {
+            if (module instanceof JavaModule) {
                 mDiagnosticListener = d -> {
                     List<Diagnostic<? extends JavaFileObject>> diagnostics =
                             CompletionEngine.getInstance()
-                                    .getCompiler((JavaProject) project)
+                                    .getCompiler((JavaModule) module)
                                     .getDiagnostics();
                     requireActivity().runOnUiThread(() ->
                             mModel.updateLogs(id, diagnostics));
@@ -172,9 +172,9 @@ public class AppLogFragment extends Fragment
                 }
             }
         };
-        if (project instanceof AndroidProject) {
+        if (module instanceof AndroidModule) {
             requireActivity().registerReceiver(mLogReceiver,
-                    new IntentFilter(((AndroidProject) project).getPackageName() + ".LOG"));
+                    new IntentFilter(((AndroidModule) module).getPackageName() + ".LOG"));
         }
     }
 }

@@ -8,7 +8,7 @@ import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.SourceFileObject;
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.cache.CacheHolder;
 import com.tyron.common.util.Cache;
 
@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-public class IncrementalJavaTask extends Task<JavaProject> {
+public class IncrementalJavaTask extends Task<JavaModule> {
 
     public static final CacheHolder.CacheKey<String, List<File>> CACHE_KEY =
             new CacheHolder.CacheKey<>("javaCache");
@@ -44,7 +44,7 @@ public class IncrementalJavaTask extends Task<JavaProject> {
     private List<File> mFilesToCompile;
     private Cache<String, List<File>> mClassCache;
 
-    public IncrementalJavaTask(JavaProject project, ILogger logger) {
+    public IncrementalJavaTask(JavaModule project, ILogger logger) {
         super(project, logger);
     }
 

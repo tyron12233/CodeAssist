@@ -6,8 +6,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 
 import org.apache.commons.io.FileUtils;
 import org.json.JSONArray;
@@ -23,11 +22,11 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-public class GenerateFirebaseConfigTask extends Task<AndroidProject> {
+public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
 
     private static final String TAG = GenerateFirebaseConfigTask.class.getSimpleName();
 
-    public GenerateFirebaseConfigTask(AndroidProject project, ILogger logger) {
+    public GenerateFirebaseConfigTask(AndroidModule project, ILogger logger) {
         super(project, logger);
     }
 

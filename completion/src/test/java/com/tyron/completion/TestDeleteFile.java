@@ -4,8 +4,8 @@ import static com.google.common.truth.Truth.assertThat;
 import static com.tyron.completion.TestUtil.*;
 
 import com.tyron.builder.project.api.FileManager;
-import com.tyron.builder.project.api.AndroidProject;
-import com.tyron.builder.project.mock.MockAndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.mock.MockAndroidModule;
 import com.tyron.builder.project.mock.MockFileManager;
 
 import org.junit.Before;
@@ -15,10 +15,8 @@ import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
 
 @RunWith(RobolectricTestRunner.class)
@@ -27,7 +25,7 @@ public class TestDeleteFile {
     private File mMainClass;
     private File mClassToDelete;
 
-    private AndroidProject mProject;
+    private AndroidModule mProject;
     private FileManager mFileManager;
     private Set<File> mJavaFiles;
     private JavaCompilerService mService;
@@ -41,7 +39,7 @@ public class TestDeleteFile {
 
         mRoot = new File(resolveBasePath(), "EmptyProject");
         mFileManager = new MockFileManager(mRoot);
-        mProject = new MockAndroidProject(mRoot, mFileManager);
+        mProject = new MockAndroidModule(mRoot, mFileManager);
 
         mMainClass = new File(resolveBasePath(), "EmptyProject/classes/Main.java");
         mClassToDelete = new File(resolveBasePath(), "EmptyProject/classes/MainSecond.java");

@@ -7,13 +7,13 @@ import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.Module;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public abstract class BuilderImpl<T extends Project> implements Builder<T> {
+public abstract class BuilderImpl<T extends Module> implements Builder<T> {
 
     private final Handler mMainHandler;
     private final T mProject;

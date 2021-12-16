@@ -29,8 +29,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.material.transition.MaterialFade;
 import com.google.android.material.transition.MaterialSharedAxis;
-import com.tyron.builder.project.api.Project;
-import com.tyron.builder.project.impl.AndroidProjectImpl;
+import com.tyron.builder.project.api.Module;
+import com.tyron.builder.project.impl.AndroidModuleImpl;
 import com.tyron.code.R;
 import com.tyron.code.ui.file.FilePickerDialogFixed;
 import com.tyron.code.ui.main.MainFragment;
@@ -201,8 +201,8 @@ public class ProjectManagerFragment extends Fragment {
                         Manifest.permission.READ_EXTERNAL_STORAGE});
     }
 
-    private void openProject(Project project) {
-        MainFragment fragment = MainFragment.newInstance(project.getRootFile().getAbsolutePath());
+    private void openProject(Module module) {
+        MainFragment fragment = MainFragment.newInstance(module.getRootFile().getAbsolutePath());
         getParentFragmentManager().beginTransaction()
                 .add(R.id.fragment_container, fragment)
                 .addToBackStack(null)
@@ -223,14 +223,14 @@ public class ProjectManagerFragment extends Fragment {
             File projectDir = new File(path);
             File[] directories = projectDir.listFiles(File::isDirectory);
 
-            List<Project> projects = new ArrayList<>();
+            List<Module> modules = new ArrayList<>();
             if (directories != null) {
                 Arrays.sort(directories, Comparator.comparingLong(File::lastModified));
                 for (File directory : directories) {
-                    Project project = new AndroidProjectImpl(new File(directory.getAbsolutePath()
+                    Module module = new AndroidModuleImpl(new File(directory.getAbsolutePath()
                             .replaceAll("%20", " ")));
                    // if (project.isValidProject()) {
-                        projects.add(project);
+                        modules.add(module);
                    // }
                 }
             }
@@ -238,7 +238,7 @@ public class ProjectManagerFragment extends Fragment {
             if (getActivity() != null) {
                 requireActivity().runOnUiThread(() -> {
                     toggleLoading(false);
-                    mAdapter.submitList(projects);
+                    mAdapter.submitList(modules);
                 });
             }
         });

@@ -1,7 +1,5 @@
 package com.tyron.builder.compiler.dex;
 
-import android.util.Log;
-
 import com.android.tools.r8.CompilationMode;
 import com.android.tools.r8.D8;
 import com.android.tools.r8.D8Command;
@@ -10,9 +8,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.JavaModule;
 
 import java.io.File;
 import java.io.IOException;
@@ -20,18 +16,17 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
  * Converts class files into dex files and merges them in the process
  */
 @SuppressWarnings("NewApi")
-public class D8Task extends Task<JavaProject> {
+public class D8Task extends Task<JavaModule> {
 
 	private static final String TAG = D8Task.class.getSimpleName();
 
-	public D8Task(JavaProject project, ILogger logger) {
+	public D8Task(JavaModule project, ILogger logger) {
 		super(project, logger);
 	}
 

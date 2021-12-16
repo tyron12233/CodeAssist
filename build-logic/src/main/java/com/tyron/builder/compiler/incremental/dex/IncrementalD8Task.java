@@ -11,7 +11,7 @@ import com.tyron.builder.compiler.dex.D8Task;
 import com.tyron.builder.compiler.dex.DexDiagnosticHandler;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.cache.CacheHolder;
 import com.tyron.common.util.Cache;
 
@@ -27,7 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class IncrementalD8Task extends Task<AndroidProject> {
+public class IncrementalD8Task extends Task<AndroidModule> {
 
     private static final String TAG = IncrementalD8Task.class.getSimpleName();
     public static final CacheHolder.CacheKey<String, List<File>> CACHE_KEY =
@@ -42,7 +42,7 @@ public class IncrementalD8Task extends Task<AndroidProject> {
 
     private BuildType mBuildType;
 
-    public IncrementalD8Task(AndroidProject project, ILogger logger) {
+    public IncrementalD8Task(AndroidModule project, ILogger logger) {
         super(project, logger);
     }
 

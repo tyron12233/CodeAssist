@@ -7,7 +7,7 @@ import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.model.ProjectSettings;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.common.util.StringSearch;
 
@@ -16,7 +16,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-public class MockAndroidProject extends MockJavaProject implements AndroidProject {
+public class MockAndroidModule extends MockJavaModule implements AndroidModule {
 
     private final Map<String, File> mKotlinFiles = new HashMap<>();
 
@@ -27,7 +27,7 @@ public class MockAndroidProject extends MockJavaProject implements AndroidProjec
 
     private File mAndroidResourcesDir;
 
-    public MockAndroidProject(File rootDir, FileManager fileManager) {
+    public MockAndroidModule(File rootDir, FileManager fileManager) {
         super(rootDir, fileManager);
     }
 

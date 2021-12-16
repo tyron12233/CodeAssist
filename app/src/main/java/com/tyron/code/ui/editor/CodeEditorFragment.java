@@ -21,8 +21,8 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
-import com.tyron.builder.project.api.JavaProject;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.language.LanguageManager;
@@ -205,7 +205,7 @@ public class CodeEditorFragment extends Fragment
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        Project project = ProjectManager.getInstance().getCurrentProject();
+        Module module = ProjectManager.getInstance().getCurrentProject();
         if (mCurrentFile.exists()) {
             String text;
             try {
@@ -213,8 +213,8 @@ public class CodeEditorFragment extends Fragment
             } catch (IOException e) {
                 text = "File does not exist: " + e.getMessage();
             }
-            if (project != null) {
-                project.getFileManager().openFileForSnapshot(mCurrentFile, text);
+            if (module != null) {
+                module.getFileManager().openFileForSnapshot(mCurrentFile, text);
             }
             mEditor.setText(text);
         }
@@ -250,8 +250,8 @@ public class CodeEditorFragment extends Fragment
                 }
 
                 if (item.item.action == com.tyron.completion.model.CompletionItem.Kind.IMPORT) {
-                    if (project instanceof JavaProject) {
-                        Parser parser = Parser.parseFile((JavaProject) project,
+                    if (module instanceof JavaModule) {
+                        Parser parser = Parser.parseFile((JavaModule) module,
                                 mEditor.getCurrentFile().toPath());
                         ParseTask task = new ParseTask(parser.task, parser.root);
 
@@ -386,8 +386,8 @@ public class CodeEditorFragment extends Fragment
             }
 
             private void updateFile(CharSequence contents) {
-                if (project != null) {
-                    project.getFileManager().setSnapshotContent(mCurrentFile, contents.toString());
+                if (module != null) {
+                    module.getFileManager().setSnapshotContent(mCurrentFile, contents.toString());
                 }
             }
         });
@@ -490,11 +490,11 @@ public class CodeEditorFragment extends Fragment
     }
 
     private List<CodeActionList> getCodeActions() {
-        Project project = ProjectManager.getInstance().getCurrentProject();
-        if (mLanguage instanceof JavaLanguage && project != null) {
+        Module module = ProjectManager.getInstance().getCurrentProject();
+        if (mLanguage instanceof JavaLanguage && module != null) {
             final Path current = mEditor.getCurrentFile().toPath();
             CodeActionProvider provider =
-                    new CodeActionProvider(CompletionEngine.getInstance().getCompiler((JavaProject) project));
+                    new CodeActionProvider(CompletionEngine.getInstance().getCompiler((JavaModule) module));
             return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
         }
         return Collections.emptyList();

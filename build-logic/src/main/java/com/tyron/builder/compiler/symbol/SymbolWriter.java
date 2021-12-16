@@ -5,7 +5,7 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Table;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 
 import org.apache.commons.io.FileUtils;
 
@@ -29,9 +29,9 @@ public class SymbolWriter {
     private final String mPackageName;
     private final List<SymbolLoader> mSymbols = Lists.newArrayList();
     private final SymbolLoader mValues;
-    private final AndroidProject mProject;
+    private final AndroidModule mProject;
 
-    public SymbolWriter(String outFolder, String packageName, SymbolLoader values, AndroidProject project) {
+    public SymbolWriter(String outFolder, String packageName, SymbolLoader values, AndroidModule project) {
         mOutFolder = outFolder;
         mPackageName = packageName;
         mValues = values;

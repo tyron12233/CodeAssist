@@ -4,7 +4,7 @@ import android.annotation.SuppressLint;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.JavaModule;
 
 import org.apache.commons.io.FileUtils;
 import org.openjdk.javax.tools.JavaFileObject;
@@ -24,13 +24,13 @@ public class SourceFileObject extends SimpleJavaFileObject {
 	public Path mFile;
 	private final Instant modified;
 	private final String mContents;
-	private final JavaProject mProject;
+	private final JavaModule mProject;
 	
 	public SourceFileObject(Path file) {
 		this(file, null, null, null);
 	}
 
-	public SourceFileObject(Path file, JavaProject project) {
+	public SourceFileObject(Path file, JavaModule project) {
 		this(file, null, null, project);
 	}
 
@@ -38,7 +38,7 @@ public class SourceFileObject extends SimpleJavaFileObject {
 		this(file, contents, modified, null);
 	}
 	
-	public SourceFileObject(Path file, String contents, Instant modified, JavaProject project) {
+	public SourceFileObject(Path file, String contents, Instant modified, JavaModule project) {
 		super(file.toUri(), JavaFileObject.Kind.SOURCE);
 		mContents = contents;
 		mFile = file;

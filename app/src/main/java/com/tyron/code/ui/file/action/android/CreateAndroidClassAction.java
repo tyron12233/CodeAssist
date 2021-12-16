@@ -2,8 +2,8 @@ package com.tyron.code.ui.file.action.android;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.ProjectManager;
-import com.tyron.builder.project.api.AndroidProject;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.template.android.ActivityTemplate;
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;
@@ -40,9 +40,9 @@ public class CreateAndroidClassAction extends CreateClassAction {
                             context.getFragment().getMainViewModel()
                                     .addFile(createdFile);
 
-                            Project currentProject = ProjectManager.getInstance().getCurrentProject();
-                            if (currentProject instanceof AndroidProject) {
-                                ((AndroidProject) currentProject).addJavaFile(createdFile);
+                            Module currentModule = ProjectManager.getInstance().getCurrentProject();
+                            if (currentModule instanceof AndroidModule) {
+                                ((AndroidModule) currentModule).addJavaFile(createdFile);
                             }
                         } catch (IOException e) {
                             new MaterialAlertDialogBuilder(context.getFragment().requireContext())

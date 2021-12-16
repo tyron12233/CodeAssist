@@ -6,7 +6,7 @@ import androidx.annotation.Nullable;
 import java.io.File;
 import java.util.Map;
 
-public interface KotlinProject extends Project {
+public interface KotlinModule extends Module {
 
     @NonNull
     Map<String, File> getKotlinFiles();

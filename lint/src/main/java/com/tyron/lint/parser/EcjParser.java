@@ -8,7 +8,7 @@ import androidx.annotation.Nullable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.MapMaker;
 import com.google.common.collect.Maps;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.Module;
 import com.tyron.lint.api.JavaContext;
 import com.tyron.lint.client.JavaParser;
 import com.tyron.lint.client.LintClient;
@@ -45,12 +45,12 @@ public class EcjParser extends JavaParser {
     private static final boolean DEBUG_DUMP_PARSE_ERRORS = false;
     private static final boolean KEEP_LOOKUP_ENVIRONMENT = false;
 
-    private final Project mProject;
+    private final Module mModule;
     private Map<File, EcjSourceFile> mSourceUnits;
     private Parser mParser;
 
-    public EcjParser(Project project) {
-        mProject = project;
+    public EcjParser(Module module) {
+        mModule = module;
     }
 
     public static CompilerOptions createCompilerOptions() {
@@ -99,7 +99,7 @@ public class EcjParser extends JavaParser {
 
     @Override
     public void prepareJavaParse(@NonNull List<JavaContext> contexts) {
-        if (mProject == null || contexts.isEmpty()) {
+        if (mModule == null || contexts.isEmpty()) {
             return;
         }
 

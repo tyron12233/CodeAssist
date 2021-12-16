@@ -6,7 +6,7 @@ import android.util.Log;
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.api.FileManager;
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.util.Cache;
 import com.tyron.common.util.StringSearch;
 import com.tyron.completion.provider.CompletionEngine;
@@ -45,7 +45,7 @@ public class JavaCompilerService implements CompilerProvider {
     private final List<Diagnostic<? extends JavaFileObject>> diagnostics =
             new ArrayList<>();
 
-    private final JavaProject mProject;
+    private final JavaModule mProject;
     public final Set<File> classPath, docPath;
     public final Set<String> addExports;
     public final ReusableCompiler compiler = new ReusableCompiler();
@@ -53,7 +53,7 @@ public class JavaCompilerService implements CompilerProvider {
 
     public final ReentrantLock mLock = new ReentrantLock();
 
-    public JavaCompilerService(JavaProject project, Set<File> classPath, Set<File> docPath, Set<String> addExports) {
+    public JavaCompilerService(JavaModule project, Set<File> classPath, Set<File> docPath, Set<String> addExports) {
         mProject = project;
         mFileManager = project.getFileManager();
         this.classPath = Collections.unmodifiableSet(classPath);
@@ -64,7 +64,7 @@ public class JavaCompilerService implements CompilerProvider {
         this.docs = new Docs(project, docPath);
     }
 
-    public JavaProject getProject() {
+    public JavaModule getProject() {
         return mProject;
     }
 

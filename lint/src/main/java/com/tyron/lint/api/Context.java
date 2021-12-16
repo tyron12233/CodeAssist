@@ -5,7 +5,7 @@ import static com.tyron.builder.compiler.manifest.SdkConstants.DOT_GRADLE;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.lint.client.Configuration;
 import com.tyron.lint.client.LintDriver;
 
@@ -23,7 +23,7 @@ public class Context {
 
     protected final LintDriver mDriver;
 
-    private final JavaProject mProject;
+    private final JavaModule mProject;
 
     private final Configuration mConfiguration;
 
@@ -33,7 +33,7 @@ public class Context {
 
     private Boolean mContainsCommentSuppress;
 
-    public Context(LintDriver driver, JavaProject project, File file, Configuration config) {
+    public Context(LintDriver driver, JavaModule project, File file, Configuration config) {
         this.file = file;
 
         mDriver = driver;

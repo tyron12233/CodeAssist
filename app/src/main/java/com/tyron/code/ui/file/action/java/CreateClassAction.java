@@ -4,8 +4,8 @@ import android.view.SubMenu;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.ProjectManager;
-import com.tyron.builder.project.api.JavaProject;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.template.java.AbstractTemplate;
@@ -59,9 +59,9 @@ public class CreateClassAction extends FileAction {
                             context.getFragment().getMainViewModel()
                                     .addFile(createdFile);
 
-                            Project currentProject = ProjectManager.getInstance().getCurrentProject();
-                            if (currentProject instanceof JavaProject) {
-                                ((JavaProject) currentProject).addJavaFile(createdFile);
+                            Module currentModule = ProjectManager.getInstance().getCurrentProject();
+                            if (currentModule instanceof JavaModule) {
+                                ((JavaModule) currentModule).addJavaFile(createdFile);
                             }
                         } catch (IOException e) {
                             new MaterialAlertDialogBuilder(context.getFragment().requireContext())

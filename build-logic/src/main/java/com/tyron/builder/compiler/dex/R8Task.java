@@ -9,10 +9,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.parser.FileManager;
-import com.tyron.builder.project.api.AndroidProject;
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.AndroidModule;
 
 import java.io.File;
 import java.io.IOException;
@@ -22,11 +19,11 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
-public class R8Task extends Task<AndroidProject> {
+public class R8Task extends Task<AndroidModule> {
 
     private static final String TAG = R8Task.class.getSimpleName();
 
-    public R8Task(AndroidProject project, ILogger logger) {
+    public R8Task(AndroidModule project, ILogger logger) {
         super(project, logger);
     }
 

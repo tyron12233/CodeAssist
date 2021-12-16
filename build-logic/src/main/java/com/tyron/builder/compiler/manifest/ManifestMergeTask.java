@@ -9,7 +9,7 @@ import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.ProjectSettings;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 
 import org.apache.commons.io.FileUtils;
 import org.w3c.dom.Document;
@@ -20,14 +20,14 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ManifestMergeTask extends Task<AndroidProject> {
+public class ManifestMergeTask extends Task<AndroidModule> {
 
     private File mOutputFile;
     private File mMainManifest;
     private File[] mLibraryManifestFiles;
     private String mPackageName;
 
-    public ManifestMergeTask(AndroidProject project, ILogger logger) {
+    public ManifestMergeTask(AndroidModule project, ILogger logger) {
         super(project, logger);
     }
 

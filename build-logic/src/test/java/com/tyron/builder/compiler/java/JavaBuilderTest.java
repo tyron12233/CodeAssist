@@ -8,8 +8,8 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.dex.JavaD8Task;
 import com.tyron.builder.compiler.incremental.java.IncrementalJavaTask;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.project.api.JavaProject;
-import com.tyron.builder.project.mock.MockAndroidProject;
+import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.mock.MockAndroidModule;
 import com.tyron.builder.project.mock.MockFileManager;
 import com.tyron.common.TestUtil;
 
@@ -28,7 +28,7 @@ public class JavaBuilderTest {
 
     private File mResourcesDirectory;
     private MockFileManager mFileManager;
-    private MockAndroidProject mJavaProject;
+    private MockAndroidModule mJavaProject;
 
     @Before
     public void setup() throws Exception {
@@ -36,7 +36,7 @@ public class JavaBuilderTest {
 
         File root = new File(mResourcesDirectory, "TestProject");
         mFileManager = new MockFileManager(root);
-        mJavaProject = new MockAndroidProject(root, mFileManager);
+        mJavaProject = new MockAndroidModule(root, mFileManager);
         mJavaProject.setLambdaStubsJarFile(new File(mResourcesDirectory,
                 "bootstraps/core-lambda-stubs.jar"));
         mJavaProject.setBootstrapFile(new File(mResourcesDirectory, "bootstraps/rt.jar"));
@@ -58,14 +58,14 @@ public class JavaBuilderTest {
         JavaBuilder builder = new JavaBuilder(mJavaProject, ILogger.STD_OUT);
         builder.build(BuildType.RELEASE);
 
-        List<Task<? super JavaProject>> tasksRan = builder.getTasksRan();
+        List<Task<? super JavaModule>> tasksRan = builder.getTasksRan();
         assertThat(tasksRan).hasSize(builder.getTasks(BuildType.RELEASE).size());
 
-        Task<? super JavaProject> firstTask = tasksRan.get(0);
+        Task<? super JavaModule> firstTask = tasksRan.get(0);
         assertThat(firstTask).isInstanceOf(IncrementalJavaTask.class);
         assertThat(((IncrementalJavaTask) firstTask).getCompiledFiles()).hasSize(1);
 
-        Task<? super JavaProject> secondTask = tasksRan.get(1);
+        Task<? super JavaModule> secondTask = tasksRan.get(1);
         assertThat(secondTask).isInstanceOf(JavaD8Task.class);
         assertThat(((JavaD8Task) secondTask).getCompiledFiles()).hasSize(1);
     }

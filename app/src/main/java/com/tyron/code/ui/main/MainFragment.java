@@ -24,8 +24,8 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.ProjectSettings;
-import com.tyron.builder.project.api.Project;
-import com.tyron.builder.project.impl.AndroidProjectImpl;
+import com.tyron.builder.project.api.Module;
+import com.tyron.builder.project.impl.AndroidModuleImpl;
 import com.tyron.code.R;
 import com.tyron.code.service.CompilerService;
 import com.tyron.code.service.CompilerServiceConnection;
@@ -73,7 +73,7 @@ public class MainFragment extends Fragment {
             }
         }
     };
-    private Project mProject;
+    private Module mModule;
     private CompilerServiceConnection mServiceConnection;
     private IndexServiceConnection mIndexServiceConnection;
 
@@ -91,7 +91,7 @@ public class MainFragment extends Fragment {
         requireActivity().getOnBackPressedDispatcher().addCallback(this, onBackPressedCallback);
 
         String projectPath = requireArguments().getString("project_path");
-        mProject = new AndroidProjectImpl(new File(projectPath));
+        mModule = new AndroidModuleImpl(new File(projectPath));
         mProjectManager = ProjectManager.getInstance();
         mLogViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
@@ -155,11 +155,11 @@ public class MainFragment extends Fragment {
             if (item.getItemId() == R.id.debug_refresh) {
                 saveAll();
                 if (!mServiceConnection.isCompiling()) {
-                    Project project = ProjectManager.getInstance()
+                    Module module = ProjectManager.getInstance()
                             .getCurrentProject();
-                    if (project != null) {
-                        project.clear();
-                        openProject(project);
+                    if (module != null) {
+                        module.clear();
+                        openProject(module);
                     }
                 }
             } else if (item.getItemId() == R.id.action_build_debug) {
@@ -185,8 +185,8 @@ public class MainFragment extends Fragment {
         });
 
         File root;
-        if (mProject != null) {
-            root = mProject.getRootFile();
+        if (mModule != null) {
+            root = mModule.getRootFile();
         } else {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 root = requireActivity().getExternalFilesDir(null);
@@ -196,12 +196,12 @@ public class MainFragment extends Fragment {
         }
         mFileViewModel.refreshNode(root);
 
-        if (!mProject.equals(mProjectManager.getCurrentProject())) {
-            mRoot.postDelayed(() -> openProject(mProject), 200);
+        if (!mModule.equals(mProjectManager.getCurrentProject())) {
+            mRoot.postDelayed(() -> openProject(mModule), 200);
         }
 
         // If the user has changed projects, clear the current opened files
-        if (!mProject.equals(mProjectManager.getCurrentProject())) {
+        if (!mModule.equals(mProjectManager.getCurrentProject())) {
             mMainViewModel.setFiles(new ArrayList<>());
         }
         mMainViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> {
@@ -258,18 +258,18 @@ public class MainFragment extends Fragment {
         mMainViewModel.openFile(file);
     }
 
-    public void openProject(Project project) {
+    public void openProject(Module module) {
         if (CompletionEngine.isIndexing()) {
             return;
         }
-        mProject = project;
-        mIndexServiceConnection.setProject(project);
+        mModule = module;
+        mIndexServiceConnection.setProject(module);
 
-        mMainViewModel.setToolbarTitle(project.getRootFile().getName());
+        mMainViewModel.setToolbarTitle(module.getRootFile().getName());
         mMainViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
 
-        mFileViewModel.refreshNode(project.getRootFile());
+        mFileViewModel.refreshNode(module.getRootFile());
 
         Intent intent = new Intent(requireContext(), IndexService.class);
         requireActivity().startService(intent);
@@ -278,7 +278,7 @@ public class MainFragment extends Fragment {
     }
 
     private void saveAll() {
-        if (mProject == null) {
+        if (mModule == null) {
             return;
         }
 
@@ -289,7 +289,7 @@ public class MainFragment extends Fragment {
         getChildFragmentManager().setFragmentResult(EditorContainerFragment.SAVE_ALL_KEY,
                 Bundle.EMPTY);
 
-        ProjectSettings settings = mProject.getSettings();
+        ProjectSettings settings = mModule.getSettings();
         if (settings == null) {
             return;
         }

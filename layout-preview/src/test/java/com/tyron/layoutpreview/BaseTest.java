@@ -1,7 +1,6 @@
 package com.tyron.layoutpreview;
 
-import com.flipkart.android.proteus.ProteusLayoutInflater;
-import com.tyron.builder.project.mock.MockAndroidProject;
+import com.tyron.builder.project.mock.MockAndroidModule;
 import com.tyron.builder.project.mock.MockFileManager;
 import com.tyron.layoutpreview.inflate.PreviewLayoutInflater;
 
@@ -10,7 +9,6 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -20,12 +18,12 @@ public abstract class BaseTest {
 
     private static File sResDirectory = new File(getResourcesDirectory(), "test_res");
 
-    private MockAndroidProject mProject;
+    private MockAndroidModule mProject;
     protected PreviewLayoutInflater mInflater;
 
     @Before
     public void setup() throws ExecutionException, InterruptedException {
-        mProject = new MockAndroidProject(null, new MockFileManager(null));
+        mProject = new MockAndroidModule(null, new MockFileManager(null));
         mProject.setAndroidResourcesDirectory(sResDirectory);
         mInflater = new PreviewLayoutInflater(null, mProject);
         mInflater.parseResources(Executors.newSingleThreadExecutor())

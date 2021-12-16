@@ -5,18 +5,17 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 
 import java.io.File;
 import java.io.IOException;
 
-public class SignTask extends Task<AndroidProject> {
+public class SignTask extends Task<AndroidModule> {
 
     private File mInputApk;
     private File mOutputApk;
 
-    public SignTask(AndroidProject project, ILogger logger) {
+    public SignTask(AndroidModule project, ILogger logger) {
         super(project, logger);
     }
 

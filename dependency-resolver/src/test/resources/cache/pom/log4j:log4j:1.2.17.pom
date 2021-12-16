@@ -26,7 +26,7 @@ To build NTEventLogAppender.dll using Microsoft tools, run the appropriate vcvar
 target platform and specify -Dntdll_target=msbuild on the mvn command line.
 
 -->        
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<module xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>log4j</groupId>
   <artifactId>log4j</artifactId>
@@ -167,7 +167,7 @@ target platform and specify -Dntdll_target=msbuild on the mvn command line.
                 <manifestEntries>
 		          <DynamicImport-Package>*</DynamicImport-Package>
                   <Implementation-Title>log4j</Implementation-Title>
-                  <Implementation-Version>${project.version}</Implementation-Version>
+                  <Implementation-Version>${module.version}</Implementation-Version>
                   <Implementation-Vendor>"Apache Software Foundation"</Implementation-Vendor>
                 </manifestEntries>
               </manifestSection>
@@ -231,7 +231,7 @@ target platform and specify -Dntdll_target=msbuild on the mvn command line.
                  <ant dir="tests" target="runAll">
                   <property name="m2_repo" location="${m2_repo}" />
                   <property name="log4j.jar" location="target/classes" />
-                  <property name="project.lib.home" location="target" />
+                  <property name="module.lib.home" location="target" />
                 </ant>
               </tasks>
             </configuration>
@@ -288,7 +288,7 @@ target platform and specify -Dntdll_target=msbuild on the mvn command line.
             </goals>
             <configuration>
               <tasks>
-                <copy todir="${project.build.directory}/apidocs/META-INF">
+                <copy todir="${module.build.directory}/apidocs/META-INF">
                   <fileset dir="${basedir}">
                     <include name="LICENSE" />
                     <include name="NOTICE" />
@@ -471,7 +471,7 @@ target platform and specify -Dntdll_target=msbuild on the mvn command line.
   <reporting>
     <plugins>
     <plugin>
-        <artifactId>maven-project-info-reports-plugin</artifactId>
+        <artifactId>maven-module-info-reports-plugin</artifactId>
         <version>2.4</version>
         <reportSets>
         <reportSet>
@@ -588,5 +588,5 @@ target platform and specify -Dntdll_target=msbuild on the mvn command line.
       <url>scp://localhost/${user.dir}/target/site-deploy</url>
     </site>
   </distributionManagement>
-</project>
+</module>
 

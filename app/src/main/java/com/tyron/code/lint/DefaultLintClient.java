@@ -5,7 +5,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.provider.CompletionEngine;
 import com.tyron.lint.api.Context;
@@ -26,7 +26,7 @@ public class DefaultLintClient extends LintClient {
     private final Lint mLint;
     private final JavaCompilerService mCompiler;
 
-    public DefaultLintClient(JavaProject project) {
+    public DefaultLintClient(JavaModule project) {
         mCompiler = CompletionEngine.getInstance().getCompiler(project);
         mLint = new Lint(mCompiler, project, this);
     }

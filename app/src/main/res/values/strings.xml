@@ -62,10 +62,10 @@
     <string name="wizard_select_min_sdk">Select a minimum SDK version.</string>
     <string name="wizard_select_save_location">Select a save location</string>
 
-    <string name="menu_open_project">Open project</string>
-    <string name="menu_create_project">Create project</string>
+    <string name="menu_open_project">Open module</string>
+    <string name="menu_create_project">Create module</string>
     <string name="menu_run">Run</string>
-    <string name="menu_refresh">Refresh project</string>
+    <string name="menu_refresh">Refresh module</string>
     <string name="menu_format">Format</string>
     <string name="menu_settings">Settings</string>
 
@@ -127,13 +127,13 @@
     <string name="project_manager_button_allow">Allow</string>
     <string name="project_manager_button_use_internal">Use internal storage</string>
     <string name="project_manager_permission_rationale">The application needs storage permissions
-        in order to save project files that will not be deleted when you uninstall the
-        app. Alternatively you can choose to save project files into the app\'s internal storage.</string>
+        in order to save module files that will not be deleted when you uninstall the
+        app. Alternatively you can choose to save module files into the app\'s internal storage.</string>
     <string name="project_manager_android11_notice">Projects will be saved to the app\'s internal storage directory.
-        Backup your projects before uninstalling the app.</string>
+        Backup your modules before uninstalling the app.</string>
     <string name="project_manager_projects">Projects</string>
     <string name="project_manager_empty">Projects are empty</string>`
-    <string name="project_manager_create_project">Create project</string>
+    <string name="project_manager_create_project">Create module</string>
 
     <!-- Compiler Service -->
     <string name="compilation_state_compiling">Compiling</string>

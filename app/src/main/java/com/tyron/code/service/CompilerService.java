@@ -21,8 +21,8 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Builder;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.project.api.AndroidProject;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
 import com.tyron.code.util.ApkInstaller;
 
@@ -40,7 +40,7 @@ public class CompilerService extends Service {
         }
     }
 
-    private Project mProject;
+    private Module mModule;
     private ApkBuilder.OnResultListener onResultListener;
     private ILogger external;
     /**
@@ -148,11 +148,11 @@ public class CompilerService extends Service {
         return mBinder;
     }
 
-    public void compile(Project project, BuildType type) {
-        mProject = project;
+    public void compile(Module module, BuildType type) {
+        mModule = module;
 
 
-        if (mProject == null) {
+        if (mModule == null) {
             if (onResultListener != null) {
                 mMainHandler.post(() -> onResultListener.onComplete(false, "Failed to open project  (Have you opened a project?)"));
             }
@@ -164,10 +164,10 @@ public class CompilerService extends Service {
         }
 
         Executors.newSingleThreadExecutor().execute(() -> {
-            Builder<? extends Project> projectBuilder = getBuilderForProject(project, type);
+            Builder<? extends Module> projectBuilder = getBuilderForProject(module, type);
 
-            project.clear();
-            project.index();
+            module.clear();
+            module.index();
 
             boolean success = true;
 
@@ -201,7 +201,7 @@ public class CompilerService extends Service {
                         if (type != BuildType.AAB) {
                             Intent intent = new Intent(Intent.ACTION_VIEW);
                             intent.setDataAndType(ApkInstaller.uriFromFile(this,
-                                    new File(mProject.getBuildDirectory(), "bin/signed.apk")),
+                                    new File(mModule.getBuildDirectory(), "bin/signed.apk")),
                                     "application/vnd.android.package-archive");
                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -224,12 +224,12 @@ public class CompilerService extends Service {
         });
     }
 
-    private Builder<? extends Project> getBuilderForProject(Project project, BuildType type) {
-        if (project instanceof AndroidProject) {
+    private Builder<? extends Module> getBuilderForProject(Module module, BuildType type) {
+        if (module instanceof AndroidModule) {
             if (type == BuildType.AAB) {
-                return new AndroidAppBundleBuilder((AndroidProject) project, logger);
+                return new AndroidAppBundleBuilder((AndroidModule) module, logger);
             }
-            return new AndroidAppBuilder((AndroidProject) project, logger);
+            return new AndroidAppBuilder((AndroidModule) module, logger);
         }
         return null;
     }

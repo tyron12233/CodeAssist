@@ -6,7 +6,7 @@ import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.parser.FileManager;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.Cache;
 
 import org.apache.commons.io.FileUtils;
@@ -15,13 +15,13 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-public class CleanTask extends Task<AndroidProject> {
+public class CleanTask extends Task<AndroidModule> {
 
     private static final String TAG = CleanTask.class.getSimpleName();
 
     private BuildType mBuildType;
 
-    public CleanTask(AndroidProject project, ILogger logger) {
+    public CleanTask(AndroidModule project, ILogger logger) {
         super(project, logger);
     }
 

@@ -10,15 +10,14 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Project;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class PackageTask extends Task<AndroidProject> {
+public class PackageTask extends Task<AndroidModule> {
 
     /**
      * List of extra dex files not including the main dex file
@@ -42,7 +41,7 @@ public class PackageTask extends Task<AndroidProject> {
     private File mApk;
     private BuildType mBuildType;
 
-    public PackageTask(AndroidProject project, ILogger logger) {
+    public PackageTask(AndroidModule project, ILogger logger) {
         super(project, logger);
     }
 

@@ -2,14 +2,14 @@ package com.tyron.builder.compiler;
 
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.exception.CompilationFailedException;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.Module;
 
 import java.io.IOException;
 
 /**
  *
  */
-public abstract class Task<T extends Project> {
+public abstract class Task<T extends Module> {
 
     private final T mProject;
     private final ILogger mLogger;

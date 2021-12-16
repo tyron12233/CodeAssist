@@ -5,8 +5,8 @@ import androidx.annotation.NonNull;
 import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.project.api.JavaProject;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.util.ProjectUtils;
@@ -25,11 +25,11 @@ public class ProjectManager {
     public interface TaskListener {
         void onTaskStarted(String message);
 
-        void onComplete(Project project, boolean success, String message);
+        void onComplete(Module module, boolean success, String message);
     }
 
     public interface OnProjectOpenListener {
-        void onProjectOpen(Project project);
+        void onProjectOpen(Module module);
     }
 
     private static volatile ProjectManager INSTANCE = null;
@@ -42,15 +42,15 @@ public class ProjectManager {
     }
 
     private final List<OnProjectOpenListener> mProjectOpenListeners = new ArrayList<>();
-    private Project mCurrentProject;
+    private Module mCurrentModule;
 
     private ProjectManager() {
 
     }
 
     public void addOnProjectOpenListener(OnProjectOpenListener listener) {
-        if (!CompletionEngine.isIndexing() && mCurrentProject != null) {
-            listener.onProjectOpen(mCurrentProject);
+        if (!CompletionEngine.isIndexing() && mCurrentModule != null) {
+            listener.onProjectOpen(mCurrentModule);
         }
         mProjectOpenListeners.add(listener);
     }
@@ -59,30 +59,30 @@ public class ProjectManager {
         mProjectOpenListeners.remove(listener);
     }
 
-    public void openProject(Project project,
+    public void openProject(Module module,
                             boolean downloadLibs,
                             TaskListener listener,
                             ILogger logger) {
         Executors.newSingleThreadExecutor().execute(() -> {
-            doOpenProject(project, downloadLibs, listener, logger);
+            doOpenProject(module, downloadLibs, listener, logger);
         });
     }
 
-    private void doOpenProject(Project project,
+    private void doOpenProject(Module module,
                                boolean downloadLibs,
                                TaskListener mListener,
                                ILogger logger) {
         try {
-            project.open();
+            module.open();
         } catch (IOException e) {
-            mListener.onComplete(project,false, "Unable to open project: " + e.getMessage());
+            mListener.onComplete(module,false, "Unable to open project: " + e.getMessage());
             return;
         }
 
-        mCurrentProject = project;
+        mCurrentModule = module;
 
-        if (project instanceof JavaProject) {
-            JavaProject javaProject = (JavaProject) project;
+        if (module instanceof JavaModule) {
+            JavaModule javaProject = (JavaModule) module;
             try {
                 downloadLibraries(javaProject, mListener, logger);
             } catch (IOException e) {
@@ -91,35 +91,35 @@ public class ProjectManager {
         }
 
         // Index the project after downloading dependencies so it will get added to classpath
-        project.index();
-        mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
+        module.index();
+        mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentModule));
 
-        if (project instanceof JavaProject) {
+        if (module instanceof JavaModule) {
             mListener.onTaskStarted("Indexing");
             try {
-                CompletionEngine.getInstance().index((JavaProject) project, logger, () ->
-                        mListener.onComplete(project, true, "Index successful"));
+                CompletionEngine.getInstance().index((JavaModule) module, logger, () ->
+                        mListener.onComplete(module, true, "Index successful"));
             } catch (Throwable e) {
                 String message = "Failure indexing project.\n" +
                         Throwables.getStackTraceAsString(e);
-                mListener.onComplete(project, false, message);
+                mListener.onComplete(module, false, message);
             }
         }
     }
 
-    private void downloadLibraries(JavaProject project, TaskListener listener, ILogger logger) throws IOException {
+    private void downloadLibraries(JavaModule project, TaskListener listener, ILogger logger) throws IOException {
         DependencyManager manager = new DependencyManager(ApplicationLoader.applicationContext.getExternalFilesDir("cache"));
         manager.resolve(project, listener, logger);
     }
 
-    public void closeProject(@NonNull Project project) {
-        if (project.equals(mCurrentProject)) {
-            mCurrentProject = null;
+    public void closeProject(@NonNull Module module) {
+        if (module.equals(mCurrentModule)) {
+            mCurrentModule = null;
         }
     }
 
-    public Project getCurrentProject() {
-        return mCurrentProject;
+    public Module getCurrentProject() {
+        return mCurrentModule;
     }
 
     public static File createFile(File directory, String name, CodeTemplate template) throws IOException {

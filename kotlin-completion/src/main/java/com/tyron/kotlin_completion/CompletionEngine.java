@@ -4,7 +4,7 @@ import android.util.Log;
 import android.util.Pair;
 
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.project.api.AndroidProject;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.Debouncer;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionList;
@@ -31,7 +31,7 @@ public class CompletionEngine {
         ALWAYS, AFTER_DOT, NEVER
     }
 
-    private final AndroidProject mProject;
+    private final AndroidModule mProject;
 
     private final SourcePath sp;
     private final CompilerClassPath classPath;
@@ -42,7 +42,7 @@ public class CompletionEngine {
     private Set<File> lintTodo = new HashSet<>();
     private int lintCount = 0;
 
-    private CompletionEngine(AndroidProject project) {
+    private CompletionEngine(AndroidModule project) {
         mProject = project;
         classPath = new CompilerClassPath(project);
         sp = new SourcePath(classPath);
@@ -50,7 +50,7 @@ public class CompletionEngine {
 
     private static volatile CompletionEngine INSTANCE = null;
 
-    public static synchronized CompletionEngine getInstance(AndroidProject project) {
+    public static synchronized CompletionEngine getInstance(AndroidModule project) {
         if (INSTANCE == null) {
             INSTANCE = new CompletionEngine(project);
         } else {

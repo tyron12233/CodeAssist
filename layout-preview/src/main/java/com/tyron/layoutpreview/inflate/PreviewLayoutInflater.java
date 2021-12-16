@@ -24,8 +24,8 @@ import com.flipkart.android.proteus.view.UnknownView;
 import com.flipkart.android.proteus.view.UnknownViewGroup;
 import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonReader;
-import com.tyron.builder.project.api.AndroidProject;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.layout.appcompat.AppCompatModule;
 import com.tyron.layout.cardview.CardViewModule;
 import com.tyron.layout.constraintlayout.ConstraintLayoutModule;
@@ -49,7 +49,7 @@ public class PreviewLayoutInflater {
 
     private final Context mBaseContext;
     private final Proteus mProteus;
-    private final AndroidProject mProject;
+    private final AndroidModule mProject;
     private ProteusContext mContext;
 
     private final ProteusLayoutInflater.Callback mCallback = new ProteusLayoutInflater.Callback() {
@@ -125,7 +125,7 @@ public class PreviewLayoutInflater {
         }
     };
 
-    public PreviewLayoutInflater(Context base, AndroidProject project) {
+    public PreviewLayoutInflater(Context base, AndroidModule project) {
         mBaseContext = base;
         ProteusBuilder builder = new ProteusBuilder();
         builder.register(ConstraintLayoutModule.create());
@@ -211,8 +211,8 @@ public class PreviewLayoutInflater {
         return mContext.getInflater().inflate(layout, new ObjectValue());
     }
 
-    public void registerCustomViews(ProteusBuilder builder, Project project) {
-        File customViewsDir = new File(project.getBuildDirectory(), "custom_views");
+    public void registerCustomViews(ProteusBuilder builder, Module module) {
+        File customViewsDir = new File(module.getBuildDirectory(), "custom_views");
         if (!customViewsDir.exists() && !customViewsDir.mkdirs()) {
             return;
         }

@@ -5,7 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.BuildModule;
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
@@ -24,14 +24,14 @@ import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
-public class JavaProjectImpl extends ProjectImpl implements JavaProject {
+public class JavaModuleImpl extends ModuleImpl implements JavaModule {
 
     // Map of fully qualified names and the jar they are contained in
     private final Map<String, File> mClassFiles;
     private final Map<String, File> mJavaFiles;
     private final Set<File> mLibraries;
 
-    public JavaProjectImpl(File root) {
+    public JavaModuleImpl(File root) {
         super(root);
         mJavaFiles = new HashMap<>();
         mClassFiles = new HashMap<>();

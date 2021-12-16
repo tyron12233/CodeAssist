@@ -2,7 +2,7 @@ package com.tyron.builder.project.api;
 
 import java.io.File;
 
-public interface AndroidProject extends JavaProject, KotlinProject {
+public interface AndroidModule extends JavaModule, KotlinModule {
 
     /**
      * @return The directory where android resource xml files are searched

@@ -11,8 +11,8 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.project.api.AndroidProject;
-import com.tyron.builder.project.api.JavaProject;
+import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.model.CachedCompletion;
@@ -75,7 +75,7 @@ public class CompletionEngine {
     }
 
     @NonNull
-    public JavaCompilerService getCompiler(JavaProject project) {
+    public JavaCompilerService getCompiler(JavaModule project) {
 
         Set<File> paths = new HashSet<>();
         paths.addAll(project.getJavaFiles().values());
@@ -128,9 +128,9 @@ public class CompletionEngine {
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @SuppressLint("NewApi")
-    public void index(JavaProject project, ILogger logger, Runnable callback) {
-        if (project instanceof AndroidProject) {
-            IncrementalAapt2Task task = new IncrementalAapt2Task((AndroidProject) project,
+    public void index(JavaModule project, ILogger logger, Runnable callback) {
+        if (project instanceof AndroidModule) {
+            IncrementalAapt2Task task = new IncrementalAapt2Task((AndroidModule) project,
                     ILogger.EMPTY, false);
             try {
                 task.prepare(BuildType.DEBUG);
@@ -177,7 +177,7 @@ public class CompletionEngine {
         }
     }
 
-    public synchronized CompletionList complete(JavaProject project,
+    public synchronized CompletionList complete(JavaModule project,
                                                 File file,
                                                 String contents,
                                                 String prefix,
@@ -234,7 +234,7 @@ public class CompletionEngine {
     }
 
     @NonNull
-    public synchronized CompletionList complete(JavaProject project,
+    public synchronized CompletionList complete(JavaModule project,
                                                 File file,
                                                 String contents,
                                                 long cursor) throws InterruptedException {

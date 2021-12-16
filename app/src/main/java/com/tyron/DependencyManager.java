@@ -6,8 +6,8 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Library;
-import com.tyron.builder.project.api.JavaProject;
-import com.tyron.builder.project.api.Project;
+import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.common.util.Decompress;
 import com.tyron.resolver.DependencyResolver;
@@ -42,7 +42,7 @@ public class DependencyManager {
         mResolver = new DependencyResolver(mRepository);
     }
 
-    public void resolve(JavaProject project, ProjectManager.TaskListener listener, ILogger logger) throws IOException {
+    public void resolve(JavaModule project, ProjectManager.TaskListener listener, ILogger logger) throws IOException {
         File gradleFile = new File(project.getRootFile(), "app/build.gradle");
 
         listener.onTaskStarted("Resolving dependencies");
@@ -56,7 +56,7 @@ public class DependencyManager {
         checkLibraries(project, logger, files);
     }
 
-    private void checkLibraries(JavaProject project, ILogger logger, List<File> newLibraries) throws IOException {
+    private void checkLibraries(JavaModule project, ILogger logger, List<File> newLibraries) throws IOException {
         Set<Library> libraries = new HashSet<>();
 
         Map<String, Library> fileLibsHashes = new HashMap<>();
@@ -119,7 +119,7 @@ public class DependencyManager {
         saveLibraryToProject(project, md5Map, fileLibsHashes);
     }
 
-    private void saveLibraryToProject(Project project, Map<String, Library> libraries, Map<String, Library> fileLibraries) throws IOException {
+    private void saveLibraryToProject(Module module, Map<String, Library> libraries, Map<String, Library> fileLibraries) throws IOException {
         Map<String, Library> combined = new HashMap<>();
         combined.putAll(libraries);
         combined.putAll(fileLibraries);
@@ -127,7 +127,7 @@ public class DependencyManager {
             String hash = entry.getKey();
             Library library = entry.getValue();
 
-            File libraryDir = new File(project.getBuildDirectory(), "libs/" + hash);
+            File libraryDir = new File(module.getBuildDirectory(), "libs/" + hash);
             if (!libraryDir.exists()) {
                 libraryDir.mkdir();
             } else {
@@ -146,7 +146,7 @@ public class DependencyManager {
         }
 
         String librariesString = new Gson().toJson(libraries.values());
-        project.getSettings().edit()
+        module.getSettings().edit()
                 .putString("libraries", librariesString)
                 .apply();
     }
