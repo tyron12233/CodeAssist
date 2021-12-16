@@ -2,7 +2,7 @@ package com.tyron.builder.project.mock;
 
 import androidx.annotation.Nullable;
 
-import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.model.ModuleSettings;
 
 import java.io.File;
 import java.util.HashMap;
@@ -12,15 +12,15 @@ import java.util.Set;
 /**
  * Mock project settings that does not rely on app_config.json
  */
-public class MockProjectSettings extends ProjectSettings {
+public class MockModuleSettings extends ModuleSettings {
 
     private final Map<String, Object> mMap = new HashMap<>();
 
-    public MockProjectSettings() {
+    public MockModuleSettings() {
         this(new File(""));
     }
 
-    private MockProjectSettings(File configFile) {
+    private MockModuleSettings(File configFile) {
         super(configFile);
     }
 

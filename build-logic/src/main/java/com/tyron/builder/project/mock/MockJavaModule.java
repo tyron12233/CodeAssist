@@ -2,7 +2,7 @@ package com.tyron.builder.project.mock;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.impl.ModuleImpl;
@@ -125,7 +125,7 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public ProjectSettings getSettings() {
+    public ModuleSettings getSettings() {
         return null;
     }
 

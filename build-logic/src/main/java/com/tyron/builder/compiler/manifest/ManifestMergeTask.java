@@ -8,7 +8,7 @@ import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.AndroidModule;
 
 import org.apache.commons.io.FileUtils;
@@ -83,19 +83,19 @@ public class ManifestMergeTask extends Task<AndroidModule> {
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-        ProjectSettings settings = getProject().getSettings();
+        ModuleSettings settings = getProject().getSettings();
 
         ManifestMerger2.Invoker<?> invoker = ManifestMerger2.newMerger(mMainManifest,
                 getLogger(), ManifestMerger2.MergeType.APPLICATION);
         invoker.setOverride(SystemProperty.PACKAGE, mPackageName);
         invoker.setOverride(SystemProperty.MIN_SDK_VERSION,
-                String.valueOf(settings.getInt(ProjectSettings.MIN_SDK_VERSION, 21)));
+                String.valueOf(settings.getInt(ModuleSettings.MIN_SDK_VERSION, 21)));
         invoker.setOverride(SystemProperty.TARGET_SDK_VERSION,
-                String.valueOf(settings.getInt(ProjectSettings.TARGET_SDK_VERSION, 30)));
+                String.valueOf(settings.getInt(ModuleSettings.TARGET_SDK_VERSION, 30)));
         invoker.setOverride(SystemProperty.VERSION_CODE,
-                String.valueOf(settings.getInt(ProjectSettings.VERSION_CODE, 1)));
+                String.valueOf(settings.getInt(ModuleSettings.VERSION_CODE, 1)));
         invoker.setOverride(SystemProperty.VERSION_NAME,
-                settings.getString(ProjectSettings.VERSION_NAME, "1.0"));
+                settings.getString(ModuleSettings.VERSION_NAME, "1.0"));
         if (mLibraryManifestFiles != null) {
             invoker.addLibraryManifests(mLibraryManifestFiles);
         }

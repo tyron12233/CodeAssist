@@ -6,7 +6,7 @@ import androidx.annotation.Nullable;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
-import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.common.util.StringSearch;
@@ -32,8 +32,8 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
     }
 
     @Override
-    public ProjectSettings getSettings() {
-        return new MockProjectSettings();
+    public ModuleSettings getSettings() {
+        return new MockModuleSettings();
     }
 
     @Override

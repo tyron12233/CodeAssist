@@ -1,17 +1,16 @@
 package com.tyron.builder.project.api;
 
-import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.cache.CacheHolder;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderEx;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
 
 public interface Module extends UserDataHolderEx, CacheHolder {
 
-    ProjectSettings getSettings();
+    ModuleSettings getSettings();
 
     FileManager getFileManager();
 

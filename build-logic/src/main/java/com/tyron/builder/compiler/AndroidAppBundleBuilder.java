@@ -10,7 +10,7 @@ import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.compiler.manifest.ManifestMergeTask;
 import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.AndroidModule;
 
 import java.util.ArrayList;
@@ -32,7 +32,7 @@ public class AndroidAppBundleBuilder extends BuilderImpl<AndroidModule> {
         tasks.add(new MergeSymbolsTask(getProject(), getLogger()));
         tasks.add(new IncrementalKotlinCompiler(getProject(), getLogger()));
         tasks.add(new IncrementalJavaTask(getProject(), getLogger()));
-        if (getProject().getSettings().getBoolean(ProjectSettings.USE_R8, false)) {
+        if (getProject().getSettings().getBoolean(ModuleSettings.USE_R8, false)) {
             tasks.add(new R8Task(getProject(), getLogger()));
         } else {
             tasks.add(new IncrementalD8Task(getProject(), getLogger()));

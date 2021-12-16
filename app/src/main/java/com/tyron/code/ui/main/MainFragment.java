@@ -23,10 +23,8 @@ import com.google.gson.Gson;
 import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.LogViewModel;
-import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.Module;
-import com.tyron.builder.project.impl.AndroidModuleImpl;
 import com.tyron.code.R;
 import com.tyron.code.service.CompilerService;
 import com.tyron.code.service.CompilerServiceConnection;
@@ -289,7 +287,7 @@ public class MainFragment extends Fragment {
         getChildFragmentManager().setFragmentResult(EditorContainerFragment.SAVE_ALL_KEY,
                 Bundle.EMPTY);
 
-        ProjectSettings settings = mProject.getSettings();
+        ModuleSettings settings = mProject.getSettings();
         if (settings == null) {
             return;
         }
@@ -301,7 +299,7 @@ public class MainFragment extends Fragment {
                             .map(File::getAbsolutePath)
                             .collect(Collectors.toList()));
             settings.edit()
-                    .putString(ProjectSettings.SAVED_EDITOR_FILES, itemString)
+                    .putString(ModuleSettings.SAVED_EDITOR_FILES, itemString)
                     .apply();
         }
     }

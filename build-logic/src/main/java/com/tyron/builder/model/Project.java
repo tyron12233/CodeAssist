@@ -37,7 +37,7 @@ public class Project {
     private final File mNativeLibsDir;
     private final FileManager mFileManager;
     private ManifestData mManifestData;
-    private ProjectSettings mSettings;
+    private ModuleSettings mSettings;
 
     /**
      * Creates a project object from specified root
@@ -62,7 +62,7 @@ public class Project {
         }
     }
 
-    public ProjectSettings getSettings() {
+    public ModuleSettings getSettings() {
         mSettings.refresh();
         return mSettings;
     }
@@ -255,7 +255,7 @@ public class Project {
         if (!getConfigFile().exists() && !getConfigFile().createNewFile()) {
             throw new IOException("Unable to create config file");
         }
-        mSettings = new ProjectSettings(getConfigFile());
+        mSettings = new ModuleSettings(getConfigFile());
     }
 
 

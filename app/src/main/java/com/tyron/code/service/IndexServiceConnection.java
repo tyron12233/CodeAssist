@@ -10,9 +10,8 @@ import com.google.gson.reflect.TypeToken;
 import com.tyron.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
-import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.Module;
 import com.tyron.code.ui.main.MainViewModel;
 
 import java.io.File;
@@ -52,8 +51,8 @@ public class IndexServiceConnection implements ServiceConnection {
         mMainViewModel.setCurrentState(null);
     }
 
-    private List<File> getOpenedFiles(ProjectSettings settings) {
-        String openedFilesString = settings.getString(ProjectSettings.SAVED_EDITOR_FILES, null);
+    private List<File> getOpenedFiles(ModuleSettings settings) {
+        String openedFilesString = settings.getString(ModuleSettings.SAVED_EDITOR_FILES, null);
         if (openedFilesString != null) {
             List<String> paths = new Gson().fromJson(openedFilesString,
                     new TypeToken<List<String>>(){}.getType());

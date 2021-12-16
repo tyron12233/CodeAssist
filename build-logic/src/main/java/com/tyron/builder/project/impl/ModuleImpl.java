@@ -2,8 +2,7 @@ package com.tyron.builder.project.impl;
 
 import androidx.annotation.Nullable;
 
-import com.google.common.collect.ImmutableList;
-import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.Module;
 import com.tyron.common.util.Cache;
@@ -16,9 +15,7 @@ import org.jetbrains.kotlin.com.intellij.util.keyFMap.KeyFMap;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class ModuleImpl implements Module {
@@ -29,7 +26,7 @@ public class ModuleImpl implements Module {
     @NotNull
     private volatile KeyFMap myUserMap = KeyFMap.EMPTY_MAP;
     private final File mRoot;
-    private ProjectSettings myProjectSettings;
+    private ModuleSettings myModuleSettings;
     private FileManager mFileManager;
 
     public ModuleImpl(File root) {
@@ -39,7 +36,7 @@ public class ModuleImpl implements Module {
 
     @Override
     public void open() throws IOException {
-        myProjectSettings = new ProjectSettings(new File(getRootFile(), "app_config.json"));
+        myModuleSettings = new ModuleSettings(new File(getRootFile(), "app_config.json"));
     }
 
     @Override
@@ -62,8 +59,8 @@ public class ModuleImpl implements Module {
     }
 
     @Override
-    public ProjectSettings getSettings() {
-        return myProjectSettings;
+    public ModuleSettings getSettings() {
+        return myModuleSettings;
     }
 
     @Override

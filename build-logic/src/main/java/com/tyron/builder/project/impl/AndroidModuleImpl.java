@@ -6,7 +6,7 @@ import androidx.annotation.Nullable;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
-import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.StringSearch;
 
@@ -119,12 +119,12 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
 
     @Override
     public int getTargetSdk() {
-        return getSettings().getInt(ProjectSettings.TARGET_SDK_VERSION, 30);
+        return getSettings().getInt(ModuleSettings.TARGET_SDK_VERSION, 30);
     }
 
     @Override
     public int getMinSdk() {
-        return getSettings().getInt(ProjectSettings.MIN_SDK_VERSION, 21);
+        return getSettings().getInt(ModuleSettings.MIN_SDK_VERSION, 21);
     }
 
     @NonNull
