@@ -30,6 +30,14 @@ public class Pom {
         return pom;
     }
 
+    public static Pom valueOf(String declaration) {
+        String[] names = declaration.split(":");
+        if (names.length < 3) {
+            throw new IllegalStateException("Unknown format: " + declaration);
+        }
+        return valueOf(names[0], names[1], names[2]);
+    }
+
     public String getVersionName() {
         return versionName;
     }
