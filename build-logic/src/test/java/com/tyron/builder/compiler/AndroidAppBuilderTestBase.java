@@ -3,6 +3,7 @@ package com.tyron.builder.compiler;
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.project.mock.MockAndroidProject;
 import com.tyron.builder.project.mock.MockFileManager;
+import com.tyron.common.TestUtil;
 
 import org.junit.Before;
 
