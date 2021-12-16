@@ -215,19 +215,34 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         ProjectManager.getInstance().removeOnProjectOpenListener(this);
     }
 
+    private void exit(String title, String message) {
+        new MaterialAlertDialogBuilder(requireActivity())
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
+        getParentFragmentManager().popBackStack();
+    }
+
     private void createInflater() {
-        mInflater = new PreviewLayoutInflater(requireContext(),
-                (AndroidModule) ProjectManager.getInstance().getCurrentProject());
+        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+        if (currentProject == null) {
+            exit(getString(R.string.error), "No project opened.");
+            return;
+        }
+        Module module = currentProject.getModule(mCurrentFile);
+        if (!(module instanceof AndroidModule)) {
+            exit(getString(R.string.error), "Layout preview is only for android projects.");
+            return;
+        }
+        mInflater = new PreviewLayoutInflater(requireContext(), (AndroidModule) module);
+
         setLoadingText("Parsing xml files");
         mInflater.parseResources(mService).whenComplete((inflater, exception) ->
                 requireActivity().runOnUiThread(() -> {
                     if (inflater == null) {
-                        new MaterialAlertDialogBuilder(requireActivity())
-                                .setTitle(R.string.error)
-                                .setMessage("Unable to inflate layout: " + exception)
-                                .setPositiveButton(android.R.string.ok, null)
-                                .show();
-                        getParentFragmentManager().popBackStack();
+                        exit(getString(R.string.error),
+                                "Unable to inflate layout: " + exception.getMessage());
                     } else {
                         afterParse(inflater);
                     }
@@ -251,12 +266,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             setDragListeners(mEditorRoot);
             setClickListeners(mEditorRoot);
         } else {
-            new MaterialAlertDialogBuilder(requireActivity())
-                    .setTitle(R.string.error)
-                    .setMessage("Unable to inflate layout.")
-                    .setPositiveButton(android.R.string.ok, null)
-                    .show();
-            getParentFragmentManager().popBackStack();
+            exit(getString(R.string.error), "Unable to inflate layout.");
         }
     }
 
@@ -353,6 +363,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     @Override
     public void onProjectOpen(Project module) {
         if (isDumb) {
+            isDumb = false;
             createInflater();
         }
     }
