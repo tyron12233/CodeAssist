@@ -183,7 +183,11 @@ public class JavaCompilerService implements CompilerProvider {
     public List<String> publicTopLevelTypes() {
         List<String> classes = new ArrayList<>();
         classes.addAll(mCurrentModule.getAllClasses());
-        classes.addAll(Collections.emptyList());
+        for (Module module : mProject.getDependencies(mCurrentModule)) {
+            if (module instanceof JavaModule) {
+                classes.addAll(((JavaModule) module).getAllClasses());
+            }
+        }
         return classes;
     }
 

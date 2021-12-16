@@ -174,6 +174,7 @@ public class CompletionEngine {
         setIndexing(true);
 
         JavaCompilerService compiler = getCompiler(project, module);
+        compiler.setCurrentModule(module);
 
         List<File> filesToIndex = new ArrayList<>(module.getJavaFiles().values());
 
@@ -249,7 +250,7 @@ public class CompletionEngine {
     }
 
     @NonNull
-    public synchronized CompletionList complete(JavaModule project,
+    public synchronized CompletionList complete(JavaModule module,
                                                 File file,
                                                 String contents,
                                                 long cursor) throws InterruptedException {
@@ -259,7 +260,10 @@ public class CompletionEngine {
         }
 
         try {
-            return new CompletionProvider(getCompiler(null, project)).complete(file, contents, cursor);
+            JavaCompilerService compiler = getCompiler(null, module);
+            compiler.setCurrentModule(module);
+            return new CompletionProvider(compiler)
+                    .complete(file, contents, cursor);
         } catch (Throwable e) {
             if (e instanceof InterruptedException) {
                 throw e;
