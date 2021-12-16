@@ -2,6 +2,7 @@ package com.flipkart.android.proteus.view;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.TextView;
 
@@ -19,7 +20,7 @@ public class UnknownView extends TextView implements ProteusView {
 
     public UnknownView(Context context, String message) {
         super(context);
-
+        setGravity(Gravity.CENTER);
         setText(message);
     }
 
