@@ -14,6 +14,7 @@ public class Pom {
     private String artifactId;
     private String groupId;
     private String versionName;
+    private String packaging;
 
     private List<Dependency> dependencies;
 
@@ -84,5 +85,13 @@ public class Pom {
     @Override
     public String toString() {
         return getDeclarationString();
+    }
+
+    public String getPackaging() {
+        return packaging;
+    }
+
+    public void setPackaging(String packaging) {
+        this.packaging = packaging;
     }
 }

@@ -56,6 +56,7 @@ public class PomParser {
     private Pom readProject(XmlPullParser parser) throws IOException, XmlPullParserException {
         parser.require(XmlPullParser.START_TAG, ns, "project");
 
+        String packaging = "jar";
         List<Dependency> dependencies = new ArrayList<>();
         while (parser.next() != XmlPullParser.END_TAG) {
             if (parser.getEventType() != XmlPullParser.START_TAG) {
@@ -63,6 +64,9 @@ public class PomParser {
             }
 
             String name = parser.getName();
+            if (name.equals("packaging")) {
+                packaging = readPackaging(parser);
+            }
             if (name.equals("properties")) {
                 mProperties.putAll(readProperties(parser));
             } else if (name.equals("dependencies")) {
@@ -74,7 +78,15 @@ public class PomParser {
 
         Pom pom = new Pom();
         pom.setDependencies(dependencies);
+        pom.setPackaging(packaging);
         return pom;
+    }
+
+    private String readPackaging(XmlPullParser parser) throws IOException, XmlPullParserException {
+        parser.require(XmlPullParser.START_TAG, ns, "packaging");
+        String s = readText(parser);
+        parser.require(XmlPullParser.END_TAG, ns, "packaging");
+        return s;
     }
 
     private Map<String, String> readProperties(XmlPullParser parser) throws IOException, XmlPullParserException {
