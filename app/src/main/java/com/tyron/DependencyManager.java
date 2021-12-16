@@ -43,7 +43,7 @@ public class DependencyManager {
     }
 
     public void resolve(JavaModule project, ProjectManager.TaskListener listener, ILogger logger) throws IOException {
-        File gradleFile = new File(project.getRootFile(), "app/build.gradle");
+        File gradleFile = new File(project.getRootFile(), "build.gradle");
 
         listener.onTaskStarted("Resolving dependencies");
         List<Pom> declaredPoms = DependencyUtils.parseGradle(mRepository, gradleFile, logger);
