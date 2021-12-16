@@ -99,7 +99,7 @@ public class ProjectManager {
         if (module instanceof JavaModule) {
             mListener.onTaskStarted("Indexing");
             try {
-                CompletionEngine.getInstance().index((JavaModule) module, logger, () ->
+                CompletionEngine.getInstance().index(project, (JavaModule) module, logger, () ->
                         mListener.onComplete(project, true, "Index successful"));
             } catch (Throwable e) {
                 String message = "Failure indexing project.\n" +

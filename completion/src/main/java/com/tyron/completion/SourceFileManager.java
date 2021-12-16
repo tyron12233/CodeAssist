@@ -3,7 +3,9 @@ package com.tyron.completion;
 import android.text.TextUtils;
 
 import com.tyron.builder.model.SourceFileObject;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.common.util.StringSearch;
 
 import org.openjdk.javax.tools.Diagnostic;
@@ -19,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -26,9 +29,10 @@ import java.util.stream.Stream;
 
 public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFileManager> {
 
-    private final JavaModule mProject;
+    private final Project mProject;
+    private Module mCurrentModule;
 
-	public SourceFileManager(JavaModule project) {
+	public SourceFileManager(Project project) {
 		super(createDelegateFileManager());
         mProject = project;
 	}
@@ -42,11 +46,14 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
         
     }
 
+    public void setCurrentModule(Module module) {
+	    mCurrentModule = module;
+    }
+
 	@Override
 	public Iterable<JavaFileObject> list(JavaFileManager.Location location, String packageName, Set<JavaFileObject.Kind> kinds, boolean recurse) throws IOException {
-		
 		if (location == StandardLocation.SOURCE_PATH) {
-			Stream<JavaFileObject> stream = list(mProject, packageName)
+			Stream<JavaFileObject> stream = list(mCurrentModule, packageName)
                     .stream()
 					.map(this::asJavaFileObject);
 			return stream.collect(Collectors.toList());
@@ -55,7 +62,7 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
 	}
 	
 	private JavaFileObject asJavaFileObject(File file) {
-		return new SourceFileObject(file.toPath(), mProject);
+		return new SourceFileObject(file.toPath(), (JavaModule) mProject.getModule(file));
 	}
 	
 	@Override
@@ -91,9 +98,9 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
         if (location == StandardLocation.SOURCE_PATH) {
             String packageName = StringSearch.mostName(className);
             String simpleClassName = StringSearch.lastName(className);
-            for (File f : list(mProject, packageName)) {
+            for (File f : list(mCurrentModule, packageName)) {
                 if (f.getName().equals(simpleClassName + kind.extension)) {
-                    return new SourceFileObject(f.toPath(), mProject);
+                    return new SourceFileObject(f.toPath(), (JavaModule) mCurrentModule);
                 }
             }
             // Fall through to disk in case we have .jar or .zip files on the source path
@@ -113,15 +120,20 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
 	    fileManager.setLocation(location, path);
     }
 
-    public static List<File> list(JavaModule project, String packageName) {
+    public static List<File> list(Module module, String packageName) {
+	    if (!(module instanceof JavaModule)) {
+	        return Collections.emptyList();
+        }
+	    JavaModule javaModule = (JavaModule) module;
+
 	    List<File> list = new ArrayList<>();
-        for (String file : project.getJavaFiles().keySet()) {
+        for (String file : javaModule.getJavaFiles().keySet()) {
             String name = file;
             if (file.endsWith(".")) {
                 name = file.substring(0, file.length() - 1);
             }
             if (name.substring(0, name.lastIndexOf(".")).equals(packageName) || name.equals(packageName)) {
-                list.add(project.getJavaFiles().get(file));
+                list.add(javaModule.getJavaFiles().get(file));
             }
         }
         return list;

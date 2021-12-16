@@ -260,7 +260,7 @@ public class CodeEditorFragment extends Fragment
 
                 if (item.item.action == com.tyron.completion.model.CompletionItem.Kind.IMPORT) {
                     if (module instanceof JavaModule) {
-                        Parser parser = Parser.parseFile((JavaModule) module,
+                        Parser parser = Parser.parseFile(currentProject,
                                 mEditor.getCurrentFile().toPath());
                         ParseTask task = new ParseTask(parser.task, parser.root);
 
@@ -500,12 +500,16 @@ public class CodeEditorFragment extends Fragment
     }
 
     private List<CodeActionList> getCodeActions() {
-        Module module = ProjectManager.getInstance().getCurrentProject()
-                .getModule(mCurrentFile);
+        Project project = ProjectManager.getInstance().getCurrentProject();
+        if (project == null) {
+            return Collections.emptyList();
+        }
+        Module module = project.getModule(mCurrentFile);
         if (mLanguage instanceof JavaLanguage && module != null) {
             final Path current = mEditor.getCurrentFile().toPath();
             CodeActionProvider provider =
-                    new CodeActionProvider(CompletionEngine.getInstance().getCompiler((JavaModule) module));
+                    new CodeActionProvider(CompletionEngine.getInstance()
+                            .getCompiler(project, (JavaModule) module));
             return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
         }
         return Collections.emptyList();

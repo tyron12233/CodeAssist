@@ -3,10 +3,14 @@ package com.tyron.completion;
 import android.annotation.SuppressLint;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.model.SourceFileObject;
-import com.tyron.builder.project.api.FileManager;
+import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.common.util.Cache;
 import com.tyron.common.util.StringSearch;
 import com.tyron.completion.provider.CompletionEngine;
@@ -39,13 +43,13 @@ import java.util.regex.Pattern;
 public class JavaCompilerService implements CompilerProvider {
 
     private DiagnosticListener<? super JavaFileObject> mDiagnosticListener;
-    private final FileManager mFileManager;
     public final SourceFileManager mSourceFileManager;
 
     private final List<Diagnostic<? extends JavaFileObject>> diagnostics =
             new ArrayList<>();
 
-    private final JavaModule mProject;
+    private final Project mProject;
+    private JavaModule mCurrentModule;
     public final Set<File> classPath, docPath;
     public final Set<String> addExports;
     public final ReusableCompiler compiler = new ReusableCompiler();
@@ -53,9 +57,8 @@ public class JavaCompilerService implements CompilerProvider {
 
     public final ReentrantLock mLock = new ReentrantLock();
 
-    public JavaCompilerService(JavaModule project, Set<File> classPath, Set<File> docPath, Set<String> addExports) {
+    public JavaCompilerService(Project project, Set<File> classPath, Set<File> docPath, Set<String> addExports) {
         mProject = project;
-        mFileManager = project.getFileManager();
         this.classPath = Collections.unmodifiableSet(classPath);
         this.docPath = Collections.unmodifiableSet(docPath);
         this.addExports = Collections.unmodifiableSet(addExports);
@@ -64,13 +67,17 @@ public class JavaCompilerService implements CompilerProvider {
         this.docs = new Docs(project, docPath);
     }
 
-    public JavaModule getProject() {
+    public Project getProject() {
         return mProject;
     }
 
     public CompileBatch cachedCompile;
     private final Map<JavaFileObject, Long> cachedModified = new HashMap<>();
 
+    public void setCurrentModule(@NonNull JavaModule module) {
+        mSourceFileManager.setCurrentModule(module);
+        mCurrentModule = module;
+    }
     /**
      * Checks whether this list has been compiled before
      *
@@ -122,7 +129,7 @@ public class JavaCompilerService implements CompilerProvider {
         firstAttempt.borrow.close();
         List<JavaFileObject> moreSources = new ArrayList<>(sources);
         for (Path add : addFiles) {
-            moreSources.add(new SourceFileObject(add, mProject));
+            moreSources.add(new SourceFileObject(add, mCurrentModule));
         }
         return new CompileBatch(this, moreSources);
     }
@@ -175,7 +182,7 @@ public class JavaCompilerService implements CompilerProvider {
     @Override
     public List<String> publicTopLevelTypes() {
         List<String> classes = new ArrayList<>();
-        classes.addAll(mProject.getAllClasses());
+        classes.addAll(mCurrentModule.getAllClasses());
         classes.addAll(Collections.emptyList());
         return classes;
     }
@@ -206,7 +213,7 @@ public class JavaCompilerService implements CompilerProvider {
 
         Path fromSource = findTypeDeclaration(className);
         if (fromSource != NOT_FOUND) {
-            return Optional.of(new SourceFileObject(fromSource, mProject));
+            return Optional.of(new SourceFileObject(fromSource, mCurrentModule));
         }
 
         return Optional.empty();
@@ -279,7 +286,7 @@ public class JavaCompilerService implements CompilerProvider {
 
         String packageName = packageName(className);
         String simpleName = simpleName(className);
-        for (File file : SourceFileManager.list(mProject, packageName)) {
+        for (File file : SourceFileManager.list(mCurrentModule, packageName)) {
             if (containsWord(file.toPath(), simpleName) && containsType(file.toPath(), className)) {
                 if (file.getName().endsWith(".java")) {
                     return file.toPath();
@@ -397,7 +404,7 @@ public class JavaCompilerService implements CompilerProvider {
     public CompileTask compile(Path... files) {
         List<JavaFileObject> sources = new ArrayList<>();
         for (Path f : files) {
-            sources.add(new SourceFileObject(f, mProject));
+            sources.add(new SourceFileObject(f, mCurrentModule));
         }
         return compile(sources);
     }
@@ -433,5 +440,9 @@ public class JavaCompilerService implements CompilerProvider {
             return true;
         }
         return cachedCompile.closed;
+    }
+
+    public JavaModule getCurrentModule() {
+        return mCurrentModule;
     }
 }

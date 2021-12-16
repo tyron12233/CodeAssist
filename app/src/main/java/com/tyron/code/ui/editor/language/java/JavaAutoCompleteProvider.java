@@ -56,7 +56,8 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
                     .getFileContent(mEditor.getCurrentFile());
             if (content.isPresent()) {
                 CompletionList completionList = CompletionEngine.getInstance()
-                        .complete((JavaModule) currentModule,
+                        .complete(project,
+                                (JavaModule) currentModule,
                                 mEditor.getCurrentFile(),
                                 content.get().toString(),
                                 prefix,

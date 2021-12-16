@@ -11,8 +11,10 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.completion.CompileTask;
 import com.tyron.completion.JavaCompilerService;
 import com.tyron.completion.model.CachedCompletion;
@@ -75,11 +77,23 @@ public class CompletionEngine {
     }
 
     @NonNull
-    public JavaCompilerService getCompiler(JavaModule project) {
+    public JavaCompilerService getCompiler(Project project, JavaModule module) {
+
+        List<Module> dependencies = new ArrayList<>();
+        if (project != null) {
+            dependencies.addAll(project.getDependencies(module));
+        }
 
         Set<File> paths = new HashSet<>();
-        paths.addAll(project.getJavaFiles().values());
-        paths.addAll(project.getLibraries());
+        paths.addAll(module.getJavaFiles().values());
+        paths.addAll(module.getLibraries());
+
+        for (Module dependency : dependencies) {
+            if (dependency instanceof JavaModule) {
+                paths.addAll(((JavaModule) dependency).getJavaFiles().values());
+                paths.addAll(((JavaModule) dependency).getLibraries());
+            }
+        }
 
         if (mProvider == null || changed(mCachedPaths, paths)) {
             mProvider = new JavaCompilerService(project, paths,
@@ -128,9 +142,9 @@ public class CompletionEngine {
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @SuppressLint("NewApi")
-    public void index(JavaModule project, ILogger logger, Runnable callback) {
-        if (project instanceof AndroidModule) {
-            IncrementalAapt2Task task = new IncrementalAapt2Task((AndroidModule) project,
+    public void index(Project project, JavaModule module, ILogger logger, Runnable callback) {
+        if (module instanceof AndroidModule) {
+            IncrementalAapt2Task task = new IncrementalAapt2Task((AndroidModule) module,
                     ILogger.EMPTY, false);
             try {
                 task.prepare(BuildType.DEBUG);
@@ -139,9 +153,9 @@ public class CompletionEngine {
                 Log.e(TAG, "Failed to index with aapt2", e);
             }
         }
-        Set<File> newSet = new HashSet<>(project.getJavaFiles().values());
+        Set<File> newSet = new HashSet<>(module.getJavaFiles().values());
 
-        for (File library : project.getLibraries()) {
+        for (File library : module.getLibraries()) {
             try {
                 JarFile jarFile = new JarFile(library);
                 newSet.add(library);
@@ -159,9 +173,9 @@ public class CompletionEngine {
 
         setIndexing(true);
 
-        JavaCompilerService compiler = getCompiler(project);
+        JavaCompilerService compiler = getCompiler(project, module);
 
-        List<File> filesToIndex = new ArrayList<>(project.getJavaFiles().values());
+        List<File> filesToIndex = new ArrayList<>(module.getJavaFiles().values());
 
         if (!filesToIndex.isEmpty()) {
             try (CompileTask task = compiler.compile(filesToIndex.stream()
@@ -177,7 +191,8 @@ public class CompletionEngine {
         }
     }
 
-    public synchronized CompletionList complete(JavaModule project,
+    public synchronized CompletionList complete(Project project,
+                                                JavaModule module,
                                                 File file,
                                                 String contents,
                                                 String prefix,
@@ -206,7 +221,7 @@ public class CompletionEngine {
         }
 
         try {
-            CompletionList complete = new CompletionProvider(getCompiler(project))
+            CompletionList complete = new CompletionProvider(getCompiler(project, module))
                     .complete(file, contents, index);
             String newPrefix = prefix;
             if (prefix.contains(".")) {
@@ -244,7 +259,7 @@ public class CompletionEngine {
         }
 
         try {
-            return new CompletionProvider(getCompiler(project)).complete(file, contents, cursor);
+            return new CompletionProvider(getCompiler(null, project)).complete(file, contents, cursor);
         } catch (Throwable e) {
             if (e instanceof InterruptedException) {
                 throw e;

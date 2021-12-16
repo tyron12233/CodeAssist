@@ -97,7 +97,7 @@ public class CompileBatch implements AutoCloseable {
             }
 
             String packageName = packageName(err);
-            File javaFile = parent.getProject().getJavaFile(packageName);
+            File javaFile = parent.getCurrentModule().getJavaFile(packageName);
             if (javaFile != null) {
                 addFiles.add(javaFile.toPath());
             }

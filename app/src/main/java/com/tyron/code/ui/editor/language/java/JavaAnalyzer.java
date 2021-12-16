@@ -262,7 +262,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 Module module = project.getModule(mEditor.getCurrentFile());
                 if (module != null) {
                     JavaCompilerService service = CompletionEngine.getInstance().
-                            getCompiler((JavaModule) module);
+                            getCompiler(project, (JavaModule) module);
                     if (service.isReady()) {
                         try {
                             try (CompileTask task = service.compile(

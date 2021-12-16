@@ -4,9 +4,12 @@ import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
+import com.tyron.builder.project.mock.MockFileManager;
+import com.tyron.builder.project.mock.MockJavaModule;
 import com.tyron.builder.project.mock.MockModuleSettings;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -39,6 +42,12 @@ public class Project {
     public Module getModule(File file) {
         // TODO: implement this on modular project
         return getMainModule();
+    }
+
+    public List<Module> getDependencies(Module module) {
+        List<Module> dependencies = new ArrayList<>();
+        dependencies.add(new MockJavaModule(new File(mRoot, "module"), new MockFileManager(mRoot)));
+        return dependencies;
     }
 
     @Override

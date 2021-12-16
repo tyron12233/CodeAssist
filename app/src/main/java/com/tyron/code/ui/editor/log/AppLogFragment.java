@@ -136,7 +136,7 @@ public class AppLogFragment extends Fragment
                 mDiagnosticListener = d -> {
                     List<Diagnostic<? extends JavaFileObject>> diagnostics =
                             CompletionEngine.getInstance()
-                                    .getCompiler((JavaModule) module)
+                                    .getCompiler(project, (JavaModule) module)
                                     .getDiagnostics();
                     requireActivity().runOnUiThread(() ->
                             mModel.updateLogs(id, diagnostics));
