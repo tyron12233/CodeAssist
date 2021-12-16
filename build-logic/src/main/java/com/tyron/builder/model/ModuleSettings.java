@@ -204,6 +204,9 @@ public class ModuleSettings implements SharedPreferences {
         public boolean commit() {
             String json;
             try {
+                if (!mConfigFile.exists() && !mConfigFile.createNewFile()) {
+                    return false;
+                }
                 Gson gson = new GsonBuilder()
                         .setPrettyPrinting()
                         .create();

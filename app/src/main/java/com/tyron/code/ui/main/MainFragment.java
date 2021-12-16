@@ -24,6 +24,7 @@ import com.tyron.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.ModuleSettings;
+import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.Project;
 import com.tyron.code.R;
 import com.tyron.code.service.CompilerService;
@@ -287,7 +288,7 @@ public class MainFragment extends Fragment {
         getChildFragmentManager().setFragmentResult(EditorContainerFragment.SAVE_ALL_KEY,
                 Bundle.EMPTY);
 
-        ModuleSettings settings = mProject.getSettings();
+        ProjectSettings settings = mProject.getSettings();
         if (settings == null) {
             return;
         }

@@ -32,8 +32,8 @@ public class Project {
         return mRoot;
     }
 
-    public ModuleSettings getSettings() {
-        return new MockModuleSettings();
+    public ProjectSettings getSettings() {
+        return mSettings;
     }
 
     public Module getModule(File file) {
