@@ -66,8 +66,7 @@ public class PomParser {
             String name = parser.getName();
             if (name.equals("packaging")) {
                 packaging = readPackaging(parser);
-            }
-            if (name.equals("properties")) {
+            } else if (name.equals("properties")) {
                 mProperties.putAll(readProperties(parser));
             } else if (name.equals("dependencies")) {
                 dependencies.addAll(readDependencies(parser));

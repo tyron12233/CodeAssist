@@ -82,6 +82,16 @@ public class Pom {
         return groupId + ":" + artifactId + ":" + versionName;
     }
 
+    public String getFileName() {
+        return artifactId + "-" + versionName;
+    }
+
+    public String getPath() {
+        String path = groupId.replace('.', '/');
+        String artifact = artifactId.replace('.', '/');
+        return path + "/" + artifact + "/" + versionName;
+    }
+
     @Override
     public String toString() {
         return getDeclarationString();

@@ -1,6 +1,9 @@
 package com.tyron.resolver.repository;
 
+import androidx.annotation.Nullable;
+
 import com.google.common.io.CharStreams;
+import com.tyron.common.util.FileUtilsEx;
 import com.tyron.resolver.model.Pom;
 import com.tyron.resolver.parser.PomParser;
 
@@ -30,6 +33,7 @@ public class PomRepositoryImpl implements PomRepository {
     }
 
     @Override
+    @Nullable
     public Pom getPom(String declaration) {
         String[] pomNames = parsePomDeclaration(declaration);
         if (pomNames == null) {
@@ -47,26 +51,39 @@ public class PomRepositoryImpl implements PomRepository {
         return getPomFromUrls(pomNames);
     }
 
-    public Pom getPomFromUrls(String[] names) {
+    private Pom getPomFromUrls(String[] names) {
+        InputStream is = getFromUrls(getPathFromDeclaration(names) + ".pom");
+        if (is != null) {
+            String contents = null;
+            try {
+                contents = CharStreams.toString(new InputStreamReader(is));
+                Pom parsed = new PomParser().parse(contents);
+                parsed.setGroupId(names[0]);
+                parsed.setArtifactId(names[1]);
+                parsed.setVersionName(names[2]);
+                pomFiles.add(parsed);
+                savePomToCache(parsed, contents);
+                return parsed;
+            } catch (IOException | XmlPullParserException e) {
+                // ignored
+            }
+        }
+        return null;
+    }
+
+    private InputStream getFromUrls(String appendUrl) {
         for (int i = 0; i < repositoryUrls.size(); i++) {
             String url = repositoryUrls.get(i);
             try {
-                URL downloadUrl = new URL(url + "/" + getPathFromDeclaration(names));
+                URL downloadUrl = new URL(url + "/" + appendUrl);
                 InputStream is = downloadUrl.openStream();
                 if (is != null) {
-                    String contents = CharStreams.toString(new InputStreamReader(is));
-                    Pom parsed = new PomParser().parse(contents);
-                    parsed.setGroupId(names[0]);
-                    parsed.setArtifactId(names[1]);
-                    parsed.setVersionName(names[2]);
-                    pomFiles.add(parsed);
-                    savePomToCache(parsed, contents);
-                    return parsed;
+                    return is;
                 }
-            } catch (IOException | XmlPullParserException e) {
+            } catch (IOException e) {
                 if (i == repositoryUrls.size() - 1) {
                     // The dependency is not found on all urls, log
-                    System.out.println("Dependency not found! " + Arrays.toString(names));
+                    System.out.println("Dependency not found! " + appendUrl);
                 }
             }
         }
@@ -85,7 +102,7 @@ public class PomRepositoryImpl implements PomRepository {
         String groupId = pomNames[0].replace('.', '/');
         String artifactId = pomNames[1].replace('.','/');
         String path = groupId + "/" + artifactId + "/" + pomNames[2];
-        return path + "/" + pomNames[1] + "-" + pomNames[2] + ".pom";
+        return path + "/" + pomNames[1] + "-" + pomNames[2];
     }
 
     private String[] parsePomDeclaration(String declaration) {
@@ -100,7 +117,27 @@ public class PomRepositoryImpl implements PomRepository {
     }
 
     @Override
-    public File getJarFile(Pom pom) {
+    @Nullable
+    public File getLibrary(Pom pom) throws IOException {
+        if ("aar".equals(pom.getPackaging())) {
+            return getFile(pom, ".aar");
+        } else {
+            return getFile(pom, ".jar");
+        }
+    }
+
+    private File getFile(Pom pom, String extension) throws IOException {
+        File[] files = getLibraryCacheDirectory().listFiles(c -> c.getName().equals(pom.getDeclarationString() + extension));
+        if (files != null && files.length > 0) {
+            return files[0];
+        }
+        InputStream is = getFromUrls(pom.getPath() + "/" + pom.getFileName() + extension);
+        if (is != null) {
+            File aarFile = new File(getLibraryCacheDirectory(), pom.getDeclarationString() + extension);
+            FileUtilsEx.createFile(aarFile);
+            FileUtils.copyInputStreamToFile(is, aarFile);
+            return aarFile;
+        }
         return null;
     }
 
@@ -110,6 +147,14 @@ public class PomRepositoryImpl implements PomRepository {
             // TODO: handle
         }
         return pomCache;
+    }
+
+    private File getLibraryCacheDirectory() {
+        File libraryCache = new File(cacheDir, "library");
+        if (!libraryCache.exists() && !libraryCache.mkdirs()) {
+            // TODO: handle
+        }
+        return libraryCache;
     }
 
     @Override
@@ -150,6 +195,7 @@ public class PomRepositoryImpl implements PomRepository {
                     this.pomFiles.add(parsed);
                 } catch (XmlPullParserException | IOException e) {
                     // ignored
+                    // TODO: should the file be deleted if its corrupt?
                 }
             }
         }

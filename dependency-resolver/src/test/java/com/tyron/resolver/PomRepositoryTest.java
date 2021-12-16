@@ -26,8 +26,6 @@ public class PomRepositoryTest {
         repository.setCacheDirectory(new File(TestUtil.getResourcesDirectory(), "cache"));
         repository.initialize();
 
-//        DependencyResolver resolver = new DependencyResolver(repository);
-
         Pom pom = repository.getPom("com.google.android.material:material:1.4.0");
 
         // get all the dependencies of this pom
@@ -41,13 +39,12 @@ public class PomRepositoryTest {
         Pom annotations = repository.getPom("androidx.annotation:annotation:1.1.0");
         assert annotations != null;
 
-//        Pom fragmentPom = Pom.valueOf("androidx.fragment", "fragment", "1.4.0");
-//        List<Pom> poms = new ArrayList<>();
-//        poms.add(pom);
-//        poms.add(fragmentPom);
-//
-//        Collection<Pom> resolve = resolver.resolve(poms);
-//        assert resolve.contains(fragmentPom);
+        File library = repository.getLibrary(androidxCore);
+        System.out.println(library);
+        assert library != null;
+
+        File annotationsFile = repository.getLibrary(annotations);
+        assert annotationsFile != null;
     }
 
     private void recurse(Pom pom) {

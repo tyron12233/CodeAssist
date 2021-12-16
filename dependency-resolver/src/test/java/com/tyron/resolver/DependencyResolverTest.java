@@ -9,10 +9,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Collection;
 import java.util.List;
-
-import edu.emory.mathcs.backport.java.util.Arrays;
 
 public class DependencyResolverTest {
 
