@@ -823,7 +823,7 @@ public class CompletionProvider {
     private CompletionItem classItem(String className) {
         CompletionItem item = new CompletionItem();
         item.label = simpleName(className).toString();
-        item.detail = className.substring(0, className.lastIndexOf("."));
+        item.detail = simpleClassName(className);
         item.commitText = item.label;
         item.data = className;
         item.cursorOffset = item.label.length();
