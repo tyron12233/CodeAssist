@@ -1,7 +1,6 @@
 package com.tyron.code.ui.main.adapter;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.lifecycle.Lifecycle;
@@ -61,31 +60,12 @@ public class PageAdapter extends FragmentStateAdapter {
         return CodeEditorFragment.newInstance(data.get(p1));
     }
 
-    @Nullable
-    public File getItem(int position) {
-        if (position > data.size() - 1) {
-            return null;
-        }
-        return data.get(position);
-    }
-
     @Override
     public long getItemId(int position) {
         if (data.isEmpty() || position > data.size()) {
             return -1;
         }
         return data.get(position).getAbsolutePath().hashCode();
-    }
-
-    public int getPosition(File file) {
-        if (containsItem(file.getAbsolutePath().hashCode())) {
-            return data.indexOf(file);
-        }
-        return -1;
-    }
-
-    public List<File> getItems() {
-        return data;
     }
 
     @Override
