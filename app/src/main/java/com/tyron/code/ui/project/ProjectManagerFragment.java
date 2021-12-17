@@ -98,6 +98,7 @@ public class ProjectManagerFragment extends Fragment {
 
         MaterialToolbar toolbar = view.findViewById(R.id.toolbar);
         toolbar.setTitle(R.string.app_name);
+        toolbar.inflateMenu(R.menu.project_list_fragment_menu);
         toolbar.setOnMenuItemClickListener(
                 new MaterialToolbar.OnMenuItemClickListener() {
                     @Override
