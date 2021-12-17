@@ -3,6 +3,7 @@ package com.tyron.completion.provider;
 import static com.google.common.truth.Truth.assertThat;
 import static com.tyron.completion.TestUtil.resolveBasePath;
 
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.mock.MockAndroidModule;
 import com.tyron.builder.project.mock.MockFileManager;
 import com.tyron.completion.CompletionModule;
@@ -27,7 +28,8 @@ public abstract class CompletionBase {
 
     private File mRoot;
     private MockFileManager mFileManager;
-    private MockAndroidModule mProject;
+    private Project mProject;
+    private MockAndroidModule mModule;
     private CompletionEngine mCompletionEngine;
 
     @Before
@@ -37,14 +39,15 @@ public abstract class CompletionBase {
 
         mRoot = new File(TestUtil.resolveBasePath(), "EmptyProject");
         mFileManager = new MockFileManager(mRoot);
-        mProject = new MockAndroidModule(mRoot, mFileManager);
-        mProject.open();
+        mProject = new Project(mRoot);
+        mModule = new MockAndroidModule(mRoot, mFileManager);
+        mModule.open();
 
         File[] testFiles = new File(mRoot, "completion").listFiles(c ->
                 c.getName().endsWith(".java"));
         if (testFiles != null) {
             for (File testFile : testFiles) {
-                mProject.addJavaFile(testFile);
+                mModule.addJavaFile(testFile);
             }
         }
 
@@ -54,6 +57,7 @@ public abstract class CompletionBase {
     protected CompletionList complete(File file, String contents, long cursor) {
         try {
             return mCompletionEngine.complete(mProject,
+                    mModule,
                     file,
                     contents,
                     cursor);
@@ -62,13 +66,13 @@ public abstract class CompletionBase {
         }
     }
     protected CompletionList complete(String fileName, long cursor) {
-        File file = new File(mProject.getRootFile(), "completion/" + fileName);
+        File file = new File(mModule.getRootFile(), "completion/" + fileName);
         CharSequence contents = mFileManager.getFileContent(file).get();
         return complete(file, contents.toString(), cursor);
     }
 
     protected CompletionList completeHandle(String fileName, String contents) {
-        File file = new File(mProject.getRootFile(), "completion/" + fileName);
+        File file = new File(mModule.getRootFile(), "completion/" + fileName);
         assertThat(contents)
                 .contains(COMPLETE_IDENTIFIER);
         long cursor = (long) contents.indexOf(COMPLETE_IDENTIFIER);
@@ -81,7 +85,7 @@ public abstract class CompletionBase {
      * automatically appends the COMPLETE_IDENTIFIER to the replace string
      */
     protected CompletionList completeInsertHandle(String fileName, String replace) {
-        File file = new File(mProject.getRootFile(), "completion/" + fileName);
+        File file = new File(mModule.getRootFile(), "completion/" + fileName);
         CharSequence contents = mFileManager.getFileContent(file).get();
         assertThat(contents.toString())
                 .contains(INSERT_IDENTIFIER);

@@ -250,7 +250,8 @@ public class CompletionEngine {
     }
 
     @NonNull
-    public synchronized CompletionList complete(JavaModule module,
+    public synchronized CompletionList complete(Project project,
+                                                JavaModule module,
                                                 File file,
                                                 String contents,
                                                 long cursor) throws InterruptedException {
@@ -260,7 +261,7 @@ public class CompletionEngine {
         }
 
         try {
-            JavaCompilerService compiler = getCompiler(null, module);
+            JavaCompilerService compiler = getCompiler(project, module);
             compiler.setCurrentModule(module);
             return new CompletionProvider(compiler)
                     .complete(file, contents, cursor);
