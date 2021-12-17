@@ -14,6 +14,7 @@ import org.openjdk.javax.tools.JavaFileObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class LogViewModel extends ViewModel {
@@ -40,6 +41,7 @@ public class LogViewModel extends ViewModel {
         }
         MutableLiveData<List<DiagnosticWrapper>> logData = this.log.get(id);
         logData.setValue(diagnostics.stream()
+                .filter(Objects::nonNull)
                 .map(DiagnosticWrapper::new)
                 .collect(Collectors.toList()));
     }
