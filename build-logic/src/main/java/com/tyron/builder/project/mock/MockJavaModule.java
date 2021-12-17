@@ -92,12 +92,12 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
     @NonNull
     @Override
     public File getJavaDirectory() {
-        return new File(mRootDir, "app/src/main/java");
+        return new File(mRootDir, "src/main/java");
     }
 
     @Override
     public File getLibraryDirectory() {
-        return new File(mRootDir, "app/libs");
+        return new File(mRootDir, "libs");
     }
 
     @Override
@@ -156,7 +156,7 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
 
     @Override
     public File getBuildDirectory() {
-        return new File(getRootFile(), "app/build");
+        return new File(getRootFile(), "build");
     }
 
     @NonNull

@@ -59,17 +59,17 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
         if (mAndroidResourcesDir != null) {
             return mAndroidResourcesDir;
         }
-        return new File(getRootFile(), "app/src/main/res");
+        return new File(getRootFile(), "src/main/res");
     }
 
     @Override
     public File getNativeLibrariesDirectory() {
-        return new File(getRootFile(), "app/src/main/jniLibs");
+        return new File(getRootFile(), "src/main/jniLibs");
     }
 
     @Override
     public File getAssetsDirectory() {
-        return new File(getRootFile(), "app/src/main/assets");
+        return new File(getRootFile(), "src/main/assets");
     }
 
     @Override
@@ -82,7 +82,7 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
 
     @Override
     public File getManifestFile() {
-        return new File(getRootFile(), "app/src/main/AndroidManifest.xml");
+        return new File(getRootFile(), "src/main/AndroidManifest.xml");
     }
 
     @Override
@@ -112,7 +112,7 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
     @NonNull
     @Override
     public File getKotlinDirectory() {
-        return new File(getRootFile(), "app/src/main/kotlin");
+        return new File(getRootFile(), "src/main/kotlin");
     }
 
     @Nullable
