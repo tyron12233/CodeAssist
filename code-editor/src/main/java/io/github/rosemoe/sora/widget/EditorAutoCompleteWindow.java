@@ -214,6 +214,9 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      */
     @SuppressLint("NewApi")
     public void select(int pos) {
+        if (pos > mAdapter.getItemCount()) {
+            return;
+        }
         CompletionItem item = mAdapter.getItem(pos);
         Cursor cursor = mEditor.getCursor();
 
