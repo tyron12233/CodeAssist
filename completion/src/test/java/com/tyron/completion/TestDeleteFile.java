@@ -3,6 +3,7 @@ package com.tyron.completion;
 import static com.google.common.truth.Truth.assertThat;
 import static com.tyron.completion.TestUtil.*;
 
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.mock.MockAndroidModule;
@@ -25,7 +26,8 @@ public class TestDeleteFile {
     private File mMainClass;
     private File mClassToDelete;
 
-    private AndroidModule mProject;
+    private Project mProject;
+    private AndroidModule mModule;
     private FileManager mFileManager;
     private Set<File> mJavaFiles;
     private JavaCompilerService mService;
@@ -38,8 +40,9 @@ public class TestDeleteFile {
         CompletionModule.setLambdaStubs(new File(resolveBasePath(), "classpath/core-lambda-stubs.jar"));
 
         mRoot = new File(resolveBasePath(), "EmptyProject");
+        mProject = new Project(mRoot);
         mFileManager = new MockFileManager(mRoot);
-        mProject = new MockAndroidModule(mRoot, mFileManager);
+        mModule = new MockAndroidModule(new File(mRoot, "app"), mFileManager);
 
         mMainClass = new File(resolveBasePath(), "EmptyProject/classes/Main.java");
         mClassToDelete = new File(resolveBasePath(), "EmptyProject/classes/MainSecond.java");
@@ -48,7 +51,7 @@ public class TestDeleteFile {
         mJavaFiles.add(mMainClass);
         mJavaFiles.add(mClassToDelete);
 
-        mJavaFiles.forEach(mProject::addJavaFile);
+        mJavaFiles.forEach(mModule::addJavaFile);
     }
 
     @Test
@@ -60,7 +63,7 @@ public class TestDeleteFile {
                     .isEmpty();
         }
 
-        mProject.removeJavaFile("com.test.MainSecond");
+        mModule.removeJavaFile("com.test.MainSecond");
         mJavaFiles.remove(mClassToDelete);
         mService = getNewService(mJavaFiles);
 
@@ -71,7 +74,9 @@ public class TestDeleteFile {
     }
 
     private JavaCompilerService getNewService(Set<File> paths) {
-        return new JavaCompilerService(mProject, paths,
+        JavaCompilerService javaCompilerService = new JavaCompilerService(mProject, paths,
                 Collections.emptySet(), Collections.emptySet());
+        javaCompilerService.setCurrentModule(mModule);
+        return javaCompilerService;
     }
 }
