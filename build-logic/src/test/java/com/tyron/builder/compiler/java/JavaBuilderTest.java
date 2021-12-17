@@ -36,7 +36,7 @@ public class JavaBuilderTest {
 
         File root = new File(mResourcesDirectory, "TestProject");
         mFileManager = new MockFileManager(root);
-        mJavaProject = new MockAndroidModule(root, mFileManager);
+        mJavaProject = new MockAndroidModule(new File(root, "app"), mFileManager);
         mJavaProject.setLambdaStubsJarFile(new File(mResourcesDirectory,
                 "bootstraps/core-lambda-stubs.jar"));
         mJavaProject.setBootstrapFile(new File(mResourcesDirectory, "bootstraps/rt.jar"));
