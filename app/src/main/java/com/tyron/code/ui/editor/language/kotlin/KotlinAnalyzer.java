@@ -5,7 +5,7 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
-import com.tyron.ProjectManager;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
@@ -21,7 +21,6 @@ import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenSource;
 import org.openjdk.javax.tools.Diagnostic;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 

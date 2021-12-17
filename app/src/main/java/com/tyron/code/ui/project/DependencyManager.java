@@ -1,4 +1,4 @@
-package com.tyron;
+package com.tyron.code.ui.project;
 
 import android.util.Log;
 
@@ -8,7 +8,9 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.AndroidUtilities;
+import com.tyron.code.util.DependencyUtils;
 import com.tyron.common.util.Decompress;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.model.Pom;

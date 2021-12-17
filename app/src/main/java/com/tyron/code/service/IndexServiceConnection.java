@@ -7,7 +7,7 @@ import android.os.IBinder;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import com.tyron.ProjectManager;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.ModuleSettings;
