@@ -370,15 +370,17 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     }
 
     private String convertLayoutToXml() {
-        LayoutToXmlConverter converter =
-                new LayoutToXmlConverter(mInflater.getContext());
-        ProteusView view = (ProteusView) mEditorRoot.getChildAt(0);
-        if (view != null) {
-            Layout layout = view.getViewManager().getLayout();
-            try {
-                return converter.convert(layout.getAsLayout());
-            } catch (Exception e) {
-                return null;
+        if (mInflater != null) {
+            LayoutToXmlConverter converter =
+                    new LayoutToXmlConverter(mInflater.getContext());
+            ProteusView view = (ProteusView) mEditorRoot.getChildAt(0);
+            if (view != null) {
+                Layout layout = view.getViewManager().getLayout();
+                try {
+                    return converter.convert(layout.getAsLayout());
+                } catch (Exception e) {
+                    return null;
+                }
             }
         }
         return null;
