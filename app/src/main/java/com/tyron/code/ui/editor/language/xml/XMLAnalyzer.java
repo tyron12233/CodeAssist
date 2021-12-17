@@ -15,11 +15,14 @@ import com.tyron.completion.provider.CompletionEngine;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Token;
+import org.eclipse.jdt.internal.compiler.ast.Block;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.Stack;
 import java.util.concurrent.Executors;
 
+import io.github.rosemoe.sora.data.BlockLine;
 import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
 import io.github.rosemoe.sora.data.Span;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
@@ -41,7 +44,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 			CodePointCharStream stream = CharStreams.fromReader(new StringReader(content.toString()));
 			XMLLexer lexer = new XMLLexer(stream);
 			Token token, previous = null;
-			boolean first = true;
+			Stack<BlockLine> stack = new Stack<>();
 
 			int lastLine = 1;
 			int line, column;
@@ -62,8 +65,15 @@ public class XMLAnalyzer implements CodeAnalyzer {
 						colors.addIfNeeded(line, column, EditorColorScheme.COMMENT);
 						break;
 					case XMLLexer.Name:
-						if (previous != null && (previous.getType() == XMLLexer.OPEN || previous.getType() == XMLLexer.SLASH)) {
+						if (previous != null && previous.getType() == XMLLexer.SLASH) {
 							colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
+							break;
+						} else if (previous != null && previous.getType() == XMLLexer.OPEN) {
+							colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
+							BlockLine block = new BlockLine();
+							block.startLine = previous.getLine() - 1;
+							block.startColumn = previous.getCharPositionInLine();
+							stack.push(block);
 							break;
 						}
 						String attribute = token.getText();
@@ -95,26 +105,54 @@ public class XMLAnalyzer implements CodeAnalyzer {
 						}
 						colors.addIfNeeded(line,column, EditorColorScheme.LITERAL);
 						break;
-					case XMLLexer.SLASH:
-					case XMLLexer.OPEN:
-					case XMLLexer.CLOSE:
 					case XMLLexer.SLASH_CLOSE:
 						colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
+						if (!stack.isEmpty()) {
+							BlockLine block = stack.pop();
+							block.endLine = line;
+							block.endColumn = column;
+							if (block.startLine != block.endLine) {
+								if (previous.getLine() == token.getLine()) {
+									block.toBottomOfEndLine = true;
+								}
+								colors.addBlockLine(block);
+							}
+						}
 						break;
-					case XMLLexer.SEA_WS:
-					case XMLLexer.S:
+					case XMLLexer.SLASH:
+						colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
+						if (previous != null && previous.getType() == XMLLexer.OPEN) {
+							if (!stack.isEmpty()) {
+								BlockLine block = stack.pop();
+								block.endLine = previous.getLine() - 1;
+								block.endColumn = previous.getCharPositionInLine();
+								if (block.startLine != block.endLine) {
+									if (previous.getLine() == token.getLine()) {
+										block.toBottomOfEndLine = true;
+									}
+									colors.addBlockLine(block);
+								}
+							}
+						}
+						break;
+					case XMLLexer.OPEN:
+					case XMLLexer.CLOSE:
+						colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
+						break;
 					default:
 						Span s = Span.obtain(column, EditorColorScheme.TEXT_NORMAL);
 						colors.addIfNeeded(line, s);
 						s.setUnderlineColor(Color.TRANSPARENT);
 				}
 
-				if (token.getType() != XMLLexer.SEA_WS) {
+				if (token.getType() != XMLLexer.SEA_WS && token.getType() != XMLLexer.S) {
 					previous = token;
 				}
 			}
-			colors.determine(lastLine);
 
+			new BasicXmlPullAnalyzer().analyze(content, colors, delegate);
+
+			colors.determine(lastLine);
 			compile(colors);
 		} catch (IOException ignore) {
 
