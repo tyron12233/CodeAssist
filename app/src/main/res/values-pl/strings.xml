@@ -1,0 +1,142 @@
+
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">CodeAssist</string>
+    <string name="hello_world">Hello world!</string>
+    <item name="paste" type="string">Wklej</item>
+    <item name="copy" type="string">Skopiuj</item>
+    <item name="selectAll" formatted="true" type="string">Wybierz Wszystko</item>
+    <item name="saveToProject" translatable="false" type="string">Projekt</item>
+    <item name="cut" type="string" translatable="false">Wytnij</item>
+    <item name="last" type="string">Ostatni</item>
+    <item name="next" type="string">Następny</item>
+    <item name="replace" type="string">Zamień</item>
+    <item name="replaceAll" type="string">Zamień Wszystkie</item>
+    <item name="replacement" type="string">Zamiennik</item>
+    <item name="cancel" type="string">Anuluj</item>
+    <item name="text_to_search" type="string">Tekst do wyszukania</item>
+
+    <item name="more" translatable="false" type="string">Więcej</item>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">Wiadomości</string>
+    <string name="sync_header">Synchronizuj</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">Twoja Sygnatura</string>
+    <string name="reply_title">Domyślna Akcja Odpowiedzi</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">Synchronizuj E-mail okresowo</string>
+    <string name="attachment_title">Pobierz nadchodzące załączniki</string>
+    <string name="attachment_summary_on">Automatycznie pobieraj załączniki nadchodzących E-maili
+    </string>
+    <string name="attachment_summary_off">Pobieraj załączniki tylko gdy tak wybiorę</string>
+
+
+    <!-- wizard -->
+    <string name="wizard_next">Następny</string>
+    <string name="wizard_finish">Zakończ</string>
+    <string name="wizard_cancel">Anuluj</string>
+    <string name="wizard_templates">Szablony</string>
+    <string name="wizard_exit">Wyjdź</string>
+    <string name="wizard_desc">Wybierz z Szablonów</string>
+    <string name="wizard_empty_templates">Szablony są puste :(</string>
+    <string name="wizard_loading">Ładowanie szablonów</string>
+    <string name="wizard_app_name">Nazwa Aplikacji</string>
+    <string name="wizard_package_name">com.moja.aplikacja</string>
+    <string name="wizard_save_location">Lokalizacja Zapisów</string>
+    <string name="wizard_language">Język</string>
+    <string name="wizard_minimum_sdk">Minimalny SDK</string>
+    <string name="wizard_create">Utwórz</string>
+    <string name="wizard_previous">Wróć</string>
+    <string name="wizard_scoped_storage_info">Przez restrykcje pamięci Android 11 możesz zapisywać tylko w wewnętrznej pamięci aplikacji..</string>
+    <string name="wizard_file_not_writable">Lokalizacja nie jest zapisywalna, wybierz inną lokalizację.</string>
+    <string name="wizard_path_exceeds">Ścieżka lokalizacji zapisu przekracza 240 znaków.</string>
+    <string name="wizard_package_illegal">Package name contains illegal characters.</string>
+    <string name="wizard_package_too_short">Nazwa pakietu jest za krótka.</string>
+    <string name="wizard_package_contains_spaces">Nazwa pakietu nie może zawierać spacji.</string>
+    <string name="wizard_error_name_empty">Nazwa nie może być pusta.</string>
+    <string name="wizard_error_name_illegal">Nazwa nie może zawierać nie dozwolonych znaków</string>
+    <string name="wizard_package_empty">Nazwa pakietu nie może być pusta.</string>
+    <string name="wizard_select_min_sdk">Wybierz minimalną wersję SDK.</string>
+    <string name="wizard_select_save_location">Wybierz lokalizację zapisu</string>
+
+    <string name="menu_open_project">Otwórz projekt</string>
+    <string name="menu_create_project">Utwórz projekt</string>
+    <string name="menu_run">Uruchom</string>
+    <string name="menu_refresh">Odśwież projekt</string>
+    <string name="menu_format">Formatuj</string>
+    <string name="menu_settings">Ustawienia</string>
+
+    <!-- preferences -->
+    <string name="settings_title_editor">Edytor</string>
+    <string name="title_activity_settings">Ustawienia</string>
+
+    <!-- Editor settings -->
+    <string name="code_engine_title">Silnik Zakończeń</string>
+    <string name="settings_code_completions">Włącz podpowiedzi kodu</string>
+    <string name="settings_kotlin_completions">Włącz podpowiedzi kodu dla Kotlin</string>
+    <string name="settings_kotlin_completions_desc">Ta funkcja jest eksperymentalna i może być wolna. Wymaga mocnego urządzenia.</string>
+
+
+    <string name="code_editor_error_highlight">Włącz podkreślanie błędów</string>
+
+    <string name="editor_settings_title">Ustawienia Edytora Kodu</string>
+    <string name="editor_settings_wordwrap">Zawijaj tekst</string>
+    <string name="font_size_title">Rozmiar czcionki</string>
+    <string name="font_size_message">Zmień rozmiar czcionki edytora kodu</string>
+    <string name="font_size_summary">Podaj rozmiar czcionki edytora kodu</string>
+    <string name="keyboard_settings_title">Klawiatura</string>
+    <string name="keyboard_enable_suggestions_description">Włącz sugestie klawiatury</string>
+
+    <!-- file manager menu -->
+    <string name="error">Błąd</string>
+    <string name="error_resource_name_restriction">Nazwa zasobu może zawierać tylko małe litery a-z, 0-9 lub podłogę.</string>
+    <string name="menu_action_new_java_class">Klasa Java</string>
+    <string name="menu_action_new_kotlin_class">Klasa Kotlin</string>
+    <string name="menu_action_new_directory">Folder</string>
+    <string name="menu_action_new_file">Plik</string>
+    <string name="directory_name">Nazwa folderu</string>
+    <string name="file_name">Nazwa pliku</string>
+    <string name="menu_new">Nowy</string>
+    <string name="menu_refactor">Refaktoryzacja</string>
+    <string name="item_project">Projekt</string>
+    <string name="dialog_create_class_title">Utwórz klasę</string>
+    <string name="create_class_dialog_class_name">Nazwa klasy</string>
+    <string name="create_class_dialog_positive">Utwórz</string>
+    <string name="create_class_dialog_class_type">Typ klasy</string>
+    <string name="create_class_dialog_invalid_name">Niepoprawna nazwa klasy</string>
+
+    <string name="dialog_confirm_delete">Na pewno chcesz usunąć %1$s?</string>
+    <string name="dialog_delete">Usuń</string>
+    <string name="menu_preview_layout">Podgląd układu</string>
+    <string name="action_menu_build_release">Zbuduj release APK</string>
+    <string name="action_menu_build_debug">Zbuduj debug APK</string>
+    <string name="action_menu_build_aab">Zbuduj AAB</string>
+
+    <string name="project_manager_alpha_notice_title">Uwagi wersji Alpha</string>
+    <string name="project_manager_alpha_notice">CodeAssist jest ciągle w wersji alpha,
+        Możesz doświadczyć błędów, bugów oraz niekompletnych funkcji.\nMożesz zgłosić te problemy na https://github.com/tyron12233/CodeAssist/issues</string>
+
+    <string name="project_manager_save_location_title">Wybierz lokalizację zapisu</string>
+    <string name="project_manager_permission_denied">Odmówiono dostępu</string>
+    <string name="project_manager_button_request_again">Zażądaj ponownie</string>
+    <string name="project_manager_button_continue">Kontynuuj</string>
+    <string name="project_manager_rationale_title">Pozwolenia dostępu Pamięci</string>
+    <string name="project_manager_button_allow">Zezwól</string>
+    <string name="project_manager_button_use_internal">Używaj pamięci wewnętrznej</string>
+    <string name="project_manager_permission_rationale">Aplikacja potrzebuje dostępu do pamięci w celu zapisu projektów, które nie zostaną usunięte po odinstalowaniu aplikacji. Możesz jednak wybrać zapis projektów w wewnętrznej pamięci aplikacji.</string>
+    <string name="project_manager_android11_notice">Projekt będzie zapisany w lokalizacji wewnętrznej pamięci aplikacji. Zrób kopie swoich projektów przed usunięciem aplikacji.</string>
+        
+    <string name="project_manager_projects">Projekty</string>
+    <string name="project_manager_empty">Brak projektów</string>`
+    <string name="project_manager_create_project">Utwórz projekt</string>
+
+    <!-- Compiler Service -->
+    <string name="compilation_state_compiling">Kompilacja</string>
+    <string name="compilation_button_install">INSTALUJ</string>
+    <string name="compilation_result_success">Kompilacja zakończona</string>
+    <string name="compilation_result_failed">Kompilacja nieudana</string>
+</resources>
