@@ -26,9 +26,10 @@ public class DependencyResolverTest {
         DependencyResolver resolver = new DependencyResolver(repository);
 
         Pom materialPom = repository.getPom("com.google.android.material:material:1.4.0");
+        Pom appcompatPom = repository.getPom("androidx.appcompat:appcompat:1.3.0");
         assert materialPom != null;
 
-        List<Pom> dependencies = ImmutableList.of(materialPom);
+        List<Pom> dependencies = ImmutableList.of(materialPom, appcompatPom);
         List<Pom> resolvedPoms =  resolver.resolve(dependencies);
 
         Pom newerFragment = Pom.valueOf("androidx.fragment", "fragment", "300");
@@ -38,9 +39,9 @@ public class DependencyResolverTest {
         // so this should return the older fragment
         Pom pom = resolvedPoms.get(resolvedPoms.indexOf(newerFragment));
         assert pom != null;
-        assert pom.getVersionName().equals("1.1.0");
+        assert pom.getVersionName().equals("1.3.4");
 
-        // the version 1.4.0 of the material library depends on fragment 1.1.0
+        // the version 1.4.0 of the material library depends on fragment 1.3.4
         // to test the dependency resolution, we will inject a higher version of fragment
         // and see if it gets overwritten
 
