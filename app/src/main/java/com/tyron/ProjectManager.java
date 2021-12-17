@@ -1,6 +1,7 @@
 package com.tyron;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
@@ -43,7 +44,7 @@ public class ProjectManager {
     }
 
     private final List<OnProjectOpenListener> mProjectOpenListeners = new ArrayList<>();
-    private Project mCurrentProject;
+    private volatile Project mCurrentProject;
 
     private ProjectManager() {
 
@@ -64,9 +65,8 @@ public class ProjectManager {
                             boolean downloadLibs,
                             TaskListener listener,
                             ILogger logger) {
-        Executors.newSingleThreadExecutor().execute(() -> {
-            doOpenProject(project, downloadLibs, listener, logger);
-        });
+        Executors.newSingleThreadExecutor().execute(() ->
+                doOpenProject(project, downloadLibs, listener, logger));
     }
 
     private void doOpenProject(Project project,
@@ -120,7 +120,7 @@ public class ProjectManager {
         }
     }
 
-    public Project getCurrentProject() {
+    public synchronized Project getCurrentProject() {
         return mCurrentProject;
     }
 
@@ -144,7 +144,7 @@ public class ProjectManager {
         return classFile;
     }
 
-    @NonNull
+    @Nullable
     public static File createClass(File directory, String className, CodeTemplate template) throws IOException {
         if (!directory.isDirectory()) {
             return null;
