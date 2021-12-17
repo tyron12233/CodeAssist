@@ -31,6 +31,10 @@ Clone this repository to your local device and then open it on Android Studio.
 - Pull request must have a short description as a title and a more detailed one in the description
 - Feature additions must include Unit/Instrumentation tests. This is for future stability of the app and modules.
 
+## Discord
+Wanna chat with us, talk about changes or just hang out? We have a Discord server just for that.
+https://discord.gg/3YMZkgFS
+
 # Special thanks
 - Rosemoe/CodeEditor 
 - JavaNIDE
