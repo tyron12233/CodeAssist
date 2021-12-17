@@ -1,18 +1,35 @@
 package com.tyron.code.ui.editor.language.kotlin;
 
 import android.graphics.Color;
+import android.util.Log;
+
+import androidx.preference.PreferenceManager;
+
+import com.tyron.ProjectManager;
+import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.Module;
+import com.tyron.common.BuildConfig;
+import com.tyron.common.SharedPreferenceKeys;
+import com.tyron.kotlin_completion.CompletionEngine;
 
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenSource;
+import org.openjdk.javax.tools.Diagnostic;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Stack;
 
 import io.github.rosemoe.sora.data.BlockLine;
 import io.github.rosemoe.sora.data.Span;
 import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
+import io.github.rosemoe.sora.text.CharPosition;
+import io.github.rosemoe.sora.text.Indexer;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.text.TextAnalyzer;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -28,14 +45,6 @@ public class KotlinAnalyzer implements CodeAnalyzer {
 
     @Override
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
-//        Project currentProject = ProjectManager.getInstance().getCurrentProject();
-//        if (currentProject instanceof AndroidProject) {
-//            if (PreferenceManager.getDefaultSharedPreferences(mEditor.getContext())
-//                    .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
-//                CompletionEngine.getInstance((AndroidProject) currentProject)
-//                        .lintLater(mEditor.getCurrentFile());
-//            }
-//        }
         try {
             CodePointCharStream stream = CharStreams.fromString(String.valueOf(content));
             KotlinLexer lexer = new KotlinLexer(stream);
@@ -188,7 +197,24 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                 }
             }
             colors.setSuppressSwitch(maxSwitch + 10);
-        } catch (Exception ignore) {}
+
+            Project currentProject = ProjectManager.getInstance().getCurrentProject();
+            if (currentProject != null) {
+                Module module = currentProject.getModule(mEditor.getCurrentFile());
+                if (module instanceof AndroidModule) {
+                    if (PreferenceManager.getDefaultSharedPreferences(mEditor.getContext())
+                            .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
+                        CompletionEngine.getInstance((AndroidModule) module)
+                                .doLint(mEditor.getCurrentFile(), content.toString(), diagnostics ->
+                        markDiagnostics(diagnostics, colors));
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            if (BuildConfig.DEBUG) {
+                Log.e("KotlinAnalyzer", "Failed to analyze", e);
+            }
+        }
     }
 
     private static class UnknownToken implements Token {
@@ -244,5 +270,36 @@ public class KotlinAnalyzer implements CodeAnalyzer {
         public CharStream getInputStream() {
             return null;
         }
+    }
+
+    private void markDiagnostics(List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
+        mEditor.getText().beginStreamCharGetting(0);
+        Indexer indexer = mEditor.getText().getIndexer();
+        diagnostics.forEach(it -> {
+            try {
+                if (it.getStartPosition() == -1) {
+                    it.setStartPosition(it.getPosition());
+                }
+                if (it.getEndPosition() == -1) {
+                    it.setEndPosition(it.getPosition());
+                }
+
+                CharPosition start = indexer.getCharPosition((int) it.getStartPosition());
+                CharPosition end = indexer.getCharPosition((int) it.getEndPosition());
+
+                // the editor does not support marking underline spans for the same start and end index
+                // to work around this, we just subtract one to the start index
+                if (start.line == end.line && end.column == start.column) {
+                    start.column--;
+                }
+
+                int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
+                colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
+            } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
+                Log.e("KotlinAnalyzer", "Unable to mark problem region", e);
+                // Work around for the indexer requiring a sorted positions
+            }
+        });
+        mEditor.getText().endStreamCharGetting();
     }
 }
