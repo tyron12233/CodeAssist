@@ -15,9 +15,11 @@ import java.util.Set;
 public class DependencyResolver {
 
     private final PomRepository repository;
+    private final Map<Pom, String> resolvedPoms;
 
     public DependencyResolver(PomRepository repository) {
         this.repository = repository;
+        this.resolvedPoms = new HashMap<>();
     }
 
     /**
@@ -25,67 +27,49 @@ public class DependencyResolver {
      * the conflicting libraries
      */
     public List<Pom> resolve(List<Pom> declaredDependencies) {
-        Map<Integer, Pom> resolved = new HashMap<>();
         for (Pom pom : declaredDependencies) {
-            for (Pom resolvedPom : resolve(pom).values()) {
-                if (resolved.containsKey(resolvedPom.hashCode())) {
-                    Pom first = resolved.get(resolvedPom.hashCode());
-                    Pom second = resolvedPom;
-                    resolved.remove(resolvedPom.hashCode());
-                    resolved.put(resolvedPom.hashCode(), getHigherVersion(first, second));
-                } else {
-                    resolved.put(resolvedPom.hashCode(), resolvedPom);
-                }
-            }
+            resolve(pom);
         }
-        return new ArrayList<>(resolved.values());
+        return new ArrayList<>(resolvedPoms.keySet());
     }
 
-    private Map<Integer, Pom> resolve(Pom pom) {
-        Map<Integer, Pom> resolved = new HashMap<>();
-        resolved.put(pom.hashCode(), pom);
+    private void resolve(Pom pom) {
+        if (resolvedPoms.containsKey(pom)) {
+            String resolvedVersion = resolvedPoms.get(pom);
+            String thisVersion = pom.getVersionName();
+            int result = getHigherVersion(resolvedVersion, thisVersion);
+            if (result == 0) {
+                return;
+            }
+            if (result > 0) {
+                return;
+            } else {
+                resolvedPoms.remove(pom);
+            }
+        }
+
         for (Dependency dependency : pom.getDependencies()) {
             if ("test".equals(dependency.getScope())) {
                 continue;
             }
-            Pom dependencyPom = repository.getPom(dependency.toString());
-            if (dependencyPom == null) {
+
+            if (dependency.getArtifactId().equals("fragment")) {
+                System.out.println(dependency);
+            }
+
+            Pom resolvedPom = repository.getPom(dependency.toString());
+            if (resolvedPom == null) {
                 continue;
             }
-            for (Pom resolvedPom : resolve(dependencyPom).values()) {
-                if (resolved.containsKey(resolvedPom.hashCode())) {
-                    Pom first = resolved.get(resolvedPom.hashCode());
-                    Pom second = resolvedPom;
-                    resolved.remove(resolvedPom.hashCode());
-                    resolved.put(resolvedPom.hashCode(), getHigherVersion(first, second));
-                } else {
-                    resolved.put(resolvedPom.hashCode(), resolvedPom);
-                }
-            }
+            resolve(resolvedPom);
         }
-        return resolved;
+        resolvedPoms.put(pom, pom.getVersionName());
     }
 
-    private Pom getHigherVersion(Pom first, Pom second) {
-        String firstVersion = first.getVersionName();
-        String secondVersion = second.getVersionName();
-
-        if (secondVersion == null) {
-            return first;
-        }
-        if (firstVersion == null) {
-            return second;
-        }
+    private int getHigherVersion(String firstVersion, String secondVersion) {
         ComparableVersion firstComparableVersion = new ComparableVersion(firstVersion);
         ComparableVersion secondComparableVersion = new ComparableVersion(secondVersion);
-
         int result = firstComparableVersion.compareTo(secondComparableVersion);
-        if (result == 0) {
-            return first;
-        }
-        if (result > 0) {
-            return first;
-        }
-        return second;
+        return result;
     }
 }

@@ -46,6 +46,9 @@ public class PomRepositoryImpl implements PomRepository {
             if (!pomNames[1].equals(pom.getArtifactId())) {
                 continue;
             }
+            if (!pomNames[2].equals(pom.getVersionName())) {
+                continue;
+            }
             return pom;
         }
         return getPomFromUrls(pomNames);
