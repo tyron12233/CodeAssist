@@ -154,7 +154,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 
 			colors.determine(lastLine);
 			compile(colors);
-		} catch (IOException ignore) {
+		} catch (Throwable ignore) {
 
 		}
 	}

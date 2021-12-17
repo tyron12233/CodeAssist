@@ -252,6 +252,10 @@ public class CodeEditorFragment extends Fragment
                     mEditor.setSelection(charPosition.line, charPosition.column);
                 }
 
+                if (item.item == null) {
+                    return;
+                }
+
                 if (item.item.additionalTextEdits != null) {
                     for (TextEdit edit : item.item.additionalTextEdits) {
                         window.applyTextEdit(edit);

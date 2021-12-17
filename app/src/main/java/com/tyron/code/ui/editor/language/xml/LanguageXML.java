@@ -28,7 +28,7 @@ public class LanguageXML implements EditorLanguage {
 	}
 	@Override
 	public boolean isAutoCompleteChar(char ch) {
-		return false;
+		return ch != ' ';
 	}
 
 	@Override
@@ -61,7 +61,7 @@ public class LanguageXML implements EditorLanguage {
 
 	@Override
 	public AutoCompleteProvider getAutoCompleteProvider() {
-		return new XMLAutoCompleteProvider();
+		return new XMLAutoCompleteProvider(mEditor);
 	}
 
 	@Override
