@@ -21,7 +21,7 @@ public class AndroidAppBuilderTestBase {
         File projectDir = new File(mResourcesDir, "TestProject");
 
         mFileManager = new MockFileManager(projectDir);
-        mProject = new MockAndroidModule(new File(mResourcesDir, "app"), mFileManager);
+        mProject = new MockAndroidModule(new File(projectDir, "app"), mFileManager);
         mProject.setLambdaStubsJarFile(new File(mResourcesDir, "bootstraps/core-lambda-stubs.jar"));
         mProject.setBootstrapFile(new File(mResourcesDir, "bootstraps/rt.jar"));
 
