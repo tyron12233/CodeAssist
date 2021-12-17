@@ -17,7 +17,7 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.tyron.ProjectManager;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
@@ -250,6 +250,10 @@ public class CodeEditorFragment extends Fragment
                     CharPosition charPosition = mEditor.getCursor()
                             .getIndexer().getCharPosition(newSel);
                     mEditor.setSelection(charPosition.line, charPosition.column);
+                }
+
+                if (item.item == null) {
+                    return;
                 }
 
                 if (item.item.additionalTextEdits != null) {

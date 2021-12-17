@@ -3,7 +3,7 @@ package com.tyron.code.ui.file.action.java;
 import android.view.SubMenu;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.tyron.ProjectManager;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;

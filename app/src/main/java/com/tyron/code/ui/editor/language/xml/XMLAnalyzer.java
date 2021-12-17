@@ -3,24 +3,12 @@ package com.tyron.code.ui.editor.language.xml;
 import android.graphics.Color;
 import android.os.Handler;
 
-import com.tyron.ProjectManager;
-import com.tyron.builder.compiler.BuildType;
-import com.tyron.builder.compiler.Task;
-import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
-import com.tyron.builder.model.Project;
-import com.tyron.code.util.ProjectUtils;
-import com.tyron.builder.exception.CompilationFailedException;
-import com.tyron.completion.provider.CompletionEngine;
-
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Token;
-import org.eclipse.jdt.internal.compiler.ast.Block;
 
-import java.io.IOException;
 import java.io.StringReader;
 import java.util.Stack;
-import java.util.concurrent.Executors;
 
 import io.github.rosemoe.sora.data.BlockLine;
 import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
@@ -154,7 +142,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
 
 			colors.determine(lastLine);
 			compile(colors);
-		} catch (IOException ignore) {
+		} catch (Throwable ignore) {
 
 		}
 	}

@@ -2,7 +2,7 @@ package com.tyron.code.ui.file.action.file;
 
 import androidx.appcompat.app.AlertDialog;
 
-import com.tyron.ProjectManager;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;

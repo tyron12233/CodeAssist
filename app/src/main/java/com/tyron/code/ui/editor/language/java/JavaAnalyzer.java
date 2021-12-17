@@ -5,7 +5,7 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
-import com.tyron.ProjectManager;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;

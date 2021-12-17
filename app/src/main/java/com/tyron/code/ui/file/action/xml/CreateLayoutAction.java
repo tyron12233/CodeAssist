@@ -1,7 +1,7 @@
 package com.tyron.code.ui.file.action.xml;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.tyron.ProjectManager;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.R;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.template.xml.LayoutTemplate;

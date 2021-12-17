@@ -33,20 +33,24 @@ public class DiagnosticWrapper implements Diagnostic<File> {
     }
 
     public DiagnosticWrapper(Diagnostic<? extends JavaFileObject> obj) {
-        this.code = obj.getCode();
-        if (obj.getSource() != null) {
-            this.source = new File(obj.getSource().toUri());
+        try {
+            this.code = obj.getCode();
+            if (obj.getSource() != null) {
+                this.source = new File(obj.getSource().toUri());
+            }
+            this.kind = obj.getKind();
+
+            this.position = obj.getPosition();
+            this.startPosition = obj.getStartPosition();
+            this.endPosition = obj.getEndPosition();
+
+            this.lineNumber = obj.getLineNumber();
+            this.columnNumber = obj.getColumnNumber();
+
+            this.message = obj.getMessage(Locale.getDefault());
+        } catch (Throwable e) {
+            // ignored
         }
-        this.kind = obj.getKind();
-
-        this.position = obj.getPosition();
-        this.startPosition = obj.getStartPosition();
-        this.endPosition = obj.getEndPosition();
-
-        this.lineNumber = obj.getLineNumber();
-        this.columnNumber = obj.getColumnNumber();
-
-        this.message = obj.getMessage(Locale.getDefault());
     }
     
     @Override

@@ -12,11 +12,14 @@ import com.tyron.kotlin_completion.completion.Completions;
 import com.tyron.kotlin_completion.diagnostic.ConvertDiagnosticKt;
 import com.tyron.kotlin_completion.util.AsyncExecutor;
 
+import org.jetbrains.kotlin.diagnostics.Diagnostic;
 import org.jetbrains.kotlin.resolve.BindingContext;
+import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics;
 
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -24,6 +27,7 @@ import java.util.concurrent.CompletableFuture;
 
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
+import kotlin.jvm.functions.Function1;
 
 public class CompletionEngine {
 
@@ -73,9 +77,14 @@ public class CompletionEngine {
     public Pair<CompiledFile, Integer> recover(File file, String contents, Recompile recompile, int offset) {
         boolean shouldRecompile = true;
         switch (recompile) {
-            case NEVER: shouldRecompile = false; break;
-            case ALWAYS:shouldRecompile = true; break;
-            case AFTER_DOT: shouldRecompile = offset > 0 && contents.charAt(offset - 1) == '.';
+            case NEVER:
+                shouldRecompile = false;
+                break;
+            case ALWAYS:
+                shouldRecompile = true;
+                break;
+            case AFTER_DOT:
+                shouldRecompile = offset > 0 && contents.charAt(offset - 1) == '.';
         }
         sp.put(file, contents, false);
 
@@ -139,7 +148,7 @@ public class CompletionEngine {
                                             File file,
                                             String prefix,
                                             int line, int column) {
-        prefix = partialIdentifier(prefix, prefix.length());;
+        prefix = partialIdentifier(prefix, prefix.length());
 
         if (cachedCompletion == null) {
             return false;
@@ -179,29 +188,61 @@ public class CompletionEngine {
         return result;
     }
 
-    public void lintLater(File file) {
+    public interface LintCallback {
+        void onLint(List<DiagnosticWrapper> diagnostics);
+    }
+
+    public void lintLater(File file, LintCallback callback) {
         lintTodo.add(file);
-        debounceLint.schedule(this::doLint);
+        debounceLint.schedule(cancelFunction -> {
+            callback.onLint(doLint(cancelFunction));
+            return Unit.INSTANCE;
+        });
     }
 
     public void lintNow(File file) {
         lintTodo.add(file);
-        debounceLint.submitImmediately(this::doLint);
+        debounceLint.submitImmediately(cancel -> {
+            doLint(cancel);
+            return Unit.INSTANCE;
+        });
     }
 
-    private Unit doLint(Function0<Boolean> cancelCallback) {
+    public void doLint(File file, String contents, LintCallback callback) {
+        debounceLint.submitImmediately(cancel -> {
+            doLint(file, contents, cancel, callback);
+            return Unit.INSTANCE;
+        });
+    }
+
+    public void doLint(File file, String contents, Function0<Boolean> cancelCallback, LintCallback callback) {
+        BindingContext context = recover(file, contents, Recompile.ALWAYS, 0).first.getCompile();
+        if (!cancelCallback.invoke()) {
+            List<DiagnosticWrapper> diagnosticWrappers =
+                    new ArrayList<>();
+            Diagnostics diagnostics = context.getDiagnostics();
+            for (Diagnostic it : diagnostics) {
+                diagnosticWrappers.addAll(ConvertDiagnosticKt.convertDiagnostic(it));
+            }
+            lintCount++;
+            callback.onLint(diagnosticWrappers);
+        }
+    }
+
+    public List<DiagnosticWrapper> doLint(Function0<Boolean> cancelCallback) {
         List<File> files = clearLint();
         BindingContext context = sp.compileFiles(files);
         if (!cancelCallback.invoke()) {
             List<DiagnosticWrapper> diagnosticWrappers =
                     new ArrayList<>();
-            context.getDiagnostics().forEach(it -> {
+            Diagnostics diagnostics = context.getDiagnostics();
+            for (Diagnostic it : diagnostics) {
                 diagnosticWrappers.addAll(ConvertDiagnosticKt.convertDiagnostic(it));
-            });
-            Log.d("Lint", "diagnostics: " + diagnosticWrappers);
+            }
+            lintCount++;
+            return diagnosticWrappers;
         }
-        lintCount++;
-        return Unit.INSTANCE;
+        return Collections.emptyList();
     }
 
 }
