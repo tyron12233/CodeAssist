@@ -46,7 +46,7 @@ public class GroovyLanguage implements EditorLanguage {
 
     @Override
     public CharSequence format(CharSequence text) {
-        return null;
+        return text;
     }
 
     @Override
