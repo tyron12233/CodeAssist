@@ -49,7 +49,8 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     private static final Tokens[] sKeywordsBeforeFunctionName = new Tokens[]{Tokens.RETURN,
             Tokens.BREAK, Tokens.IF, Tokens.AND, Tokens.OR, Tokens.OREQ, Tokens.OROR, Tokens.ANDAND,
             Tokens.ANDEQ, Tokens.RPAREN, Tokens.LPAREN, Tokens.LBRACE, Tokens.NEW, Tokens.DOT,
-            Tokens.SEMICOLON, Tokens.EQ, Tokens.NOTEQ, Tokens.NOT, Tokens.RBRACE, Tokens.COMMA};
+            Tokens.SEMICOLON, Tokens.EQ, Tokens.NOTEQ, Tokens.NOT, Tokens.RBRACE, Tokens.COMMA, Tokens.PLUS,
+            Tokens.PLUSEQ, Tokens.MINUS, Tokens.MINUSEQ, Tokens.MULT, Tokens.MULTEQ, Tokens.DIV, Tokens.DIVEQ};
 
     private final CodeEditor mEditor;
     private DefaultLintClient mClient;
