@@ -867,12 +867,16 @@ public class CompletionProvider {
     private List<CompletionItem> overridableMethod(CompileTask task,
                                                    TreePath parentPath,
                                                    List<ExecutableElement> overloads,
-                                                   boolean endsWithParen) {
+                                                   boolean endsWithParen) throws InterruptedException {
+        checkInterrupted();
+
         List<CompletionItem> items = new ArrayList<>(overloads.size());
         Types types = task.task.getTypes();
         Element parentElement = Trees.instance(task.task).getElement(parentPath);
         DeclaredType type = (DeclaredType) parentElement.asType();
         for (ExecutableElement element : overloads) {
+            checkInterrupted();
+
             Element enclosingElement = element.getEnclosingElement();
             if (!types.isAssignable(type, enclosingElement.asType())) {
                 items.addAll(method(Collections.singletonList(element), endsWithParen));
@@ -892,17 +896,26 @@ public class CompletionProvider {
     }
 
 
-    private List<CompletionItem> method(List<ExecutableElement> overloads, boolean endsWithParen) {
+    private List<CompletionItem> method(List<ExecutableElement> overloads,
+                                        boolean endsWithParen) throws InterruptedException {
         return method(overloads, endsWithParen, false);
     }
 
-    private List<CompletionItem> method(List<ExecutableElement> overloads, boolean endsWithParen, boolean methodRef) {
+    private List<CompletionItem> method(List<ExecutableElement> overloads,
+                                        boolean endsWithParen,
+                                        boolean methodRef) throws InterruptedException {
         return method(overloads, endsWithParen, methodRef, null);
     }
 
-    private List<CompletionItem> method(List<ExecutableElement> overloads, boolean endsWithParen, boolean methodRef, DeclaredType type) {
+    private List<CompletionItem> method(List<ExecutableElement> overloads,
+                                        boolean endsWithParen,
+                                        boolean methodRef,
+                                        DeclaredType type) throws InterruptedException {
+        checkInterrupted();
         List<CompletionItem> items = new ArrayList<>();
         for (ExecutableElement first : overloads) {
+            checkInterrupted();
+
             CompletionItem item = new CompletionItem();
             item.label = getMethodLabel(first) + getThrowsType(first);
             item.commitText = first.getSimpleName().toString() + ((methodRef || endsWithParen) ? "" : "()");
