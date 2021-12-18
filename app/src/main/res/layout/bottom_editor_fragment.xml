@@ -21,7 +21,7 @@
 
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tablayout"
-        app:theme="@style/CodeEditorActionBar"
+        android:theme="@style/CodeEditorActionBar"
         android:background="#212121"
         app:tabSelectedTextColor="#FFCC7832"
         app:tabTextColor="@android:color/white"
