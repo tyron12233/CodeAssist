@@ -102,6 +102,7 @@ public class CompletionEngine {
             mCachedPaths.clear();
             mCachedPaths.addAll(paths);
             mProvider.setDiagnosticListener(mInternalListener);
+            mProvider.setCurrentModule(module);
             Log.d(TAG, "Class path changed, creating a new compiler");
         }
 
@@ -174,7 +175,6 @@ public class CompletionEngine {
         setIndexing(true);
 
         JavaCompilerService compiler = getCompiler(project, module);
-        compiler.setCurrentModule(module);
 
         List<File> filesToIndex = new ArrayList<>(module.getJavaFiles().values());
 
@@ -206,14 +206,17 @@ public class CompletionEngine {
 
         if (isIncrementalCompletion(cachedCompletion, file, prefix, line, column)) {
             Log.d(TAG, "Using incremental completion");
+            String partialIdentifier = partialIdentifier(prefix, prefix.length());
             List<CompletionItem> narrowedList = cachedCompletion.getCompletionList().items.stream()
                     .filter(item -> {
                         String label = item.label;
                         if (label.contains("(")) {
                             label = label.substring(0, label.indexOf('('));
                         }
-                        return FuzzySearch.partialRatio(label,
-                                partialIdentifier(prefix, prefix.length())) > 90;
+                        if (label.length() < partialIdentifier.length()) {
+                            return false;
+                        }
+                        return FuzzySearch.partialRatio(label, partialIdentifier) > 90;
                     })
                     .collect(Collectors.toList());
             CompletionList completionList = new CompletionList();
@@ -262,7 +265,6 @@ public class CompletionEngine {
 
         try {
             JavaCompilerService compiler = getCompiler(project, module);
-            compiler.setCurrentModule(module);
             return new CompletionProvider(compiler)
                     .complete(file, contents, cursor);
         } catch (Throwable e) {
@@ -281,7 +283,6 @@ public class CompletionEngine {
                                             String prefix,
                                             int line, int column) {
         prefix = partialIdentifier(prefix, prefix.length());
-        ;
 
         if (cachedCompletion == null) {
             return false;

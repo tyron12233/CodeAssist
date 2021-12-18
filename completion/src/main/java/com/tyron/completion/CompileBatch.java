@@ -3,6 +3,8 @@ package com.tyron.completion;
 import android.util.Log;
 
 import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
@@ -77,6 +79,10 @@ public class CompileBatch implements AutoCloseable {
      * names, list those source files.
      */
     public Set<Path> needsAdditionalSources() {
+        if (parent.getCurrentModule() == null) {
+            return Collections.emptySet();
+        }
+        JavaModule module = parent.getCurrentModule();
         // Check for "class not found errors" that refer to package private classes
         Set<Path> addFiles = new HashSet<>();
         for (Diagnostic<? extends JavaFileObject> err : parent.getDiagnostics()) {
@@ -97,7 +103,7 @@ public class CompileBatch implements AutoCloseable {
             }
 
             String packageName = packageName(err);
-            File javaFile = parent.getCurrentModule().getJavaFile(packageName);
+            File javaFile = module.getJavaFile(packageName);
             if (javaFile != null) {
                 addFiles.add(javaFile.toPath());
             }

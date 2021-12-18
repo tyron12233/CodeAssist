@@ -428,7 +428,7 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
     public void close() {
-        if (!cachedCompile.closed) {
+        if (cachedCompile != null && !cachedCompile.closed) {
             cachedCompile.close();
         }
         if (mLock.isHeldByCurrentThread() && mLock.isLocked()) {
