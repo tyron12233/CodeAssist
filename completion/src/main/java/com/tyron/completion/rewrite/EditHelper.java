@@ -1,5 +1,7 @@
 package com.tyron.completion.rewrite;
 
+import androidx.annotation.NonNull;
+
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -100,10 +102,24 @@ public class EditHelper {
         } else {
             buf.append(printParameters(parameterizedType, source));
         }
-        buf.append(") {\n\t");
+        buf.append(") ");
+        if (method.getThrownTypes() != null && !method.getThrownTypes().isEmpty()) {
+            buf.append(printThrows(method.getThrownTypes()));
+            buf.append(" ");
+        }
+        buf.append("{\n\t");
         buf.append(printBody(method, source));
         buf.append("\n}");
         return buf.toString();
+    }
+
+    public static String printThrows(@NonNull List<? extends TypeMirror> thrownTypes) {
+        StringBuilder types = new StringBuilder();
+        for (TypeMirror m : thrownTypes) {
+            types.append((types.length() == 0) ? "" : ", ")
+                    .append(printType(m));
+        }
+        return "throws " + types;
     }
 
     public static String printBody(ExecutableElement method, MethodTree source) {
