@@ -9,6 +9,7 @@ import android.os.Environment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.MenuItem;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -97,13 +98,21 @@ public class ProjectManagerFragment extends Fragment {
 
         MaterialToolbar toolbar = view.findViewById(R.id.toolbar);
         toolbar.setTitle(R.string.app_name);
+        toolbar.inflateMenu(R.menu.project_list_fragment_menu);
+        toolbar.setOnMenuItemClickListener(
+                new MaterialToolbar.OnMenuItemClickListener() {
+                    @Override
+                    public boolean onMenuItemClick(MenuItem item) {
+                        // Handle menu item click event
+                        if (item.getItemId() == R.id.projects_path) {
+                            setSavePath(null);
+                            checkSavePath();
+                        }
+                        return true;
+                    }
+                });
 
         mCreateProjectFab = view.findViewById(R.id.create_project_fab);
-        mCreateProjectFab.setOnLongClickListener(v -> {
-            setSavePath(null);
-            checkSavePath();
-            return true;
-        });
         mCreateProjectFab.setOnClickListener(v -> {
             WizardFragment wizardFragment = new WizardFragment();
             wizardFragment.setOnProjectCreatedListener(this::openProject);
