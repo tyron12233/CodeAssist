@@ -57,6 +57,9 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
 
     @Override
     public void addJavaFile(@NonNull File javaFile) {
+        if (!javaFile.getName().endsWith(".java")) {
+            return;
+        }
         String packageName = StringSearch.packageName(javaFile);
         String className;
         if (packageName == null) {
@@ -82,6 +85,9 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
 
     @Override
     public void addLibrary(@NonNull File jar) {
+        if (!jar.getName().endsWith(".jar")) {
+
+        }
         mLibraries.add(jar);
         try {
             putJar(jar);

@@ -270,7 +270,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                                     Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
                                 innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
                             }
-                        } catch (RuntimeException e) {
+                        } catch (Throwable e) {
                             Log.e("JavaAnalyzer", "Failed compiling the file", e);
                             service.close();
                         }
