@@ -95,15 +95,18 @@ public class ProjectManagerFragment extends Fragment {
 
         MaterialToolbar toolbar = view.findViewById(R.id.toolbar);
         toolbar.setTitle(R.string.app_name);
-        toolbar.inflateMenu(R.menu.project_list_fragment_menu);
-        toolbar.setOnMenuItemClickListener(item -> {
-            // Handle menu item click event
-            if (item.getItemId() == R.id.projects_path) {
-                setSavePath(null);
-                checkSavePath();
-            }
-            return true;
-        });
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            toolbar.inflateMenu(R.menu.project_list_fragment_menu);
+            toolbar.setOnMenuItemClickListener(item -> {
+                // Handle menu item click event
+                if (item.getItemId() == R.id.projects_path) {
+                    setSavePath(null);
+                    checkSavePath();
+                }
+                return true;
+            });
+        }
 
         mCreateProjectFab = view.findViewById(R.id.create_project_fab);
         mCreateProjectFab.setOnClickListener(v -> {
