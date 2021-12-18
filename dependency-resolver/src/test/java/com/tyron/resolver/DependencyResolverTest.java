@@ -28,6 +28,7 @@ public class DependencyResolverTest {
         Pom materialPom = repository.getPom("com.google.android.material:material:1.4.0");
         Pom appcompatPom = repository.getPom("androidx.appcompat:appcompat:1.3.0");
         assert materialPom != null;
+        assert appcompatPom != null;
 
         List<Pom> dependencies = ImmutableList.of(materialPom, appcompatPom);
         List<Pom> resolvedPoms =  resolver.resolve(dependencies);

@@ -1,5 +1,7 @@
 package com.tyron.resolver.model;
 
+import androidx.annotation.NonNull;
+
 public class Dependency {
 
     public Dependency() {
@@ -23,7 +25,23 @@ public class Dependency {
     }
 
     public String getVersionName() {
-        return versionName;
+        if (versionName == null) {
+            return "";
+        }
+        String temp = versionName.replace("[",  "")
+                .replace("]", "")
+                .replace("(", "")
+                .replace(")", "");
+        if (temp.contains(",")) {
+            String[] versions = temp.split(",");
+            for (String version : versions) {
+                // return the first version for now.
+                if (!version.isEmpty()) {
+                    return version;
+                }
+            }
+        }
+        return temp;
     }
 
     public void setVersionName(String versionName) {
@@ -36,15 +54,15 @@ public class Dependency {
     private String scope;
     private String type;
 
+    @NonNull
     @Override
     public String toString() {
-        return groupId + ":" + artifactId + ":" + versionName;
+        return getGroupId() + ":" + getArtifactId() + ":" + getVersionName();
     }
 
     public String getType() {
         return type;
     }
-
     public void setType(String type) {
         this.type = type;
     }

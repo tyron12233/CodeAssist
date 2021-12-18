@@ -53,10 +53,6 @@ public class DependencyResolver {
                 continue;
             }
 
-            if (dependency.getArtifactId().equals("fragment")) {
-                System.out.println(dependency);
-            }
-
             Pom resolvedPom = repository.getPom(dependency.toString());
             if (resolvedPom == null) {
                 continue;
@@ -69,7 +65,6 @@ public class DependencyResolver {
     private int getHigherVersion(String firstVersion, String secondVersion) {
         ComparableVersion firstComparableVersion = new ComparableVersion(firstVersion);
         ComparableVersion secondComparableVersion = new ComparableVersion(secondVersion);
-        int result = firstComparableVersion.compareTo(secondComparableVersion);
-        return result;
+        return firstComparableVersion.compareTo(secondComparableVersion);
     }
 }
