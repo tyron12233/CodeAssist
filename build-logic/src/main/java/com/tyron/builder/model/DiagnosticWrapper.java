@@ -1,5 +1,7 @@
 package com.tyron.builder.model;
 
+import android.view.View;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -11,7 +13,7 @@ import java.util.Locale;
 import java.util.Objects;
 
 public class DiagnosticWrapper implements Diagnostic<File> {
-    
+
     private String code;
     private File source;
     private Kind kind;
@@ -22,7 +24,7 @@ public class DiagnosticWrapper implements Diagnostic<File> {
 
     private long lineNumber;
     private long columnNumber;
-    
+    private View.OnClickListener onClickListener;
     private String message;
 
     /** Extra information for this diagnostic */
@@ -52,7 +54,15 @@ public class DiagnosticWrapper implements Diagnostic<File> {
             // ignored
         }
     }
-    
+
+    public void setOnClickListener(View.OnClickListener listener) {
+        onClickListener = listener;
+    }
+
+    public View.OnClickListener getOnClickListener() {
+        return onClickListener;
+    }
+
     @Override
     public Kind getKind() {
         return kind;

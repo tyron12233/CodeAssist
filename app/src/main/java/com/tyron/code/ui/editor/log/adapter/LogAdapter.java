@@ -148,6 +148,16 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.ViewHolder>{
         if (diagnostic.getSource() == null || !diagnostic.getSource().exists()) {
             return;
         }
+        if (diagnostic.getOnClickListener() != null) {
+            ClickableSpan span = new ClickableSpan() {
+                @Override
+                public void onClick(@NonNull View widget) {
+                    diagnostic.getOnClickListener().onClick(widget);
+                }
+            };
+            sb.append("[" + diagnostic.getExtra() + "]", span, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            return;
+        }
         ClickableSpan span = new ClickableSpan() {
             @Override
             public void onClick(@NonNull View view) {

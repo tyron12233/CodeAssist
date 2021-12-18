@@ -5,12 +5,15 @@ import android.content.ServiceConnection;
 import android.os.IBinder;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.ApkInstaller;
+
+import org.openjdk.javax.tools.Diagnostic;
 
 import java.io.File;
 import java.util.Objects;
@@ -61,6 +64,20 @@ public class CompilerServiceConnection implements ServiceConnection {
                 if (file.exists() && mBuildType != BuildType.AAB) {
                     ApkInstaller.installApplication(mService,
                             file.getAbsolutePath());
+
+                    DiagnosticWrapper wrapper = new DiagnosticWrapper(null);
+                    wrapper.setKind(Diagnostic.Kind.NOTE);
+                    wrapper.setMessage("Generated APK has been saved to " + file.getAbsolutePath());
+                    wrapper.setExtra("INSTALL");
+                    wrapper.setSource(file);
+                    wrapper.setCode("");
+                    wrapper.setOnClickListener((view) -> {
+                        if (view == null || view.getContext() == null) {
+                            return;
+                        }
+                        ApkInstaller.installApplication(view.getContext(), file.getAbsolutePath());
+                    });
+                    mLogViewModel.d(LogViewModel.BUILD_LOG, wrapper);
                 }
             } else {
                 mLogViewModel.e(LogViewModel.BUILD_LOG, message);

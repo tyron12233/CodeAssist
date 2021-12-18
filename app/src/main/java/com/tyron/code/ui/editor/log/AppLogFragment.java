@@ -134,6 +134,9 @@ public class AppLogFragment extends Fragment
         if (id == LogViewModel.DEBUG) {
             if (module instanceof JavaModule) {
                 mDiagnosticListener = d -> {
+                    if (getActivity() == null) {
+                        return;
+                    }
                     List<Diagnostic<? extends JavaFileObject>> diagnostics =
                             CompletionEngine.getInstance()
                                     .getCompiler(project, (JavaModule) module)
