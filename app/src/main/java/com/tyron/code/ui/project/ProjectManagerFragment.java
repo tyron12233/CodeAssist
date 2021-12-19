@@ -10,8 +10,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
-import android.widget.LinearLayout;
-
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
@@ -53,7 +51,6 @@ public class ProjectManagerFragment extends Fragment {
     private SharedPreferences mPreferences;
     private RecyclerView mRecyclerView;
     private ProjectManagerAdapter mAdapter;
-    private LinearLayout empty_list;
     private ExtendedFloatingActionButton mCreateProjectFab;
     private boolean mShowDialogOnPermissionGrant;
     private ActivityResultLauncher<String[]> mPermissionLauncher;
@@ -125,8 +122,7 @@ public class ProjectManagerFragment extends Fragment {
         mRecyclerView = view.findViewById(R.id.projects_recycler);
         mRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         mRecyclerView.setAdapter(mAdapter);
-        empty_list = view.findViewById(R.id.empty_list);
-
+        
         checkSavePath();
     }
 
@@ -254,13 +250,21 @@ public class ProjectManagerFragment extends Fragment {
                 });
             }
 
-            if (projects.size() == 0){
-		mRecyclerView.setVisibility(View.GONE);
-		empty_list.setVisibility(View.VISIBLE);
-	    } else {
-		mRecyclerView.setVisibility(View.VISIBLE);
-		empty_list.setVisibility(View.GONE);
-	    }
+            if (getActivity() != null || isDetached()) {
+                View recycler = requireView().findViewById(R.id.projects_recycler);
+                View empty_list_layout = requireView().findViewById(R.id.empty_list);
+
+                TransitionManager.beginDelayedTransition(
+                    (ViewGroup) recycler.getParent(), new MaterialFade());
+
+                if (projects.size() == 0) {
+                    recycler.setVisibility(View.GONE);
+                    empty_list_layout.setVisibility(View.VISIBLE);
+                } else {
+                    recycler.setVisibility(View.VISIBLE);
+                    empty_list_layout.setVisibility(View.GONE);
+                 }
+            }
         });
     }
 
