@@ -247,8 +247,8 @@ public class ProjectManagerFragment extends Fragment {
                 requireActivity().runOnUiThread(() -> {
                     toggleLoading(false);
                     mAdapter.submitList(projects);
+                    toggleNotFound(projects);
                 });
-                toggleNotFound(projects);
             }
         });
     }
