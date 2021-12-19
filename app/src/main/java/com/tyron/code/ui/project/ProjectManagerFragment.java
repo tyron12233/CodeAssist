@@ -248,24 +248,29 @@ public class ProjectManagerFragment extends Fragment {
                     toggleLoading(false);
                     mAdapter.submitList(projects);
                 });
-            }
-
-            if (getActivity() != null || isDetached()) {
-                View recycler = requireView().findViewById(R.id.projects_recycler);
-                View empty_list_layout = requireView().findViewById(R.id.empty_list);
-
-                TransitionManager.beginDelayedTransition(
-                    (ViewGroup) recycler.getParent(), new MaterialFade());
-
-                if (projects.size() == 0) {
-                    recycler.setVisibility(View.GONE);
-                    empty_list_layout.setVisibility(View.VISIBLE);
-                } else {
-                    recycler.setVisibility(View.VISIBLE);
-                    empty_list_layout.setVisibility(View.GONE);
-                 }
+                toggleNotFound(projects);
             }
         });
+    }
+    
+    private void toggleNotFound(List<Project> projects) {
+	if (getActivity() == null || isDetached()) {
+            return;
+        }
+		
+        View recycler = requireView().findViewById(R.id.projects_recycler);
+        View empty_list_layout = requireView().findViewById(R.id.empty_list);
+
+        TransitionManager.beginDelayedTransition(
+                (ViewGroup) recycler.getParent(), new MaterialFade());
+
+        if (projects.size() == 0) {
+            recycler.setVisibility(View.GONE);
+            empty_list_layout.setVisibility(View.VISIBLE);
+        } else {
+            recycler.setVisibility(View.VISIBLE);
+            empty_list_layout.setVisibility(View.GONE);
+        }
     }
 
     private void toggleLoading(boolean show) {
