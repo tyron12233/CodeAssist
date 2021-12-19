@@ -29,7 +29,7 @@ English-language chat in Telegram: https://t.me/code_assist
 Russian-language (русскоязычный) chat in Telegram: https://t.me/codeassist_chat
 
 ## Issues
-Issues are disabled until the next release as most issues has been fixed and there have been many changes so the issues on the previous apk may not be valid with the current apk.
+If you have any problems, then immediately write about them. This is very important for the next versions of CodeAssist
 
 ## Building - Android Studio
 Clone this repository to your local device and then open it on Android Studio.
