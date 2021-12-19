@@ -119,6 +119,10 @@
     <string name="project_manager_alpha_notice">CodeAssist is still in alpha,
         you may encounter crashes, bugs and incomplete features.\nYou
         can report these issues at https://github.com/tyron12233/CodeAssist/issues</string>
+    <string name="project_manager_no_project_found">No Project Found</string>
+    <string name="project_manager_suggestions">Suggestions :\n\n- Create new project.\n- Change projects path.</string>
+    <string name="project_manager_save_location_title">Select save location</string>
+    <string name="project_manager_permission_denied">Permission denied</string>
     <string name="project_manager_save_location_title">Select save location</string>
     <string name="project_manager_permission_denied">Permission denied</string>
     <string name="project_manager_button_request_again">Request again</string>
