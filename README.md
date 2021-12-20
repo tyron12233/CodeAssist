@@ -24,7 +24,7 @@ CodeAssist does not use gradle. Editing the build.gradle file will not do anythi
 ## CodeAssist Community
 Discord server: https://discord.gg/3YMZkgFS
 
-English-language chat in Telegram: https://t.me/code_assist
+English-language chat in Telegram: https://t.me/codeassist_app
 
 Russian-language (русскоязычный) chat in Telegram: https://t.me/codeassist_chat
 
