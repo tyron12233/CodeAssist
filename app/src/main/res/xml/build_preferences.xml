@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        android:title="@string/run_title">
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:iconSpaceReserved="false"
+            android:key="install_apk_directly"
+            app:iconSpaceReserved="false"
+            android:title="@string/settings_install_apk_title"
+            android:summary="@string/settings_install_desc"/>
+     
+    </PreferenceCategory>
+</PreferenceScreen>
