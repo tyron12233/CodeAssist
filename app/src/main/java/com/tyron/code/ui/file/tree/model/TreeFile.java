@@ -3,6 +3,7 @@ package com.tyron.code.ui.file.tree.model;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import com.tyron.code.R;
@@ -11,7 +12,11 @@ import java.io.File;
 
 public class TreeFile {
 
+    @Nullable
     public static TreeFile fromFile(File file) {
+        if (file == null) {
+            return null;
+        }
         if (file.isDirectory()) {
             return new TreeFolder(file);
         }

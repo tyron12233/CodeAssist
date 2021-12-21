@@ -29,23 +29,31 @@ public class DeleteFileAction extends FileAction {
                             .setMessage(String.format(context.getFragment().getString(R.string.dialog_confirm_delete),
                                     context.getCurrentNode().getValue().getFile().getName()))
                             .setPositiveButton(context.getFragment().getString(R.string.dialog_delete), (d, which) -> {
-                                deleteFiles(context);
-                                context.getTreeView().deleteNode(context.getCurrentNode());
-                                context.getTreeView().refreshTreeView();
+                                if (deleteFiles(context)) {
+                                    context.getTreeView().deleteNode(context.getCurrentNode());
+                                    context.getTreeView().refreshTreeView();
+                                } else {
+                                    new AlertDialog.Builder(context.getFragment().requireContext())
+                                            .setTitle(R.string.error)
+                                            .setMessage("Failed to delete file.")
+                                            .setPositiveButton(android.R.string.ok, null)
+                                            .show();
+                                }
                             })
                             .show();
                     return true;
                 });
     }
 
-    private void deleteFiles(ActionContext context) {
-        FilesKt.walk(context.getCurrentNode().getContent().getFile(), FileWalkDirection.TOP_DOWN).iterator().forEachRemaining(file -> {
+    private boolean deleteFiles(ActionContext context) {
+        File currentFile = context.getCurrentNode().getContent().getFile();
+        FilesKt.walk(currentFile, FileWalkDirection.TOP_DOWN).iterator().forEachRemaining(file -> {
             if (file.getName().endsWith(".java")) { // todo: add .kt and .xml checks
                 context.getFragment().getMainViewModel().removeFile(file);
 
                 Module module = ProjectManager.getInstance()
                         .getCurrentProject()
-                        .getModule(context.getCurrentNode().getContent().getFile());
+                        .getModule(file);
                 if (module instanceof JavaModule) {
                     String packageName = StringSearch.packageName(file);
                     if (packageName != null) {
@@ -57,6 +65,6 @@ public class DeleteFileAction extends FileAction {
             }
         });
 
-        FilesKt.deleteRecursively(context.getCurrentNode().getContent().getFile());
+        return FilesKt.deleteRecursively(currentFile);
     }
 }
