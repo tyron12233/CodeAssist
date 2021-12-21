@@ -247,9 +247,29 @@ public class ProjectManagerFragment extends Fragment {
                 requireActivity().runOnUiThread(() -> {
                     toggleLoading(false);
                     mAdapter.submitList(projects);
+                    toggleNullProject(projects);
                 });
             }
         });
+    }
+    
+    private void toggleNullProject(List<Project> projects) {
+		if (getActivity() == null || isDetached()) {
+            return;
+        }
+
+        View recycler = requireView().findViewById(R.id.projects_recycler);
+        View empty = requireView().findViewById(R.id.empty_projects);
+
+        TransitionManager.beginDelayedTransition(
+                (ViewGroup) recycler.getParent(), new MaterialFade());
+        if (projects.size() == 0) {
+            recycler.setVisibility(View.GONE);
+            empty.setVisibility(View.VISIBLE);
+        } else {
+            recycler.setVisibility(View.VISIBLE);
+            empty.setVisibility(View.GONE);
+        }
     }
 
     private void toggleLoading(boolean show) {
