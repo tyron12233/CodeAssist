@@ -26,10 +26,12 @@ public class CompilerServiceConnection implements ServiceConnection {
     private CompilerService mService;
     private BuildType mBuildType;
     private boolean mCompiling;
+    private SharedPreferences mPreferences;
 
     public CompilerServiceConnection(MainViewModel mainViewModel, LogViewModel logViewModel) {
         mMainViewModel = mainViewModel;
         mLogViewModel = logViewModel;
+        mPreferences = PreferenceManager.getDefaultSharedPreferences(mService);
     }
 
     public void setBuildType(BuildType type) {
@@ -62,9 +64,9 @@ public class CompilerServiceConnection implements ServiceConnection {
                 File file = new File(ProjectManager.getInstance().getCurrentProject()
                         .getMainModule().getBuildDirectory(), "bin/signed.apk");
                 if (file.exists() && mBuildType != BuildType.AAB) {
-                    ApkInstaller.installApplication(mService,
-                            file.getAbsolutePath());
-
+                     if (mPreferences.getBoolean(SharedPreferenceKeys.INSTALL_APK_DIRECTLY, true)) {
+                         ApkInstaller.installApplication(mService,file.getAbsolutePath());
+                    }
                     DiagnosticWrapper wrapper = new DiagnosticWrapper(null);
                     wrapper.setKind(Diagnostic.Kind.NOTE);
                     wrapper.setMessage("Generated APK has been saved to " + file.getAbsolutePath());
