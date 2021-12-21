@@ -1,6 +1,7 @@
 package com.tyron.code.ui.file.action.android;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.code.ui.file.tree.TreeUtil;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
@@ -27,14 +28,14 @@ public class CreateAndroidClassAction extends CreateClassAction {
                     fragment.show(context.getFragment().getChildFragmentManager(), null);
                     fragment.setOnClassCreatedListener((className, template) -> {
                         try {
-                            File createdFile = ProjectManager.createClass(context.getCurrentNode().getContent().getFile(),
-                                    className, template);
-                            TreeNode<TreeFile> newNode = new TreeNode<>(
-                                    TreeFile.fromFile(createdFile),
-                                    context.getCurrentNode().getLevel() + 1
-                            );
+                            File currentFile = context.getCurrentNode().getContent().getFile();
+                            if (currentFile == null) {
+                                throw new IOException("Unable to create class");
+                            }
 
-                            context.getTreeView().addNode(context.getCurrentNode(), newNode);
+                            File createdFile = ProjectManager.createClass(currentFile,
+                                    className, template);
+                            TreeUtil.updateNode(context.getCurrentNode().getParent());
                             context.getTreeView().refreshTreeView();
 
                             context.getFragment().getMainViewModel()

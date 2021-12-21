@@ -32,6 +32,10 @@ public class FileViewModel extends ViewModel {
         refreshNode(root);
     }
 
+    public void setRootNode(TreeNode<TreeFile> rootNode) {
+        mNode.setValue(rootNode);
+    }
+
     public void refreshNode(File root) {
         Executors.newSingleThreadExecutor().execute(() -> {
             TreeNode<TreeFile> node = TreeNode.root(TreeUtil.getNodes(root));

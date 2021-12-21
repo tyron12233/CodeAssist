@@ -136,5 +136,9 @@ public class TreeFileManagerFragment extends Fragment {
     public MainViewModel getMainViewModel() {
         return mMainViewModel;
     }
+
+    public FileViewModel getFileViewModel() {
+        return mFileViewModel;
+    }
 }
 

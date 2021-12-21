@@ -42,6 +42,9 @@ public class FileManagerImpl implements FileManager {
 
     @Override
     public void closeFileForSnapshot(File file) {
+        if (!file.exists()) {
+            return;
+        }
         if (mSnapshots.containsKey(file)) {
             try {
                 FileUtils.writeStringToFile(file, mSnapshots.get(file), StandardCharsets.UTF_8);

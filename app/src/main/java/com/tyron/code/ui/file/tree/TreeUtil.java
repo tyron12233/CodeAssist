@@ -23,6 +23,16 @@ public class TreeUtil {
         }
     };
 
+    public static TreeNode<TreeFile> getRootNode(TreeNode<TreeFile> node) {
+        TreeNode<TreeFile> parent = node.getParent();
+        TreeNode<TreeFile> root = node;
+        while (parent != null) {
+            root = parent;
+            parent = parent.getParent();
+        }
+        return root;
+    }
+
     public static void updateNode(TreeNode<TreeFile> node) {
         Set<File> expandedNodes = TreeUtil.getExpandedNodes(node);
         List<TreeNode<TreeFile>> newChildren = getNodes(node.getValue().getFile(), node.getLevel())

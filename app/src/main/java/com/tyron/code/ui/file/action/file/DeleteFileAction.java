@@ -1,7 +1,13 @@
 package com.tyron.code.ui.file.action.file;
 
+import static com.tyron.code.ui.file.tree.TreeUtil.updateNode;
+
 import androidx.appcompat.app.AlertDialog;
 
+import com.tyron.code.ui.component.tree.TreeNode;
+import com.tyron.code.ui.component.tree.helper.TreeHelper;
+import com.tyron.code.ui.file.tree.TreeUtil;
+import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
@@ -10,7 +16,10 @@ import com.tyron.code.ui.file.action.ActionContext;
 import com.tyron.code.ui.file.action.FileAction;
 import com.tyron.common.util.StringSearch;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.File;
+import java.io.IOException;
 
 import kotlin.io.FileWalkDirection;
 import kotlin.io.FilesKt;
@@ -31,7 +40,6 @@ public class DeleteFileAction extends FileAction {
                             .setPositiveButton(context.getFragment().getString(R.string.dialog_delete), (d, which) -> {
                                 if (deleteFiles(context)) {
                                     context.getTreeView().deleteNode(context.getCurrentNode());
-                                    context.getTreeView().refreshTreeView();
                                 } else {
                                     new AlertDialog.Builder(context.getFragment().requireContext())
                                             .setTitle(R.string.error)
@@ -64,7 +72,11 @@ public class DeleteFileAction extends FileAction {
                 }
             }
         });
-
-        return FilesKt.deleteRecursively(currentFile);
+        try {
+            FileUtils.forceDelete(currentFile);
+        } catch (IOException e) {
+            return false;
+        }
+        return true;
     }
 }
