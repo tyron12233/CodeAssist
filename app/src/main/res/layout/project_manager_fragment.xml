@@ -117,6 +117,12 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent" />
 
+                <include
+                    android:id="@+id/empty_projects"
+                    layout="@layout/empty_projects_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
             </FrameLayout>
         </androidx.constraintlayout.widget.ConstraintLayout>
     </androidx.core.widget.NestedScrollView>
