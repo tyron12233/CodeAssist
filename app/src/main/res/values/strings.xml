@@ -72,6 +72,7 @@
     <!-- preferences -->
     <string name="settings_title_editor">Editor</string>
     <string name="title_activity_settings">SettingsActivity</string>
+    
 
     <!-- Editor settings -->
     <string name="code_engine_title">Completion Engine</string>
@@ -89,6 +90,11 @@
     <string name="font_size_summary">Specify the default font size of the editor</string>
     <string name="keyboard_settings_title">Keyboard</string>
     <string name="keyboard_enable_suggestions_description">Enable keyboard suggestions</string>
+    <string name="settings_title_build_run">Build &amp; Run</string>
+    <string name="run_title">Run</string>
+    <string name="settings_install_apk_title">Install built apk directly</string>
+    <string name="settings_install_desc">Install built apk without noticing the user</string>
+
 
     <!-- file manager menu -->
     <string name="error">Error</string>
