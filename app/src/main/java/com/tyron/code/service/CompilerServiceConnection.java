@@ -34,7 +34,6 @@ public class CompilerServiceConnection implements ServiceConnection {
     public CompilerServiceConnection(MainViewModel mainViewModel, LogViewModel logViewModel) {
         mMainViewModel = mainViewModel;
         mLogViewModel = logViewModel;
-        mPreferences = PreferenceManager.getDefaultSharedPreferences(mService);
     }
 
     public void setBuildType(BuildType type) {
@@ -67,6 +66,7 @@ public class CompilerServiceConnection implements ServiceConnection {
                 File file = new File(ProjectManager.getInstance().getCurrentProject()
                         .getMainModule().getBuildDirectory(), "bin/signed.apk");
                 if (file.exists() && mBuildType != BuildType.AAB) {
+                     mPreferences = PreferenceManager.getDefaultSharedPreferences(mService);
                      if (mPreferences.getBoolean(SharedPreferenceKeys.INSTALL_APK_DIRECTLY, true)) {
                          ApkInstaller.installApplication(mService,file.getAbsolutePath());
                     }
