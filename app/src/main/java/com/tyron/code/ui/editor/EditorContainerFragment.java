@@ -133,10 +133,12 @@ public class EditorContainerFragment extends Fragment {
 
             @Override
             public void onSlide(@NonNull View bottomSheet, float slideOffset) {
-                Bundle bundle = new Bundle();
-                bundle.putFloat("offset", slideOffset);
-                getChildFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY,
-                        bundle);
+                if (isAdded()) {
+                    Bundle bundle = new Bundle();
+                    bundle.putFloat("offset", slideOffset);
+                    getChildFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY,
+                            bundle);
+                }
             }
         });
         mBehavior.setHalfExpandedRatio(0.3f);
