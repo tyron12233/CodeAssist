@@ -135,6 +135,8 @@
     <string name="project_manager_empty">Projects are empty</string>`
     <string name="project_manager_create_project">Create module</string>
     <string name="project_path_menu_title">Projects Path</string>
+    <string name="project_manager_null_projects">No Project Found</string>
+    <string name="project_manager_suggestions">Suggestions:\n\n  - Create New Project\n  - Change Projects Path</string>
     
 
     <!-- Compiler Service -->
