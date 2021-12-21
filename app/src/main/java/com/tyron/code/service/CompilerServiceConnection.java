@@ -3,7 +3,10 @@ package com.tyron.code.service;
 import android.content.ComponentName;
 import android.content.ServiceConnection;
 import android.os.IBinder;
+import android.content.SharedPreferences;
 
+import androidx.preference.PreferenceManager;
+import com.tyron.common.SharedPreferenceKeys;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.ui.project.ProjectManager;
