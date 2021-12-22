@@ -2,11 +2,13 @@ package com.tyron.code;
 
 import android.app.Application;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Toast;
 
 import androidx.annotation.VisibleForTesting;
+import androidx.preference.PreferenceManager;
 
 import com.developer.crashx.config.CrashConfig;
 import com.tyron.builder.BuildModule;
@@ -32,7 +34,11 @@ public class ApplicationLoader extends Application {
                 .trackActivities(true)
                 .apply();
     }
-    
+
+    public static SharedPreferences getDefaultPreferences() {
+        return PreferenceManager.getDefaultSharedPreferences(applicationContext);
+    }
+
     public static void showToast(String message) {
         Toast.makeText(applicationContext, message, Toast.LENGTH_LONG)
                 .show();
