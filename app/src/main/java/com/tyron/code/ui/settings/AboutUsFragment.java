@@ -32,9 +32,10 @@ public class AboutUsFragment extends Fragment {
                 .setImage(R.mipmap.ic_launcher)
                 .addItem(versionElement)
                 .addGroup(getString(R.string.contact_group_title))
-                .addItem(createGithubElement("ThatSketchub", getString(R.string.sketchub_team)))
                 .addItem(createGithubElement("tyron12233/CodeAssist", getString(R.string.app_source_title)))
                 .addEmail("contact.tyronscott@gmail.com")
+                .addGroup(getString(R.string.sketchub_team))
+                .addItem(createGithubElement("ThatSketchub", "Github"))
                 .create();
     }
 
