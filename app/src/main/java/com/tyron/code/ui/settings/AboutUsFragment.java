@@ -27,13 +27,13 @@ public class AboutUsFragment extends Fragment {
         Element versionElement = new Element();
         versionElement.setTitle(getString(R.string.app_version, BuildConfig.VERSION_NAME));
 
-        return new AboutPage(requireContext())
+        return new AboutPage(requireContext(), /* forceDarkMode */ true)
                 .setDescription(getString(R.string.app_description))
                 .setImage(R.mipmap.ic_launcher)
                 .addItem(versionElement)
                 .addGroup(getString(R.string.contact_group_title))
                 .addItem(createGithubElement("tyron12233/CodeAssist", getString(R.string.app_source_title)))
-                .addEmail("contact.tyronscott@gmail.com")
+                .addItem(createEmail("contact.tyronscott@gmail.com", getString(R.string.about_contact_us)))
                 .addGroup(getString(R.string.sketchub_team))
                 .addItem(createGithubElement("ThatSketchub", "Github"))
                 .create();
@@ -53,5 +53,19 @@ public class AboutUsFragment extends Fragment {
 
         gitHubElement.setIntent(intent);
         return gitHubElement;
+    }
+
+    public Element createEmail(String email, String title) {
+        Element emailElement = new Element();
+        emailElement.setTitle(title);
+        emailElement.setIconDrawable(R.drawable.about_icon_email);
+        emailElement.setIconTint(R.color.colorControlNormal);
+
+        Intent intent = new Intent(Intent.ACTION_SENDTO);
+        intent.setData(Uri.parse("mailto:"));
+        intent.putExtra(Intent.EXTRA_EMAIL, new String[]{email});
+        emailElement.setIntent(intent);
+
+        return emailElement;
     }
 }

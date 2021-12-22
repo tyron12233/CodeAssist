@@ -87,6 +87,7 @@
         <entry key="app/src/main/res/layout/main_fragment.xml" value="0.1" />
         <entry key="app/src/main/res/layout/text_compose_panel.xml" value="0.25" />
         <entry key="app/src/main/res/layout/text_compose_popup_window.xml" value="0.33" />
+        <entry key="app/src/main/res/menu/project_list_fragment_menu.xml" value="0.15555555555555556" />
         <entry key="app/src/main/res/xml/build_preferences.xml" value="0.25" />
         <entry key="app/src/main/res/xml/root_preferences.xml" value="0.22" />
       </map>
