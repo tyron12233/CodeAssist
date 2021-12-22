@@ -93,8 +93,8 @@
     <string name="settings_build_run_title">Build &amp; Run</string>
     <string name="settings_build_run_desc">Configure build and execution settings</string>
     <string name="run_title">Run</string>
-    <string name="settings_install_apk_title">Install built apk directly</string>
-    <string name="settings_install_desc">Install built apk without noticing the user</string>
+    <string name="settings_install_apk_title">APK Installation Prompt</string>
+    <string name="settings_install_desc">Show APK installation prompt after successful compilation.</string>
 
 
     <!-- file manager menu -->

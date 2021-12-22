@@ -22,7 +22,5 @@ public class BuildSettingsFragment extends PreferenceFragmentCompat {
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         setPreferencesFromResource(R.xml.build_preferences, rootKey);
-
-        
     }
 }
