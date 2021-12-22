@@ -17,19 +17,33 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
 import com.tyron.code.R;
 
+import java.lang.ref.WeakReference;
+
 public class IndexService extends Service {
 
     private static final int NOTIFICATION_ID = 23;
 
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
-    private final IndexBinder mBinder = new IndexBinder();
+    private final IndexBinder mBinder = new IndexBinder(this);
 
     public IndexService() {
     }
 
-    public class IndexBinder extends Binder {
+    public static class IndexBinder extends Binder {
+
+        public final WeakReference<IndexService> mIndexServiceReference;
+
+        public IndexBinder(IndexService service) {
+            mIndexServiceReference = new WeakReference<>(service);
+        }
+
         public void index(Project project, ProjectManager.TaskListener listener, ILogger logger) {
-            IndexService.this.index(project, listener, logger);
+            IndexService service = mIndexServiceReference.get();
+            if (service == null) {
+                listener.onComplete(project, false, "Index service is null!");
+            } else {
+                service.index(project, listener, logger);
+            }
         }
     }
 
@@ -49,6 +63,11 @@ public class IndexService extends Service {
         updateNotification(notification);
         startForeground(NOTIFICATION_ID, notification);
         return START_STICKY;
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
     }
 
     private void index(Project project, ProjectManager.TaskListener listener, ILogger logger) {
