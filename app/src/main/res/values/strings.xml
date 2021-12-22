@@ -96,7 +96,14 @@
     <string name="settings_install_apk_title">APK Installation Prompt</string>
     <string name="settings_install_desc">Show APK installation prompt after successful compilation.</string>
 
-
+    <!-- about page -->
+    <string name="settings_about_us_title">About Us</string>
+    <string name="settings_about_us_desc">More info about the developers.</string>
+    <string name="app_description">Powerful and lightweight IDE for Android app development right within your pocket.</string>
+    <string name="app_version">Version %1$s</string>
+    <string name="contact_group_title">Contact</string>
+    <string name="app_source_title">Source code</string>
+    <string name="sketchub_team">Sketchub Team</string>
     <!-- file manager menu -->
     <string name="error">Error</string>
     <string name="error_resource_name_restriction">Resource names must only contain lowercase a–z, 0–9 or an underscore.</string>

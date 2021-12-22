@@ -45,6 +45,8 @@ dependencies {
     implementation project(path: ':jaxp:jaxp-internal')
     implementation project(path: ':jaxp:xml')
 
+    implementation 'io.github.medyo:android-about-page:2.0.0'
+    
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     implementation project(path: ':dependency-resolver')
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:1.1.5")
