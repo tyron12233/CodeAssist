@@ -23,7 +23,10 @@ import java.util.Set;
 
 /**
  * Class for storing project data, directories and files
+ *
+ * @deprecated legacy code, use {@link com.tyron.builder.project.Project} instead.
  */
+@Deprecated
 public class Project {
     
     public final File mRoot;
