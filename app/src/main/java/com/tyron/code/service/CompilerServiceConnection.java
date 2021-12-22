@@ -6,6 +6,8 @@ import android.os.IBinder;
 import android.content.SharedPreferences;
 
 import androidx.preference.PreferenceManager;
+
+import com.tyron.code.ApplicationLoader;
 import com.tyron.common.SharedPreferenceKeys;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -29,7 +31,6 @@ public class CompilerServiceConnection implements ServiceConnection {
     private CompilerService mService;
     private BuildType mBuildType;
     private boolean mCompiling;
-    private SharedPreferences mPreferences;
 
     public CompilerServiceConnection(MainViewModel mainViewModel, LogViewModel logViewModel) {
         mMainViewModel = mainViewModel;
@@ -70,8 +71,8 @@ public class CompilerServiceConnection implements ServiceConnection {
                 File file = new File(ProjectManager.getInstance().getCurrentProject()
                         .getMainModule().getBuildDirectory(), "bin/signed.apk");
                 if (file.exists() && mBuildType != BuildType.AAB) {
-                     mPreferences = PreferenceManager.getDefaultSharedPreferences(mService);
-                     if (mPreferences.getBoolean(SharedPreferenceKeys.INSTALL_APK_DIRECTLY, true)) {
+                     SharedPreferences preference = ApplicationLoader.getDefaultPreferences();
+                     if (preference.getBoolean(SharedPreferenceKeys.INSTALL_APK_DIRECTLY, true)) {
                          ApkInstaller.installApplication(mService,file.getAbsolutePath());
                     }
                     DiagnosticWrapper wrapper = new DiagnosticWrapper(null);
