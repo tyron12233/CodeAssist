@@ -18,6 +18,7 @@ import com.tyron.completion.provider.CompletionEngine;
 
 import org.openjdk.javax.tools.Diagnostic;
 
+import java.lang.ref.WeakReference;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -52,18 +53,21 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             Tokens.SEMICOLON, Tokens.EQ, Tokens.NOTEQ, Tokens.NOT, Tokens.RBRACE, Tokens.COMMA, Tokens.PLUS,
             Tokens.PLUSEQ, Tokens.MINUS, Tokens.MINUSEQ, Tokens.MULT, Tokens.MULTEQ, Tokens.DIV, Tokens.DIVEQ};
 
-    private final CodeEditor mEditor;
+    private final WeakReference<CodeEditor> mEditorReference;
     private DefaultLintClient mClient;
 
     private final SharedPreferences mPreferences;
 
     public JavaAnalyzer(CodeEditor editor) {
-        mEditor = editor;
+        mEditorReference = new WeakReference<>(editor);
         mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
     }
 
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
-
+        CodeEditor editor = mEditorReference.get();
+        if (editor == null) {
+            return;
+        }
         Instant startTime = Instant.now();
 
         StringBuilder text = content instanceof StringBuilder ? (StringBuilder) content : new StringBuilder(content);
@@ -260,14 +264,14 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
             Project project = ProjectManager.getInstance().getCurrentProject();
             if (project != null) {
-                Module module = project.getModule(mEditor.getCurrentFile());
+                Module module = project.getModule(editor.getCurrentFile());
                 if (module != null) {
                     JavaCompilerService service = CompletionEngine.getInstance().
                             getCompiler(project, (JavaModule) module);
                     if (service.isReady()) {
                         try {
                             try (CompileTask task = service.compile(
-                                    Collections.singletonList(new SourceFileObject(mEditor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
+                                    Collections.singletonList(new SourceFileObject(editor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
                                 innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
                             }
                         } catch (Throwable e) {
@@ -278,14 +282,14 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
             }
         }
-        markDiagnostics(innerDiagnostics, colors);
+        markDiagnostics(editor, innerDiagnostics, colors);
 
         Log.d(TAG, "Analysis took " + Duration.between(startTime, Instant.now()).toMillis() + " ms");
     }
 
-    private void markDiagnostics(List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
-        mEditor.getText().beginStreamCharGetting(0);
-        Indexer indexer = mEditor.getText().getIndexer();
+    private void markDiagnostics(CodeEditor editor, List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
+        editor.getText().beginStreamCharGetting(0);
+        Indexer indexer = editor.getText().getIndexer();
 
         diagnostics.forEach(it -> {
             try {
@@ -312,6 +316,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 Log.w(TAG, "Unable to mark problem region: diagnostics " + diagnostics, e);
             }
         });
-        mEditor.getText().endStreamCharGetting();
+        editor.getText().endStreamCharGetting();
     }
 }

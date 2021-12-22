@@ -21,6 +21,7 @@ import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenSource;
 import org.openjdk.javax.tools.Diagnostic;
 
+import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.Stack;
 
@@ -36,14 +37,18 @@ import io.github.rosemoe.sora.widget.EditorColorScheme;
 
 public class KotlinAnalyzer implements CodeAnalyzer {
 
-    private final CodeEditor mEditor;
+    private final WeakReference<CodeEditor> mEditorReference;
 
     public KotlinAnalyzer(CodeEditor editor) {
-        mEditor = editor;
+        mEditorReference = new WeakReference<>(editor);
     }
 
     @Override
     public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
+        CodeEditor editor = mEditorReference.get();
+        if (editor == null) {
+            return;
+        }
         try {
             CodePointCharStream stream = CharStreams.fromString(String.valueOf(content));
             KotlinLexer lexer = new KotlinLexer(stream);
@@ -199,13 +204,13 @@ public class KotlinAnalyzer implements CodeAnalyzer {
 
             Project currentProject = ProjectManager.getInstance().getCurrentProject();
             if (currentProject != null) {
-                Module module = currentProject.getModule(mEditor.getCurrentFile());
+                Module module = currentProject.getModule(editor.getCurrentFile());
                 if (module instanceof AndroidModule) {
-                    if (PreferenceManager.getDefaultSharedPreferences(mEditor.getContext())
+                    if (PreferenceManager.getDefaultSharedPreferences(editor.getContext())
                             .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
                         CompletionEngine.getInstance((AndroidModule) module)
-                                .doLint(mEditor.getCurrentFile(), content.toString(), diagnostics ->
-                        markDiagnostics(diagnostics, colors));
+                                .doLint(editor.getCurrentFile(), content.toString(), diagnostics ->
+                        markDiagnostics(editor, diagnostics, colors));
                     }
                 }
             }
@@ -271,9 +276,9 @@ public class KotlinAnalyzer implements CodeAnalyzer {
         }
     }
 
-    private void markDiagnostics(List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
-        mEditor.getText().beginStreamCharGetting(0);
-        Indexer indexer = mEditor.getText().getIndexer();
+    private void markDiagnostics(CodeEditor editor, List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
+        editor.getText().beginStreamCharGetting(0);
+        Indexer indexer = editor.getText().getIndexer();
         diagnostics.forEach(it -> {
             try {
                 if (it.getStartPosition() == -1) {
@@ -299,6 +304,6 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                 // Work around for the indexer requiring a sorted positions
             }
         });
-        mEditor.getText().endStreamCharGetting();
+        editor.getText().endStreamCharGetting();
     }
 }

@@ -8,6 +8,7 @@ import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Token;
 
 import java.io.StringReader;
+import java.lang.ref.WeakReference;
 import java.util.Stack;
 
 import io.github.rosemoe.sora.data.BlockLine;
@@ -20,14 +21,18 @@ import io.github.rosemoe.sora.widget.EditorColorScheme;
 
 public class XMLAnalyzer implements CodeAnalyzer {
 
-	private final CodeEditor mEditor;
+	private final WeakReference<CodeEditor> mEditorReference;
 
 	public XMLAnalyzer(CodeEditor codeEditor) {
-		mEditor = codeEditor;
+		mEditorReference = new WeakReference<>(codeEditor);
 	}
 	
 	@Override
 	public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
+		CodeEditor editor = mEditorReference.get();
+		if (editor == null) {
+			return;
+		}
 		try {
 			CodePointCharStream stream = CharStreams.fromReader(new StringReader(content.toString()));
 			XMLLexer lexer = new XMLLexer(stream);
