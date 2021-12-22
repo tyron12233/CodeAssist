@@ -7,8 +7,8 @@
        app:fragment="com.tyron.code.ui.settings.EditorSettingsFragment"/>
 
    <Preference
-       app:title="@string/settings_title_build_run"
-       app:summary="Configure build and execution settings"
+       app:title="@string/settings_build_run_title"
+       app:summary="@string/settings_build_run_desc"
        app:iconSpaceReserved="false"
        app:fragment="com.tyron.code.ui.settings.BuildSettingsFragment"/>
 
