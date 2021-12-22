@@ -28,16 +28,24 @@ import com.tyron.code.R;
 import com.tyron.code.util.ApkInstaller;
 
 import java.io.File;
+import java.lang.ref.WeakReference;
 import java.util.concurrent.Executors;
 
 public class CompilerService extends Service {
 
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
-    private final CompilerBinder mBinder = new CompilerBinder();
+    private final CompilerBinder mBinder = new CompilerBinder(this);
 
-    public class CompilerBinder extends Binder {
+    public static class CompilerBinder extends Binder {
+
+        private final WeakReference<CompilerService> mServiceReference;
+
+        public CompilerBinder(CompilerService service) {
+            mServiceReference = new WeakReference<>(service);
+        }
+
         public CompilerService getCompilerService() {
-            return CompilerService.this;
+            return mServiceReference.get();
         }
     }
 

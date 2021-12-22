@@ -49,6 +49,10 @@ public class CompilerServiceConnection implements ServiceConnection {
     @Override
     public void onServiceConnected(ComponentName name, IBinder binder) {
         mService = ((CompilerService.CompilerBinder) binder).getCompilerService();
+        if (mService == null) {
+            mLogViewModel.e(LogViewModel.BUILD_LOG, "CompilerService is null!");
+            return;
+        }
         mService.setLogger(ILogger.wrap(mLogViewModel));
         mService.setShouldShowNotification(false);
         mService.setOnResultListener((success, message) -> {
