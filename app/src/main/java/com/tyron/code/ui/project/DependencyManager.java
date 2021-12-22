@@ -40,6 +40,7 @@ public class DependencyManager {
         mRepository.addRepositoryUrl("https://repo1.maven.org/maven2");
         mRepository.addRepositoryUrl("https://maven.google.com");
         mRepository.addRepositoryUrl("https://jitpack.io");
+        mRepository.addRepositoryUrl("https://jcenter.bintray.com");
         mRepository.initialize();
         mResolver = new DependencyResolver(mRepository);
     }
@@ -48,6 +49,18 @@ public class DependencyManager {
         File gradleFile = new File(project.getRootFile(), "build.gradle");
 
         listener.onTaskStarted("Resolving dependencies");
+
+        mResolver.setResolveListener(new DependencyResolver.ResolveListener() {
+            @Override
+            public void onResolve(String message) {
+                listener.onTaskStarted(message);
+            }
+
+            @Override
+            public void onFailure(String message) {
+                logger.error(message);
+            }
+        });
         List<Pom> declaredPoms = DependencyUtils.parseGradle(mRepository, gradleFile, logger);
         List<Pom> resolvedPoms = mResolver.resolve(declaredPoms);
 

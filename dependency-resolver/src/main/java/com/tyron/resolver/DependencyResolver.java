@@ -17,9 +17,20 @@ public class DependencyResolver {
     private final PomRepository repository;
     private final Map<Pom, String> resolvedPoms;
 
+    private ResolveListener mListener;
+
     public DependencyResolver(PomRepository repository) {
         this.repository = repository;
         this.resolvedPoms = new HashMap<>();
+    }
+
+    public void setResolveListener(ResolveListener listener) {
+        mListener = listener;
+    }
+
+    public interface ResolveListener {
+        void onResolve(String message);
+        void onFailure(String message);
     }
 
     /**
@@ -48,6 +59,10 @@ public class DependencyResolver {
             }
         }
 
+        if (mListener != null) {
+            mListener.onResolve("Resolving " + pom);
+        }
+
         for (Dependency dependency : pom.getDependencies()) {
             if ("test".equals(dependency.getScope())) {
                 continue;
@@ -55,6 +70,9 @@ public class DependencyResolver {
 
             Pom resolvedPom = repository.getPom(dependency.toString());
             if (resolvedPom == null) {
+                if (mListener != null) {
+                    mListener.onFailure("Failed to resolve " + dependency);
+                }
                 continue;
             }
             resolve(resolvedPom);
