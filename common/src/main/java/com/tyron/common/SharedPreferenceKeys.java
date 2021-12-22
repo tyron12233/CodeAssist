@@ -8,4 +8,6 @@ public class SharedPreferenceKeys {
     public static final String FONT_SIZE = "font_size";
     public static final String CLASSPATH = "classpath";
     public static final String KOTLIN_COMPLETIONS = "experimental_kotlin_completions";
+    public static final String INSTALL_APK_DIRECTLY = "install_apk_directly";
+
 }

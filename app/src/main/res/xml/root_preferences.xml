@@ -6,4 +6,10 @@
        app:iconSpaceReserved="false"
        app:fragment="com.tyron.code.ui.settings.EditorSettingsFragment"/>
 
+   <Preference
+       app:title="@string/settings_title_build_run"
+       app:summary="Configure build and execution settings"
+       app:iconSpaceReserved="false"
+       app:fragment="com.tyron.code.ui.settings.BuildSettingsFragment"/>
+
 </PreferenceScreen>

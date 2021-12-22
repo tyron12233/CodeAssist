@@ -3,7 +3,10 @@ package com.tyron.code.service;
 import android.content.ComponentName;
 import android.content.ServiceConnection;
 import android.os.IBinder;
+import android.content.SharedPreferences;
 
+import androidx.preference.PreferenceManager;
+import com.tyron.common.SharedPreferenceKeys;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.ui.project.ProjectManager;
@@ -26,6 +29,7 @@ public class CompilerServiceConnection implements ServiceConnection {
     private CompilerService mService;
     private BuildType mBuildType;
     private boolean mCompiling;
+    private SharedPreferences mPreferences;
 
     public CompilerServiceConnection(MainViewModel mainViewModel, LogViewModel logViewModel) {
         mMainViewModel = mainViewModel;
@@ -66,9 +70,10 @@ public class CompilerServiceConnection implements ServiceConnection {
                 File file = new File(ProjectManager.getInstance().getCurrentProject()
                         .getMainModule().getBuildDirectory(), "bin/signed.apk");
                 if (file.exists() && mBuildType != BuildType.AAB) {
-                    ApkInstaller.installApplication(mService,
-                            file.getAbsolutePath());
-
+                     mPreferences = PreferenceManager.getDefaultSharedPreferences(mService);
+                     if (mPreferences.getBoolean(SharedPreferenceKeys.INSTALL_APK_DIRECTLY, true)) {
+                         ApkInstaller.installApplication(mService,file.getAbsolutePath());
+                    }
                     DiagnosticWrapper wrapper = new DiagnosticWrapper(null);
                     wrapper.setKind(Diagnostic.Kind.NOTE);
                     wrapper.setMessage("Generated APK has been saved to " + file.getAbsolutePath());
