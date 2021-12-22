@@ -5,6 +5,8 @@ import androidx.annotation.Nullable;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListenableFutureTask;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
@@ -20,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 
 public class ProjectManager {
@@ -114,8 +117,8 @@ public class ProjectManager {
         manager.resolve(project, listener, logger);
     }
 
-    public void closeProject(@NonNull Project module) {
-        if (module.equals(mCurrentProject)) {
+    public void closeProject(@NonNull Project project) {
+        if (project.equals(mCurrentProject)) {
             mCurrentProject = null;
         }
     }

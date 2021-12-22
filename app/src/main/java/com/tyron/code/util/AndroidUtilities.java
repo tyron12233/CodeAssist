@@ -11,6 +11,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 
+import androidx.annotation.StringRes;
+
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.code.ApplicationLoader;
 
 import java.io.File;
@@ -65,6 +68,18 @@ public class AndroidUtilities {
 		}
 
 		return calculateMD5(is);
+	}
+
+	public static void showSimpleAlert(Context context, @StringRes int title, @StringRes int message) {
+		showSimpleAlert(context, context.getString(title), context.getString(message));
+	}
+
+	public static void showSimpleAlert(Context context, String title, String message) {
+		new MaterialAlertDialogBuilder(context)
+				.setTitle(title)
+				.setMessage(message)
+				.setPositiveButton(android.R.string.ok, null)
+				.show();
 	}
 
 	public static String calculateMD5(InputStream is) {

@@ -7,7 +7,9 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.view.ContextMenu;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -15,6 +17,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
@@ -30,6 +33,9 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.material.transition.MaterialFade;
 import com.google.android.material.transition.MaterialSharedAxis;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFutureTask;
 import com.tyron.builder.project.Project;
 import com.tyron.code.R;
 import com.tyron.code.ui.file.FilePickerDialogFixed;
@@ -37,9 +43,13 @@ import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.project.adapter.ProjectManagerAdapter;
 import com.tyron.code.ui.settings.SettingsActivity;
 import com.tyron.code.ui.wizard.WizardFragment;
+import com.tyron.code.util.AndroidUtilities;
 import com.tyron.common.SharedPreferenceKeys;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -135,11 +145,56 @@ public class ProjectManagerFragment extends Fragment {
         });
         mAdapter = new ProjectManagerAdapter();
         mAdapter.setOnProjectSelectedListener(this::openProject);
+        mAdapter.setOnProjectLongClickListener(this::inflateProjectMenus);
         mRecyclerView = view.findViewById(R.id.projects_recycler);
         mRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         mRecyclerView.setAdapter(mAdapter);
 
         checkSavePath();
+    }
+
+    private boolean inflateProjectMenus(View view, Project project) {
+        view.setOnCreateContextMenuListener((menu, v, menuInfo) -> {
+            menu.add(R.string.dialog_delete)
+                    .setOnMenuItemClickListener(item -> {
+                        String message = getString(R.string.dialog_confirm_delete,
+                                project.getRootFile().getName());
+                        new MaterialAlertDialogBuilder(requireContext())
+                                .setTitle(R.string.dialog_delete)
+                                .setMessage(message)
+                                .setPositiveButton(android.R.string.yes,
+                                        (d, which) -> deleteProject(project))
+                                .setNegativeButton(android.R.string.no, null)
+                                .show();
+                        return true;
+                    });
+        });
+        view.showContextMenu();
+        return true;
+    }
+
+    private void deleteProject(Project project) {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                FileUtils.forceDelete(project.getRootFile());
+                if (getActivity() != null) {
+                    requireActivity().runOnUiThread(() -> {
+                        AndroidUtilities.showSimpleAlert(
+                                requireContext(),
+                                getString(R.string.success),
+                                getString(R.string.delete_success));
+                        loadProjects();
+                    });
+                }
+            } catch (IOException e) {
+                if (getActivity() != null) {
+                    requireActivity().runOnUiThread(() ->
+                            AndroidUtilities.showSimpleAlert(requireContext(),
+                                    getString(R.string.error),
+                                    e.getMessage()));
+                }
+            }
+        });
     }
 
     @Nullable

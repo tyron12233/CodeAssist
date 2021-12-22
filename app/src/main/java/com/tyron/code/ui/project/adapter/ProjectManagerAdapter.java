@@ -25,10 +25,15 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
     private static final int TYPE_ITEM = 1;
 
     public interface OnProjectSelectedListener {
-        void onProjectSelect(Project module);
+        void onProjectSelect(Project project);
+    }
+
+    public interface OnProjectLongClickedListener {
+        boolean onLongClicked(View view, Project project);
     }
 
     private final List<Project> mProjects = new ArrayList<>();
+    private OnProjectLongClickedListener mLongClickListener;
     private OnProjectSelectedListener mListener;
 
     public ProjectManagerAdapter() {
@@ -37,6 +42,10 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
 
     public void setOnProjectSelectedListener(OnProjectSelectedListener listener) {
         mListener = listener;
+    }
+
+    public void setOnProjectLongClickListener(OnProjectLongClickedListener listener) {
+        mLongClickListener = listener;
     }
 
     public void submitList(@NonNull List<Project> projects) {
@@ -86,6 +95,15 @@ public class ProjectManagerAdapter extends RecyclerView.Adapter<ProjectManagerAd
                    mListener.onProjectSelect(mProjects.get(position));
                }
            }
+        });
+        root.setOnLongClickListener(v -> {
+            if (mLongClickListener != null) {
+                int position = holder.getBindingAdapterPosition();
+                if (position != RecyclerView.NO_POSITION) {
+                    return mLongClickListener.onLongClicked(v, mProjects.get(position));
+                }
+            }
+            return false;
         });
         return holder;
     }
