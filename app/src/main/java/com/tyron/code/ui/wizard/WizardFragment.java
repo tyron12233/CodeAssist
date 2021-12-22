@@ -120,8 +120,6 @@ public class WizardFragment extends Fragment {
                 }
             }
         });
-        requireActivity().getOnBackPressedDispatcher()
-                .addCallback(this, onBackPressedCallback);
     }
 
     @Override
@@ -130,10 +128,18 @@ public class WizardFragment extends Fragment {
         onBackPressedCallback.setEnabled(false);
     }
 
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
+        requireActivity().getOnBackPressedDispatcher()
+                .addCallback(getViewLifecycleOwner(), onBackPressedCallback);
+
         View view = inflater.inflate(R.layout.wizard_fragment, container, false);
         LinearLayout layout = view.findViewById(R.id.setup_wizard_layout);
 
@@ -438,6 +444,7 @@ public class WizardFragment extends Fragment {
         for (String name : packages) {
             if (name.isEmpty()) {
                 mPackageNameLayout.setError(getString(R.string.wizard_package_illegal));
+                return;
             }
         }
         if (packages == null) {
