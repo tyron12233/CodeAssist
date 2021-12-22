@@ -74,7 +74,9 @@ public class CompilerServiceConnection implements ServiceConnection {
                      SharedPreferences preference = ApplicationLoader.getDefaultPreferences();
                      if (preference.getBoolean(SharedPreferenceKeys.INSTALL_APK_DIRECTLY, true)) {
                          ApkInstaller.installApplication(mService,file.getAbsolutePath());
-                    }
+                    } else {
+                         mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                     }
                     DiagnosticWrapper wrapper = new DiagnosticWrapper(null);
                     wrapper.setKind(Diagnostic.Kind.NOTE);
                     wrapper.setMessage("Generated APK has been saved to " + file.getAbsolutePath());
