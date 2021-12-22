@@ -1,6 +1,7 @@
 package com.tyron.code.ui.project;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -34,6 +35,7 @@ import com.tyron.code.R;
 import com.tyron.code.ui.file.FilePickerDialogFixed;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.project.adapter.ProjectManagerAdapter;
+import com.tyron.code.ui.settings.SettingsActivity;
 import com.tyron.code.ui.wizard.WizardFragment;
 import com.tyron.common.SharedPreferenceKeys;
 
@@ -96,17 +98,31 @@ public class ProjectManagerFragment extends Fragment {
         MaterialToolbar toolbar = view.findViewById(R.id.toolbar);
         toolbar.setTitle(R.string.app_name);
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            toolbar.inflateMenu(R.menu.project_list_fragment_menu);
-            toolbar.setOnMenuItemClickListener(item -> {
-                // Handle menu item click event
-                if (item.getItemId() == R.id.projects_path) {
-                    setSavePath(null);
-                    checkSavePath();
-                }
-                return true;
-            });
+
+        toolbar.inflateMenu(R.menu.project_list_fragment_menu);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // can't change project path on android R
+            toolbar.getMenu().removeItem(R.id.projects_path);
         }
+        toolbar.setOnMenuItemClickListener(item -> {
+            int id = item.getItemId();
+
+            if (id == R.id.projects_path) {
+                setSavePath(null);
+                checkSavePath();
+                return true;
+            }
+
+            if (id == R.id.menu_settings) {
+                Intent intent = new Intent();
+                intent.setClass(requireActivity(), SettingsActivity.class);
+                startActivity(intent);
+                return true;
+            }
+
+            return true;
+        });
+
 
         mCreateProjectFab = view.findViewById(R.id.create_project_fab);
         mCreateProjectFab.setOnClickListener(v -> {
@@ -252,9 +268,9 @@ public class ProjectManagerFragment extends Fragment {
             }
         });
     }
-    
+
     private void toggleNullProject(List<Project> projects) {
-		if (getActivity() == null || isDetached()) {
+        if (getActivity() == null || isDetached()) {
             return;
         }
 
