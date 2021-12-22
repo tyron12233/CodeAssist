@@ -65,8 +65,7 @@ public class SettingsActivity extends AppCompatActivity implements
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         if (item.getItemId() == android.R.id.home) {
-            finish();
-            return true;
+            return getSupportFragmentManager().popBackStackImmediate();
         }
         return super.onOptionsItemSelected(item);
     }
