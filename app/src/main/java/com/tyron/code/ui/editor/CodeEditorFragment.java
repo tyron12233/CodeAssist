@@ -70,6 +70,7 @@ public class CodeEditorFragment extends Fragment
     private static final String LAYOUT_EDITOR_PREFIX = "editor_";
 
     private CodeEditor mEditor;
+    private CodeEditorEventListener mEditorEventListener;
 
     private EditorLanguage mLanguage;
     private File mCurrentFile = new File("");
@@ -95,19 +96,6 @@ public class CodeEditorFragment extends Fragment
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
-
-        if (ProjectManager.getInstance().getCurrentProject() != null) {
-            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile)
-                    .getFileManager()
-                    .setSnapshotContent(mCurrentFile, mEditor.getText().toString());
-        }
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-
-        hideEditorWindows();
 
         if (ProjectManager.getInstance().getCurrentProject() != null) {
             ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile)
@@ -228,6 +216,8 @@ public class CodeEditorFragment extends Fragment
             mEditor.setText(text);
         }
 
+        mEditorEventListener = new CodeEditorEventListener(module, mCurrentFile);
+        mEditor.setEventListener(mEditorEventListener);
         mEditor.setOnCompletionItemSelectedListener((window, item) -> {
             Cursor cursor = mEditor.getCursor();
             if (!cursor.isSelected()) {
@@ -348,62 +338,7 @@ public class CodeEditorFragment extends Fragment
                 }
             });
         });
-        mEditor.setEventListener(new EditorEventListener() {
-            @Override
-            public boolean onRequestFormat(@NonNull CodeEditor editor) {
-                return false;
-            }
 
-            @Override
-            public boolean onFormatFail(@NonNull CodeEditor editor, Throwable cause) {
-                ApplicationLoader.showToast("Unable to format: " + cause.getMessage());
-                return false;
-            }
-
-            @Override
-            public void onFormatSucceed(@NonNull CodeEditor editor) {
-
-            }
-
-            @Override
-            public void onNewTextSet(@NonNull CodeEditor editor) {
-                updateFile(editor.getText().toString());
-            }
-
-            @Override
-            public void afterDelete(@NonNull CodeEditor editor,
-                                    @NonNull CharSequence content,
-                                    int startLine, int startColumn,
-                                    int endLine, int endColumn,
-                                    CharSequence deletedContent) {
-                updateFile(content);
-            }
-
-            @Override
-            public void afterInsert(@NonNull CodeEditor editor,
-                                    @NonNull CharSequence content,
-                                    int startLine, int startColumn,
-                                    int endLine, int endColumn,
-                                    CharSequence insertedContent) {
-                updateFile(content);
-            }
-
-            @Override
-            public void beforeReplace(@NonNull CodeEditor editor, @NonNull CharSequence content) {
-                updateFile(content);
-            }
-
-            @Override
-            public void onSelectionChanged(@NonNull CodeEditor editor, @NonNull Cursor cursor) {
-
-            }
-
-            private void updateFile(CharSequence contents) {
-                if (module != null) {
-                    module.getFileManager().setSnapshotContent(mCurrentFile, contents.toString());
-                }
-            }
-        });
         getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
                 getViewLifecycleOwner(), ((requestKey, result) -> {
                     String xml = result.getString("text", mEditor.getText().toString());
@@ -411,6 +346,18 @@ public class CodeEditorFragment extends Fragment
                             XmlFormatStyle.LAYOUT, "\n");
                     mEditor.setText(xml);
                 }));
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+
+        mEditorEventListener = null;
+        mEditor.setEditorLanguage(null);
+        mEditor.setEventListener(null);
+        mEditor.setOnLongPressListener(null);
+        mEditor.setOnCompletionItemSelectedListener(null);
+        mEditor.destroy();
     }
 
     @Override
@@ -422,6 +369,19 @@ public class CodeEditorFragment extends Fragment
                     .closeFileForSnapshot(mCurrentFile);
         }
         mPreferences.unregisterOnSharedPreferenceChangeListener(this);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+
+        hideEditorWindows();
+
+        if (ProjectManager.getInstance().getCurrentProject() != null) {
+            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile)
+                    .getFileManager()
+                    .setSnapshotContent(mCurrentFile, mEditor.getText().toString());
+        }
     }
 
     @Override
@@ -517,5 +477,71 @@ public class CodeEditorFragment extends Fragment
             return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
         }
         return Collections.emptyList();
+    }
+
+    private static final class CodeEditorEventListener implements EditorEventListener {
+
+        private final Module mModule;
+        private final File mCurrentFile;
+
+        public CodeEditorEventListener(Module module, File currentFile) {
+            mModule = module;
+            mCurrentFile = currentFile;
+        }
+
+        @Override
+        public boolean onRequestFormat(@NonNull CodeEditor editor) {
+            return false;
+        }
+
+        @Override
+        public boolean onFormatFail(@NonNull CodeEditor editor, Throwable cause) {
+            ApplicationLoader.showToast("Unable to format: " + cause.getMessage());
+            return false;
+        }
+
+        @Override
+        public void onFormatSucceed(@NonNull CodeEditor editor) {
+
+        }
+
+        @Override
+        public void onNewTextSet(@NonNull CodeEditor editor) {
+            updateFile(editor.getText().toString());
+        }
+
+        @Override
+        public void afterDelete(@NonNull CodeEditor editor,
+                                @NonNull CharSequence content,
+                                int startLine, int startColumn,
+                                int endLine, int endColumn,
+                                CharSequence deletedContent) {
+            updateFile(content);
+        }
+
+        @Override
+        public void afterInsert(@NonNull CodeEditor editor,
+                                @NonNull CharSequence content,
+                                int startLine, int startColumn,
+                                int endLine, int endColumn,
+                                CharSequence insertedContent) {
+            updateFile(content);
+        }
+
+        @Override
+        public void beforeReplace(@NonNull CodeEditor editor, @NonNull CharSequence content) {
+            updateFile(content);
+        }
+
+        @Override
+        public void onSelectionChanged(@NonNull CodeEditor editor, @NonNull Cursor cursor) {
+
+        }
+
+        private void updateFile(CharSequence contents) {
+            if (mModule != null) {
+                mModule.getFileManager().setSnapshotContent(mCurrentFile, contents.toString());
+            }
+        }
     }
 }

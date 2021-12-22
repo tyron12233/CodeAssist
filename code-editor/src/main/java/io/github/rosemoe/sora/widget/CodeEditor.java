@@ -5215,6 +5215,12 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
 
     }
 
+    public void destroy() {
+        mSpanner.setCallback(null);
+        mSpanner.shutdown();
+        mSpanner = null;
+    }
+
     private final static String COPYRIGHT = "sora-editor\nCopyright (C) Rosemoe roses2020@qq.com\nThis project is distributed under the LGPL v2.1 license";
 
 }
