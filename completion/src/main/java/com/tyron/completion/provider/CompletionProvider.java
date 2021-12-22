@@ -405,7 +405,7 @@ public class CompletionProvider {
             }
         }
         for (List<ExecutableElement> overloads : methods.values()) {
-            list.addAll(method(overloads, !endsWithParen));
+            list.addAll(method(overloads, endsWithParen));
         }
         if (isStatic) {
             if (StringSearch.matchesPartialName("class", partial)) {
@@ -621,7 +621,7 @@ public class CompletionProvider {
             }
         }
         for (List<ExecutableElement> overloads : methods.values()) {
-            list.items.addAll(method(overloads, !endsWithParen));
+            list.items.addAll(method(overloads, endsWithParen));
         }
     }
 
