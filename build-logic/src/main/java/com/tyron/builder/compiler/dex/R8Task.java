@@ -105,7 +105,7 @@ public class R8Task extends Task<AndroidModule> {
             }
         });
 
-        File proguardRuleTxt = new File(getModule().getRootFile(), "app/proguard-rules.txt");
+        File proguardRuleTxt = new File(getModule().getRootFile(), "proguard-rules.pro");
         if (proguardRuleTxt.exists()) {
             rules.add(proguardRuleTxt.toPath());
         }
