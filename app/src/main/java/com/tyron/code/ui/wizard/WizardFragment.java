@@ -89,7 +89,7 @@ public class WizardFragment extends Fragment {
     private final OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(true) {
         @Override
         public void handleOnBackPressed() {
-            onNavigateBack(mExitButton);
+            onNavigateBack();
         }
     };
     private ActivityResultLauncher<String[]> mPermissionLauncher;
@@ -148,7 +148,7 @@ public class WizardFragment extends Fragment {
         mNavigateButton.setOnClickListener(this::onNavigateNext);
 
         mExitButton = layout.findViewById(R.id.exit_button);
-        mExitButton.setOnClickListener(this::onNavigateBack);
+        mExitButton.setOnClickListener(v -> onNavigateBack());
 
         mRecyclerView = layout.findViewById(R.id.template_recyclerview);
         mRecyclerView.setLayoutManager(new GridLayoutManager(requireContext(),
@@ -171,7 +171,7 @@ public class WizardFragment extends Fragment {
         loadTemplates();
     }
 
-    private void onNavigateBack(View view) {
+    private void onNavigateBack() {
         if (!mLast) {
             getParentFragmentManager().beginTransaction()
                     .remove(this)
