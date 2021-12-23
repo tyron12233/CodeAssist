@@ -18,6 +18,9 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.jar.JarFile;
+import java.util.zip.ZipException;
+import java.util.zip.ZipFile;
 
 import kotlin.text.Charsets;
 
@@ -132,7 +135,20 @@ public class PomRepositoryImpl implements PomRepository {
     private File getFile(Pom pom, String extension) throws IOException {
         File[] files = getLibraryCacheDirectory().listFiles(c -> c.getName().equals(pom.getDeclarationString() + extension));
         if (files != null && files.length > 0) {
-            return files[0];
+            File file = files[0];
+            if (".aar".equals(extension)) {
+                if (isValidZipFile(file)) {
+                    return file;
+                } else {
+                    FileUtils.deleteQuietly(file);
+                }
+            } else {
+                if (isValidJarFile(file)) {
+                    return file;
+                } else {
+                    FileUtils.deleteQuietly(file);
+                }
+            }
         }
         InputStream is = getFromUrls(pom.getPath() + "/" + pom.getFileName() + extension);
         if (is != null) {
@@ -142,6 +158,26 @@ public class PomRepositoryImpl implements PomRepository {
             return aarFile;
         }
         return null;
+    }
+
+    private boolean isValidJarFile(File file) {
+        try {
+            // noinspection unused
+            JarFile jarFile = new JarFile(file);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private boolean isValidZipFile(File file) {
+        try {
+            // noinspection unused
+            ZipFile zipFile = new ZipFile(file);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private File getPomCacheDirectory() {
