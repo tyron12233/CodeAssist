@@ -4,9 +4,15 @@
 
 A javac APIs-based code editor that supports building Android apps.
 
+[<img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png"
+     alt="Get it on Google Play"
+     height="80">](https://play.google.com/store/apps/details?id=com.tyron.code)
+
+
 ## Note
 CodeAssist does not use gradle. Editing the build.gradle file will not do anything. There are currently no plans with using Gradle.
 
+## CodeAssist 
 ## Features
 - [x] APK Compilation
 - [x] AAB Support
