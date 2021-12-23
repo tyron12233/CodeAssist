@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.zip.ZipException;
 
 public class JavaModuleImpl extends ModuleImpl implements JavaModule {
 
@@ -86,13 +87,15 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     @Override
     public void addLibrary(@NonNull File jar) {
         if (!jar.getName().endsWith(".jar")) {
-
+            return;
         }
-        mLibraries.add(jar);
         try {
+            // noinspection unused, used to check if jar is valid.
+            JarFile jarFile = new JarFile(jar);
             putJar(jar);
+            mLibraries.add(jar);
         } catch (IOException e) {
-            // ignored
+            // ignored, don't put the jar
         }
     }
 
