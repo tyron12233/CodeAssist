@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 
 import org.apache.commons.io.FileUtils;
@@ -44,9 +45,10 @@ public class ModuleSettings implements SharedPreferences {
     private Map<String, Object> parseFile() {
         HashMap<String, Object> config = null;
         try {
-            config = new Gson().fromJson(new FileReader(mConfigFile),
+            Gson gson = new GsonBuilder().setLenient().create();
+            config = gson.fromJson(new FileReader(mConfigFile),
                     new TypeToken<HashMap<String, Object>>(){}.getType());
-        } catch (FileNotFoundException ignore) {
+        } catch (FileNotFoundException | JsonSyntaxException ignored) {
 
         }
         return config == null ? getDefaults() : config;

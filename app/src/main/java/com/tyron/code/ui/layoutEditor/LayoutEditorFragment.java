@@ -20,6 +20,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.transition.TransitionManager;
 
 import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.exceptions.ProteusInflateException;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.Dimension;
@@ -257,8 +258,14 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     }
 
     private void inflateFile(File file) {
-        Optional<ProteusView> optionalView = mInflater.inflateLayout(file.getName()
-                .replace(".xml", ""));
+        Optional<ProteusView> optionalView;
+
+        try {
+            optionalView = mInflater.inflateLayout(file.getName()
+                    .replace(".xml", ""));
+        } catch (ProteusInflateException e) {
+            optionalView = Optional.empty();
+        }
         setLoadingText(null);
 
         if (optionalView.isPresent()) {

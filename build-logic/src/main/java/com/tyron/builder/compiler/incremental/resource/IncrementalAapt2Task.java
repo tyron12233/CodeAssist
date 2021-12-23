@@ -214,6 +214,10 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         }
         args.add(file.getAbsolutePath());
 
+        for (File library : getLibraries()) {
+
+        }
+
         if (getModule().getAssetsDirectory().exists()) {
             args.add("-A");
             args.add(getModule().getAssetsDirectory().getAbsolutePath());
@@ -314,6 +318,19 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
             throw new IOException("Unable to create R.txt file");
         }
         args.add(file.getAbsolutePath());
+
+        for (File library : getModule().getLibraries()) {
+            File parent = library.getParentFile();
+            if (parent == null) {
+                continue;
+            }
+
+            File assetsDir = new File(parent, "assets");
+            if (assetsDir.exists()) {
+                args.add("-A");
+                args.add(assetsDir.getAbsolutePath());
+            }
+        }
 
         if (getModule().getAssetsDirectory().exists()) {
             args.add("-A");
