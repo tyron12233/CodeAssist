@@ -33,7 +33,8 @@ public class JavaCompletionProvider extends CompletionProvider {
     }
 
     @Override
-    public CompletionList complete(Project project, Module module, File file, String contents, String prefix, int line, int column, long index) {
+    public CompletionList complete(Project project, Module module, File file, String contents,
+                                   String prefix, int line, int column, long index) {
         if (!(module instanceof JavaModule)) {
             return CompletionList.EMPTY;
         }
@@ -41,35 +42,40 @@ public class JavaCompletionProvider extends CompletionProvider {
 
         if (isIncrementalCompletion(mCachedCompletion, file, prefix, line, column)) {
             String partialIdentifier = partialIdentifier(prefix, prefix.length());
-            List<CompletionItem> narrowedList = mCachedCompletion.getCompletionList().items.stream()
-                    .filter(item -> {
-                        String label = item.label;
-                        if (label.contains("(")) {
-                            label = label.substring(0, label.indexOf('('));
-                        }
-                        if (label.length() < partialIdentifier.length()) {
-                            return false;
-                        }
-                        return FuzzySearch.partialRatio(label, partialIdentifier) > 90;
-                    })
-                    .collect(Collectors.toList());
+            List<CompletionItem> narrowedList =
+                    mCachedCompletion.getCompletionList().items.stream().filter(item -> {
+                String label = item.label;
+                if (label.contains("(")) {
+                    label = label.substring(0, label.indexOf('('));
+                }
+                if (label.length() < partialIdentifier.length()) {
+                    return false;
+                }
+                return FuzzySearch.partialRatio(label, partialIdentifier) > 90;
+            }).collect(Collectors.toList());
             CompletionList completionList = new CompletionList();
             completionList.items = narrowedList;
             return completionList;
         }
 
-        JavaCompilerProvider compilerProvider = CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-        JavaCompilerService service = compilerProvider.getCompiler(project, (JavaModule) module);
+        CompletionList complete = complete(project, (JavaModule) module, file, contents, index);
+        String newPrefix = prefix;
+        if (prefix.contains(".")) {
+            newPrefix = partialIdentifier(prefix, prefix.length());
+        }
+        mCachedCompletion = new CachedCompletion(file, line, column, newPrefix, complete);
+
+        return complete;
+    }
+
+    public CompletionList complete(Project project, JavaModule module, File file, String contents
+            , long cursor) {
+        JavaCompilerProvider compilerProvider =
+                CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+        JavaCompilerService service = compilerProvider.getCompiler(project, module);
 
         try {
-            CompletionList complete = new com.tyron.completion.java.provider.CompletionProvider(service)
-                    .complete(file, contents, index);
-            String newPrefix = prefix;
-            if (prefix.contains(".")) {
-                newPrefix = partialIdentifier(prefix, prefix.length());
-            }
-            mCachedCompletion = new CachedCompletion(file, line, column, newPrefix, complete);
-            return complete;
+            return new com.tyron.completion.java.provider.CompletionProvider(service).complete(file, contents, cursor);
         } catch (Throwable e) {
             if (e instanceof ProcessCanceledException) {
                 throw e;
@@ -88,11 +94,17 @@ public class JavaCompletionProvider extends CompletionProvider {
     }
 
 
-    private boolean isIncrementalCompletion(CachedCompletion cachedCompletion,
-                                            File file,
-                                            String prefix,
-                                            int line, int column) {
+    private boolean isIncrementalCompletion(CachedCompletion cachedCompletion, File file,
+                                            String prefix, int line, int column) {
         prefix = partialIdentifier(prefix, prefix.length());
+
+        if (line == -1) {
+            return false;
+        }
+
+        if (column == -1) {
+            return false;
+        }
 
         if (cachedCompletion == null) {
             return false;
@@ -118,8 +130,7 @@ public class JavaCompletionProvider extends CompletionProvider {
             return false;
         }
 
-        if (prefix.length() - cachedCompletion.getPrefix().length() !=
-                column - cachedCompletion.getColumn()) {
+        if (prefix.length() - cachedCompletion.getPrefix().length() != column - cachedCompletion.getColumn()) {
             return false;
         }
 

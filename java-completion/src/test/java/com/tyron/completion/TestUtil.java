@@ -6,7 +6,7 @@ import java.util.Objects;
 
 public class TestUtil {
 
-    public static final String MODULE_NAME = "completion";
+    public static final String MODULE_NAME = "java-completion";
 
     public static String resolveBasePath() {
         final String path = "./" + MODULE_NAME + "/src/test/resources";

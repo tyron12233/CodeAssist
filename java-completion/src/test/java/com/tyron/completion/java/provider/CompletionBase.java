@@ -6,8 +6,11 @@ import static com.tyron.completion.TestUtil.resolveBasePath;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.mock.MockAndroidModule;
 import com.tyron.builder.project.mock.MockFileManager;
+import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.TestUtil;
+import com.tyron.completion.java.JavaCompilerProvider;
+import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.model.CompletionList;
 
 import org.junit.Before;
@@ -30,12 +33,15 @@ public abstract class CompletionBase {
     private MockFileManager mFileManager;
     private Project mProject;
     private MockAndroidModule mModule;
-    private CompletionEngine mCompletionEngine;
+    private JavaCompletionProvider mCompletionEngine;
 
     @Before
     public void setup() throws IOException {
         CompletionModule.setAndroidJar(new File(resolveBasePath(), "classpath/rt.jar"));
         CompletionModule.setLambdaStubs(new File(resolveBasePath(), "classpath/core-lambda-stubs.jar"));
+
+        JavaCompilerProvider provider = new JavaCompilerProvider();
+        CompilerService.getInstance().registerIndexProvider(JavaCompilerProvider.KEY, provider);
 
         mRoot = new File(TestUtil.resolveBasePath(), "EmptyProject");
         mFileManager = new MockFileManager(mRoot);
@@ -51,7 +57,7 @@ public abstract class CompletionBase {
             }
         }
 
-        mCompletionEngine = CompletionEngine.getInstance();
+        mCompletionEngine = new JavaCompletionProvider();
     }
 
     protected CompletionList complete(File file, String contents, long cursor) {
@@ -61,8 +67,8 @@ public abstract class CompletionBase {
                     file,
                     contents,
                     cursor);
-        } catch (InterruptedException e) {
-            return CompletionList.EMPTY;
+        } catch (Throwable e) {
+            throw e;
         }
     }
     protected CompletionList complete(String fileName, long cursor) {
@@ -96,5 +102,13 @@ public abstract class CompletionBase {
     public void assertCompletion(CompletionList list, String... expectedItems) {
         assertThat(list.items.stream().map(it -> it.label).collect(Collectors.toList()))
                 .containsAtLeastElementsIn(expectedItems);
+    }
+
+    private String partialIdentifier(String contents, int end) {
+        int start = end;
+        while (start > 0 && Character.isJavaIdentifierPart(contents.charAt(start - 1))) {
+            start--;
+        }
+        return contents.substring(start, end);
     }
 }
