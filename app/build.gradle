@@ -38,7 +38,7 @@ dependencies {
     implementation project(path: ':build-logic')
     implementation project(path: ':common')
     implementation project(path: ':completion-api')
-    implementation project(path: ':java-completion2')
+    implementation project(path: ':java-completion')
     implementation project(path: ':lint')
     implementation project(path: ':layout-preview')
     implementation project(path: ':kotlin-completion')
