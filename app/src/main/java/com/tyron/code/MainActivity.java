@@ -19,12 +19,14 @@ public class MainActivity extends AppCompatActivity {
 
         StartupManager startupManager = new StartupManager();
         startupManager.addStartupActivity(() -> {
+            CompilerService.getInstance().clear();
+            CompletionEngine.getInstance().clear();
             CompilerService.getInstance().registerIndexProvider(JavaCompilerProvider.KEY, new JavaCompilerProvider());
             CompletionEngine.getInstance().registerCompletionProvider(new JavaCompletionProvider());
         });
+        startupManager.startup();
 
         if (getSupportFragmentManager().findFragmentByTag(ProjectManagerFragment.TAG) == null) {
-            startupManager.startup();
             getSupportFragmentManager().beginTransaction()
                     .replace(R.id.fragment_container,
                             new ProjectManagerFragment(),

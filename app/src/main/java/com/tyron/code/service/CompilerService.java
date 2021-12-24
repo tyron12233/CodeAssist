@@ -115,38 +115,29 @@ public class CompilerService extends Service {
     }
 
     private Notification setupNotification() {
-        return new NotificationCompat.Builder(this, createNotificationChannel())
-                .setContentTitle(getString(R.string.app_name))
-                .setSmallIcon(R.drawable.ic_launcher)
-                .setContentText("Preparing")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setOngoing(true)
-                .setProgress(100, 0, true)
-                .build();
+        return new NotificationCompat.Builder(this, createNotificationChannel()).setContentTitle(getString(R.string.app_name)).setSmallIcon(R.drawable.ic_launcher).setContentText("Preparing").setPriority(NotificationCompat.PRIORITY_HIGH).setOngoing(true).setProgress(100, 0, true).build();
     }
 
     private void updateNotification(String title, String message, int progress) {
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "Compiler")
-                .setContentTitle(title)
-                .setContentText(message)
-                .setSmallIcon(R.drawable.ic_launcher)
-                .setPriority(NotificationCompat.PRIORITY_HIGH);
-        if (progress != -1) {
-            builder.setProgress(100, progress, false);
-        }
-        NotificationManagerCompat.from(this)
-                .notify(201, builder.build());
+        updateNotification(title, message, progress, NotificationCompat.PRIORITY_LOW);
+    }
+
+    private void updateNotification(String title, String message, int progress, int priority) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            NotificationCompat.Builder builder =
+                    new NotificationCompat.Builder(this, "Compiler").setContentTitle(title).setContentText(message).setSmallIcon(R.drawable.ic_launcher).setPriority(priority);
+            if (progress != -1) {
+                builder.setProgress(100, progress, false);
+            }
+            NotificationManagerCompat.from(this).notify(201, builder.build());
+        });
     }
 
     private String createNotificationChannel() {
         NotificationChannelCompat channel = new NotificationChannelCompat.Builder("Compiler",
-                NotificationManagerCompat.IMPORTANCE_HIGH)
-                .setName("Compiler service")
-                .setDescription("Foreground notification for the compiler")
-                .build();
+                NotificationManagerCompat.IMPORTANCE_HIGH).setName("Compiler service").setDescription("Foreground notification for the compiler").build();
 
-        NotificationManagerCompat.from(this)
-                .createNotificationChannel(channel);
+        NotificationManagerCompat.from(this).createNotificationChannel(channel);
 
         return "Compiler";
     }
@@ -163,11 +154,13 @@ public class CompilerService extends Service {
 
         if (mProject == null) {
             if (onResultListener != null) {
-                mMainHandler.post(() -> onResultListener.onComplete(false, "Failed to open project  (Have you opened a project?)"));
+                mMainHandler.post(() -> onResultListener.onComplete(false, "Failed to open " +
+                        "project  (Have you opened a project?)"));
             }
 
             if (shouldShowNotification) {
-                updateNotification("Compilation failed", "Unable to open project", -1);
+                updateNotification("Compilation failed", "Unable to open project", -1,
+                        NotificationCompat.PRIORITY_HIGH);
             }
             return;
         }
@@ -181,6 +174,8 @@ public class CompilerService extends Service {
 
             boolean success = true;
 
+            projectBuilder.setTaskListener(this::updateNotification);
+
             try {
                 projectBuilder.build(type);
             } catch (Exception e) {
@@ -192,21 +187,16 @@ public class CompilerService extends Service {
                 mMainHandler.post(() -> onResultListener.onComplete(true, "Success"));
             }
 
-            projectBuilder.setTaskListener(this::updateNotification);
 
             String projectName = "Project";
             if (!success) {
-                updateNotification(projectName,
-                        getString(R.string.compilation_result_failed),
-                        -1);
+                updateNotification(projectName, getString(R.string.compilation_result_failed), -1
+                        , NotificationCompat.PRIORITY_HIGH);
             } else {
                 if (shouldShowNotification) {
                     mMainHandler.post(() -> {
-                        NotificationCompat.Builder builder =
-                                new NotificationCompat.Builder(this, "Compiler")
-                                        .setSmallIcon(R.drawable.ic_launcher)
-                                        .setContentTitle(projectName)
-                                        .setContentText(getString(R.string.compilation_result_success));
+                        NotificationCompat.Builder builder = new NotificationCompat.Builder(this,
+                                "Compiler").setSmallIcon(R.drawable.ic_launcher).setContentTitle(projectName).setContentText(getString(R.string.compilation_result_success));
 
                         if (type != BuildType.AAB) {
                             Intent intent = new Intent(Intent.ACTION_VIEW);
@@ -215,16 +205,12 @@ public class CompilerService extends Service {
                                     "application/vnd.android.package-archive");
                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                            PendingIntent pending = PendingIntent.getActivity(this,
-                                    0,
-                                    intent,
+                            PendingIntent pending = PendingIntent.getActivity(this, 0, intent,
                                     PendingIntent.FLAG_IMMUTABLE);
                             builder.addAction(new NotificationCompat.Action(0,
-                                    getString(R.string.compilation_button_install),
-                                    pending));
+                                    getString(R.string.compilation_button_install), pending));
                         }
-                        NotificationManagerCompat.from(this)
-                                .notify(201, builder.build());
+                        NotificationManagerCompat.from(this).notify(201, builder.build());
                     });
                 }
             }

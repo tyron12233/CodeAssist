@@ -37,4 +37,8 @@ public class CompilerService {
             provider.get(project, module);
         }
     }
+
+    public void clear() {
+        mIndexProviders.clear();
+    }
 }
