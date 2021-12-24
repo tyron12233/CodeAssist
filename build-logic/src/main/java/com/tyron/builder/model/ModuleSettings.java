@@ -45,7 +45,7 @@ public class ModuleSettings implements SharedPreferences {
     private Map<String, Object> parseFile() {
         HashMap<String, Object> config = null;
         try {
-            Gson gson = new GsonBuilder().setLenient().create();
+            Gson gson = new GsonBuilder().create();
             config = gson.fromJson(new FileReader(mConfigFile),
                     new TypeToken<HashMap<String, Object>>(){}.getType());
         } catch (FileNotFoundException | JsonSyntaxException ignored) {
