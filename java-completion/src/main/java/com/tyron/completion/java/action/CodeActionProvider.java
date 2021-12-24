@@ -6,8 +6,11 @@ import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.FindTypeDeclarationAt;
+import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.hover.FindHoverElement;
 import com.tyron.completion.java.model.CodeAction;
 import com.tyron.completion.java.model.CodeActionList;
+import com.tyron.completion.java.rewrite.IntroduceLocalVariable;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -22,6 +25,7 @@ import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.TypeElement;
 import org.openjdk.javax.lang.model.element.VariableElement;
+import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.javax.lang.model.util.Types;
@@ -30,12 +34,15 @@ import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.LineMap;
+import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
+import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
+import org.openjdk.tools.javac.tree.JCTree;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.io.IOException;
@@ -62,13 +69,42 @@ public class CodeActionProvider {
 
         Diagnostic<? extends JavaFileObject> diagnostic;
         TreeMap<String, Rewrite> overrideMethods = new TreeMap<>();
+        TreeMap<String, Rewrite> contextActions = new TreeMap<>();
+
         try (CompileTask task = mCompiler.compile(file)) {
             diagnostic = getDiagnostic(task, cursor);
             overrideMethods.putAll(getOverrideInheritedMethods(task, file, cursor));
+
+            TreePath path = new FindCurrentPath(task.task).scan(task.root(), cursor);
+            if (path != null) {
+                Tree leaf = path.getLeaf();
+                switch (leaf.getKind()) {
+                    case METHOD_INVOCATION:
+                        JCTree.JCMethodInvocation tree = (JCTree.JCMethodInvocation) leaf;
+                        TreePath parent = path.getParentPath();
+                        if (!(parent.getLeaf() instanceof JCTree.JCVariableDecl)) {
+                            ExecutableElement element =
+                                    (ExecutableElement) Trees.instance(task.task).getElement(path);
+                            if (element != null) {
+                                TypeMirror returnType = element.getReturnType();
+                                if (returnType.getKind() != TypeKind.VOID) {
+                                    SourcePositions pos =
+                                            Trees.instance(task.task).getSourcePositions();
+                                    long startPosition =
+                                            pos.getStartPosition(path.getCompilationUnit(),
+                                                    path.getLeaf());
+                                    contextActions.put("Introduce local variable",
+                                            new IntroduceLocalVariable(file, returnType,
+                                                    startPosition));
+                                }
+                            }
+                        }
+                }
+            }
         }
         if (diagnostic != null) {
-            CompletionModule.post(() -> Toast.makeText(CompletionModule.getContext(), diagnostic.getMessage(Locale.getDefault()), Toast.LENGTH_LONG)
-                    .show());
+            CompletionModule.post(() -> Toast.makeText(CompletionModule.getContext(),
+                    diagnostic.getMessage(Locale.getDefault()), Toast.LENGTH_LONG).show());
 
             codeActionList.add(getDiagnosticActions(file, diagnostic));
         }
@@ -77,6 +113,13 @@ public class CodeActionProvider {
         overrideAction.setTitle("Override inherited methods");
         overrideAction.setActions(getActionsFromRewrites(overrideMethods));
         codeActionList.add(overrideAction);
+
+        if (!contextActions.isEmpty()) {
+            CodeActionList contextAction = new CodeActionList();
+            contextAction.setTitle("Context Actions");
+            contextAction.setActions(getActionsFromRewrites(contextActions));
+            codeActionList.add(contextAction);
+        }
 
         return codeActionList;
     }
@@ -89,7 +132,8 @@ public class CodeActionProvider {
         return actions;
     }
 
-    private CodeActionList getDiagnosticActions(Path file, Diagnostic<? extends JavaFileObject> diagnostic) {
+    private CodeActionList getDiagnosticActions(Path file,
+                                                Diagnostic<? extends JavaFileObject> diagnostic) {
         CodeActionList list = new CodeActionList();
         list.setTitle("Quick fixes");
 
@@ -107,7 +151,7 @@ public class CodeActionProvider {
     /**
      * Gets the diagnostics of the current compile task
      *
-     * @param task the current compile task where the diagnostic is retrieved
+     * @param task   the current compile task where the diagnostic is retrieved
      * @param cursor the current cursor position
      * @return null if no diagnostic is found
      */
@@ -120,11 +164,13 @@ public class CodeActionProvider {
         return null;
     }
 
-    private Map<String, Rewrite> getOverrideInheritedMethods(CompileTask task, Path file, long cursor) {
+    private Map<String, Rewrite> getOverrideInheritedMethods(CompileTask task, Path file,
+                                                             long cursor) {
         return new TreeMap<>(overrideInheritedMethods(task, file, cursor));
     }
 
-    private Map<String, Rewrite> overrideInheritedMethods(CompileTask task, Path file, long cursor) {
+    private Map<String, Rewrite> overrideInheritedMethods(CompileTask task, Path file,
+                                                          long cursor) {
         if (!isBlankLine(task.root(), cursor)) {
             return Collections.emptyMap();
         }
@@ -160,8 +206,8 @@ public class CodeActionProvider {
                 continue;
             }
             MethodPtr ptr = new MethodPtr(task.task, method);
-            Rewrite rewrite = new OverrideInheritedMethod(
-                    ptr.className, ptr.methodName, ptr.erasedParameterTypes, file, (int) cursor);
+            Rewrite rewrite = new OverrideInheritedMethod(ptr.className, ptr.methodName,
+                    ptr.erasedParameterTypes, file, (int) cursor);
             String title = "Override " + method.getSimpleName() + " from " + ptr.className;
             actions.put(title, rewrite);
         }
@@ -198,7 +244,8 @@ public class CodeActionProvider {
             switch (d.getCode()) {
                 case "compiler.err.does.not.override.abstract":
                     Rewrite implementAbstracts = new ImplementAbstractMethods(diagnostic);
-                    return Collections.singletonMap("Implement abstract methods", implementAbstracts);
+                    return Collections.singletonMap("Implement abstract methods",
+                            implementAbstracts);
                 case "compiler.err.cant.resolve":
                 case "compiler.err.cant.resolve.location":
                     CharSequence simpleName = diagnostic.getArgs()[1].toString();
@@ -213,20 +260,18 @@ public class CodeActionProvider {
                     return allImports;
                 case "compiler.err.doesnt.exist":
                     simpleName = diagnostic.getArgs()[0].toString();
-                    boolean isField = simpleName.toString()
-                            .contains(".");
+                    boolean isField = simpleName.toString().contains(".");
                     String searchName = simpleName.toString();
                     if (isField) {
-                        searchName = searchName.substring(0,
-                                searchName.indexOf('.'));
+                        searchName = searchName.substring(0, searchName.indexOf('.'));
                     }
                     allImports = new TreeMap<>();
                     for (String qualifiedName : mCompiler.publicTopLevelTypes()) {
 
                         if (qualifiedName.endsWith("." + searchName)) {
                             if (isField) {
-                                qualifiedName = qualifiedName
-                                        .substring(0, qualifiedName.lastIndexOf('.'));
+                                qualifiedName = qualifiedName.substring(0,
+                                        qualifiedName.lastIndexOf('.'));
                                 qualifiedName += simpleName;
                             }
                             String title = "Import " + qualifiedName;
@@ -271,7 +316,7 @@ public class CodeActionProvider {
     }
 
     private ClassTree findClassTree(CompileTask task, Range range) {
-        long position = task.root().getLineMap().getPosition(range.start.line , range.start.column);
+        long position = task.root().getLineMap().getPosition(range.start.line, range.start.column);
         return new FindTypeDeclarationAt(task.task).scan(task.root(), position);
     }
 
@@ -299,7 +344,8 @@ public class CodeActionProvider {
     }
 
     private boolean synthetic(CompileTask task, MethodTree method) {
-        return Trees.instance(task.task).getSourcePositions().getStartPosition(task.root(), method) != -1;
+        return Trees.instance(task.task).getSourcePositions().getStartPosition(task.root(),
+                method) != -1;
     }
 
     private int findPosition(CompileTask task, Position position) {
@@ -316,6 +362,7 @@ public class CodeActionProvider {
         LineMap lines = task.root().getLineMap();
         return (int) lines.getColumnNumber(position);
     }
+
     private Range getRange(CompileTask task, Diagnostic<? extends JavaFileObject> diagnostic) {
         int startLine = findLine(task, diagnostic.getStartPosition());
         int startColumn = findColumn(task, diagnostic.getStartPosition());
@@ -327,7 +374,8 @@ public class CodeActionProvider {
 
     private MethodPtr findMethod(CompileTask task, Range range) {
         Trees trees = Trees.instance(task.task);
-        long position = task.root().getLineMap().getPosition(range.start.line + 1, range.start.column + 1);
+        long position = task.root().getLineMap().getPosition(range.start.line + 1,
+                range.start.column + 1);
         Tree tree = new FindMethodDeclarationAt(task.task).scan(task.root(), position);
         TreePath path = trees.getPath(task.root(), tree);
         ExecutableElement method = (ExecutableElement) trees.getElement(path);
@@ -362,7 +410,8 @@ public class CodeActionProvider {
             return "";
         }
 
-        int start = (int) task.root().getLineMap().getPosition(range.start.line, range.start.column);
+        int start = (int) task.root().getLineMap().getPosition(range.start.line,
+                range.start.column);
         int end = (int) task.root().getLineMap().getPosition(range.end.line, range.end.column);
 
         CharSequence charSequence = contents.subSequence(start, end);
@@ -371,10 +420,7 @@ public class CodeActionProvider {
 
 
     private List<IAction> getActions() {
-        return Arrays.asList(
-                new ConvertToAnonymousAction(),
-                new ConvertToLambdaAction()
-        );
+        return Arrays.asList(new ConvertToAnonymousAction(), new ConvertToLambdaAction());
     }
 
 }

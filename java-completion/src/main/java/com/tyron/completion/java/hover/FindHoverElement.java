@@ -13,7 +13,7 @@ public class FindHoverElement extends TreePathScanner<Element, Long> {
     private final JavacTask task;
     private CompilationUnitTree root;
 
-    FindHoverElement(JavacTask task) {
+    public FindHoverElement(JavacTask task) {
         this.task = task;
     }
 

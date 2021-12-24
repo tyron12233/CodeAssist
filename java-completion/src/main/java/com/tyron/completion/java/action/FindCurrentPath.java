@@ -2,7 +2,10 @@ package com.tyron.completion.java.action;
 
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.LambdaExpressionTree;
+import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.NewClassTree;
+import org.openjdk.source.tree.Tree;
+import org.openjdk.source.tree.VariableTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
@@ -29,6 +32,14 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     @Override
+    public TreePath visitMethodInvocation(MethodInvocationTree tree, Long cursor) {
+        if (isInside(tree, cursor)) {
+            return getCurrentPath();
+        }
+        return super.visitMethodInvocation(tree, cursor);
+    }
+
+    @Override
     public TreePath visitLambdaExpression(LambdaExpressionTree t, Long find) {
         TreePath smaller = super.visitLambdaExpression(t, find);
         if (smaller != null) {
@@ -40,6 +51,10 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
         }
 
         return null;
+    }
+
+    private boolean isInside(Tree tree, long find) {
+        return mPos.getStartPosition(mCompilationUnit, tree) <= find && find < mPos.getEndPosition(mCompilationUnit, tree);
     }
 
 

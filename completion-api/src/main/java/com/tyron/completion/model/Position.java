@@ -11,10 +11,22 @@ public class Position {
     public int line;
     
     public int column;
+
+    public long start;
+    public long end;
+
+    public Position(long start, long end) {
+        this.start = start;
+        this.end = end;
+        line = -1;
+        column = -1;
+    }
     
     public Position(int line, int column) {
         this.line = line;
         this.column = column;
+        start = -1;
+        column = -1;
     }
     
     @Override

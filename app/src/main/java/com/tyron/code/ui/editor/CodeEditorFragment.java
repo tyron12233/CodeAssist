@@ -67,8 +67,8 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 
 @SuppressWarnings("FieldCanBeLocal")
-public class CodeEditorFragment extends Fragment
-        implements Savable, SharedPreferences.OnSharedPreferenceChangeListener {
+public class CodeEditorFragment extends Fragment implements Savable,
+        SharedPreferences.OnSharedPreferenceChangeListener {
 
     private static final String LAYOUT_EDITOR_PREFIX = "editor_";
 
@@ -101,9 +101,7 @@ public class CodeEditorFragment extends Fragment
         super.onSaveInstanceState(outState);
 
         if (ProjectManager.getInstance().getCurrentProject() != null) {
-            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile)
-                    .getFileManager()
-                    .setSnapshotContent(mCurrentFile, mEditor.getText().toString());
+            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().setSnapshotContent(mCurrentFile, mEditor.getText().toString());
         }
     }
 
@@ -134,18 +132,18 @@ public class CodeEditorFragment extends Fragment
     }
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
         mPreferences = PreferenceManager.getDefaultSharedPreferences(requireContext());
 
         View root = inflater.inflate(R.layout.code_editor_fragment, container, false);
 
         mEditor = root.findViewById(R.id.code_editor);
-        mEditor.setEditorLanguage(mLanguage =
-                LanguageManager.getInstance().get(mEditor, mCurrentFile));
+        mEditor.setEditorLanguage(mLanguage = LanguageManager.getInstance().get(mEditor,
+                mCurrentFile));
         mEditor.setColorScheme(new SchemeDarcula());
         mEditor.setOverScrollEnabled(false);
-        mEditor.setTextSize(
-                Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
+        mEditor.setTextSize(Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
         mEditor.setCurrentFile(mCurrentFile);
         mEditor.setTextActionMode(CodeEditor.TextActionMode.POPUP_WINDOW);
         mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(),
@@ -157,13 +155,9 @@ public class CodeEditorFragment extends Fragment
         mEditor.setWordwrap(mPreferences.getBoolean(SharedPreferenceKeys.EDITOR_WORDWRAP, false));
         mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         if (mPreferences.getBoolean(SharedPreferenceKeys.KEYBOARD_ENABLE_SUGGESTIONS, false)) {
-            mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT |
-                    EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
+            mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
         } else {
-            mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS |
-                    EditorInfo.TYPE_CLASS_TEXT |
-                    EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
-                    EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+            mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         }
         mPreferences.registerOnSharedPreferenceChangeListener(this);
         return root;
@@ -180,13 +174,9 @@ public class CodeEditorFragment extends Fragment
                 break;
             case SharedPreferenceKeys.KEYBOARD_ENABLE_SUGGESTIONS:
                 if (pref.getBoolean(key, false)) {
-                    mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT |
-                            EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
+                    mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
                 } else {
-                    mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS |
-                            EditorInfo.TYPE_CLASS_TEXT |
-                            EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
-                            EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+                    mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
                 }
                 break;
             case SharedPreferenceKeys.EDITOR_WORDWRAP:
@@ -230,8 +220,7 @@ public class CodeEditorFragment extends Fragment
                 if (window.getLastPrefix().contains(".")) {
                     length -= window.getLastPrefix().lastIndexOf(".") + 1;
                 }
-                mEditor.getText().delete(cursor.getLeftLine(),
-                        cursor.getLeftColumn() - length,
+                mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - length,
                         cursor.getLeftLine(), cursor.getLeftColumn());
 
                 window.setSelectedItem(item.commit);
@@ -240,8 +229,8 @@ public class CodeEditorFragment extends Fragment
                 if (item.commit != null && item.cursorOffset != item.commit.length()) {
                     int delta = (item.commit.length() - item.cursorOffset);
                     int newSel = Math.max(mEditor.getCursor().getLeft() - delta, 0);
-                    CharPosition charPosition = mEditor.getCursor()
-                            .getIndexer().getCharPosition(newSel);
+                    CharPosition charPosition =
+                            mEditor.getCursor().getIndexer().getCharPosition(newSel);
                     mEditor.setSelection(charPosition.line, charPosition.column);
                 }
 
@@ -262,13 +251,15 @@ public class CodeEditorFragment extends Fragment
                         ParseTask task = new ParseTask(parser.task, parser.root);
 
                         boolean samePackage = false;
+                        String packageName = task.root.getPackageName() == null ? "" :
+                                task.root.getPackageName().toString();
                         //it's either in the same class or it's already imported
-                        if (!item.item.data.contains(".") || task.root.getPackageName().toString()
-                                .equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
+                        if (!item.item.data.contains(".") || packageName.equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
                             samePackage = true;
                         }
 
-                        if (!samePackage && !CompletionProvider.hasImport(task.root, item.item.data)) {
+                        if (!samePackage && !CompletionProvider.hasImport(task.root,
+                                item.item.data)) {
                             AddImport imp = new AddImport(new File(""), item.item.data);
                             Map<File, TextEdit> edits = imp.getText(task);
                             TextEdit edit = edits.values().iterator().next();
@@ -298,40 +289,42 @@ public class CodeEditorFragment extends Fragment
                                     continue;
                                 }
                                 menu.add(action.getTitle()).setOnMenuItemClickListener(menuItem -> {
-                                    new MaterialAlertDialogBuilder(CodeEditorFragment.this.requireContext())
-                                            .setTitle(action.getTitle())
-                                            .setItems(action.getActions().stream()
-                                                            .map(CodeAction::getTitle)
-                                                            .toArray(String[]::new),
-                                                    ((dialogInterface, i) -> {
-                                                        CodeAction codeAction = action.getActions().get(i);
-                                                        Map<Path, List<TextEdit>> rewrites =
-                                                                codeAction.getEdits();
-                                                        List<TextEdit> edits = rewrites.values()
-                                                                .iterator().next();
-                                                        for (TextEdit edit : edits) {
-                                                            Range range = edit.range;
-                                                            if (range.start.equals(range.end)) {
-                                                                mEditor.getText()
-                                                                        .insert(range.start.line,
-                                                                                range.start.column,
-                                                                                edit.newText);
-                                                            } else {
-                                                                mEditor.getText()
-                                                                        .replace(range.start.line,
-                                                                                range.start.column,
-                                                                                range.end.line,
-                                                                                range.end.column,
-                                                                                edit.newText);
-                                                            }
-                                                            int startFormat = mEditor.getText()
-                                                                    .getCharIndex(range.start.line,
-                                                                            range.start.column);
-                                                            int endFormat = startFormat +
-                                                                    edit.newText.length();
-                                                            mEditor.formatCodeAsync(startFormat, endFormat);
-                                                        }
-                                                    })).show();
+                                    new MaterialAlertDialogBuilder(CodeEditorFragment.this.requireContext()).setTitle(action.getTitle()).setItems(action.getActions().stream().map(CodeAction::getTitle).toArray(String[]::new), ((dialogInterface, i) -> {
+                                        CodeAction codeAction = action.getActions().get(i);
+                                        Map<Path, List<TextEdit>> rewrites = codeAction.getEdits();
+                                        List<TextEdit> edits = rewrites.values().iterator().next();
+                                        for (TextEdit edit : edits) {
+                                            Range range = edit.range;
+
+                                            int startFormat;
+                                            int endFormat;
+                                            if (range.start.line == -1 && range.start.column == -1 || (range.end.line == -1 && range.end.column == -1)) {
+                                                startFormat = (int) range.start.start;
+                                                endFormat = (int) range.end.end;
+
+                                                CharPosition startChar =
+                                                        mEditor.getText().getIndexer().getCharPosition((int) range.start.start);
+                                                CharPosition endChar =
+                                                        mEditor.getText().getIndexer().getCharPosition((int) range.end.end);
+                                                mEditor.getText().insert(startChar.line,
+                                                        startChar.column, edit.newText);
+                                            } else {
+                                                if (range.start.equals(range.end)) {
+                                                    mEditor.getText().insert(range.start.line,
+                                                            range.start.column, edit.newText);
+                                                } else {
+                                                    mEditor.getText().replace(range.start.line,
+                                                            range.start.column, range.end.line,
+                                                            range.end.column, edit.newText);
+                                                }
+                                                startFormat =
+                                                        mEditor.getText().getCharIndex(range.start.line, range.start.column);
+                                                endFormat = startFormat + edit.newText.length();
+                                            }
+
+                                            mEditor.formatCodeAsync(startFormat, endFormat);
+                                        }
+                                    })).show();
                                     return true;
                                 });
                             }
@@ -344,11 +337,11 @@ public class CodeEditorFragment extends Fragment
 
         getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
                 getViewLifecycleOwner(), ((requestKey, result) -> {
-                    String xml = result.getString("text", mEditor.getText().toString());
-                    xml = XmlPrettyPrinter.prettyPrint(xml, XmlFormatPreferences.defaults(),
-                            XmlFormatStyle.LAYOUT, "\n");
-                    mEditor.setText(xml);
-                }));
+            String xml = result.getString("text", mEditor.getText().toString());
+            xml = XmlPrettyPrinter.prettyPrint(xml, XmlFormatPreferences.defaults(),
+                    XmlFormatStyle.LAYOUT, "\n");
+            mEditor.setText(xml);
+        }));
     }
 
     @Override
@@ -367,9 +360,7 @@ public class CodeEditorFragment extends Fragment
     public void onDestroy() {
         super.onDestroy();
         if (ProjectManager.getInstance().getCurrentProject() != null) {
-            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile)
-                    .getFileManager()
-                    .closeFileForSnapshot(mCurrentFile);
+            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().closeFileForSnapshot(mCurrentFile);
         }
         mPreferences.unregisterOnSharedPreferenceChangeListener(this);
     }
@@ -381,9 +372,7 @@ public class CodeEditorFragment extends Fragment
         hideEditorWindows();
 
         if (ProjectManager.getInstance().getCurrentProject() != null) {
-            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile)
-                    .getFileManager()
-                    .setSnapshotContent(mCurrentFile, mEditor.getText().toString());
+            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().setSnapshotContent(mCurrentFile, mEditor.getText().toString());
         }
     }
 
@@ -428,8 +417,7 @@ public class CodeEditorFragment extends Fragment
 
     public void setCursorPosition(int line, int column) {
         if (mEditor != null) {
-            mEditor.getCursor()
-                    .set(line, column);
+            mEditor.getCursor().set(line, column);
         }
     }
 
@@ -457,10 +445,8 @@ public class CodeEditorFragment extends Fragment
 
         File currentFile = mEditor.getCurrentFile();
         if (ProjectUtils.isLayoutXMLFile(currentFile)) {
-            getChildFragmentManager().beginTransaction()
-                    .add(R.id.layout_editor_container, LayoutEditorFragment.newInstance(currentFile))
-                    .addToBackStack(null)
-                    .commit();
+            getChildFragmentManager().beginTransaction().add(R.id.layout_editor_container,
+                    LayoutEditorFragment.newInstance(currentFile)).addToBackStack(null).commit();
         } else {
             // TODO: handle unknown files
         }
@@ -474,10 +460,10 @@ public class CodeEditorFragment extends Fragment
         Module module = project.getModule(mCurrentFile);
         if (mLanguage instanceof JavaLanguage && module != null) {
             final Path current = mEditor.getCurrentFile().toPath();
-            JavaCompilerProvider service = CompilerService.getInstance()
-                    .getIndex(JavaCompilerProvider.KEY);
-            CodeActionProvider provider =
-                    new CodeActionProvider(service.getCompiler(project, (JavaModule) module));
+            JavaCompilerProvider service =
+                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+            CodeActionProvider provider = new CodeActionProvider(service.getCompiler(project,
+                    (JavaModule) module));
             return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
         }
         return Collections.emptyList();
@@ -515,19 +501,15 @@ public class CodeEditorFragment extends Fragment
         }
 
         @Override
-        public void afterDelete(@NonNull CodeEditor editor,
-                                @NonNull CharSequence content,
-                                int startLine, int startColumn,
-                                int endLine, int endColumn,
+        public void afterDelete(@NonNull CodeEditor editor, @NonNull CharSequence content,
+                                int startLine, int startColumn, int endLine, int endColumn,
                                 CharSequence deletedContent) {
             updateFile(content);
         }
 
         @Override
-        public void afterInsert(@NonNull CodeEditor editor,
-                                @NonNull CharSequence content,
-                                int startLine, int startColumn,
-                                int endLine, int endColumn,
+        public void afterInsert(@NonNull CodeEditor editor, @NonNull CharSequence content,
+                                int startLine, int startColumn, int endLine, int endColumn,
                                 CharSequence insertedContent) {
             updateFile(content);
         }
