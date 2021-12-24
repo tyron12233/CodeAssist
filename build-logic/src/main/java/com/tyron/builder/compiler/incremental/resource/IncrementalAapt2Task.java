@@ -163,25 +163,6 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         args.add(String.valueOf(getModule().getMinSdk()));
         args.add("--target-sdk-version");
         args.add(String.valueOf(getModule().getTargetSdk()));
-        File[] libraryResources = getOutputPath().listFiles();
-        if (libraryResources != null) {
-            for (File resource : libraryResources) {
-                if (resource.isDirectory()) {
-                    continue;
-                }
-                if (!resource.getName().endsWith(".zip")) {
-                    getLogger().warning("Unrecognized file " + resource.getName());
-                    continue;
-                }
-
-                if (resource.length() == 0) {
-                    getLogger().warning("Empty zip file " + resource.getName());
-                }
-
-                args.add("-R");
-                args.add(resource.getAbsolutePath());
-            }
-        }
 
         File[] resources = files.listFiles();
         if (resources == null) {
@@ -203,8 +184,6 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
             }
         }
         args.add(gen.getAbsolutePath());
-        args.add("-o");
-        args.add(getOutputPath().getParent() + "/generated.apk.res");
 
         args.add("--output-text-symbols");
         File file = new File(getOutputPath(), "R.txt");
@@ -214,16 +193,15 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         }
         args.add(file.getAbsolutePath());
 
-        for (File library : getLibraries()) {
-
-        }
-
         if (getModule().getAssetsDirectory().exists()) {
             args.add("-A");
             args.add(getModule().getAssetsDirectory().getAbsolutePath());
         }
         args.add("--manifest");
         args.add(getModule().getManifestFile().getAbsolutePath());
+
+        args.add("-o");
+        args.add(getOutputPath().getParent() + "/generated.apk.res");
 
         BinaryExecutor exec = new BinaryExecutor();
         exec.setCommands(args);
@@ -433,7 +411,11 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
             List<File> files = map.get(resourceType);
             if (files != null) {
                 for (File file : files) {
-                    FileUtils.copyFileToDirectory(file, outputDir, true);
+                    File copy = new File(outputDir, file.getName());
+                    if (copy.exists()) {
+                        FileUtils.deleteQuietly(copy);
+                    }
+                    FileUtils.copyFileToDirectory(file, outputDir, false);
                 }
             }
         }
