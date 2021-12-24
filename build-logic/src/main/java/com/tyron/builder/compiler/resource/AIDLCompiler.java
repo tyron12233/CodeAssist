@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.io.FilenameFilter;
 
 public class AIDLCompiler {
 
@@ -27,44 +26,68 @@ public class AIDLCompiler {
 
 	private final Project mProject;
 	private final ILogger mLogger;
-	//File file = new File(mProject.getBuildDirectory(), "gen");
 
-	
 	public AIDLCompiler(ILogger log, Project project) {
 		mLogger = log;
 		mProject = project;
 	}
 
 	public void run() throws IOException, CompilationFailedException {
-		
+		long start = System.currentTimeMillis();
+
 		compileProject();
 	
-		}
+
+		Log.d(TAG, "Aidl Resource compilation took " + (System.currentTimeMillis() - start) + " ms");
+	}
+
 	private void compileProject() throws IOException, CompilationFailedException {
 
-		mLogger.debug("Compiling project AIDL resources.");
+		mLogger.debug("Compiling project aidl resources.");
+		
+		for (File file : mProject.getLibraries()) {
+			File parent = file.getParentFile();
+			if (parent == null) {
+				throw new IOException("Library folder doesn't exist");
+			}
 
-		//FileManager.deleteDir(getOutputPath());
-		FileManager.deleteDir(new File(mProject.getBuildDirectory(), "gen"));
-                //command :- aidl pathtoaidl file,need to make complile separate aidl files into gen
-		List<String> args = new ArrayList<>();
-		args.add(getBinary().getAbsolutePath());
-		args.add("");
-		args.add("-o");
-		//args.add(file.getAbsolutePath());
+			File resFolder = new File(parent, "aidl");
+			if (!resFolder.exists() || !resFolder.isDirectory()) {
+				continue;
+			}
+			File gen = new File(mProject.getBuildDirectory(), "gen");
+			if (!gen.exists()) {
+				if (!gen.mkdirs()) {
+					throw  new CompilationFailedException("Failed to create gen folder");
+				}
+			}
+			
 	
+		FileManager.deleteDir(new File(mProject.getBuildDirectory(), "gen"));
+
+		List<String> args = new ArrayList<>();
+		args.add(getAidlBinary().getAbsolutePath());
+		args.add("-p");
+		args.add("/storage/emulated/0/Projects/framework.aidl");
+		args.add("-o");
+		args.add(gen.getAbsolutePath());
+		args.add("-I");
+		args.add(mProject.getAidlDirectory().getAbsolutePath());
+			/*if (!resFolder.exists() || !resFolder.isDirectory()) {
+				args.add("-I");
+				args.add(resFolder.getPath());
+				}*/
+		args.add("");
 		BinaryExecutor exec = new BinaryExecutor();
 		exec.setCommands(args);
 		if (!exec.execute().trim().isEmpty()) {
 			throw new CompilationFailedException(exec.getLog());
 		}
-
-		
-
+}
 	}
 
 	
-			
+		
 	/**
 	 * Retrieves the package names of libraries of has a resource file
 	 * @return list of package names in a form of string separated by ":" for use with AAPT2 directly
@@ -75,7 +98,7 @@ public class AIDLCompiler {
 	 * @return null if an exception occurred or cannot be determined.
 	 */
 	
-	private static File getBinary() throws IOException {
+	private static File getAidlBinary() throws IOException {
 		File check = new File(
 			BuildModule.getContext().getApplicationInfo().nativeLibraryDir,
 			"libaidl.so"
