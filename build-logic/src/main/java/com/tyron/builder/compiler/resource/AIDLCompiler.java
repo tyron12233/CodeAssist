@@ -1,5 +1,4 @@
-package com.test;
-//package com.tyron.builder.compiler.resource;
+package com.tyron.builder.compiler.resource;
 
 import android.util.Log;
 
