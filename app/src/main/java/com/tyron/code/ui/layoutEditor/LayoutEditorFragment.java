@@ -38,7 +38,7 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
 import com.tyron.code.ui.layoutEditor.attributeEditor.AttributeEditorDialogFragment;
 import com.tyron.code.ui.layoutEditor.model.ViewPalette;
-import com.tyron.completion.provider.CompletionEngine;
+import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.layoutpreview.BoundaryDrawingFrameLayout;
 import com.tyron.layoutpreview.convert.LayoutToXmlConverter;
 import com.tyron.layoutpreview.inflate.PreviewLayoutInflater;

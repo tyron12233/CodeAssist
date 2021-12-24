@@ -5,8 +5,6 @@ import androidx.annotation.Nullable;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.ListenableFutureTask;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
@@ -14,7 +12,7 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.util.ProjectUtils;
-import com.tyron.completion.provider.CompletionEngine;
+import com.tyron.completion.java.provider.CompletionEngine;
 
 import org.apache.commons.io.FileUtils;
 
@@ -22,7 +20,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 
 public class ProjectManager {

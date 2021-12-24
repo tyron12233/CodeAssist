@@ -34,16 +34,19 @@ import com.tyron.code.ui.layoutEditor.LayoutEditorFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.SharedPreferenceKeys;
-import com.tyron.completion.ParseTask;
-import com.tyron.completion.Parser;
-import com.tyron.completion.action.CodeActionProvider;
-import com.tyron.completion.model.CodeAction;
-import com.tyron.completion.model.CodeActionList;
+import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.java.JavaCompilerProvider;
+import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.Parser;
+import com.tyron.completion.java.action.CodeActionProvider;
+import com.tyron.completion.java.model.CodeAction;
+import com.tyron.completion.java.model.CodeActionList;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
-import com.tyron.completion.provider.CompletionEngine;
-import com.tyron.completion.provider.CompletionProvider;
-import com.tyron.completion.rewrite.AddImport;
+import com.tyron.completion.java.provider.CompletionEngine;
+import com.tyron.completion.java.provider.CompletionProvider;
+import com.tyron.completion.java.rewrite.AddImport;
+import com.tyron.completion.model.CompletionItem;
 
 import org.apache.commons.io.FileUtils;
 
@@ -252,7 +255,7 @@ public class CodeEditorFragment extends Fragment
                     }
                 }
 
-                if (item.item.action == com.tyron.completion.model.CompletionItem.Kind.IMPORT) {
+                if (item.item.action == CompletionItem.Kind.IMPORT) {
                     if (module instanceof JavaModule) {
                         Parser parser = Parser.parseFile(currentProject,
                                 mEditor.getCurrentFile().toPath());
@@ -471,9 +474,10 @@ public class CodeEditorFragment extends Fragment
         Module module = project.getModule(mCurrentFile);
         if (mLanguage instanceof JavaLanguage && module != null) {
             final Path current = mEditor.getCurrentFile().toPath();
+            JavaCompilerProvider service = CompilerService.getInstance()
+                    .getIndex(JavaCompilerProvider.KEY);
             CodeActionProvider provider =
-                    new CodeActionProvider(CompletionEngine.getInstance()
-                            .getCompiler(project, (JavaModule) module));
+                    new CodeActionProvider(service.getCompiler(project, (JavaModule) module));
             return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
         }
         return Collections.emptyList();

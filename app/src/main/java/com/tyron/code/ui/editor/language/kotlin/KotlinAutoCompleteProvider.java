@@ -48,7 +48,7 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
             return null;
         }
 
-        if (com.tyron.completion.provider.CompletionEngine.isIndexing()) {
+        if (com.tyron.completion.java.provider.CompletionEngine.isIndexing()) {
             return null;
         }
 

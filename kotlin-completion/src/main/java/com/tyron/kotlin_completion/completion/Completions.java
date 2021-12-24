@@ -1,7 +1,6 @@
 package com.tyron.kotlin_completion.completion;
 
 import android.util.Log;
-import android.util.TimingLogger;
 
 import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.CompiledFile;

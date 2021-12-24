@@ -12,7 +12,7 @@ import androidx.preference.PreferenceManager;
 
 import com.developer.crashx.config.CrashConfig;
 import com.tyron.builder.BuildModule;
-import com.tyron.completion.CompletionModule;
+import com.tyron.completion.java.CompletionModule;
 
 public class ApplicationLoader extends Application {
     

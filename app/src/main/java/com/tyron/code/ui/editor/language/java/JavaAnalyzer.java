@@ -5,16 +5,18 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
-import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.lint.DefaultLintClient;
-import com.tyron.completion.CompileTask;
-import com.tyron.completion.JavaCompilerService;
-import com.tyron.completion.provider.CompletionEngine;
+import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.JavaCompilerService;
+import com.tyron.completion.java.JavaCompilerProvider;
+import com.tyron.completion.java.provider.CompletionEngine;
 
 import org.openjdk.javax.tools.Diagnostic;
 
@@ -266,19 +268,22 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             if (project != null) {
                 Module module = project.getModule(editor.getCurrentFile());
                 if (module != null) {
-                    JavaCompilerService service = CompletionEngine.getInstance().
-                            getCompiler(project, (JavaModule) module);
-                    if (service.isReady()) {
-                        try {
-                            try (CompileTask task = service.compile(
-                                    Collections.singletonList(new SourceFileObject(editor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
-                                innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
+                    JavaCompilerProvider provider = CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+                    if (provider != null) {
+                        JavaCompilerService service = provider.getCompiler(project, (JavaModule) module);
+                        if (service != null && service.isReady()) {
+                            try {
+                                try (CompileTask task = service.compile(
+                                        Collections.singletonList(new SourceFileObject(editor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
+                                    innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
+                                }
+                            } catch (Throwable e) {
+                                Log.e("JavaAnalyzer", "Failed compiling the file", e);
+                                service.close();
                             }
-                        } catch (Throwable e) {
-                            Log.e("JavaAnalyzer", "Failed compiling the file", e);
-                            service.close();
                         }
                     }
+
                 }
             }
         }
