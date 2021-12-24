@@ -1,7 +1,7 @@
 package com.tyron.kotlin_completion;
 
 import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.completion.CompletionModule;
+import com.tyron.completion.java.CompletionModule;
 import com.tyron.kotlin_completion.classpath.ClassPathEntry;
 import com.tyron.kotlin_completion.classpath.DefaultClassPathResolver;
 import com.tyron.kotlin_completion.compiler.Compiler;

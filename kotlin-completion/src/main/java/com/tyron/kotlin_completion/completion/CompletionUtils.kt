@@ -1,9 +1,9 @@
 package com.tyron.kotlin_completion.completion
 
 import android.util.Log
-import com.tyron.completion.drawable.CircleDrawable
 import com.tyron.completion.model.CompletionItem
 import com.tyron.completion.model.CompletionList
+import com.tyron.completion.model.DrawableKind
 import com.tyron.completion.model.Position
 import com.tyron.kotlin_completion.CompiledFile
 import com.tyron.kotlin_completion.index.Symbol
@@ -117,12 +117,12 @@ private fun indexCompletionItems(
                 commitText = label
                 cursorOffset = label.length
                 iconKind = when (it.kind) {
-                    Symbol.Kind.CLASS -> CircleDrawable.Kind.Class
-                    Symbol.Kind.INTERFACE -> CircleDrawable.Kind.Interface
-                    Symbol.Kind.FUNCTION -> CircleDrawable.Kind.Method
-                    Symbol.Kind.VARIABLE -> CircleDrawable.Kind.LocalVariable
-                    Symbol.Kind.FIELD -> CircleDrawable.Kind.Filed
-                    else -> CircleDrawable.Kind.Method
+                    Symbol.Kind.CLASS -> DrawableKind.Class
+                    Symbol.Kind.INTERFACE -> DrawableKind.Interface
+                    Symbol.Kind.FUNCTION -> DrawableKind.Method
+                    Symbol.Kind.VARIABLE -> DrawableKind.LocalVariable
+                    Symbol.Kind.FIELD -> DrawableKind.Filed
+                    else -> DrawableKind.Method
                 }
                 detail = "(import from ${it.fqName.parent()})"
 //                val pos = findImportInsertionPosition(parsedFile, it.fqName)
@@ -167,7 +167,7 @@ private fun keywordCompletionItems(partial: String): Sequence<CompletionItem> {
         .map {
             CompletionItem().apply {
                 label = it
-                iconKind = CircleDrawable.Kind.Keyword
+                iconKind = DrawableKind.Keyword
                 commitText = label
                 cursorOffset = label.length
             }

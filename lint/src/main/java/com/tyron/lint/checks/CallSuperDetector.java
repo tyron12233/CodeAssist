@@ -10,7 +10,6 @@ import androidx.annotation.CallSuper;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.completion.FindTypeDeclarationAt;
 import com.tyron.lint.api.Category;
 import com.tyron.lint.api.Detector;
 import com.tyron.lint.api.Implementation;

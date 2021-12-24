@@ -26,7 +26,9 @@ import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainViewModel;
-import com.tyron.completion.provider.CompletionEngine;
+import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.java.JavaCompilerProvider;
+import com.tyron.completion.java.provider.CompletionEngine;
 
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.DiagnosticListener;
@@ -137,9 +139,10 @@ public class AppLogFragment extends Fragment
                     if (getActivity() == null) {
                         return;
                     }
+                    JavaCompilerProvider provider = CompilerService.getInstance()
+                            .getIndex(JavaCompilerProvider.KEY);
                     List<Diagnostic<? extends JavaFileObject>> diagnostics =
-                            CompletionEngine.getInstance()
-                                    .getCompiler(project, (JavaModule) module)
+                            provider.getCompiler(project, (JavaModule) module)
                                     .getDiagnostics();
                     requireActivity().runOnUiThread(() ->
                             mModel.updateLogs(id, diagnostics));

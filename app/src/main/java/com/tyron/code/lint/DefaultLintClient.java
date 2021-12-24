@@ -6,8 +6,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.builder.project.api.JavaModule;
-import com.tyron.completion.JavaCompilerService;
-import com.tyron.completion.provider.CompletionEngine;
+import com.tyron.code.service.IndexService;
+import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.java.JavaCompilerProvider;
+import com.tyron.completion.java.JavaCompilerService;
+import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.lint.api.Context;
 import com.tyron.lint.api.Issue;
 import com.tyron.lint.api.Lint;
@@ -27,7 +30,8 @@ public class DefaultLintClient extends LintClient {
     private final JavaCompilerService mCompiler;
 
     public DefaultLintClient(JavaModule project) {
-        mCompiler = CompletionEngine.getInstance().getCompiler(null, project);
+        mCompiler = CompilerService.getInstance()
+                .getIndex(JavaCompilerProvider.KEY);
         mLint = new Lint(mCompiler, project, this);
     }
 

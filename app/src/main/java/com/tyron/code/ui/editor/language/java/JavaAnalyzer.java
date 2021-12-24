@@ -5,16 +5,18 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
-import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.lint.DefaultLintClient;
-import com.tyron.completion.CompileTask;
-import com.tyron.completion.JavaCompilerService;
-import com.tyron.completion.provider.CompletionEngine;
+import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.JavaCompilerService;
+import com.tyron.completion.java.JavaCompilerProvider;
+import com.tyron.completion.java.provider.CompletionEngine;
 
 import org.openjdk.javax.tools.Diagnostic;
 
@@ -68,8 +70,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         if (editor == null) {
             return;
         }
-        Instant startTime = Instant.now();
-
         StringBuilder text = content instanceof StringBuilder ? (StringBuilder) content : new StringBuilder(content);
         JavaTextTokenizer tokenizer = new JavaTextTokenizer(text);
         tokenizer.setCalculateLineColumn(false);
@@ -266,25 +266,25 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             if (project != null) {
                 Module module = project.getModule(editor.getCurrentFile());
                 if (module != null) {
-                    JavaCompilerService service = CompletionEngine.getInstance().
-                            getCompiler(project, (JavaModule) module);
-                    if (service.isReady()) {
-                        try {
-                            try (CompileTask task = service.compile(
-                                    Collections.singletonList(new SourceFileObject(editor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
-                                innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
+                    JavaCompilerProvider provider = CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+                    if (provider != null) {
+                        JavaCompilerService service = provider.getCompiler(project, (JavaModule) module);
+                        if (service != null && service.isReady()) {
+                            try {
+                                try (CompileTask task = service.compile(
+                                        Collections.singletonList(new SourceFileObject(editor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
+                                    innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
+                                }
+                            } catch (Throwable e) {
+                                service.close();
                             }
-                        } catch (Throwable e) {
-                            Log.e("JavaAnalyzer", "Failed compiling the file", e);
-                            service.close();
                         }
                     }
+
                 }
             }
         }
         markDiagnostics(editor, innerDiagnostics, colors);
-
-        Log.d(TAG, "Analysis took " + Duration.between(startTime, Instant.now()).toMillis() + " ms");
     }
 
     private void markDiagnostics(CodeEditor editor, List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
@@ -312,8 +312,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
                 colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
             } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
-                // Work around for the indexer requiring a sorted positions
-                Log.w(TAG, "Unable to mark problem region: diagnostics " + diagnostics, e);
+               // ignored
             }
         });
         editor.getText().endStreamCharGetting();

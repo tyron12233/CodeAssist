@@ -35,14 +35,17 @@ dependencies {
 
     implementation project(path: ':kotlinc')
     implementation project(path: ':build-logic')
-    implementation project(path: ':completion')
+    implementation project(path: ':completion-api')
     implementation project(path: ':common')
 
     implementation 'org.jetbrains.exposed:exposed-core:0.32.1'
     implementation 'org.jetbrains.exposed:exposed-dao:0.32.1'
     implementation 'org.jetbrains.exposed:exposed-jdbc:0.32.1'
     implementation 'com.h2database:h2:1.4.200'
+    implementation project(path: ':java-completion')
     testImplementation 'junit:junit:4.+'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
 }

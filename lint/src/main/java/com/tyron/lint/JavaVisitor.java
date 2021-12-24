@@ -4,9 +4,9 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.completion.CompileTask;
-import com.tyron.completion.CompilerProvider;
-import com.tyron.completion.JavaCompilerService;
+import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerProvider;
+import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.lint.api.Detector;
 import com.tyron.lint.api.Detector.JavaScanner;
 import com.tyron.lint.api.JavaContext;

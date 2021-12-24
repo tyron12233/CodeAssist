@@ -34,7 +34,7 @@ import com.tyron.code.service.IndexServiceConnection;
 import com.tyron.code.ui.editor.EditorContainerFragment;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.settings.SettingsActivity;
-import com.tyron.completion.provider.CompletionEngine;
+import com.tyron.completion.java.provider.CompletionEngine;
 
 import java.io.File;
 import java.util.ArrayList;

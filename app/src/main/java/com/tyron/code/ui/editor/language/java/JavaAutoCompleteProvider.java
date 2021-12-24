@@ -8,8 +8,8 @@ import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.completion.main.CompletionEngine;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.completion.provider.CompletionEngine;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,9 +37,9 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
             return null;
         }
 
-        if (CompletionEngine.isIndexing()) {
-            return null;
-        }
+//        if (CompletionEngine.isIndexing()) {
+//            return null;
+//        }
 
         Project project = ProjectManager.getInstance().getCurrentProject();
 
@@ -57,7 +57,7 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
             if (content.isPresent()) {
                 CompletionList completionList = CompletionEngine.getInstance()
                         .complete(project,
-                                (JavaModule) currentModule,
+                                currentModule,
                                 mEditor.getCurrentFile(),
                                 content.get().toString(),
                                 prefix,

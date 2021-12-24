@@ -22,7 +22,6 @@
  */
 package io.github.rosemoe.sora.interfaces;
 
-import org.jetbrains.kotlin.com.intellij.util.Consumer;
 
 import java.util.List;
 
@@ -46,9 +45,5 @@ public interface AutoCompleteProvider {
      * @return Analyzed items
      */
     List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) throws InterruptedException;
-    
-    default void getAutoCompleteItems(String prefix, TextAnalyzeResult result, int line, int column, Consumer<CompletionItem> consumer) throws InterruptedException {
-        getAutoCompleteItems(prefix, result, line, column).forEach(consumer::consume);
-    }
 }
 

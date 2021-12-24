@@ -1,10 +1,9 @@
 package com.tyron.kotlin_completion.completion;
 
-import com.tyron.completion.drawable.CircleDrawable;
+import com.tyron.completion.model.DrawableKind;
 import com.tyron.completion.model.CompletionItem;
 
 import org.jetbrains.kotlin.builtins.FunctionTypesKt;
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.descriptors.ClassDescriptor;
 import org.jetbrains.kotlin.descriptors.ConstructorDescriptor;
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
@@ -22,22 +21,17 @@ import org.jetbrains.kotlin.descriptors.TypeAliasDescriptor;
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor;
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor;
 import org.jetbrains.kotlin.descriptors.VariableDescriptor;
-import org.jetbrains.kotlin.descriptors.impl.DeclarationDescriptorImpl;
 import org.jetbrains.kotlin.renderer.ClassifierNamePolicy;
 import org.jetbrains.kotlin.renderer.DescriptorRenderer;
-import org.jetbrains.kotlin.renderer.DescriptorRendererOptions;
 import org.jetbrains.kotlin.renderer.ParameterNameRenderingPolicy;
 import org.jetbrains.kotlin.types.ErrorUtils;
 import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.kotlin.types.UnresolvedType;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import kotlin.Unit;
-import kotlin.collections.ArraysKt;
-import kotlin.jvm.functions.Function1;
 import kotlin.sequences.Sequence;
 import kotlin.sequences.SequencesKt;
 import kotlin.text.Regex;
@@ -115,7 +109,7 @@ public class RenderCompletionItem implements DeclarationDescriptorVisitor<Comple
     public CompletionItem visitVariableDescriptor(VariableDescriptor variableDescriptor, Void unused) {
         setDefaults(variableDescriptor);
 
-        result.iconKind = CircleDrawable.Kind.LocalVariable;
+        result.iconKind = DrawableKind.LocalVariable;
 
         return result;
     }
@@ -124,7 +118,7 @@ public class RenderCompletionItem implements DeclarationDescriptorVisitor<Comple
     public CompletionItem visitFunctionDescriptor(FunctionDescriptor functionDescriptor, Void unused) {
         setDefaults(functionDescriptor);
 
-        result.iconKind = CircleDrawable.Kind.Method;
+        result.iconKind = DrawableKind.Method;
         result.commitText = functionInsertText(functionDescriptor);
 
         return result;
@@ -141,9 +135,9 @@ public class RenderCompletionItem implements DeclarationDescriptorVisitor<Comple
         setDefaults(classDescriptor);
 
         switch (classDescriptor.getKind()) {
-            case INTERFACE: result.iconKind = CircleDrawable.Kind.Interface; break;
+            case INTERFACE: result.iconKind = DrawableKind.Interface; break;
             default:
-            case CLASS: result.iconKind = CircleDrawable.Kind.Class; break;
+            case CLASS: result.iconKind = DrawableKind.Class; break;
         }
 
 
@@ -190,7 +184,7 @@ public class RenderCompletionItem implements DeclarationDescriptorVisitor<Comple
     public CompletionItem visitPropertyGetterDescriptor(PropertyGetterDescriptor propertyGetterDescriptor, Void unused) {
         setDefaults(propertyGetterDescriptor);
 
-        result.iconKind = CircleDrawable.Kind.Filed;
+        result.iconKind = DrawableKind.Filed;
 
         return result;
     }
@@ -199,7 +193,7 @@ public class RenderCompletionItem implements DeclarationDescriptorVisitor<Comple
     public CompletionItem visitPropertySetterDescriptor(PropertySetterDescriptor propertySetterDescriptor, Void unused) {
         setDefaults(propertySetterDescriptor);
 
-        result.iconKind = CircleDrawable.Kind.Filed;
+        result.iconKind = DrawableKind.Filed;
         return result;
     }
 

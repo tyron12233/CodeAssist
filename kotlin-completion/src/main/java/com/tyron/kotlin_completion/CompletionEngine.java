@@ -6,7 +6,7 @@ import android.util.Pair;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.Debouncer;
-import com.tyron.completion.model.CachedCompletion;
+import com.tyron.completion.java.model.CachedCompletion;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.completion.Completions;
 import com.tyron.kotlin_completion.diagnostic.ConvertDiagnosticKt;
@@ -27,7 +27,6 @@ import java.util.concurrent.CompletableFuture;
 
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
-import kotlin.jvm.functions.Function1;
 
 public class CompletionEngine {
 
