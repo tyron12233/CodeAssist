@@ -46,7 +46,7 @@ public class AIDLCompiler {
 
 		FileManager.deleteDir(getOutputPath());
 		FileManager.deleteDir(new File(mProject.getBuildDirectory(), "gen"));
-
+                //command :- aidl pathtoaidl file,need to make complile separate aidl files into gen
 		List<String> args = new ArrayList<>();
 		args.add(getBinary().getAbsolutePath());
 		args.add("");
