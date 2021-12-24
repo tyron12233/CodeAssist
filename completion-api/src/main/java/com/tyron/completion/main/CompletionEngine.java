@@ -4,6 +4,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.completion.progress.ProcessCanceledException;
 import com.tyron.completion.progress.ProgressManager;
 
 import java.io.File;
@@ -56,6 +57,8 @@ public class CompletionEngine {
                 ProgressManager.getInstance().setRunning(true);
                 ProgressManager.getInstance().setCanceled(false);
                 return provider.complete(project, module, file, contents, prefix, line, column, index);
+            } catch(ProcessCanceledException e) {
+                // ignore
             } finally {
                 ProgressManager.getInstance().setRunning(true);
             }

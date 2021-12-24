@@ -65,8 +65,6 @@ public class CompileBatch implements AutoCloseable {
             // The results of borrow.task.analyze() are unreliable when errors are present
             // You can get at `Element` values using `Trees`
             borrow.task.analyze();
-
-            Log.d("CompileBatch", "Parse and analyze took " + Duration.between(start, Instant.now()).toMillis() + " ms");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

@@ -70,8 +70,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         if (editor == null) {
             return;
         }
-        Instant startTime = Instant.now();
-
         StringBuilder text = content instanceof StringBuilder ? (StringBuilder) content : new StringBuilder(content);
         JavaTextTokenizer tokenizer = new JavaTextTokenizer(text);
         tokenizer.setCalculateLineColumn(false);
@@ -288,8 +286,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             }
         }
         markDiagnostics(editor, innerDiagnostics, colors);
-
-        Log.d(TAG, "Analysis took " + Duration.between(startTime, Instant.now()).toMillis() + " ms");
     }
 
     private void markDiagnostics(CodeEditor editor, List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
