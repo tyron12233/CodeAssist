@@ -155,52 +155,8 @@ public class CompletionEngine {
 //            return CompletionList.EMPTY;
 //        }
 //
-//        if (isIncrementalCompletion(cachedCompletion, file, prefix, line, column)) {
-//            Log.d(TAG, "Using incremental completion");
-//            String partialIdentifier = partialIdentifier(prefix, prefix.length());
-//            List<CompletionItem> narrowedList = cachedCompletion.getCompletionList().items.stream()
-//                    .filter(item -> {
-//                        String label = item.label;
-//                        if (label.contains("(")) {
-//                            label = label.substring(0, label.indexOf('('));
-//                        }
-//                        if (label.length() < partialIdentifier.length()) {
-//                            return false;
-//                        }
-//                        return FuzzySearch.partialRatio(label, partialIdentifier) > 90;
-//                    })
-//                    .collect(Collectors.toList());
-//            CompletionList completionList = new CompletionList();
-//            completionList.items = narrowedList;
-//            return completionList;
-//        }
-//
-//        try {
-//            CompletionList complete = new CompletionProvider(getCompiler(project, module))
-//                    .complete(file, contents, index);
-//            String newPrefix = prefix;
-//            if (prefix.contains(".")) {
-//                newPrefix = partialIdentifier(prefix, prefix.length());
-//            }
-//            cachedCompletion = new CachedCompletion(file, line, column, newPrefix, complete);
-//            return complete;
-//        } catch (Throwable e) {
-//            if (e instanceof InterruptedException) {
-//                throw e;
-//            }
-//
-//            Log.d(TAG, "Completion failed: " + Log.getStackTraceString(e) + " Clearing cache.");
-//            mProvider = null;
-//        }
-        return CompletionList.EMPTY;
-    }
 
-    private String partialIdentifier(String contents, int end) {
-        int start = end;
-        while (start > 0 && Character.isJavaIdentifierPart(contents.charAt(start - 1))) {
-            start--;
-        }
-        return contents.substring(start, end);
+        return CompletionList.EMPTY;
     }
 
     @NonNull
@@ -229,41 +185,5 @@ public class CompletionEngine {
         return CompletionList.EMPTY;
     }
 
-    private boolean isIncrementalCompletion(CachedCompletion cachedCompletion,
-                                            File file,
-                                            String prefix,
-                                            int line, int column) {
-        prefix = partialIdentifier(prefix, prefix.length());
 
-        if (cachedCompletion == null) {
-            return false;
-        }
-
-        if (!file.equals(cachedCompletion.getFile())) {
-            return false;
-        }
-
-        if (prefix.endsWith(".")) {
-            return false;
-        }
-
-        if (cachedCompletion.getLine() != line) {
-            return false;
-        }
-
-        if (cachedCompletion.getColumn() > column) {
-            return false;
-        }
-
-        if (!prefix.startsWith(cachedCompletion.getPrefix())) {
-            return false;
-        }
-
-        if (prefix.length() - cachedCompletion.getPrefix().length() !=
-                column - cachedCompletion.getColumn()) {
-            return false;
-        }
-
-        return true;
-    }
 }

@@ -5,5 +5,5 @@ import com.tyron.builder.project.api.Module;
 
 public abstract class CompilerProvider<T> {
 
-    public abstract T index(Project project, Module module);
+    public abstract T get(Project project, Module module);
 }

@@ -34,7 +34,7 @@ public class CompilerService {
 
     public void index(Project project, Module module) {
         for (CompilerProvider<?> provider : mIndexProviders.values()) {
-            provider.index(project, module);
+            provider.get(project, module);
         }
     }
 }

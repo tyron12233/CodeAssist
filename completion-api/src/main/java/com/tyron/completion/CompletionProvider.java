@@ -18,7 +18,7 @@ public abstract class CompletionProvider {
 
     /**
      * @return The file extension this CompletionProvider is applicable to
-     * without including the dot.
+     * including the dot.
      */
     public abstract String getFileExtension();
 

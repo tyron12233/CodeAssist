@@ -5,6 +5,7 @@ public class ProgressManager {
     private static ProgressManager sInstance = null;
 
     private volatile boolean mIsCanceled;
+    private volatile boolean mIsRunning;
 
     public static ProgressManager getInstance() {
         if (sInstance == null) {
@@ -13,8 +14,16 @@ public class ProgressManager {
         return sInstance;
     }
 
+    public synchronized void setRunning(boolean running) {
+        mIsRunning = running;
+    }
+
     public synchronized void setCanceled(boolean cancel) {
         mIsCanceled = cancel;
+    }
+
+    public synchronized boolean isRunning() {
+        return mIsRunning;
     }
 
     public synchronized boolean isCanceled() {

@@ -4,6 +4,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.completion.progress.ProgressManager;
 
 import java.io.File;
 import java.util.HashMap;
@@ -46,9 +47,18 @@ public class CompletionEngine {
                                    int column,
                                    long index) {
         String extension = getExtension(file);
+        if (ProgressManager.getInstance().isRunning()) {
+            ProgressManager.getInstance().setCanceled(true);
+        }
         CompletionProvider provider = getCompletionProvider(extension);
         if (provider != null) {
-            return provider.complete(project, module, file, contents, prefix, line, column, index);
+            try {
+                ProgressManager.getInstance().setRunning(true);
+                ProgressManager.getInstance().setCanceled(false);
+                return provider.complete(project, module, file, contents, prefix, line, column, index);
+            } finally {
+                ProgressManager.getInstance().setRunning(true);
+            }
         }
         return CompletionList.EMPTY;
     }

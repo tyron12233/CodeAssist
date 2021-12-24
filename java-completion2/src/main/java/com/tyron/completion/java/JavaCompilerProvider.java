@@ -23,11 +23,16 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
     }
 
     @Override
-    public JavaCompilerService index(Project project, Module module) {
+    public JavaCompilerService get(Project project, Module module) {
         if (module instanceof JavaModule) {
             return getCompiler(project, (JavaModule) module);
         }
         return null;
+    }
+
+    public void destroy() {
+        mCachedPaths.clear();
+        mProvider = null;
     }
 
     public JavaCompilerService getCompiler(Project project, JavaModule module) {
