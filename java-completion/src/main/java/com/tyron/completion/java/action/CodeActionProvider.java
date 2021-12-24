@@ -36,12 +36,14 @@ import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.LineMap;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
+import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
+import org.openjdk.tools.javac.code.Symbol;
 import org.openjdk.tools.javac.tree.JCTree;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
@@ -75,32 +77,7 @@ public class CodeActionProvider {
             diagnostic = getDiagnostic(task, cursor);
             overrideMethods.putAll(getOverrideInheritedMethods(task, file, cursor));
 
-            TreePath path = new FindCurrentPath(task.task).scan(task.root(), cursor);
-            if (path != null) {
-                Tree leaf = path.getLeaf();
-                switch (leaf.getKind()) {
-                    case METHOD_INVOCATION:
-                        JCTree.JCMethodInvocation tree = (JCTree.JCMethodInvocation) leaf;
-                        TreePath parent = path.getParentPath();
-                        if (!(parent.getLeaf() instanceof JCTree.JCVariableDecl)) {
-                            ExecutableElement element =
-                                    (ExecutableElement) Trees.instance(task.task).getElement(path);
-                            if (element != null) {
-                                TypeMirror returnType = element.getReturnType();
-                                if (returnType.getKind() != TypeKind.VOID) {
-                                    SourcePositions pos =
-                                            Trees.instance(task.task).getSourcePositions();
-                                    long startPosition =
-                                            pos.getStartPosition(path.getCompilationUnit(),
-                                                    path.getLeaf());
-                                    contextActions.put("Introduce local variable",
-                                            new IntroduceLocalVariable(file, returnType,
-                                                    startPosition));
-                                }
-                            }
-                        }
-                }
-            }
+            addContextActions(task, file, cursor, contextActions);
         }
         if (diagnostic != null) {
             CompletionModule.post(() -> Toast.makeText(CompletionModule.getContext(),
@@ -122,6 +99,37 @@ public class CodeActionProvider {
         }
 
         return codeActionList;
+    }
+
+    private void addContextActions(CompileTask task, Path file, long cursor, TreeMap<String, Rewrite> contextActions) {
+        TreePath path = new FindCurrentPath(task.task).scan(task.root(), cursor);
+        if (path != null) {
+            Tree leaf = path.getLeaf();
+            switch (leaf.getKind()) {
+                case NEW_CLASS:
+                case METHOD_INVOCATION:
+                    TreePath parent = path.getParentPath();
+                    if (!(parent.getLeaf() instanceof JCTree.JCVariableDecl)) {
+                        ExecutableElement element =
+                                (ExecutableElement) Trees.instance(task.task).getElement(path);
+                        if (element != null) {
+                            TypeMirror returnType = path.getLeaf() instanceof NewClassTree
+                                    ? Trees.instance(task.task).getTypeMirror(path)
+                                    : element.getReturnType();
+                            if (returnType.getKind() != TypeKind.VOID) {
+                                SourcePositions pos =
+                                        Trees.instance(task.task).getSourcePositions();
+                                long startPosition =
+                                        pos.getStartPosition(path.getCompilationUnit(),
+                                                path.getLeaf());
+                                contextActions.put("Introduce local variable",
+                                        new IntroduceLocalVariable(file, returnType,
+                                                startPosition));
+                            }
+                        }
+                    }
+            }
+        }
     }
 
     private List<CodeAction> getActionsFromRewrites(Map<String, Rewrite> rewrites) {
