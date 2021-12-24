@@ -95,6 +95,14 @@ public class PackageTask extends Task<AndroidModule> {
 
             for (File library : mLibraries) {
                 builder.addResourcesFromJar(library);
+
+                File parent = library.getParentFile();
+                if (parent != null) {
+                    File jniFolder = new File(parent, "jni");
+                    if (jniFolder.exists() && jniFolder.isDirectory()) {
+                        builder.addNativeLibraries(jniFolder);
+                    }
+                }
             }
 
             if (getModule().getNativeLibrariesDirectory().exists()) {
