@@ -299,15 +299,22 @@ public class CodeEditorFragment extends Fragment implements Savable,
                                             int startFormat;
                                             int endFormat;
                                             if (range.start.line == -1 && range.start.column == -1 || (range.end.line == -1 && range.end.column == -1)) {
-                                                startFormat = (int) range.start.start;
-                                                endFormat = (int) range.end.end;
-
                                                 CharPosition startChar =
                                                         mEditor.getText().getIndexer().getCharPosition((int) range.start.start);
                                                 CharPosition endChar =
                                                         mEditor.getText().getIndexer().getCharPosition((int) range.end.end);
-                                                mEditor.getText().insert(startChar.line,
-                                                        startChar.column, edit.newText);
+
+                                                if (range.start.start == range.end.end) {
+                                                    mEditor.getText().insert(startChar.line, startChar.column, edit.newText);
+                                                } else {
+                                                    mEditor.getText().replace(startChar.line, startChar.column, endChar.line, endChar.column, edit.newText);
+                                                }
+
+                                                startFormat = (int) range.start.start;
+                                                endFormat = startFormat + edit.newText.length();
+
+                                                String string = mEditor.getText().toStringBuilder().substring(startFormat, endFormat);
+                                                System.out.println(string);
                                             } else {
                                                 if (range.start.equals(range.end)) {
                                                     mEditor.getText().insert(range.start.line,
@@ -322,7 +329,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
                                                 endFormat = startFormat + edit.newText.length();
                                             }
 
-                                            mEditor.formatCodeAsync(startFormat, endFormat);
+                                            if (startFormat < endFormat) {
+                                                mEditor.formatCodeAsync(startFormat, endFormat);
+                                            }
                                         }
                                     })).show();
                                     return true;
