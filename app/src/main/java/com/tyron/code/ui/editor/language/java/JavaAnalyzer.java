@@ -276,7 +276,6 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                                     innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
                                 }
                             } catch (Throwable e) {
-                                Log.e("JavaAnalyzer", "Failed compiling the file", e);
                                 service.close();
                             }
                         }
@@ -313,8 +312,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
                 colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
             } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
-                // Work around for the indexer requiring a sorted positions
-                Log.w(TAG, "Unable to mark problem region: diagnostics " + diagnostics, e);
+               // ignored
             }
         });
         editor.getText().endStreamCharGetting();
