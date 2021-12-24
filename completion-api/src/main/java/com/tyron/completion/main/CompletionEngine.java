@@ -74,4 +74,8 @@ public class CompletionEngine {
         }
         return name.substring(dotIndex);
     }
+
+    public void clear() {
+        mCompletionProviders.clear();
+    }
 }
