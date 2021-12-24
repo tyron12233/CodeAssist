@@ -27,7 +27,7 @@ public class AIDLCompiler {
 
 	private final Project mProject;
 	private final ILogger mLogger;
-	File file = new File(mProject.getBuildDirectory(), "gen");
+	//File file = new File(mProject.getBuildDirectory(), "gen");
 
 	
 	public AIDLCompiler(ILogger log, Project project) {
@@ -51,7 +51,7 @@ public class AIDLCompiler {
 		args.add(getBinary().getAbsolutePath());
 		args.add("");
 		args.add("-o");
-		args.add(file.getAbsolutePath());
+		//args.add(file.getAbsolutePath());
 	
 		BinaryExecutor exec = new BinaryExecutor();
 		exec.setCommands(args);
