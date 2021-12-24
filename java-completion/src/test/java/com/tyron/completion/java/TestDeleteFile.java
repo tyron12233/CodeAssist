@@ -1,4 +1,4 @@
-package com.tyron.completion;
+package com.tyron.completion.java;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.tyron.completion.TestUtil.*;
