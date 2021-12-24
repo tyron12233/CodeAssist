@@ -42,12 +42,15 @@ public class Project {
     private ManifestData mManifestData;
     private ModuleSettings mSettings;
 
+	private File mAidlDir;
+
     /**
      * Creates a project object from specified root
      */
     public Project(File root) {
         mRoot = root;
-
+		
+		mAidlDir = new File(root, "app/src/main/aidl");
         mAssetsDir = new File(root, "app/src/main/assets");
         mNativeLibsDir = new File(root, "app/src/main/jniLibs");
         mFileManager = new FileManager();
@@ -58,7 +61,8 @@ public class Project {
         try {
             mAssetsDir = File.createTempFile("assets", "");
             mNativeLibsDir = new File("jniLibs");
-            mRoot = mNativeLibsDir.getParentFile();
+			mAidlDir = new File("aidl","");
+			  mRoot = mNativeLibsDir.getParentFile();
             mFileManager = manager;
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -303,7 +307,9 @@ public class Project {
     public File getAssetsDirectory() {
         return mAssetsDir;
     }
-
+	public File getAidlDirectory() {
+        return mAidlDir;
+    }
     public File getNativeLibsDirectory() {
         return mNativeLibsDir;
     }
