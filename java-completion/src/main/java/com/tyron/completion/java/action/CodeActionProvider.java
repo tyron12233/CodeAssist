@@ -37,6 +37,7 @@ import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.CatchTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.LambdaExpressionTree;
 import org.openjdk.source.tree.LineMap;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
@@ -131,6 +132,7 @@ public class CodeActionProvider {
                             }
                         }
                     }
+                    break;
             }
         }
     }
@@ -297,22 +299,24 @@ public class CodeActionProvider {
                     return allImports;
                 case "compiler.err.unreported.exception.need.to.catch.or.throw":
                     Map<String, Rewrite> map = new TreeMap<>();
-                    MethodPtr needsThrow = findMethod(task, d.getPosition());
-                    String exceptionName = extractExceptionName(d.getMessage(Locale.ENGLISH));
-                    map.put("Add 'throws'", new AddException(needsThrow.className,
-                            needsThrow.methodName, needsThrow.erasedParameterTypes, exceptionName));
-
+                    SourcePositions sourcePositions =
+                            Trees.instance(task.task).getSourcePositions();
                     long length = d.getEndPosition() - d.getStartPosition();
                     TreePath currentPath = findCurrentPath(task, d.getEndPosition() - (length / 2));
                     if (currentPath != null) {
-                        TreePath parentPath = currentPath.getParentPath();
+                        TreePath surroundingPath = ActionUtil.findSurroundingPath(currentPath);
+                        if (surroundingPath != null) {
+                            String exceptionName =
+                                    extractExceptionName(d.getMessage(Locale.ENGLISH));
+                            if (!(surroundingPath.getLeaf() instanceof LambdaExpressionTree)) {
+                                MethodPtr needsThrow = findMethod(task, d.getPosition());
+                                map.put("Add 'throws'", new AddException(needsThrow.className,
+                                        needsThrow.methodName, needsThrow.erasedParameterTypes,
+                                        exceptionName));
+                            }
 
-                        if (parentPath.getParentPath().getLeaf() instanceof BlockTree) {
-                            SourcePositions sourcePositions =
-                                    Trees.instance(task.task).getSourcePositions();
-                            Tree leaf = parentPath.getParentPath().getParentPath().getLeaf();
-                            if (parentPath.getParentPath().getParentPath().getLeaf() instanceof TryTree) {
-                                TryTree tryTree = (TryTree) leaf;
+                            if (surroundingPath.getLeaf() instanceof TryTree) {
+                                TryTree tryTree = (TryTree) surroundingPath.getLeaf();
                                 CatchTree catchTree =
                                         tryTree.getCatches().get(tryTree.getCatches().size() - 1);
                                 int start = (int) sourcePositions.getEndPosition(task.root(),
@@ -321,10 +325,10 @@ public class CodeActionProvider {
                                         exceptionName));
                             } else {
                                 int start = (int) sourcePositions.getStartPosition(task.root(),
-                                        parentPath.getLeaf());
+                                        surroundingPath.getLeaf());
                                 int end = (int) sourcePositions.getEndPosition(task.root(),
-                                        parentPath.getLeaf());
-                                String contents = parentPath.getLeaf().toString();
+                                        surroundingPath.getLeaf());
+                                String contents = surroundingPath.getLeaf().toString();
                                 map.put("Surround with try catch", new AddTryCatch(file, contents
                                         , start, end, exceptionName));
                             }

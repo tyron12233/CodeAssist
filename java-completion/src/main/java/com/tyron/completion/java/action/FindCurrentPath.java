@@ -15,6 +15,7 @@ import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.TreePathScanner;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.tree.JCTree;
 
 /**
  * Scanner to retrieve the current {@link TreePath} given the cursor position each visit methods
@@ -39,8 +40,10 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
 
     @Override
     public TreePath visitMethodInvocation(MethodInvocationTree tree, Long cursor) {
-        if (isInside(tree, cursor)) {
-            return getCurrentPath();
+        if (tree instanceof JCTree.JCMethodInvocation) {
+            if (isInside(((JCTree.JCMethodInvocation) tree).meth, cursor)) {
+                return getCurrentPath();
+            }
         }
         return super.visitMethodInvocation(tree, cursor);
     }

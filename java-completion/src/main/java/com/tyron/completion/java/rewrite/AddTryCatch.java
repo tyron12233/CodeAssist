@@ -2,11 +2,14 @@ package com.tyron.completion.java.rewrite;
 
 import com.google.common.collect.ImmutableMap;
 import com.tyron.completion.java.CompilerProvider;
+import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.TreeMap;
 
 public class AddTryCatch implements Rewrite {
 
@@ -26,12 +29,30 @@ public class AddTryCatch implements Rewrite {
 
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
-        String finalString = "try {\n" + contents + "\n} catch (" +
-                exceptionName + " e) { }" ;
+        Map<Path, TextEdit[]> map = new TreeMap<>();
+        String newContents = insertColon(contents);
+        String edit =
+                "try {\n" + newContents + "\n} catch (" + ActionUtil.getSimpleName(exceptionName) +
+                        " e) { }";
         Range deleteRange = new Range(start, end);
         TextEdit delete = new TextEdit(deleteRange, "");
-
         Range range = new Range(start, start);
-        return ImmutableMap.of(file, new TextEdit[]{delete, new TextEdit(range,finalString)});
+        TextEdit insert = new TextEdit(range, edit);
+        map.put(file, new TextEdit[]{delete, insert});
+
+        ParseTask task = compiler.parse(file);
+        if (!ActionUtil.hasImport(task.root, exceptionName)) {
+            AddImport addImport = new AddImport(file.toFile(), exceptionName);
+            Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+            map.putAll(rewrite);
+        }
+        return map;
+    }
+
+    private String insertColon(String string) {
+        if (string.endsWith(")")) {
+            return string += ";";
+        }
+        return string;
     }
 }

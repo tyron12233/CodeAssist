@@ -41,6 +41,7 @@ import com.tyron.completion.java.Parser;
 import com.tyron.completion.java.action.CodeActionProvider;
 import com.tyron.completion.java.model.CodeAction;
 import com.tyron.completion.java.model.CodeActionList;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.java.provider.CompletionEngine;
@@ -258,7 +259,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                             samePackage = true;
                         }
 
-                        if (!samePackage && !CompletionProvider.hasImport(task.root,
+                        if (!samePackage && !ActionUtil.hasImport(task.root,
                                 item.item.data)) {
                             AddImport imp = new AddImport(new File(""), item.item.data);
                             Map<File, TextEdit> edits = imp.getText(task);

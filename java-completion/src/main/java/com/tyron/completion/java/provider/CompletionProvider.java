@@ -986,33 +986,4 @@ public class CompletionProvider {
                 return DrawableKind.LocalVariable;
         }
     }
-
-
-    public static boolean hasImport(CompilationUnitTree root, String className) {
-
-        String packageName = className.substring(0, className.lastIndexOf("."));
-
-        // if the package name of the class is java.lang, we dont need 
-        // to check since its already imported
-        if (packageName.equals("java.lang")) {
-            return true;
-        }
-
-        for (ImportTree imp : root.getImports()) {
-            String name = imp.getQualifiedIdentifier().toString();
-            if (name.equals(className)) {
-                return true;
-            }
-
-            // if the import is a wildcard, lets check if theyre on the same package
-            if (name.endsWith("*")) {
-                String first = name.substring(0, name.lastIndexOf("."));
-                String end = className.substring(0, className.lastIndexOf("."));
-                if (first.equals(end)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
 }
