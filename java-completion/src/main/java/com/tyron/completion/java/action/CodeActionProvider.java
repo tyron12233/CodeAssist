@@ -254,6 +254,7 @@ public class CodeActionProvider {
         return true;
     }
 
+    // TODO: Abstract this implementation to provide easy way of adding diagnostic quick fixes
     public Map<String, Rewrite> quickFixes(CompileTask task, Path file, Diagnostic<?
             extends JavaFileObject> d) {
         if (d instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {

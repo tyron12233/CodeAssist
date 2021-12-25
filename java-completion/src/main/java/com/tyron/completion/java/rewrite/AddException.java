@@ -54,7 +54,7 @@ public class AddException implements Rewrite {
             }
             String insertText ;
             if (methodTree.getThrows().isEmpty()) {
-                insertText = "throws " + simpleName + " ";
+                insertText = " throws " + simpleName + " ";
             } else {
                 insertText = ", " + simpleName + " ";
             }
