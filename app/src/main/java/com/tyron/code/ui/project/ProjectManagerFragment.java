@@ -129,6 +129,17 @@ public class ProjectManagerFragment extends Fragment {
                 startActivity(intent);
                 return true;
             }
+            
+            if (id == R.id.menu_about){
+				Bundle b = new Bundle();
+				b.putBoolean("open_about_act", true);
+				
+				Intent intent = new Intent();
+				intent.putExtras(b);
+                intent.setClass(requireActivity(), SettingsActivity.class);
+                startActivity(intent);
+				return true;
+			}
 
             return true;
         });

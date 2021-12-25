@@ -29,6 +29,16 @@ public class SettingsActivity extends AppCompatActivity implements
                     .beginTransaction()
                     .replace(R.id.settings, new SettingsFragment())
                     .commit();
+                    
+            if (getIntent().getExtras() != null) {
+                if (getIntent().getExtras().getBoolean("open_about_act")) {
+                    getSupportFragmentManager()
+                            .beginTransaction()
+                            .replace(R.id.settings, new AboutUsFragment())
+                            .commit();
+                    setTitle("About Us");
+                }
+            }
         } else {
             setTitle(savedInstanceState.getCharSequence(TITLE_TAG));
         }
