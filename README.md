@@ -21,6 +21,26 @@ CodeAssist does not use gradle. Editing the build.gradle file will not do anythi
 - [ ] Debugger
 - [ ] Lint 
 
+## Installation
+
+CodeAssist can be obtained through various sources listed below.
+The APK files of different sources are signed with different signature keys.
+If you wish to install from a different source, then you must **uninstall CodeAssist** from your device first, then install new APKs from the new source.
+
+### Github
+
+CodeAssist application can be obtained on `Github` either from [`Github Releases`](https://github.com/tyron12233/CodeAssist/releases) or from [`Github Build`](https://github.com/tyron12233/CodeAssist/actions/workflows/build-apk.yml) action workflows.
+
+The APKs for `Github Releases` will be listed under `Assets` drop-down of a release. These are automatically attached when a new version is released.
+
+The APKs for `Github Build` action workflows will be listed under `Artifacts` section of a workflow run. These are created for each commit/push done to the repository and can be used by users who don't want to wait for releases and want to try out the latest features immediately or want to test their pull requests.
+
+### Google Play Store
+
+CodeAssist application can be obtained from `Google Play Store`
+
+<a href='https://play.google.com/store/apps/details?id=com.tyron.code'><img alt='Get it on Google Play' width="250px" src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png'/></a>
+
 ## CodeAssist Community
 Discord server: https://discord.gg/3YMZkgFS
 
