@@ -15,14 +15,4 @@
         android:textColor="@color/colorOnSecondary"
         android:textSize="20sp" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:alpha="0.7"
-        android:focusable="false"
-        android:padding="8dp"
-        android:text="@string/project_manager_suggestions"
-        android:textColor="@color/colorOnSecondary"
-        android:textSize="14sp" />
-
 </LinearLayout>

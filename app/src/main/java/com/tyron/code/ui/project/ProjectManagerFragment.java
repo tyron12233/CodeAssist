@@ -152,7 +152,26 @@ public class ProjectManagerFragment extends Fragment {
         mRecyclerView = view.findViewById(R.id.projects_recycler);
         mRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         mRecyclerView.setAdapter(mAdapter);
+        
+        TextView newpr = view.findViewById(R.id.new_project_tv);
+        TextView changepath = view.findViewById(R.id.change_path_tv);
+        
+        newpr.setOnClickListener(
+                (View v) -> {
+                    WizardFragment wizardFragment = new WizardFragment();
+                    // wizardFragment.setOnProjectCreatedListener(this::openProject);
+                    getParentFragmentManager()
+                            .beginTransaction()
+                            .add(R.id.fragment_container, wizardFragment)
+                            .addToBackStack(null)
+                            .commit();
+                });
+        changepath.setOnClickListener((View v) -> {
+			setSavePath(null);
+			checkSavePath();
+		});
 
+        
         checkSavePath();
     }
 
