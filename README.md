@@ -42,7 +42,7 @@ CodeAssist application can be obtained from `Google Play Store`
 <a href='https://play.google.com/store/apps/details?id=com.tyron.code'><img alt='Get it on Google Play' width="250px" src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png'/></a>
 
 ## CodeAssist Community
-Discord server: https://discord.gg/3YMZkgFS
+Discord server: https://discord.gg/pffnyE6prs
 
 English-language chat in Telegram: https://t.me/codeassist_app
 
