@@ -156,7 +156,7 @@ public class EditorContainerFragment extends Fragment {
             mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
         });
         mMainViewModel.getCurrentPosition().observe(getViewLifecycleOwner(), pos -> {
-            mPager.setCurrentItem(pos);
+            mPager.setCurrentItem(pos, false);
             if (mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {
                 mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_COLLAPSED);
             }

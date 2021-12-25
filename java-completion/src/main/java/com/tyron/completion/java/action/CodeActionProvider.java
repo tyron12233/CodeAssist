@@ -6,11 +6,13 @@ import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.FindTypeDeclarationAt;
-import com.tyron.completion.java.ParseTask;
-import com.tyron.completion.java.hover.FindHoverElement;
 import com.tyron.completion.java.model.CodeAction;
 import com.tyron.completion.java.model.CodeActionList;
+import com.tyron.completion.java.rewrite.AddCatchClause;
+import com.tyron.completion.java.rewrite.AddException;
+import com.tyron.completion.java.rewrite.AddTryCatch;
 import com.tyron.completion.java.rewrite.IntroduceLocalVariable;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -31,19 +33,21 @@ import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.source.tree.BlockTree;
+import org.openjdk.source.tree.CatchTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.LambdaExpressionTree;
 import org.openjdk.source.tree.LineMap;
-import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.Tree;
+import org.openjdk.source.tree.TryTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
-import org.openjdk.tools.javac.code.Symbol;
 import org.openjdk.tools.javac.tree.JCTree;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
@@ -57,6 +61,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class CodeActionProvider {
 
@@ -101,21 +107,19 @@ public class CodeActionProvider {
         return codeActionList;
     }
 
-    private void addContextActions(CompileTask task, Path file, long cursor, TreeMap<String, Rewrite> contextActions) {
+    private void addContextActions(CompileTask task, Path file, long cursor, TreeMap<String,
+            Rewrite> contextActions) {
         TreePath path = new FindCurrentPath(task.task).scan(task.root(), cursor);
         if (path != null) {
             Tree leaf = path.getLeaf();
             switch (leaf.getKind()) {
                 case NEW_CLASS:
                 case METHOD_INVOCATION:
-                    TreePath parent = path.getParentPath();
-                    if (!(parent.getLeaf() instanceof JCTree.JCVariableDecl)) {
-                        ExecutableElement element =
-                                (ExecutableElement) Trees.instance(task.task).getElement(path);
-                        if (element != null) {
-                            TypeMirror returnType = path.getLeaf() instanceof NewClassTree
-                                    ? Trees.instance(task.task).getTypeMirror(path)
-                                    : element.getReturnType();
+                    if (ActionUtil.canIntroduceLocalVariable(path)) {
+                        Element element = Trees.instance(task.task).getElement(path);
+                        if (element instanceof ExecutableElement) {
+                            TypeMirror returnType = ActionUtil.getReturnType(task.task, path,
+                                    (ExecutableElement) element);
                             if (returnType.getKind() != TypeKind.VOID) {
                                 SourcePositions pos =
                                         Trees.instance(task.task).getSourcePositions();
@@ -128,6 +132,7 @@ public class CodeActionProvider {
                             }
                         }
                     }
+                    break;
             }
         }
     }
@@ -145,7 +150,10 @@ public class CodeActionProvider {
         CodeActionList list = new CodeActionList();
         list.setTitle("Quick fixes");
 
-        TreeMap<String, Rewrite> rewrites = new TreeMap<>(quickFixes(file, diagnostic));
+        TreeMap<String, Rewrite> rewrites = new TreeMap<>();
+        try (CompileTask task = mCompiler.compile(file)) {
+            rewrites.putAll(quickFixes(task, file, diagnostic));
+        }
 
         List<CodeAction> actions = new ArrayList<>();
         for (Map.Entry<String, Rewrite> entry : rewrites.entrySet()) {
@@ -246,7 +254,8 @@ public class CodeActionProvider {
         return true;
     }
 
-    public Map<String, Rewrite> quickFixes(Path file, Diagnostic<? extends JavaFileObject> d) {
+    public Map<String, Rewrite> quickFixes(CompileTask task, Path file, Diagnostic<?
+            extends JavaFileObject> d) {
         if (d instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
             JCDiagnostic diagnostic = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) d).d;
             switch (d.getCode()) {
@@ -288,11 +297,50 @@ public class CodeActionProvider {
                         }
                     }
                     return allImports;
+                case "compiler.err.unreported.exception.need.to.catch.or.throw":
+                    Map<String, Rewrite> map = new TreeMap<>();
+                    SourcePositions sourcePositions =
+                            Trees.instance(task.task).getSourcePositions();
+                    long length = d.getEndPosition() - d.getStartPosition();
+                    TreePath currentPath = findCurrentPath(task, d.getEndPosition() - (length / 2));
+                    if (currentPath != null) {
+                        TreePath surroundingPath = ActionUtil.findSurroundingPath(currentPath);
+                        if (surroundingPath != null) {
+                            String exceptionName =
+                                    extractExceptionName(d.getMessage(Locale.ENGLISH));
+                            if (!(surroundingPath.getLeaf() instanceof LambdaExpressionTree)) {
+                                MethodPtr needsThrow = findMethod(task, d.getPosition());
+                                map.put("Add 'throws'", new AddException(needsThrow.className,
+                                        needsThrow.methodName, needsThrow.erasedParameterTypes,
+                                        exceptionName));
+                            }
+
+                            if (surroundingPath.getLeaf() instanceof TryTree) {
+                                TryTree tryTree = (TryTree) surroundingPath.getLeaf();
+                                CatchTree catchTree =
+                                        tryTree.getCatches().get(tryTree.getCatches().size() - 1);
+                                int start = (int) sourcePositions.getEndPosition(task.root(),
+                                        catchTree);
+                                map.put("Add catch clause", new AddCatchClause(file, start,
+                                        exceptionName));
+                            } else {
+                                int start = (int) sourcePositions.getStartPosition(task.root(),
+                                        surroundingPath.getLeaf());
+                                int end = (int) sourcePositions.getEndPosition(task.root(),
+                                        surroundingPath.getLeaf());
+                                String contents = surroundingPath.getLeaf().toString();
+                                map.put("Surround with try catch", new AddTryCatch(file, contents
+                                        , start, end, exceptionName));
+                            }
+                        }
+                        return map;
+                    }
             }
 
         }
         return Collections.emptyMap();
     }
+
 
     private List<CodeAction> createQuickFix(String title, Rewrite rewrite) {
         Map<Path, TextEdit[]> edits = rewrite.rewrite(mCompiler);
@@ -380,6 +428,18 @@ public class CodeActionProvider {
         return new Range(new Position(startLine, startColumn), new Position(endLine, endColumn));
     }
 
+    private TreePath findCurrentPath(CompileTask task, long position) {
+        return new FindCurrentPath(task.task).scan(task.root(), position);
+    }
+
+    private MethodPtr findMethod(CompileTask task, long position) {
+        Trees trees = Trees.instance(task.task);
+        Tree tree = new FindMethodDeclarationAt(task.task).scan(task.root(), position);
+        TreePath path = trees.getPath(task.root(), tree);
+        ExecutableElement method = (ExecutableElement) trees.getElement(path);
+        return new MethodPtr(task.task, method);
+    }
+
     private MethodPtr findMethod(CompileTask task, Range range) {
         Trees trees = Trees.instance(task.task);
         long position = task.root().getLineMap().getPosition(range.start.line + 1,
@@ -431,4 +491,14 @@ public class CodeActionProvider {
         return Arrays.asList(new ConvertToAnonymousAction(), new ConvertToLambdaAction());
     }
 
+    private static final Pattern UNREPORTED_EXCEPTION =
+            Pattern.compile("unreported exception (" + "(\\w+\\.)*\\w+)");
+
+    private String extractExceptionName(String message) {
+        Matcher matcher = UNREPORTED_EXCEPTION.matcher(message);
+        if (!matcher.find()) {
+            return "";
+        }
+        return matcher.group(1);
+    }
 }
