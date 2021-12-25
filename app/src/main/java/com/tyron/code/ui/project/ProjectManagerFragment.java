@@ -88,6 +88,7 @@ public class ProjectManagerFragment extends Fragment {
                             mShowDialogOnPermissionGrant = false;
                             setSavePath(Environment.getExternalStorageDirectory().getAbsolutePath());
                         })
+                        .setCancelable(false)
                         .show();
                 setSavePath(Environment.getExternalStorageDirectory().getAbsolutePath());
             } else {
