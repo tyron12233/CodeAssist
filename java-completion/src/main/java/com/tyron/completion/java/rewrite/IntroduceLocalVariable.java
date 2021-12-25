@@ -3,9 +3,11 @@ package com.tyron.completion.java.rewrite;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
+import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.Name;
 import org.openjdk.javax.lang.model.type.DeclaredType;
 import org.openjdk.javax.lang.model.type.TypeMirror;
@@ -36,7 +38,14 @@ public class IntroduceLocalVariable implements Rewrite {
     private String guessNameFromType(TypeMirror type) {
         if (type instanceof DeclaredType) {
             DeclaredType declared = (DeclaredType) type;
-            Name name = declared.asElement().getSimpleName();
+            Element element = declared.asElement();
+            String name = element.getSimpleName().toString();
+            // anonymous class, guess from class name
+            if (name.length() == 0) {
+                name = declared.toString();
+                name = name.substring("<anonymous ".length(), name.length() - 1);
+                name = ActionUtil.getSimpleName(name);
+            }
             return "" + Character.toLowerCase(name.charAt(0)) + name.subSequence(1, name.length());
         }
         return "variable";

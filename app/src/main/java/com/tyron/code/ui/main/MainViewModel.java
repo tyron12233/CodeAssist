@@ -161,7 +161,7 @@ public class MainViewModel extends ViewModel {
         if (value != null) {
             index = value.indexOf(file);
         }
-        if (index >= 0) {
+        if (index != -1) {
             updateCurrentPosition(index);
             return true;
         }
