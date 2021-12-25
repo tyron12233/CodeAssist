@@ -32,6 +32,10 @@
             <item
                 android:id="@+id/debug_refresh"
                 android:title="@string/menu_refresh" />
+            <item
+                android:id="@+id/action_save"
+                android:title="@string/menu_save" />
+
         </menu>
     </item>
 
