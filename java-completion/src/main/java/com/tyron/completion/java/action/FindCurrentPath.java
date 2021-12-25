@@ -1,6 +1,10 @@
 package com.tyron.completion.java.action;
 
+import com.tyron.completion.java.FindNewTypeDeclarationAt;
+
+import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.LambdaExpressionTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.NewClassTree;
@@ -18,10 +22,12 @@ import org.openjdk.source.util.Trees;
  */
 public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
 
+    private final JavacTask task;
     private final SourcePositions mPos;
     private CompilationUnitTree mCompilationUnit;
 
     public FindCurrentPath(JavacTask task) {
+        this.task = task;
         mPos = Trees.instance(task).getSourcePositions();
     }
 
@@ -60,12 +66,12 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
 
     @Override
     public TreePath visitNewClass(NewClassTree t, Long find) {
-        TreePath smaller = super.visitNewClass(t, find);
+        TreePath smaller  = super.visitNewClass(t, find);
         if (smaller != null) {
             return smaller;
         }
 
-        if (mPos.getStartPosition(mCompilationUnit, t) <= find && find < mPos.getEndPosition(mCompilationUnit, t)) {
+        if (isInside(t.getIdentifier(), find)) {
             return getCurrentPath();
         }
 

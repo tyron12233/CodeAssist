@@ -8,9 +8,11 @@ import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.FindTypeDeclarationAt;
 import com.tyron.completion.java.model.CodeAction;
 import com.tyron.completion.java.model.CodeActionList;
+import com.tyron.completion.java.rewrite.AddCatchClause;
 import com.tyron.completion.java.rewrite.AddException;
 import com.tyron.completion.java.rewrite.AddTryCatch;
 import com.tyron.completion.java.rewrite.IntroduceLocalVariable;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -112,13 +114,11 @@ public class CodeActionProvider {
             switch (leaf.getKind()) {
                 case NEW_CLASS:
                 case METHOD_INVOCATION:
-                    TreePath parent = path.getParentPath();
-                    if (!(parent.getLeaf() instanceof JCTree.JCVariableDecl)) {
+                    if (ActionUtil.canIntroduceLocalVariable(path)) {
                         Element element = Trees.instance(task.task).getElement(path);
                         if (element instanceof ExecutableElement) {
-                            TypeMirror returnType = path.getLeaf() instanceof NewClassTree ?
-                                    Trees.instance(task.task).getTypeMirror(path) :
-                                    ((ExecutableElement) element).getReturnType();
+                            TypeMirror returnType = ActionUtil.getReturnType(task.task, path,
+                                    (ExecutableElement) element);
                             if (returnType.getKind() != TypeKind.VOID) {
                                 SourcePositions pos =
                                         Trees.instance(task.task).getSourcePositions();
@@ -302,32 +302,41 @@ public class CodeActionProvider {
                     map.put("Add 'throws'", new AddException(needsThrow.className,
                             needsThrow.methodName, needsThrow.erasedParameterTypes, exceptionName));
 
-                    TreePath currentPath = findCurrentPath(task, d.getPosition());
-                    TreePath parentPath = currentPath.getParentPath();
+                    long length = d.getEndPosition() - d.getStartPosition();
+                    TreePath currentPath = findCurrentPath(task, d.getEndPosition() - (length / 2));
+                    if (currentPath != null) {
+                        TreePath parentPath = currentPath.getParentPath();
 
-                    if (parentPath.getParentPath().getLeaf() instanceof BlockTree) {
-                        Tree leaf = parentPath.getParentPath().getParentPath().getLeaf();
-                        if (parentPath.getParentPath().getParentPath().getLeaf() instanceof TryTree) {
-                            TypeElement typeElement =
-                                    task.task.getElements().getTypeElement(exceptionName);
-                            String string = leaf.toString();
-                            System.out.println(string + " ");
-                        } else {
+                        if (parentPath.getParentPath().getLeaf() instanceof BlockTree) {
                             SourcePositions sourcePositions =
                                     Trees.instance(task.task).getSourcePositions();
-                            int start = (int) sourcePositions.getStartPosition(task.root(), parentPath.getLeaf());
-                            int end = (int) sourcePositions.getEndPosition(task.root(), parentPath.getLeaf());
-                            String contents = parentPath.getLeaf().toString();
-                            map.put("Surround with try catch", new AddTryCatch(file, contents,
-                                    start, end, exceptionName));
+                            Tree leaf = parentPath.getParentPath().getParentPath().getLeaf();
+                            if (parentPath.getParentPath().getParentPath().getLeaf() instanceof TryTree) {
+                                TryTree tryTree = (TryTree) leaf;
+                                CatchTree catchTree =
+                                        tryTree.getCatches().get(tryTree.getCatches().size() - 1);
+                                int start = (int) sourcePositions.getEndPosition(task.root(),
+                                        catchTree);
+                                map.put("Add catch clause", new AddCatchClause(file, start,
+                                        exceptionName));
+                            } else {
+                                int start = (int) sourcePositions.getStartPosition(task.root(),
+                                        parentPath.getLeaf());
+                                int end = (int) sourcePositions.getEndPosition(task.root(),
+                                        parentPath.getLeaf());
+                                String contents = parentPath.getLeaf().toString();
+                                map.put("Surround with try catch", new AddTryCatch(file, contents
+                                        , start, end, exceptionName));
+                            }
                         }
+                        return map;
                     }
-                    return map;
             }
 
         }
         return Collections.emptyMap();
     }
+
 
     private List<CodeAction> createQuickFix(String title, Rewrite rewrite) {
         Map<Path, TextEdit[]> edits = rewrite.rewrite(mCompiler);
