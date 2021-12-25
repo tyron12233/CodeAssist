@@ -36,6 +36,9 @@ public class AboutUsFragment extends Fragment {
                 .addItem(createEmail("contact.tyronscott@gmail.com", getString(R.string.about_contact_us)))
                 .addGroup(getString(R.string.sketchub_team))
                 .addItem(createGithubElement("ThatSketchub", "Github"))
+                .addGroup(getString(R.string.community))
+                .addItem(createCommunity("Discord",R.drawable.ic_icons8_discord,"https://discord.gg/3YMZkgFS"))
+                .addItem(createCommunity("Telegram",R.drawable.ic_icons8_telegram_app,"https://t.me/codeassist_app"))
                 .create();
     }
 
@@ -67,5 +70,20 @@ public class AboutUsFragment extends Fragment {
         emailElement.setIntent(intent);
 
         return emailElement;
+    }
+
+    public Element createCommunity(String title, int drawable, String url) {
+        Element communityElement = new Element();
+        communityElement.setTitle(title);
+        communityElement.setIconDrawable(drawable);
+        communityElement.setIconTint(R.color.colorControlNormal);
+
+        Intent intent = new Intent();
+        intent.setAction(Intent.ACTION_VIEW);
+        intent.addCategory(Intent.CATEGORY_BROWSABLE);
+        intent.setData(Uri.parse(url));
+        communityElement.setIntent(intent);
+
+        return communityElement;
     }
 }
