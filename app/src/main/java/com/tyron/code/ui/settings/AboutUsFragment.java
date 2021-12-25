@@ -37,7 +37,7 @@ public class AboutUsFragment extends Fragment {
                 .addGroup(getString(R.string.sketchub_team))
                 .addItem(createGithubElement("ThatSketchub", "Github"))
                 .addGroup(getString(R.string.community))
-                .addItem(createCommunity("Discord",R.drawable.ic_icons8_discord,"https://discord.gg/3YMZkgFS"))
+                .addItem(createCommunity("Discord",R.drawable.ic_icons8_discord,"https://discord.gg/pffnyE6prs"))
                 .addItem(createCommunity("Telegram",R.drawable.ic_icons8_telegram_app,"https://t.me/codeassist_app"))
                 .create();
     }
