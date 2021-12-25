@@ -1,0 +1,15 @@
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory 
+		android:title="Projects" 
+		app:iconSpaceReserved="false">
+		
+        <Preference 
+			app:iconSpaceReserved="false"
+			app:key="change_project_path" 
+			app:summary="Change projects directory to a specific one. ( Android 11+ can't )" 
+			app:title="Change Projects Path" />
+			
+    </PreferenceCategory>
+
+</PreferenceScreen>

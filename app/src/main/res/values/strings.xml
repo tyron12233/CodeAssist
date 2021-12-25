@@ -91,7 +91,7 @@
     <string name="keyboard_settings_title">Keyboard</string>
     <string name="keyboard_enable_suggestions_description">Enable keyboard suggestions</string>
     <string name="settings_build_run_title">Build &amp; Run</string>
-    <string name="settings_build_run_desc">Configure build and execution settings</string>
+    <string name="settings_build_run_desc">Configure build and execution settings.</string>
     <string name="run_title">Run</string>
     <string name="settings_install_apk_title">APK Installation Prompt</string>
     <string name="settings_install_desc">Show APK installation prompt after successful compilation.</string>
@@ -104,7 +104,6 @@
     <string name="contact_group_title">Contact</string>
     <string name="app_source_title">Source code</string>
     <string name="sketchub_team">Sketchub Team</string>
-    <string name="community">Community</string>
     <!-- file manager menu -->
     <string name="error">Error</string>
     <string name="error_resource_name_restriction">Resource names must only contain lowercase a–z, 0–9 or an underscore.</string>
@@ -149,10 +148,12 @@
     <string name="project_manager_android11_notice">Projects will be saved to the app\'s internal storage directory.
         Backup your modules before uninstalling the app.</string>
     <string name="project_manager_projects">Projects</string>
-    <string name="project_manager_empty">Projects are empty</string>`
+    <string name="project_manager_empty">Projects are empty</string>
     <string name="project_manager_create_project">Create module</string>
-    <string name="project_path_menu_title">Projects Path</string>
-    <string name="about_menu">About</string>
+    <string name="settings_application_desc">Configure global application settings.</string>
+	<string name="settings_application_title">Application</string>
+    
+	<string name="about_menu">About</string>
     <string name="project_manager_null_projects">No Project Found</string>
     <string name="project_manager_suggestions">Suggestions:\n\n  - Create New Project\n  - Change Projects Path</string>
     

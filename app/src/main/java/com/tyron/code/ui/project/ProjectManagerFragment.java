@@ -110,19 +110,10 @@ public class ProjectManagerFragment extends Fragment {
 
 
         toolbar.inflateMenu(R.menu.project_list_fragment_menu);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // can't change project path on android R
-            toolbar.getMenu().removeItem(R.id.projects_path);
-        }
+      
         toolbar.setOnMenuItemClickListener(item -> {
             int id = item.getItemId();
-
-            if (id == R.id.projects_path) {
-                setSavePath(null);
-                checkSavePath();
-                return true;
-            }
-
+            
             if (id == R.id.menu_settings) {
                 Intent intent = new Intent();
                 intent.setClass(requireActivity(), SettingsActivity.class);
