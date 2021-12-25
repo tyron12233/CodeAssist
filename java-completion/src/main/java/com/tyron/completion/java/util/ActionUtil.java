@@ -8,6 +8,7 @@ import org.openjdk.source.doctree.ThrowsTree;
 import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.EnhancedForLoopTree;
+import org.openjdk.source.tree.ExpressionStatementTree;
 import org.openjdk.source.tree.ForLoopTree;
 import org.openjdk.source.tree.IfTree;
 import org.openjdk.source.tree.ImportTree;
@@ -73,7 +74,7 @@ public class ActionUtil {
         TreePath grandParent = parent.getParentPath();
 
         if (parent.getLeaf() instanceof JCTree.JCVariableDecl) {
-            return null;
+            return parent;
         }
         // inside if parenthesis
         if (parent.getLeaf() instanceof ParenthesizedTree) {
@@ -102,6 +103,12 @@ public class ActionUtil {
             }
         }
 
+        if (parent.getLeaf() instanceof ExpressionStatementTree) {
+            if (grandParent.getLeaf() instanceof ThrowsTree) {
+                return null;
+            }
+            return parent;
+        }
         return null;
     }
 

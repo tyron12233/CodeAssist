@@ -45,8 +45,7 @@ public class ImplementAbstractMethods implements Rewrite {
 
     public ImplementAbstractMethods(String className, String classFile, long lineStart) {
         if (className.startsWith("<anonymous")) {
-            className = className.substring("<anonymous ".length(),
-                    className.length() - 1);
+            className = className.substring("<anonymous ".length(), className.length() - 1);
         }
         mClassName = className;
         mClassFile = classFile;
@@ -62,9 +61,8 @@ public class ImplementAbstractMethods implements Rewrite {
             mClassFile = className;
             mPosition = 0;
         } else {
-            className = className.substring("<anonymous ".length(),
-                    className.length() - 1);
-            className = className.substring(0, className.indexOf(   '$'));
+            className = className.substring("<anonymous ".length(), className.length() - 1);
+            className = className.substring(0, className.indexOf('$'));
             mClassFile = className;
             mClassName = args[2].toString();
             mPosition = diagnostic.getStartPosition();
@@ -95,7 +93,8 @@ public class ImplementAbstractMethods implements Rewrite {
                 thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), mPosition);
             }
             if (thisTree == null) {
-                thisTree = new FindNewTypeDeclarationAt(task.task, task.root()).scan(task.root(), mPosition);
+                thisTree = new FindNewTypeDeclarationAt(task.task, task.root()).scan(task.root(),
+                        mPosition);
             }
             int indent = EditHelper.indent(task.task, task.root(), thisTree) + 4;
 
@@ -105,7 +104,8 @@ public class ImplementAbstractMethods implements Rewrite {
                     MethodTree source = findSource(compiler, task, method);
                     int tabCount = indent / 4;
                     String tabs = Strings.repeat("\t", tabCount);
-                    ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType, method);
+                    ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType
+                            , method);
                     String text;
                     if (source != null) {
                         text = EditHelper.printMethod(method, parameterizedType, source);
@@ -119,12 +119,13 @@ public class ImplementAbstractMethods implements Rewrite {
 
             Position insert = EditHelper.insertAtEndOfClass(task.task, task.root(), thisTree);
 
-            TextEdit[] edits = {new TextEdit(new Range(insert, insert), insertText + "\n")};
+            TextEdit[] edits = {new TextEdit(new Range(insert, insert), insertText + "\n", true)};
             return Collections.singletonMap(file, edits);
         }
     }
 
-    private MethodTree findSource(CompilerProvider compiler, CompileTask task, ExecutableElement method) {
+    private MethodTree findSource(CompilerProvider compiler, CompileTask task,
+                                  ExecutableElement method) {
         TypeElement superClass = (TypeElement) method.getEnclosingElement();
         String superClassName = superClass.getQualifiedName().toString();
         String methodName = method.getSimpleName().toString();

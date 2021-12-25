@@ -29,7 +29,7 @@ public class AddCatchClause implements Rewrite {
 
         String finalString = " catch (" + ActionUtil.getSimpleName(exceptionName) + " e) { }";
         Range range = new Range(start, start);
-        TextEdit edit = new TextEdit(range, finalString);
+        TextEdit edit = new TextEdit(range, finalString, true);
         map.put(file, new TextEdit[]{edit});
 
         ParseTask task = compiler.parse(file);

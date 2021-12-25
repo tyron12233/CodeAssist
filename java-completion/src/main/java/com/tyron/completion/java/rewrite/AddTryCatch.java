@@ -37,7 +37,7 @@ public class AddTryCatch implements Rewrite {
         Range deleteRange = new Range(start, end);
         TextEdit delete = new TextEdit(deleteRange, "");
         Range range = new Range(start, start);
-        TextEdit insert = new TextEdit(range, edit);
+        TextEdit insert = new TextEdit(range, edit, true);
         map.put(file, new TextEdit[]{delete, insert});
 
         ParseTask task = compiler.parse(file);

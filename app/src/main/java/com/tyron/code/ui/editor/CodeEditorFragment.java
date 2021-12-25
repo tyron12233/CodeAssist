@@ -296,43 +296,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                                         List<TextEdit> edits = rewrites.values().iterator().next();
                                         for (TextEdit edit : edits) {
                                             Range range = edit.range;
-
-                                            int startFormat;
-                                            int endFormat;
-                                            if (range.start.line == -1 && range.start.column == -1 || (range.end.line == -1 && range.end.column == -1)) {
-                                                CharPosition startChar =
-                                                        mEditor.getText().getIndexer().getCharPosition((int) range.start.start);
-                                                CharPosition endChar =
-                                                        mEditor.getText().getIndexer().getCharPosition((int) range.end.end);
-
-                                                if (range.start.start == range.end.end) {
-                                                    mEditor.getText().insert(startChar.line, startChar.column, edit.newText);
-                                                } else {
-                                                    mEditor.getText().replace(startChar.line, startChar.column, endChar.line, endChar.column, edit.newText);
-                                                }
-
-                                                startFormat = (int) range.start.start;
-                                                endFormat = startFormat + edit.newText.length();
-
-                                                String string = mEditor.getText().toStringBuilder().substring(startFormat, endFormat);
-                                                System.out.println(string);
-                                            } else {
-                                                if (range.start.equals(range.end)) {
-                                                    mEditor.getText().insert(range.start.line,
-                                                            range.start.column, edit.newText);
-                                                } else {
-                                                    mEditor.getText().replace(range.start.line,
-                                                            range.start.column, range.end.line,
-                                                            range.end.column, edit.newText);
-                                                }
-                                                startFormat =
-                                                        mEditor.getText().getCharIndex(range.start.line, range.start.column);
-                                                endFormat = startFormat + edit.newText.length();
-                                            }
-
-                                            if (startFormat < endFormat) {
-                                                mEditor.formatCodeAsync(startFormat, endFormat);
-                                            }
+                                            requireActivity().runOnUiThread(() -> applyTextEdit(edit, range));
                                         }
                                     })).show();
                                     return true;
@@ -352,6 +316,47 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     XmlFormatStyle.LAYOUT, "\n");
             mEditor.setText(xml);
         }));
+    }
+
+    private void applyTextEdit(TextEdit edit, Range range) {
+        int startFormat;
+        int endFormat;
+        if (range.start.line == -1 && range.start.column == -1 || (range.end.line == -1 && range.end.column == -1)) {
+            CharPosition startChar =
+                    mEditor.getText().getIndexer().getCharPosition((int) range.start.start);
+            CharPosition endChar =
+                    mEditor.getText().getIndexer().getCharPosition((int) range.end.end);
+
+            if (range.start.start == range.end.end) {
+                mEditor.getText().insert(startChar.line, startChar.column, edit.newText);
+            } else {
+                mEditor.getText().replace(startChar.line, startChar.column, endChar.line, endChar.column, edit.newText);
+            }
+
+            startFormat = (int) range.start.start;
+            endFormat = startFormat + edit.newText.length();
+
+            String string = mEditor.getText().toStringBuilder().substring(startFormat, endFormat);
+            System.out.println(string);
+        } else {
+            if (range.start.equals(range.end)) {
+                mEditor.getText().insert(range.start.line,
+                        range.start.column, edit.newText);
+            } else {
+                mEditor.getText().replace(range.start.line,
+                        range.start.column, range.end.line,
+                        range.end.column, edit.newText);
+            }
+            startFormat =
+                    mEditor.getText().getCharIndex(range.start.line, range.start.column);
+            endFormat = startFormat + edit.newText.length();
+        }
+
+        if (startFormat < endFormat) {
+            if (edit.needFormat) {
+                mEditor.formatCodeAsync(startFormat, endFormat);
+            }
+        }
     }
 
     @Override

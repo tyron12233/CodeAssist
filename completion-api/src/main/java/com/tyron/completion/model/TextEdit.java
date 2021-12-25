@@ -7,12 +7,20 @@ package com.tyron.completion.model;
 public class TextEdit {
     public Range range;
     public String newText;
+    public boolean needFormat;
 
     public TextEdit() {}
 
     public TextEdit(Range range, String newText) {
         this.range = range;
         this.newText = newText;
+        this.needFormat = false;
+    }
+
+    public TextEdit(Range range, String newText, boolean needFormat) {
+        this.range = range;
+        this.newText = newText;
+        this.needFormat = needFormat;
     }
 
     @Override

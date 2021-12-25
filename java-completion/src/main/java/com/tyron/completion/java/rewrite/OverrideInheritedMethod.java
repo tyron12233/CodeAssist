@@ -51,7 +51,7 @@ public class OverrideInheritedMethod implements Rewrite {
         if (insertText == null) {
             return Rewrite.CANCELLED;
         }
-        TextEdit[] edits = {new TextEdit(new Range(insertPoint, insertPoint), insertText)};
+        TextEdit[] edits = {new TextEdit(new Range(insertPoint, insertPoint), insertText, true)};
         return Collections.singletonMap(file, edits);
     }
 
