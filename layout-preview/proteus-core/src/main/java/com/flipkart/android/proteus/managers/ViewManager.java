@@ -148,7 +148,10 @@ public class ViewManager implements ProteusView.Manager {
 
     @Override
     public Map<String, ViewTypeParser.AttributeSet.Attribute> getAvailableAttributes() {
-        return parser.getAttributeSet().getAttributes();
+        Map<String, ViewTypeParser.AttributeSet.Attribute> attributes =
+                parser.getAttributeSet().getAttributes();
+        attributes.putAll(parser.getAttributeSet().getLayoutParamsAttributes());
+        return attributes;
     }
 
     @Override

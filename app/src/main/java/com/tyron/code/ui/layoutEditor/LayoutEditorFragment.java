@@ -100,7 +100,12 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                 String name = ProteusHelper.getAttributeName(view, view.getViewManager().getLayout().type, attribute.id);
                 attributes.add(new Pair<>(name, attribute.value.toString()));
             }
-            AttributeEditorDialogFragment.newInstance(attributes)
+            ArrayList<Pair<String, String>> availableAttributes = new ArrayList<>();
+            view.getViewManager().getAvailableAttributes().forEach((key, value) -> {
+                availableAttributes.add(new Pair<>(key, ""));
+            });
+
+            AttributeEditorDialogFragment.newInstance(availableAttributes, attributes)
                     .show(getChildFragmentManager(), null);
 
             getChildFragmentManager().setFragmentResultListener(
