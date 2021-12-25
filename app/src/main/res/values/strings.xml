@@ -104,6 +104,7 @@
     <string name="contact_group_title">Contact</string>
     <string name="app_source_title">Source code</string>
     <string name="sketchub_team">Sketchub Team</string>
+    <string name="community">Community</string>
     <!-- file manager menu -->
     <string name="error">Error</string>
     <string name="error_resource_name_restriction">Resource names must only contain lowercase a–z, 0–9 or an underscore.</string>
