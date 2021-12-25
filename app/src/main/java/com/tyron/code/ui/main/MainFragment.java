@@ -161,6 +161,11 @@ public class MainFragment extends Fragment {
                         openProject(project);
                     }
                 }
+            } else if (item.getItemId() == R.id.action_save) {
+                saveAll();
+                Toast toast=Toast. makeText(ApplicationLoader.applicationContext,"All file saved",Toast. LENGTH_SHORT);
+                toast. setMargin(50,50);
+                toast. show();
             } else if (item.getItemId() == R.id.action_build_debug) {
                 compile(BuildType.DEBUG);
             } else if (item.getItemId() == R.id.action_build_release) {
