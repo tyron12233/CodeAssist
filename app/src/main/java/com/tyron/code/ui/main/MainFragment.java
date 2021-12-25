@@ -40,6 +40,8 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import android.widget.Toast;
+import com.tyron.code.ApplicationLoader;
 
 public class MainFragment extends Fragment {
 
