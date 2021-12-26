@@ -2,9 +2,9 @@ name: Android Tests CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ javac-17 ]
   pull_request:
-    branches: [ main ]
+    branches: [ javac-17 ]
 
 jobs:
   build:
