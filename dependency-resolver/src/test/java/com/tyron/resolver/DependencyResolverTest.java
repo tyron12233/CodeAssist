@@ -6,6 +6,7 @@ import com.tyron.resolver.model.Pom;
 import com.tyron.resolver.repository.PomRepository;
 import com.tyron.resolver.repository.PomRepositoryImpl;
 
+import org.apache.commons.io.FileUtils;
 import org.junit.Test;
 
 import java.io.File;
@@ -18,9 +19,13 @@ public class DependencyResolverTest {
 
     @Test
     public void testDependencyResolution() throws IOException {
+        File cacheDir = new File(TestUtil.getResourcesDirectory(), "cache");
+        if (!cacheDir.exists()) {
+            FileUtils.createParentDirectories(cacheDir);
+        }
         repository.addRepositoryUrl("https://repo1.maven.org/maven2");
         repository.addRepositoryUrl("https://maven.google.com");
-        repository.setCacheDirectory(new File(TestUtil.getResourcesDirectory(), "cache"));
+        repository.setCacheDirectory(cacheDir);
         repository.initialize();
 
         DependencyResolver resolver = new DependencyResolver(repository);
@@ -51,5 +56,7 @@ public class DependencyResolverTest {
         pom = resolvedPoms.get(resolvedPoms.indexOf(newerFragment));
         assert pom != null;
         assert pom.getVersionName().equals("300");
+
+        FileUtils.forceDelete(cacheDir);
     }
 }

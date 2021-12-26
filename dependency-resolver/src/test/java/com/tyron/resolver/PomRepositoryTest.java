@@ -5,6 +5,7 @@ import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
 import com.tyron.resolver.repository.PomRepositoryImpl;
 
+import org.apache.commons.io.FileUtils;
 import org.junit.Test;
 
 import java.io.File;
@@ -21,9 +22,14 @@ public class PomRepositoryTest {
 
     @Test
     public void test() throws IOException {
+        File cacheDir = new File(TestUtil.getResourcesDirectory(), "cache");
+        if (!cacheDir.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            cacheDir.mkdirs();
+        }
         repository.addRepositoryUrl("https://repo1.maven.org/maven2");
         repository.addRepositoryUrl("https://maven.google.com");
-        repository.setCacheDirectory(new File(TestUtil.getResourcesDirectory(), "cache"));
+        repository.setCacheDirectory(cacheDir);
         repository.initialize();
 
         Pom pom = repository.getPom("com.google.android.material:material:1.4.0");
@@ -45,6 +51,8 @@ public class PomRepositoryTest {
 
         File annotationsFile = repository.getLibrary(annotations);
         assert annotationsFile != null;
+
+        FileUtils.forceDelete(cacheDir);
     }
 
     private void recurse(Pom pom) {
