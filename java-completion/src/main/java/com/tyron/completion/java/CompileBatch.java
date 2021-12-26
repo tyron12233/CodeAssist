@@ -178,7 +178,7 @@ public class CompileBatch implements AutoCloseable {
         if (getModuleFile() != null) {
             Collections.addAll(list, "-target", "11", "-source", "11");
             newClassPath.add(CompletionModule.getAndroidJar());
-            newClassPath.add(CompletionModile.getLambdaStubs());
+            newClassPath.add(CompletionModule.getLambdaStubs());
         } else {
             Collections.addAll(list, "-target", "8", "-source", "8");
         }
