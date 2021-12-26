@@ -188,7 +188,7 @@ public class CompletionProvider {
                     return completeMemberSelect(task, path, partial, endsWithParen);
                 case MEMBER_REFERENCE:
                     return completeMemberReference(task, path, partial);
-                case SWITCH:
+                case CASE:
                     return completeSwitchConstant(task, path, partial);
                 case IMPORT:
                     return completeImport(qualifiedPartialIdentifier(contents, (int) cursor));
