@@ -2,6 +2,9 @@ package com.tyron.builder.compiler.incremental.java;
 
 import androidx.annotation.VisibleForTesting;
 
+import com.sun.source.util.JavacTask;
+import com.sun.tools.javac.api.JavacTaskImpl;
+import com.sun.tools.javac.api.JavacTool;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
@@ -13,12 +16,6 @@ import com.tyron.builder.project.cache.CacheHolder;
 import com.tyron.common.util.Cache;
 
 import org.apache.commons.io.FileUtils;
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.StandardJavaFileManager;
-import org.openjdk.javax.tools.StandardLocation;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.tools.javac.api.JavacTool;
 
 import java.io.File;
 import java.io.IOException;
@@ -32,6 +29,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+
+import javax.tools.DiagnosticListener;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.StandardLocation;
 
 public class IncrementalJavaTask extends Task<JavaModule> {
 
@@ -105,15 +107,13 @@ public class IncrementalJavaTask extends Task<JavaModule> {
 
         JavacTool tool = JavacTool.create();
 
-        StandardJavaFileManager standardJavaFileManager = tool.getStandardFileManager(
-                diagnosticCollector,
-                Locale.getDefault(),
-                Charset.defaultCharset()
-        );
+        StandardJavaFileManager standardJavaFileManager =
+                tool.getStandardFileManager(diagnosticCollector, Locale.getDefault(),
+                        Charset.defaultCharset());
 
         List<File> classpath = new ArrayList<>(getModule().getLibraries());
         classpath.add(mOutputDir);
-
+        classpath.add(getModule().getBootstrapJarFile());
         try {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT,
                     Collections.singletonList(mOutputDir));
@@ -131,36 +131,27 @@ public class IncrementalJavaTask extends Task<JavaModule> {
             javaFileObjects.add(new SourceFileObject(file.toPath()));
         }
 
-        JavacTask task = tool.getTask(
-                null,
-                standardJavaFileManager,
-                diagnosticCollector,
-                null,
-                null,
-                javaFileObjects
-        );
+        JavacTask task = tool.getTask(null, standardJavaFileManager, diagnosticCollector,
+                Arrays.asList("--target", "11", "--source", "11", "--system",
+                        getModule().getBootstrapJarFile().getParent()), null, javaFileObjects);
 
         HashMap<String, List<File>> compiledFiles = new HashMap<>();
-
         try {
-            task.parse();
+            ((JavacTaskImpl) task).parse(javaFileObjects.toArray(new JavaFileObject[0]));
             task.analyze();
             Iterable<? extends JavaFileObject> generate = task.generate();
             for (JavaFileObject fileObject : generate) {
                 String path = fileObject.getName();
                 File classFile = new File(path);
                 if (classFile.exists()) {
-                    String classPath = classFile.getAbsolutePath()
-                            .replace("build/bin/classes/", "src/main/java/")
-                            .replace(".class", ".java");
+                    String classPath = classFile.getAbsolutePath().replace("build/bin/classes/",
+                            "src/main/java/").replace(".class", ".java");
                     if (classFile.getName().indexOf('$') != -1) {
-                        classPath = classPath.substring(0, classPath.indexOf('$'))
-                                + ".java";
+                        classPath = classPath.substring(0, classPath.indexOf('$')) + ".java";
                     }
                     File file = new File(classPath);
                     if (!file.exists()) {
-                        file = new File(
-                                classPath.replace("src/main/java", "build/gen"));
+                        file = new File(classPath.replace("src/main/java", "build/gen"));
                     }
 
                     if (!compiledFiles.containsKey(file.getAbsolutePath())) {
@@ -168,18 +159,15 @@ public class IncrementalJavaTask extends Task<JavaModule> {
                         list.add(classFile);
                         compiledFiles.put(file.getAbsolutePath(), list);
                     } else {
-                        Objects.requireNonNull(compiledFiles.get(file.getAbsolutePath()))
-                                .add(classFile);
+                        Objects.requireNonNull(compiledFiles.get(file.getAbsolutePath())).add(classFile);
                     }
-                    mClassCache.load(file.toPath(), "class",
-                            Collections.singletonList(classFile));
+                    mClassCache.load(file.toPath(), "class", Collections.singletonList(classFile));
                 }
             }
 
             compiledFiles.forEach((key, values) -> {
                 File sourceFile = new File(key);
-                String name = sourceFile.getName()
-                        .replace(".java", "");
+                String name = sourceFile.getName().replace(".java", "");
                 File first = values.iterator().next();
                 File parent = first.getParentFile();
                 if (parent != null) {
@@ -187,8 +175,7 @@ public class IncrementalJavaTask extends Task<JavaModule> {
                         if (!c.getName().contains("$")) {
                             return false;
                         }
-                        String baseClassName = c.getName()
-                                .substring(0, c.getName().indexOf('$'));
+                        String baseClassName = c.getName().substring(0, c.getName().indexOf('$'));
                         return baseClassName.equals(name);
                     });
                     if (children != null) {
@@ -217,8 +204,7 @@ public class IncrementalJavaTask extends Task<JavaModule> {
     }
 
     private File findClassFile(String packageName) {
-        String path = packageName.replace(".", "/")
-                .concat(".class");
+        String path = packageName.replace(".", "/").concat(".class");
         return new File(mOutputDir, path);
     }
 
@@ -226,8 +212,8 @@ public class IncrementalJavaTask extends Task<JavaModule> {
         File parent = classFile.getParentFile();
         String name = classFile.getName().replace(ext, "");
         if (parent != null) {
-            File[] children = parent.listFiles((c) ->
-                    c.getName().endsWith(ext) && c.getName().contains("$"));
+            File[] children =
+                    parent.listFiles((c) -> c.getName().endsWith(ext) && c.getName().contains("$"));
             if (children != null) {
                 for (File child : children) {
                     if (child.getName().startsWith(name)) {

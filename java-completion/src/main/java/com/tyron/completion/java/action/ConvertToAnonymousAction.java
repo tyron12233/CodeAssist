@@ -4,8 +4,8 @@ import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.model.CodeAction;
 import com.tyron.completion.java.model.CodeActionList;
 
-import org.openjdk.source.tree.LambdaExpressionTree;
-import org.openjdk.source.util.TreePath;
+import com.sun.source.tree.LambdaExpressionTree;
+import com.sun.source.util.TreePath;
 
 import java.util.Collections;
 

@@ -14,14 +14,14 @@ import com.tyron.lint.api.JavaVoidVisitor;
 import com.tyron.lint.api.Scope;
 import com.tyron.lint.api.Severity;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.MemberSelectTree;
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.code.Symbol;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.code.Symbol;
 
 import java.util.Collections;
 import java.util.List;

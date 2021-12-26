@@ -16,13 +16,13 @@ import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.builder.project.api.JavaModule;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.StandardJavaFileManager;
-import org.openjdk.javax.tools.StandardLocation;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.tools.javac.api.JavacTool;
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticListener;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.StandardLocation;
+import com.sun.source.util.JavacTask;
+import com.sun.tools.javac.api.JavacTool;
 
 import java.io.File;
 import java.io.IOException;

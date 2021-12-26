@@ -2,20 +2,20 @@ package com.tyron.completion.java.action;
 
 import com.tyron.completion.java.FindNewTypeDeclarationAt;
 
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.ExpressionTree;
-import org.openjdk.source.tree.LambdaExpressionTree;
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.tree.NewClassTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.VariableTree;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.TreePathScanner;
-import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.tree.JCTree;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.LambdaExpressionTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.VariableTree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.TreePathScanner;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.tree.JCTree;
 
 /**
  * Scanner to retrieve the current {@link TreePath} given the cursor position each visit methods

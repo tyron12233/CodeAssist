@@ -2,25 +2,25 @@ package com.tyron.completion.java.util;
 
 import androidx.annotation.NonNull;
 
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.source.doctree.ThrowsTree;
-import org.openjdk.source.tree.BlockTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.EnhancedForLoopTree;
-import org.openjdk.source.tree.ExpressionStatementTree;
-import org.openjdk.source.tree.ForLoopTree;
-import org.openjdk.source.tree.IfTree;
-import org.openjdk.source.tree.ImportTree;
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.tree.NewClassTree;
-import org.openjdk.source.tree.ParenthesizedTree;
-import org.openjdk.source.tree.TryTree;
-import org.openjdk.source.tree.WhileLoopTree;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.tree.JCTree;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.type.TypeMirror;
+import com.sun.source.doctree.ThrowsTree;
+import com.sun.source.tree.BlockTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.EnhancedForLoopTree;
+import com.sun.source.tree.ExpressionStatementTree;
+import com.sun.source.tree.ForLoopTree;
+import com.sun.source.tree.IfTree;
+import com.sun.source.tree.ImportTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.ParenthesizedTree;
+import com.sun.source.tree.TryTree;
+import com.sun.source.tree.WhileLoopTree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.tree.JCTree;
 
 public class ActionUtil {
 

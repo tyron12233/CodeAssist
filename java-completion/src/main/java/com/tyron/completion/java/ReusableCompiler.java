@@ -1,24 +1,25 @@
 package com.tyron.completion.java;
 
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.TaskEvent;
-import org.openjdk.source.util.TaskListener;
-import org.openjdk.tools.javac.api.JavacTaskImpl;
-import org.openjdk.tools.javac.api.JavacTool;
-import org.openjdk.tools.javac.api.JavacTrees;
-import org.openjdk.tools.javac.api.MultiTaskListener;
-import org.openjdk.tools.javac.code.Types;
-import org.openjdk.tools.javac.comp.Annotate;
-import org.openjdk.tools.javac.comp.Check;
-import org.openjdk.tools.javac.comp.CompileStates;
-import org.openjdk.tools.javac.comp.Enter;
-import org.openjdk.tools.javac.comp.Modules;
-import org.openjdk.tools.javac.main.Arguments;
-import org.openjdk.tools.javac.model.JavacElements;
-import org.openjdk.tools.javac.util.Context;
-import org.openjdk.tools.javac.util.DefinedBy;
-import org.openjdk.tools.javac.util.Log;
-import org.openjdk.tools.javac.main.JavaCompiler;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.TaskEvent;
+import com.sun.source.util.TaskListener;
+import com.sun.tools.javac.api.BasicJavacTask;
+import com.sun.tools.javac.api.JavacTaskImpl;
+import com.sun.tools.javac.api.JavacTool;
+import com.sun.tools.javac.api.JavacTrees;
+import com.sun.tools.javac.api.MultiTaskListener;
+import com.sun.tools.javac.code.Types;
+import com.sun.tools.javac.comp.Annotate;
+import com.sun.tools.javac.comp.Check;
+import com.sun.tools.javac.comp.CompileStates;
+import com.sun.tools.javac.comp.Enter;
+import com.sun.tools.javac.comp.Modules;
+import com.sun.tools.javac.main.Arguments;
+import com.sun.tools.javac.model.JavacElements;
+import com.sun.tools.javac.util.Context;
+import com.sun.tools.javac.util.DefinedBy;
+import com.sun.tools.javac.util.Log;
+import com.sun.tools.javac.main.JavaCompiler;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -28,10 +29,10 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileManager;
-import org.openjdk.javax.tools.JavaFileObject;
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticListener;
+import javax.tools.JavaFileManager;
+import javax.tools.JavaFileObject;
 
 /**
  * A pool of reusable JavacTasks. When a task is no valid anymore, it is returned to the pool, and its Context may be
@@ -95,7 +96,8 @@ public class ReusableCompiler {
 			StreamSupport.stream(options.spliterator(), false).collect(Collectors.toCollection(ArrayList::new));
         if (!opts.equals(currentOptions)) {
             LOG.warning(String.format("Options changed from %s to %s, creating new compiler", options, opts));
-            currentOptions = opts;
+            currentOptions.clear();
+            currentOptions.addAll(opts);
             currentContext = new ReusableContext(opts);
         }
         JavacTaskImpl task =

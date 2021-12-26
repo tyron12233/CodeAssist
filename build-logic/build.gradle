@@ -37,6 +37,7 @@ dependencies {
     implementation project(path: ':jaxp:jaxp-internal')
     implementation project(path: ':jaxp:xml')
 
+
     testImplementation 'junit:junit:4.13.2'
     testImplementation "com.google.truth:truth:1.1.3"
     testImplementation "org.robolectric:robolectric:4.2.1"
@@ -53,4 +54,6 @@ dependencies {
             'libs/zip4j.jar',
             'libs/ecj.jar'
     )
+
+    api files('libs/nb-javac-17.0.0.0.jar', 'libs/nb-javac-17.0.0.0-api.jar', 'libs/jrt-fs.jar')
 }

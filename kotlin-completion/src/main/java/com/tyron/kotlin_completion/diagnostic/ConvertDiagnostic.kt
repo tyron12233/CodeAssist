@@ -4,7 +4,7 @@ import com.tyron.builder.model.DiagnosticWrapper
 import com.tyron.kotlin_completion.position.Position
 import org.jetbrains.kotlin.diagnostics.Severity
 import org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages
-import org.openjdk.javax.tools.Diagnostic
+import javax.tools.Diagnostic
 import java.io.File
 import org.jetbrains.kotlin.diagnostics.Diagnostic as KotlinDiagnostic
 
