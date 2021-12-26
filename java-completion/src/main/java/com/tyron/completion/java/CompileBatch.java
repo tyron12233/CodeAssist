@@ -174,10 +174,15 @@ public class CompileBatch implements AutoCloseable {
         if (TestUtil.isDalvik()) {
             if (getModuleFile() != null) {
                 Collections.addAll(list, "--system", CompletionModule.getAndroidJar().getParent());
+                Collections.addAll(list, "-target", "11", "-source", "11");
+            } else {
+                Collections.addAll(list, "-target", "8", "-source", "8");
             }
+        } else {
+            Collections.addAll(list, "-target", "8", "-source", "8");
         }
 
-        Collections.addAll(list, "-target", "8", "-source", "8");
+        
 
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
         //Collections.addAll(list, "-verbose");
