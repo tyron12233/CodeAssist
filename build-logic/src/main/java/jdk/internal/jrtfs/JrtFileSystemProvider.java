@@ -81,7 +81,9 @@ public final class JrtFileSystemProvider extends FileSystemProvider {
         Objects.requireNonNull(env);
         this.checkPermission();
         this.checkUri(uri);
-        return (FileSystem)(env.containsKey("java.home") ? this.newFileSystem((String)env.get("java.home"), uri, env) : new JrtFileSystem(this, env));
+        return (FileSystem)(env.containsKey("java.home") ? this.newFileSystem((String)env.get("java.home"), uri, env) : new JrtFileSystemWrapper(new JrtFileSystem(this, env)) {
+
+        });
     }
 
     private FileSystem newFileSystem(String targetHome, URI uri, Map<String, ?> env) throws IOException {
@@ -95,23 +97,6 @@ public final class JrtFileSystemProvider extends FileSystemProvider {
 
             return newFileSystem(uri, newEnv);
         }
-    }
-
-    private static URLClassLoader newJrtFsLoader(Path jrtfs) {
-        URL url;
-        try {
-            url = jrtfs.toUri().toURL();
-        } catch (MalformedURLException var3) {
-            throw new IllegalArgumentException(var3);
-        }
-
-        final URL[] urls = new URL[]{url};
-//        return (URLClassLoader)AccessController.doPrivileged(new PrivilegedAction<URLClassLoader>() {
-//            public URLClassLoader run() {
-//                return new JrtFileSystemProvider.JrtFsLoader(urls);
-//            }
-//        });
-        return null;
     }
 
     public Path getPath(URI uri) {
