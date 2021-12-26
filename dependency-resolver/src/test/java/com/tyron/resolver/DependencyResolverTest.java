@@ -21,7 +21,8 @@ public class DependencyResolverTest {
     public void testDependencyResolution() throws IOException {
         File cacheDir = new File(TestUtil.getResourcesDirectory(), "cache");
         if (!cacheDir.exists()) {
-            FileUtils.createParentDirectories(cacheDir);
+            //noinspection ResultOfMethodCallIgnored
+            cacheDir.mkdirs();
         }
         repository.addRepositoryUrl("https://repo1.maven.org/maven2");
         repository.addRepositoryUrl("https://maven.google.com");
