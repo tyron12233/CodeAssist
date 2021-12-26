@@ -8,6 +8,7 @@ import com.sun.source.util.Trees;
 import com.sun.tools.javac.api.ClientCodeWrapper;
 import com.sun.tools.javac.util.JCDiagnostic;
 import com.tyron.builder.project.api.JavaModule;
+import com.tyron.common.TestUtil;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
@@ -19,6 +20,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -163,13 +165,16 @@ public class CompileBatch implements AutoCloseable {
 
         if (!classPath.isEmpty()) {
             Collections.addAll(list, "-cp",
-                    joinPath(classPath) + File.pathSeparator + CompletionModule.getAndroidJar().getAbsolutePath());
+                    joinPath(classPath));
         }
 
-        Collections.addAll(list, "--system", CompletionModule.getAndroidJar().getParent());
-//        Collections.addAll(list, "-bootclasspath", joinPath(
-//                Arrays.asList(CompletionModule.getAndroidJar(), CompletionModule.getLambdaStubs
-//                ())));
+        if (TestUtil.isDalvik()) {
+            Collections.addAll(list, "--system", CompletionModule.getAndroidJar().getParent());
+        }
+
+        Collections.addAll(list, "-bootclasspath",
+                joinPath(Arrays.asList(CompletionModule.getAndroidJar(),
+                        CompletionModule.getLambdaStubs())));
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
         //Collections.addAll(list, "-verbose");
         Collections.addAll(list, "-proc:none");
