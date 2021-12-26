@@ -162,11 +162,9 @@ public class CompileBatch implements AutoCloseable {
 
     private static List<String> options(Set<File> classPath, Set<String> addExports) {
         List<String> list = new ArrayList<>();
-
-        if (!classPath.isEmpty()) {
-            Collections.addAll(list, "-cp",
-                    joinPath(classPath));
-        }
+        
+        Set<File> newClassPath = new HashSet<>(classPath);
+        
         Collections.addAll(list, "-bootclasspath",
                 joinPath(Arrays.asList(CompletionModule.getAndroidJar(),
                         CompletionModule.getLambdaStubs())));
@@ -174,14 +172,18 @@ public class CompileBatch implements AutoCloseable {
         if (TestUtil.isDalvik()) {
             if (getModuleFile() != null) {
                 Collections.addAll(list, "--system", CompletionModule.getAndroidJar().getParent());
-                Collections.addAll(list, "-target", "11", "-source", "11");
-            } else {
-                Collections.addAll(list, "-target", "8", "-source", "8");
             }
+        } 
+
+        if (getModuleFile() != null) {
+            Collections.addAll(list, "-target", "11", "-source", "11");
+            newClassPath.add(CompletionModule.getAndroidJar());
+            newClassPath.add(CompletionModile.getLambdaStubs());
         } else {
             Collections.addAll(list, "-target", "8", "-source", "8");
         }
 
+        Collections.addAll(list, "-cp", joinPath(newClassPath));
         
 
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
