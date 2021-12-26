@@ -126,7 +126,7 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
 
     @Override
     public ModuleSettings getSettings() {
-        return null;
+        return new MockModuleSettings();
     }
 
     @Override
