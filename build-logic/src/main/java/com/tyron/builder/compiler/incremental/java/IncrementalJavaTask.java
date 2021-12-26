@@ -13,6 +13,7 @@ import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.cache.CacheHolder;
+import com.tyron.common.TestUtil;
 import com.tyron.common.util.Cache;
 
 import org.apache.commons.io.FileUtils;
@@ -131,13 +132,28 @@ public class IncrementalJavaTask extends Task<JavaModule> {
             javaFileObjects.add(new SourceFileObject(file.toPath()));
         }
 
+        List<String> options = new ArrayList<>();
+        options.add("-target");
+        options.add("11");
+        options.add("-source");
+        options.add("11");
+        if (TestUtil.isDalvik()) {
+            options.add("--system");
+            options.add(getModule().getBootstrapJarFile().getParent());
+        }
+
         JavacTask task = tool.getTask(null, standardJavaFileManager, diagnosticCollector,
-                Arrays.asList("--target", "11", "--source", "11", "--system",
-                        getModule().getBootstrapJarFile().getParent()), null, javaFileObjects);
+                options, null, javaFileObjects);
 
         HashMap<String, List<File>> compiledFiles = new HashMap<>();
         try {
-            ((JavacTaskImpl) task).parse(javaFileObjects.toArray(new JavaFileObject[0]));
+
+            if (TestUtil.isDalvik()) {
+                ((JavacTaskImpl) task).parse(javaFileObjects.toArray(new JavaFileObject[0]));
+            } else {
+                task.parse();
+            }
+
             task.analyze();
             Iterable<? extends JavaFileObject> generate = task.generate();
             for (JavaFileObject fileObject : generate) {

@@ -69,20 +69,26 @@ import javax.tools.StandardJavaFileManager.PathFactory;
 
 import jdk.internal.jrtfs.JrtFileSystemProvider;
 
-@SuppressWarnings("ALL")
 public class Locations {
     private Log log;
     private FSInfo fsInfo;
     private boolean warn;
     private ModuleNameReader moduleNameReader;
     private PathFactory pathFactory = Paths::get;
-    static final Path javaHome = FileSystems.getDefault().getPath("/data/data/com.tyron.code/files");
+    static Path javaHome = FileSystems.getDefault().getPath(System.getProperty("java.home"));
     static final Path thisSystemModules;
     Map<Path, FileSystem> fileSystems = new LinkedHashMap<>();
     List<Closeable> closeables = new ArrayList<>();
     private Map<String, String> fsEnv = Collections.emptyMap();
     Map<Location, Locations.LocationHandler> handlersForLocation;
     Map<Option, Locations.LocationHandler> handlersForOption;
+
+    /**
+     * Used in an android environment where there's no JDK available
+     */
+    public static void setJavaHome(Path home) {
+        javaHome = home;
+    }
 
     Locations() {
         this.initHandlers();
@@ -97,7 +103,7 @@ public class Locations {
     }
 
     public void close() throws IOException {
-        ListBuffer<IOException> list = new ListBuffer();
+        ListBuffer<IOException> list = new ListBuffer<>();
         this.closeables.forEach((closeable) -> {
             try {
                 closeable.close();
@@ -139,12 +145,11 @@ public class Locations {
     }
 
     private Iterable<Path> getPathEntries(String searchPath, Path emptyPathDefault) {
-        ListBuffer<Path> entries = new ListBuffer();
+        ListBuffer<Path> entries = new ListBuffer<>();
         String[] var4 = searchPath.split(Pattern.quote(File.pathSeparator), -1);
         int var5 = var4.length;
 
-        for(int var6 = 0; var6 < var5; ++var6) {
-            String s = var4[var6];
+        for (String s : var4) {
             if (s.isEmpty()) {
                 if (emptyPathDefault != null) {
                     entries.add(emptyPathDefault);
@@ -941,11 +946,9 @@ public class Locations {
 
         private List<Path> checkPaths(Iterable<? extends Path> paths) throws IOException {
             Objects.requireNonNull(paths);
-            List<Path> validPaths = new ArrayList();
-            Iterator var3 = paths.iterator();
+            List<Path> validPaths = new ArrayList<>();
 
-            while(var3.hasNext()) {
-                Path p = (Path)var3.next();
+            for (Path p : paths) {
                 validPaths.add(this.checkDirectory(p));
             }
 
@@ -955,16 +958,13 @@ public class Locations {
         private void initModuleLocations() {
             if (this.moduleTable == null) {
                 this.moduleTable = Locations.this.new ModuleTable();
-                Iterator var1 = this.listLocationsForModules().iterator();
 
-                while(var1.hasNext()) {
-                    Set<Location> set = (Set)var1.next();
-                    Iterator var3 = set.iterator();
+                for (Set<Location> locations : this.listLocationsForModules()) {
+                    Set<Location> set = (Set) locations;
 
-                    while(var3.hasNext()) {
-                        Location locn = (Location)var3.next();
-                        if (locn instanceof Locations.ModuleLocationHandler) {
-                            Locations.ModuleLocationHandler l = (Locations.ModuleLocationHandler)locn;
+                    for (Location locn : set) {
+                        if (locn instanceof ModuleLocationHandler) {
+                            ModuleLocationHandler l = (ModuleLocationHandler) locn;
                             if (!this.moduleTable.nameMap.containsKey(l.moduleName)) {
                                 this.moduleTable.add(l);
                             }
@@ -976,8 +976,8 @@ public class Locations {
         }
 
         private void checkValidModulePathEntry(Path p) {
-            if (Files.exists(p, new LinkOption[0])) {
-                if (!Files.isDirectory(p, new LinkOption[0])) {
+            if (Files.exists(p)) {
+                if (!Files.isDirectory(p)) {
                     String name = p.getFileName().toString();
                     int lastDot = name.lastIndexOf(".");
                     if (lastDot > 0) {
@@ -1043,7 +1043,7 @@ public class Locations {
                         }
 
                         Path path = (Path)this.pathIter.next();
-                        if (Files.isDirectory(path, new LinkOption[0])) {
+                        if (Files.isDirectory(path)) {
                             this.next = this.scanDirectory(path);
                         } else {
                             this.next = this.scanFile(path);
@@ -1070,13 +1070,11 @@ public class Locations {
                 Path moduleInfoClass = null;
 
                 try {
-                    DirectoryStream stream = Files.newDirectoryStream(path);
+                    DirectoryStream<Path> stream = Files.newDirectoryStream(path);
 
                     try {
-                        Iterator var5 = stream.iterator();
 
-                        while(var5.hasNext()) {
-                            Path entry = (Path)var5.next();
+                        for (Path entry : stream) {
                             if (entry.endsWith("module-info.class")) {
                                 moduleInfoClass = entry;
                                 break;
@@ -1096,9 +1094,7 @@ public class Locations {
                         throw var16;
                     }
 
-                    if (stream != null) {
-                        stream.close();
-                    }
+                    stream.close();
                 } catch (IOException | DirectoryIteratorException var17) {
                     Locations.this.log.error(Errors.LocnCantReadDirectory(path));
                     return Collections.emptySet();
@@ -1118,18 +1114,18 @@ public class Locations {
                         return Collections.emptySet();
                     }
                 } else {
-                    Set<Location> result = new LinkedHashSet();
+                    Set<Location> result = new LinkedHashSet<>();
                     int index = 0;
-                    Iterator var22 = paths.iterator();
 
-                    while(var22.hasNext()) {
-                        Path entryx = (Path)var22.next();
+                    for (Path entryx : paths) {
                         Pair<String, Path> module = this.inferModuleName(entryx);
                         if (module != null) {
-                            String moduleName = (String)module.fst;
-                            Path modulePath = (Path)module.snd;
-                            String name = ModulePathLocationHandler.this.location.getName() + "[" + this.pathIndex + "." + index++ + ":" + moduleName + "]";
-                            Locations.ModuleLocationHandler lx = Locations.this.new ModuleLocationHandler(ModulePathLocationHandler.this, name, moduleName, Collections.singletonList(modulePath), false);
+                            String moduleName = (String) module.fst;
+                            Path modulePath = (Path) module.snd;
+                            String name =
+                                    ModulePathLocationHandler.this.location.getName() + "[" + this.pathIndex + "." + index++ + ":" + moduleName + "]";
+                            ModuleLocationHandler lx =
+                                    Locations.this.new ModuleLocationHandler(ModulePathLocationHandler.this, name, moduleName, Collections.singletonList(modulePath), false);
                             result.add(lx);
                         }
                     }
@@ -1256,30 +1252,22 @@ public class Locations {
                                                 throw var24;
                                             }
 
-                                            if (fsx != null) {
-                                                fsx.close();
-                                            }
+                                            fsx.close();
 
                                             return var10;
                                         }
 
-                                        if (fsx != null) {
-                                            fsx.close();
-                                        }
+                                        fsx.close();
 
                                         return var10;
                                     }
 
-                                    if (fsx != null) {
-                                        fsx.close();
-                                    }
+                                    fsx.close();
 
                                     return var39;
                                 }
 
-                                if (fsx != null) {
-                                    fsx.close();
-                                }
+                                fsx.close();
                             } catch (BadClassFile var25) {
                                 Locations.this.log.error(Errors.LocnBadModuleInfo(p));
                                 return null;
@@ -1341,9 +1329,6 @@ public class Locations {
                                 Locations.this.log.error(Errors.LocnCantReadFile(p));
                                 return null;
                             }
-                        }
-
-                        if (Locations.this.warn) {
                         }
 
                         return null;
@@ -1485,7 +1470,7 @@ public class Locations {
 
     private class BootClassPathLocationHandler extends Locations.BasicLocationHandler {
         private Collection<Path> searchPath;
-        final Map<Option, String> optionValues = new EnumMap(Option.class);
+        final Map<Option, String> optionValues = new EnumMap<>(Option.class);
         private boolean isDefault;
 
         BootClassPathLocationHandler() {
@@ -1564,7 +1549,7 @@ public class Locations {
             } else {
                 Collection<Path> systemClasses = this.systemClasses();
                 if (systemClasses != null) {
-                    path.addFiles((Iterable)systemClasses, false);
+                    path.addFiles(systemClasses, false);
                 } else {
                     String files = System.getProperty("sun.boot.class.path");
                     path.addFiles(files, false);
@@ -1576,7 +1561,7 @@ public class Locations {
                 path.addDirectories(extdirsOpt);
             } else {
                 Path jfxrt = Locations.javaHome.resolve("lib/jfxrt.jar");
-                if (Files.exists(jfxrt, new LinkOption[0])) {
+                if (Files.exists(jfxrt)) {
                     path.addFile(jfxrt, false);
                 }
 
@@ -1588,16 +1573,16 @@ public class Locations {
         }
 
         private Collection<Path> systemClasses() throws IOException {
-            if (Files.isRegularFile(Locations.thisSystemModules, new LinkOption[0])) {
+            if (Files.isRegularFile(Locations.thisSystemModules)) {
                 return Collections.singleton(Locations.thisSystemModules);
             } else {
                 Path modules = Locations.javaHome.resolve("modules");
-                if (Files.isDirectory(modules.resolve("java.base"), new LinkOption[0])) {
-                    Stream listedModules = Files.list(modules);
+                if (Files.isDirectory(modules.resolve("java.base"))) {
+                    Stream<Path> listedModules = Files.list(modules);
 
-                    Collection var3;
+                    Collection<Path> var3;
                     try {
-                        var3 = (Collection)listedModules.collect(Collectors.toList());
+                        var3 = listedModules.collect(Collectors.toList());
                     } catch (Throwable var6) {
                         if (listedModules != null) {
                             try {
@@ -1610,9 +1595,7 @@ public class Locations {
                         throw var6;
                     }
 
-                    if (listedModules != null) {
-                        listedModules.close();
-                    }
+                    listedModules.close();
 
                     return var3;
                 } else {
@@ -1670,7 +1653,7 @@ public class Locations {
 
         private void lazy() {
             if (this.searchPath == null) {
-                this.setPaths((Iterable)null);
+                this.setPaths(null);
             }
 
         }
@@ -1796,13 +1779,11 @@ public class Locations {
 
         Iterable<Set<Location>> listLocationsForModules() throws IOException {
             if (!this.listed && this.outputDir != null) {
-                DirectoryStream stream = Files.newDirectoryStream(this.outputDir);
+                DirectoryStream<Path> stream = Files.newDirectoryStream(this.outputDir);
 
                 try {
-                    Iterator var2 = stream.iterator();
 
-                    while(var2.hasNext()) {
-                        Path p = (Path)var2.next();
+                    for (Path p : stream) {
                         this.getLocationForModule(p.getFileName().toString());
                     }
                 } catch (Throwable var5) {
@@ -1867,9 +1848,9 @@ public class Locations {
 
         protected Path checkDirectory(Path path) throws IOException {
             Objects.requireNonNull(path);
-            if (!Files.exists(path, new LinkOption[0])) {
+            if (!Files.exists(path)) {
                 throw new FileNotFoundException(path + ": does not exist");
-            } else if (!Files.isDirectory(path, new LinkOption[0])) {
+            } else if (!Files.isDirectory(path)) {
                 throw new IOException(path + ": not a directory");
             } else {
                 return path;
@@ -1944,10 +1925,8 @@ public class Locations {
             Locations.SearchPath var9;
             try {
                 if (dirs != null) {
-                    Iterator var4 = Locations.this.getPathEntries(dirs).iterator();
 
-                    while(var4.hasNext()) {
-                        Path dir = (Path)var4.next();
+                    for (Path dir : Locations.this.getPathEntries(dirs)) {
                         this.addDirectory(dir, warn);
                     }
                 }
@@ -1992,9 +1971,7 @@ public class Locations {
                         throw var7;
                     }
 
-                    if (s != null) {
-                        s.close();
-                    }
+                    s.close();
                 } catch (IOException var8) {
                 }
 
@@ -2015,10 +1992,8 @@ public class Locations {
 
         public Locations.SearchPath addFiles(Iterable<? extends Path> files, boolean warn) {
             if (files != null) {
-                Iterator var3 = files.iterator();
 
-                while(var3.hasNext()) {
-                    Path file = (Path)var3.next();
+                for (Path file : files) {
                     this.addFile(file, warn);
                 }
             }
@@ -2074,10 +2049,8 @@ public class Locations {
 
         private void addJarClassPath(Path jarFile, boolean warn) {
             try {
-                Iterator var3 = Locations.this.fsInfo.getJarClassPath(jarFile).iterator();
 
-                while(var3.hasNext()) {
-                    Path f = (Path)var3.next();
+                for (Path f : Locations.this.fsInfo.getJarClassPath(jarFile)) {
                     this.addFile(f, warn);
                 }
             } catch (IOException var5) {

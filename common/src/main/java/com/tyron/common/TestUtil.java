@@ -11,6 +11,11 @@ public class TestUtil {
                 .startsWith("Windows");
     }
 
+    public static boolean isDalvik() {
+        return System.getProperty("java.vm.name", "")
+                .contains("Dalvik");
+    }
+
     public static File getResourcesDirectory() throws IOException {
         File currentDirFile = Paths.get(".").toFile();
         String helper = currentDirFile.getAbsolutePath();
