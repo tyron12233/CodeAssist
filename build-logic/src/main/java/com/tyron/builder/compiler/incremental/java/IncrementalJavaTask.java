@@ -10,6 +10,7 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.cache.CacheHolder;
@@ -114,7 +115,7 @@ public class IncrementalJavaTask extends Task<JavaModule> {
 
         List<File> classpath = new ArrayList<>(getModule().getLibraries());
         classpath.add(mOutputDir);
-        classpath.add(getModule().getBootstrapJarFile());
+
         try {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT,
                     Collections.singletonList(mOutputDir));
@@ -134,9 +135,9 @@ public class IncrementalJavaTask extends Task<JavaModule> {
 
         List<String> options = new ArrayList<>();
         options.add("-target");
-        options.add("11");
+        options.add(getModule().getSettings().getString(ModuleSettings.JAVA_SOURCE_VERSION, "8"));
         options.add("-source");
-        options.add("11");
+        options.add(getModule().getSettings().getString(ModuleSettings.JAVA_SOURCE_VERSION, "8"));
         if (TestUtil.isDalvik()) {
             options.add("--system");
             options.add(getModule().getBootstrapJarFile().getParent());

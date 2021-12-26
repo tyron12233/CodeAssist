@@ -33,6 +33,8 @@ public class ModuleSettings implements SharedPreferences {
     public static final String MIN_SDK_VERSION = "minSdkVersion";
     public static final String VERSION_NAME = "versionName";
     public static final String VERSION_CODE = "versionCode";
+    public static final String JAVA_TARGET_VERSION = "javaTargetVersion";
+    public static final String JAVA_SOURCE_VERSION = "javaSourceVersion";
 
     private final File mConfigFile;
     private final Map<String, Object> mConfigMap;
@@ -61,6 +63,8 @@ public class ModuleSettings implements SharedPreferences {
         map.put(TARGET_SDK_VERSION, 30);
         map.put(VERSION_NAME, "1.0");
         map.put(VERSION_CODE, 1);
+        map.put(JAVA_SOURCE_VERSION, "8");
+        map.put(JAVA_TARGET_VERSION, "8");
         return map;
     }
 
