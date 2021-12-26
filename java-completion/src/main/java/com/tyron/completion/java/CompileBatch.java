@@ -167,16 +167,18 @@ public class CompileBatch implements AutoCloseable {
             Collections.addAll(list, "-cp",
                     joinPath(classPath));
         }
+        Collections.addAll(list, "-bootclasspath",
+                joinPath(Arrays.asList(CompletionModule.getAndroidJar(),
+                        CompletionModule.getLambdaStubs())));
 
         if (TestUtil.isDalvik()) {
-            Collections.addAll(list, "--system", CompletionModule.getAndroidJar().getParent());
+            if (getModuleFile() != null) {
+                Collections.addAll(list, "--system", CompletionModule.getAndroidJar().getParent());
+            }
         }
 
         Collections.addAll(list, "-target", "8", "-source", "8");
 
-        Collections.addAll(list, "-bootclasspath",
-                joinPath(Arrays.asList(CompletionModule.getAndroidJar(),
-                        CompletionModule.getLambdaStubs())));
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
         //Collections.addAll(list, "-verbose");
         Collections.addAll(list, "-proc:none");
@@ -192,6 +194,18 @@ public class CompileBatch implements AutoCloseable {
         }
 
         return list;
+    }
+
+    private static File getModuleFile() {
+        File parentFile = CompletionModule.getAndroidJar().getParentFile();
+        if (parentFile == null) {
+            return null;
+        }
+        File moduleFile = new File(parentFile, "lib/modules");
+        if (moduleFile.exists()) {
+            return moduleFile;
+        }
+        return null;
     }
 
     private boolean isValidFileRange(Diagnostic<? extends JavaFileObject> d) {
