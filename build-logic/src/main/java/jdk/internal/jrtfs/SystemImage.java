@@ -10,6 +10,7 @@ import com.tyron.builder.BuildModule;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.channels.ClosedChannelException;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.FileSystems;
@@ -40,19 +41,32 @@ abstract class SystemImage {
 
     static SystemImage open() throws IOException {
         if (modulesImageExists) {
-            final ImageReader image = ImageReader.open(moduleImageFile);
-            image.getRootDirectory();
+            final ImageReader[] image = {ImageReader.open(moduleImageFile)};
+            image[0].getRootDirectory();
             return new SystemImage() {
                 Node findNode(String path) throws IOException {
-                    return image.findNode(path);
+                    try {
+                        return image[0].findNode(path);
+                    } catch (Throwable e) {
+                        image[0] = ImageReader.open(moduleImageFile);
+                        image[0].getRootDirectory();
+                        return image[0].findNode(path);
+                    }
                 }
 
                 byte[] getResource(Node node) throws IOException {
-                    return image.getResource(node);
+                    try {
+                        return image[0].getResource(node);
+                    } catch (Throwable e) {
+                        image[0] = ImageReader.open(moduleImageFile);
+                        image[0].getRootDirectory();
+                        return image[0].getResource(node);
+                    }
                 }
 
                 void close() throws IOException {
-                    image.close();
+                    // compilation tasks may be destroyed and recreated and we
+                    // don't want to close this during this times
                 }
             };
         } else if (Files.notExists(explodedModulesDir)) {

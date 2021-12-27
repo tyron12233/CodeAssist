@@ -58,7 +58,6 @@ public final class JrtFileSystemProvider extends FileSystemProvider {
             RuntimePermission perm = new RuntimePermission("accessSystemModules");
             sm.checkPermission(perm);
         }
-
     }
 
     private void checkUri(URI uri) {

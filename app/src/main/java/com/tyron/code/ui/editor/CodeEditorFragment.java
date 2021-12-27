@@ -4,6 +4,7 @@ import android.app.ProgressDialog;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,6 +18,7 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
@@ -481,7 +483,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
             }
         } catch (Throwable e) {
-            // ignored
+            if (BuildConfig.DEBUG) {
+                Log.d("getCodeActions()", "Unable to get code actions", e);
+            }
         }
         return Collections.emptyList();
     }

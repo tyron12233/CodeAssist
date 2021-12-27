@@ -49,7 +49,7 @@ public class IntroduceLocalVariable implements Rewrite {
         if (variableName == null) {
             variableName = "variable";
         }
-        if (containsVariableAtScope(variableName, task)) {
+        while (containsVariableAtScope(variableName, task)) {
             variableName = getVariableName(variableName);
         }
         TextEdit edit = new TextEdit(range,
@@ -78,8 +78,8 @@ public class IntroduceLocalVariable implements Rewrite {
     private String getVariableName(String name) {
         Matcher matcher = DIGITS_PATTERN.matcher(name);
         if (matcher.matches()) {
-            String variableName = matcher.group(0);
-            String stringNumber = matcher.group(1);
+            String variableName = matcher.group(1);
+            String stringNumber = matcher.group(2);
             if (stringNumber == null) {
                 stringNumber = "0";
             }
