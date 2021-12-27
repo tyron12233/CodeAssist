@@ -122,7 +122,6 @@ public class ActionUtil {
     }
 
     public static boolean hasImport(CompilationUnitTree root, String className) {
-
         String packageName = className.substring(0, className.lastIndexOf("."));
 
         // if the package name of the class is java.lang, we dont need

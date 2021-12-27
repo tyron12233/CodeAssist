@@ -2,6 +2,7 @@ package com.tyron.completion.java.rewrite;
 
 import com.google.common.collect.ImmutableMap;
 import com.sun.source.tree.Scope;
+import com.sun.source.tree.Tree;
 import com.sun.source.util.TreePath;
 import com.sun.source.util.Trees;
 import com.tyron.completion.java.CompilerProvider;
@@ -61,12 +62,14 @@ public class IntroduceLocalVariable implements Rewrite {
                 ActionUtil.getSimpleName(variableType) + " " + variableName + " = ");
         edits.add(edit);
 
-        if (!ActionUtil.hasImport(task.root, variableType)) {
-            AddImport addImport = new AddImport(file.toFile(), variableType);
-            Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-            TextEdit[] imports = rewrite.get(file);
-            if (imports != null) {
-                Collections.addAll(edits, imports);
+        if (!type.getKind().isPrimitive()) {
+            if (!ActionUtil.hasImport(task.root, variableType)) {
+                AddImport addImport = new AddImport(file.toFile(), variableType);
+                Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+                TextEdit[] imports = rewrite.get(file);
+                if (imports != null) {
+                    Collections.addAll(edits, imports);
+                }
             }
         }
         return ImmutableMap.of(file, edits.toArray(new TextEdit[0]));
