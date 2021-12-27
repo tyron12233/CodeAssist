@@ -53,15 +53,18 @@ public class JavaCompilerService implements CompilerProvider {
     public final Set<String> addExports;
     public final ReusableCompiler compiler = new ReusableCompiler();
     private final Docs docs;
+    public final int target;
+    public final int source;
 
     public final ReentrantLock mLock = new ReentrantLock();
 
-    public JavaCompilerService(Project project, Set<File> classPath, Set<File> docPath, Set<String> addExports) {
+    public JavaCompilerService(Project project, Set<File> classPath, Set<File> docPath, Set<String> addExports, int target, int source) {
         mProject = project;
         this.classPath = Collections.unmodifiableSet(classPath);
         this.docPath = Collections.unmodifiableSet(docPath);
         this.addExports = Collections.unmodifiableSet(addExports);
-
+        this.target = target;
+        this.source = source;
         this.mSourceFileManager = new SourceFileManager(project);
         this.docs = new Docs(project, docPath);
     }

@@ -95,6 +95,23 @@
     <string name="run_title">Run</string>
     <string name="settings_install_apk_title">APK Installation Prompt</string>
     <string name="settings_install_desc">Show APK installation prompt after successful compilation.</string>
+    <string-array name="java_versions" translatable="false">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+    </string-array>
+
+    <string name="completion_settings_java_title">Java</string>
+    <string name="completion_java_target_version_title">Target version</string>
+    <string name="completion_java_source_version_title">Source version</string>
 
     <!-- about page -->
     <string name="settings_about_us_title">About Us</string>

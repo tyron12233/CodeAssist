@@ -8,19 +8,14 @@ package jdk.internal.jrtfs;
 import com.tyron.builder.BuildModule;
 
 import java.io.IOException;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.nio.channels.ClosedChannelException;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.AccessController;
-import java.security.CodeSource;
 import java.security.PrivilegedAction;
+
 import jdk.internal.jimage.ImageReader;
 import jdk.internal.jimage.ImageReader.Node;
 
@@ -45,23 +40,11 @@ abstract class SystemImage {
             image[0].getRootDirectory();
             return new SystemImage() {
                 Node findNode(String path) throws IOException {
-                    try {
-                        return image[0].findNode(path);
-                    } catch (Throwable e) {
-                        image[0] = ImageReader.open(moduleImageFile);
-                        image[0].getRootDirectory();
-                        return image[0].findNode(path);
-                    }
+                    return image[0].findNode(path);
                 }
 
                 byte[] getResource(Node node) throws IOException {
-                    try {
-                        return image[0].getResource(node);
-                    } catch (Throwable e) {
-                        image[0] = ImageReader.open(moduleImageFile);
-                        image[0].getRootDirectory();
-                        return image[0].getResource(node);
-                    }
+                    return image[0].getResource(node);
                 }
 
                 void close() throws IOException {
@@ -102,10 +85,11 @@ abstract class SystemImage {
 
     static {
         PrivilegedAction<String> pa = SystemImage::findHome;
-        RUNTIME_HOME = (String)AccessController.doPrivileged(pa);
+        RUNTIME_HOME = (String) AccessController.doPrivileged(pa);
         FileSystem fs = FileSystems.getDefault();
         moduleImageFile = fs.getPath(RUNTIME_HOME, "lib", "modules");
         explodedModulesDir = fs.getPath(RUNTIME_HOME, "modules");
-        modulesImageExists = (Boolean)AccessController.doPrivileged((PrivilegedAction<Boolean>) () -> Files.isRegularFile(SystemImage.moduleImageFile));
+        modulesImageExists =
+                (Boolean) AccessController.doPrivileged((PrivilegedAction<Boolean>) () -> Files.isRegularFile(SystemImage.moduleImageFile));
     }
 }

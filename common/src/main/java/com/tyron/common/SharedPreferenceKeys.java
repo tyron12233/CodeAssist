@@ -9,5 +9,6 @@ public class SharedPreferenceKeys {
     public static final String CLASSPATH = "classpath";
     public static final String KOTLIN_COMPLETIONS = "experimental_kotlin_completions";
     public static final String INSTALL_APK_DIRECTLY = "install_apk_directly";
-
+    public static final String JAVA_COMPLETIONS_TARGET_VERSION = "javaCompletionsTargetVersion";
+    public static final String JAVA_COMPLETIONS_SOURCE_VERSION = "javaCompletionsSourceVersion";
 }

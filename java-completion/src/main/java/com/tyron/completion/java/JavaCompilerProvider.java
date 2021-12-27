@@ -3,6 +3,7 @@ package com.tyron.completion.java;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.index.CompilerProvider;
 
 import java.io.File;
@@ -53,9 +54,14 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
             }
         }
 
+        String target =
+                CompletionModule.getPreferences().getString(SharedPreferenceKeys.JAVA_COMPLETIONS_TARGET_VERSION, "8");
+        String source =
+                CompletionModule.getPreferences().getString(SharedPreferenceKeys.JAVA_COMPLETIONS_SOURCE_VERSION, "8");
+
         if (mProvider == null || changed(mCachedPaths, paths)) {
-            mProvider = new JavaCompilerService(project, paths,
-                    Collections.emptySet(), Collections.emptySet());
+            mProvider = new JavaCompilerService(project, paths, Collections.emptySet(),
+                    Collections.emptySet(), Integer.parseInt(target), Integer.parseInt(source));
 
             mCachedPaths.clear();
             mCachedPaths.addAll(paths);
