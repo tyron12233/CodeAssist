@@ -127,7 +127,6 @@ public class CompletionProvider {
         SourceFileObject source = new SourceFileObject(file.toPath(), contents, Instant.now());
         boolean endsWithParen = endsWithParen(contents, (int) cursor);
 
-
         checkCanceled();
         try (CompileTask task = compiler.compile(Collections.singletonList(source))) {
             TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
