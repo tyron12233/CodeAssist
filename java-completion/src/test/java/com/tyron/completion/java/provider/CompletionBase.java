@@ -3,6 +3,8 @@ package com.tyron.completion.java.provider;
 import static com.google.common.truth.Truth.assertThat;
 import static com.tyron.completion.TestUtil.resolveBasePath;
 
+import androidx.test.core.app.ApplicationProvider;
+
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.mock.MockAndroidModule;
 import com.tyron.builder.project.mock.MockFileManager;
@@ -37,6 +39,7 @@ public abstract class CompletionBase {
 
     @Before
     public void setup() throws IOException {
+        CompletionModule.initialize(ApplicationProvider.getApplicationContext());
         CompletionModule.setAndroidJar(new File(resolveBasePath(), "classpath/rt.jar"));
         CompletionModule.setLambdaStubs(new File(resolveBasePath(), "classpath/core-lambda-stubs.jar"));
 
