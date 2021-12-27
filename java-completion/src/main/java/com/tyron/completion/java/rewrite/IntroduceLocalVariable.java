@@ -1,5 +1,6 @@
 package com.tyron.completion.java.rewrite;
 
+import com.google.common.collect.ImmutableMap;
 import com.sun.source.tree.Scope;
 import com.sun.source.util.TreePath;
 import com.sun.source.util.Trees;
@@ -11,6 +12,10 @@ import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
@@ -37,9 +42,9 @@ public class IntroduceLocalVariable implements Rewrite {
 
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
-        Map<Path, TextEdit[]> map = new TreeMap<>();
-        ParseTask task = compiler.parse(file);
+        List<TextEdit> edits = new ArrayList<>();
 
+        ParseTask task = compiler.parse(file);
         Range range = new Range(position, position);
         String variableType = EditHelper.printType(type, true);
         String variableName = ActionUtil.guessNameFromMethodName(methodName);
@@ -54,13 +59,17 @@ public class IntroduceLocalVariable implements Rewrite {
         }
         TextEdit edit = new TextEdit(range,
                 ActionUtil.getSimpleName(variableType) + " " + variableName + " = ");
-        map.put(file, new TextEdit[]{edit});
+        edits.add(edit);
 
         if (!ActionUtil.hasImport(task.root, variableType)) {
             AddImport addImport = new AddImport(file.toFile(), variableType);
-            map.putAll(addImport.rewrite(compiler));
+            Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+            TextEdit[] imports = rewrite.get(file);
+            if (imports != null) {
+                Collections.addAll(edits, imports);
+            }
         }
-        return map;
+        return ImmutableMap.of(file, edits.toArray(new TextEdit[0]));
     }
 
     private boolean containsVariableAtScope(String name, ParseTask parse) {
