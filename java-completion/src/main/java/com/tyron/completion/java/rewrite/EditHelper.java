@@ -228,9 +228,13 @@ public class EditHelper {
     }
 
     public static String printType(TypeMirror type) {
+        return printType(type, false);
+    }
+
+    public static String printType(TypeMirror type, boolean fqn) {
         if (type instanceof DeclaredType) {
             DeclaredType declared = (DeclaredType) type;
-            String string = printTypeName((TypeElement) declared.asElement());
+            String string = printTypeName((TypeElement) declared.asElement(), fqn);
             if (!declared.getTypeArguments().isEmpty()) {
                 string = string + "<" + printTypeParameters(declared.getTypeArguments()) + ">";
             }
@@ -252,15 +256,26 @@ public class EditHelper {
     }
 
     public static String printTypeName(TypeElement type) {
+        return printTypeName(type, false);
+    }
+
+    public static String printTypeName(TypeElement type, boolean fqn) {
         if (type.getEnclosingElement() instanceof TypeElement) {
             return printTypeName((TypeElement) type.getEnclosingElement()) + "." + type.getSimpleName();
         }
-        String s = type.getSimpleName().toString();
+        String s;
+        if (fqn) {
+            s = type.getQualifiedName().toString();
+        } else {
+            s = type.getSimpleName().toString();
+        }
         // anonymous
         if (s.isEmpty()) {
             s = type.asType().toString();
             s = s.substring("<anonymous ".length(), s.length() - 1);
-            s = ActionUtil.getSimpleName(s);
+            if (fqn) {
+                s = ActionUtil.getSimpleName(s);
+            }
         }
         return s;
     }

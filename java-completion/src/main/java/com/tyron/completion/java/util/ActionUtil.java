@@ -1,8 +1,11 @@
 package com.tyron.completion.java.util;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
 import com.sun.source.doctree.ThrowsTree;
 import com.sun.source.tree.BlockTree;
@@ -150,5 +153,35 @@ public class ActionUtil {
         int dot = className.lastIndexOf('.');
         if (dot == -1) return className;
         return className.substring(dot + 1, className.length());
+    }
+
+    /**
+     * @return null if type is an anonymous class
+     */
+    @Nullable
+    public static String guessNameFromType(TypeMirror type) {
+        if (type instanceof DeclaredType) {
+            DeclaredType declared = (DeclaredType) type;
+            Element element = declared.asElement();
+            String name = element.getSimpleName().toString();
+            // anonymous class, guess from class name
+            if (name.length() == 0) {
+                name = declared.toString();
+                name = name.substring("<anonymous ".length(), name.length() - 1);
+                name = ActionUtil.getSimpleName(name);
+            }
+            return "" + Character.toLowerCase(name.charAt(0)) + name.substring(1);
+        }
+        return null;
+    }
+
+    public static String guessNameFromMethodName(String methodName) {
+        if (methodName == null) {
+            return null;
+        }
+        if (methodName.startsWith("get")) {
+            methodName = methodName.substring("get".length());
+        }
+        return  Character.toLowerCase(methodName.charAt(0)) + methodName.substring(1);
     }
 }

@@ -37,10 +37,6 @@ public class JavaAutoCompleteProvider implements AutoCompleteProvider {
             return null;
         }
 
-//        if (CompletionEngine.isIndexing()) {
-//            return null;
-//        }
-
         Project project = ProjectManager.getInstance().getCurrentProject();
 
         if (project == null) {

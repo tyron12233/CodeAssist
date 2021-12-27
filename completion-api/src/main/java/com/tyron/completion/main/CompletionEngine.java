@@ -59,8 +59,8 @@ public class CompletionEngine {
                 return provider.complete(project, module, file, contents, prefix, line, column, index);
             } catch(ProcessCanceledException e) {
                 // ignore
-            } finally {
-                ProgressManager.getInstance().setRunning(true);
+            } {
+                ProgressManager.getInstance().setRunning(false);
             }
         }
         return CompletionList.EMPTY;

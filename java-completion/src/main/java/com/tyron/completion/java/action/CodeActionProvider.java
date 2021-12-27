@@ -2,6 +2,20 @@ package com.tyron.completion.java.action;
 
 import android.widget.Toast;
 
+import com.sun.source.tree.CatchTree;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.LambdaExpressionTree;
+import com.sun.source.tree.LineMap;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.TryTree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.api.ClientCodeWrapper;
+import com.sun.tools.javac.util.JCDiagnostic;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.CompletionModule;
@@ -10,46 +24,16 @@ import com.tyron.completion.java.model.CodeAction;
 import com.tyron.completion.java.model.CodeActionList;
 import com.tyron.completion.java.rewrite.AddCatchClause;
 import com.tyron.completion.java.rewrite.AddException;
+import com.tyron.completion.java.rewrite.AddImport;
 import com.tyron.completion.java.rewrite.AddTryCatch;
+import com.tyron.completion.java.rewrite.ImplementAbstractMethods;
 import com.tyron.completion.java.rewrite.IntroduceLocalVariable;
+import com.tyron.completion.java.rewrite.OverrideInheritedMethod;
+import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
-import com.tyron.completion.java.rewrite.AddImport;
-import com.tyron.completion.java.rewrite.ImplementAbstractMethods;
-import com.tyron.completion.java.rewrite.OverrideInheritedMethod;
-import com.tyron.completion.java.rewrite.Rewrite;
-
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
-import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
-import com.sun.source.tree.BlockTree;
-import com.sun.source.tree.CatchTree;
-import com.sun.source.tree.ClassTree;
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.tree.LambdaExpressionTree;
-import com.sun.source.tree.LineMap;
-import com.sun.source.tree.MethodTree;
-import com.sun.source.tree.NewClassTree;
-import com.sun.source.tree.Tree;
-import com.sun.source.tree.TryTree;
-import com.sun.source.util.JavacTask;
-import com.sun.source.util.SourcePositions;
-import com.sun.source.util.TreePath;
-import com.sun.source.util.Trees;
-import com.sun.tools.javac.api.ClientCodeWrapper;
-import com.sun.tools.javac.tree.JCTree;
-import com.sun.tools.javac.util.JCDiagnostic;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -63,6 +47,19 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
 
 public class CodeActionProvider {
 
@@ -127,7 +124,8 @@ public class CodeActionProvider {
                                         pos.getStartPosition(path.getCompilationUnit(),
                                                 path.getLeaf());
                                 contextActions.put("Introduce local variable",
-                                        new IntroduceLocalVariable(file, returnType,
+                                        new IntroduceLocalVariable(file,
+                                                element.getSimpleName().toString(), returnType,
                                                 startPosition));
                             }
                         }

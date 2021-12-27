@@ -472,14 +472,16 @@ public class CodeEditorFragment extends Fragment implements Savable,
         if (project == null) {
             return Collections.emptyList();
         }
-        Module module = project.getModule(mCurrentFile);
-        if (mLanguage instanceof JavaLanguage && module != null) {
-            final Path current = mEditor.getCurrentFile().toPath();
-            JavaCompilerProvider service =
-                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-            CodeActionProvider provider = new CodeActionProvider(service.getCompiler(project,
-                    (JavaModule) module));
-            return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
+        try {
+            Module module = project.getModule(mCurrentFile);
+            if (mLanguage instanceof JavaLanguage && module != null) {
+                final Path current = mEditor.getCurrentFile().toPath();
+                JavaCompilerProvider service = CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+                CodeActionProvider provider = new CodeActionProvider(service.getCompiler(project, (JavaModule) module));
+                return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
+            }
+        } catch (Throwable e) {
+            // ignored
         }
         return Collections.emptyList();
     }
