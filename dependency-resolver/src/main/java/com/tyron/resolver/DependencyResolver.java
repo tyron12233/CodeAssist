@@ -30,6 +30,7 @@ public class DependencyResolver {
 
     public interface ResolveListener {
         void onResolve(String message);
+
         void onFailure(String message);
     }
 
@@ -50,6 +51,7 @@ public class DependencyResolver {
         }
         return resolve(poms);
     }
+
     /**
      * Resolve the list of given dependencies, prioritizing the latest versions of
      * the conflicting libraries
@@ -92,7 +94,9 @@ public class DependencyResolver {
                 }
                 continue;
             }
-            resolve(resolvedPom);
+            if (!resolvedPom.equals(pom)) {
+                resolve(resolvedPom);
+            }
         }
         resolvedPoms.put(pom, pom.getVersionName());
     }
