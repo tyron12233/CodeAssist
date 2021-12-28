@@ -239,7 +239,7 @@ public class EditHelper {
                 string = string + "<" + printTypeParameters(declared.getTypeArguments()) + ">";
             }
             return string;
-        } else if (type instanceof ArrayType) {
+        } else if (type instanceof ArrayType && !fqn) {
             ArrayType array = (ArrayType) type;
             return printType(array.getComponentType()) + "[]";
         } else {

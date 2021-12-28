@@ -1,6 +1,8 @@
 package com.tyron.completion.java.rewrite;
 
 import com.google.common.collect.ImmutableMap;
+
+import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.source.tree.Scope;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
@@ -65,6 +67,9 @@ public class IntroduceLocalVariable implements Rewrite {
             edits.add(edit);
 
             if (!type.getKind().isPrimitive()) {
+                if (type.getKind() == TypeKind.ARRAY) {
+                    variableType = variableType.substring(0, variableType.length() - 2);
+                }
                 if (!ActionUtil.hasImport(task.root(), variableType)) {
                     AddImport addImport = new AddImport(file.toFile(), variableType);
                     Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
