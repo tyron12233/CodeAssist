@@ -8,14 +8,14 @@ import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.common.util.StringSearch;
 
-import javax.tools.Diagnostic;
-import javax.tools.FileObject;
-import javax.tools.ForwardingJavaFileManager;
-import javax.tools.JavaFileManager;
-import javax.tools.JavaFileObject;
-import javax.tools.StandardJavaFileManager;
-import javax.tools.StandardLocation;
-import com.sun.tools.javac.api.JavacTool;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.FileObject;
+import org.openjdk.javax.tools.ForwardingJavaFileManager;
+import org.openjdk.javax.tools.JavaFileManager;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.StandardJavaFileManager;
+import org.openjdk.javax.tools.StandardLocation;
+import org.openjdk.tools.javac.api.JavacTool;
 
 import java.io.File;
 import java.io.IOException;
@@ -23,6 +23,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -39,7 +40,7 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
 	
 	private static StandardJavaFileManager createDelegateFileManager() {
         JavacTool compiler = JavacTool.create();
-        return compiler.getStandardFileManager(SourceFileManager::logError, null, Charset.defaultCharset());
+        return (StandardJavaFileManager) compiler.getStandardFileManager(SourceFileManager::logError, Locale.getDefault(), Charset.defaultCharset());
     }
 	
 	private static void logError(Diagnostic<?> error) {

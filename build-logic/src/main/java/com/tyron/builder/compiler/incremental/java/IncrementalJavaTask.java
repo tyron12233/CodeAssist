@@ -22,6 +22,7 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,6 +35,7 @@ import java.util.Objects;
 
 import javax.tools.DiagnosticListener;
 import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.StandardLocation;
 
@@ -154,7 +156,12 @@ public class IncrementalJavaTask extends Task<JavaModule> {
 
         List<JavaFileObject> javaFileObjects = new ArrayList<>();
         for (File file : mFilesToCompile) {
-            javaFileObjects.add(new SourceFileObject(file.toPath()));
+            javaFileObjects.add(new SimpleJavaFileObject(file.toURI(), JavaFileObject.Kind.SOURCE) {
+                @Override
+                public CharSequence getCharContent(boolean ignoreEncodingErrors) throws IOException {
+                    return FileUtils.readFileToString(file, StandardCharsets.UTF_8);
+                }
+            });
         }
 
         JavacTask task = tool.getTask(null, standardJavaFileManager, diagnosticCollector,

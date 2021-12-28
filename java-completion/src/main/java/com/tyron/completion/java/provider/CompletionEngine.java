@@ -22,8 +22,8 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
 import org.apache.commons.io.FileUtils;
-import javax.tools.DiagnosticListener;
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileObject;
 
 import java.io.File;
 import java.io.IOException;

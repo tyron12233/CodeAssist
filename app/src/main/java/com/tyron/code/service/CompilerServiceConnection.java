@@ -18,7 +18,7 @@ import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.ApkInstaller;
 
-import javax.tools.Diagnostic;
+import org.openjdk.javax.tools.Diagnostic;
 
 import java.io.File;
 import java.util.Objects;
@@ -77,7 +77,7 @@ public class CompilerServiceConnection implements ServiceConnection {
                     } else {
                          mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HALF_EXPANDED);
                      }
-                    DiagnosticWrapper wrapper = new DiagnosticWrapper(null);
+                    DiagnosticWrapper wrapper = new DiagnosticWrapper();
                     wrapper.setKind(Diagnostic.Kind.NOTE);
                     wrapper.setMessage("Generated APK has been saved to " + file.getAbsolutePath());
                     wrapper.setExtra("INSTALL");

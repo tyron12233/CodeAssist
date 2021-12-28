@@ -18,7 +18,7 @@ import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.provider.CompletionEngine;
 
-import javax.tools.Diagnostic;
+import org.openjdk.javax.tools.Diagnostic;
 
 import java.lang.ref.WeakReference;
 import java.time.Duration;

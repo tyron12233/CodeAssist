@@ -30,9 +30,9 @@ import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.provider.CompletionEngine;
 
-import javax.tools.Diagnostic;
-import javax.tools.DiagnosticListener;
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileObject;
 
 import java.util.List;
 

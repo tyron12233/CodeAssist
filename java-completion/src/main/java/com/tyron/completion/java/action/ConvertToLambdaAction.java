@@ -6,14 +6,14 @@ import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.model.CodeAction;
 import com.tyron.completion.java.model.CodeActionList;
 
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.DeclaredType;
-import com.sun.source.tree.Tree;
-import com.sun.source.util.TreePath;
-import com.sun.source.util.Trees;
+import org.openjdk.javax.lang.model.element.Element;
+import org.openjdk.javax.lang.model.element.ElementKind;
+import org.openjdk.javax.lang.model.element.Modifier;
+import org.openjdk.javax.lang.model.element.VariableElement;
+import org.openjdk.javax.lang.model.type.DeclaredType;
+import org.openjdk.source.tree.Tree;
+import org.openjdk.source.util.TreePath;
+import org.openjdk.source.util.Trees;
 
 import java.util.ArrayList;
 import java.util.Collections;

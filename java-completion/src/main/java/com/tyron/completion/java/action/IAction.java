@@ -3,7 +3,7 @@ package com.tyron.completion.java.action;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.model.CodeActionList;
 
-import com.sun.source.util.TreePath;
+import org.openjdk.source.util.TreePath;
 
 public abstract class IAction {
 

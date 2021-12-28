@@ -14,12 +14,12 @@ import com.tyron.common.util.Cache;
 import com.tyron.common.util.StringSearch;
 import com.tyron.completion.java.provider.CompletionEngine;
 
-import javax.tools.Diagnostic;
-import javax.tools.DiagnosticListener;
-import javax.tools.JavaFileObject;
-import javax.tools.StandardLocation;
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.tools.javac.file.PathFileObject;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.StandardLocation;
+import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.tools.javac.file.PathFileObject;
 
 import java.io.File;
 import java.io.IOException;

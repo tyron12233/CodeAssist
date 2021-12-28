@@ -9,8 +9,8 @@ import androidx.lifecycle.ViewModel;
 
 import com.tyron.builder.model.DiagnosticWrapper;
 
-import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -5,8 +5,8 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
 
 import java.io.File;
 import java.util.Locale;
@@ -41,6 +41,40 @@ public class DiagnosticWrapper implements Diagnostic<File> {
                 this.source = new File(obj.getSource().toUri());
             }
             this.kind = obj.getKind();
+
+            this.position = obj.getPosition();
+            this.startPosition = obj.getStartPosition();
+            this.endPosition = obj.getEndPosition();
+
+            this.lineNumber = obj.getLineNumber();
+            this.columnNumber = obj.getColumnNumber();
+
+            this.message = obj.getMessage(Locale.getDefault());
+        } catch (Throwable e) {
+            // ignored
+        }
+    }
+
+    public DiagnosticWrapper(javax.tools.Diagnostic<? extends javax.tools.JavaFileObject> obj) {
+        try {
+            this.code = obj.getCode();
+            if (obj.getSource() != null) {
+                this.source = new File(obj.getSource().toUri());
+            }
+
+            switch (obj.getKind()) {
+                case NOTE:
+                    this.kind = Kind.NOTE;
+                    break;
+                case WARNING:
+                    this.kind = Kind.WARNING;
+                    break;
+                case OTHER:
+                    this.kind = Kind.OTHER;
+                    break;
+                case ERROR:
+                    this.kind = Kind.ERROR;
+            }
 
             this.position = obj.getPosition();
             this.startPosition = obj.getStartPosition();

@@ -1,7 +1,7 @@
 package com.tyron.completion.java.util;
 
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
+import org.openjdk.javax.lang.model.element.ExecutableElement;
+import org.openjdk.javax.lang.model.element.Modifier;
 
 import java.util.Set;
 

@@ -7,8 +7,8 @@ import androidx.annotation.NonNull;
 import com.tyron.builder.project.api.JavaModule;
 
 import org.apache.commons.io.FileUtils;
-import javax.tools.JavaFileObject;
-import javax.tools.SimpleJavaFileObject;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.SimpleJavaFileObject;
 
 import java.io.IOException;
 import java.net.URI;

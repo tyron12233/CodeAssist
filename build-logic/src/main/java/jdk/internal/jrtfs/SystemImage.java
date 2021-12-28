@@ -36,20 +36,19 @@ abstract class SystemImage {
 
     static SystemImage open() throws IOException {
         if (modulesImageExists) {
-            final ImageReader[] image = {ImageReader.open(moduleImageFile)};
-            image[0].getRootDirectory();
+            final ImageReader image = ImageReader.open(moduleImageFile);
+            image.getRootDirectory();
             return new SystemImage() {
                 Node findNode(String path) throws IOException {
-                    return image[0].findNode(path);
+                    return image.findNode(path);
                 }
 
                 byte[] getResource(Node node) throws IOException {
-                    return image[0].getResource(node);
+                    return image.getResource(node);
                 }
 
                 void close() throws IOException {
-                    // compilation tasks may be destroyed and recreated and we
-                    // don't want to close this during this times
+                    image.close();
                 }
             };
         } else if (Files.notExists(explodedModulesDir)) {
@@ -85,7 +84,7 @@ abstract class SystemImage {
 
     static {
         PrivilegedAction<String> pa = SystemImage::findHome;
-        RUNTIME_HOME = (String) AccessController.doPrivileged(pa);
+        RUNTIME_HOME = AccessController.doPrivileged(pa);
         FileSystem fs = FileSystems.getDefault();
         moduleImageFile = fs.getPath(RUNTIME_HOME, "lib", "modules");
         explodedModulesDir = fs.getPath(RUNTIME_HOME, "modules");

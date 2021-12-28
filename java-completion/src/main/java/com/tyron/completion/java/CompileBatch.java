@@ -2,28 +2,28 @@ package com.tyron.completion.java;
 
 import android.util.Log;
 
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.util.JavacTask;
-import com.sun.source.util.Trees;
-import com.sun.tools.javac.api.BasicJavacTask;
-import com.sun.tools.javac.api.ClientCodeWrapper;
-import com.sun.tools.javac.api.JavacTaskImpl;
-import com.sun.tools.javac.code.Kinds;
-import com.sun.tools.javac.tree.JCTree;
-import com.sun.tools.javac.util.JCDiagnostic;
-import com.tyron.builder.BuildModule;
+import org.openjdk.source.tree.CompilationUnitTree;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.TestUtil;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
+import org.openjdk.javax.lang.model.util.Elements;
+import org.openjdk.javax.lang.model.util.Types;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.api.ClientCodeWrapper;
+import org.openjdk.tools.javac.api.JavacTaskImpl;
+import org.openjdk.tools.javac.code.Kinds;
+import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -32,11 +32,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
-import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
 
 
 @SuppressWarnings("NewApi")
@@ -66,12 +61,12 @@ public class CompileBatch implements AutoCloseable {
         this.roots = new ArrayList<>();
         // Compile all roots
         try {
-            for (CompilationUnitTree t : ((JavacTaskImpl) borrow.task).parse(files.toArray(new JavaFileObject[0]))) {
+            for (CompilationUnitTree t : borrow.task.parse()) {
                 roots.add(t);
             }
             // The results of borrow.task.analyze() are unreliable when errors are present
             // You can get at `Element` values using `Trees`
-            borrow.task.analyze();
+            ((JavacTaskImpl) borrow.task).analyze();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -179,26 +174,9 @@ public class CompileBatch implements AutoCloseable {
                                         int source) {
         List<String> list = new ArrayList<>();
 
-        Set<File> newClassPath = new HashSet<>(classPath);
+        Collections.addAll(list, "-target", "8", "-source", "8");
 
-        if (TestUtil.isDalvik()) {
-            if (getModuleFile() != null) {
-                if (target >= 9) {
-                    Collections.addAll(list, "--system", CompletionModule.getAndroidJar().getParent());
-                }
-            }
-        }
-
-        Collections.addAll(list, "-target", String.valueOf(target), "-source",
-                String.valueOf(source));
-
-        if (target >= 9) {
-            newClassPath.add(CompletionModule.getAndroidJar());
-            newClassPath.add(CompletionModule.getLambdaStubs());
-        }
-
-
-        Collections.addAll(list, "-cp", joinPath(newClassPath));
+        Collections.addAll(list, "-cp", joinPath(classPath));
 
 
         Collections.addAll(list, "-bootclasspath",
@@ -206,7 +184,6 @@ public class CompileBatch implements AutoCloseable {
                         CompletionModule.getLambdaStubs())));
 
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
-        //Collections.addAll(list, "-verbose");
         Collections.addAll(list, "-proc:none");
         // You would think we could do -Xlint:all,
         // but some lints trigger fatal errors in the presence of parse errors

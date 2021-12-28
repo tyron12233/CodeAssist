@@ -19,7 +19,7 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenSource;
-import javax.tools.Diagnostic;
+import org.openjdk.javax.tools.Diagnostic;
 
 import java.lang.ref.WeakReference;
 import java.util.List;

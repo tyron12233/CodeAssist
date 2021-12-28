@@ -6,25 +6,25 @@
 package com.sun.tools.javac.file;
 
 import com.github.marschall.com.sun.nio.zipfs.ZipFileSystemProvider;
+
 import com.sun.tools.javac.util.Context;
+
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.spi.FileSystemProvider;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.StringTokenizer;
 import java.util.jar.Attributes;
+import java.util.jar.Attributes.Name;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
-import java.util.jar.Attributes.Name;
 
 /**
  * Modified version of JDK 17's FSInfo to return a custom FileSystemProvider

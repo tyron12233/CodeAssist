@@ -2,7 +2,7 @@ package com.tyron.builder.log;
 
 import com.tyron.builder.model.DiagnosticWrapper;
 
-import javax.tools.Diagnostic;
+import org.openjdk.javax.tools.Diagnostic;
 
 public interface ILogger {
 
