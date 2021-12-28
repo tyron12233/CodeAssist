@@ -22,12 +22,14 @@ import org.openjdk.tools.javac.api.BasicJavacTask;
 import org.openjdk.tools.javac.api.JavacTaskImpl;
 import org.openjdk.tools.javac.code.Type;
 import org.openjdk.tools.javac.tree.JCTree;
+
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.common.util.StringSearch;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.rewrite.EditHelper;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.ElementUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
@@ -529,16 +531,20 @@ public class CompletionProvider {
                     if (StringSearch.matchesPartialName(classElement.getSimpleName().toString(),
                             partial)) {
                         CompletionItem item = new CompletionItem();
-                        item.iconKind = DrawableKind.Interface;
-                        item.label = classElement.getSimpleName().toString() + " {...}";
-                        item.commitText = "" + classElement.getSimpleName() + "() {\n\t//TODO:\n}";
-                        item.cursorOffset = item.commitText.length();
-                        item.detail = "";
 
+                        StringBuilder sb = new StringBuilder();
                         if (classElement instanceof TypeElement) {
+                            TypeElement typeElement = (TypeElement) classElement;
                             // import the class
                             item.action = CompletionItem.Kind.IMPORT;
-                            item.data = ((TypeElement) classElement).getQualifiedName().toString();
+                            item.data = typeElement.getQualifiedName().toString();
+                            item.iconKind = DrawableKind.Interface;
+                            item.label = classElement.getSimpleName().toString() + " {...}";
+                            item.commitText = "" + classElement.getSimpleName() + "() {\n" +
+                                    "\t// TODO\n" +
+                                    "}";
+                            item.cursorOffset = item.commitText.length();
+                            item.detail = "";
                         }
                         items.add(item);
                     }
@@ -568,7 +574,8 @@ public class CompletionProvider {
                     methods.clear();
                     putMethod((ExecutableElement) member, methods);
                     for (List<ExecutableElement> overloads : methods.values()) {
-                        list.items.addAll(method(task, overloads, endsWithParen, false, (DeclaredType) type.asType()));
+                        list.items.addAll(method(task, overloads, endsWithParen, false,
+                                (DeclaredType) type.asType()));
                     }
                 } else {
                     list.items.add(item(member));
@@ -837,7 +844,8 @@ public class CompletionProvider {
 
             Element enclosingElement = element.getEnclosingElement();
             if (!types.isAssignable(type, enclosingElement.asType())) {
-                items.addAll(method(task, Collections.singletonList(element), endsWithParen, false, type));
+                items.addAll(method(task, Collections.singletonList(element), endsWithParen,
+                        false, type));
                 continue;
             }
 
@@ -854,8 +862,9 @@ public class CompletionProvider {
         return items;
     }
 
-    private List<CompletionItem> method(CompileTask task, List<ExecutableElement> overloads, boolean endsWithParen,
-                                        boolean methodRef, DeclaredType type) {
+    private List<CompletionItem> method(CompileTask task, List<ExecutableElement> overloads,
+                                        boolean endsWithParen, boolean methodRef,
+                                        DeclaredType type) {
         checkCanceled();
         List<CompletionItem> items = new ArrayList<>();
         Types types = task.task.getTypes();
@@ -866,23 +875,24 @@ public class CompletionProvider {
         return items;
     }
 
-    private CompletionItem method(ExecutableElement first, boolean endsWithParen, boolean methodRef, ExecutableType type) {
+    private CompletionItem method(ExecutableElement first, boolean endsWithParen,
+                                  boolean methodRef, ExecutableType type) {
         CompletionItem item = new CompletionItem();
         item.label = getMethodLabel(first, type) + getThrowsType(first);
-        item.commitText = first.getSimpleName().toString() + ((methodRef || endsWithParen) ?
-                "" : "()");
+        item.commitText = first.getSimpleName().toString() + ((methodRef || endsWithParen) ? "" :
+                "()");
         item.detail = simpleType(type.getReturnType());
         item.iconKind = DrawableKind.Method;
         item.cursorOffset = item.commitText.length();
         if (first.getParameters() != null && !first.getParameters().isEmpty()) {
-            item.cursorOffset = item.commitText.length() - ((methodRef || endsWithParen) ? 0
-                    : 1);
+            item.cursorOffset = item.commitText.length() - ((methodRef || endsWithParen) ? 0 : 1);
         }
         return item;
     }
 
-    private List<CompletionItem> method(CompileTask task, List<ExecutableElement> overloads, boolean endsWithParen,
-                                        boolean methodRef, ExecutableType type) {
+    private List<CompletionItem> method(CompileTask task, List<ExecutableElement> overloads,
+                                        boolean endsWithParen, boolean methodRef,
+                                        ExecutableType type) {
         checkCanceled();
         List<CompletionItem> items = new ArrayList<>();
         for (ExecutableElement first : overloads) {
