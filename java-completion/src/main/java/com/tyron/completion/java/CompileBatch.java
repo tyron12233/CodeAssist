@@ -165,10 +165,6 @@ public class CompileBatch implements AutoCloseable {
 
         Set<File> newClassPath = new HashSet<>(classPath);
 
-        Collections.addAll(list, "-bootclasspath",
-                joinPath(Arrays.asList(CompletionModule.getAndroidJar(),
-                        CompletionModule.getLambdaStubs())));
-
         if (TestUtil.isDalvik()) {
             if (getModuleFile() != null) {
                 if (target >= 9) {
@@ -188,6 +184,10 @@ public class CompileBatch implements AutoCloseable {
 
         Collections.addAll(list, "-cp", joinPath(newClassPath));
 
+
+        Collections.addAll(list, "-bootclasspath",
+                joinPath(Arrays.asList(CompletionModule.getAndroidJar(),
+                        CompletionModule.getLambdaStubs())));
 
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
         //Collections.addAll(list, "-verbose");
