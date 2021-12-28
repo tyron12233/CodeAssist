@@ -5,8 +5,13 @@ import android.util.Log;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.Trees;
+import com.sun.tools.javac.api.BasicJavacTask;
 import com.sun.tools.javac.api.ClientCodeWrapper;
+import com.sun.tools.javac.api.JavacTaskImpl;
+import com.sun.tools.javac.code.Kinds;
+import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.util.JCDiagnostic;
+import com.tyron.builder.BuildModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.TestUtil;
 import com.tyron.common.util.StringSearch;
@@ -61,7 +66,7 @@ public class CompileBatch implements AutoCloseable {
         this.roots = new ArrayList<>();
         // Compile all roots
         try {
-            for (CompilationUnitTree t : borrow.task.parse()) {
+            for (CompilationUnitTree t : ((JavacTaskImpl) borrow.task).parse(files.toArray(new JavaFileObject[0]))) {
                 roots.add(t);
             }
             // The results of borrow.task.analyze() are unreliable when errors are present
@@ -133,6 +138,17 @@ public class CompileBatch implements AutoCloseable {
     }
 
     private String packageName(Diagnostic<? extends JavaFileObject> err) {
+        if (err instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
+            JCDiagnostic diagnostic = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) err).d;
+            JCDiagnostic.DiagnosticPosition pos = diagnostic.getDiagnosticPosition();
+            Object[] args = diagnostic.getArgs();
+            Kinds.KindName kind = (Kinds.KindName) args[0];
+            if (kind == Kinds.KindName.CLASS) {
+                if (pos.toString().contains(".")) {
+                    return pos.toString().substring(0, pos.toString().lastIndexOf('.'));
+                }
+            }
+        }
         Path file = Paths.get(err.getSource().toUri());
         return StringSearch.packageName(file.toFile());
     }
