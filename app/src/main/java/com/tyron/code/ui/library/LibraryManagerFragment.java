@@ -9,6 +9,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.Toolbar;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -107,6 +108,8 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         } else {
             loadDependencies(project);
         }
+        Toolbar toolbar = view.findViewById(R.id.toolbar);
+        toolbar.setOnMenuItemClickListener(menu -> getParentFragmentManager().popBackStackImmediate());
     }
 
     @Override
@@ -180,12 +183,12 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         });
         mAdapter.setItemLongClickListener((v, dependency) -> {
             v.setOnCreateContextMenuListener((menu, v1, menuInfo) -> {
-                menu.add("Delete").setOnMenuItemClickListener(item -> {
+                menu.add(R.string.dialog_delete).setOnMenuItemClickListener(item -> {
                     mAdapter.removeDependency(dependency);
                     return true;
                 });
 
-                menu.add("Display all dependencies").setOnMenuItemClickListener(item -> {
+                menu.add(R.string.menu_display_dependencies).setOnMenuItemClickListener(item -> {
                     DependencyResolver resolver = new DependencyResolver(mPomRepository);
 
                     ProgressDialog dialog = new ProgressDialog(requireContext());
@@ -209,7 +212,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                             }
                         }
                     });
-                   return true;
+                    return true;
                 });
             });
             v.showContextMenu();

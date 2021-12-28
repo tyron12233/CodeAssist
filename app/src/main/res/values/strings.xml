@@ -181,7 +181,9 @@
     <string name="compilation_result_failed">Compilation failed</string>
 
     <!-- Library manager -->
+    <string name="library_manager_title">%1s Libraries</string>
     <string name="group_id">Group Id</string>
     <string name="artifact_id">Artifact Id</string>
     <string name="version_name">Version Name</string>
+    <string name="menu_display_dependencies">List dependencies</string>
 </resources>

@@ -9,6 +9,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.RecyclerView.LayoutParams;
 
 import com.google.common.collect.ImmutableList;
 import com.tyron.code.R;
@@ -82,6 +83,7 @@ public class LibraryManagerAdapter extends RecyclerView.Adapter<LibraryManagerAd
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         FrameLayout view = new FrameLayout(parent.getContext());
+        view.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         ViewHolder viewHolder = new ViewHolder(view);
         view.setOnLongClickListener(v -> {
             int pos = viewHolder.getBindingAdapterPosition();
@@ -97,6 +99,11 @@ public class LibraryManagerAdapter extends RecyclerView.Adapter<LibraryManagerAd
 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+        if (position == 0) {
+            holder.mDivider.setVisibility(View.GONE);
+        } else {
+            holder.mDivider.setVisibility(View.VISIBLE);
+        }
         holder.bind(mData.get(position));
     }
 
@@ -107,6 +114,7 @@ public class LibraryManagerAdapter extends RecyclerView.Adapter<LibraryManagerAd
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
 
+        public final View mDivider;
         private final TextView mTextView;
 
         public ViewHolder(FrameLayout view) {
@@ -114,6 +122,7 @@ public class LibraryManagerAdapter extends RecyclerView.Adapter<LibraryManagerAd
 
             LayoutInflater inflater = LayoutInflater.from(view.getContext());
             View root = inflater.inflate(R.layout.library_manager_item, view);
+            mDivider = root.findViewById(R.id.divider);
             mTextView = root.findViewById(R.id.item_text);
         }
 
