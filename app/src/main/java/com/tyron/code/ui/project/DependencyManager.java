@@ -8,6 +8,7 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.DependencyUtils;
@@ -36,6 +37,8 @@ public class DependencyManager {
     private final DependencyResolver mResolver;
 
     public DependencyManager(File cacheDir) {
+        extractCommonPomsIfNeeded();
+
         mRepository = new PomRepositoryImpl();
         mRepository.setCacheDirectory(cacheDir);
         mRepository.addRepositoryUrl("https://repo1.maven.org/maven2");
@@ -44,6 +47,15 @@ public class DependencyManager {
         mRepository.addRepositoryUrl("https://jcenter.bintray.com");
         mRepository.initialize();
         mResolver = new DependencyResolver(mRepository);
+    }
+
+    private void extractCommonPomsIfNeeded() {
+        File cacheDir = ApplicationLoader.applicationContext.getExternalFilesDir("cache");
+        File pomsDir = new File(cacheDir, "pom");
+        File[] children = pomsDir.listFiles();
+        if (!pomsDir.exists() || children == null || children.length == 0) {
+            Decompress.unzipFromAssets(ApplicationLoader.applicationContext, "common_poms.zip", pomsDir.getAbsolutePath());
+        }
     }
 
     public void resolve(JavaModule project, ProjectManager.TaskListener listener, ILogger logger) throws IOException {
