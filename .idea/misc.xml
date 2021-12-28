@@ -76,17 +76,24 @@
         <entry key="app/src/main/res/drawable/test.xml" value="0.209375" />
         <entry key="app/src/main/res/drawable/test_xml.xml" value="0.14895833333333333" />
         <entry key="app/src/main/res/font/mono_font.xml" value="0.22708333333333333" />
+        <entry key="app/src/main/res/layout/add_dependency_dialog.xml" value="0.1" />
         <entry key="app/src/main/res/layout/attribute_editor_dialog_fragment.xml" value="0.18" />
         <entry key="app/src/main/res/layout/attribute_editor_item.xml" value="0.1068840579710145" />
         <entry key="app/src/main/res/layout/bottom_editor_fragment.xml" value="0.1" />
         <entry key="app/src/main/res/layout/completion_result_item.xml" value="0.33" />
+        <entry key="app/src/main/res/layout/create_class_dialog.xml" value="0.1" />
         <entry key="app/src/main/res/layout/default_completion_result_item.xml" value="0.33" />
         <entry key="app/src/main/res/layout/editor_container_fragment.xml" value="0.1" />
         <entry key="app/src/main/res/layout/empty_projects_layout.xml" value="0.22" />
         <entry key="app/src/main/res/layout/layout_editor_fragment.xml" value="0.22" />
+        <entry key="app/src/main/res/layout/library_manager_fragment.xml" value="0.22" />
+        <entry key="app/src/main/res/layout/library_manager_item.xml" value="0.18" />
+        <entry key="app/src/main/res/layout/loading_layout.xml" value="0.1" />
+        <entry key="app/src/main/res/layout/main.xml" value="0.1" />
         <entry key="app/src/main/res/layout/main_fragment.xml" value="0.1" />
         <entry key="app/src/main/res/layout/text_compose_panel.xml" value="0.25" />
         <entry key="app/src/main/res/layout/text_compose_popup_window.xml" value="0.33" />
+        <entry key="app/src/main/res/menu/code_editor_menu.xml" value="0.19322916666666667" />
         <entry key="app/src/main/res/menu/project_list_fragment_menu.xml" value="0.15555555555555556" />
         <entry key="app/src/main/res/xml/build_preferences.xml" value="0.25" />
         <entry key="app/src/main/res/xml/root_preferences.xml" value="0.22" />

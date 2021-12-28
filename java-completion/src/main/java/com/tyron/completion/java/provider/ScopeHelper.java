@@ -25,7 +25,7 @@ public class ScopeHelper {
         // The outermost scope contains those elements available via "star import" declarations;
         // the scope within that contains the top level elements of the compilation unit, including any named
         // imports.
-        // https://parent.docs.oracle.com/en/java/javase/11/docs/api/jdk.compiler/com/sun/source/tree/Scope.html
+        // https://parent.docs.oracle.com/en/java/javase/11/docs/api/jdk.compiler/org.openjdk.source/tree/Scope.html
         return scopes.subList(0, scopes.size() - 2);
     }
 

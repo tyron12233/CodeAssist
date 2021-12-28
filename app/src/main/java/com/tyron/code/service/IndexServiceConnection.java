@@ -7,6 +7,7 @@ import android.os.IBinder;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.tyron.builder.model.ProjectSettings;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
@@ -51,8 +52,8 @@ public class IndexServiceConnection implements ServiceConnection {
         mMainViewModel.setCurrentState(null);
     }
 
-    private List<File> getOpenedFiles(ModuleSettings settings) {
-        String openedFilesString = settings.getString(ModuleSettings.SAVED_EDITOR_FILES, null);
+    private List<File> getOpenedFiles(ProjectSettings settings) {
+        String openedFilesString = settings.getString(ProjectSettings.SAVED_EDITOR_FILES, null);
         if (openedFilesString != null) {
             List<String> paths = new Gson().fromJson(openedFilesString,
                     new TypeToken<List<String>>(){}.getType());
@@ -80,7 +81,7 @@ public class IndexServiceConnection implements ServiceConnection {
                 Project currentProject = ProjectManager.getInstance().getCurrentProject();
                 if (project.equals(currentProject)) {
                     mMainViewModel.setToolbarTitle(project.getRootFile().getName());
-                    mMainViewModel.setFiles(getOpenedFiles(project.getSettings()));
+                    mMainViewModel.setFiles(getOpenedFiles(currentProject.getSettings()));
                 }
             } else {
                 if (mMainViewModel.getBottomSheetState().getValue()

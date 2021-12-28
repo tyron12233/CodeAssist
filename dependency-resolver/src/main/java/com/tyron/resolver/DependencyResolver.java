@@ -30,7 +30,26 @@ public class DependencyResolver {
 
     public interface ResolveListener {
         void onResolve(String message);
+
         void onFailure(String message);
+    }
+
+    public List<Pom> resolveDependencies(List<Dependency> declaredDependencies) {
+        List<Pom> poms = new ArrayList<>();
+        for (Dependency dependency : declaredDependencies) {
+            if (mListener != null) {
+                mListener.onResolve("Getting POM: " + dependency);
+            }
+            Pom pom = repository.getPom(dependency.toString());
+            if (pom != null) {
+                poms.add(pom);
+            } else {
+                if (mListener != null) {
+                    mListener.onFailure("Unable to retrieve POM of " + dependency);
+                }
+            }
+        }
+        return resolve(poms);
     }
 
     /**
@@ -75,7 +94,9 @@ public class DependencyResolver {
                 }
                 continue;
             }
-            resolve(resolvedPom);
+            if (!resolvedPom.equals(pom)) {
+                resolve(resolvedPom);
+            }
         }
         resolvedPoms.put(pom, pom.getVersionName());
     }

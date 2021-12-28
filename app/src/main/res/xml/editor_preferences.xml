@@ -8,10 +8,9 @@
 
         <SwitchPreference
             android:defaultValue="true"
-            android:iconSpaceReserved="false"
-            android:key="code_editor_completion"
             app:iconSpaceReserved="false"
-            android:title="@string/settings_code_completions" />
+            android:key="code_editor_error_highlight"
+            android:title="@string/code_editor_error_highlight"/>
 
         <SwitchPreference
             android:defaultValue="false"
@@ -20,12 +19,19 @@
             app:iconSpaceReserved="false"
             android:title="@string/settings_kotlin_completions"
             android:summary="@string/settings_kotlin_completions_desc"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        app:title="@string/completion_settings_java_title">
 
         <SwitchPreference
             android:defaultValue="true"
+            android:iconSpaceReserved="false"
+            android:key="code_editor_completion"
             app:iconSpaceReserved="false"
-            android:key="code_editor_error_highlight"
-            android:title="@string/code_editor_error_highlight"/>
+            android:title="@string/settings_code_completions" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

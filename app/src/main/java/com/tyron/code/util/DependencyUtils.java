@@ -1,5 +1,8 @@
 package com.tyron.code.util;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
 import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
@@ -10,7 +13,9 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -61,6 +66,22 @@ public class DependencyUtils {
             }
         }
         return deps;
+    }
+
+    public static List<Dependency> parseLibraries(PomRepository repository, File libraries, ILogger logger) {
+        String contents;
+        try {
+            contents = FileUtils.readFileToString(libraries, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            logger.error("Unable to read " + libraries.getName() + ": " + e.getMessage());
+            return Collections.emptyList();
+        }
+        try {
+            return new Gson().fromJson(contents, new TypeToken<List<Dependency>>() {}.getType());
+        } catch (JsonSyntaxException e) {
+            logger.error("Unable to parse " + libraries.getName() + ": " + e.getMessage());
+            return Collections.emptyList();
+        }
     }
 }
 

@@ -1,8 +1,11 @@
 package com.tyron.completion.java.util;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
+import org.openjdk.javax.lang.model.type.DeclaredType;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.doctree.ThrowsTree;
 import org.openjdk.source.tree.BlockTree;
@@ -66,7 +69,10 @@ public class ActionUtil {
             }
         }
 
-        return !(grandParent.getLeaf() instanceof ThrowsTree);
+        if (parent.getLeaf() instanceof JCTree.JCThrow) {
+            return false;
+        }
+        return !(parent.getLeaf() instanceof ThrowsTree);
     }
 
     public static TreePath findSurroundingPath(TreePath path) {
@@ -119,7 +125,9 @@ public class ActionUtil {
     }
 
     public static boolean hasImport(CompilationUnitTree root, String className) {
-
+        if (className.endsWith("[]")) {
+            className = className.substring(0, className.length() - 2);
+        }
         String packageName = className.substring(0, className.lastIndexOf("."));
 
         // if the package name of the class is java.lang, we dont need
@@ -150,5 +158,38 @@ public class ActionUtil {
         int dot = className.lastIndexOf('.');
         if (dot == -1) return className;
         return className.substring(dot + 1, className.length());
+    }
+
+    /**
+     * @return null if type is an anonymous class
+     */
+    @Nullable
+    public static String guessNameFromType(TypeMirror type) {
+        if (type instanceof DeclaredType) {
+            DeclaredType declared = (DeclaredType) type;
+            Element element = declared.asElement();
+            String name = element.getSimpleName().toString();
+            // anonymous class, guess from class name
+            if (name.length() == 0) {
+                name = declared.toString();
+                name = name.substring("<anonymous ".length(), name.length() - 1);
+                name = ActionUtil.getSimpleName(name);
+            }
+            return "" + Character.toLowerCase(name.charAt(0)) + name.substring(1);
+        }
+        return null;
+    }
+
+    public static String guessNameFromMethodName(String methodName) {
+        if (methodName == null) {
+            return null;
+        }
+        if (methodName.startsWith("get")) {
+            methodName = methodName.substring("get".length());
+        }
+        if (methodName.isEmpty()) {
+            return null;
+        }
+        return  Character.toLowerCase(methodName.charAt(0)) + methodName.substring(1);
     }
 }

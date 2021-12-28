@@ -4,6 +4,7 @@ import android.app.ProgressDialog;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,6 +18,7 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
@@ -472,14 +474,18 @@ public class CodeEditorFragment extends Fragment implements Savable,
         if (project == null) {
             return Collections.emptyList();
         }
-        Module module = project.getModule(mCurrentFile);
-        if (mLanguage instanceof JavaLanguage && module != null) {
-            final Path current = mEditor.getCurrentFile().toPath();
-            JavaCompilerProvider service =
-                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-            CodeActionProvider provider = new CodeActionProvider(service.getCompiler(project,
-                    (JavaModule) module));
-            return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
+        try {
+            Module module = project.getModule(mCurrentFile);
+            if (mLanguage instanceof JavaLanguage && module != null) {
+                final Path current = mEditor.getCurrentFile().toPath();
+                JavaCompilerProvider service = CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+                CodeActionProvider provider = new CodeActionProvider(service.getCompiler(project, (JavaModule) module));
+                return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
+            }
+        } catch (Throwable e) {
+            if (BuildConfig.DEBUG) {
+                Log.d("getCodeActions()", "Unable to get code actions", e);
+            }
         }
         return Collections.emptyList();
     }

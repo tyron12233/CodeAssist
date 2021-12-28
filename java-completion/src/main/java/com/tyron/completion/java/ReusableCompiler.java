@@ -1,5 +1,9 @@
 package com.tyron.completion.java;
 
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileManager;
+import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TaskEvent;
 import org.openjdk.source.util.TaskListener;
@@ -14,11 +18,11 @@ import org.openjdk.tools.javac.comp.CompileStates;
 import org.openjdk.tools.javac.comp.Enter;
 import org.openjdk.tools.javac.comp.Modules;
 import org.openjdk.tools.javac.main.Arguments;
+import org.openjdk.tools.javac.main.JavaCompiler;
 import org.openjdk.tools.javac.model.JavacElements;
 import org.openjdk.tools.javac.util.Context;
 import org.openjdk.tools.javac.util.DefinedBy;
 import org.openjdk.tools.javac.util.Log;
-import org.openjdk.tools.javac.main.JavaCompiler;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -27,11 +31,6 @@ import java.util.List;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
-
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileManager;
-import org.openjdk.javax.tools.JavaFileObject;
 
 /**
  * A pool of reusable JavacTasks. When a task is no valid anymore, it is returned to the pool, and its Context may be
@@ -95,7 +94,8 @@ public class ReusableCompiler {
 			StreamSupport.stream(options.spliterator(), false).collect(Collectors.toCollection(ArrayList::new));
         if (!opts.equals(currentOptions)) {
             LOG.warning(String.format("Options changed from %s to %s, creating new compiler", options, opts));
-            currentOptions = opts;
+            currentOptions.clear();
+            currentOptions.addAll(opts);
             currentContext = new ReusableContext(opts);
         }
         JavacTaskImpl task =

@@ -25,6 +25,7 @@ import org.openjdk.javax.lang.model.element.TypeElement;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.util.Types;
 
+
 /**
  * Convenience class for common tasks with completions
  */

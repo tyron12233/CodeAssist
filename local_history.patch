@@ -51960,11 +51960,11 @@ deleted file mode 100644
 -        }
 -    }
 -}
-Index: Build/src/main/resources/com/sun/tools/javac/resources/javac.properties
+Index: Build/src/main/resources/org.openjdk.tools/javac/resources/javac.properties
 ===================================================================
-diff --git a/Build/src/main/resources/com/sun/tools/javac/resources/javac.properties b/Build/src/main/resources/com/sun/tools/javac/resources/javac.properties
+diff --git a/Build/src/main/resources/org.openjdk.tools/javac/resources/javac.properties b/Build/src/main/resources/org.openjdk.tools/javac/resources/javac.properties
 deleted file mode 100644
---- a/Build/src/main/resources/com/sun/tools/javac/resources/javac.properties	(date 0)
+--- a/Build/src/main/resources/org.openjdk.tools/javac/resources/javac.properties	(date 0)
 +++ /dev/null	(date 0)
 @@ -1,256 +0,0 @@
 -#
@@ -52223,11 +52223,11 @@ deleted file mode 100644
 -
 -javac.version={0} {1}
 -javac.fullVersion={0} full version "{1}"
-Index: Build/src/main/resources/com/sun/tools/javac/resources/legacy.properties
+Index: Build/src/main/resources/org.openjdk.tools/javac/resources/legacy.properties
 ===================================================================
-diff --git a/Build/src/main/resources/com/sun/tools/javac/resources/legacy.properties b/Build/src/main/resources/com/sun/tools/javac/resources/legacy.properties
+diff --git a/Build/src/main/resources/org.openjdk.tools/javac/resources/legacy.properties b/Build/src/main/resources/org.openjdk.tools/javac/resources/legacy.properties
 deleted file mode 100644
---- a/Build/src/main/resources/com/sun/tools/javac/resources/legacy.properties	(date 0)
+--- a/Build/src/main/resources/org.openjdk.tools/javac/resources/legacy.properties	(date 0)
 +++ /dev/null	(date 0)
 @@ -1,573 +0,0 @@
 -#
@@ -52803,11 +52803,11 @@ deleted file mode 100644
 -sun.util.logging.resources = tiger legacy
 -sunw.io = tiger legacy
 -sunw.util = tiger legacy
-Index: Build/src/main/resources/com/sun/tools/javac/resources/compiler.properties
+Index: Build/src/main/resources/org.openjdk.tools/javac/resources/compiler.properties
 ===================================================================
-diff --git a/Build/src/main/resources/com/sun/tools/javac/resources/compiler.properties b/Build/src/main/resources/com/sun/tools/javac/resources/compiler.properties
+diff --git a/Build/src/main/resources/org.openjdk.tools/javac/resources/compiler.properties b/Build/src/main/resources/org.openjdk.tools/javac/resources/compiler.properties
 deleted file mode 100644
---- a/Build/src/main/resources/com/sun/tools/javac/resources/compiler.properties	(date 0)
+--- a/Build/src/main/resources/org.openjdk.tools/javac/resources/compiler.properties	(date 0)
 +++ /dev/null	(date 0)
 @@ -1,2576 +0,0 @@
 -#
@@ -55386,11 +55386,11 @@ deleted file mode 100644
 -    unterminated string
 -
 -
-Index: Build/src/main/resources/com/sun/tools/javac/resources/javac_ja.properties
+Index: Build/src/main/resources/org.openjdk.tools/javac/resources/javac_ja.properties
 ===================================================================
-diff --git a/Build/src/main/resources/com/sun/tools/javac/resources/javac_ja.properties b/Build/src/main/resources/com/sun/tools/javac/resources/javac_ja.properties
+diff --git a/Build/src/main/resources/org.openjdk.tools/javac/resources/javac_ja.properties b/Build/src/main/resources/org.openjdk.tools/javac/resources/javac_ja.properties
 deleted file mode 100644
---- a/Build/src/main/resources/com/sun/tools/javac/resources/javac_ja.properties	(date 0)
+--- a/Build/src/main/resources/org.openjdk.tools/javac/resources/javac_ja.properties	(date 0)
 +++ /dev/null	(date 0)
 @@ -1,147 +0,0 @@
 -#
@@ -55540,11 +55540,11 @@ deleted file mode 100644
 -
 -javac.version={0} {1}
 -javac.fullVersion={0}\u30D5\u30EB\u30FB\u30D0\u30FC\u30B8\u30E7\u30F3"{1}"
-Index: Build/src/main/resources/com/sun/tools/javac/resources/compiler_ja.properties
+Index: Build/src/main/resources/org.openjdk.tools/javac/resources/compiler_ja.properties
 ===================================================================
-diff --git a/Build/src/main/resources/com/sun/tools/javac/resources/compiler_ja.properties b/Build/src/main/resources/com/sun/tools/javac/resources/compiler_ja.properties
+diff --git a/Build/src/main/resources/org.openjdk.tools/javac/resources/compiler_ja.properties b/Build/src/main/resources/org.openjdk.tools/javac/resources/compiler_ja.properties
 deleted file mode 100644
---- a/Build/src/main/resources/com/sun/tools/javac/resources/compiler_ja.properties	(date 0)
+--- a/Build/src/main/resources/org.openjdk.tools/javac/resources/compiler_ja.properties	(date 0)
 +++ /dev/null	(date 0)
 @@ -1,1810 +0,0 @@
 -#
@@ -57357,11 +57357,11 @@ deleted file mode 100644
 -compiler.err.dc.unterminated.string=\u6587\u5B57\u5217\u304C\u7D42\u4E86\u3057\u3066\u3044\u307E\u305B\u3093
 -
 -
-Index: Build/src/main/resources/com/sun/tools/javac/resources/javac_zh_CN.properties
+Index: Build/src/main/resources/org.openjdk.tools/javac/resources/javac_zh_CN.properties
 ===================================================================
-diff --git a/Build/src/main/resources/com/sun/tools/javac/resources/javac_zh_CN.properties b/Build/src/main/resources/com/sun/tools/javac/resources/javac_zh_CN.properties
+diff --git a/Build/src/main/resources/org.openjdk.tools/javac/resources/javac_zh_CN.properties b/Build/src/main/resources/org.openjdk.tools/javac/resources/javac_zh_CN.properties
 deleted file mode 100644
---- a/Build/src/main/resources/com/sun/tools/javac/resources/javac_zh_CN.properties	(date 0)
+--- a/Build/src/main/resources/org.openjdk.tools/javac/resources/javac_zh_CN.properties	(date 0)
 +++ /dev/null	(date 0)
 @@ -1,147 +0,0 @@
 -#
@@ -57511,11 +57511,11 @@ deleted file mode 100644
 -
 -javac.version={0} {1}
 -javac.fullVersion={0}\u5B8C\u6574\u7248\u672C "{1}"
-Index: Build/src/main/resources/com/sun/tools/javac/resources/compiler_zh_CN.properties
+Index: Build/src/main/resources/org.openjdk.tools/javac/resources/compiler_zh_CN.properties
 ===================================================================
-diff --git a/Build/src/main/resources/com/sun/tools/javac/resources/compiler_zh_CN.properties b/Build/src/main/resources/com/sun/tools/javac/resources/compiler_zh_CN.properties
+diff --git a/Build/src/main/resources/org.openjdk.tools/javac/resources/compiler_zh_CN.properties b/Build/src/main/resources/org.openjdk.tools/javac/resources/compiler_zh_CN.properties
 deleted file mode 100644
---- a/Build/src/main/resources/com/sun/tools/javac/resources/compiler_zh_CN.properties	(date 0)
+--- a/Build/src/main/resources/org.openjdk.tools/javac/resources/compiler_zh_CN.properties	(date 0)
 +++ /dev/null	(date 0)
 @@ -1,1810 +0,0 @@
 -#
@@ -59328,11 +59328,11 @@ deleted file mode 100644
 -compiler.err.dc.unterminated.string=\u672A\u7EC8\u6B62\u7684\u5B57\u7B26\u4E32
 -
 -
-Index: Build/src/main/resources/com/sun/tools/javac/resources/version.properties-template
+Index: Build/src/main/resources/org.openjdk.tools/javac/resources/version.properties-template
 ===================================================================
-diff --git a/Build/src/main/resources/com/sun/tools/javac/resources/version.properties-template b/Build/src/main/resources/com/sun/tools/javac/resources/version.properties-template
+diff --git a/Build/src/main/resources/org.openjdk.tools/javac/resources/version.properties-template b/Build/src/main/resources/org.openjdk.tools/javac/resources/version.properties-template
 deleted file mode 100644
---- a/Build/src/main/resources/com/sun/tools/javac/resources/version.properties-template	(date 0)
+--- a/Build/src/main/resources/org.openjdk.tools/javac/resources/version.properties-template	(date 0)
 +++ /dev/null	(date 0)
 @@ -1,28 +0,0 @@
 -#

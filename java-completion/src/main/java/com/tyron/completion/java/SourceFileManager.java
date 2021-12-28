@@ -23,6 +23,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -39,7 +40,7 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
 	
 	private static StandardJavaFileManager createDelegateFileManager() {
         JavacTool compiler = JavacTool.create();
-        return compiler.getStandardFileManager(SourceFileManager::logError, null, Charset.defaultCharset());
+        return (StandardJavaFileManager) compiler.getStandardFileManager(SourceFileManager::logError, Locale.getDefault(), Charset.defaultCharset());
     }
 	
 	private static void logError(Diagnostic<?> error) {

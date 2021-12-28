@@ -64,7 +64,6 @@ public class JavaCompletionProvider extends CompletionProvider {
             newPrefix = partialIdentifier(prefix, prefix.length());
         }
         mCachedCompletion = new CachedCompletion(file, line, column, newPrefix, complete);
-
         return complete;
     }
 
@@ -81,6 +80,8 @@ public class JavaCompletionProvider extends CompletionProvider {
                 throw e;
             }
             compilerProvider.destroy();
+        } finally {
+            service.close();
         }
         return CompletionList.EMPTY;
     }

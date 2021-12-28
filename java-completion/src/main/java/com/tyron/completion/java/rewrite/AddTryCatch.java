@@ -8,6 +8,9 @@ import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -29,24 +32,29 @@ public class AddTryCatch implements Rewrite {
 
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
-        Map<Path, TextEdit[]> map = new TreeMap<>();
+        List<TextEdit> edits = new ArrayList<>();
         String newContents = insertColon(contents);
         String edit =
                 "try {\n" + newContents + "\n} catch (" + ActionUtil.getSimpleName(exceptionName) +
                         " e) { }";
         Range deleteRange = new Range(start, end);
         TextEdit delete = new TextEdit(deleteRange, "");
+        edits.add(delete);
+
         Range range = new Range(start, start);
         TextEdit insert = new TextEdit(range, edit, true);
-        map.put(file, new TextEdit[]{delete, insert});
+        edits.add(insert);
 
         ParseTask task = compiler.parse(file);
         if (!ActionUtil.hasImport(task.root, exceptionName)) {
             AddImport addImport = new AddImport(file.toFile(), exceptionName);
             Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-            map.putAll(rewrite);
+            TextEdit[] imports = rewrite.get(file);
+            if (imports != null) {
+                Collections.addAll(edits, imports);
+            }
         }
-        return map;
+        return ImmutableMap.of(file, edits.toArray(new TextEdit[0]));
     }
 
     private String insertColon(String string) {

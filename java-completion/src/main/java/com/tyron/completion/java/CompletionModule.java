@@ -1,8 +1,10 @@
 package com.tyron.completion.java;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
+import android.preference.PreferenceManager;
 
 import androidx.annotation.VisibleForTesting;
 
@@ -68,5 +70,9 @@ public class CompletionModule {
     @VisibleForTesting
     public static void setAndroidJar(File file) {
         sAndroidJar = file;
+    }
+
+    public static SharedPreferences getPreferences() {
+        return PreferenceManager.getDefaultSharedPreferences(sApplicationContext);
     }
 }

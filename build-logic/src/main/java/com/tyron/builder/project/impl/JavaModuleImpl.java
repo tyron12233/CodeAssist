@@ -156,6 +156,15 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     }
 
     @Override
+    public File getLibraryFile() {
+        File custom = getPathSetting("library_file");
+        if (custom.exists()) {
+            return custom;
+        }
+        return new File(getRootFile(), "libraries.json");
+    }
+
+    @Override
     public File getLambdaStubsJarFile() {
         return BuildModule.getLambdaStubs();
     }

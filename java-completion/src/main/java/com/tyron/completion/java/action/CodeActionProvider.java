@@ -2,6 +2,20 @@ package com.tyron.completion.java.action;
 
 import android.widget.Toast;
 
+import org.openjdk.source.tree.CatchTree;
+import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.LambdaExpressionTree;
+import org.openjdk.source.tree.LineMap;
+import org.openjdk.source.tree.MethodTree;
+import org.openjdk.source.tree.Tree;
+import org.openjdk.source.tree.TryTree;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.source.util.SourcePositions;
+import org.openjdk.source.util.TreePath;
+import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.api.ClientCodeWrapper;
+import org.openjdk.tools.javac.util.JCDiagnostic;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.CompletionModule;
@@ -10,46 +24,16 @@ import com.tyron.completion.java.model.CodeAction;
 import com.tyron.completion.java.model.CodeActionList;
 import com.tyron.completion.java.rewrite.AddCatchClause;
 import com.tyron.completion.java.rewrite.AddException;
+import com.tyron.completion.java.rewrite.AddImport;
 import com.tyron.completion.java.rewrite.AddTryCatch;
+import com.tyron.completion.java.rewrite.ImplementAbstractMethods;
 import com.tyron.completion.java.rewrite.IntroduceLocalVariable;
+import com.tyron.completion.java.rewrite.OverrideInheritedMethod;
+import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
-import com.tyron.completion.java.rewrite.AddImport;
-import com.tyron.completion.java.rewrite.ImplementAbstractMethods;
-import com.tyron.completion.java.rewrite.OverrideInheritedMethod;
-import com.tyron.completion.java.rewrite.Rewrite;
-
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.element.VariableElement;
-import org.openjdk.javax.lang.model.type.TypeKind;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.javax.lang.model.util.Elements;
-import org.openjdk.javax.lang.model.util.Types;
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.source.tree.BlockTree;
-import org.openjdk.source.tree.CatchTree;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.LambdaExpressionTree;
-import org.openjdk.source.tree.LineMap;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.NewClassTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.TryTree;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.api.ClientCodeWrapper;
-import org.openjdk.tools.javac.tree.JCTree;
-import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -63,6 +47,19 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.openjdk.javax.lang.model.element.Element;
+import org.openjdk.javax.lang.model.element.ElementKind;
+import org.openjdk.javax.lang.model.element.ExecutableElement;
+import org.openjdk.javax.lang.model.element.Modifier;
+import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.element.VariableElement;
+import org.openjdk.javax.lang.model.type.TypeKind;
+import org.openjdk.javax.lang.model.type.TypeMirror;
+import org.openjdk.javax.lang.model.util.Elements;
+import org.openjdk.javax.lang.model.util.Types;
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
 
 public class CodeActionProvider {
 
@@ -127,7 +124,8 @@ public class CodeActionProvider {
                                         pos.getStartPosition(path.getCompilationUnit(),
                                                 path.getLeaf());
                                 contextActions.put("Introduce local variable",
-                                        new IntroduceLocalVariable(file, returnType,
+                                        new IntroduceLocalVariable(file,
+                                                element.getSimpleName().toString(), returnType,
                                                 startPosition));
                             }
                         }

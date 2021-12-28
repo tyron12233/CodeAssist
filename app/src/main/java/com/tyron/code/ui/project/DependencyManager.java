@@ -8,11 +8,13 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.DependencyUtils;
 import com.tyron.common.util.Decompress;
 import com.tyron.resolver.DependencyResolver;
+import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
 import com.tyron.resolver.repository.PomRepository;
 import com.tyron.resolver.repository.PomRepositoryImpl;
@@ -35,6 +37,8 @@ public class DependencyManager {
     private final DependencyResolver mResolver;
 
     public DependencyManager(File cacheDir) {
+        extractCommonPomsIfNeeded();
+
         mRepository = new PomRepositoryImpl();
         mRepository.setCacheDirectory(cacheDir);
         mRepository.addRepositoryUrl("https://repo1.maven.org/maven2");
@@ -45,9 +49,16 @@ public class DependencyManager {
         mResolver = new DependencyResolver(mRepository);
     }
 
-    public void resolve(JavaModule project, ProjectManager.TaskListener listener, ILogger logger) throws IOException {
-        File gradleFile = new File(project.getRootFile(), "build.gradle");
+    private void extractCommonPomsIfNeeded() {
+        File cacheDir = ApplicationLoader.applicationContext.getExternalFilesDir("cache");
+        File pomsDir = new File(cacheDir, "pom");
+        File[] children = pomsDir.listFiles();
+        if (!pomsDir.exists() || children == null || children.length == 0) {
+            Decompress.unzipFromAssets(ApplicationLoader.applicationContext, "common_poms.zip", pomsDir.getAbsolutePath());
+        }
+    }
 
+    public void resolve(JavaModule project, ProjectManager.TaskListener listener, ILogger logger) throws IOException {
         listener.onTaskStarted("Resolving dependencies");
 
         mResolver.setResolveListener(new DependencyResolver.ResolveListener() {
@@ -61,8 +72,8 @@ public class DependencyManager {
                 logger.error(message);
             }
         });
-        List<Pom> declaredPoms = DependencyUtils.parseGradle(mRepository, gradleFile, logger);
-        List<Pom> resolvedPoms = mResolver.resolve(declaredPoms);
+        List<Dependency> declaredDependencies = DependencyUtils.parseLibraries(mRepository, project.getLibraryFile(), logger);
+        List<Pom> resolvedPoms = mResolver.resolveDependencies(declaredDependencies);
 
         listener.onTaskStarted("Downloading dependencies");
         List<File> files = getFiles(resolvedPoms, logger);

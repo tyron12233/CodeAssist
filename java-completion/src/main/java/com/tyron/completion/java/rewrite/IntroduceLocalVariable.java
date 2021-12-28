@@ -1,53 +1,114 @@
 package com.tyron.completion.java.rewrite;
 
 import com.google.common.collect.ImmutableMap;
+
+import org.openjdk.javax.lang.model.type.TypeKind;
+import org.openjdk.source.tree.Scope;
+import org.openjdk.source.tree.Tree;
+import org.openjdk.source.util.TreePath;
+import org.openjdk.source.util.Trees;
+
+import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.action.FindCurrentPath;
+import com.tyron.completion.java.provider.ScopeHelper;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.Name;
-import org.openjdk.javax.lang.model.type.DeclaredType;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.openjdk.javax.lang.model.element.Element;
+import org.openjdk.javax.lang.model.type.TypeMirror;
 
 public class IntroduceLocalVariable implements Rewrite {
 
+    private static final Pattern DIGITS_PATTERN = Pattern.compile("^(.+?)(\\d+)$");
+
     private final Path file;
+    private final String methodName;
     private final TypeMirror type;
     private final long position;
 
-    public IntroduceLocalVariable(Path file, TypeMirror type, long position) {
+    public IntroduceLocalVariable(Path file, String methodName, TypeMirror type, long position) {
         this.file = file;
+        this.methodName = methodName;
         this.type = type;
         this.position = position;
     }
 
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
-        Range range = new Range(position, position);
-        TextEdit edit = new TextEdit(range,
-                EditHelper.printType(type) + " " + guessNameFromType(type) + " = ");
-        return ImmutableMap.of(file, new TextEdit[]{edit});
+        List<TextEdit> edits = new ArrayList<>();
+
+        try (CompileTask task = compiler.compile(file)) {
+            Range range = new Range(position, position);
+            String variableType = EditHelper.printType(type, true);
+            String variableName = ActionUtil.guessNameFromMethodName(methodName);
+            if (variableName == null) {
+                variableName = ActionUtil.guessNameFromType(type);
+            }
+            if (variableName == null) {
+                variableName = "variable";
+            }
+            while (containsVariableAtScope(variableName, task)) {
+                variableName = getVariableName(variableName);
+            }
+            TextEdit edit = new TextEdit(range, ActionUtil.getSimpleName(variableType) + " " + variableName + " = ");
+            edits.add(edit);
+
+            if (!type.getKind().isPrimitive()) {
+                if (type.getKind() == TypeKind.ARRAY) {
+                    variableType = variableType.substring(0, variableType.length() - 2);
+                }
+                if (!ActionUtil.hasImport(task.root(), variableType)) {
+                    AddImport addImport = new AddImport(file.toFile(), variableType);
+                    Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+                    TextEdit[] imports = rewrite.get(file);
+                    if (imports != null) {
+                        Collections.addAll(edits, imports);
+                    }
+                }
+            }
+            return ImmutableMap.of(file, edits.toArray(new TextEdit[0]));
+        }
     }
 
-    private String guessNameFromType(TypeMirror type) {
-        if (type instanceof DeclaredType) {
-            DeclaredType declared = (DeclaredType) type;
-            Element element = declared.asElement();
-            String name = element.getSimpleName().toString();
-            // anonymous class, guess from class name
-            if (name.length() == 0) {
-                name = declared.toString();
-                name = name.substring("<anonymous ".length(), name.length() - 1);
-                name = ActionUtil.getSimpleName(name);
-            }
-            return "" + Character.toLowerCase(name.charAt(0)) + name.subSequence(1, name.length());
+    private boolean containsVariableAtScope(String name, CompileTask parse) {
+        TreePath scan = new FindCurrentPath(parse.task).scan(parse.root(), position);
+        if (scan == null) {
+            return false;
         }
-        return "variable";
+        Scope scope = Trees.instance(parse.task).getScope(scan);
+        Iterable<? extends Element> localElements = scope.getLocalElements();
+        for (Element element : localElements) {
+            if (name.contentEquals(element.getSimpleName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String getVariableName(String name) {
+        Matcher matcher = DIGITS_PATTERN.matcher(name);
+        if (matcher.matches()) {
+            String variableName = matcher.group(1);
+            String stringNumber = matcher.group(2);
+            if (stringNumber == null) {
+                stringNumber = "0";
+            }
+            int number = Integer.parseInt(stringNumber) + 1;
+            return variableName + number;
+        }
+        return name + "1";
     }
 }

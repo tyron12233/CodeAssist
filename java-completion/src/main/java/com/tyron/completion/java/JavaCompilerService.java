@@ -61,7 +61,6 @@ public class JavaCompilerService implements CompilerProvider {
         this.classPath = Collections.unmodifiableSet(classPath);
         this.docPath = Collections.unmodifiableSet(docPath);
         this.addExports = Collections.unmodifiableSet(addExports);
-
         this.mSourceFileManager = new SourceFileManager(project);
         this.docs = new Docs(project, docPath);
     }

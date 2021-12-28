@@ -26,6 +26,7 @@ import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.MethodTree;
+import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
@@ -87,7 +88,6 @@ public class ImplementAbstractMethods implements Rewrite {
             Types types = task.task.getTypes();
             Trees trees = Trees.instance(task.task);
             TypeElement thisClass = elements.getTypeElement(mClassName);
-            DeclaredType thisType = (DeclaredType) thisClass.asType();
             ClassTree thisTree = trees.getTree(thisClass);
             if (mPosition != 0) {
                 thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), mPosition);
@@ -96,6 +96,10 @@ public class ImplementAbstractMethods implements Rewrite {
                 thisTree = new FindNewTypeDeclarationAt(task.task, task.root()).scan(task.root(),
                         mPosition);
             }
+            TreePath path = trees.getPath(task.root(), thisTree);
+            Element element = trees.getElement(path);
+            DeclaredType thisType = (DeclaredType) element.asType();
+
             int indent = EditHelper.indent(task.task, task.root(), thisTree) + 4;
 
             for (Element member : elements.getAllMembers(thisClass)) {

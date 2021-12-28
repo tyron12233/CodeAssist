@@ -2,7 +2,10 @@ package com.tyron.completion.java;
 
 import android.util.Log;
 
+import org.openjdk.source.tree.CompilationUnitTree;
+
 import com.tyron.builder.project.api.JavaModule;
+import com.tyron.common.TestUtil;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
@@ -10,10 +13,11 @@ import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
+import org.openjdk.tools.javac.api.JavacTaskImpl;
+import org.openjdk.tools.javac.code.Kinds;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.io.File;
@@ -21,8 +25,6 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -39,7 +41,9 @@ public class CompileBatch implements AutoCloseable {
 
     public final JavaCompilerService parent;
     public final ReusableCompiler.Borrow borrow;
-    /** Indicates the task that requested the compilation is finished with it. */
+    /**
+     * Indicates the task that requested the compilation is finished with it.
+     */
     public boolean closed;
 
     public final JavacTask task;
@@ -58,20 +62,20 @@ public class CompileBatch implements AutoCloseable {
         this.roots = new ArrayList<>();
         // Compile all roots
         try {
-            Instant start = Instant.now();
             for (CompilationUnitTree t : borrow.task.parse()) {
                 roots.add(t);
             }
             // The results of borrow.task.analyze() are unreliable when errors are present
             // You can get at `Element` values using `Trees`
-            borrow.task.analyze();
+            task.analyze();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
     /**
-     * If the compilation failed because javac didn't find some package-private files in source files with different
+     * If the compilation failed because javac didn't find some package-private files in source
+     * files with different
      * names, list those source files.
      */
     public Set<Path> needsAdditionalSources() {
@@ -130,6 +134,17 @@ public class CompileBatch implements AutoCloseable {
     }
 
     private String packageName(Diagnostic<? extends JavaFileObject> err) {
+        if (err instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
+            JCDiagnostic diagnostic = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) err).d;
+            JCDiagnostic.DiagnosticPosition pos = diagnostic.getDiagnosticPosition();
+            Object[] args = diagnostic.getArgs();
+            Kinds.KindName kind = (Kinds.KindName) args[0];
+            if (kind == Kinds.KindName.CLASS) {
+                if (pos.toString().contains(".")) {
+                    return pos.toString().substring(0, pos.toString().lastIndexOf('.'));
+                }
+            }
+        }
         Path file = Paths.get(err.getSource().toUri());
         return StringSearch.packageName(file.toFile());
     }
@@ -141,18 +156,17 @@ public class CompileBatch implements AutoCloseable {
         closed = true;
     }
 
-    private static ReusableCompiler.Borrow batchTask(
-		JavaCompilerService parent, Collection<? extends JavaFileObject> sources) {
+    private static ReusableCompiler.Borrow batchTask(JavaCompilerService parent, Collection<?
+            extends JavaFileObject> sources) {
         parent.clearDiagnostics();
         List<String> options = options(parent.classPath, parent.addExports);
-        return parent.compiler.getTask(parent.mSourceFileManager,
-                parent::addDiagnostic,
-                options,
-                Collections.emptyList(),
-                sources);
+        return parent.compiler.getTask(parent.mSourceFileManager, parent::addDiagnostic, options,
+                Collections.emptyList(), sources);
     }
 
-    /** Combine source path or class path entries using the system separator, for example ':' in unix */
+    /**
+     * Combine source path or class path entries using the system separator, for example ':' in unix
+     */
     private static String joinPath(Collection<File> classOrSourcePath) {
         return classOrSourcePath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator));
     }
@@ -160,27 +174,15 @@ public class CompileBatch implements AutoCloseable {
     private static List<String> options(Set<File> classPath, Set<String> addExports) {
         List<String> list = new ArrayList<>();
 
-        if (!classPath.isEmpty()) {
-            Collections.addAll(list, "-cp", joinPath(classPath));
-        }
-        Collections.addAll(list, "-bootclasspath", joinPath(
-                Arrays.asList(CompletionModule.getAndroidJar(), CompletionModule.getLambdaStubs())));
+        Collections.addAll(list, "-bootclasspath", joinPath(Arrays.asList(CompletionModule.getAndroidJar(), CompletionModule.getLambdaStubs())));
+        Collections.addAll(list, "-cp", joinPath(classPath));
+
+
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
-        //Collections.addAll(list, "-verbose");
         Collections.addAll(list, "-proc:none");
         // You would think we could do -Xlint:all,
         // but some lints trigger fatal errors in the presence of parse errors
-        Collections.addAll(
-			list,
-			"-Xlint:cast",
-			"-Xlint:deprecation",
-			"-Xlint:empty",
-			"-Xlint:fallthrough",
-			"-Xlint:finally",
-			"-Xlint:path",
-			"-Xlint:unchecked",
-			"-Xlint:varargs",
-			"-Xlint:static");
+        Collections.addAll(list, "-Xlint:cast", "-Xlint:deprecation", "-Xlint:empty", "-Xlint" + ":fallthrough", "-Xlint:finally", "-Xlint:path", "-Xlint:unchecked", "-Xlint" + ":varargs", "-Xlint:static");
 
         for (String export : addExports) {
             list.add("--add-exports");
