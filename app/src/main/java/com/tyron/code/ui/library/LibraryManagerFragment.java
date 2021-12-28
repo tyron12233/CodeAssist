@@ -180,11 +180,16 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
             dependency.setScope("compile");
             mAdapter.addDependency(dependency);
             save(javaModule.getLibraryFile(), mAdapter.getData());
+            toggleEmptyView(false, false, "");
         });
         mAdapter.setItemLongClickListener((v, dependency) -> {
             v.setOnCreateContextMenuListener((menu, v1, menuInfo) -> {
                 menu.add(R.string.dialog_delete).setOnMenuItemClickListener(item -> {
                     mAdapter.removeDependency(dependency);
+                    save(javaModule.getLibraryFile(), mAdapter.getData());
+                    if (mAdapter.getData().isEmpty()) {
+                        toggleEmptyView(true, false, "No dependencies");
+                    }
                     return true;
                 });
 
