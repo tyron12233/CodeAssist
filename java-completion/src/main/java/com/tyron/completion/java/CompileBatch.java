@@ -67,7 +67,7 @@ public class CompileBatch implements AutoCloseable {
             }
             // The results of borrow.task.analyze() are unreliable when errors are present
             // You can get at `Element` values using `Trees`
-            ((JavacTaskImpl) borrow.task).analyze();
+            task.analyze();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -174,9 +174,7 @@ public class CompileBatch implements AutoCloseable {
     private static List<String> options(Set<File> classPath, Set<String> addExports) {
         List<String> list = new ArrayList<>();
 
-        Collections.addAll(list, "-bootclasspath",
-                joinPath(Arrays.asList(CompletionModule.getAndroidJar(),
-                        CompletionModule.getLambdaStubs())));
+        Collections.addAll(list, "-bootclasspath", joinPath(Arrays.asList(CompletionModule.getAndroidJar(), CompletionModule.getLambdaStubs())));
         Collections.addAll(list, "-cp", joinPath(classPath));
 
 
@@ -184,9 +182,7 @@ public class CompileBatch implements AutoCloseable {
         Collections.addAll(list, "-proc:none");
         // You would think we could do -Xlint:all,
         // but some lints trigger fatal errors in the presence of parse errors
-        Collections.addAll(list, "-Xlint:cast", "-Xlint:deprecation", "-Xlint:empty", "-Xlint" +
-                ":fallthrough", "-Xlint:finally", "-Xlint:path", "-Xlint:unchecked", "-Xlint" +
-                ":varargs", "-Xlint:static");
+        Collections.addAll(list, "-Xlint:cast", "-Xlint:deprecation", "-Xlint:empty", "-Xlint" + ":fallthrough", "-Xlint:finally", "-Xlint:path", "-Xlint:unchecked", "-Xlint" + ":varargs", "-Xlint:static");
 
         for (String export : addExports) {
             list.add("--add-exports");
@@ -194,18 +190,6 @@ public class CompileBatch implements AutoCloseable {
         }
 
         return list;
-    }
-
-    private static File getModuleFile() {
-        File parentFile = CompletionModule.getAndroidJar().getParentFile();
-        if (parentFile == null) {
-            return null;
-        }
-        File moduleFile = new File(parentFile, "lib/modules");
-        if (moduleFile.exists()) {
-            return moduleFile;
-        }
-        return null;
     }
 
     private boolean isValidFileRange(Diagnostic<? extends JavaFileObject> d) {

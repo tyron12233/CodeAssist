@@ -48,6 +48,7 @@ dependencies {
     api 'com.android.tools:r8:3.0.73'
     api 'com.github.marschall:zipfilesystem-standalone:1.0.1'
     api project(path: ':kotlinc')
+
     api files (
             'libs/javac-new.jar',
             'libs/apksigner.jar',

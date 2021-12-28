@@ -239,11 +239,19 @@ public class EditHelper {
                 string = string + "<" + printTypeParameters(declared.getTypeArguments()) + ">";
             }
             return string;
-        } else if (type instanceof ArrayType && !fqn) {
+        } else if (type instanceof ArrayType) {
             ArrayType array = (ArrayType) type;
-            return printType(array.getComponentType()) + "[]";
+            if (!fqn) {
+                return printType(array.getComponentType()) + "[]";
+            } else {
+                return type.toString();
+            }
         } else {
-            return type.toString();
+            if (fqn) {
+                return type.toString();
+            } else {
+                return ActionUtil.getSimpleName(type.toString());
+            }
         }
     }
 
