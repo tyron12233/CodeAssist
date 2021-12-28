@@ -5,9 +5,12 @@ import org.openjdk.source.tree.Scope;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
+
+import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.action.FindCurrentPath;
+import com.tyron.completion.java.provider.ScopeHelper;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -45,38 +48,38 @@ public class IntroduceLocalVariable implements Rewrite {
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
         List<TextEdit> edits = new ArrayList<>();
 
-        ParseTask task = compiler.parse(file);
-        Range range = new Range(position, position);
-        String variableType = EditHelper.printType(type, true);
-        String variableName = ActionUtil.guessNameFromMethodName(methodName);
-        if (variableName == null) {
-            variableName = ActionUtil.guessNameFromType(type);
-        }
-        if (variableName == null) {
-            variableName = "variable";
-        }
-        while (containsVariableAtScope(variableName, task)) {
-            variableName = getVariableName(variableName);
-        }
-        TextEdit edit = new TextEdit(range,
-                ActionUtil.getSimpleName(variableType) + " " + variableName + " = ");
-        edits.add(edit);
+        try (CompileTask task = compiler.compile(file)) {
+            Range range = new Range(position, position);
+            String variableType = EditHelper.printType(type, true);
+            String variableName = ActionUtil.guessNameFromMethodName(methodName);
+            if (variableName == null) {
+                variableName = ActionUtil.guessNameFromType(type);
+            }
+            if (variableName == null) {
+                variableName = "variable";
+            }
+            while (containsVariableAtScope(variableName, task)) {
+                variableName = getVariableName(variableName);
+            }
+            TextEdit edit = new TextEdit(range, ActionUtil.getSimpleName(variableType) + " " + variableName + " = ");
+            edits.add(edit);
 
-        if (!type.getKind().isPrimitive()) {
-            if (!ActionUtil.hasImport(task.root, variableType)) {
-                AddImport addImport = new AddImport(file.toFile(), variableType);
-                Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-                TextEdit[] imports = rewrite.get(file);
-                if (imports != null) {
-                    Collections.addAll(edits, imports);
+            if (!type.getKind().isPrimitive()) {
+                if (!ActionUtil.hasImport(task.root(), variableType)) {
+                    AddImport addImport = new AddImport(file.toFile(), variableType);
+                    Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+                    TextEdit[] imports = rewrite.get(file);
+                    if (imports != null) {
+                        Collections.addAll(edits, imports);
+                    }
                 }
             }
+            return ImmutableMap.of(file, edits.toArray(new TextEdit[0]));
         }
-        return ImmutableMap.of(file, edits.toArray(new TextEdit[0]));
     }
 
-    private boolean containsVariableAtScope(String name, ParseTask parse) {
-        TreePath scan = new FindCurrentPath(parse.task).scan(parse.root, position);
+    private boolean containsVariableAtScope(String name, CompileTask parse) {
+        TreePath scan = new FindCurrentPath(parse.task).scan(parse.root(), position);
         if (scan == null) {
             return false;
         }

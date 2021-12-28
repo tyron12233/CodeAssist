@@ -2,9 +2,9 @@ package com.tyron.builder.compiler.incremental.java;
 
 import androidx.annotation.VisibleForTesting;
 
-import com.sun.source.util.JavacTask;
-import com.sun.tools.javac.api.JavacTaskImpl;
-import com.sun.tools.javac.api.JavacTool;
+import org.openjdk.source.util.JavacTask;
+import org.openjdk.tools.javac.api.JavacTaskImpl;
+import org.openjdk.tools.javac.api.JavacTool;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
@@ -33,11 +33,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-import javax.tools.DiagnosticListener;
-import javax.tools.JavaFileObject;
-import javax.tools.SimpleJavaFileObject;
-import javax.tools.StandardJavaFileManager;
-import javax.tools.StandardLocation;
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.javax.tools.SimpleJavaFileObject;
+import org.openjdk.javax.tools.StandardJavaFileManager;
+import org.openjdk.javax.tools.StandardLocation;
 
 public class IncrementalJavaTask extends Task<JavaModule> {
 
@@ -114,35 +114,10 @@ public class IncrementalJavaTask extends Task<JavaModule> {
         StandardJavaFileManager standardJavaFileManager =
                 tool.getStandardFileManager(diagnosticCollector, Locale.getDefault(),
                         Charset.defaultCharset());
-
-        String target = getModule().getSettings().getString(ModuleSettings.JAVA_SOURCE_VERSION, "8");
-        String source = getModule().getSettings().getString(ModuleSettings.JAVA_SOURCE_VERSION, "8");
-
-        List<String> options = new ArrayList<>();
-        options.add("-target");
-        options.add(target);
-        options.add("-source");
-        options.add(source);
-
         List<File> classpath = new ArrayList<>(getModule().getLibraries());
         classpath.add(mOutputDir);
 
         try {
-            try {
-                if (target == null) {
-                    target = "8";
-                }
-                if (Integer.parseInt(target) >= 9) {
-                    if (TestUtil.isDalvik()) {
-                        options.add("--system");
-                        options.add(getModule().getBootstrapJarFile().getParent());
-                    }
-                    classpath.add(getModule().getBootstrapJarFile());
-                }
-            } catch (NumberFormatException ignore) {
-
-            }
-
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT,
                     Collections.singletonList(mOutputDir));
             standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH,
@@ -165,17 +140,12 @@ public class IncrementalJavaTask extends Task<JavaModule> {
         }
 
         JavacTask task = tool.getTask(null, standardJavaFileManager, diagnosticCollector,
-                options, null, javaFileObjects);
+                Collections.emptyList(), null, javaFileObjects);
 
         HashMap<String, List<File>> compiledFiles = new HashMap<>();
         try {
 
-            if (TestUtil.isDalvik()) {
-                ((JavacTaskImpl) task).parse(javaFileObjects.toArray(new JavaFileObject[0]));
-            } else {
-                task.parse();
-            }
-
+            task.parse();
             task.analyze();
             Iterable<? extends JavaFileObject> generate = task.generate();
             for (JavaFileObject fileObject : generate) {

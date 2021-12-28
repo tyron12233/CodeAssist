@@ -55,40 +55,6 @@ public class DiagnosticWrapper implements Diagnostic<File> {
         }
     }
 
-    public DiagnosticWrapper(javax.tools.Diagnostic<? extends javax.tools.JavaFileObject> obj) {
-        try {
-            this.code = obj.getCode();
-            if (obj.getSource() != null) {
-                this.source = new File(obj.getSource().toUri());
-            }
-
-            switch (obj.getKind()) {
-                case NOTE:
-                    this.kind = Kind.NOTE;
-                    break;
-                case WARNING:
-                    this.kind = Kind.WARNING;
-                    break;
-                case OTHER:
-                    this.kind = Kind.OTHER;
-                    break;
-                case ERROR:
-                    this.kind = Kind.ERROR;
-            }
-
-            this.position = obj.getPosition();
-            this.startPosition = obj.getStartPosition();
-            this.endPosition = obj.getEndPosition();
-
-            this.lineNumber = obj.getLineNumber();
-            this.columnNumber = obj.getColumnNumber();
-
-            this.message = obj.getMessage(Locale.getDefault());
-        } catch (Throwable e) {
-            // ignored
-        }
-    }
-
     public void setOnClickListener(View.OnClickListener listener) {
         onClickListener = listener;
     }

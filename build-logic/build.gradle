@@ -54,6 +54,4 @@ dependencies {
             'libs/zip4j.jar',
             'libs/ecj.jar'
     )
-
-    api files('libs/nb-javac-17.0.0.0.jar', 'libs/nb-javac-17.0.0.0-api.jar', 'libs/jrt-fs.jar')
 }

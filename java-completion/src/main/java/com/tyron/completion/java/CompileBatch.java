@@ -3,6 +3,7 @@ package com.tyron.completion.java;
 import android.util.Log;
 
 import org.openjdk.source.tree.CompilationUnitTree;
+
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.TestUtil;
 import com.tyron.common.util.StringSearch;
@@ -173,14 +174,11 @@ public class CompileBatch implements AutoCloseable {
     private static List<String> options(Set<File> classPath, Set<String> addExports) {
         List<String> list = new ArrayList<>();
 
-        Collections.addAll(list, "-target", "8", "-source", "8");
-
-        Collections.addAll(list, "-cp", joinPath(classPath));
-
-
         Collections.addAll(list, "-bootclasspath",
                 joinPath(Arrays.asList(CompletionModule.getAndroidJar(),
                         CompletionModule.getLambdaStubs())));
+        Collections.addAll(list, "-cp", joinPath(classPath));
+
 
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");
         Collections.addAll(list, "-proc:none");

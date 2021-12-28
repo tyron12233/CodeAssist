@@ -1,5 +1,9 @@
 package com.tyron.completion.java;
 
+import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.DiagnosticListener;
+import org.openjdk.javax.tools.JavaFileManager;
+import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TaskEvent;
 import org.openjdk.source.util.TaskListener;
@@ -7,15 +11,12 @@ import org.openjdk.tools.javac.api.JavacTaskImpl;
 import org.openjdk.tools.javac.api.JavacTool;
 import org.openjdk.tools.javac.api.JavacTrees;
 import org.openjdk.tools.javac.api.MultiTaskListener;
-import org.openjdk.tools.javac.code.DeferredLintHandler;
 import org.openjdk.tools.javac.code.Types;
-import org.openjdk.tools.javac.comp.Analyzer;
 import org.openjdk.tools.javac.comp.Annotate;
 import org.openjdk.tools.javac.comp.Check;
 import org.openjdk.tools.javac.comp.CompileStates;
 import org.openjdk.tools.javac.comp.Enter;
 import org.openjdk.tools.javac.comp.Modules;
-import org.openjdk.tools.javac.file.JavacFileManager;
 import org.openjdk.tools.javac.main.Arguments;
 import org.openjdk.tools.javac.main.JavaCompiler;
 import org.openjdk.tools.javac.model.JavacElements;
@@ -30,11 +31,6 @@ import java.util.List;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
-
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileManager;
-import org.openjdk.javax.tools.JavaFileObject;
 
 /**
  * A pool of reusable JavacTasks. When a task is no valid anymore, it is returned to the pool, and its Context may be

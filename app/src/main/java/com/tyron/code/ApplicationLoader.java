@@ -11,7 +11,6 @@ import androidx.annotation.VisibleForTesting;
 import androidx.preference.PreferenceManager;
 
 import com.developer.crashx.config.CrashConfig;
-import com.sun.tools.javac.file.Locations;
 import com.tyron.builder.BuildModule;
 import com.tyron.completion.java.CompletionModule;
 
@@ -26,7 +25,6 @@ public class ApplicationLoader extends Application {
         applicationContext = this;
         CompletionModule.initialize(applicationContext);
         BuildModule.initialize(applicationContext);
-        Locations.setJavaHome(getFilesDir().toPath());
         CrashConfig.Builder.create()
                 .backgroundMode(CrashConfig.BACKGROUND_MODE_SHOW_CUSTOM)
                 .enabled(true)
