@@ -125,6 +125,9 @@ public class ActionUtil {
     }
 
     public static boolean hasImport(CompilationUnitTree root, String className) {
+        if (className.endsWith("[]")) {
+            className = className.substring(0, className.length() - 2);
+        }
         String packageName = className.substring(0, className.lastIndexOf("."));
 
         // if the package name of the class is java.lang, we dont need
@@ -183,6 +186,9 @@ public class ActionUtil {
         }
         if (methodName.startsWith("get")) {
             methodName = methodName.substring("get".length());
+        }
+        if (methodName.isEmpty()) {
+            return null;
         }
         return  Character.toLowerCase(methodName.charAt(0)) + methodName.substring(1);
     }
