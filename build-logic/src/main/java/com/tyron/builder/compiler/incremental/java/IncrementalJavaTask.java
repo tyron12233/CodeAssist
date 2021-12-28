@@ -113,10 +113,34 @@ public class IncrementalJavaTask extends Task<JavaModule> {
                 tool.getStandardFileManager(diagnosticCollector, Locale.getDefault(),
                         Charset.defaultCharset());
 
+        String target = getModule().getSettings().getString(ModuleSettings.JAVA_SOURCE_VERSION, "8");
+        String source = getModule().getSettings().getString(ModuleSettings.JAVA_SOURCE_VERSION, "8");
+
+        List<String> options = new ArrayList<>();
+        options.add("-target");
+        options.add(target);
+        options.add("-source");
+        options.add(source);
+
         List<File> classpath = new ArrayList<>(getModule().getLibraries());
         classpath.add(mOutputDir);
 
         try {
+            try {
+                if (target == null) {
+                    target = "8";
+                }
+                if (Integer.parseInt(target) >= 9) {
+                    if (TestUtil.isDalvik()) {
+                        options.add("--system");
+                        options.add(getModule().getBootstrapJarFile().getParent());
+                    }
+                    classpath.add(getModule().getBootstrapJarFile());
+                }
+            } catch (NumberFormatException ignore) {
+
+            }
+
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT,
                     Collections.singletonList(mOutputDir));
             standardJavaFileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH,
@@ -131,16 +155,6 @@ public class IncrementalJavaTask extends Task<JavaModule> {
         List<JavaFileObject> javaFileObjects = new ArrayList<>();
         for (File file : mFilesToCompile) {
             javaFileObjects.add(new SourceFileObject(file.toPath()));
-        }
-
-        List<String> options = new ArrayList<>();
-        options.add("-target");
-        options.add(getModule().getSettings().getString(ModuleSettings.JAVA_SOURCE_VERSION, "8"));
-        options.add("-source");
-        options.add(getModule().getSettings().getString(ModuleSettings.JAVA_SOURCE_VERSION, "8"));
-        if (TestUtil.isDalvik()) {
-            options.add("--system");
-            options.add(getModule().getBootstrapJarFile().getParent());
         }
 
         JavacTask task = tool.getTask(null, standardJavaFileManager, diagnosticCollector,
@@ -160,7 +174,7 @@ public class IncrementalJavaTask extends Task<JavaModule> {
             for (JavaFileObject fileObject : generate) {
                 String path = fileObject.getName();
                 File classFile = new File(path);
-                if (classFile.exists()) {
+                if (classFile. exists()) {
                     String classPath = classFile.getAbsolutePath().replace("build/bin/classes/",
                             "src/main/java/").replace(".class", ".java");
                     if (classFile.getName().indexOf('$') != -1) {
