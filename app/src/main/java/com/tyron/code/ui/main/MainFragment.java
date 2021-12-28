@@ -15,11 +15,13 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.google.gson.Gson;
+import com.tyron.code.ui.library.LibraryManagerFragment;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.LogViewModel;
@@ -101,7 +103,8 @@ public class MainFragment extends Fragment {
     }
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
         mRoot = inflater.inflate(R.layout.main_fragment, container, false);
 
         mProgressBar = mRoot.findViewById(R.id.progressbar);
@@ -144,7 +147,7 @@ public class MainFragment extends Fragment {
                 @Override
                 public void onDrawerClosed(@NonNull View p1) {
                     mMainViewModel.setDrawerState(false);
-                   onBackPressedCallback.setEnabled(false);
+                    onBackPressedCallback.setEnabled(false);
                 }
             });
         } else {
@@ -155,8 +158,7 @@ public class MainFragment extends Fragment {
             if (item.getItemId() == R.id.debug_refresh) {
                 saveAll();
                 if (!mServiceConnection.isCompiling()) {
-                    Project project = ProjectManager.getInstance()
-                            .getCurrentProject();
+                    Project project = ProjectManager.getInstance().getCurrentProject();
                     if (project != null) {
                         openProject(project);
                     }
@@ -178,6 +180,15 @@ public class MainFragment extends Fragment {
             } else if (item.getItemId() == R.id.menu_preview_layout) {
                 getChildFragmentManager().setFragmentResult(EditorContainerFragment.PREVIEW_KEY,
                         Bundle.EMPTY);
+            } else if (item.getItemId() == R.id.library_manager) {
+                FragmentManager fm = getParentFragmentManager();
+                if (fm.findFragmentByTag(LibraryManagerFragment.TAG) == null) {
+                    String path = mProject.getMainModule().getRootFile().getAbsolutePath();
+                    Fragment fragment = LibraryManagerFragment.newInstance(path);
+                    getParentFragmentManager().beginTransaction()
+                            .add(R.id.fragment_container, fragment, LibraryManagerFragment.TAG)
+                            .addToBackStack(LibraryManagerFragment.TAG).commit();
+                }
             }
 
             return false;
@@ -272,8 +283,7 @@ public class MainFragment extends Fragment {
 
         Intent intent = new Intent(requireContext(), IndexService.class);
         requireActivity().startService(intent);
-        requireActivity().bindService(intent,
-                mIndexServiceConnection, Context.BIND_IMPORTANT);
+        requireActivity().bindService(intent, mIndexServiceConnection, Context.BIND_IMPORTANT);
     }
 
     private void saveAll() {
@@ -295,13 +305,9 @@ public class MainFragment extends Fragment {
 
         List<File> items = mMainViewModel.getFiles().getValue();
         if (items != null) {
-            String itemString = new Gson()
-                    .toJson(items.stream()
-                            .map(File::getAbsolutePath)
-                            .collect(Collectors.toList()));
-            settings.edit()
-                    .putString(ModuleSettings.SAVED_EDITOR_FILES, itemString)
-                    .apply();
+            String itemString =
+                    new Gson().toJson(items.stream().map(File::getAbsolutePath).collect(Collectors.toList()));
+            settings.edit().putString(ProjectSettings.SAVED_EDITOR_FILES, itemString).apply();
         }
     }
 

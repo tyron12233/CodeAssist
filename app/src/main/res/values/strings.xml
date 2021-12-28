@@ -66,6 +66,7 @@
     <string name="menu_create_project">Create module</string>
     <string name="menu_run">Run</string>
     <string name="menu_refresh">Refresh module</string>
+    <string name="menu_library_manager">Library manager</string>
     <string name="menu_format">Format</string>
     <string name="menu_settings">Settings</string>
 
@@ -178,4 +179,9 @@
     <string name="compilation_button_install">INSTALL</string>
     <string name="compilation_result_success">Compilation success</string>
     <string name="compilation_result_failed">Compilation failed</string>
+
+    <!-- Library manager -->
+    <string name="group_id">Group Id</string>
+    <string name="artifact_id">Artifact Id</string>
+    <string name="version_name">Version Name</string>
 </resources>

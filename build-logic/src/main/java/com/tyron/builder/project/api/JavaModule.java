@@ -45,6 +45,11 @@ public interface JavaModule extends Module {
 
     File getLibraryDirectory();
 
+    /*
+     * @return the libraries.json file used to store the dependencies of this module
+     */
+    File getLibraryFile();
+
     /**
      * This is required if the project uses lambdas
      *

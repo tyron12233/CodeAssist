@@ -32,6 +32,9 @@
             <item
                 android:id="@+id/debug_refresh"
                 android:title="@string/menu_refresh" />
+            <item
+                android:id="@+id/library_manager"
+                android:title="@string/menu_library_manager"/>
         </menu>
     </item>
 

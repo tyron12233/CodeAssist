@@ -101,6 +101,11 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
     }
 
     @Override
+    public File getLibraryFile() {
+        return new File(mRootDir, "libraries.json");
+    }
+
+    @Override
     public File getLambdaStubsJarFile() {
         return mLambdaStubsJarFile;
     }

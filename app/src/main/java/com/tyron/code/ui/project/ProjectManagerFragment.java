@@ -347,7 +347,9 @@ public class ProjectManagerFragment extends Fragment {
         if (getActivity() == null || isDetached()) {
             return;
         }
-
+        if (getView() == null) {
+            return;
+        }
         View recycler = requireView().findViewById(R.id.projects_recycler);
         View empty = requireView().findViewById(R.id.empty_container);
 
