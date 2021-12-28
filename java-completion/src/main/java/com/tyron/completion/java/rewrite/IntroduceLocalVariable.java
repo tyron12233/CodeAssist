@@ -77,6 +77,9 @@ public class IntroduceLocalVariable implements Rewrite {
 
     private boolean containsVariableAtScope(String name, ParseTask parse) {
         TreePath scan = new FindCurrentPath(parse.task).scan(parse.root, position);
+        if (scan == null) {
+            return false;
+        }
         Scope scope = Trees.instance(parse.task).getScope(scan);
         Iterable<? extends Element> localElements = scope.getLocalElements();
         for (Element element : localElements) {

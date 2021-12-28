@@ -69,7 +69,10 @@ public class ActionUtil {
             }
         }
 
-        return !(grandParent.getLeaf() instanceof ThrowsTree);
+        if (parent.getLeaf() instanceof JCTree.JCThrow) {
+            return false;
+        }
+        return !(parent.getLeaf() instanceof ThrowsTree);
     }
 
     public static TreePath findSurroundingPath(TreePath path) {
