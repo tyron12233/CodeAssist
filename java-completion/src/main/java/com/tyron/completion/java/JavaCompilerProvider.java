@@ -61,7 +61,7 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
 
         if (mProvider == null || changed(mCachedPaths, paths)) {
             mProvider = new JavaCompilerService(project, paths, Collections.emptySet(),
-                    Collections.emptySet(), Integer.parseInt(target), Integer.parseInt(source));
+                    Collections.emptySet());
 
             mCachedPaths.clear();
             mCachedPaths.addAll(paths);

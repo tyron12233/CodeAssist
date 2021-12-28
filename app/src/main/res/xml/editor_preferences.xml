@@ -32,22 +32,6 @@
             app:iconSpaceReserved="false"
             android:title="@string/settings_code_completions" />
 
-        <ListPreference
-            app:iconSpaceReserved="false"
-            app:entries="@array/java_versions"
-            app:entryValues="@array/java_versions"
-            app:key="javaCompletionsSourceVersion"
-            app:defaultValue="8"
-            app:title="@string/completion_java_source_version_title"/>
-        <ListPreference
-            app:iconSpaceReserved="false"
-            app:entries="@array/java_versions"
-            app:entryValues="@array/java_versions"
-            app:defaultValue="8"
-            app:key="javaCompletionsTargetVersion"
-            app:title="@string/completion_java_target_version_title"/>
-
-
     </PreferenceCategory>
 
     <PreferenceCategory

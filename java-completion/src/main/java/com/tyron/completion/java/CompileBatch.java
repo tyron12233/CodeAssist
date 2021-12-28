@@ -158,7 +158,7 @@ public class CompileBatch implements AutoCloseable {
     private static ReusableCompiler.Borrow batchTask(JavaCompilerService parent, Collection<?
             extends JavaFileObject> sources) {
         parent.clearDiagnostics();
-        List<String> options = options(parent.classPath, parent.addExports, parent.target, parent.source);
+        List<String> options = options(parent.classPath, parent.addExports);
         return parent.compiler.getTask(parent.mSourceFileManager, parent::addDiagnostic, options,
                 Collections.emptyList(), sources);
     }
@@ -170,8 +170,7 @@ public class CompileBatch implements AutoCloseable {
         return classOrSourcePath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator));
     }
 
-    private static List<String> options(Set<File> classPath, Set<String> addExports, int target,
-                                        int source) {
+    private static List<String> options(Set<File> classPath, Set<String> addExports) {
         List<String> list = new ArrayList<>();
 
         Collections.addAll(list, "-target", "8", "-source", "8");
