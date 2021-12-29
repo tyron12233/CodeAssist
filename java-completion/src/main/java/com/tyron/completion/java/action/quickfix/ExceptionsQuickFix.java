@@ -16,7 +16,13 @@ import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.DiagnosticUtil.MethodPtr;
+import com.tyron.completion.java.util.ElementUtil;
 
+import org.openjdk.javax.lang.model.element.Element;
+import org.openjdk.javax.lang.model.element.ElementKind;
+import org.openjdk.javax.lang.model.element.ExecutableElement;
+import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.CatchTree;
@@ -32,8 +38,8 @@ import java.util.Locale;
 
 public class ExceptionsQuickFix extends ActionProvider {
 
-    public static final String ERROR_CODE =
-            "compiler.err.unreported.exception.need.to.catch.or.throw";
+    public static final String ERROR_CODE = "compiler.err.unreported.exception.need.to.catch.or" +
+            ".throw";
 
     @Override
     public boolean isApplicable(ActionContext context, @Nullable String errorCode) {
@@ -52,13 +58,18 @@ public class ExceptionsQuickFix extends ActionProvider {
                 DiagnosticUtil.extractExceptionName(diagnostic.getMessage(Locale.ENGLISH));
         TreePath surroundingPath = ActionUtil.findSurroundingPath(context.getCurrentPath());
         if (surroundingPath != null) {
-            List<Action> actions = new ArrayList<>();
-
             if (!(surroundingPath.getLeaf() instanceof LambdaExpressionTree)) {
                 MethodPtr needsThrow = findMethod(task, diagnostic.getPosition());
-                Rewrite rewrite = new AddException(needsThrow.className, needsThrow.methodName,
-                        needsThrow.erasedParameterTypes, exceptionName);
-                addAction(context, new Action(rewrite), "Add 'throws'");
+                Element classElement = needsThrow.method.getEnclosingElement();
+                TypeElement classTypeElement = (TypeElement) classElement;
+                TypeMirror superclass = classTypeElement.getSuperclass();
+                TypeElement superClassElement =
+                        (TypeElement) task.task.getTypes().asElement(superclass);
+                if (!ElementUtil.isMemberOf(task, needsThrow.method, superClassElement)) {
+                    Rewrite rewrite = new AddException(needsThrow.className,
+                            needsThrow.methodName, needsThrow.erasedParameterTypes, exceptionName);
+                    addAction(context, new Action(rewrite), "Add 'throws'");
+                }
             }
 
             if (surroundingPath.getLeaf() instanceof TryTree) {
@@ -85,7 +96,7 @@ public class ExceptionsQuickFix extends ActionProvider {
     private void addAction(ActionContext context, Action action, String title) {
         context.addMenu("quickFix", title).setOnMenuItemClickListener(item -> {
             context.performAction(action);
-           return true;
+            return true;
         });
     }
 }

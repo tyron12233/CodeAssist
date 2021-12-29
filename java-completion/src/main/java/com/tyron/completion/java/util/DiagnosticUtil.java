@@ -26,8 +26,10 @@ public class DiagnosticUtil {
     public static class MethodPtr {
         public String className, methodName;
         public String[] erasedParameterTypes;
+        public ExecutableElement method;
 
         public MethodPtr(JavacTask task, ExecutableElement method) {
+            this.method = method;
             Types types = task.getTypes();
             TypeElement parent = (TypeElement) method.getEnclosingElement();
             className = parent.getQualifiedName().toString();
