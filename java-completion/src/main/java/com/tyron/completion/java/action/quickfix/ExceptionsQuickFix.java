@@ -27,7 +27,6 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -37,7 +36,7 @@ public class ExceptionsQuickFix extends ActionProvider {
             "compiler.err.unreported.exception.need.to.catch.or.throw";
 
     @Override
-    public boolean isApplicable(@Nullable String errorCode) {
+    public boolean isApplicable(ActionContext context, @Nullable String errorCode) {
         return ERROR_CODE.equals(errorCode);
     }
 

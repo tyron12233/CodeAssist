@@ -16,15 +16,12 @@ import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
-import java.util.Collections;
-import java.util.List;
-
 public class ImplementAbstractMethodsFix extends ActionProvider {
 
     public static final String ERROR_CODE = "compiler.err.does.not.override.abstract";
 
     @Override
-    public boolean isApplicable(@Nullable String errorCode) {
+    public boolean isApplicable(ActionContext context, @Nullable String errorCode) {
        return ERROR_CODE.equals(errorCode);
     }
 

@@ -26,7 +26,7 @@ public class ImportClassFieldFix extends ActionProvider {
     public static final String ERROR_CODE = "compiler.err.doesnt.exist";
 
     @Override
-    public boolean isApplicable(@Nullable String errorCode) {
+    public boolean isApplicable(ActionContext context, @Nullable String errorCode) {
         return ERROR_CODE.equals(errorCode);
     }
 

@@ -5,17 +5,13 @@ import android.view.MenuItem;
 
 import androidx.annotation.NonNull;
 
-import com.google.common.collect.ImmutableMap;
 import com.tyron.completion.java.CompileTask;
-import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
 import com.tyron.completion.java.rewrite.OverrideInheritedMethod;
 import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.DiagnosticUtil;
-import com.tyron.completion.model.Range;
-import com.tyron.completion.model.TextEdit;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
@@ -28,14 +24,13 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.TreeMap;
 
 public class OverrideInheritedMethodsAction extends ActionProvider {
 
     @Override
-    public boolean isApplicable(@NonNull TreePath currentPath) {
+    public boolean isApplicable(ActionContext context, @NonNull TreePath currentPath) {
         return currentPath.getLeaf() instanceof ClassTree;
     }
 

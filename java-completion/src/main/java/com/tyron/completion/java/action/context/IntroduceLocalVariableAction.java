@@ -22,7 +22,7 @@ import org.openjdk.source.util.Trees;
 public class IntroduceLocalVariableAction extends ActionProvider {
 
     @Override
-    public boolean isApplicable(@NonNull TreePath currentPath) {
+    public boolean isApplicable(ActionContext context, @NonNull TreePath currentPath) {
         return ActionUtil.canIntroduceLocalVariable(currentPath);
     }
 

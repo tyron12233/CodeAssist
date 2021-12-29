@@ -82,13 +82,13 @@ public class CodeActionManager {
         List<ActionProvider> actionProviders = new ArrayList<>();
         for (ActionProvider action : mActions) {
             if (context.getDiagnostic() != null) {
-                if (action.isApplicable(context.getDiagnostic().getCode())) {
+                if (action.isApplicable(context, context.getDiagnostic().getCode())) {
                     actionProviders.add(action);
                 }
             }
 
             if (context.getCurrentPath() != null) {
-                if (action.isApplicable(context.getCurrentPath())) {
+                if (action.isApplicable(context, context.getCurrentPath())) {
                     actionProviders.add(action);
                 }
             }

@@ -5,8 +5,6 @@ import androidx.annotation.Nullable;
 
 import org.openjdk.source.util.TreePath;
 
-import java.util.List;
-
 /**
  * Class for providing actions in the editor given the current path or the current diagnostic code.
  *
@@ -18,18 +16,22 @@ import java.util.List;
 public abstract class ActionProvider {
 
     /**
+     *
+     * @param context
      * @param errorCode Error code given by javac.
      * @return whether this ActionProvider is applicable to a specific error code.
      */
-    public boolean isApplicable(@Nullable String errorCode) {
+    public boolean isApplicable(ActionContext context, @Nullable String errorCode) {
         return false;
     }
 
     /**
+     *
+     * @param context
      * @param currentPath The TreePath representation of where the current cursor is
      * @return whether this ActionProvider is applicable to a specific tree path.
      */
-    public boolean isApplicable(@NonNull TreePath currentPath) {
+    public boolean isApplicable(ActionContext context, @NonNull TreePath currentPath) {
         return false;
     }
 
