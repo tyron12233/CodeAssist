@@ -15,9 +15,9 @@ public class TreeUtil {
 
     public static final Comparator<File> FILE_FIRST_ORDER = (file1, file2) -> {
         if (file1.isFile() && file2.isDirectory()) {
-            return -1;
-        } else if (file2.isFile() && file1.isDirectory()) {
             return 1;
+        } else if (file2.isFile() && file1.isDirectory()) {
+            return -1;
         } else {
             return String.CASE_INSENSITIVE_ORDER.compare(file1.getName(), file2.getName());
         }
