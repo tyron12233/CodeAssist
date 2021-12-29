@@ -1,8 +1,16 @@
 package com.tyron.completion.java.action.api;
 
+import android.content.Context;
+import android.view.Menu;
+
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.JavaCompilerService;
+import com.tyron.completion.java.action.context.IntroduceLocalVariableAction;
+import com.tyron.completion.java.action.context.OverrideInheritedMethodsAction;
 import com.tyron.completion.java.action.quickfix.ExceptionsQuickFix;
+import com.tyron.completion.java.action.quickfix.ImplementAbstractMethodsFix;
+import com.tyron.completion.java.action.quickfix.ImportClassFieldFix;
+import com.tyron.completion.java.action.quickfix.ImportClassFix;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.TreeUtil;
 
@@ -35,32 +43,38 @@ public class CodeActionManager {
 
     private void registerBuiltinProviders() {
         registerActionProvider(new ExceptionsQuickFix());
+        registerActionProvider(new ImplementAbstractMethodsFix());
+        registerActionProvider(new OverrideInheritedMethodsAction());
+        registerActionProvider(new IntroduceLocalVariableAction());
+        registerActionProvider(new ImportClassFix());
+        registerActionProvider(new ImportClassFieldFix());
     }
 
     public void registerActionProvider(ActionProvider provider) {
         mActions.add(provider);
     }
 
-    public List<Action> getActions(JavaCompilerService service, Path file, int cursor) {
+    public List<Action> getActions(Context thisContext, Menu menu, JavaCompilerService service, Path file, int cursor, EditorInterface editor){
         try (CompileTask task = service.compile(file)) {
             Diagnostic<? extends JavaFileObject> diagnostic = DiagnosticUtil.getDiagnostic(task,
                     cursor);
             TreePath currentPath = TreeUtil.findCurrentPath(task, cursor);
             ActionContext context = ActionContext.builder()
+                    .setContext(thisContext)
+                    .setMenu(menu)
                     .setCompileTask(task)
+                    .setEditorInterface(editor)
                     .setCurrentPath(currentPath)
                     .setDiagnostic(diagnostic)
                     .setCurrentFile(file)
+                    .setCompiler(service)
                     .setCursor(cursor)
                     .build();
 
             List<ActionProvider> applicableActions = getApplicableActions(context);
             List<Action> actions = new ArrayList<>();
             for (ActionProvider actionProvider : applicableActions) {
-                List<Action> action = actionProvider.getAction(context);
-                if (action != null) {
-                    actions.addAll(action);
-                }
+                actionProvider.addMenus(context);
             }
             return actions;
         }

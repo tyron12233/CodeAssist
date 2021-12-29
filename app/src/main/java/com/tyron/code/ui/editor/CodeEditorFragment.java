@@ -6,11 +6,13 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.view.menu.MenuBuilder;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -44,6 +46,7 @@ import com.tyron.completion.java.Parser;
 import com.tyron.completion.java.action.CodeActionProvider;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.CodeActionManager;
+import com.tyron.completion.java.action.api.EditorInterface;
 import com.tyron.completion.java.model.CodeAction;
 import com.tyron.completion.java.model.CodeActionList;
 import com.tyron.completion.java.rewrite.Rewrite;
@@ -279,45 +282,40 @@ public class CodeEditorFragment extends Fragment implements Savable,
             mEditor.postHideCompletionWindow();
         });
         mEditor.setOnLongPressListener((start, end, event) -> {
-            ProgressDialog dialog = new ProgressDialog(requireContext());
-            dialog.setMessage("Analyzing");
-            dialog.show();
+            save();
 
-            ThreadUtil.runOnBackgroundThread(() -> {
-                save();
+            if (currentProject == null) {
+                return;
+            }
+            Module currentModule = currentProject.getModule(mCurrentFile);
+            if (!(mLanguage instanceof JavaLanguage) && !(currentModule instanceof JavaModule)) {
+                return;
+            }
 
-                if (currentProject == null) {
-                    return;
-                }
-                Module currentModule = currentProject.getModule(mCurrentFile);
-                if (!(mLanguage instanceof JavaLanguage) && !(currentModule instanceof JavaModule)) {
-                    return;
-                }
+            JavaCompilerProvider service =
+                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+            JavaCompilerService compiler = service.getCompiler(currentProject,
+                    (JavaModule) currentModule);
+            if (!compiler.isReady()) {
+                return;
+            }
 
-                JavaCompilerProvider service =
-                        CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-                JavaCompilerService compiler = service.getCompiler(currentProject,
-                        (JavaModule) currentModule);
-
-                List<Action> actions = getCodeActions(compiler);
-                if (getActivity() != null && mEditor != null) {
-                    mEditor.postDelayed(() -> {
-                        dialog.dismiss();
-                        mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
-                            for (final Action action : actions) {
-                                if (action.getRewrite().equals(Rewrite.CANCELLED)) {
-                                    continue;
-                                }
-                                menu.add(action.getName()).setOnMenuItemClickListener(menuItem -> {
-                                    performAction(compiler, action);
-                                    return true;
-                                });
-                            }
-                        });
-                        mEditor.showContextMenu(event.getX(), event.getY());
-                    }, 300);
+            mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
+                menu.clear();
+                menu.setHeaderTitle("Loading...");
+                List<Action> actions = getCodeActions(menu, compiler);
+                menu.clearHeader();
+                for (final Action action : actions) {
+                    if (action.getRewrite().equals(Rewrite.CANCELLED)) {
+                        continue;
+                    }
+//                    menu.add(action.getName()).setOnMenuItemClickListener(menuItem -> {
+//                        performAction(compiler, action);
+//                        return true;
+//                    });
                 }
             });
+            mEditor.showContextMenu(event.getX(), event.getY());
         });
 
         getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
@@ -491,14 +489,45 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
-    private List<Action> getCodeActions(JavaCompilerService compiler) {
+    private List<Action> getCodeActions(Menu menu, JavaCompilerService compiler) {
         if (compiler == null) {
             return Collections.emptyList();
         }
         try {
             final Path current = mEditor.getCurrentFile().toPath();
-            return CodeActionManager.getInstance().getActions(compiler, current,
-                    mEditor.getCursor().getLeft());
+            return CodeActionManager.getInstance().getActions(requireContext(), menu, compiler, current, mEditor.getCursor().getLeft(), new EditorInterface() {
+                @Override
+                public int getCharIndex(int line, int column) {
+                    return mEditor.getText().getCharIndex(line, column);
+                }
+
+                @Override
+                public CharPositionWrapper getCharPosition(int index) {
+                    CharPosition charPosition =
+                            mEditor.getText().getIndexer().getCharPosition(index);
+                    CharPositionWrapper wrapper = new CharPositionWrapper();
+                    wrapper.column = charPosition.column;
+                    wrapper.index = charPosition.index;
+                    wrapper.line = charPosition.line;
+                    return wrapper;
+                }
+
+                @Override
+                public void insert(int line, int column, String string) {
+                    mEditor.getText().insert(line, column, string);
+                }
+
+                @Override
+                public void replace(int line, int column, int endLine, int endColumn,
+                                    String string) {
+                    mEditor.getText().replace(line, column, endLine, endColumn, string);
+                }
+
+                @Override
+                public void formatCodeAsync(int startIndex, int endIndex) {
+                    mEditor.formatCodeAsync();
+                }
+            });
         } catch (Throwable e) {
             if (BuildConfig.DEBUG) {
                 Log.d("getCodeActions()", "Unable to get code actions", e);

@@ -6,25 +6,11 @@ public class Action {
 
     private final Rewrite mRewrite;
 
-    private final String mGroupId;
-
-    private final String mName;
-
-    public Action(Rewrite rewrite, String groupId, String actionName) {
+    public Action(Rewrite rewrite) {
         mRewrite = rewrite;
-        mGroupId = groupId;
-        mName = actionName;
     }
 
     public Rewrite getRewrite() {
         return mRewrite;
-    }
-
-    public String getGroupId() {
-        return mGroupId;
-    }
-
-    public String getName() {
-        return mName;
     }
 }

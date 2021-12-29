@@ -3,8 +3,6 @@ package com.tyron.completion.java.action.api;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.completion.java.model.CodeAction;
-
 import org.openjdk.source.util.TreePath;
 
 import java.util.List;
@@ -35,5 +33,5 @@ public abstract class ActionProvider {
         return false;
     }
 
-    public abstract List<Action> getAction(ActionContext context);
+    public abstract void addMenus(@NonNull ActionContext context);
 }

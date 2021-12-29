@@ -16,8 +16,10 @@ import org.openjdk.source.tree.ForLoopTree;
 import org.openjdk.source.tree.IfTree;
 import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.MethodInvocationTree;
+import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.ParenthesizedTree;
+import org.openjdk.source.tree.ReturnTree;
 import org.openjdk.source.tree.TryTree;
 import org.openjdk.source.tree.WhileLoopTree;
 import org.openjdk.source.util.JavacTask;
@@ -28,6 +30,9 @@ import org.openjdk.tools.javac.tree.JCTree;
 public class ActionUtil {
 
     public static boolean canIntroduceLocalVariable(@NonNull TreePath path) {
+        if (path.getLeaf() instanceof MethodTree) {
+            return false;
+        }
         TreePath parent = path.getParentPath();
         if (parent == null) {
             return false;
@@ -70,6 +75,9 @@ public class ActionUtil {
         }
 
         if (parent.getLeaf() instanceof JCTree.JCThrow) {
+            return false;
+        }
+        if (parent.getLeaf() instanceof ReturnTree) {
             return false;
         }
         return !(parent.getLeaf() instanceof ThrowsTree);

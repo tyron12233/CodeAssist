@@ -6,7 +6,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.completion.java.CompileTask;
-import com.tyron.completion.java.action.CodeActionProvider;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
@@ -43,9 +42,9 @@ public class ExceptionsQuickFix extends ActionProvider {
     }
 
     @Override
-    public List<Action> getAction(ActionContext context) {
+    public void addMenus(@NonNull ActionContext context) {
         if (context.getDiagnostic() == null) {
-            return Collections.emptyList();
+            return;
         }
         CompileTask task = context.getCompileTask();
         SourcePositions sourcePositions = Trees.instance(task.task).getSourcePositions();
@@ -60,8 +59,7 @@ public class ExceptionsQuickFix extends ActionProvider {
                 MethodPtr needsThrow = findMethod(task, diagnostic.getPosition());
                 Rewrite rewrite = new AddException(needsThrow.className, needsThrow.methodName,
                         needsThrow.erasedParameterTypes, exceptionName);
-                Action action = new Action(rewrite, "quickFix", "Add 'throws'");
-                actions.add(action);
+                addAction(context, new Action(rewrite), "Add 'throws'");
             }
 
             if (surroundingPath.getLeaf() instanceof TryTree) {
@@ -71,8 +69,7 @@ public class ExceptionsQuickFix extends ActionProvider {
 
                 Rewrite rewrite = new AddCatchClause(context.getCurrentFile(), start,
                         exceptionName);
-                Action action = new Action(rewrite, "quickFix", "Add catch clause");
-                actions.add(action);
+                addAction(context, new Action(rewrite), "Add catch clause");
             } else {
                 int start = (int) sourcePositions.getStartPosition(task.root(),
                         surroundingPath.getLeaf());
@@ -81,12 +78,15 @@ public class ExceptionsQuickFix extends ActionProvider {
                 String contents = surroundingPath.getLeaf().toString();
                 Rewrite rewrite = new AddTryCatch(context.getCurrentFile(), contents, start, end,
                         exceptionName);
-                Action action = new Action(rewrite, "quickFix", "Surround with try catch");
-                actions.add(action);
+                addAction(context, new Action(rewrite), "Surround with try-catch");
             }
-            return actions;
-        } return Collections.emptyList();
+        }
     }
 
-
+    private void addAction(ActionContext context, Action action, String title) {
+        context.addMenu("quickFix", title).setOnMenuItemClickListener(item -> {
+            context.performAction(action);
+           return true;
+        });
+    }
 }

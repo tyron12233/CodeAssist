@@ -2,6 +2,7 @@ package com.tyron.completion.java.action;
 
 import static com.tyron.completion.java.util.DiagnosticUtil.getDiagnostic;
 import static com.tyron.completion.java.util.TreeUtil.findCurrentPath;
+import static com.tyron.completion.java.util.TreeUtil.isBlankLine;
 
 import android.widget.Toast;
 
@@ -224,23 +225,7 @@ public class CodeActionProvider {
         return method != null;
     }
 
-    private boolean isBlankLine(CompilationUnitTree root, long cursor) {
-        LineMap lines = root.getLineMap();
-        long line = lines.getLineNumber(cursor);
-        long start = lines.getStartPosition(line);
-        CharSequence contents;
-        try {
-            contents = root.getSourceFile().getCharContent(true);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        for (long i = start; i < cursor; i++) {
-            if (!Character.isWhitespace(contents.charAt((int) i))) {
-                return false;
-            }
-        }
-        return true;
-    }
+
 
     // TODO: Abstract this implementation to provide easy way of adding diagnostic quick fixes
     public Map<String, Rewrite> quickFixes(CompileTask task, Path file, Diagnostic<?
