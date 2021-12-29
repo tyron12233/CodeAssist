@@ -9,7 +9,6 @@ import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
-import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.AndroidUtilities;
 import com.tyron.code.util.DependencyUtils;
 import com.tyron.common.util.Decompress;
@@ -72,7 +71,7 @@ public class DependencyManager {
                 logger.error(message);
             }
         });
-        List<Dependency> declaredDependencies = DependencyUtils.parseLibraries(mRepository, project.getLibraryFile(), logger);
+        List<Dependency> declaredDependencies = DependencyUtils.parseLibraries(project.getLibraryFile(), logger);
         List<Pom> resolvedPoms = mResolver.resolveDependencies(declaredDependencies);
 
         listener.onTaskStarted("Downloading dependencies");
