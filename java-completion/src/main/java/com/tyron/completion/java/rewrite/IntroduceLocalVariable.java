@@ -84,7 +84,7 @@ public class IntroduceLocalVariable implements Rewrite {
     }
 
     private boolean containsVariableAtScope(String name, CompileTask parse) {
-        TreePath scan = new FindCurrentPath(parse.task).scan(parse.root(), position);
+        TreePath scan = new FindCurrentPath(parse.task).scan(parse.root(), position + 1);
         if (scan == null) {
             return false;
         }
