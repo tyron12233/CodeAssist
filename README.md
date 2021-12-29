@@ -1,66 +1,96 @@
-# CodeAssist
+<p align='center'>
+<img width='300px%' height='300px' src='logo-light.png#gh-light-mode-only' >
+<img width='300px' height='300px' src='logo-dark.png#gh-dark-mode-only'>
+</p>
+
+
+<div align='center'>
+  
 [![stability-alpha](https://img.shields.io/badge/stability-alpha-f4d03f.svg)](https://github.com/mkenney/software-guides/blob/master/STABILITY-BADGES.md#alpha)
 [![Chat](https://img.shields.io/badge/chat-on%20discord-7289da)](https://discord.gg/pffnyE6prs)
 
-A javac APIs-based code editor that supports building Android apps.
+  <h2>A javac APIs-based code editor that supports building Android apps.</h2>
 
-## Note
-CodeAssist does not use gradle. Editing the build.gradle file will not do anything. There are currently no plans with using Gradle.
+</div>
 
-## Features
+<img style="width: 35%; height: 80%; padding-right: 10px" src=".github/resources/screenshot/screenshots_title_light.png?raw=true#gh-light-mode-only">
+<img style="width: 35%; height: 80%; padding-right: 10px" src=".github/resources/screenshot/screenshots_title_dark.png?raw=true#gh-dark-mode-only">
+
+<img style="width: 25%; height: 80%; padding-right: 10px" src=".github/resources/screenshot/screenshot1.webp?raw=true"><img style="width: 25%; height: 80%" src=".github/resources/screenshot/screenshot2.webp?raw=true"><img style="width: 25%; height: 80%" src=".github/resources/screenshot/screenshot3.webp?raw=true"><img style="width: 25%; height: 80%" src=".github/resources/screenshot/screenshot4.webp?raw=true">
+
+<img style="width: 35%; height: 80%; padding-right: 10px" src=".github/resources/images/features_title_dark.png?raw=true#gh-light-mode-only">
+<img style="width: 35%; height: 80%; padding-right: 10px" src=".github/resources/images/features_title_light.png?raw=true#gh-dark-mode-only">
+
 - [x] APK Compilation
+
 - [x] AAB Support
+
 - [x] Java
+
 - [x] Kotlin  
+
 - [x] R8/ProGuard
+
 - [x] Code Completions (Currently for Java only)  
+
 - [x] Quick fixes (Import missing class and Implement Abstract Methods)  
+
 - [x] Layout Preview (80%)
+
 - [x] Automatic dependency resolution  
+
 - [ ] Layout Editor
+
 - [ ] Debugger
+
 - [ ] Lint 
 
-## Installation
-
-CodeAssist can be obtained through various sources listed below.
-The APK files of different sources are signed with different signature keys.
-If you wish to install from a different source, then you must **uninstall CodeAssist** from your device first, then install new APKs from the new source.
-
-### Github
-
-CodeAssist application can be obtained on `Github` either from [`Github Releases`](https://github.com/tyron12233/CodeAssist/releases) or from [`Github Build`](https://github.com/tyron12233/CodeAssist/actions/workflows/build-apk.yml) action workflows.
-
-The APKs for `Github Releases` will be listed under `Assets` drop-down of a release. These are automatically attached when a new version is released.
-
-The APKs for `Github Build` action workflows will be listed under `Artifacts` section of a workflow run. These are created for each commit/push done to the repository and can be used by users who don't want to wait for releases and want to try out the latest features immediately or want to test their pull requests.
-
-### Google Play Store
-
-CodeAssist application can be obtained from `Google Play Store`
-
-<a href='https://play.google.com/store/apps/details?id=com.tyron.code'><img alt='Get it on Google Play' width="250px" src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png'/></a>
+<img style=" width: 100%;" src=".github/resources/images/hr.jpg">
 
 ## CodeAssist Community
-Discord server: https://discord.gg/pffnyE6prs
 
-English-language chat in Telegram: https://t.me/codeassist_app
+Discord server: https://discord.gg/3YMZkgFS
+
+
+
+English-language chat in Telegram: https://t.me/code_assist
+
+
 
 Russian-language (русскоязычный) chat in Telegram: https://t.me/codeassist_chat
 
+
+
 ## Issues
-If you have any problems, then immediately write about them. This is very important for the next versions of CodeAssist
+
+Issues are disabled until the next release as most issues has been fixed and there have been many changes so the issues on the previous apk may not be valid with the current apk.
+
+
 
 ## Building - Android Studio
+
 Clone this repository to your local device and then open it on Android Studio.
 
+
+
 ## Contributing
+
 - Pull request must have a short description as a title and a more detailed one in the description
+
 - Feature additions must include Unit/Instrumentation tests. This is for future stability of the app and modules.
 
+
+
 # Special thanks
+
 - Rosemoe/CodeEditor 
+
 - JavaNIDE
+
 - Mike Anderson
+
 - Java Language Server
+
 - Ilyasse Salama
+
+<img style="border-radius: 30px; width: 100%; height: 100%" src="https://krishnavyshak.github.io/info_codeassist_1.png">
