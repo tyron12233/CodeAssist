@@ -26,6 +26,7 @@ import org.openjdk.source.tree.VariableTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.code.Symbol;
 
 import java.util.List;
 import java.util.StringJoiner;
@@ -269,9 +270,13 @@ public class EditHelper {
 
     public static String printTypeName(TypeElement type, boolean fqn) {
         if (type.getEnclosingElement() instanceof TypeElement) {
-            return printTypeName((TypeElement) type.getEnclosingElement()) + "." + type.getSimpleName();
+            return printTypeName((TypeElement) type.getEnclosingElement(), fqn) + "." + type.getSimpleName();
         }
         String s;
+        if (type instanceof Symbol.ClassSymbol) {
+            Symbol.ClassSymbol symbol = (Symbol.ClassSymbol) type;
+            s = symbol.type.toString();
+        } else
         if (fqn) {
             s = type.getQualifiedName().toString();
         } else {
@@ -280,10 +285,13 @@ public class EditHelper {
         // anonymous
         if (s.isEmpty()) {
             s = type.asType().toString();
+        }
+
+        if (s.startsWith("<anonymous")) {
             s = s.substring("<anonymous ".length(), s.length() - 1);
-            if (fqn) {
-                s = ActionUtil.getSimpleName(s);
-            }
+        }
+        if (!fqn) {
+            s = ActionUtil.getSimpleName(s);
         }
         return s;
     }

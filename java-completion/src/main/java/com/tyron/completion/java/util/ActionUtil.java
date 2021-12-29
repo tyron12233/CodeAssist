@@ -25,6 +25,7 @@ import org.openjdk.source.tree.WhileLoopTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.code.Type;
 import org.openjdk.tools.javac.tree.JCTree;
 
 public class ActionUtil {
@@ -127,9 +128,11 @@ public class ActionUtil {
     }
 
     public static TypeMirror getReturnType(JavacTask task, TreePath path, ExecutableElement element) {
-        return path.getLeaf() instanceof NewClassTree ?
-                Trees.instance(task).getTypeMirror(path) :
-                ((ExecutableElement) element).getReturnType();
+        if (path.getLeaf() instanceof JCTree.JCNewClass) {
+            JCTree.JCNewClass newClass = (JCTree.JCNewClass) path.getLeaf();
+            return newClass.type;
+        }
+        return element.getReturnType();
     }
 
     public static boolean hasImport(CompilationUnitTree root, String className) {
@@ -196,6 +199,12 @@ public class ActionUtil {
             methodName = methodName.substring("get".length());
         }
         if (methodName.isEmpty()) {
+            return null;
+        }
+        if ("<init>".equals(methodName)) {
+            return null;
+        }
+        if ("<clinit>".equals(methodName)) {
             return null;
         }
         return  Character.toLowerCase(methodName.charAt(0)) + methodName.substring(1);
