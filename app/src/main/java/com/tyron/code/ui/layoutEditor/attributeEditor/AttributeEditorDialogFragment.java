@@ -1,5 +1,6 @@
 package com.tyron.code.ui.layoutEditor.attributeEditor;
 
+import android.content.DialogInterface;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -14,6 +15,7 @@ import androidx.fragment.app.DialogFragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
@@ -23,7 +25,7 @@ import java.util.List;
 
 import kotlin.Pair;
 
-public class AttributeEditorDialogFragment extends DialogFragment {
+public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
 
     public static final String KEY_ATTRIBUTE_CHANGED = "ATTRIBUTE_CHANGED";
 
@@ -76,11 +78,17 @@ public class AttributeEditorDialogFragment extends DialogFragment {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        if(getDialog() != null){
+            getDialog().getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+
         mAdapter.setItemClickListener((pos, attribute) -> {
-            EditText editText = new EditText(requireContext());
+            View v = LayoutInflater.from(requireContext()).inflate(R.layout.attribute_editor_input, null);
+            EditText editText = v.findViewById(R.id.value);
             editText.setText(attribute.getSecond());
-            new MaterialAlertDialogBuilder(requireContext()).setView(editText).setPositiveButton(
-                    "apply", (d, w) -> {
+            new MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Attribute")
+                    .setView(v).setPositiveButton("apply", (d, w) -> {
                 List<Pair<String, String>> attributes = mAdapter.getAttributes();
                 attributes.set(pos, new Pair<>(attribute.getFirst(),
                         editText.getText().toString()));
@@ -102,10 +110,18 @@ public class AttributeEditorDialogFragment extends DialogFragment {
             for (int i = 0; i < mAvailableAttributes.size(); i++) {
                 items[i] = mAvailableAttributes.get(i).getFirst();
             }
-            builder.setItems(items, (d, which) -> {
-                mAttributes.add(mAvailableAttributes.get(which));
-                mAdapter.submitList(mAttributes);
+            boolean[] selectedAttrs = new boolean[mAvailableAttributes.size()];
+            builder.setMultiChoiceItems(items, selectedAttrs, (d, which, isSelected) -> {
+               selectedAttrs[which] = isSelected;
             });
+            builder.setPositiveButton("Add", ((dialogInterface, which) -> {
+                for(int i = 0; i < selectedAttrs.length; i++){
+                    if(selectedAttrs[i]){
+                        mAttributes.add(mAvailableAttributes.get(i));
+                    }
+                }
+                mAdapter.submitList(mAttributes);
+            }));
             builder.show();
         });
     }
