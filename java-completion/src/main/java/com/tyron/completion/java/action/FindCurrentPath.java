@@ -1,12 +1,16 @@
 package com.tyron.completion.java.action;
 
+import com.android.tools.r8.graph.P;
 import com.tyron.completion.java.FindNewTypeDeclarationAt;
 
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.ExpressionStatementTree;
 import org.openjdk.source.tree.ExpressionTree;
+import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.LambdaExpressionTree;
 import org.openjdk.source.tree.MethodInvocationTree;
+import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.VariableTree;
@@ -39,6 +43,33 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     @Override
+    public TreePath visitClass(ClassTree classTree, Long aLong) {
+        TreePath smaller = super.visitClass(classTree, aLong);
+        if (smaller != null) {
+            return smaller;
+        }
+
+        if (isInside(classTree, aLong)) {
+            return getCurrentPath();
+        }
+        return null;
+    }
+
+    @Override
+    public TreePath visitMethod(MethodTree methodTree, Long aLong) {
+        TreePath smaller = super.visitMethod(methodTree, aLong);
+        if (smaller != null) {
+            return smaller;
+        }
+
+        if (isInside(methodTree, aLong) && !isInside(methodTree.getBody(), aLong)) {
+            return getCurrentPath();
+        }
+
+        return null;
+    }
+
+    @Override
     public TreePath visitMethodInvocation(MethodInvocationTree tree, Long cursor) {
         if (tree instanceof JCTree.JCMethodInvocation) {
             if (isInside(((JCTree.JCMethodInvocation) tree).meth, cursor)) {
@@ -63,22 +94,20 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     private boolean isInside(Tree tree, long find) {
-        return mPos.getStartPosition(mCompilationUnit, tree) <= find && find < mPos.getEndPosition(mCompilationUnit, tree);
+        long start = mPos.getStartPosition(mCompilationUnit, tree);
+        long end = mPos.getEndPosition(mCompilationUnit, tree);
+        return  start <= find && find < end;
     }
 
 
     @Override
     public TreePath visitNewClass(NewClassTree t, Long find) {
-        TreePath smaller  = super.visitNewClass(t, find);
-        if (smaller != null) {
-            return smaller;
-        }
 
-        if (isInside(t.getIdentifier(), find)) {
+        if (isInside(t, find) && !isInside(t.getClassBody(), find)) {
             return getCurrentPath();
         }
 
-        return null;
+        return super.visitNewClass(t, find);
     }
 
     @Override

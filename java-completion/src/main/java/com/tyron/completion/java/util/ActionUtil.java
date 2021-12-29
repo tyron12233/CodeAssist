@@ -3,6 +3,8 @@ package com.tyron.completion.java.util;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.completion.java.rewrite.EditHelper;
+
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
@@ -16,18 +18,27 @@ import org.openjdk.source.tree.ForLoopTree;
 import org.openjdk.source.tree.IfTree;
 import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.MethodInvocationTree;
+import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.ParenthesizedTree;
+import org.openjdk.source.tree.ReturnTree;
 import org.openjdk.source.tree.TryTree;
 import org.openjdk.source.tree.WhileLoopTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.code.Type;
 import org.openjdk.tools.javac.tree.JCTree;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ActionUtil {
 
     public static boolean canIntroduceLocalVariable(@NonNull TreePath path) {
+        if (path.getLeaf() instanceof MethodTree) {
+            return false;
+        }
         TreePath parent = path.getParentPath();
         if (parent == null) {
             return false;
@@ -70,6 +81,9 @@ public class ActionUtil {
         }
 
         if (parent.getLeaf() instanceof JCTree.JCThrow) {
+            return false;
+        }
+        if (parent.getLeaf() instanceof ReturnTree) {
             return false;
         }
         return !(parent.getLeaf() instanceof ThrowsTree);
@@ -119,14 +133,19 @@ public class ActionUtil {
     }
 
     public static TypeMirror getReturnType(JavacTask task, TreePath path, ExecutableElement element) {
-        return path.getLeaf() instanceof NewClassTree ?
-                Trees.instance(task).getTypeMirror(path) :
-                ((ExecutableElement) element).getReturnType();
+        if (path.getLeaf() instanceof JCTree.JCNewClass) {
+            JCTree.JCNewClass newClass = (JCTree.JCNewClass) path.getLeaf();
+            return newClass.type;
+        }
+        return element.getReturnType();
     }
 
     public static boolean hasImport(CompilationUnitTree root, String className) {
         if (className.endsWith("[]")) {
             className = className.substring(0, className.length() - 2);
+        }
+        if (className.contains("<")) {
+            className = className.substring(0, className.indexOf('<'));
         }
         String packageName = className.substring(0, className.lastIndexOf("."));
 
@@ -154,10 +173,17 @@ public class ActionUtil {
         return false;
     }
 
+    public static String getSimpleName(TypeMirror typeMirror) {
+        return EditHelper.printType(typeMirror, false);
+    }
+
     public static String getSimpleName(String className) {
+        if (className.contains("<")) {
+            className = className.substring(0, className.indexOf('<'));
+        }
         int dot = className.lastIndexOf('.');
         if (dot == -1) return className;
-        return className.substring(dot + 1, className.length());
+        return className.substring(dot + 1);
     }
 
     /**
@@ -188,6 +214,12 @@ public class ActionUtil {
             methodName = methodName.substring("get".length());
         }
         if (methodName.isEmpty()) {
+            return null;
+        }
+        if ("<init>".equals(methodName)) {
+            return null;
+        }
+        if ("<clinit>".equals(methodName)) {
             return null;
         }
         return  Character.toLowerCase(methodName.charAt(0)) + methodName.substring(1);
