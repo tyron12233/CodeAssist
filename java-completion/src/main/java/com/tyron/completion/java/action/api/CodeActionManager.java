@@ -54,7 +54,7 @@ public class CodeActionManager {
         mActions.add(provider);
     }
 
-    public List<Action> getActions(Context thisContext, Menu menu, JavaCompilerService service, Path file, int cursor, EditorInterface editor){
+    public void addActions(Context thisContext, Menu menu, JavaCompilerService service, Path file, int cursor, EditorInterface editor){
         try (CompileTask task = service.compile(file)) {
             Diagnostic<? extends JavaFileObject> diagnostic = DiagnosticUtil.getDiagnostic(task,
                     cursor);
@@ -72,11 +72,9 @@ public class CodeActionManager {
                     .build();
 
             List<ActionProvider> applicableActions = getApplicableActions(context);
-            List<Action> actions = new ArrayList<>();
             for (ActionProvider actionProvider : applicableActions) {
                 actionProvider.addMenus(context);
             }
-            return actions;
         }
     }
 

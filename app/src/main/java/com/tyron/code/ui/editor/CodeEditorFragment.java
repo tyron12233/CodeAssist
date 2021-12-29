@@ -1,6 +1,5 @@
 package com.tyron.code.ui.editor;
 
-import android.app.ProgressDialog;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -12,14 +11,12 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.view.menu.MenuBuilder;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
@@ -43,19 +40,15 @@ import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.Parser;
-import com.tyron.completion.java.action.CodeActionProvider;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.CodeActionManager;
 import com.tyron.completion.java.action.api.EditorInterface;
-import com.tyron.completion.java.model.CodeAction;
-import com.tyron.completion.java.model.CodeActionList;
 import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.ThreadUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.java.provider.CompletionEngine;
-import com.tyron.completion.java.provider.CompletionProvider;
 import com.tyron.completion.java.rewrite.AddImport;
 import com.tyron.completion.model.CompletionItem;
 
@@ -65,10 +58,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
 
 import io.github.rosemoe.sora.interfaces.EditorEventListener;
 import io.github.rosemoe.sora.interfaces.EditorLanguage;
@@ -303,17 +293,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
             mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
                 menu.clear();
                 menu.setHeaderTitle("Loading...");
-                List<Action> actions = getCodeActions(menu, compiler);
+                addCodeActions(menu, compiler);
                 menu.clearHeader();
-                for (final Action action : actions) {
-                    if (action.getRewrite().equals(Rewrite.CANCELLED)) {
-                        continue;
-                    }
-//                    menu.add(action.getName()).setOnMenuItemClickListener(menuItem -> {
-//                        performAction(compiler, action);
-//                        return true;
-//                    });
-                }
             });
             mEditor.showContextMenu(event.getX(), event.getY());
         });
@@ -489,13 +470,13 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
-    private List<Action> getCodeActions(Menu menu, JavaCompilerService compiler) {
+    private void addCodeActions(Menu menu, JavaCompilerService compiler) {
         if (compiler == null) {
-            return Collections.emptyList();
+            return;
         }
         try {
             final Path current = mEditor.getCurrentFile().toPath();
-            return CodeActionManager.getInstance().getActions(requireContext(), menu, compiler, current, mEditor.getCursor().getLeft(), new EditorInterface() {
+            CodeActionManager.getInstance().addActions(requireContext(), menu, compiler, current, mEditor.getCursor().getLeft(), new EditorInterface() {
                 @Override
                 public int getCharIndex(int line, int column) {
                     return mEditor.getText().getCharIndex(line, column);
@@ -533,7 +514,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 Log.d("getCodeActions()", "Unable to get code actions", e);
             }
         }
-        return Collections.emptyList();
     }
 
     private static final class CodeEditorEventListener implements EditorEventListener {
