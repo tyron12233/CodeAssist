@@ -1,5 +1,8 @@
 package com.tyron.completion.java.util;
 
+import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.action.FindCurrentPath;
+
 import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.MemberSelectTree;
@@ -51,4 +54,9 @@ public class TreeUtil {
         }
         return null;
     }
+
+    public static TreePath findCurrentPath(CompileTask task, long position) {
+        return new FindCurrentPath(task.task).scan(task.root(), position);
+    }
+
 }

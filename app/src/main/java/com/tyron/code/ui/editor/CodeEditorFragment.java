@@ -38,12 +38,17 @@ import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
+import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.Parser;
 import com.tyron.completion.java.action.CodeActionProvider;
+import com.tyron.completion.java.action.api.Action;
+import com.tyron.completion.java.action.api.CodeActionManager;
 import com.tyron.completion.java.model.CodeAction;
 import com.tyron.completion.java.model.CodeActionList;
+import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.java.util.ThreadUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.java.provider.CompletionEngine;
@@ -261,8 +266,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                             samePackage = true;
                         }
 
-                        if (!samePackage && !ActionUtil.hasImport(task.root,
-                                item.item.data)) {
+                        if (!samePackage && !ActionUtil.hasImport(task.root, item.item.data)) {
                             AddImport imp = new AddImport(new File(""), item.item.data);
                             Map<File, TextEdit> edits = imp.getText(task);
                             TextEdit edit = edits.values().iterator().next();
@@ -279,28 +283,33 @@ public class CodeEditorFragment extends Fragment implements Savable,
             dialog.setMessage("Analyzing");
             dialog.show();
 
-            Executors.newSingleThreadExecutor().execute(() -> {
+            ThreadUtil.runOnBackgroundThread(() -> {
                 save();
 
-                List<CodeActionList> actions = getCodeActions();
+                if (currentProject == null) {
+                    return;
+                }
+                Module currentModule = currentProject.getModule(mCurrentFile);
+                if (!(mLanguage instanceof JavaLanguage) && !(currentModule instanceof JavaModule)) {
+                    return;
+                }
+
+                JavaCompilerProvider service =
+                        CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+                JavaCompilerService compiler = service.getCompiler(currentProject,
+                        (JavaModule) currentModule);
+
+                List<Action> actions = getCodeActions(compiler);
                 if (getActivity() != null && mEditor != null) {
                     mEditor.postDelayed(() -> {
                         dialog.dismiss();
                         mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
-                            for (final CodeActionList action : actions) {
-                                if (action.getActions().isEmpty()) {
+                            for (final Action action : actions) {
+                                if (action.getRewrite().equals(Rewrite.CANCELLED)) {
                                     continue;
                                 }
-                                menu.add(action.getTitle()).setOnMenuItemClickListener(menuItem -> {
-                                    new MaterialAlertDialogBuilder(CodeEditorFragment.this.requireContext()).setTitle(action.getTitle()).setItems(action.getActions().stream().map(CodeAction::getTitle).toArray(String[]::new), ((dialogInterface, i) -> {
-                                        CodeAction codeAction = action.getActions().get(i);
-                                        Map<Path, List<TextEdit>> rewrites = codeAction.getEdits();
-                                        List<TextEdit> edits = rewrites.values().iterator().next();
-                                        for (TextEdit edit : edits) {
-                                            Range range = edit.range;
-                                            requireActivity().runOnUiThread(() -> applyTextEdit(edit, range));
-                                        }
-                                    })).show();
+                                menu.add(action.getName()).setOnMenuItemClickListener(menuItem -> {
+                                    performAction(compiler, action);
                                     return true;
                                 });
                             }
@@ -320,9 +329,24 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }));
     }
 
-    private void applyTextEdit(TextEdit edit, Range range) {
+    private void performAction(JavaCompilerService compiler, Action action) {
+        ThreadUtil.runOnBackgroundThread(() -> {
+            Rewrite rewrite = action.getRewrite();
+            Map<Path, TextEdit[]> rewrites = rewrite.rewrite(compiler);
+            rewrites.forEach((k, v) -> {
+                if (k.toFile().equals(mCurrentFile)) {
+                    for (TextEdit edit : v) {
+                        applyTextEdit(edit);
+                    }
+                }
+            });
+        });
+    }
+
+    private void applyTextEdit(TextEdit edit) {
         int startFormat;
         int endFormat;
+        Range range = edit.range;
         if (range.start.line == -1 && range.start.column == -1 || (range.end.line == -1 && range.end.column == -1)) {
             CharPosition startChar =
                     mEditor.getText().getIndexer().getCharPosition((int) range.start.start);
@@ -332,7 +356,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
             if (range.start.start == range.end.end) {
                 mEditor.getText().insert(startChar.line, startChar.column, edit.newText);
             } else {
-                mEditor.getText().replace(startChar.line, startChar.column, endChar.line, endChar.column, edit.newText);
+                mEditor.getText().replace(startChar.line, startChar.column, endChar.line,
+                        endChar.column, edit.newText);
             }
 
             startFormat = (int) range.start.start;
@@ -342,15 +367,12 @@ public class CodeEditorFragment extends Fragment implements Savable,
             System.out.println(string);
         } else {
             if (range.start.equals(range.end)) {
-                mEditor.getText().insert(range.start.line,
-                        range.start.column, edit.newText);
+                mEditor.getText().insert(range.start.line, range.start.column, edit.newText);
             } else {
-                mEditor.getText().replace(range.start.line,
-                        range.start.column, range.end.line,
+                mEditor.getText().replace(range.start.line, range.start.column, range.end.line,
                         range.end.column, edit.newText);
             }
-            startFormat =
-                    mEditor.getText().getCharIndex(range.start.line, range.start.column);
+            startFormat = mEditor.getText().getCharIndex(range.start.line, range.start.column);
             endFormat = startFormat + edit.newText.length();
         }
 
@@ -469,19 +491,14 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
-    private List<CodeActionList> getCodeActions() {
-        Project project = ProjectManager.getInstance().getCurrentProject();
-        if (project == null) {
+    private List<Action> getCodeActions(JavaCompilerService compiler) {
+        if (compiler == null) {
             return Collections.emptyList();
         }
         try {
-            Module module = project.getModule(mCurrentFile);
-            if (mLanguage instanceof JavaLanguage && module != null) {
-                final Path current = mEditor.getCurrentFile().toPath();
-                JavaCompilerProvider service = CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-                CodeActionProvider provider = new CodeActionProvider(service.getCompiler(project, (JavaModule) module));
-                return provider.codeActionsForCursor(current, mEditor.getCursor().getLeft());
-            }
+            final Path current = mEditor.getCurrentFile().toPath();
+            return CodeActionManager.getInstance().getActions(compiler, current,
+                    mEditor.getCursor().getLeft());
         } catch (Throwable e) {
             if (BuildConfig.DEBUG) {
                 Log.d("getCodeActions()", "Unable to get code actions", e);

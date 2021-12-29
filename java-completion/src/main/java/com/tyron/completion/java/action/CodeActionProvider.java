@@ -1,5 +1,8 @@
 package com.tyron.completion.java.action;
 
+import static com.tyron.completion.java.util.DiagnosticUtil.getDiagnostic;
+import static com.tyron.completion.java.util.TreeUtil.findCurrentPath;
+
 import android.widget.Toast;
 
 import org.openjdk.source.tree.CatchTree;
@@ -15,6 +18,7 @@ import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
+import org.openjdk.tools.javac.tree.JCTree;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerProvider;
@@ -31,6 +35,8 @@ import com.tyron.completion.java.rewrite.IntroduceLocalVariable;
 import com.tyron.completion.java.rewrite.OverrideInheritedMethod;
 import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.java.util.DiagnosticUtil;
+import com.tyron.completion.java.util.DiagnosticUtil.MethodPtr;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -162,22 +168,6 @@ public class CodeActionProvider {
         return list;
     }
 
-    /**
-     * Gets the diagnostics of the current compile task
-     *
-     * @param task   the current compile task where the diagnostic is retrieved
-     * @param cursor the current cursor position
-     * @return null if no diagnostic is found
-     */
-    public Diagnostic<? extends JavaFileObject> getDiagnostic(CompileTask task, long cursor) {
-        for (Diagnostic<? extends JavaFileObject> diagnostic : task.diagnostics) {
-            if (diagnostic.getStartPosition() <= cursor && cursor < diagnostic.getEndPosition()) {
-                return diagnostic;
-            }
-        }
-        return null;
-    }
-
     private Map<String, Rewrite> getOverrideInheritedMethods(CompileTask task, Path file,
                                                              long cursor) {
         return new TreeMap<>(overrideInheritedMethods(task, file, cursor));
@@ -255,6 +245,10 @@ public class CodeActionProvider {
     // TODO: Abstract this implementation to provide easy way of adding diagnostic quick fixes
     public Map<String, Rewrite> quickFixes(CompileTask task, Path file, Diagnostic<?
             extends JavaFileObject> d) {
+        SourcePositions sourcePositions =
+                Trees.instance(task.task).getSourcePositions();
+        long length = d.getEndPosition() - d.getStartPosition();
+        TreePath currentPath = findCurrentPath(task, d.getEndPosition() - (length / 2));
         if (d instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
             JCDiagnostic diagnostic = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) d).d;
             switch (d.getCode()) {
@@ -283,7 +277,6 @@ public class CodeActionProvider {
                     }
                     allImports = new TreeMap<>();
                     for (String qualifiedName : mCompiler.publicTopLevelTypes()) {
-
                         if (qualifiedName.endsWith("." + searchName)) {
                             if (isField) {
                                 qualifiedName = qualifiedName.substring(0,
@@ -298,17 +291,13 @@ public class CodeActionProvider {
                     return allImports;
                 case "compiler.err.unreported.exception.need.to.catch.or.throw":
                     Map<String, Rewrite> map = new TreeMap<>();
-                    SourcePositions sourcePositions =
-                            Trees.instance(task.task).getSourcePositions();
-                    long length = d.getEndPosition() - d.getStartPosition();
-                    TreePath currentPath = findCurrentPath(task, d.getEndPosition() - (length / 2));
                     if (currentPath != null) {
                         TreePath surroundingPath = ActionUtil.findSurroundingPath(currentPath);
                         if (surroundingPath != null) {
                             String exceptionName =
                                     extractExceptionName(d.getMessage(Locale.ENGLISH));
                             if (!(surroundingPath.getLeaf() instanceof LambdaExpressionTree)) {
-                                MethodPtr needsThrow = findMethod(task, d.getPosition());
+                                MethodPtr needsThrow = DiagnosticUtil.findMethod(task, d.getPosition());
                                 map.put("Add 'throws'", new AddException(needsThrow.className,
                                         needsThrow.methodName, needsThrow.erasedParameterTypes,
                                         exceptionName));
@@ -333,6 +322,16 @@ public class CodeActionProvider {
                             }
                         }
                         return map;
+                    }
+
+                case "compiler.err.prob.found.req" :
+                    if (currentPath != null) {
+                        if (currentPath.getParentPath().getLeaf() instanceof JCTree.JCVariableDecl) {
+                            JCTree.JCVariableDecl decl = (JCTree.JCVariableDecl) currentPath.getParentPath().getLeaf();
+                            Tree leaf = currentPath.getLeaf();
+                            JCTree type = decl.getType();
+                            System.out.println(type);
+                        }
                     }
             }
 
@@ -427,18 +426,6 @@ public class CodeActionProvider {
         return new Range(new Position(startLine, startColumn), new Position(endLine, endColumn));
     }
 
-    private TreePath findCurrentPath(CompileTask task, long position) {
-        return new FindCurrentPath(task.task).scan(task.root(), position);
-    }
-
-    private MethodPtr findMethod(CompileTask task, long position) {
-        Trees trees = Trees.instance(task.task);
-        Tree tree = new FindMethodDeclarationAt(task.task).scan(task.root(), position);
-        TreePath path = trees.getPath(task.root(), tree);
-        ExecutableElement method = (ExecutableElement) trees.getElement(path);
-        return new MethodPtr(task.task, method);
-    }
-
     private MethodPtr findMethod(CompileTask task, Range range) {
         Trees trees = Trees.instance(task.task);
         long position = task.root().getLineMap().getPosition(range.start.line + 1,
@@ -449,25 +436,6 @@ public class CodeActionProvider {
         return new MethodPtr(task.task, method);
     }
 
-
-    private static class MethodPtr {
-        String className, methodName;
-        String[] erasedParameterTypes;
-
-        MethodPtr(JavacTask task, ExecutableElement method) {
-            Types types = task.getTypes();
-            TypeElement parent = (TypeElement) method.getEnclosingElement();
-            className = parent.getQualifiedName().toString();
-            methodName = method.getSimpleName().toString();
-            erasedParameterTypes = new String[method.getParameters().size()];
-            for (int i = 0; i < erasedParameterTypes.length; i++) {
-                VariableElement param = method.getParameters().get(i);
-                TypeMirror type = param.asType();
-                TypeMirror erased = types.erasure(type);
-                erasedParameterTypes[i] = erased.toString();
-            }
-        }
-    }
 
     private CharSequence extractRange(CompileTask task, Range range) {
         CharSequence contents;
@@ -481,8 +449,7 @@ public class CodeActionProvider {
                 range.start.column);
         int end = (int) task.root().getLineMap().getPosition(range.end.line, range.end.column);
 
-        CharSequence charSequence = contents.subSequence(start, end);
-        return charSequence;
+        return contents.subSequence(start, end);
     }
 
 
