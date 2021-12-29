@@ -24,10 +24,14 @@ import java.util.TreeMap;
 public class ImportClassFix extends ActionProvider {
 
     public static final String ERROR_CODE = "compiler.err.cant.resolve.location";
+    public static final String ERROR_CODE_RETURN_TYPE = "compiler.err.cant.resolve";
 
     @Override
     public boolean isApplicable(ActionContext context, @Nullable String errorCode) {
-        return ERROR_CODE.equals(errorCode);
+        if (ERROR_CODE.equals(errorCode)) {
+            return true;
+        }
+        return ERROR_CODE_RETURN_TYPE.equals(errorCode);
     }
 
     @Override
