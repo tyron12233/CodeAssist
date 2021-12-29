@@ -346,11 +346,31 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private List<ViewPalette> populatePalettes() {
         List<ViewPalette> palettes = new ArrayList<>();
+
         palettes.add(createPalette("android.widget.LinearLayout", R.drawable.ic_baseline_vertical_24));
         palettes.add(createPalette("android.widget.FrameLayout", R.drawable.ic_baseline_frame_24));
+        palettes.add(createPalette("android.widget.ScrollView", R.drawable.ic_baseline_format_line_spacing_24));
+        palettes.add(createPalette("android.widget.HorizontalScrollView", R.drawable.ic_baseline_format_line_spacing_24));
+
+        palettes.add(createPalette("androidx.cardview.widget.CardView", R.drawable.ic_baseline_style_24));
+
+        palettes.add(createPalette("android.widget.Button",
+                R.drawable.ic_baseline_crop_16_9_24,
+                ImmutableMap.of(Attributes.TextView.Text, new Primitive("Button"))));
         palettes.add(createPalette("android.widget.TextView",
                 R.drawable.ic_baseline_text_fields_24,
                 ImmutableMap.of(Attributes.TextView.Text, new Primitive("TextView"))));
+        palettes.add(createPalette("android.widget.EditText",
+                R.drawable.ic_baseline_edit_24,
+                ImmutableMap.of(Attributes.TextView.Hint, new Primitive("EditText"))));
+        palettes.add(createPalette("android.widget.CheckBox",
+                R.drawable.ic_baseline_check_box_24,
+                ImmutableMap.of(Attributes.TextView.Text, new Primitive("CheckBox"))));
+        palettes.add(createPalette("android.widget.Switch",
+                R.drawable.ic_baseline_edit_attributes_24,
+                ImmutableMap.of(Attributes.TextView.Text, new Primitive("Switch"))));
+        palettes.add(createPalette("android.widget.SeekBar", R.drawable.ic_baseline_swipe_right_alt_24));
+
         return palettes;
     }
 
