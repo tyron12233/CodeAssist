@@ -69,6 +69,11 @@
         <entry key="..\:/Users/bounc/AndroidStudioProjects/CodeAssist/app/src/main/res/menu/code_editor_menu.xml" value="0.1" />
         <entry key="..\:/Users/bounc/AndroidStudioProjects/CodeAssist/app/src/main/res/xml/editor_preferences.xml" value="0.4" />
         <entry key="..\:/Users/bounc/AndroidStudioProjects/CodeAssist/code-editor/src/main/res/layout/completion_result_item.xml" value="0.20833333333333334" />
+        <entry key="..\:/Users/pavnv/Desktop/Android_Projects/CodeAssist/app/src/main/res/layout/code_editor_fragment.xml" value="0.25" />
+        <entry key="..\:/Users/pavnv/Desktop/Android_Projects/CodeAssist/app/src/main/res/layout/editor_container_fragment.xml" value="0.25" />
+        <entry key="..\:/Users/pavnv/Desktop/Android_Projects/CodeAssist/app/src/main/res/layout/editor_palette_item.xml" value="0.25" />
+        <entry key="..\:/Users/pavnv/Desktop/Android_Projects/CodeAssist/app/src/main/res/layout/main_fragment.xml" value="0.25" />
+        <entry key="..\:/Users/pavnv/Desktop/Android_Projects/CodeAssist/app/src/main/res/layout/view_palette_fragment.xml" value="0.25" />
         <entry key="app/src/main/res/drawable/ic_baseline_add_24.xml" value="0.15" />
         <entry key="app/src/main/res/drawable/ic_java_class_24.xml" value="0.15185185185185185" />
         <entry key="app/src/main/res/drawable/ic_java_file_24.xml" value="0.1" />

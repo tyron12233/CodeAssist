@@ -346,10 +346,10 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private List<ViewPalette> populatePalettes() {
         List<ViewPalette> palettes = new ArrayList<>();
-        palettes.add(createPalette("android.widget.LinearLayout", R.drawable.crash_ic_close));
-        palettes.add(createPalette("android.widget.FrameLayout", R.drawable.ic_baseline_add_24));
+        palettes.add(createPalette("android.widget.LinearLayout", R.drawable.ic_baseline_vertical_24));
+        palettes.add(createPalette("android.widget.FrameLayout", R.drawable.ic_baseline_frame_24));
         palettes.add(createPalette("android.widget.TextView",
-                R.drawable.crash_ic_bug_report,
+                R.drawable.ic_baseline_text_fields_24,
                 ImmutableMap.of(Attributes.TextView.Text, new Primitive("TextView"))));
         return palettes;
     }
