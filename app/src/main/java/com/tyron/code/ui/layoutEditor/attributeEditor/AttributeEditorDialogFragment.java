@@ -106,18 +106,26 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
         linearAdd.setOnClickListener(v -> {
             MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(requireContext());
             builder.setTitle("Available Attributes");
-            CharSequence[] items = new CharSequence[mAvailableAttributes.size()];
-            for (int i = 0; i < mAvailableAttributes.size(); i++) {
-                items[i] = mAvailableAttributes.get(i).getFirst();
+
+            final ArrayList<CharSequence> items = new ArrayList<>();
+            final ArrayList<Pair<String, String>> filteredAttributes = new ArrayList<>();
+
+            Loop1: for (int i = 0; i < mAvailableAttributes.size(); i++) {
+                for(Pair<String, String> pair : mAttributes){
+                    if(pair.getFirst().equals(mAvailableAttributes.get(i).getFirst()))
+                        continue Loop1;
+                }
+                filteredAttributes.add(mAvailableAttributes.get(i));
+                items.add(mAvailableAttributes.get(i).getFirst());
             }
-            boolean[] selectedAttrs = new boolean[mAvailableAttributes.size()];
-            builder.setMultiChoiceItems(items, selectedAttrs, (d, which, isSelected) -> {
+            boolean[] selectedAttrs = new boolean[filteredAttributes.size()];
+            builder.setMultiChoiceItems(items.toArray(new CharSequence[0]), selectedAttrs, (d, which, isSelected) -> {
                selectedAttrs[which] = isSelected;
             });
             builder.setPositiveButton("Add", ((dialogInterface, which) -> {
                 for(int i = 0; i < selectedAttrs.length; i++){
                     if(selectedAttrs[i]){
-                        mAttributes.add(mAvailableAttributes.get(i));
+                        mAttributes.add(filteredAttributes.get(i));
                     }
                 }
                 mAdapter.submitList(mAttributes);
