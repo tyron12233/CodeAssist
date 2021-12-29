@@ -52,6 +52,11 @@ public class ImportClassFix extends ActionProvider {
                 }
             }
 
+            if (map.size() == 1) {
+                context.performAction(new Action(map.values().iterator().next()));
+                return true;
+            }
+
             String[] titles = map.keySet().toArray(new String[0]);
             new AlertDialog.Builder(context.getContext())
                     .setTitle("Import class")
