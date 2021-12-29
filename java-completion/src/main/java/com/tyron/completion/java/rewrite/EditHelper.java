@@ -27,6 +27,7 @@ import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.code.Symbol;
+import org.openjdk.tools.javac.code.Type;
 
 import java.util.List;
 import java.util.StringJoiner;
@@ -235,6 +236,13 @@ public class EditHelper {
     public static String printType(TypeMirror type, boolean fqn) {
         if (type instanceof DeclaredType) {
             DeclaredType declared = (DeclaredType) type;
+            if (declared instanceof Type.ClassType) {
+                Type.ClassType classType = (Type.ClassType) declared;
+                if (classType.all_interfaces_field != null) {
+                    Type next = classType.all_interfaces_field.get(0);
+                    declared = (DeclaredType) next;
+                }
+            }
             String string = printTypeName((TypeElement) declared.asElement(), fqn);
             if (!declared.getTypeArguments().isEmpty()) {
                 string = string + "<" + printTypeParameters(declared.getTypeArguments()) + ">";
@@ -272,8 +280,9 @@ public class EditHelper {
         if (type.getEnclosingElement() instanceof TypeElement) {
             return printTypeName((TypeElement) type.getEnclosingElement(), fqn) + "." + type.getSimpleName();
         }
+
         String s;
-        if (type instanceof Symbol.ClassSymbol) {
+        if (type.toString().startsWith("<anonymous") && type instanceof Symbol.ClassSymbol) {
             Symbol.ClassSymbol symbol = (Symbol.ClassSymbol) type;
             s = symbol.type.toString();
         } else

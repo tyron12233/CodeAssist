@@ -3,6 +3,8 @@ package com.tyron.completion.java.util;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.completion.java.rewrite.EditHelper;
+
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
@@ -27,6 +29,9 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.code.Type;
 import org.openjdk.tools.javac.tree.JCTree;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ActionUtil {
 
@@ -139,6 +144,9 @@ public class ActionUtil {
         if (className.endsWith("[]")) {
             className = className.substring(0, className.length() - 2);
         }
+        if (className.contains("<")) {
+            className = className.substring(0, className.indexOf('<'));
+        }
         String packageName = className.substring(0, className.lastIndexOf("."));
 
         // if the package name of the class is java.lang, we dont need
@@ -165,10 +173,17 @@ public class ActionUtil {
         return false;
     }
 
+    public static String getSimpleName(TypeMirror typeMirror) {
+        return EditHelper.printType(typeMirror, false);
+    }
+
     public static String getSimpleName(String className) {
+        if (className.contains("<")) {
+            className = className.substring(0, className.indexOf('<'));
+        }
         int dot = className.lastIndexOf('.');
         if (dot == -1) return className;
-        return className.substring(dot + 1, className.length());
+        return className.substring(dot + 1);
     }
 
     /**
