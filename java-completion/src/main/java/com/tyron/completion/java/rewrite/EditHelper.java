@@ -11,6 +11,7 @@ import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.Name;
 import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.element.TypeParameterElement;
 import org.openjdk.javax.lang.model.element.VariableElement;
 import org.openjdk.javax.lang.model.type.ArrayType;
 import org.openjdk.javax.lang.model.type.DeclaredType;
@@ -95,6 +96,19 @@ public class EditHelper {
         }
         if (method.getModifiers().contains(Modifier.PROTECTED)) {
             buf.append("protected ");
+        }
+
+        if (!method.getTypeParameters().isEmpty()) {
+            buf.append('<');
+            List<? extends TypeParameterElement> typeParameters = method.getTypeParameters();
+            for (int i = 0; i < typeParameters.size(); i++) {
+                TypeParameterElement parameter = typeParameters.get(i);
+                buf.append(parameter.toString());
+                if (i != typeParameters.size() - 1) {
+                    buf.append(", ");
+                }
+            }
+            buf.append('>');
         }
 
         buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(" ");

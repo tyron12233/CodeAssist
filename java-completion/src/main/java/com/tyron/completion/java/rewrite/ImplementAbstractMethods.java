@@ -10,6 +10,7 @@ import com.tyron.completion.java.FindTypeDeclarationAt;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.provider.FindHelper;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -35,9 +36,11 @@ import org.openjdk.tools.javac.util.JCDiagnostic;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.StringJoiner;
 
 public class ImplementAbstractMethods implements Rewrite {
@@ -81,6 +84,7 @@ public class ImplementAbstractMethods implements Rewrite {
             return Collections.emptyMap();
         }
 
+        List<TextEdit> edits = new ArrayList<>();
         Path file = compiler.findTypeDeclaration(mClassFile);
         if (file == JavaCompilerService.NOT_FOUND) {
             return Collections.emptyMap();
@@ -104,7 +108,7 @@ public class ImplementAbstractMethods implements Rewrite {
             Element element = trees.getElement(path);
             DeclaredType thisType = (DeclaredType) element.asType();
 
-            List<TypeMirror> typesToImport = new ArrayList<>();
+            Set<String> typesToImport = new HashSet<>();
 
             int indent = EditHelper.indent(task.task, task.root(), thisTree) + 4;
 
@@ -123,26 +127,27 @@ public class ImplementAbstractMethods implements Rewrite {
                         text = EditHelper.printMethod(method, parameterizedType, method);
                     }
 
-                    if (method.getThrownTypes() != null) {
-                        typesToImport.addAll(method.getThrownTypes());
-                    }
-                    for (VariableElement parameter : method.getParameters()) {
-                        typesToImport.add(parameter.asType());
-                    }
-
+                    typesToImport.addAll(ActionUtil.getTypesToImport(parameterizedType));
                     text = tabs + text.replace("\n", "\n" + tabs);
                     insertText.add(text);
                 }
             }
 
             Position insert = EditHelper.insertAtEndOfClass(task.task, task.root(), thisTree);
+            edits.add(new TextEdit(new Range(insert, insert), insertText + "\n", true));
 
-            for (TypeMirror type : typesToImport) {
-                String fqn = EditHelper.printType(type, true);
-                System.out.println(fqn);
+            for (String type : typesToImport) {
+                String fqn = ActionUtil.removeDiamond(type);
+                if (!ActionUtil.hasImport(task.root(), fqn)) {
+                    Rewrite addImport = new AddImport(file.toFile(), fqn);
+                    Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+                    TextEdit[] textEdits = rewrite.get(file);
+                    if (textEdits != null) {
+                        Collections.addAll(edits, textEdits);
+                    }
+                }
             }
-            TextEdit[] edits = {new TextEdit(new Range(insert, insert), insertText + "\n", true)};
-            return Collections.singletonMap(file, edits);
+            return Collections.singletonMap(file, edits.toArray(new TextEdit[0]));
         }
     }
 

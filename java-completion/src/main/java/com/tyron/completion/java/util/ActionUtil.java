@@ -8,6 +8,7 @@ import com.tyron.completion.java.rewrite.EditHelper;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
+import org.openjdk.javax.lang.model.type.ExecutableType;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.doctree.ThrowsTree;
 import org.openjdk.source.tree.BlockTree;
@@ -30,6 +31,8 @@ import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.code.Type;
 import org.openjdk.tools.javac.tree.JCTree;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -182,12 +185,23 @@ public class ActionUtil {
     }
 
     public static String getSimpleName(String className) {
+        className = removeDiamond(className);
+
+        int dot = className.lastIndexOf('.');
+        if (dot == -1) {
+            return className;
+        }
+        if (className.startsWith("? extends")) {
+            return "? extends " + className.substring(dot + 1);
+        }
+        return className.substring(dot + 1);
+    }
+
+    public static String removeDiamond(String className) {
         if (className.contains("<")) {
             className = className.substring(0, className.indexOf('<'));
         }
-        int dot = className.lastIndexOf('.');
-        if (dot == -1) return className;
-        return className.substring(dot + 1);
+        return className;
     }
 
     /**
@@ -227,5 +241,27 @@ public class ActionUtil {
             return null;
         }
         return  Character.toLowerCase(methodName.charAt(0)) + methodName.substring(1);
+    }
+
+    /**
+     * Get all the possible fully qualified names that may be imported
+     * @param type method to scan
+     * @return Set of fully qualified names not including the diamond operator
+     */
+    public static Set<String> getTypesToImport(ExecutableType type) {
+        Set<String> types = new HashSet<>();
+
+        if (type.getReturnType() != null) {
+            types.add(removeDiamond(EditHelper.printType(type.getReturnType(), true)));
+        }
+        if (type.getThrownTypes() != null) {
+            for (TypeMirror thrown : type.getThrownTypes()) {
+                types.add(removeDiamond(EditHelper.printType(thrown, true)));
+            }
+        }
+        for (TypeMirror t : type.getParameterTypes()) {
+            types.add(removeDiamond(EditHelper.printType(t, true)));
+        }
+        return types;
     }
 }
