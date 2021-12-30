@@ -1,5 +1,6 @@
 package com.tyron.completion.java.rewrite;
 
+import com.github.javaparser.ast.type.Type;
 import com.google.common.collect.ImmutableMap;
 
 import org.openjdk.javax.lang.model.type.TypeKind;
@@ -14,6 +15,8 @@ import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.action.FindCurrentPath;
 import com.tyron.completion.java.provider.ScopeHelper;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.java.util.JavaParserTypesUtil;
+import com.tyron.completion.java.util.JavaParserUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
@@ -52,7 +55,7 @@ public class IntroduceLocalVariable implements Rewrite {
 
         try (CompileTask task = compiler.compile(file)) {
             Range range = new Range(position, position);
-            String variableType = EditHelper.printType(type, true);
+            Type variableType = EditHelper.printType(type, true);
             String variableName = ActionUtil.guessNameFromMethodName(methodName);
             if (variableName == null) {
                 variableName = ActionUtil.guessNameFromType(type);
@@ -63,19 +66,27 @@ public class IntroduceLocalVariable implements Rewrite {
             while (containsVariableAtScope(variableName, task)) {
                 variableName = getVariableName(variableName);
             }
-            TextEdit edit = new TextEdit(range, ActionUtil.getSimpleName(type) + " " + variableName + " = ");
+            String typeName = JavaParserTypesUtil.getName(variableType, name -> {
+                boolean needsfqn = ActionUtil.needsFqn(task.root(), name);
+                boolean hasImport =ActionUtil.hasImport(task.root(), name);
+                if (needsfqn) {
+                    return !hasImport;
+                }
+                return  true;
+            });
+            TextEdit edit = new TextEdit(range, typeName + " " + variableName + " = ");
             edits.add(edit);
 
             if (!type.getKind().isPrimitive()) {
-                if (type.getKind() == TypeKind.ARRAY) {
-                    variableType = variableType.substring(0, variableType.length() - 2);
-                }
-                if (!ActionUtil.hasImport(task.root(), variableType)) {
-                    AddImport addImport = new AddImport(file.toFile(), variableType);
-                    Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-                    TextEdit[] imports = rewrite.get(file);
-                    if (imports != null) {
-                        Collections.addAll(edits, imports);
+                List<String> classes = JavaParserUtil.getClassNames(variableType);
+                for (String aClass : classes) {
+                    if (!ActionUtil.hasImport(task.root(), aClass)) {
+                        AddImport addImport = new AddImport(file.toFile(), aClass);
+                        Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+                        TextEdit[] imports = rewrite.get(file);
+                        if (imports != null) {
+                            Collections.addAll(edits, imports);
+                        }
                     }
                 }
             }

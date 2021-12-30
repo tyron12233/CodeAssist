@@ -486,7 +486,7 @@ public class CompletionProvider {
                     item.label = (sam.getParameters().size() == 1) ? label + " -> " :
                             "(" + label + ")" + " -> ";
                     item.commitText = item.label;
-                    item.detail = EditHelper.printType(sam.getReturnType());
+                    item.detail = EditHelper.printType(sam.getReturnType()).toString();
                     item.cursorOffset = item.label.length();
                     item.iconKind = DrawableKind.Lambda;
                     items.add(item);
@@ -853,7 +853,7 @@ public class CompletionProvider {
 
             CompletionItem item = new CompletionItem();
             item.label = getMethodLabel(element, executableType) + getThrowsType(element);
-            item.detail = EditHelper.printType(element.getReturnType());
+            item.detail = EditHelper.printType(element.getReturnType()).toString();
             item.commitText = EditHelper.printMethod(element, executableType, element);
             item.cursorOffset = item.commitText.length();
             item.iconKind = DrawableKind.Method;

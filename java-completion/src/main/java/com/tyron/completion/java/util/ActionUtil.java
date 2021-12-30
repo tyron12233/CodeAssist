@@ -144,6 +144,21 @@ public class ActionUtil {
         return element.getReturnType();
     }
 
+    /**
+     * Used to check whether we need to add fully qualified names instead of importing it
+     */
+    public static boolean needsFqn(CompilationUnitTree root, String className) {
+        String name = getSimpleName(className);
+        for (ImportTree anImport : root.getImports()) {
+            String fqn = anImport.getQualifiedIdentifier().toString();
+            String simpleName = getSimpleName(fqn);
+            if (simpleName.equals(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean hasImport(CompilationUnitTree root, String className) {
         if (className.endsWith("[]")) {
             className = className.substring(0, className.length() - 2);
@@ -157,7 +172,11 @@ public class ActionUtil {
             packageName = className.substring(0, className.lastIndexOf("."));
         }
 
-        // if the package name of the class is java.lang, we dont need
+        if (needsFqn(root, className)) {
+            return true;
+        }
+
+        // if the package name of the class is java.lang, we don't need
         // to check since its already imported
         if (packageName.equals("java.lang")) {
             return true;
@@ -182,7 +201,7 @@ public class ActionUtil {
     }
 
     public static String getSimpleName(TypeMirror typeMirror) {
-        return EditHelper.printType(typeMirror, false);
+        return EditHelper.printType(typeMirror, false).toString();
     }
 
     public static String getSimpleName(String className) {
@@ -290,7 +309,7 @@ public class ActionUtil {
         if (type.getKind().isPrimitive()) {
             return null;
         }
-        String fqn = EditHelper.printType(type, true);
+        String fqn = EditHelper.printType(type, true).toString();
         if (type.getKind() == TypeKind.ARRAY) {
             fqn = removeArray(fqn);
         }
