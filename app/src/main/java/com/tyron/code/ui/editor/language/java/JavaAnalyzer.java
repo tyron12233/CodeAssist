@@ -12,6 +12,7 @@ import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.lint.DefaultLintClient;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.common.util.Debouncer;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.JavaCompilerService;
@@ -42,35 +43,99 @@ import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.text.TextAnalyzer;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.EditorColorScheme;
+import kotlin.Unit;
+import kotlin.jvm.functions.Function0;
+import kotlin.jvm.functions.Function1;
 
 public class JavaAnalyzer extends JavaCodeAnalyzer {
-
+    private static final Debouncer sDebouncer = new Debouncer(Duration.ofMillis(700));
     private static final String TAG = JavaAnalyzer.class.getSimpleName();
     /**
      * These are tokens that cannot exist before a valid function identifier
      */
     private static final Tokens[] sKeywordsBeforeFunctionName = new Tokens[]{Tokens.RETURN,
-            Tokens.BREAK, Tokens.IF, Tokens.AND, Tokens.OR, Tokens.OREQ, Tokens.OROR, Tokens.ANDAND,
-            Tokens.ANDEQ, Tokens.RPAREN, Tokens.LPAREN, Tokens.LBRACE, Tokens.NEW, Tokens.DOT,
-            Tokens.SEMICOLON, Tokens.EQ, Tokens.NOTEQ, Tokens.NOT, Tokens.RBRACE, Tokens.COMMA, Tokens.PLUS,
-            Tokens.PLUSEQ, Tokens.MINUS, Tokens.MINUSEQ, Tokens.MULT, Tokens.MULTEQ, Tokens.DIV, Tokens.DIVEQ};
+            Tokens.BREAK, Tokens.IF, Tokens.AND, Tokens.OR, Tokens.OREQ, Tokens.OROR,
+            Tokens.ANDAND, Tokens.ANDEQ, Tokens.RPAREN, Tokens.LPAREN, Tokens.LBRACE, Tokens.NEW,
+            Tokens.DOT, Tokens.SEMICOLON, Tokens.EQ, Tokens.NOTEQ, Tokens.NOT, Tokens.RBRACE,
+            Tokens.COMMA, Tokens.PLUS, Tokens.PLUSEQ, Tokens.MINUS, Tokens.MINUSEQ, Tokens.MULT,
+            Tokens.MULTEQ, Tokens.DIV, Tokens.DIVEQ};
 
     private final WeakReference<CodeEditor> mEditorReference;
-    private DefaultLintClient mClient;
-
+    private final List<DiagnosticWrapper> mDiagnostics;
     private final SharedPreferences mPreferences;
 
     public JavaAnalyzer(CodeEditor editor) {
         mEditorReference = new WeakReference<>(editor);
         mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
+        mDiagnostics = new ArrayList<>();
     }
 
-    public void analyze(CharSequence content, TextAnalyzeResult colors, TextAnalyzer.AnalyzeThread.Delegate delegate) {
+    @Override
+    public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
+        mDiagnostics.clear();
+        mDiagnostics.addAll(diagnostics);
+    }
+
+    @Override
+    public void analyzeInBackground(CharSequence contents) {
+        sDebouncer.schedule(cancel -> {
+            doAnalyzeInBackground(cancel, contents);
+            return Unit.INSTANCE;
+        });
+    }
+
+    private JavaCompilerService getCompiler(CodeEditor editor) {
+        Project project = ProjectManager.getInstance().getCurrentProject();
+        if (project == null) {
+            return null;
+        }
+        Module module = project.getModule(editor.getCurrentFile());
+        if (module instanceof JavaModule) {
+            JavaCompilerProvider provider =
+                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+            if (provider != null) {
+                return provider.getCompiler(project, (JavaModule) module);
+            }
+        }
+        return null;
+    }
+
+    private void doAnalyzeInBackground(Function0<Boolean> cancel, CharSequence contents) {
         CodeEditor editor = mEditorReference.get();
         if (editor == null) {
             return;
         }
-        StringBuilder text = content instanceof StringBuilder ? (StringBuilder) content : new StringBuilder(content);
+        if (cancel.invoke()) {
+            return;
+        }
+        // do not compile the file if it not yet closed as it will cause issues when
+        // compiling multiple files at the same time
+        if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
+            JavaCompilerService service = getCompiler(editor);
+            if (service != null && service.isReady()) {
+                try {
+                    try (CompileTask task =
+                                 service.compile(editor.getCurrentFile().toPath())) {
+                        if (!cancel.invoke()) {
+                            List<DiagnosticWrapper> collect = task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList());
+                            editor.setDiagnostics(collect);
+                        }
+                    }
+                } catch (Throwable e) {
+                    service.close();
+                }
+            }
+        }
+    }
+
+    public void analyze(CharSequence content, TextAnalyzeResult colors,
+                        TextAnalyzer.AnalyzeThread.Delegate delegate) {
+        CodeEditor editor = mEditorReference.get();
+        if (editor == null) {
+            return;
+        }
+        StringBuilder text = content instanceof StringBuilder ? (StringBuilder) content :
+                new StringBuilder(content);
         JavaTextTokenizer tokenizer = new JavaTextTokenizer(text);
         tokenizer.setCalculateLineColumn(false);
         Tokens token, previous = Tokens.UNKNOWN;
@@ -256,38 +321,11 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         colors.determine(line);
         colors.setSuppressSwitch(maxSwitch + 10);
         colors.setNavigation(labels);
-
-        List<DiagnosticWrapper> innerDiagnostics = new ArrayList<>();
-
-        // do not compile the file if it not yet closed as it will cause issues when
-        // compiling multiple files at the same time
-        if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
-            Project project = ProjectManager.getInstance().getCurrentProject();
-            if (project != null) {
-                Module module = project.getModule(editor.getCurrentFile());
-                if (module != null) {
-                    JavaCompilerProvider provider = CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-                    if (provider != null) {
-                        JavaCompilerService service = provider.getCompiler(project, (JavaModule) module);
-                        if (service != null && service.isReady()) {
-                            try {
-                                try (CompileTask task = service.compile(
-                                        Collections.singletonList(new SourceFileObject(editor.getCurrentFile().toPath(), content.toString(), Instant.now())))) {
-                                    innerDiagnostics.addAll(task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList()));
-                                }
-                            } catch (Throwable e) {
-                                service.close();
-                            }
-                        }
-                    }
-
-                }
-            }
-        }
-        markDiagnostics(editor, innerDiagnostics, colors);
+        markDiagnostics(editor, mDiagnostics, colors);
     }
 
-    private void markDiagnostics(CodeEditor editor, List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
+    private void markDiagnostics(CodeEditor editor, List<DiagnosticWrapper> diagnostics,
+                                 TextAnalyzeResult colors) {
         editor.getText().beginStreamCharGetting(0);
         Indexer indexer = editor.getText().getIndexer();
 
@@ -303,16 +341,18 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 CharPosition start = indexer.getCharPosition((int) it.getStartPosition());
                 CharPosition end = indexer.getCharPosition((int) it.getEndPosition());
 
-                // the editor does not support marking underline spans for the same start and end index
+                // the editor does not support marking underline spans for the same start and end
+                // index
                 // to work around this, we just subtract one to the start index
                 if (start.line == end.line && end.column == start.column) {
                     start.column--;
                 }
 
-                int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
+                int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR :
+                        Span.FLAG_WARNING;
                 colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
             } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
-               // ignored
+                // ignored
             }
         });
         editor.getText().endStreamCharGetting();

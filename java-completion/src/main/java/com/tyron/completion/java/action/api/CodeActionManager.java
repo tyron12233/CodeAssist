@@ -54,7 +54,7 @@ public class CodeActionManager {
         mActions.add(provider);
     }
 
-    public void addActions(Context thisContext, Menu menu, JavaCompilerService service, Path file, int cursor, EditorInterface editor){
+    public synchronized void addActions(Context thisContext, Menu menu, JavaCompilerService service, Path file, int cursor, EditorInterface editor){
         try (CompileTask task = service.compile(file)) {
             Diagnostic<? extends JavaFileObject> diagnostic = DiagnosticUtil.getDiagnostic(task,
                     cursor);

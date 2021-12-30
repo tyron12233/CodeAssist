@@ -74,6 +74,8 @@ import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.annotation.RequiresApi;
 
+import com.tyron.builder.model.DiagnosticWrapper;
+
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -281,7 +283,11 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     private HwAcceleratedRenderer mRenderer;
     KeyMetaStates mKeyMetaStates = new KeyMetaStates(this);
 
+    /**
+     * CodeAssist added fields
+     */
     private File mCurrentFile;
+    private final List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
 
     public CodeEditor(Context context) {
         this(context, null);
@@ -434,6 +440,15 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     protected float getOffset(int line, int column) {
         prepareLine(line);
         return measureText(mBuffer, 0, column) + measureTextRegionOffset() - getOffsetX();
+    }
+
+    public synchronized void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
+        mDiagnostics.clear();
+        mDiagnostics.addAll(diagnostics);
+        if (mLanguage.getAnalyzer() != null) {
+            mLanguage.getAnalyzer().setDiagnostics(diagnostics);
+        }
+        analyze();
     }
 
     /**

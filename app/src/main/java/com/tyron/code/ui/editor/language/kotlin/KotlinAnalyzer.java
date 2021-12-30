@@ -22,6 +22,7 @@ import org.antlr.v4.runtime.TokenSource;
 import org.openjdk.javax.tools.Diagnostic;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 
@@ -38,9 +39,36 @@ import io.github.rosemoe.sora.widget.EditorColorScheme;
 public class KotlinAnalyzer implements CodeAnalyzer {
 
     private final WeakReference<CodeEditor> mEditorReference;
+    private final List<DiagnosticWrapper> mDiagnostics;
 
     public KotlinAnalyzer(CodeEditor editor) {
         mEditorReference = new WeakReference<>(editor);
+        mDiagnostics = new ArrayList<>();
+    }
+
+    @Override
+    public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
+        mDiagnostics.clear();
+        mDiagnostics.addAll(diagnostics);
+    }
+
+    @Override
+    public void analyzeInBackground(CharSequence content) {
+        CodeEditor editor = mEditorReference.get();
+        if (editor == null) {
+            return;
+        }
+        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+        if (currentProject != null) {
+            Module module = currentProject.getModule(editor.getCurrentFile());
+            if (module instanceof AndroidModule) {
+                if (PreferenceManager.getDefaultSharedPreferences(editor.getContext())
+                        .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
+                    CompletionEngine.getInstance((AndroidModule) module)
+                            .doLint(editor.getCurrentFile(), content.toString(), editor::setDiagnostics);
+                }
+            }
+        }
     }
 
     @Override
@@ -201,19 +229,7 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                 }
             }
             colors.setSuppressSwitch(maxSwitch + 10);
-
-            Project currentProject = ProjectManager.getInstance().getCurrentProject();
-            if (currentProject != null) {
-                Module module = currentProject.getModule(editor.getCurrentFile());
-                if (module instanceof AndroidModule) {
-                    if (PreferenceManager.getDefaultSharedPreferences(editor.getContext())
-                            .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
-                        CompletionEngine.getInstance((AndroidModule) module)
-                                .doLint(editor.getCurrentFile(), content.toString(), diagnostics ->
-                        markDiagnostics(editor, diagnostics, colors));
-                    }
-                }
-            }
+            markDiagnostics(editor, mDiagnostics, colors);
         } catch (Throwable e) {
             if (BuildConfig.DEBUG) {
                 Log.e("KotlinAnalyzer", "Failed to analyze", e);

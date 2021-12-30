@@ -198,6 +198,7 @@ public class TextAnalyzer {
                     do {
                         waiting = false;
                         StringBuilder c = content.toStringBuilder();
+                        codeAnalyzer.analyzeInBackground(c);
                         codeAnalyzer.analyze(c, colors, d);
                         if (waiting) {
                             colors.mSpanMap.clear();
