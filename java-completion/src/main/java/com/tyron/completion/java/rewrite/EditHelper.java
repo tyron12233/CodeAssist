@@ -2,7 +2,28 @@ package com.tyron.completion.java.rewrite;
 
 import androidx.annotation.NonNull;
 
+import com.github.javaparser.ast.Modifier.Keyword;
+import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.expr.BooleanLiteralExpr;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.IntegerLiteralExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NullLiteralExpr;
+import com.github.javaparser.ast.expr.SuperExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.ReturnStmt;
+import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.type.PrimitiveType;
+import com.github.javaparser.printer.configuration.ConfigurationOption;
+import com.github.javaparser.printer.configuration.DefaultConfigurationOption;
+import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
+import com.github.javaparser.printer.configuration.PrinterConfiguration;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.java.util.JavaParserUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -65,6 +86,34 @@ public class EditHelper {
      * @return a string that represents the method
      */
     public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, MethodTree source) {
+        if (true) {
+            MethodDeclaration methodDeclaration = JavaParserUtil.toMethodDeclaration(source,
+                    parameterizedType);
+            methodDeclaration.addAnnotation(Override.class);
+
+            BlockStmt blockStmt = new BlockStmt();
+            if (method.getModifiers().contains(Modifier.ABSTRACT)) {
+                methodDeclaration.removeModifier(Keyword.ABSTRACT);
+                if (methodDeclaration.getType().isClassOrInterfaceType()) {
+                    blockStmt.addStatement(new ReturnStmt(new NullLiteralExpr()));
+                }
+                if (methodDeclaration.getType().isPrimitiveType()) {
+                    PrimitiveType type = methodDeclaration.getType().asPrimitiveType();
+                    blockStmt.addStatement(new ReturnStmt(getReturnExpr(type)));
+                }
+            } else {
+                MethodCallExpr methodCallExpr = new MethodCallExpr();
+                methodCallExpr.setName(methodDeclaration.getName());
+                methodCallExpr.setArguments(methodDeclaration.getParameters().stream()
+                        .map(NodeWithSimpleName::getNameAsExpression)
+                        .collect(NodeList.toNodeList()));
+                blockStmt.addStatement(methodCallExpr);
+                methodCallExpr.setScope(new SuperExpr());
+            }
+            methodDeclaration.setBody(blockStmt);
+
+            return methodDeclaration.toString();
+        }
         StringBuilder buf = new StringBuilder();
         buf.append("@Override\n");
         if (method.getModifiers().contains(Modifier.PUBLIC)) {
@@ -88,7 +137,24 @@ public class EditHelper {
         return buf.toString();
     }
 
+    private static Expression getReturnExpr(PrimitiveType type) {
+        switch (type.getType())  {
+            case BOOLEAN: return new BooleanLiteralExpr();
+            case BYTE:
+            case DOUBLE:
+            case CHAR:
+            case SHORT:
+            case LONG:
+            case FLOAT:
+            case INT: return new IntegerLiteralExpr("0");
+            default: return new NullLiteralExpr();
+        }
+    }
+
     public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, ExecutableElement source) {
+        if (true) {
+            return JavaParserUtil.toMethodDeclaration(method, parameterizedType).toString();
+        }
         StringBuilder buf = new StringBuilder();
         buf.append("@Override\n");
         if (method.getModifiers().contains(Modifier.PUBLIC)) {

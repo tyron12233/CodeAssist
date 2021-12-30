@@ -425,7 +425,7 @@ public class JavaCompilerService implements CompilerProvider {
         return new CompileTask(compile.task, compile.roots, diagnostics, this::close);
     }
 
-    public void close() {
+    public synchronized void close() {
         if (cachedCompile != null && !cachedCompile.closed) {
             cachedCompile.close();
         }
@@ -434,7 +434,7 @@ public class JavaCompilerService implements CompilerProvider {
         }
     }
 
-    public boolean isReady() {
+    public synchronized boolean isReady() {
         if (CompletionEngine.isIndexing()) {
             return false;
         }

@@ -1,5 +1,7 @@
 package com.tyron.completion.java.rewrite;
 
+import android.util.Log;
+
 import com.google.common.base.Strings;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerProvider;
@@ -25,6 +27,8 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -78,11 +82,13 @@ public class OverrideInheritedMethod implements Rewrite {
             if (sourceFile.isPresent()) {
                 ParseTask parse = compiler.parse(sourceFile.get());
                 MethodTree source = FindHelper.findMethod(parse, superClassName, methodName, erasedParameterTypes);
+                Instant now = Instant.now();
                 if (source == null) {
                     text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
                 } else {
                     text = EditHelper.printMethod(superMethod, parameterizedType, source);
                 }
+                Log.d("TEST JAVAPARSER", "Printing took " + Duration.between(now, Instant.now()).toMillis());
             } else {
                 text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
             }
