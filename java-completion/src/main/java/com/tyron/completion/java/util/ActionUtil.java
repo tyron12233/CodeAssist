@@ -3,9 +3,13 @@ package com.tyron.completion.java.util;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.completion.java.rewrite.EditHelper;
+
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
+import org.openjdk.javax.lang.model.type.ExecutableType;
+import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.doctree.ThrowsTree;
 import org.openjdk.source.tree.BlockTree;
@@ -16,18 +20,29 @@ import org.openjdk.source.tree.ForLoopTree;
 import org.openjdk.source.tree.IfTree;
 import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.MethodInvocationTree;
+import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.ParenthesizedTree;
+import org.openjdk.source.tree.ReturnTree;
 import org.openjdk.source.tree.TryTree;
 import org.openjdk.source.tree.WhileLoopTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.code.Type;
 import org.openjdk.tools.javac.tree.JCTree;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ActionUtil {
 
     public static boolean canIntroduceLocalVariable(@NonNull TreePath path) {
+        if (path.getLeaf() instanceof MethodTree) {
+            return false;
+        }
         TreePath parent = path.getParentPath();
         if (parent == null) {
             return false;
@@ -70,6 +85,9 @@ public class ActionUtil {
         }
 
         if (parent.getLeaf() instanceof JCTree.JCThrow) {
+            return false;
+        }
+        if (parent.getLeaf() instanceof ReturnTree) {
             return false;
         }
         return !(parent.getLeaf() instanceof ThrowsTree);
@@ -119,16 +137,25 @@ public class ActionUtil {
     }
 
     public static TypeMirror getReturnType(JavacTask task, TreePath path, ExecutableElement element) {
-        return path.getLeaf() instanceof NewClassTree ?
-                Trees.instance(task).getTypeMirror(path) :
-                ((ExecutableElement) element).getReturnType();
+        if (path.getLeaf() instanceof JCTree.JCNewClass) {
+            JCTree.JCNewClass newClass = (JCTree.JCNewClass) path.getLeaf();
+            return newClass.type;
+        }
+        return element.getReturnType();
     }
 
     public static boolean hasImport(CompilationUnitTree root, String className) {
         if (className.endsWith("[]")) {
             className = className.substring(0, className.length() - 2);
         }
-        String packageName = className.substring(0, className.lastIndexOf("."));
+        if (className.contains("<")) {
+            className = className.substring(0, className.indexOf('<'));
+        }
+        String packageName = "";
+
+        if (className.contains(".")) {
+            packageName = className.substring(0, className.lastIndexOf("."));
+        }
 
         // if the package name of the class is java.lang, we dont need
         // to check since its already imported
@@ -154,10 +181,35 @@ public class ActionUtil {
         return false;
     }
 
+    public static String getSimpleName(TypeMirror typeMirror) {
+        return EditHelper.printType(typeMirror, false);
+    }
+
     public static String getSimpleName(String className) {
+        className = removeDiamond(className);
+
         int dot = className.lastIndexOf('.');
-        if (dot == -1) return className;
-        return className.substring(dot + 1, className.length());
+        if (dot == -1) {
+            return className;
+        }
+        if (className.startsWith("? extends")) {
+            return "? extends " + className.substring(dot + 1);
+        }
+        return className.substring(dot + 1);
+    }
+
+    public static String removeDiamond(String className) {
+        if (className.contains("<")) {
+            className = className.substring(0, className.indexOf('<'));
+        }
+        return className;
+    }
+
+    public static String removeArray(String className) {
+        if (className.contains("[")) {
+            className = className.substring(0, className.indexOf('['));
+        }
+        return className;
     }
 
     /**
@@ -190,6 +242,58 @@ public class ActionUtil {
         if (methodName.isEmpty()) {
             return null;
         }
+        if ("<init>".equals(methodName)) {
+            return null;
+        }
+        if ("<clinit>".equals(methodName)) {
+            return null;
+        }
         return  Character.toLowerCase(methodName.charAt(0)) + methodName.substring(1);
+    }
+
+    /**
+     * Get all the possible fully qualified names that may be imported
+     * @param type method to scan
+     * @return Set of fully qualified names not including the diamond operator
+     */
+    public static Set<String> getTypesToImport(ExecutableType type) {
+        Set<String> types = new HashSet<>();
+
+        if (type.getReturnType() != null) {
+            if (type.getReturnType().getKind() != TypeKind.VOID) {
+                String fqn = getTypeToImport(type.getReturnType());
+                if (fqn != null) {
+                    types.add(fqn);
+                }
+            }
+        }
+
+        if (type.getThrownTypes() != null) {
+            for (TypeMirror thrown : type.getThrownTypes()) {
+                String fqn = getTypeToImport(thrown);
+                if (fqn != null) {
+                    types.add(fqn);
+                }
+            }
+        }
+        for (TypeMirror t : type.getParameterTypes()) {
+            String fqn = getTypeToImport(t);
+            if (fqn != null) {
+                types.add(fqn);
+            }
+        }
+        return types;
+    }
+
+    @Nullable
+    private static String getTypeToImport(TypeMirror type) {
+        if (type.getKind().isPrimitive()) {
+            return null;
+        }
+        String fqn = EditHelper.printType(type, true);
+        if (type.getKind() == TypeKind.ARRAY) {
+            fqn = removeArray(fqn);
+        }
+        return removeDiamond(fqn);
     }
 }

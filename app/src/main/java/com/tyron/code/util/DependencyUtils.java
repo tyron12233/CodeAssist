@@ -24,51 +24,7 @@ import java.util.regex.Pattern;
 
 public class DependencyUtils {
 
-    private static final Pattern GRADLE_IMPL = Pattern.compile("\\s*(implementation)\\s*(')([a-zA-Z0-9.'/-:\\-]+)(')");
-    private static final Pattern GRADLE_IMPL_QUOT = Pattern.compile("\\s*(implementation)\\s*(\")([a-zA-Z0-9.'/-:\\-]+)(\")");
-
-    /**
-     * Parses a build.gradle file and gets the dependencies out of it
-     *
-     * @param file input build.gradle file
-     * @return Library dependencies
-     */
-    public static List<Pom> parseGradle(PomRepository repository, File file, ILogger logger) throws IOException {
-        String readString = FileUtils.readFileToString(file, Charset.defaultCharset());
-        // remove all comments
-        readString = readString.replaceAll("\\s*//.*", "");
-        Matcher matcher = GRADLE_IMPL.matcher(readString);
-
-        List<Pom> deps = new ArrayList<>();
-        while (matcher.find()) {
-            String declaration = matcher.group(3);
-            if (declaration != null) {
-
-                Pom dependency = repository.getPom(declaration);
-                if (dependency != null) {
-                    //dependency.setUserDefined(true);
-                    deps.add(dependency);
-                } else {
-                    logger.warning("Unable to resolve dependency: " + declaration);
-                }
-            }
-        }
-
-        matcher = GRADLE_IMPL_QUOT.matcher(readString);
-        while (matcher.find()) {
-            String declaration = matcher.group(3);
-            Pom dependency = repository.getPom(declaration);
-            if (dependency != null) {
-                //  dependency.setUserDefined(true);
-                deps.add(dependency);
-            } else {
-                logger.warning("Unable to resolve dependency: " + declaration);
-            }
-        }
-        return deps;
-    }
-
-    public static List<Dependency> parseLibraries(PomRepository repository, File libraries, ILogger logger) {
+    public static List<Dependency> parseLibraries(File libraries, ILogger logger) {
         String contents;
         try {
             contents = FileUtils.readFileToString(libraries, StandardCharsets.UTF_8);
@@ -77,7 +33,12 @@ public class DependencyUtils {
             return Collections.emptyList();
         }
         try {
-            return new Gson().fromJson(contents, new TypeToken<List<Dependency>>() {}.getType());
+            List<Dependency> dependencies = new Gson().fromJson(contents,
+                    new TypeToken<List<Dependency>>() {}.getType());
+            if (dependencies == null) {
+                dependencies = Collections.emptyList();
+            }
+            return dependencies;
         } catch (JsonSyntaxException e) {
             logger.error("Unable to parse " + libraries.getName() + ": " + e.getMessage());
             return Collections.emptyList();

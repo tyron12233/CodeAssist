@@ -52,7 +52,7 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
             return null;
         }
 
-        if (!mPreferences.getBoolean("code_editor_completion", true)) {
+        if (!mPreferences.getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
             return null;
         }
 

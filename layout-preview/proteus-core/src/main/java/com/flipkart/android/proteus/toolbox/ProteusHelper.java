@@ -3,6 +3,8 @@ package com.flipkart.android.proteus.toolbox;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
@@ -43,25 +45,68 @@ public class ProteusHelper {
             return "Unknown";
         }
 
+        String attributeName = "Unknown";
+
         parser = context.getParser(parentLayout.type);
         if (parser != null) {
-            return getAttributeName(parser.getAttributeSet(), id);
+            attributeName = getAttributeName(parser.getAttributeSet(), id);
         }
-        return "Unknown";
+        if ("Unknown".equals(attributeName)) {
+            parser = context.getParser("android.view.View");
+            if (parser != null) {
+                attributeName = getAttributeName(parser.getAttributeSet(), id);
+            }
+        }
+        return attributeName;
     }
 
-    public static String getAttributeName(ProteusView view, String layoutType, int id) {
+    public static String getAttributeName(ProteusView view, int id) {
         if (view == null) {
             return "Unknown";
         }
+        String layoutType = view.getViewManager().getLayout().type;
         ViewTypeParser<View> parser = view.getViewManager()
                 .getContext()
                 .getParser(layoutType);
-        if (parser == null) {
-            return getAttributeName((ProteusView) view.getAsView().getParent(),
-                    layoutType, id);
+        String attributeName = "Unknown";
+        if (parser != null) {
+            attributeName = getAttributeName(parser.getAttributeSet(), id);
         }
-        return getAttributeName(parser.getAttributeSet(), id);
+        if ("Unknown".equals(attributeName)) {
+            if (view.getAsView().getParent() instanceof ProteusView) {
+                attributeName = getAttributeName((ProteusView) view.getAsView().getParent(), id);
+            }
+        }
+        return attributeName;
+    }
+
+    public static ViewTypeParser<View> getViewTypeParser(@NonNull ProteusView view, String attributeName) {
+        ProteusView.Manager viewManager = view.getViewManager();
+        int id = viewManager.getViewTypeParser().getAttributeId(attributeName);
+        if (id != -1) {
+            //noinspection unchecked
+            return viewManager.getViewTypeParser();
+        }
+        if (view.getAsView().getParent() instanceof ProteusView) {
+            ProteusView parent = (ProteusView) view.getAsView().getParent();
+            //noinspection unchecked
+            return  parent.getViewManager().getViewTypeParser();
+        }
+        return null;
+    }
+
+    public static int getAttributeId(@NonNull ProteusView view, String attributeName) {
+        ProteusView.Manager viewManager = view.getViewManager();
+        int id = viewManager.getViewTypeParser().getAttributeId(attributeName);
+        if (id != -1) {
+            return id;
+        }
+        if (view.getAsView().getParent() instanceof ProteusView) {
+            ProteusView parent = (ProteusView) view.getAsView().getParent();
+            ViewTypeParser<?> parser = parent.getViewManager().getViewTypeParser();
+            return parser.getAttributeId(attributeName);
+        }
+        return -1;
     }
 
     private static String getAttributeName(ViewTypeParser.AttributeSet attrs, int id) {

@@ -7,7 +7,11 @@ import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.Debouncer;
 import com.tyron.completion.java.model.CachedCompletion;
+import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.completion.model.DrawableKind;
+import com.tyron.completion.progress.ProgressManager;
+import com.tyron.kotlin_completion.completion.CompletionUtilsKt;
 import com.tyron.kotlin_completion.completion.Completions;
 import com.tyron.kotlin_completion.diagnostic.ConvertDiagnosticKt;
 import com.tyron.kotlin_completion.util.AsyncExecutor;
@@ -18,6 +22,7 @@ import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics;
 
 import java.io.File;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -119,20 +124,22 @@ public class CompletionEngine {
         if (isIndexing()) {
             return CompletableFuture.completedFuture(CompletionList.EMPTY);
         }
+        try {
+            ProgressManager.getInstance().setCanceled(true);
+            return async.compute(() -> {
+                ProgressManager.getInstance().setCanceled(false);
+                ProgressManager.getInstance().setRunning(true);
+                Instant now = Instant.now();
+                Pair<CompiledFile, Integer> recover = recover(file, contents, Recompile.NEVER, cursor);
+                Log.d("RECOVER", "Took " + Duration.between(now, Instant.now()).toMillis());
+                CompletionList list = CompletionUtilsKt.completions(recover.first, cursor, sp.getIndex(), partialIdentifier(contents, cursor));
 
-        Recompile recompile;
-        if (isIncrementalCompletion(cachedCompletion, file, partialIdentifier(prefix, prefix.length()), line, column)) {
-            recompile = Recompile.NEVER;
-            Log.d("Kotlin completion", "Using incremental completion");
-        } else {
-            recompile = Recompile.ALWAYS;
+                ProgressManager.getInstance().setRunning(false);
+                return list;
+            });
+        } finally {
+
         }
-        return async.compute(() -> {
-            Pair<CompiledFile, Integer> pair = recover(file, contents, recompile, cursor);
-            CompletionList completions = new Completions().completions(pair.first, cursor, sp.getIndex());
-            cachedCompletion = new CachedCompletion(file, line, column, partialIdentifier(prefix, prefix.length()), completions);
-            return completions;
-        });
     }
 
     private String partialIdentifier(String contents, int end) {
@@ -208,7 +215,7 @@ public class CompletionEngine {
     }
 
     public void doLint(File file, String contents, LintCallback callback) {
-        debounceLint.submitImmediately(cancel -> {
+        debounceLint.schedule(cancel -> {
             doLint(file, contents, cancel, callback);
             return Unit.INSTANCE;
         });

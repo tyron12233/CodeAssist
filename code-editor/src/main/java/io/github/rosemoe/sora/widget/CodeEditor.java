@@ -74,6 +74,8 @@ import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.annotation.RequiresApi;
 
+import com.tyron.builder.model.DiagnosticWrapper;
+
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -100,6 +102,7 @@ import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.ContentLine;
 import io.github.rosemoe.sora.text.ContentListener;
 import io.github.rosemoe.sora.text.Cursor;
+import io.github.rosemoe.sora.text.DiagnosticSpanMapUpdater;
 import io.github.rosemoe.sora.text.FormatThread;
 import io.github.rosemoe.sora.text.LineRemoveListener;
 import io.github.rosemoe.sora.text.SpanMapUpdater;
@@ -281,7 +284,11 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     private HwAcceleratedRenderer mRenderer;
     KeyMetaStates mKeyMetaStates = new KeyMetaStates(this);
 
+    /**
+     * CodeAssist added fields
+     */
     private File mCurrentFile;
+    private final List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
 
     public CodeEditor(Context context) {
         this(context, null);
@@ -309,8 +316,12 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     }
 
     public void analyze() {
+        analyze(true);
+    }
+
+    public void analyze(boolean runBgAnalyzer) {
         if (mSpanner != null) {
-            mSpanner.analyze(getText());
+            mSpanner.analyze(getText(), runBgAnalyzer);
         }
     }
 
@@ -434,6 +445,15 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     protected float getOffset(int line, int column) {
         prepareLine(line);
         return measureText(mBuffer, 0, column) + measureTextRegionOffset() - getOffsetX();
+    }
+
+    public synchronized void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
+        mDiagnostics.clear();
+        mDiagnostics.addAll(diagnostics);
+        if (mLanguage.getAnalyzer() != null) {
+            mLanguage.getAnalyzer().setDiagnostics(diagnostics);
+        }
+        analyze(false);
     }
 
     /**
@@ -4981,6 +5001,12 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             }
         }
 
+        if (startLine == endLine) {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineInsert(mDiagnostics, startLine, startColumn, endColumn);
+        } else {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineInsert(mDiagnostics, startLine, startColumn, endLine, endColumn);
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             mRenderer.afterInsert(content, startLine, startColumn, endLine, endColumn, insertedContent);
         }
@@ -5042,6 +5068,11 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             } else {
                 SpanMapUpdater.shiftSpansOnMultiLineDelete(mSpanner.getResult().getSpanMap(), startLine, startColumn, endLine, endColumn);
             }
+        }
+        if (startLine == endLine) {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineDelete(mDiagnostics, startLine, startColumn, endColumn);
+        } else {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineDelete(mDiagnostics, startLine, startColumn, endLine, endColumn);
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

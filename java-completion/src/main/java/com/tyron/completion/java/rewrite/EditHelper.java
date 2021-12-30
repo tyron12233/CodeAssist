@@ -11,6 +11,7 @@ import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.Name;
 import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.element.TypeParameterElement;
 import org.openjdk.javax.lang.model.element.VariableElement;
 import org.openjdk.javax.lang.model.type.ArrayType;
 import org.openjdk.javax.lang.model.type.DeclaredType;
@@ -26,6 +27,8 @@ import org.openjdk.source.tree.VariableTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.code.Symbol;
+import org.openjdk.tools.javac.code.Type;
 
 import java.util.List;
 import java.util.StringJoiner;
@@ -93,6 +96,19 @@ public class EditHelper {
         }
         if (method.getModifiers().contains(Modifier.PROTECTED)) {
             buf.append("protected ");
+        }
+
+        if (!method.getTypeParameters().isEmpty()) {
+            buf.append('<');
+            List<? extends TypeParameterElement> typeParameters = method.getTypeParameters();
+            for (int i = 0; i < typeParameters.size(); i++) {
+                TypeParameterElement parameter = typeParameters.get(i);
+                buf.append(parameter.toString());
+                if (i != typeParameters.size() - 1) {
+                    buf.append(", ");
+                }
+            }
+            buf.append('>');
         }
 
         buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(" ");
@@ -234,6 +250,13 @@ public class EditHelper {
     public static String printType(TypeMirror type, boolean fqn) {
         if (type instanceof DeclaredType) {
             DeclaredType declared = (DeclaredType) type;
+            if (declared instanceof Type.ClassType) {
+                Type.ClassType classType = (Type.ClassType) declared;
+                if (classType.all_interfaces_field != null) {
+                    Type next = classType.all_interfaces_field.get(0);
+                    declared = (DeclaredType) next;
+                }
+            }
             String string = printTypeName((TypeElement) declared.asElement(), fqn);
             if (!declared.getTypeArguments().isEmpty()) {
                 string = string + "<" + printTypeParameters(declared.getTypeArguments()) + ">";
@@ -269,9 +292,14 @@ public class EditHelper {
 
     public static String printTypeName(TypeElement type, boolean fqn) {
         if (type.getEnclosingElement() instanceof TypeElement) {
-            return printTypeName((TypeElement) type.getEnclosingElement()) + "." + type.getSimpleName();
+            return printTypeName((TypeElement) type.getEnclosingElement(), fqn) + "." + type.getSimpleName();
         }
+
         String s;
+        if (type.toString().startsWith("<anonymous") && type instanceof Symbol.ClassSymbol) {
+            Symbol.ClassSymbol symbol = (Symbol.ClassSymbol) type;
+            s = symbol.type.toString();
+        } else
         if (fqn) {
             s = type.getQualifiedName().toString();
         } else {
@@ -280,10 +308,13 @@ public class EditHelper {
         // anonymous
         if (s.isEmpty()) {
             s = type.asType().toString();
+        }
+
+        if (s.startsWith("<anonymous")) {
             s = s.substring("<anonymous ".length(), s.length() - 1);
-            if (fqn) {
-                s = ActionUtil.getSimpleName(s);
-            }
+        }
+        if (!fqn) {
+            s = ActionUtil.getSimpleName(s);
         }
         return s;
     }

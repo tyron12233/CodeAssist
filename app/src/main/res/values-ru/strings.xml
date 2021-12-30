@@ -116,4 +116,6 @@
     <string name="project_manager_projects">Проекты</string>
     <string name="project_manager_empty">Отсутствуют проекты</string>
     <string name="project_manager_create_project">Создать проект</string>
+    <string name="attributes_editor">Attributes Editor</string>
+    <string name="attribute_value">Attribute value</string>
 </resources>

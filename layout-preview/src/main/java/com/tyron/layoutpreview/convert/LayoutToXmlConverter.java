@@ -74,7 +74,7 @@ public class LayoutToXmlConverter {
                         if (!child.isLayout()) {
                             continue;
                         }
-                        addChildren(element, parent, child.getAsLayout());
+                        addChildren(element, layout, child.getAsLayout());
                     }
                 }
                 continue;

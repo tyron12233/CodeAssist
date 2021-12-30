@@ -1,5 +1,6 @@
 package com.tyron.kotlin_completion;
 
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.kotlin_completion.compiler.CompletionKind;
 import com.tyron.kotlin_completion.position.Position;
 import com.tyron.kotlin_completion.util.PsiUtils;
@@ -76,6 +77,7 @@ public class CompiledFile {
     }
 
     public Pair<KtExpression, DeclarationDescriptor> referenceAtPoint(int cursor) {
+        ProgressManager.checkCanceled();
         KtElement element = parseAtPoint(cursor, true);
         if (element == null) {
             return null;
@@ -95,6 +97,7 @@ public class CompiledFile {
     }
 
     public Pair<KtExpression, DeclarationDescriptor> referenceFromContext(int cursor, BindingContext context) {
+        ProgressManager.checkCanceled();
         ImmutableMap<KtReferenceExpression, DeclarationDescriptor> targets = context.getSliceContents(BindingContext.REFERENCE_TARGET);
         Sequence<Map.Entry<KtReferenceExpression, DeclarationDescriptor>> filter = SequencesKt.filter(MapsKt.asSequence(targets), it -> it.getKey().getTextRange().contains(cursor));
         Sequence<Map.Entry<KtReferenceExpression, DeclarationDescriptor>> sorted = SequencesKt.sortedBy(filter, it -> it.getKey().getTextRange().getLength());

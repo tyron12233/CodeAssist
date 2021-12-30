@@ -171,25 +171,11 @@ public abstract class ViewTypeParser<V extends View> {
   public boolean handleAttribute(V view, int attributeId, Value value) {
     int position = getPosition(attributeId);
     if (position < 0) {
-      boolean b = null != parent && parent.handleAttribute(view, attributeId, value);
-      if (!b && view.getParent() != null) {
-        ProteusView parent = (ProteusView) view.getParent();
-        if (parent == null) {
-          return false;
-        }
-
-        if (parent.getViewManager().getLayout().type.equals(getType())) {
-          return false;
-        }
-        //noinspection unchecked
-        return parent.getViewManager().getViewTypeParser().handleAttribute(view, attributeId, value);
-      } else {
-        return false;
-      }
+      return null != parent && parent.handleAttribute(view, attributeId, value);
     }
     //noinspection unchecked
-    AttributeProcessor<V> attributeProcessor = processors[position];
-    attributeProcessor.process(view, value);
+    AttributeProcessor<V> processor = processors[position];
+    processor.process(view, value);
     return true;
   }
 

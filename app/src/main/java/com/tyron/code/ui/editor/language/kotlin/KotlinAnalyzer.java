@@ -5,6 +5,7 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
+import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
@@ -22,6 +23,7 @@ import org.antlr.v4.runtime.TokenSource;
 import org.openjdk.javax.tools.Diagnostic;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 
@@ -38,9 +40,36 @@ import io.github.rosemoe.sora.widget.EditorColorScheme;
 public class KotlinAnalyzer implements CodeAnalyzer {
 
     private final WeakReference<CodeEditor> mEditorReference;
+    private final List<DiagnosticWrapper> mDiagnostics;
 
     public KotlinAnalyzer(CodeEditor editor) {
         mEditorReference = new WeakReference<>(editor);
+        mDiagnostics = new ArrayList<>();
+    }
+
+    @Override
+    public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
+        mDiagnostics.clear();
+        mDiagnostics.addAll(diagnostics);
+    }
+
+    @Override
+    public void analyzeInBackground(CharSequence content) {
+        CodeEditor editor = mEditorReference.get();
+        if (editor == null) {
+            return;
+        }
+        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+        if (currentProject != null) {
+            Module module = currentProject.getModule(editor.getCurrentFile());
+            if (module instanceof AndroidModule) {
+                if (PreferenceManager.getDefaultSharedPreferences(editor.getContext())
+                        .getBoolean(SharedPreferenceKeys.KOTLIN_HIGHLIGHTING, true)) {
+                    CompletionEngine.getInstance((AndroidModule) module)
+                            .doLint(editor.getCurrentFile(), content.toString(), editor::setDiagnostics);
+                }
+            }
+        }
     }
 
     @Override
@@ -201,19 +230,7 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                 }
             }
             colors.setSuppressSwitch(maxSwitch + 10);
-
-            Project currentProject = ProjectManager.getInstance().getCurrentProject();
-            if (currentProject != null) {
-                Module module = currentProject.getModule(editor.getCurrentFile());
-                if (module instanceof AndroidModule) {
-                    if (PreferenceManager.getDefaultSharedPreferences(editor.getContext())
-                            .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
-                        CompletionEngine.getInstance((AndroidModule) module)
-                                .doLint(editor.getCurrentFile(), content.toString(), diagnostics ->
-                        markDiagnostics(editor, diagnostics, colors));
-                    }
-                }
-            }
+            HighlightUtil.markDiagnostics(editor, mDiagnostics, colors);
         } catch (Throwable e) {
             if (BuildConfig.DEBUG) {
                 Log.e("KotlinAnalyzer", "Failed to analyze", e);
@@ -274,36 +291,5 @@ public class KotlinAnalyzer implements CodeAnalyzer {
         public CharStream getInputStream() {
             return null;
         }
-    }
-
-    private void markDiagnostics(CodeEditor editor, List<DiagnosticWrapper> diagnostics, TextAnalyzeResult colors) {
-        editor.getText().beginStreamCharGetting(0);
-        Indexer indexer = editor.getText().getIndexer();
-        diagnostics.forEach(it -> {
-            try {
-                if (it.getStartPosition() == -1) {
-                    it.setStartPosition(it.getPosition());
-                }
-                if (it.getEndPosition() == -1) {
-                    it.setEndPosition(it.getPosition());
-                }
-
-                CharPosition start = indexer.getCharPosition((int) it.getStartPosition());
-                CharPosition end = indexer.getCharPosition((int) it.getEndPosition());
-
-                // the editor does not support marking underline spans for the same start and end index
-                // to work around this, we just subtract one to the start index
-                if (start.line == end.line && end.column == start.column) {
-                    start.column--;
-                }
-
-                int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR : Span.FLAG_WARNING;
-                colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
-            } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
-                Log.e("KotlinAnalyzer", "Unable to mark problem region", e);
-                // Work around for the indexer requiring a sorted positions
-            }
-        });
-        editor.getText().endStreamCharGetting();
     }
 }
