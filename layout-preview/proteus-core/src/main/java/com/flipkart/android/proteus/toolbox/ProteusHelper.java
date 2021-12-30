@@ -45,11 +45,19 @@ public class ProteusHelper {
             return "Unknown";
         }
 
+        String attributeName = "Unknown";
+
         parser = context.getParser(parentLayout.type);
         if (parser != null) {
-            return getAttributeName(parser.getAttributeSet(), id);
+            attributeName = getAttributeName(parser.getAttributeSet(), id);
         }
-        return "Unknown";
+        if ("Unknown".equals(attributeName)) {
+            parser = context.getParser("android.view.View");
+            if (parser != null) {
+                attributeName = getAttributeName(parser.getAttributeSet(), id);
+            }
+        }
+        return attributeName;
     }
 
     public static String getAttributeName(ProteusView view, int id) {
