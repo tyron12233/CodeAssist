@@ -27,6 +27,7 @@ import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
@@ -175,16 +176,19 @@ public class ViewManager implements ProteusView.Manager {
         if (value == null) {
             value = primitive;
         }
-        int attributeId = parser.getAttributeId(name);
-        if (attributeId != -1) {
-            boolean contains = false;
-            if (layout.attributes.contains(new Layout.Attribute(attributeId, null))) {
-                layout.attributes.remove(new Layout.Attribute(attributeId, null));
+        int attributeId = ProteusHelper.getAttributeId((ProteusView) view, name);
+        ViewTypeParser<View> parser = ProteusHelper.getViewTypeParser((ProteusView) view, name);
+        if (attributeId != -1 && parser != null) {
+            if (layout.attributes == null) {
+                layout.attributes = new ArrayList<>();
             }
+            layout.attributes.remove(new Layout.Attribute(attributeId, null));
             layout.attributes.add(new Layout.Attribute(attributeId, value));
-            //noinspection unchecked
             parser.handleAttribute(view, attributeId, value);
         } else {
+            if (layout.extras == null) {
+                layout.extras = new ObjectValue();
+            }
             layout.extras.addProperty(name, value.getAsString());
         }
     }

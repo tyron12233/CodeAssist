@@ -3,6 +3,8 @@ package com.flipkart.android.proteus.toolbox;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
@@ -62,6 +64,35 @@ public class ProteusHelper {
                     layoutType, id);
         }
         return getAttributeName(parser.getAttributeSet(), id);
+    }
+
+    public static ViewTypeParser<View> getViewTypeParser(@NonNull ProteusView view, String attributeName) {
+        ProteusView.Manager viewManager = view.getViewManager();
+        int id = viewManager.getViewTypeParser().getAttributeId(attributeName);
+        if (id != -1) {
+            //noinspection unchecked
+            return viewManager.getViewTypeParser();
+        }
+        if (view.getAsView().getParent() instanceof ProteusView) {
+            ProteusView parent = (ProteusView) view.getAsView().getParent();
+            //noinspection unchecked
+            return  parent.getViewManager().getViewTypeParser();
+        }
+        return null;
+    }
+
+    public static int getAttributeId(@NonNull ProteusView view, String attributeName) {
+        ProteusView.Manager viewManager = view.getViewManager();
+        int id = viewManager.getViewTypeParser().getAttributeId(attributeName);
+        if (id != -1) {
+            return id;
+        }
+        if (view.getAsView().getParent() instanceof ProteusView) {
+            ProteusView parent = (ProteusView) view.getAsView().getParent();
+            ViewTypeParser<?> parser = parent.getViewManager().getViewTypeParser();
+            return parser.getAttributeId(attributeName);
+        }
+        return -1;
     }
 
     private static String getAttributeName(ViewTypeParser.AttributeSet attrs, int id) {

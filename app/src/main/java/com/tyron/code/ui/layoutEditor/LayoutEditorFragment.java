@@ -19,7 +19,9 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.transition.TransitionManager;
 
+import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.exceptions.ProteusInflateException;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.toolbox.ProteusHelper;
@@ -93,15 +95,33 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     private final View.OnClickListener mOnClickListener = v -> {
         if (v instanceof ProteusView) {
             ProteusView view = (ProteusView) v;
-
+            ProteusView.Manager manager = view.getViewManager();
+            ProteusContext context = manager.getContext();
+            Layout layout = manager.getLayout();
             ArrayList<Pair<String, String>> attributes = new ArrayList<>();
             for (Layout.Attribute attribute :
-                    view.getViewManager().getLayout().getAttributes()) {
-                String name = ProteusHelper.getAttributeName(view, view.getViewManager().getLayout().type, attribute.id);
+                    layout.getAttributes()) {
+                String name = ProteusHelper.getAttributeName(view, layout.type, attribute.id);
                 attributes.add(new Pair<>(name, attribute.value.toString()));
             }
+            if (layout.extras != null) {
+                layout.extras.entrySet().forEach(entry -> {
+                    int id = manager.getViewTypeParser().getAttributeId(entry.getKey());
+                    if (id == -1) {
+                        ViewTypeParser<View> parser = context.getParser("android.view.View");
+                        if (parser != null) {
+                            id = parser.getAttributeId(entry.getKey());
+                        }
+                    }
+                    if (id != -1) {
+                        String name = ProteusHelper.getAttributeName(view, layout.type, id);
+                        attributes.add(new Pair<>(name, entry.getValue().toString()));
+                    }
+                });
+            }
+
             ArrayList<Pair<String, String>> availableAttributes = new ArrayList<>();
-            view.getViewManager().getAvailableAttributes().forEach((key, value) -> {
+            manager.getAvailableAttributes().forEach((key, value) -> {
                 availableAttributes.add(new Pair<>(key, ""));
             });
 
@@ -112,7 +132,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                     AttributeEditorDialogFragment.KEY_ATTRIBUTE_CHANGED,
                     getViewLifecycleOwner(),
                     (requestKey, result) ->
-                            view.getViewManager().updateAttribute(result.getString("key"),
+                            manager.updateAttribute(result.getString("key"),
                                     result.getString("value")));
         }
     };
