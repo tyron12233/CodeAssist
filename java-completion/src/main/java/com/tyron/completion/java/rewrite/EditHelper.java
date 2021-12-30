@@ -2,6 +2,10 @@ package com.tyron.completion.java.rewrite;
 
 import androidx.annotation.NonNull;
 
+import com.github.javaparser.ast.Modifier.Keyword;
+import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
@@ -54,25 +58,26 @@ public class EditHelper {
     }
 
     /**
-     * Prints a given method into a String, adds {@code throws UnsupportedOperationException} to the method body
-     * if the source is null, it will get the parameter names from the class file which will be {@code arg1, arg2, arg3}
-     * @param method method to print
+     * Prints a given method into a String, adds {@code throws UnsupportedOperationException} to
+     * the method body
+     * if the source is null, it will get the parameter names from the class file which will be
+     * {@code arg1, arg2, arg3}
+     *
+     * @param method            method to print
      * @param parameterizedType type parameters of this method
-     * @param source the source method, in which the parameter names are fetched
+     * @param source            the source method, in which the parameter names are fetched
      * @return a string that represents the method
      */
-    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, MethodTree source) {
+    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType,
+                                     MethodTree source) {
         StringBuilder buf = new StringBuilder();
-        buf.append("@Override\n");
-        if (method.getModifiers().contains(Modifier.PUBLIC)) {
-            buf.append("public ");
-        }
-        if (method.getModifiers().contains(Modifier.PROTECTED)) {
-            buf.append("protected ");
-        }
 
-        buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(" ");
-
+        MethodDeclaration methodDeclaration = new MethodDeclaration();
+        methodDeclaration.addAndGetAnnotation(Override.class);
+        methodDeclaration.setModifiers(method.getModifiers().stream()
+                .map(it -> Keyword.valueOf(it.toString()))
+                .toArray(Keyword[]::new));
+        methodDeclaration.setType(EditHelper.printType(parameterizedType.getReturnType()));
         buf.append(method.getSimpleName()).append("(");
         if (source == null) {
             buf.append(printParameters(parameterizedType, method));
@@ -85,7 +90,8 @@ public class EditHelper {
         return buf.toString();
     }
 
-    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, ExecutableElement source) {
+    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType,
+                                     ExecutableElement source) {
         StringBuilder buf = new StringBuilder();
         buf.append("@Override\n");
         if (method.getModifiers().contains(Modifier.PUBLIC)) {
@@ -117,8 +123,7 @@ public class EditHelper {
     public static String printThrows(@NonNull List<? extends TypeMirror> thrownTypes) {
         StringBuilder types = new StringBuilder();
         for (TypeMirror m : thrownTypes) {
-            types.append((types.length() == 0) ? "" : ", ")
-                    .append(printType(m));
+            types.append((types.length() == 0) ? "" : ", ").append(printType(m));
         }
         return "throws " + types;
     }
@@ -133,11 +138,9 @@ public class EditHelper {
             } else {
                 String names;
                 if (source != null) {
-                    names = source.getParameters().stream().map(VariableTree::getName)
-                            .map(Name::toString).collect(Collectors.joining(", "));
+                    names = source.getParameters().stream().map(VariableTree::getName).map(Name::toString).collect(Collectors.joining(", "));
                 } else {
-                    names = method.getParameters().stream().map(VariableElement::getSimpleName)
-                            .map(Name::toString).collect(Collectors.joining(", "));
+                    names = method.getParameters().stream().map(VariableElement::getSimpleName).map(Name::toString).collect(Collectors.joining(", "));
                 }
                 body = "super." + method.getSimpleName() + "(" + names + ");";
             }
@@ -146,13 +149,16 @@ public class EditHelper {
         }
 
         switch (returnType.getKind()) {
-            case VOID: return "";
+            case VOID:
+                return "";
             case SHORT:
             case CHAR:
             case FLOAT:
             case BYTE:
-            case INT: return "return 0;";
-            case BOOLEAN: return "return false;";
+            case INT:
+                return "return 0;";
+            case BOOLEAN:
+                return "return false;";
             default:
                 return "return null;";
         }
@@ -168,11 +174,9 @@ public class EditHelper {
             } else {
                 String names;
                 if (source != null) {
-                    names = source.getParameters().stream().map(VariableElement::getSimpleName)
-                            .map(Name::toString).collect(Collectors.joining(", "));
+                    names = source.getParameters().stream().map(VariableElement::getSimpleName).map(Name::toString).collect(Collectors.joining(", "));
                 } else {
-                    names = method.getParameters().stream().map(VariableElement::getSimpleName)
-                            .map(Name::toString).collect(Collectors.joining(", "));
+                    names = method.getParameters().stream().map(VariableElement::getSimpleName).map(Name::toString).collect(Collectors.joining(", "));
                 }
                 body = "super." + method.getSimpleName() + "(" + names + ");";
             }
@@ -181,13 +185,16 @@ public class EditHelper {
         }
 
         switch (returnType.getKind()) {
-            case VOID: return "";
+            case VOID:
+                return "";
             case SHORT:
             case CHAR:
             case FLOAT:
             case BYTE:
-            case INT: return "return 0;";
-            case BOOLEAN: return "return false;";
+            case INT:
+                return "return 0;";
+            case BOOLEAN:
+                return "return false;";
             default:
                 return "return null;";
         }
@@ -195,6 +202,7 @@ public class EditHelper {
 
     /**
      * Prints parameters given the source method that contains parameter names
+     *
      * @param method element from the .class file
      * @param source element from the .java file
      * @return Formatted string that represents the methods parameters with proper names
@@ -213,6 +221,7 @@ public class EditHelper {
     /**
      * Prints parameters with the default names eg. {@code arg0, arg1}
      * this is used when the source file of the class isn't found
+     *
      * @param method element to print
      * @param source the class file of the method
      * @return Formatted String that represents the parameters of this method
@@ -313,7 +322,8 @@ public class EditHelper {
         return new Position(line, 0);
     }
 
-    public static Position insertAtEndOfClass(JavacTask task, CompilationUnitTree root, ClassTree leaf) {
+    public static Position insertAtEndOfClass(JavacTask task, CompilationUnitTree root,
+                                              ClassTree leaf) {
         SourcePositions pos = Trees.instance(task).getSourcePositions();
         LineMap lines = root.getLineMap();
         long end = pos.getEndPosition(root, leaf);
