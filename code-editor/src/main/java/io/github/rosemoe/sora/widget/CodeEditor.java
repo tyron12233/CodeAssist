@@ -102,6 +102,7 @@ import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.ContentLine;
 import io.github.rosemoe.sora.text.ContentListener;
 import io.github.rosemoe.sora.text.Cursor;
+import io.github.rosemoe.sora.text.DiagnosticSpanMapUpdater;
 import io.github.rosemoe.sora.text.FormatThread;
 import io.github.rosemoe.sora.text.LineRemoveListener;
 import io.github.rosemoe.sora.text.SpanMapUpdater;
@@ -316,7 +317,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
 
     public void analyze() {
         if (mSpanner != null) {
-            mSpanner.analyze(getText());
+            mSpanner.analyze(getText(), false);
         }
     }
 
@@ -4996,6 +4997,12 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             }
         }
 
+        if (startLine == endLine) {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineInsert(mDiagnostics, startLine, startColumn, endColumn);
+        } else {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineInsert(mDiagnostics, startLine, startColumn, endLine, endColumn);
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             mRenderer.afterInsert(content, startLine, startColumn, endLine, endColumn, insertedContent);
         }
@@ -5057,6 +5064,11 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             } else {
                 SpanMapUpdater.shiftSpansOnMultiLineDelete(mSpanner.getResult().getSpanMap(), startLine, startColumn, endLine, endColumn);
             }
+        }
+        if (startLine == endLine) {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineDelete(mDiagnostics, startLine, startColumn, endColumn);
+        } else {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineDelete(mDiagnostics, startLine, startColumn, endLine, endColumn);
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

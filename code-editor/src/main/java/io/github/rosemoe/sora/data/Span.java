@@ -22,6 +22,10 @@
  */
 package io.github.rosemoe.sora.data;
 
+import com.tyron.builder.model.DiagnosticWrapper;
+
+import org.openjdk.javax.tools.Diagnostic;
+
 import java.util.Collection;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;

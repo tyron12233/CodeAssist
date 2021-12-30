@@ -61,7 +61,8 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             Tokens.MULTEQ, Tokens.DIV, Tokens.DIVEQ};
 
     private final WeakReference<CodeEditor> mEditorReference;
-    private final List<DiagnosticWrapper> mDiagnostics;
+    private List<DiagnosticWrapper> mDiagnostics;
+    private final List<DiagnosticWrapper> mPreviousDiagnostics = new ArrayList<>();
     private final SharedPreferences mPreferences;
 
     public JavaAnalyzer(CodeEditor editor) {
@@ -72,8 +73,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
     @Override
     public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
-        mDiagnostics.clear();
-        mDiagnostics.addAll(diagnostics);
+        mDiagnostics = diagnostics;
     }
 
     @Override
@@ -114,8 +114,11 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             JavaCompilerService service = getCompiler(editor);
             if (service != null && service.isReady()) {
                 try {
+                    SourceFileObject sourceFileObject =
+                            new SourceFileObject(editor.getCurrentFile().toPath(),
+                                    contents.toString(), Instant.now());
                     try (CompileTask task =
-                                 service.compile(editor.getCurrentFile().toPath())) {
+                                 service.compile(Collections.singletonList(sourceFileObject))) {
                         if (!cancel.invoke()) {
                             List<DiagnosticWrapper> collect = task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList());
                             editor.setDiagnostics(collect);
@@ -321,6 +324,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         colors.determine(line);
         colors.setSuppressSwitch(maxSwitch + 10);
         colors.setNavigation(labels);
+
         markDiagnostics(editor, mDiagnostics, colors);
     }
 
@@ -331,26 +335,40 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
 
         diagnostics.forEach(it -> {
             try {
-                if (it.getStartPosition() == -1) {
-                    it.setStartPosition(it.getPosition());
-                }
-                if (it.getEndPosition() == -1) {
-                    it.setEndPosition(it.getPosition());
-                }
+                int startLine;
+                int startColumn;
+                int endLine;
+                int endColumn;
+                if (it.getPosition() != DiagnosticWrapper.USE_LINE_POS) {
+                    if (it.getStartPosition() == -1) {
+                        it.setStartPosition(it.getPosition());
+                    }
+                    if (it.getEndPosition() == -1) {
+                        it.setEndPosition(it.getPosition());
+                    }
+                    CharPosition start = indexer.getCharPosition((int) it.getStartPosition());
+                    CharPosition end = indexer.getCharPosition((int) it.getEndPosition());
 
-                CharPosition start = indexer.getCharPosition((int) it.getStartPosition());
-                CharPosition end = indexer.getCharPosition((int) it.getEndPosition());
+                    // the editor does not support marking underline spans for the same start and end
+                    // index
+                    // to work around this, we just subtract one to the start index
+                    if (start.line == end.line && end.column == start.column) {
+                        start.column--;
+                    }
 
-                // the editor does not support marking underline spans for the same start and end
-                // index
-                // to work around this, we just subtract one to the start index
-                if (start.line == end.line && end.column == start.column) {
-                    start.column--;
+                    it.setStartLine(start.line);
+                    it.setEndLine(end.line);
+                    it.setStartColumn(start.column);
+                    it.setEndColumn(end.column);
                 }
+                startLine = it.getStartLine();
+                startColumn = it.getStartColumn();
+                endLine = it.getEndLine();
+                endColumn = it.getEndColumn();
 
                 int flag = it.getKind() == Diagnostic.Kind.ERROR ? Span.FLAG_ERROR :
                         Span.FLAG_WARNING;
-                colors.markProblemRegion(flag, start.line, start.column, end.line, end.column);
+                colors.markProblemRegion(flag, startLine, startColumn, endLine, endColumn);
             } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
                 // ignored
             }

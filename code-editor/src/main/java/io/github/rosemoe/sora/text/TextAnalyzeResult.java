@@ -263,15 +263,13 @@ public class TextAnalyzeResult {
                     int regionStartInSpan = Math.max(span.column, start);
                     int regionEndInSpan = Math.min(end, spanEnd);
                     if (regionStartInSpan == span.column) {
-                        if (regionEndInSpan == spanEnd) {
-                            span.problemFlags |= newFlag;
-                        } else {
+                        if (regionEndInSpan != spanEnd) {
                             increment = 2;
                             Span nSpan = span.copy();
                             nSpan.column = regionEndInSpan;
                             spans.add(i + 1, nSpan);
-                            span.problemFlags |= newFlag;
                         }
+                        span.problemFlags |= newFlag;
                     } else {
                         //regionStartInSpan > span.column
                         if (regionEndInSpan == spanEnd) {

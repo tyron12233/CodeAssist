@@ -101,6 +101,15 @@ public class TextAnalyzer {
      * @param origin The source text
      */
     public synchronized void analyze(Content origin) {
+        analyze(origin, true);
+    }
+
+    /**
+     * Analyze the given text
+     *
+     * @param origin The source text
+     */
+    public synchronized void analyze(Content origin, boolean bg) {
         AnalyzeThread thread = this.mThread;
         if (thread == null || !thread.isAlive()) {
             Log.d("TextAnalyzer", "Starting a new thread for analyzing");
@@ -109,7 +118,7 @@ public class TextAnalyzer {
             thread.setDaemon(true);
             thread.start();
         } else {
-            thread.restartWith(origin);
+            thread.restartWith(origin, bg);
             synchronized (mLock) {
                 mLock.notify();
             }
@@ -175,6 +184,7 @@ public class TextAnalyzer {
         private final Object lock;
         private volatile boolean waiting = false;
         private Content content;
+        private boolean bg;
 
         /**
          * Create a new thread
@@ -198,7 +208,9 @@ public class TextAnalyzer {
                     do {
                         waiting = false;
                         StringBuilder c = content.toStringBuilder();
-                        codeAnalyzer.analyzeInBackground(c);
+                        if (bg) {
+                            codeAnalyzer.analyzeInBackground(c);
+                        }
                         codeAnalyzer.analyze(c, colors, d);
                         if (waiting) {
                             colors.mSpanMap.clear();
@@ -242,8 +254,9 @@ public class TextAnalyzer {
          *
          * @param content New source
          */
-        public synchronized void restartWith(Content content) {
+        public synchronized void restartWith(Content content, boolean bg) {
             waiting = true;
+            this.bg = bg;
             this.content = content;
         }
 
