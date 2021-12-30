@@ -9,6 +9,7 @@ import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
 import org.openjdk.javax.lang.model.type.ExecutableType;
+import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.doctree.ThrowsTree;
 import org.openjdk.source.tree.BlockTree;
@@ -204,6 +205,13 @@ public class ActionUtil {
         return className;
     }
 
+    public static String removeArray(String className) {
+        if (className.contains("[")) {
+            className = className.substring(0, className.indexOf('['));
+        }
+        return className;
+    }
+
     /**
      * @return null if type is an anonymous class
      */
@@ -252,16 +260,40 @@ public class ActionUtil {
         Set<String> types = new HashSet<>();
 
         if (type.getReturnType() != null) {
-            types.add(removeDiamond(EditHelper.printType(type.getReturnType(), true)));
+            if (type.getReturnType().getKind() != TypeKind.VOID) {
+                String fqn = getTypeToImport(type.getReturnType());
+                if (fqn != null) {
+                    types.add(fqn);
+                }
+            }
         }
+
         if (type.getThrownTypes() != null) {
             for (TypeMirror thrown : type.getThrownTypes()) {
-                types.add(removeDiamond(EditHelper.printType(thrown, true)));
+                String fqn = getTypeToImport(thrown);
+                if (fqn != null) {
+                    types.add(fqn);
+                }
             }
         }
         for (TypeMirror t : type.getParameterTypes()) {
-            types.add(removeDiamond(EditHelper.printType(t, true)));
+            String fqn = getTypeToImport(t);
+            if (fqn != null) {
+                types.add(fqn);
+            }
         }
         return types;
+    }
+
+    @Nullable
+    private static String getTypeToImport(TypeMirror type) {
+        if (type.getKind().isPrimitive()) {
+            return null;
+        }
+        String fqn = EditHelper.printType(type, true);
+        if (type.getKind() == TypeKind.ARRAY) {
+            fqn = removeArray(fqn);
+        }
+        return removeDiamond(fqn);
     }
 }

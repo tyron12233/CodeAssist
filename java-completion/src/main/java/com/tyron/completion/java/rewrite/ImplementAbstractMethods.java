@@ -134,7 +134,7 @@ public class ImplementAbstractMethods implements Rewrite {
             }
 
             Position insert = EditHelper.insertAtEndOfClass(task.task, task.root(), thisTree);
-            edits.add(new TextEdit(new Range(insert, insert), insertText + "\n", true));
+            edits.add(new TextEdit(new Range(insert, insert), insertText + "\n"));
 
             for (String type : typesToImport) {
                 String fqn = ActionUtil.removeDiamond(type);

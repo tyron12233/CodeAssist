@@ -125,13 +125,13 @@ public class ActionContext {
         ThreadUtil.runOnBackgroundThread(() -> {
             Rewrite rewrite = action.getRewrite();
             Map<Path, TextEdit[]> rewrites = rewrite.rewrite(mCompiler);
-            ThreadUtil.runOnUiThread(() -> rewrites.forEach((k, v) -> {
-                if (k.equals(getCurrentFile())) {
+            rewrites.forEach((k, v) -> {
+                if (k.equals(mCurrentFile)) {
                     for (TextEdit edit : v) {
-                        applyTextEdit(edit);
+                        ThreadUtil.runOnUiThread(() -> applyTextEdit(edit));
                     }
                 }
-            }));
+            });
         });
     }
 
