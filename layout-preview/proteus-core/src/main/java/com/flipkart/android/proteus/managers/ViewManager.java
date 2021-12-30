@@ -178,7 +178,7 @@ public class ViewManager implements ProteusView.Manager {
         }
         int attributeId = ProteusHelper.getAttributeId((ProteusView) view, name);
         ViewTypeParser<View> parser = ProteusHelper.getViewTypeParser((ProteusView) view, name);
-        if (attributeId != -1 && parser != null) {
+        if (this.parser.equals(parser)) {
             if (layout.attributes == null) {
                 layout.attributes = new ArrayList<>();
             }
@@ -190,6 +190,9 @@ public class ViewManager implements ProteusView.Manager {
                 layout.extras = new ObjectValue();
             }
             layout.extras.addProperty(name, value.getAsString());
+            if (parser != null) {
+                parser.handleAttribute(view, attributeId, value);
+            }
         }
     }
 

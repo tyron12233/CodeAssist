@@ -101,20 +101,21 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             ArrayList<Pair<String, String>> attributes = new ArrayList<>();
             for (Layout.Attribute attribute :
                     layout.getAttributes()) {
-                String name = ProteusHelper.getAttributeName(view, layout.type, attribute.id);
+                String name = ProteusHelper.getAttributeName(view, attribute.id);
                 attributes.add(new Pair<>(name, attribute.value.toString()));
             }
             if (layout.extras != null) {
                 layout.extras.entrySet().forEach(entry -> {
-                    int id = manager.getViewTypeParser().getAttributeId(entry.getKey());
+                    ViewTypeParser<View> parser;
+                    int id = ProteusHelper.getAttributeId(view, entry.getKey());
                     if (id == -1) {
-                        ViewTypeParser<View> parser = context.getParser("android.view.View");
+                        parser = context.getParser("android.view.View");
                         if (parser != null) {
                             id = parser.getAttributeId(entry.getKey());
                         }
                     }
                     if (id != -1) {
-                        String name = ProteusHelper.getAttributeName(view, layout.type, id);
+                        String name = ProteusHelper.getAttributeName(view, id);
                         attributes.add(new Pair<>(name, entry.getValue().toString()));
                     }
                 });
@@ -308,22 +309,9 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
         try {
             LayoutTransition transition = new LayoutTransition();
-            transition.addTransitionListener(new LayoutTransition.TransitionListener() {
-                @Override
-                public void startTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
-                    transition.getAnimator(transitionType).addListener(new AnimatorListenerAdapter() {
-                        @Override
-                        public void onAnimationEnd(Animator animation) {
-                            mEditorRoot.postDelayed(() -> mEditorRoot.invalidate(), 70);
-                        }
-                    });
-                }
-
-                @Override
-                public void endTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
-
-                }
-            });
+            transition.enableTransitionType(LayoutTransition.CHANGING);
+            transition.disableTransitionType(LayoutTransition.DISAPPEARING);
+            transition.setDuration(180L);
             viewGroup.setLayoutTransition(new LayoutTransition());
         } catch (Throwable e) {
             // ignored, some ViewGroup's may not allow layout transitions
