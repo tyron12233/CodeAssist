@@ -129,6 +129,7 @@ public class ImplementAbstractMethods implements Rewrite {
 
                     typesToImport.addAll(ActionUtil.getTypesToImport(parameterizedType));
                     text = tabs + text.replace("\n", "\n" + tabs);
+                    text += "\n";
                     insertText.add(text);
                 }
             }

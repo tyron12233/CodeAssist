@@ -126,7 +126,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                         }
                     }
                 } catch (Throwable e) {
-                    service.close();
+                    service.destroy();
                 }
             }
         }

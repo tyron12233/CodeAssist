@@ -447,4 +447,8 @@ public class JavaCompilerService implements CompilerProvider {
     public JavaModule getCurrentModule() {
         return mCurrentModule;
     }
+
+    public void destroy() {
+        cachedCompile = null;
+    }
 }
