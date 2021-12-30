@@ -316,8 +316,12 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     }
 
     public void analyze() {
+        analyze(true);
+    }
+
+    public void analyze(boolean runBgAnalyzer) {
         if (mSpanner != null) {
-            mSpanner.analyze(getText(), false);
+            mSpanner.analyze(getText(), runBgAnalyzer);
         }
     }
 
@@ -449,7 +453,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         if (mLanguage.getAnalyzer() != null) {
             mLanguage.getAnalyzer().setDiagnostics(diagnostics);
         }
-        analyze();
+        analyze(false);
     }
 
     /**
