@@ -147,7 +147,11 @@ public class ActionUtil {
         if (className.contains("<")) {
             className = className.substring(0, className.indexOf('<'));
         }
-        String packageName = className.substring(0, className.lastIndexOf("."));
+        String packageName = "";
+
+        if (className.contains(".")) {
+            packageName = className.substring(0, className.lastIndexOf("."));
+        }
 
         // if the package name of the class is java.lang, we dont need
         // to check since its already imported
