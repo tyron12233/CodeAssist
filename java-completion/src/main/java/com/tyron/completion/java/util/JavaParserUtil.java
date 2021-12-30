@@ -21,6 +21,7 @@ import org.openjdk.javax.lang.model.element.TypeParameterElement;
 import org.openjdk.javax.lang.model.element.VariableElement;
 import org.openjdk.javax.lang.model.type.ExecutableType;
 import org.openjdk.javax.lang.model.type.TypeMirror;
+import org.openjdk.javax.lang.model.type.TypeVariable;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.TypeParameterTree;
@@ -28,7 +29,9 @@ import org.openjdk.source.tree.VariableTree;
 import org.openjdk.tools.javac.code.Type.ClassType;
 
 import java.io.Serializable;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.IntStream;
 
 public class JavaParserUtil {
@@ -44,8 +47,12 @@ public class JavaParserUtil {
         methodDeclaration.setParameters(IntStream.range(0, method.getParameters().size())
                 .mapToObj(i -> toParameter(type.getParameterTypes().get(i), method.getParameters().get(i)))
                 .collect(NodeList.toNodeList()));
-        methodDeclaration.setTypeParameters(method.getTypeParameters().stream()
-                .map(JavaParserUtil::toTypeParameter)
+        methodDeclaration.setTypeParameters(type.getTypeVariables().stream()
+                .map(it -> toType(((TypeMirror) it)))
+                .filter(Objects::nonNull)
+                .map(type1 -> type1 != null ? type1.toTypeParameter() : Optional.<TypeParameter>empty())
+                .filter(Optional::isPresent)
+                .map(Optional::get)
                 .collect(NodeList.toNodeList()));
         return methodDeclaration;
     }
@@ -60,8 +67,9 @@ public class JavaParserUtil {
         methodDeclaration.setParameters(IntStream.range(0, method.getParameters().size())
                 .mapToObj(i -> toParameter(type.getParameterTypes().get(i), method.getParameters().get(i)))
                 .collect(NodeList.toNodeList()));
-        methodDeclaration.setTypeParameters(method.getTypeParameters().stream()
-                .map(JavaParserUtil::toTypeParameter)
+        List<? extends TypeVariable> typeVariables = type.getTypeVariables();
+        methodDeclaration.setTypeParameters(type.getTypeVariables().stream()
+                .map(it -> JavaParserUtil.toTypeParameter((TypeParameterElement) it.asElement()))
                 .collect(NodeList.toNodeList()));
         if (method.getReceiverParameter() != null) {
             methodDeclaration.setReceiverParameter(toReceiverParameter(method.getReceiverParameter()));
@@ -97,6 +105,10 @@ public class JavaParserUtil {
 
     public static TypeParameter toTypeParameter(TypeParameterElement type) {
         return StaticJavaParser.parseTypeParameter(type.toString());
+    }
+
+    public static TypeParameter toTypeParameter(TypeVariable typeVariable) {
+        return StaticJavaParser.parseTypeParameter(typeVariable.toString());
     }
 
     public static TypeParameter toTypeParameter(TypeParameterTree type) {
