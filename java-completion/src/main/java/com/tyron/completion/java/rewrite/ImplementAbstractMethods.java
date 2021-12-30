@@ -19,8 +19,10 @@ import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.element.VariableElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
 import org.openjdk.javax.lang.model.type.ExecutableType;
+import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.JavaFileObject;
@@ -31,7 +33,9 @@ import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.StringJoiner;
@@ -100,6 +104,8 @@ public class ImplementAbstractMethods implements Rewrite {
             Element element = trees.getElement(path);
             DeclaredType thisType = (DeclaredType) element.asType();
 
+            List<TypeMirror> typesToImport = new ArrayList<>();
+
             int indent = EditHelper.indent(task.task, task.root(), thisTree) + 4;
 
             for (Element member : elements.getAllMembers(thisClass)) {
@@ -116,6 +122,14 @@ public class ImplementAbstractMethods implements Rewrite {
                     } else {
                         text = EditHelper.printMethod(method, parameterizedType, method);
                     }
+
+                    if (method.getThrownTypes() != null) {
+                        typesToImport.addAll(method.getThrownTypes());
+                    }
+                    for (VariableElement parameter : method.getParameters()) {
+                        typesToImport.add(parameter.asType());
+                    }
+
                     text = tabs + text.replace("\n", "\n" + tabs);
                     insertText.add(text);
                 }
@@ -123,10 +137,16 @@ public class ImplementAbstractMethods implements Rewrite {
 
             Position insert = EditHelper.insertAtEndOfClass(task.task, task.root(), thisTree);
 
+            for (TypeMirror type : typesToImport) {
+                String fqn = EditHelper.printType(type, true);
+                System.out.println(fqn);
+            }
             TextEdit[] edits = {new TextEdit(new Range(insert, insert), insertText + "\n", true)};
             return Collections.singletonMap(file, edits);
         }
     }
+
+
 
     private MethodTree findSource(CompilerProvider compiler, CompileTask task,
                                   ExecutableElement method) {

@@ -44,6 +44,10 @@ public class DiagnosticSpanMapUpdater {
             if (diagnostic.getStartLine() < startLine) {
                 continue;
             }
+            if (diagnostic.getEndLine() < endLine) {
+                continue;
+            }
+            int dLength = diagnostic.getEndColumn() - diagnostic.getStartColumn();
             diagnostic.setStartLine(diagnostic.getStartLine() - length);
             diagnostic.setEndLine(diagnostic.getEndLine() - length);
             diagnostic.setPosition(DiagnosticWrapper.USE_LINE_POS);
@@ -55,6 +59,14 @@ public class DiagnosticSpanMapUpdater {
         for (DiagnosticWrapper diagnostic : diagnostics) {
             if (diagnostic.getStartLine() < startLine) {
                 continue;
+            }
+            if (diagnostic.getStartLine() == startLine) {
+                if (diagnostic.getStartColumn() <= startColumn) {
+                    continue;
+                }
+                if (diagnostic.getEndColumn() <= endColumn) {
+                    continue;
+                }
             }
             diagnostic.setStartLine(diagnostic.getStartLine() + length);
             diagnostic.setEndLine(diagnostic.getEndLine() + length);
