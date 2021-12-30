@@ -132,6 +132,7 @@ public class PackageTask extends Task<AndroidModule> {
             String message = "Duplicate files from two libraries detected. \n";
             message += "File1: " + e.getFile1() + " \n";
             message += "File2: " + e.getFile2() + " \n";
+            message += "Archive path: " + e.getArchivePath();
             throw new CompilationFailedException(message);
         }
     }
