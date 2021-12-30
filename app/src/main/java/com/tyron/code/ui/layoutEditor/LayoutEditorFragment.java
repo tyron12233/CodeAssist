@@ -132,9 +132,11 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             getChildFragmentManager().setFragmentResultListener(
                     AttributeEditorDialogFragment.KEY_ATTRIBUTE_CHANGED,
                     getViewLifecycleOwner(),
-                    (requestKey, result) ->
-                            manager.updateAttribute(result.getString("key"),
-                                    result.getString("value")));
+                    (requestKey, result) -> {
+                manager.updateAttribute(result.getString("key"), result.getString("value"));
+                getChildFragmentManager()
+                        .clearFragmentResult(AttributeEditorDialogFragment.KEY_ATTRIBUTE_CHANGED);
+            });
         }
     };
 
