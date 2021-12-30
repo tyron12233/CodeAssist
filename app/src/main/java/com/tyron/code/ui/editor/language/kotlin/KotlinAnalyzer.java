@@ -64,7 +64,7 @@ public class KotlinAnalyzer implements CodeAnalyzer {
             Module module = currentProject.getModule(editor.getCurrentFile());
             if (module instanceof AndroidModule) {
                 if (PreferenceManager.getDefaultSharedPreferences(editor.getContext())
-                        .getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
+                        .getBoolean(SharedPreferenceKeys.KOTLIN_HIGHLIGHTING, true)) {
                     CompletionEngine.getInstance((AndroidModule) module)
                             .doLint(editor.getCurrentFile(), content.toString(), editor::setDiagnostics);
                 }

@@ -105,6 +105,7 @@
         <entry key="app/src/main/res/menu/code_editor_menu.xml" value="0.19322916666666667" />
         <entry key="app/src/main/res/menu/project_list_fragment_menu.xml" value="0.15555555555555556" />
         <entry key="app/src/main/res/xml/build_preferences.xml" value="0.25" />
+        <entry key="app/src/main/res/xml/editor_preferences.xml" value="0.22" />
         <entry key="app/src/main/res/xml/root_preferences.xml" value="0.22" />
       </map>
     </option>
