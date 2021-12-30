@@ -110,7 +110,11 @@ public class ImplementAbstractMethods implements Rewrite {
 
             Set<String> typesToImport = new HashSet<>();
 
-            int indent = EditHelper.indent(task.task, task.root(), thisTree) + 4;
+            int indent = EditHelper.indent(task.task, task.root(), thisTree);
+            if (indent == 1) {
+                indent = 4;
+            }
+            indent += 4;
 
             for (Element member : elements.getAllMembers(thisClass)) {
                 if (member.getKind() == ElementKind.METHOD && member.getModifiers().contains(Modifier.ABSTRACT)) {
