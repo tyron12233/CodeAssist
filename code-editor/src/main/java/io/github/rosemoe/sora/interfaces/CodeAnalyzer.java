@@ -22,6 +22,10 @@
  */
 package io.github.rosemoe.sora.interfaces;
 
+import com.tyron.builder.model.DiagnosticWrapper;
+
+import java.util.List;
+
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.text.TextAnalyzer;
@@ -32,6 +36,20 @@ import io.github.rosemoe.sora.text.TextAnalyzer;
  * @author Rose
  */
 public interface CodeAnalyzer {
+
+    /**
+     * Sets the diagnostics to be highlighted by this analyzer
+     */
+    default void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
+
+    }
+
+    /**
+     * This is called still on the main thread, implementations must create their own thread.
+     */
+    default void analyzeInBackground(CharSequence contents) {
+
+    }
 
     /**
      * Analyze spans for the given input

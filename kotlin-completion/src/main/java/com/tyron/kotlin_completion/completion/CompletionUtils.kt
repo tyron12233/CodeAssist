@@ -5,6 +5,7 @@ import com.tyron.completion.model.CompletionItem
 import com.tyron.completion.model.CompletionList
 import com.tyron.completion.model.DrawableKind
 import com.tyron.completion.model.Position
+import com.tyron.completion.progress.ProgressManager
 import com.tyron.kotlin_completion.CompiledFile
 import com.tyron.kotlin_completion.index.Symbol
 import com.tyron.kotlin_completion.index.SymbolIndex
@@ -36,7 +37,7 @@ inline fun <reified Find> PsiElement.findParent() =
     PsiUtils.getParentsWithSelf(this).filterIsInstance<Find>().firstOrNull()
 
 const val MIN_SORT_LENGTH = 3
-const val MAX_COMPLETION_ITEMS = 20
+const val MAX_COMPLETION_ITEMS = 50
 
 fun completions(
     file: CompiledFile,
@@ -47,17 +48,23 @@ fun completions(
 
     val (elementItems, isExhaustive, receiver) = elementCompletionItems(file, cursor, partial)
 
+    if (true) {
+        val list = CompletionList()
+        list.items.addAll(elementItems)
+        return list
+    }
+
     val elementItemList = elementItems.toList()
     val elementItemLabels = elementItemList.mapNotNull { it.label }.toSet()
 
     val items = (elementItemList.asSequence()
-            + (if (!isExhaustive) indexCompletionItems(
-        file,
-        cursor,
-        receiver,
-        index,
-        partial
-    ).filter { it.label !in elementItemLabels } else emptySequence())
+//            + (if (!isExhaustive) indexCompletionItems(
+//        file,
+//        cursor,
+//        receiver,
+//        index,
+//        partial
+//    ).filter { it.label !in elementItemLabels } else emptySequence())
             + (if (elementItemList.isEmpty()) keywordCompletionItems(partial) else emptySequence())
             )
 
@@ -204,11 +211,15 @@ private fun elementCompletionItems(
     cursor: Int,
     partial: String
 ): ElementCompletionItems {
+    ProgressManager.checkCanceled()
+
     val surroundingElement = completableElement(file, cursor) ?: return ElementCompletionItems(
         emptySequence(),
         true,
         null
     )
+
+
     val completions = elementCompletions(file, cursor, surroundingElement)
 
     val matchesName = completions.filter {
@@ -400,6 +411,7 @@ private fun isParentClass(declaration: DeclarationDescriptor): ClassDescriptor? 
 
 
 fun completableElement(file: CompiledFile, cursor: Int): KtElement? {
+    ProgressManager.checkCanceled()
     val el = file.parseAtPoint(cursor - 1, false) ?: return null
     // import x.y.?
     return el.findParent<KtImportDirective>()
@@ -424,6 +436,7 @@ fun elementCompletions(
     cursor: Int,
     surroundingElement: KtElement
 ): Sequence<DeclarationDescriptor> {
+    ProgressManager.checkCanceled()
     return when (surroundingElement) {
         // import x.y.?
         is KtImportDirective -> {
@@ -447,7 +460,7 @@ fun elementCompletions(
                 ?: return emptySequence()
             val parentDot = if (match.groupValues[1].isNotBlank()) match.groupValues[1] else "."
             val parent = parentDot.substring(0, parentDot.length - 1)
-            Log.d("ElementCompletions", "Looking for members of " + parent)
+            Log.d("ElementCompletions", "Looking for members of $parent")
             val parentPackage = module.getPackage(FqName.fromSegments(parent.split('.')))
             parentPackage.memberScope.getContributedDescriptors(DescriptorKindFilter.PACKAGES)
                 .asSequence()
@@ -459,16 +472,16 @@ fun elementCompletions(
             if (surroundingElement is KtUserType && surroundingElement.qualifier != null) {
                 val referenceTarget =
                     file.referenceAtPoint(PsiUtils.getStartOffset(surroundingElement.qualifier!!))?.second
-                if (referenceTarget is ClassDescriptor) {
+                return if (referenceTarget is ClassDescriptor) {
                     Log.d(
                         "ElementCompletions",
                         "Completing members of " + PsiUtils.getFqNameSafe(referenceTarget)
                     )
-                    return referenceTarget.unsubstitutedInnerClassesScope.getContributedDescriptors()
+                    referenceTarget.unsubstitutedInnerClassesScope.getContributedDescriptors()
                         .asSequence()
                 } else {
                     //  LOG.warn("No type reference in '{}'", surroundingElement.text)
-                    return emptySequence()
+                    emptySequence()
                 }
             } else {
                 // : ?
@@ -525,10 +538,12 @@ private fun completeMembers(
     receiverExpr: KtExpression,
     unwrapNullable: Boolean = false
 ): Sequence<DeclarationDescriptor> {
+    ProgressManager.checkCanceled()
     // thingWithType.?
     var descriptors = emptySequence<DeclarationDescriptor>()
     file.scopeAtPoint(cursor)?.let { lexicalScope ->
         file.typeOfExpression(receiverExpr, lexicalScope)?.let { expressionType ->
+            ProgressManager.checkCanceled()
             val receiverType = if (unwrapNullable) try {
                 TypeUtils.makeNotNullable(expressionType)
             } catch (e: Exception) {
@@ -539,7 +554,10 @@ private fun completeMembers(
             // LOG.debug("Completing members of instance '{}'", receiverType)
             val members = receiverType.memberScope.getContributedDescriptors().asSequence()
             val extensions =
-                extensionFunctions(lexicalScope).filter { isExtensionFor(receiverType, it) }
+                extensionFunctions(lexicalScope).filter {
+                    ProgressManager.checkCanceled()
+                    isExtensionFor(receiverType, it)
+                }
             descriptors = members + extensions
 
             if (!isCompanionOfEnum(receiverType)) {
@@ -582,7 +600,10 @@ private fun scopeTypes(scope: HierarchicalScope): Sequence<DeclarationDescriptor
 
 private fun identifiers(scope: LexicalScope): Sequence<DeclarationDescriptor> =
     PsiUtils.getParentsWithSelf(scope)
-        .flatMap(::scopeIdentifiers)
+        .flatMap {
+            ProgressManager.checkCanceled()
+            scopeIdentifiers(it)
+        }
         .flatMap(::explodeConstructors)
 
 private fun explodeConstructors(declaration: DeclarationDescriptor): Sequence<DeclarationDescriptor> {
@@ -604,16 +625,16 @@ private fun scopeExtensionFunctions(scope: HierarchicalScope): Sequence<Callable
 
 
 private fun scopeIdentifiers(scope: HierarchicalScope): Sequence<DeclarationDescriptor> {
+    ProgressManager.checkCanceled()
     val locals = scope.getContributedDescriptors().asSequence()
     val members = implicitMembers(scope)
-
     return locals + members
 }
 
 private fun implicitMembers(scope: HierarchicalScope): Sequence<DeclarationDescriptor> {
+    ProgressManager.checkCanceled()
     if (scope !is LexicalScope) return emptySequence()
     val implicit = scope.implicitReceiver ?: return emptySequence()
-
     return implicit.type.memberScope.getContributedDescriptors().asSequence()
 }
 

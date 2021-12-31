@@ -1,5 +1,7 @@
 package com.tyron.kotlin_completion.util;
 
+import com.tyron.completion.progress.ProgressManager;
+
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
 import org.jetbrains.kotlin.name.FqName;
@@ -19,6 +21,7 @@ import org.jetbrains.kotlin.types.typeUtil.TypeUtilsKt;
 public class PsiUtils {
 
     public static <Find> Find findParent(PsiElement element, Class<Find> find) {
+        ProgressManager.checkCanceled();
         Sequence<PsiElement> parentsWithSelf = PsiUtilsKt.getParentsWithSelf(element);
         Sequence<Find> sequence = SequencesKt.filterIsInstance(parentsWithSelf, find);
         return SequencesKt.firstOrNull(sequence);
@@ -44,10 +47,12 @@ public class PsiUtils {
     }
 
     public static Sequence<DeclarationDescriptor> getParentsWithSelf(DeclarationDescriptor d) {
+        ProgressManager.checkCanceled();
         return DescriptorUtilsKt.getParentsWithSelf(d);
     }
 
     public static FqName getFqNameSafe(DeclarationDescriptor d) {
+        ProgressManager.checkCanceled();
         return DescriptorUtilsKt.getFqNameSafe(d);
     }
 

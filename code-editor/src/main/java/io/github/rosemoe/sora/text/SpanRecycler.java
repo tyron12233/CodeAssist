@@ -32,7 +32,7 @@ import io.github.rosemoe.sora.data.Span;
 
 public class SpanRecycler {
 
-    private static SpanRecycler INSTANCE;
+    private volatile static SpanRecycler INSTANCE;
     private final BlockingQueue<List<List<Span>>> taskQueue;
     private Thread recycleThread;
     private SpanRecycler() {

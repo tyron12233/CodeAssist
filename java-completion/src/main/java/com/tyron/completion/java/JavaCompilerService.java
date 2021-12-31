@@ -403,7 +403,7 @@ public class JavaCompilerService implements CompilerProvider {
      * @return a CompileTask for this compilation
      */
     @Override
-    public CompileTask compile(Path... files) {
+    public synchronized CompileTask compile(Path... files) {
         List<JavaFileObject> sources = new ArrayList<>();
         for (Path f : files) {
             sources.add(new SourceFileObject(f, mCurrentModule));
@@ -419,13 +419,13 @@ public class JavaCompilerService implements CompilerProvider {
      * @return a CompileTask for this compilation
      */
     @Override
-    public CompileTask compile(Collection<? extends JavaFileObject> sources) {
+    public synchronized CompileTask compile(Collection<? extends JavaFileObject> sources) {
         mLock.lock();
         CompileBatch compile = compileBatch(sources);
         return new CompileTask(compile.task, compile.roots, diagnostics, this::close);
     }
 
-    public void close() {
+    public synchronized void close() {
         if (cachedCompile != null && !cachedCompile.closed) {
             cachedCompile.close();
         }
@@ -434,7 +434,7 @@ public class JavaCompilerService implements CompilerProvider {
         }
     }
 
-    public boolean isReady() {
+    public synchronized boolean isReady() {
         if (CompletionEngine.isIndexing()) {
             return false;
         }
@@ -446,5 +446,9 @@ public class JavaCompilerService implements CompilerProvider {
 
     public JavaModule getCurrentModule() {
         return mCurrentModule;
+    }
+
+    public void destroy() {
+        cachedCompile = null;
     }
 }

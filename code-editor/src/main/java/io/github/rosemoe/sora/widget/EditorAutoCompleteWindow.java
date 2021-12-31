@@ -214,6 +214,9 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      */
     @SuppressLint("NewApi")
     public void select(int pos) {
+        if (mAdapter.getItemCount() == 0) {
+            return;
+        }
         if (pos > mAdapter.getItemCount()) {
             return;
         }

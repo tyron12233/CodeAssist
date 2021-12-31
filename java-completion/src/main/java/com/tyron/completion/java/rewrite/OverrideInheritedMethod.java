@@ -1,10 +1,13 @@
 package com.tyron.completion.java.rewrite;
 
+import android.util.Log;
+
 import com.google.common.base.Strings;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.FindTypeDeclarationAt;
 import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -24,9 +27,15 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class OverrideInheritedMethod implements Rewrite {
 
@@ -46,17 +55,11 @@ public class OverrideInheritedMethod implements Rewrite {
 
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
-        Position insertPoint = insertNearCursor(compiler);
-        String insertText = insertText(compiler);
-        if (insertText == null) {
-            return Rewrite.CANCELLED;
-        }
-        TextEdit[] edits = {new TextEdit(new Range(insertPoint, insertPoint), insertText, true)};
-        return Collections.singletonMap(file, edits);
-    }
 
-    private String insertText(CompilerProvider compiler) {
+        Position insertPoint = insertNearCursor(compiler);
+
         try (CompileTask task = compiler.compile(file)) {
+            List<TextEdit> edits = new ArrayList<>();
             Types types = task.task.getTypes();
             Trees trees = Trees.instance(task.task);
             ExecutableElement superMethod = FindHelper.findMethod(task, superClassName, methodName, erasedParameterTypes);
@@ -68,28 +71,47 @@ public class OverrideInheritedMethod implements Rewrite {
             TreePath thisPath = trees.getPath(task.root(), thisTree);
             TypeElement thisClass = (TypeElement) trees.getElement(thisPath);
             ExecutableType parameterizedType = (ExecutableType) types.asMemberOf((DeclaredType) thisClass.asType(), superMethod);
-            int indent = EditHelper.indent(task.task, task.root(), thisTree) + 4;
+            int indent = EditHelper.indent(task.task, task.root(), thisTree);
+            if (indent == 1) {
+                indent = 4;
+            }
+            indent += 4;
+
             Optional<JavaFileObject> sourceFile = compiler.findAnywhere(superClassName);
             String text;
             if (sourceFile.isPresent()) {
                 ParseTask parse = compiler.parse(sourceFile.get());
                 MethodTree source = FindHelper.findMethod(parse, superClassName, methodName, erasedParameterTypes);
+                Instant now = Instant.now();
                 if (source == null) {
                     text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
                 } else {
                     text = EditHelper.printMethod(superMethod, parameterizedType, source);
                 }
+                Log.d("TEST JAVAPARSER", "Printing took " + Duration.between(now, Instant.now()).toMillis());
             } else {
                 text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
             }
-
             int tabCount = indent / 4;
 
             String tabs = Strings.repeat("\t", tabCount);
 
             text = tabs + text.replace("\n", "\n" + tabs)
                     + "\n\n";
-            return text;
+
+            edits.add(new TextEdit(new Range(insertPoint, insertPoint), text));
+
+            for (String s : ActionUtil.getTypesToImport(parameterizedType)) {
+                if (!ActionUtil.hasImport(task.root(), s)) {
+                    Rewrite addImport = new AddImport(file.toFile(), s);
+                    Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+                    TextEdit[] textEdits = rewrite.get(file);
+                    if (textEdits != null) {
+                        Collections.addAll(edits, textEdits);
+                    }
+                }
+            }
+            return Collections.singletonMap(file, edits.toArray(new TextEdit[0]));
         }
     }
 

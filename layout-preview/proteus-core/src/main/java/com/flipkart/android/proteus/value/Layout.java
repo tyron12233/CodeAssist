@@ -40,13 +40,13 @@ public class Layout extends Value {
   public String type;
 
   @Nullable
-  public final List<Attribute> attributes;
+  public List<Attribute> attributes;
 
   @Nullable
   public final Map<String, Value> data;
 
   @Nullable
-  public final ObjectValue extras;
+  public ObjectValue extras;
 
   public Layout(@NonNull String type) {
     this(type, new ArrayList<>(), new HashMap<>(), new ObjectValue());

@@ -126,8 +126,14 @@ public class PackageTask extends Task<AndroidModule> {
                 }
             }
             builder.sealApk();
-        } catch (ApkCreationException | SealedApkException | DuplicateFileException e) {
+        } catch (ApkCreationException | SealedApkException e) {
             throw new CompilationFailedException(e);
+        } catch (DuplicateFileException e) {
+            String message = "Duplicate files from two libraries detected. \n";
+            message += "File1: " + e.getFile1() + " \n";
+            message += "File2: " + e.getFile2() + " \n";
+            message += "Archive path: " + e.getArchivePath();
+            throw new CompilationFailedException(message);
         }
     }
 }

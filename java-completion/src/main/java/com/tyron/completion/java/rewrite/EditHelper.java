@@ -2,7 +2,29 @@ package com.tyron.completion.java.rewrite;
 
 import androidx.annotation.NonNull;
 
+import com.github.javaparser.ast.Modifier.Keyword;
+import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.expr.BooleanLiteralExpr;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.IntegerLiteralExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NullLiteralExpr;
+import com.github.javaparser.ast.expr.SuperExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.ReturnStmt;
+import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.type.PrimitiveType;
+import com.github.javaparser.printer.configuration.ConfigurationOption;
+import com.github.javaparser.printer.configuration.DefaultConfigurationOption;
+import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
+import com.github.javaparser.printer.configuration.PrinterConfiguration;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.java.util.JavaParserTypesUtil;
+import com.tyron.completion.java.util.JavaParserUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -11,6 +33,7 @@ import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.Name;
 import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.element.TypeParameterElement;
 import org.openjdk.javax.lang.model.element.VariableElement;
 import org.openjdk.javax.lang.model.type.ArrayType;
 import org.openjdk.javax.lang.model.type.DeclaredType;
@@ -56,71 +79,80 @@ public class EditHelper {
     }
 
     /**
-     * Prints a given method into a String, adds {@code throws UnsupportedOperationException} to the method body
-     * if the source is null, it will get the parameter names from the class file which will be {@code arg1, arg2, arg3}
-     * @param method method to print
+     * Prints a given method into a String, adds {@code throws UnsupportedOperationException} to
+     * the method body
+     * if the source is null, it will get the parameter names from the class file which will be
+     * {@code arg1, arg2, arg3}
+     *
+     * @param method            method to print
      * @param parameterizedType type parameters of this method
-     * @param source the source method, in which the parameter names are fetched
+     * @param source            the source method, in which the parameter names are fetched
      * @return a string that represents the method
      */
-    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, MethodTree source) {
-        StringBuilder buf = new StringBuilder();
-        buf.append("@Override\n");
-        if (method.getModifiers().contains(Modifier.PUBLIC)) {
-            buf.append("public ");
-        }
-        if (method.getModifiers().contains(Modifier.PROTECTED)) {
-            buf.append("protected ");
-        }
-
-        buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(" ");
-
-        buf.append(method.getSimpleName()).append("(");
-        if (source == null) {
-            buf.append(printParameters(parameterizedType, method));
-        } else {
-            buf.append(printParameters(parameterizedType, source));
-        }
-        buf.append(") {\n\t");
-        buf.append(printBody(method, source));
-        buf.append("\n}");
-        return buf.toString();
+    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType,
+                                     MethodTree source) {
+        MethodDeclaration methodDeclaration = JavaParserUtil.toMethodDeclaration(source,
+                parameterizedType);
+        printMethodInternal(methodDeclaration, method);
+        return methodDeclaration.toString();
     }
 
-    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, ExecutableElement source) {
-        StringBuilder buf = new StringBuilder();
-        buf.append("@Override\n");
-        if (method.getModifiers().contains(Modifier.PUBLIC)) {
-            buf.append("public ");
-        }
-        if (method.getModifiers().contains(Modifier.PROTECTED)) {
-            buf.append("protected ");
-        }
-
-        buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(" ");
-
-        buf.append(method.getSimpleName()).append("(");
-        if (source == null) {
-            buf.append(printParameters(parameterizedType, method));
-        } else {
-            buf.append(printParameters(parameterizedType, source));
-        }
-        buf.append(") ");
-        if (method.getThrownTypes() != null && !method.getThrownTypes().isEmpty()) {
-            buf.append(printThrows(method.getThrownTypes()));
-            buf.append(" ");
-        }
-        buf.append("{\n\t");
-        buf.append(printBody(method, source));
-        buf.append("\n}");
-        return buf.toString();
+    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType,
+                                     ExecutableElement source) {
+        MethodDeclaration methodDeclaration = JavaParserUtil.toMethodDeclaration(method,
+                parameterizedType);
+        printMethodInternal(methodDeclaration, source);
+        return methodDeclaration.toString();
     }
+
+    private static void printMethodInternal(MethodDeclaration methodDeclaration, ExecutableElement method) {
+        methodDeclaration.addAnnotation(Override.class);
+        BlockStmt blockStmt = new BlockStmt();
+        if (method.getModifiers().contains(Modifier.ABSTRACT)) {
+            methodDeclaration.removeModifier(Keyword.ABSTRACT);
+            if (methodDeclaration.getType().isClassOrInterfaceType()) {
+                blockStmt.addStatement(new ReturnStmt(new NullLiteralExpr()));
+            }
+            if (methodDeclaration.getType().isPrimitiveType()) {
+                PrimitiveType type = methodDeclaration.getType().asPrimitiveType();
+                blockStmt.addStatement(new ReturnStmt(getReturnExpr(type)));
+            }
+        } else {
+            MethodCallExpr methodCallExpr = new MethodCallExpr();
+            methodCallExpr.setName(methodDeclaration.getName());
+            methodCallExpr.setArguments(methodDeclaration.getParameters().stream().map(NodeWithSimpleName::getNameAsExpression).collect(NodeList.toNodeList()));
+            methodCallExpr.setScope(new SuperExpr());
+            if (methodDeclaration.getType().isVoidType()) {
+                blockStmt.addStatement(methodCallExpr);
+            } else {
+                blockStmt.addStatement(new ReturnStmt(methodCallExpr));
+            }
+        }
+        methodDeclaration.setBody(blockStmt);
+
+    }
+    private static Expression getReturnExpr(PrimitiveType type) {
+        switch (type.getType()) {
+            case BOOLEAN:
+                return new BooleanLiteralExpr();
+            case BYTE:
+            case DOUBLE:
+            case CHAR:
+            case SHORT:
+            case LONG:
+            case FLOAT:
+            case INT:
+                return new IntegerLiteralExpr("0");
+            default:
+                return new NullLiteralExpr();
+        }
+    }
+
 
     public static String printThrows(@NonNull List<? extends TypeMirror> thrownTypes) {
         StringBuilder types = new StringBuilder();
         for (TypeMirror m : thrownTypes) {
-            types.append((types.length() == 0) ? "" : ", ")
-                    .append(printType(m));
+            types.append((types.length() == 0) ? "" : ", ").append(printType(m));
         }
         return "throws " + types;
     }
@@ -135,11 +167,9 @@ public class EditHelper {
             } else {
                 String names;
                 if (source != null) {
-                    names = source.getParameters().stream().map(VariableTree::getName)
-                            .map(Name::toString).collect(Collectors.joining(", "));
+                    names = source.getParameters().stream().map(VariableTree::getName).map(Name::toString).collect(Collectors.joining(", "));
                 } else {
-                    names = method.getParameters().stream().map(VariableElement::getSimpleName)
-                            .map(Name::toString).collect(Collectors.joining(", "));
+                    names = method.getParameters().stream().map(VariableElement::getSimpleName).map(Name::toString).collect(Collectors.joining(", "));
                 }
                 body = "super." + method.getSimpleName() + "(" + names + ");";
             }
@@ -148,13 +178,16 @@ public class EditHelper {
         }
 
         switch (returnType.getKind()) {
-            case VOID: return "";
+            case VOID:
+                return "";
             case SHORT:
             case CHAR:
             case FLOAT:
             case BYTE:
-            case INT: return "return 0;";
-            case BOOLEAN: return "return false;";
+            case INT:
+                return "return 0;";
+            case BOOLEAN:
+                return "return false;";
             default:
                 return "return null;";
         }
@@ -170,11 +203,9 @@ public class EditHelper {
             } else {
                 String names;
                 if (source != null) {
-                    names = source.getParameters().stream().map(VariableElement::getSimpleName)
-                            .map(Name::toString).collect(Collectors.joining(", "));
+                    names = source.getParameters().stream().map(VariableElement::getSimpleName).map(Name::toString).collect(Collectors.joining(", "));
                 } else {
-                    names = method.getParameters().stream().map(VariableElement::getSimpleName)
-                            .map(Name::toString).collect(Collectors.joining(", "));
+                    names = method.getParameters().stream().map(VariableElement::getSimpleName).map(Name::toString).collect(Collectors.joining(", "));
                 }
                 body = "super." + method.getSimpleName() + "(" + names + ");";
             }
@@ -183,13 +214,16 @@ public class EditHelper {
         }
 
         switch (returnType.getKind()) {
-            case VOID: return "";
+            case VOID:
+                return "";
             case SHORT:
             case CHAR:
             case FLOAT:
             case BYTE:
-            case INT: return "return 0;";
-            case BOOLEAN: return "return false;";
+            case INT:
+                return "return 0;";
+            case BOOLEAN:
+                return "return false;";
             default:
                 return "return null;";
         }
@@ -197,6 +231,7 @@ public class EditHelper {
 
     /**
      * Prints parameters given the source method that contains parameter names
+     *
      * @param method element from the .class file
      * @param source element from the .java file
      * @return Formatted string that represents the methods parameters with proper names
@@ -215,6 +250,7 @@ public class EditHelper {
     /**
      * Prints parameters with the default names eg. {@code arg0, arg1}
      * this is used when the source file of the class isn't found
+     *
      * @param method element to print
      * @param source the class file of the method
      * @return Formatted String that represents the parameters of this method
@@ -234,6 +270,9 @@ public class EditHelper {
     }
 
     public static String printType(TypeMirror type, boolean fqn) {
+        if (fqn) {
+            return JavaParserTypesUtil.toType(type).toString();
+        }
         if (type instanceof DeclaredType) {
             DeclaredType declared = (DeclaredType) type;
             if (declared instanceof Type.ClassType) {
@@ -285,8 +324,7 @@ public class EditHelper {
         if (type.toString().startsWith("<anonymous") && type instanceof Symbol.ClassSymbol) {
             Symbol.ClassSymbol symbol = (Symbol.ClassSymbol) type;
             s = symbol.type.toString();
-        } else
-        if (fqn) {
+        } else if (fqn) {
             s = type.getQualifiedName().toString();
         } else {
             s = type.getSimpleName().toString();
@@ -330,7 +368,8 @@ public class EditHelper {
         return new Position(line, 0);
     }
 
-    public static Position insertAtEndOfClass(JavacTask task, CompilationUnitTree root, ClassTree leaf) {
+    public static Position insertAtEndOfClass(JavacTask task, CompilationUnitTree root,
+                                              ClassTree leaf) {
         SourcePositions pos = Trees.instance(task).getSourcePositions();
         LineMap lines = root.getLineMap();
         long end = pos.getEndPosition(root, leaf);

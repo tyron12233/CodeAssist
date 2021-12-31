@@ -19,7 +19,9 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.transition.TransitionManager;
 
+import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.exceptions.ProteusInflateException;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.toolbox.ProteusHelper;
@@ -93,15 +95,34 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     private final View.OnClickListener mOnClickListener = v -> {
         if (v instanceof ProteusView) {
             ProteusView view = (ProteusView) v;
-
+            ProteusView.Manager manager = view.getViewManager();
+            ProteusContext context = manager.getContext();
+            Layout layout = manager.getLayout();
             ArrayList<Pair<String, String>> attributes = new ArrayList<>();
             for (Layout.Attribute attribute :
-                    view.getViewManager().getLayout().getAttributes()) {
-                String name = ProteusHelper.getAttributeName(view, view.getViewManager().getLayout().type, attribute.id);
+                    layout.getAttributes()) {
+                String name = ProteusHelper.getAttributeName(view, attribute.id);
                 attributes.add(new Pair<>(name, attribute.value.toString()));
             }
+            if (layout.extras != null) {
+                layout.extras.entrySet().forEach(entry -> {
+                    ViewTypeParser<View> parser;
+                    int id = ProteusHelper.getAttributeId(view, entry.getKey());
+                    if (id == -1) {
+                        parser = context.getParser("android.view.View");
+                        if (parser != null) {
+                            id = parser.getAttributeId(entry.getKey());
+                        }
+                    }
+                    if (id != -1) {
+                        String name = ProteusHelper.getAttributeName(view, id);
+                        attributes.add(new Pair<>(name, entry.getValue().toString()));
+                    }
+                });
+            }
+
             ArrayList<Pair<String, String>> availableAttributes = new ArrayList<>();
-            view.getViewManager().getAvailableAttributes().forEach((key, value) -> {
+            manager.getAvailableAttributes().forEach((key, value) -> {
                 availableAttributes.add(new Pair<>(key, ""));
             });
 
@@ -111,9 +132,11 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             getChildFragmentManager().setFragmentResultListener(
                     AttributeEditorDialogFragment.KEY_ATTRIBUTE_CHANGED,
                     getViewLifecycleOwner(),
-                    (requestKey, result) ->
-                            view.getViewManager().updateAttribute(result.getString("key"),
-                                    result.getString("value")));
+                    (requestKey, result) -> {
+                manager.updateAttribute(result.getString("key"), result.getString("value"));
+                getChildFragmentManager()
+                        .clearFragmentResult(AttributeEditorDialogFragment.KEY_ATTRIBUTE_CHANGED);
+            });
         }
     };
 
@@ -288,22 +311,9 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
         try {
             LayoutTransition transition = new LayoutTransition();
-            transition.addTransitionListener(new LayoutTransition.TransitionListener() {
-                @Override
-                public void startTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
-                    transition.getAnimator(transitionType).addListener(new AnimatorListenerAdapter() {
-                        @Override
-                        public void onAnimationEnd(Animator animation) {
-                            mEditorRoot.postDelayed(() -> mEditorRoot.invalidate(), 70);
-                        }
-                    });
-                }
-
-                @Override
-                public void endTransition(LayoutTransition transition, ViewGroup container, View view, int transitionType) {
-
-                }
-            });
+            transition.enableTransitionType(LayoutTransition.CHANGING);
+            transition.disableTransitionType(LayoutTransition.DISAPPEARING);
+            transition.setDuration(180L);
             viewGroup.setLayoutTransition(new LayoutTransition());
         } catch (Throwable e) {
             // ignored, some ViewGroup's may not allow layout transitions
@@ -346,11 +356,31 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private List<ViewPalette> populatePalettes() {
         List<ViewPalette> palettes = new ArrayList<>();
-        palettes.add(createPalette("android.widget.LinearLayout", R.drawable.crash_ic_close));
-        palettes.add(createPalette("android.widget.FrameLayout", R.drawable.ic_baseline_add_24));
+
+        palettes.add(createPalette("android.widget.LinearLayout", R.drawable.ic_baseline_vertical_24));
+        palettes.add(createPalette("android.widget.FrameLayout", R.drawable.ic_baseline_frame_24));
+        palettes.add(createPalette("android.widget.ScrollView", R.drawable.ic_baseline_format_line_spacing_24));
+        palettes.add(createPalette("android.widget.HorizontalScrollView", R.drawable.ic_baseline_format_line_spacing_24));
+
+        palettes.add(createPalette("androidx.cardview.widget.CardView", R.drawable.ic_baseline_style_24));
+
+        palettes.add(createPalette("android.widget.Button",
+                R.drawable.ic_baseline_crop_16_9_24,
+                ImmutableMap.of(Attributes.TextView.Text, new Primitive("Button"))));
         palettes.add(createPalette("android.widget.TextView",
-                R.drawable.crash_ic_bug_report,
+                R.drawable.ic_baseline_text_fields_24,
                 ImmutableMap.of(Attributes.TextView.Text, new Primitive("TextView"))));
+        palettes.add(createPalette("android.widget.EditText",
+                R.drawable.ic_baseline_edit_24,
+                ImmutableMap.of(Attributes.TextView.Hint, new Primitive("EditText"))));
+        palettes.add(createPalette("android.widget.CheckBox",
+                R.drawable.ic_baseline_check_box_24,
+                ImmutableMap.of(Attributes.TextView.Text, new Primitive("CheckBox"))));
+        palettes.add(createPalette("android.widget.Switch",
+                R.drawable.ic_baseline_edit_attributes_24,
+                ImmutableMap.of(Attributes.TextView.Text, new Primitive("Switch"))));
+        palettes.add(createPalette("android.widget.SeekBar", R.drawable.ic_baseline_swipe_right_alt_24));
+
         return palettes;
     }
 

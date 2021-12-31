@@ -72,7 +72,7 @@ public class AttributeEditorAdapter extends RecyclerView.Adapter<AttributeEditor
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         ViewHolder viewHolder = new ViewHolder(new FrameLayout(parent.getContext()));
 
-        viewHolder.itemView.setOnClickListener(v -> {
+        viewHolder.itemView.findViewById(R.id.item_attribute).setOnClickListener(v -> {
             if (mItemClickListener != null) {
                 int position = viewHolder.getBindingAdapterPosition();
                 if (position != RecyclerView.NO_POSITION) {
@@ -100,6 +100,7 @@ public class AttributeEditorAdapter extends RecyclerView.Adapter<AttributeEditor
 
         public ViewHolder(FrameLayout frameLayout) {
             super(frameLayout);
+            frameLayout.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
             View root = LayoutInflater.from(frameLayout.getContext())
                     .inflate(R.layout.attribute_editor_item, frameLayout);

@@ -55,10 +55,19 @@ public class ActionContext {
         return new Builder();
     }
 
+    /**
+     * Do not use this compile task outside addMenu(), this may be outdated and may return null.
+     * Use {@code getCompiler#compile(Path file)} to get a new instance of CompileTask
+     *
+     * example, do not use this inside an onMenuItemClickEvent.
+     */
     public CompileTask getCompileTask() {
         return mCompileTask;
     }
 
+    /**
+     * The TreePath represented by the current cursor position
+     */
     public TreePath getCurrentPath() {
         return mCurrentPath;
     }
@@ -108,17 +117,21 @@ public class ActionContext {
         return mMenu.addSubMenu(id, Menu.NONE, Menu.NONE, "JUST TESTING");
     }
 
+    /**
+     * Performs an action on the background thread and dispatches them on the UI thread after.
+     * @param action action to perform
+     */
     public void performAction(Action action) {
         ThreadUtil.runOnBackgroundThread(() -> {
             Rewrite rewrite = action.getRewrite();
             Map<Path, TextEdit[]> rewrites = rewrite.rewrite(mCompiler);
-            ThreadUtil.runOnUiThread(() -> rewrites.forEach((k, v) -> {
-                if (k.equals(getCurrentFile())) {
+            rewrites.forEach((k, v) -> {
+                if (k.equals(mCurrentFile)) {
                     for (TextEdit edit : v) {
-                        applyTextEdit(edit);
+                        ThreadUtil.runOnUiThread(() -> applyTextEdit(edit));
                     }
                 }
-            }));
+            });
         });
     }
 

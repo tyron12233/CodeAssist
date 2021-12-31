@@ -14,6 +14,8 @@ import java.util.Objects;
 
 public class DiagnosticWrapper implements Diagnostic<File> {
 
+    public static final int USE_LINE_POS = -31;
+
     private String code;
     private File source;
     private Kind kind;
@@ -29,7 +31,11 @@ public class DiagnosticWrapper implements Diagnostic<File> {
 
     /** Extra information for this diagnostic */
     private Object mExtra;
-    
+    private int startLine;
+    private int endLine;
+    private int startColumn;
+    private int endColumn;
+
     public DiagnosticWrapper() {
 
     }
@@ -158,8 +164,17 @@ public class DiagnosticWrapper implements Diagnostic<File> {
         return "startOffset: " + startPosition + "\n" +
                 "endOffset: " + endPosition + "\n" +
                 "position: " + position + "\n" +
-                "lineNumber: " + lineNumber + "\n" +
+                "startLine: " + startLine + "\n" +
+                "startColumn: " + startColumn + "\n" +
+                "endLine: " + endLine + "\n" +
+                "endColumn: " + endColumn + "\n" +
                 "message: " + message;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(code, source, kind, position, startPosition, endPosition, lineNumber,
+                columnNumber, message, mExtra);
     }
 
     @Override
@@ -187,11 +202,40 @@ public class DiagnosticWrapper implements Diagnostic<File> {
                 return false;
             }
 
-            if (that.columnNumber != this.columnNumber) {
-                return false;
-            }
-            return true;
+            return that.columnNumber == this.columnNumber;
         }
         return super.equals(obj);
+    }
+
+    public void setStartLine(int line) {
+        this.startLine = line;
+    }
+
+    public int getStartLine() {
+        return startLine;
+    }
+
+    public int getEndLine() {
+        return endLine;
+    }
+
+    public void setEndLine(int endLine) {
+        this.endLine = endLine;
+    }
+
+    public int getStartColumn() {
+        return startColumn;
+    }
+
+    public void setStartColumn(int startColumn) {
+        this.startColumn = startColumn;
+    }
+
+    public int getEndColumn() {
+        return endColumn;
+    }
+
+    public void setEndColumn(int endColumn) {
+        this.endColumn = endColumn;
     }
 }

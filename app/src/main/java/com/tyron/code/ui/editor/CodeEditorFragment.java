@@ -510,6 +510,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 }
             });
         } catch (Throwable e) {
+            compiler.close();
             if (BuildConfig.DEBUG) {
                 Log.d("getCodeActions()", "Unable to get code actions", e);
             }

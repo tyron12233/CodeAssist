@@ -2,6 +2,7 @@ package com.tyron.completion.java.action.api;
 
 import android.content.Context;
 import android.view.Menu;
+import android.widget.Toast;
 
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.JavaCompilerService;
@@ -54,7 +55,11 @@ public class CodeActionManager {
         mActions.add(provider);
     }
 
-    public void addActions(Context thisContext, Menu menu, JavaCompilerService service, Path file, int cursor, EditorInterface editor){
+    public synchronized void addActions(Context thisContext, Menu menu, JavaCompilerService service, Path file, int cursor, EditorInterface editor){
+        if (!service.isReady()) {
+            Toast.makeText(thisContext, "Compiler is busy", Toast.LENGTH_SHORT).show();
+            return;
+        }
         try (CompileTask task = service.compile(file)) {
             Diagnostic<? extends JavaFileObject> diagnostic = DiagnosticUtil.getDiagnostic(task,
                     cursor);
