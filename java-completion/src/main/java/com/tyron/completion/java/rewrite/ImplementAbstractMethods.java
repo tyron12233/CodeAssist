@@ -2,6 +2,7 @@ package com.tyron.completion.java.rewrite;
 
 import android.util.Log;
 
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.google.common.base.Strings;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerContainer;
@@ -12,6 +13,7 @@ import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.provider.FindHelper;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.java.util.JavaParserUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -29,6 +31,7 @@ import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
@@ -43,6 +46,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+
+import javaslang.collection.Tree;
 
 public class ImplementAbstractMethods implements Rewrite {
 
@@ -110,6 +115,11 @@ public class ImplementAbstractMethods implements Rewrite {
                 Element element = trees.getElement(path);
                 DeclaredType thisType = (DeclaredType) element.asType();
 
+                Set<String> importedClasses = new HashSet<>();
+                task.root().getImports().stream()
+                        .map(ImportTree::getQualifiedIdentifier)
+                        .map(Object::toString)
+                        .forEach(importedClasses::add);
                 Set<String> typesToImport = new HashSet<>();
 
                 int indent = EditHelper.indent(task.task, task.root(), thisTree);
@@ -126,14 +136,24 @@ public class ImplementAbstractMethods implements Rewrite {
                         String tabs = Strings.repeat("\t", tabCount);
                         ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType
                                 , method);
-                        String text;
+                        Set<String> classes = ActionUtil.getTypesToImport(parameterizedType);
+                        typesToImport.addAll(classes);
+                        importedClasses.addAll(classes);
+
+                        MethodDeclaration methodDeclaration;
                         if (source != null) {
-                            text = EditHelper.printMethod(method, parameterizedType, source);
+                            methodDeclaration = EditHelper.printMethod(method, parameterizedType, source);
                         } else {
-                            text = EditHelper.printMethod(method, parameterizedType, method);
+                            methodDeclaration = EditHelper.printMethod(method, parameterizedType, method);
                         }
 
-                        typesToImport.addAll(ActionUtil.getTypesToImport(parameterizedType));
+                        String text = JavaParserUtil.prettyPrint(methodDeclaration, className -> {
+                            if (ActionUtil.needsFqn(importedClasses, className)) {
+                                return true;
+                            }
+                            return ActionUtil.hasImport(importedClasses, className);
+                        });
+
                         text = tabs + text.replace("\n", "\n" + tabs);
                         text += "\n";
                         insertText.add(text);

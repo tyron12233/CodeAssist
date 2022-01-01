@@ -24,6 +24,7 @@ import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.ParenthesizedTree;
 import org.openjdk.source.tree.ReturnTree;
+import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.TryTree;
 import org.openjdk.source.tree.WhileLoopTree;
 import org.openjdk.source.util.JavacTask;
@@ -36,6 +37,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class ActionUtil {
 
@@ -148,9 +150,15 @@ public class ActionUtil {
      * Used to check whether we need to add fully qualified names instead of importing it
      */
     public static boolean needsFqn(CompilationUnitTree root, String className) {
+        return needsFqn(root.getImports().stream()
+                .map(ImportTree::getQualifiedIdentifier)
+                .map(Tree::toString)
+                .collect(Collectors.toSet()), className);
+    }
+
+    public static boolean needsFqn(Set<String> imports, String className) {
         String name = getSimpleName(className);
-        for (ImportTree anImport : root.getImports()) {
-            String fqn = anImport.getQualifiedIdentifier().toString();
+        for (String fqn : imports) {
             String simpleName = getSimpleName(fqn);
             if (simpleName.equals(name)) {
                 return true;
@@ -166,29 +174,31 @@ public class ActionUtil {
         if (className.contains("<")) {
             className = className.substring(0, className.indexOf('<'));
         }
-        String packageName = "";
 
+        return hasImport(root.getImports().stream()
+                .map(ImportTree::getQualifiedIdentifier)
+                .map(Tree::toString)
+                .collect(Collectors.toSet()), className);
+    }
+
+    public static boolean hasImport(Set<String> importDeclarations, String className) {
+
+        String packageName = "";
         if (className.contains(".")) {
             packageName = className.substring(0, className.lastIndexOf("."));
         }
-
-        if (needsFqn(root, className)) {
-            return true;
-        }
-
-        // if the package name of the class is java.lang, we don't need
-        // to check since its already imported
         if (packageName.equals("java.lang")) {
             return true;
         }
 
-        for (ImportTree imp : root.getImports()) {
-            String name = imp.getQualifiedIdentifier().toString();
+        if (needsFqn(importDeclarations, className)) {
+            return true;
+        }
+
+        for (String name : importDeclarations) {
             if (name.equals(className)) {
                 return true;
             }
-
-            // if the import is a wildcard, lets check if they are on the same package
             if (name.endsWith("*")) {
                 String first = name.substring(0, name.lastIndexOf("."));
                 String end = className.substring(0, className.lastIndexOf("."));

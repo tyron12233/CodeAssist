@@ -2,6 +2,7 @@ package com.tyron.completion.java.rewrite;
 
 import android.util.Log;
 
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.google.common.base.Strings;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerContainer;
@@ -9,6 +10,7 @@ import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.FindTypeDeclarationAt;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.java.util.JavaParserUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -21,6 +23,7 @@ import org.openjdk.javax.lang.model.type.ExecutableType;
 import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
@@ -79,31 +82,41 @@ public class OverrideInheritedMethod implements Rewrite {
                 }
                 indent += 4;
 
+                Set<String> importedClasses = new HashSet<>();
+                Set<String> typesToImport = ActionUtil.getTypesToImport(parameterizedType);
+                task.root().getImports().stream()
+                        .map(ImportTree::getQualifiedIdentifier)
+                        .map(Object::toString)
+                        .forEach(importedClasses::add);
+
                 Optional<JavaFileObject> sourceFile = compiler.findAnywhere(superClassName);
-                String text;
+                MethodDeclaration methodDeclaration;
                 if (sourceFile.isPresent()) {
                     ParseTask parse = compiler.parse(sourceFile.get());
                     MethodTree source = FindHelper.findMethod(parse, superClassName, methodName, erasedParameterTypes);
-                    Instant now = Instant.now();
                     if (source == null) {
-                        text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
+                        methodDeclaration = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
                     } else {
-                        text = EditHelper.printMethod(superMethod, parameterizedType, source);
+                        methodDeclaration = EditHelper.printMethod(superMethod, parameterizedType, source);
                     }
-                    Log.d("TEST JAVAPARSER", "Printing took " + Duration.between(now, Instant.now()).toMillis());
                 } else {
-                    text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
+                    methodDeclaration = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
                 }
                 int tabCount = indent / 4;
 
                 String tabs = Strings.repeat("\t", tabCount);
-
+                String text = JavaParserUtil.prettyPrint(methodDeclaration, className -> {
+                    if (ActionUtil.needsFqn(importedClasses, className)) {
+                        return true;
+                    }
+                    return ActionUtil.hasImport(importedClasses, className);
+                });
                 text = tabs + text.replace("\n", "\n" + tabs)
                         + "\n\n";
 
                 edits.add(new TextEdit(new Range(insertPoint, insertPoint), text));
 
-                for (String s : ActionUtil.getTypesToImport(parameterizedType)) {
+                for (String s : typesToImport) {
                     if (!ActionUtil.hasImport(task.root(), s)) {
                         Rewrite addImport = new AddImport(file.toFile(), s);
                         Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);

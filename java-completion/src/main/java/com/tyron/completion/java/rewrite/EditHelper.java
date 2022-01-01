@@ -89,20 +89,20 @@ public class EditHelper {
      * @param source            the source method, in which the parameter names are fetched
      * @return a string that represents the method
      */
-    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType,
+    public static MethodDeclaration printMethod(ExecutableElement method, ExecutableType parameterizedType,
                                      MethodTree source) {
         MethodDeclaration methodDeclaration = JavaParserUtil.toMethodDeclaration(source,
                 parameterizedType);
         printMethodInternal(methodDeclaration, method);
-        return methodDeclaration.toString();
+        return methodDeclaration;
     }
 
-    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType,
+    public static MethodDeclaration printMethod(ExecutableElement method, ExecutableType parameterizedType,
                                      ExecutableElement source) {
         MethodDeclaration methodDeclaration = JavaParserUtil.toMethodDeclaration(method,
                 parameterizedType);
         printMethodInternal(methodDeclaration, source);
-        return methodDeclaration.toString();
+        return methodDeclaration;
     }
 
     private static void printMethodInternal(MethodDeclaration methodDeclaration, ExecutableElement method) {

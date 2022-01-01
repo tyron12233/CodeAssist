@@ -857,7 +857,7 @@ public class CompletionProvider {
             CompletionItem item = new CompletionItem();
             item.label = getMethodLabel(element, executableType) + getThrowsType(element);
             item.detail = EditHelper.printType(element.getReturnType()).toString();
-            item.commitText = EditHelper.printMethod(element, executableType, element);
+            item.commitText = EditHelper.printMethod(element, executableType, element).toString();
             item.cursorOffset = item.commitText.length();
             item.iconKind = DrawableKind.Method;
             items.add(item);

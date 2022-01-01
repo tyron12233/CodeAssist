@@ -8,6 +8,7 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.ReceiverParameter;
+import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.type.ArrayType;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
@@ -15,6 +16,9 @@ import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.WildcardType;
+import com.github.javaparser.printer.DefaultPrettyPrinter;
+import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
+import com.github.javaparser.printer.configuration.PrinterConfiguration;
 import com.tyron.completion.java.rewrite.EditHelper;
 
 import org.openjdk.javax.lang.model.element.ExecutableElement;
@@ -72,7 +76,11 @@ public class JavaParserUtil {
                 .collect(NodeList.toNodeList()));
         List<? extends TypeVariable> typeVariables = type.getTypeVariables();
         methodDeclaration.setTypeParameters(type.getTypeVariables().stream()
-                .map(it -> JavaParserUtil.toTypeParameter((TypeParameterElement) it.asElement()))
+                .map(it -> toType(((TypeMirror) it)))
+                .filter(Objects::nonNull)
+                .map(type1 -> type1 != null ? type1.toTypeParameter() : Optional.<TypeParameter>empty())
+                .filter(Optional::isPresent)
+                .map(Optional::get)
                 .collect(NodeList.toNodeList()));
         if (method.getReceiverParameter() != null) {
             methodDeclaration.setReceiverParameter(toReceiverParameter(method.getReceiverParameter()));
@@ -144,5 +152,25 @@ public class JavaParserUtil {
                     .forEach(classNames::addAll);
         }
         return classNames;
+    }
+
+    public static String prettyPrint(MethodDeclaration methodDeclaration, JavaParserTypesUtil.NeedFqnDelegate delegate) {
+        PrinterConfiguration configuration = new DefaultPrinterConfiguration();
+        JavaPrettyPrinterVisitor visitor =  new JavaPrettyPrinterVisitor(configuration) {
+            @Override
+            public void visit(SimpleName n, Void arg) {
+                printOrphanCommentsBeforeThisChildNode(n);
+                printComment(n.getComment(), arg);
+
+                String identifier = n.getIdentifier();
+                if (delegate.needsFqn(identifier)) {
+                    printer.print(identifier);
+                } else {
+                    printer.print(ActionUtil.getSimpleName(identifier));
+                }
+            }
+        };
+        DefaultPrettyPrinter prettyPrinter = new DefaultPrettyPrinter(t -> visitor, configuration);
+        return prettyPrinter.print(methodDeclaration);
     }
 }

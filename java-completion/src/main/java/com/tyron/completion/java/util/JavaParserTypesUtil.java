@@ -11,6 +11,7 @@ import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
+import com.github.javaparser.ast.type.VoidType;
 import com.github.javaparser.ast.type.WildcardType;
 import com.github.javaparser.ast.visitor.VoidVisitor;
 import com.github.javaparser.printer.DefaultPrettyPrinter;
@@ -18,6 +19,7 @@ import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
 import com.github.javaparser.printer.configuration.PrinterConfiguration;
 
 import org.openjdk.javax.lang.model.type.DeclaredType;
+import org.openjdk.javax.lang.model.type.NoType;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.type.TypeVariable;
@@ -56,6 +58,9 @@ public class JavaParserTypesUtil {
         }
         if (typeMirror instanceof org.openjdk.javax.lang.model.type.TypeVariable) {
             return toType(((TypeVariable) typeMirror));
+        }
+        if (typeMirror instanceof NoType) {
+            return new VoidType();
         }
         return null;
     }
