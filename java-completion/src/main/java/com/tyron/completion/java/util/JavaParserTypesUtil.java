@@ -2,6 +2,7 @@ package com.tyron.completion.java.util;
 
 import static com.github.javaparser.utils.PositionUtils.sortByBeginPosition;
 
+import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.type.ArrayType;
@@ -11,6 +12,7 @@ import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
+import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.ast.type.VoidType;
 import com.github.javaparser.ast.type.WildcardType;
 import com.github.javaparser.ast.visitor.VoidVisitor;
@@ -23,8 +25,11 @@ import org.openjdk.javax.lang.model.type.NoType;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.type.TypeVariable;
+import org.openjdk.source.tree.ErroneousTree;
+import org.openjdk.source.tree.PrimitiveTypeTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.WildcardTree;
+import org.openjdk.tools.javac.tree.JCTree;
 
 import java.util.Objects;
 import java.util.function.Function;
@@ -36,9 +41,23 @@ public class JavaParserTypesUtil {
         boolean needsFqn(String name);
     }
 
+    // trees
     public static Type toType(Tree type) {
-        return null;
+        if (type instanceof ErroneousTree) {
+            ErroneousTree erroneousTree = (ErroneousTree) type;
+            if (!erroneousTree.getErrorTrees().isEmpty()) {
+                return toType(erroneousTree.getErrorTrees().get(0));
+            } else {
+                return new UnknownType();
+            }
+        }
+        return StaticJavaParser.parseType(type.toString());
     }
+
+
+
+
+    // type mirrors
 
     public static Type toType(TypeMirror typeMirror) {
         if (typeMirror.getKind() == TypeKind.ARRAY) {
@@ -122,6 +141,10 @@ public class JavaParserTypesUtil {
             classOrInterfaceType.setName(type.asElement().toString());
         }
         return classOrInterfaceType;
+    }
+
+    public static ClassOrInterfaceType toClassOrInterfaceType(Tree tree) {
+        return StaticJavaParser.parseClassOrInterfaceType(tree.toString());
     }
 
     public static String getName(Type type, NeedFqnDelegate needFqnDelegate) {

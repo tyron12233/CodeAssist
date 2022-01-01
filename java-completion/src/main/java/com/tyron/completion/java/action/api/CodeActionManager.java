@@ -13,6 +13,7 @@ import com.tyron.completion.java.action.quickfix.ExceptionsQuickFix;
 import com.tyron.completion.java.action.quickfix.ImplementAbstractMethodsFix;
 import com.tyron.completion.java.action.quickfix.ImportClassFieldFix;
 import com.tyron.completion.java.action.quickfix.ImportClassFix;
+import com.tyron.completion.java.action.quickfix.MigrateTypeFix;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.TreeUtil;
 
@@ -50,6 +51,7 @@ public class CodeActionManager {
         registerActionProvider(new IntroduceLocalVariableAction());
         registerActionProvider(new ImportClassFix());
         registerActionProvider(new ImportClassFieldFix());
+        registerActionProvider(new MigrateTypeFix());
     }
 
     public void registerActionProvider(ActionProvider provider) {
