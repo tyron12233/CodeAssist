@@ -2,8 +2,10 @@ package com.tyron.completion.java.action.api;
 
 import android.content.Context;
 import android.view.Menu;
+import android.widget.Toast;
 
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.action.context.IntroduceLocalVariableAction;
 import com.tyron.completion.java.action.context.OverrideInheritedMethodsAction;
@@ -11,6 +13,7 @@ import com.tyron.completion.java.action.quickfix.ExceptionsQuickFix;
 import com.tyron.completion.java.action.quickfix.ImplementAbstractMethodsFix;
 import com.tyron.completion.java.action.quickfix.ImportClassFieldFix;
 import com.tyron.completion.java.action.quickfix.ImportClassFix;
+import com.tyron.completion.java.action.quickfix.MigrateTypeFix;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.TreeUtil;
 
@@ -48,6 +51,7 @@ public class CodeActionManager {
         registerActionProvider(new IntroduceLocalVariableAction());
         registerActionProvider(new ImportClassFix());
         registerActionProvider(new ImportClassFieldFix());
+        registerActionProvider(new MigrateTypeFix());
     }
 
     public void registerActionProvider(ActionProvider provider) {
@@ -55,26 +59,32 @@ public class CodeActionManager {
     }
 
     public synchronized void addActions(Context thisContext, Menu menu, JavaCompilerService service, Path file, int cursor, EditorInterface editor){
-        try (CompileTask task = service.compile(file)) {
-            Diagnostic<? extends JavaFileObject> diagnostic = DiagnosticUtil.getDiagnostic(task,
-                    cursor);
-            TreePath currentPath = TreeUtil.findCurrentPath(task, cursor);
-            ActionContext context = ActionContext.builder()
-                    .setContext(thisContext)
-                    .setMenu(menu)
-                    .setCompileTask(task)
-                    .setEditorInterface(editor)
-                    .setCurrentPath(currentPath)
-                    .setDiagnostic(diagnostic)
-                    .setCurrentFile(file)
-                    .setCompiler(service)
-                    .setCursor(cursor)
-                    .build();
+        if (!service.isReady()) {
+            Toast.makeText(thisContext, "Compiler is busy", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try (CompilerContainer container = service.compile(file)) {
+            container.run(task -> {
+                Diagnostic<? extends JavaFileObject> diagnostic = DiagnosticUtil.getDiagnostic(task,
+                        cursor);
+                TreePath currentPath = TreeUtil.findCurrentPath(task, cursor);
+                ActionContext context = ActionContext.builder()
+                        .setContext(thisContext)
+                        .setMenu(menu)
+                        .setCompileTask(task)
+                        .setEditorInterface(editor)
+                        .setCurrentPath(currentPath)
+                        .setDiagnostic(diagnostic)
+                        .setCurrentFile(file)
+                        .setCompiler(service)
+                        .setCursor(cursor)
+                        .build();
 
-            List<ActionProvider> applicableActions = getApplicableActions(context);
-            for (ActionProvider actionProvider : applicableActions) {
-                actionProvider.addMenus(context);
-            }
+                List<ActionProvider> applicableActions = getApplicableActions(context);
+                for (ActionProvider actionProvider : applicableActions) {
+                    actionProvider.addMenus(context);
+                }
+            });
         }
     }
 

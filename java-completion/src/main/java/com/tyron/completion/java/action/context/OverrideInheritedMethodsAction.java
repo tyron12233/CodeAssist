@@ -6,6 +6,7 @@ import android.view.MenuItem;
 import androidx.annotation.NonNull;
 
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
@@ -49,41 +50,43 @@ public class OverrideInheritedMethodsAction extends ActionProvider {
     }
 
     private void perform(ActionContext context) {
-        try (CompileTask task = context.getCompiler().compile(context.getCurrentFile())) {
-            Trees trees = Trees.instance(task.task);
-            Element classElement = trees.getElement(context.getCurrentPath());
-            Elements elements = task.task.getElements();
-            Map<String, Rewrite> rewriteMap = new TreeMap<>();
-            for (Element member : elements.getAllMembers((TypeElement) classElement)) {
-                if (member.getModifiers().contains(Modifier.FINAL)) {
-                    continue;
+        try (CompilerContainer container = context.getCompiler().compile(context.getCurrentFile())) {
+            container.run(task -> {
+                Trees trees = Trees.instance(task.task);
+                Element classElement = trees.getElement(context.getCurrentPath());
+                Elements elements = task.task.getElements();
+                Map<String, Rewrite> rewriteMap = new TreeMap<>();
+                for (Element member : elements.getAllMembers((TypeElement) classElement)) {
+                    if (member.getModifiers().contains(Modifier.FINAL)) {
+                        continue;
+                    }
+                    if (member.getModifiers().contains(Modifier.STATIC)) {
+                        continue;
+                    }
+                    if (member.getKind() != ElementKind.METHOD) {
+                        continue;
+                    }
+                    ExecutableElement method = (ExecutableElement) member;
+                    TypeElement methodSource = (TypeElement) member.getEnclosingElement();
+                    if (methodSource.getQualifiedName().contentEquals("java.lang.Object")) {
+                        continue;
+                    }
+                    if (methodSource.equals(classElement)) {
+                        continue;
+                    }
+                    DiagnosticUtil.MethodPtr ptr = new DiagnosticUtil.MethodPtr(task.task, method);
+                    Rewrite rewrite = new OverrideInheritedMethod(ptr.className, ptr.methodName, ptr.erasedParameterTypes, context.getCurrentFile(), context.getCursor());
+                    String title = "Override " + method.getSimpleName() + " from " + ptr.className;
+                    rewriteMap.put(title, rewrite);
                 }
-                if (member.getModifiers().contains(Modifier.STATIC)) {
-                    continue;
-                }
-                if (member.getKind() != ElementKind.METHOD) {
-                    continue;
-                }
-                ExecutableElement method = (ExecutableElement) member;
-                TypeElement methodSource = (TypeElement) member.getEnclosingElement();
-                if (methodSource.getQualifiedName().contentEquals("java.lang.Object")) {
-                    continue;
-                }
-                if (methodSource.equals(classElement)) {
-                    continue;
-                }
-                DiagnosticUtil.MethodPtr ptr = new DiagnosticUtil.MethodPtr(task.task, method);
-                Rewrite rewrite = new OverrideInheritedMethod(ptr.className, ptr.methodName, ptr.erasedParameterTypes, context.getCurrentFile(), context.getCursor());
-                String title = "Override " + method.getSimpleName() + " from " + ptr.className;
-                rewriteMap.put(title, rewrite);
-            }
 
-            String[] strings = rewriteMap.keySet().toArray(new String[0]);
+                String[] strings = rewriteMap.keySet().toArray(new String[0]);
 
-            new AlertDialog.Builder(context.getContext()).setTitle("Override inherited methods").setItems(strings, (d, w) -> {
-                Rewrite rewrite = rewriteMap.get(strings[w]);
-                context.performAction(new Action(rewrite));
-            }).setNegativeButton(android.R.string.cancel, null).show();
+                new AlertDialog.Builder(context.getContext()).setTitle("Override inherited methods").setItems(strings, (d, w) -> {
+                    Rewrite rewrite = rewriteMap.get(strings[w]);
+                    context.performAction(new Action(rewrite));
+                }).setNegativeButton(android.R.string.cancel, null).show();
+            });
         }
     }
 }

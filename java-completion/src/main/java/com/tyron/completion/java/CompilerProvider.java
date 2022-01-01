@@ -34,9 +34,9 @@ public interface CompilerProvider {
 
     ParseTask parse(JavaFileObject file);
 
-    CompileTask compile(Path... files);
+    CompilerContainer compile(Path... files);
 
-    CompileTask compile(Collection<? extends JavaFileObject> sources);
+    CompilerContainer compile(Collection<? extends JavaFileObject> sources);
 
     Path NOT_FOUND = Paths.get("");
 }

@@ -16,6 +16,7 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
+import com.github.javaparser.ast.CompilationUnit;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.project.ProjectManager;
@@ -45,6 +46,7 @@ import com.tyron.completion.java.action.api.CodeActionManager;
 import com.tyron.completion.java.action.api.EditorInterface;
 import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.java.util.JavaParserUtil;
 import com.tyron.completion.java.util.ThreadUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -308,19 +310,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }));
     }
 
-    private void performAction(JavaCompilerService compiler, Action action) {
-        ThreadUtil.runOnBackgroundThread(() -> {
-            Rewrite rewrite = action.getRewrite();
-            Map<Path, TextEdit[]> rewrites = rewrite.rewrite(compiler);
-            rewrites.forEach((k, v) -> {
-                if (k.toFile().equals(mCurrentFile)) {
-                    for (TextEdit edit : v) {
-                        applyTextEdit(edit);
-                    }
-                }
-            });
-        });
-    }
 
     private void applyTextEdit(TextEdit edit) {
         int startFormat;
@@ -467,6 +456,14 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     LayoutEditorFragment.newInstance(currentFile)).addToBackStack(null).commit();
         } else {
             // TODO: handle unknown files
+            JavaCompilerProvider service =
+                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+            JavaCompilerService compiler = service.getCompiler(ProjectManager.getInstance().getCurrentProject(),
+                    (JavaModule) ProjectManager.getInstance().getCurrentProject().getMainModule());
+            ParseTask parse = compiler.parse(mCurrentFile.toPath());
+            CompilationUnit compilationUnit =
+                    JavaParserUtil.toCompilationUnit(parse.root);
+            System.out.println(compilationUnit);
         }
     }
 

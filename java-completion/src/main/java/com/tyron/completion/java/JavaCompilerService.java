@@ -54,6 +54,10 @@ public class JavaCompilerService implements CompilerProvider {
     public final ReusableCompiler compiler = new ReusableCompiler();
     private final Docs docs;
 
+    private final CompilerContainer mContainer = new CompilerContainer();
+    private CompileBatch cachedCompile;
+    private final Map<JavaFileObject, Long> cachedModified = new HashMap<>();
+
     public final ReentrantLock mLock = new ReentrantLock();
 
     public JavaCompilerService(Project project, Set<File> classPath, Set<File> docPath, Set<String> addExports) {
@@ -68,9 +72,6 @@ public class JavaCompilerService implements CompilerProvider {
     public Project getProject() {
         return mProject;
     }
-
-    public CompileBatch cachedCompile;
-    private final Map<JavaFileObject, Long> cachedModified = new HashMap<>();
 
     public void setCurrentModule(@NonNull JavaModule module) {
         mSourceFileManager.setCurrentModule(module);
@@ -139,7 +140,6 @@ public class JavaCompilerService implements CompilerProvider {
      * @return CompileBatch for this compilation
      */
     private CompileBatch compileBatch(Collection<? extends JavaFileObject> sources) {
-
         if (needsCompile(sources)) {
             loadCompile(sources);
         } else {
@@ -403,7 +403,7 @@ public class JavaCompilerService implements CompilerProvider {
      * @return a CompileTask for this compilation
      */
     @Override
-    public synchronized CompileTask compile(Path... files) {
+    public synchronized CompilerContainer compile(Path... files) {
         List<JavaFileObject> sources = new ArrayList<>();
         for (Path f : files) {
             sources.add(new SourceFileObject(f, mCurrentModule));
@@ -419,13 +419,16 @@ public class JavaCompilerService implements CompilerProvider {
      * @return a CompileTask for this compilation
      */
     @Override
-    public synchronized CompileTask compile(Collection<? extends JavaFileObject> sources) {
-        mLock.lock();
-        CompileBatch compile = compileBatch(sources);
-        return new CompileTask(compile.task, compile.roots, diagnostics, this::close);
+    public synchronized CompilerContainer compile(Collection<? extends JavaFileObject> sources) {
+        synchronized (mContainer) {
+            CompileBatch compile = compileBatch(sources);
+            CompileTask task = new CompileTask(compile);
+            mContainer.setCompileTask(task);
+            return mContainer;
+        }
     }
 
-    public void close() {
+    public synchronized void close() {
         if (cachedCompile != null && !cachedCompile.closed) {
             cachedCompile.close();
         }
@@ -434,7 +437,7 @@ public class JavaCompilerService implements CompilerProvider {
         }
     }
 
-    public boolean isReady() {
+    public synchronized boolean isReady() {
         if (CompletionEngine.isIndexing()) {
             return false;
         }
