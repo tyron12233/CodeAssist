@@ -154,6 +154,12 @@ public class JavaParserUtil {
         return classNames;
     }
 
+    /**
+     * Print a method declaration into its string representation
+     * @param methodDeclaration method to print
+     * @param delegate callback to whether a class name should be printed as fully qualified names
+     * @return String representation of the method declaration properly formatted
+     */
     public static String prettyPrint(MethodDeclaration methodDeclaration, JavaParserTypesUtil.NeedFqnDelegate delegate) {
         PrinterConfiguration configuration = new DefaultPrinterConfiguration();
         JavaPrettyPrinterVisitor visitor =  new JavaPrettyPrinterVisitor(configuration) {
