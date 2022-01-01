@@ -4,6 +4,7 @@ import android.util.Log;
 
 import com.google.common.base.Strings;
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.FindTypeDeclarationAt;
 import com.tyron.completion.java.ParseTask;
@@ -56,62 +57,64 @@ public class OverrideInheritedMethod implements Rewrite {
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
 
+        List<TextEdit> edits = new ArrayList<>();
         Position insertPoint = insertNearCursor(compiler);
 
-        try (CompileTask task = compiler.compile(file)) {
-            List<TextEdit> edits = new ArrayList<>();
-            Types types = task.task.getTypes();
-            Trees trees = Trees.instance(task.task);
-            ExecutableElement superMethod = FindHelper.findMethod(task, superClassName, methodName, erasedParameterTypes);
-            if (superMethod == null) {
-                return null;
-            }
-
-            ClassTree thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), (long) insertPosition);
-            TreePath thisPath = trees.getPath(task.root(), thisTree);
-            TypeElement thisClass = (TypeElement) trees.getElement(thisPath);
-            ExecutableType parameterizedType = (ExecutableType) types.asMemberOf((DeclaredType) thisClass.asType(), superMethod);
-            int indent = EditHelper.indent(task.task, task.root(), thisTree);
-            if (indent == 1) {
-                indent = 4;
-            }
-            indent += 4;
-
-            Optional<JavaFileObject> sourceFile = compiler.findAnywhere(superClassName);
-            String text;
-            if (sourceFile.isPresent()) {
-                ParseTask parse = compiler.parse(sourceFile.get());
-                MethodTree source = FindHelper.findMethod(parse, superClassName, methodName, erasedParameterTypes);
-                Instant now = Instant.now();
-                if (source == null) {
-                    text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
-                } else {
-                    text = EditHelper.printMethod(superMethod, parameterizedType, source);
+        try (CompilerContainer container = compiler.compile(file)) {
+            return container.get(task -> {
+                Types types = task.task.getTypes();
+                Trees trees = Trees.instance(task.task);
+                ExecutableElement superMethod = FindHelper.findMethod(task, superClassName, methodName, erasedParameterTypes);
+                if (superMethod == null) {
+                    return null;
                 }
-                Log.d("TEST JAVAPARSER", "Printing took " + Duration.between(now, Instant.now()).toMillis());
-            } else {
-                text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
-            }
-            int tabCount = indent / 4;
 
-            String tabs = Strings.repeat("\t", tabCount);
+                ClassTree thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), (long) insertPosition);
+                TreePath thisPath = trees.getPath(task.root(), thisTree);
+                TypeElement thisClass = (TypeElement) trees.getElement(thisPath);
+                ExecutableType parameterizedType = (ExecutableType) types.asMemberOf((DeclaredType) thisClass.asType(), superMethod);
+                int indent = EditHelper.indent(task.task, task.root(), thisTree);
+                if (indent == 1) {
+                    indent = 4;
+                }
+                indent += 4;
 
-            text = tabs + text.replace("\n", "\n" + tabs)
-                    + "\n\n";
+                Optional<JavaFileObject> sourceFile = compiler.findAnywhere(superClassName);
+                String text;
+                if (sourceFile.isPresent()) {
+                    ParseTask parse = compiler.parse(sourceFile.get());
+                    MethodTree source = FindHelper.findMethod(parse, superClassName, methodName, erasedParameterTypes);
+                    Instant now = Instant.now();
+                    if (source == null) {
+                        text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
+                    } else {
+                        text = EditHelper.printMethod(superMethod, parameterizedType, source);
+                    }
+                    Log.d("TEST JAVAPARSER", "Printing took " + Duration.between(now, Instant.now()).toMillis());
+                } else {
+                    text = EditHelper.printMethod(superMethod, parameterizedType, superMethod);
+                }
+                int tabCount = indent / 4;
 
-            edits.add(new TextEdit(new Range(insertPoint, insertPoint), text));
+                String tabs = Strings.repeat("\t", tabCount);
 
-            for (String s : ActionUtil.getTypesToImport(parameterizedType)) {
-                if (!ActionUtil.hasImport(task.root(), s)) {
-                    Rewrite addImport = new AddImport(file.toFile(), s);
-                    Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-                    TextEdit[] textEdits = rewrite.get(file);
-                    if (textEdits != null) {
-                        Collections.addAll(edits, textEdits);
+                text = tabs + text.replace("\n", "\n" + tabs)
+                        + "\n\n";
+
+                edits.add(new TextEdit(new Range(insertPoint, insertPoint), text));
+
+                for (String s : ActionUtil.getTypesToImport(parameterizedType)) {
+                    if (!ActionUtil.hasImport(task.root(), s)) {
+                        Rewrite addImport = new AddImport(file.toFile(), s);
+                        Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+                        TextEdit[] textEdits = rewrite.get(file);
+                        if (textEdits != null) {
+                            Collections.addAll(edits, textEdits);
+                        }
                     }
                 }
-            }
-            return Collections.singletonMap(file, edits.toArray(new TextEdit[0]));
+                return Collections.singletonMap(file, edits.toArray(new TextEdit[0]));
+            });
         }
     }
 

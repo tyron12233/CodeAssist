@@ -13,11 +13,18 @@ import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
 
 public class CompileTask implements AutoCloseable {
-    
+
+    private final CompileBatch mCompileBatch;
     public final JavacTask task;
     public final List<CompilationUnitTree> roots;
     public final List<Diagnostic<? extends JavaFileObject>> diagnostics;
-    private final Runnable close;
+
+    public CompileTask(CompileBatch batch) {
+        mCompileBatch = batch;
+        this.task = batch.task;
+        this.roots = batch.roots;
+        this.diagnostics = batch.parent.getDiagnostics();
+    }
 
     public CompilationUnitTree root() {
         if (roots.size() != 1) {
@@ -45,19 +52,8 @@ public class CompileTask implements AutoCloseable {
         throw new RuntimeException("not found");
     }
 
-    public CompileTask(
-        JavacTask task,
-        List<CompilationUnitTree> roots,
-        List<Diagnostic<? extends JavaFileObject>> diagnostics,
-        Runnable close) {
-        this.task = task;
-        this.roots = roots;
-        this.diagnostics = diagnostics;
-        this.close = close;
-    }
-
     @Override
     public void close() {
-        close.run();
+        mCompileBatch.close();
     }
 }

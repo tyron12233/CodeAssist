@@ -5,6 +5,7 @@ import android.view.Menu;
 import android.widget.Toast;
 
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.action.context.IntroduceLocalVariableAction;
 import com.tyron.completion.java.action.context.OverrideInheritedMethodsAction;
@@ -60,26 +61,28 @@ public class CodeActionManager {
             Toast.makeText(thisContext, "Compiler is busy", Toast.LENGTH_SHORT).show();
             return;
         }
-        try (CompileTask task = service.compile(file)) {
-            Diagnostic<? extends JavaFileObject> diagnostic = DiagnosticUtil.getDiagnostic(task,
-                    cursor);
-            TreePath currentPath = TreeUtil.findCurrentPath(task, cursor);
-            ActionContext context = ActionContext.builder()
-                    .setContext(thisContext)
-                    .setMenu(menu)
-                    .setCompileTask(task)
-                    .setEditorInterface(editor)
-                    .setCurrentPath(currentPath)
-                    .setDiagnostic(diagnostic)
-                    .setCurrentFile(file)
-                    .setCompiler(service)
-                    .setCursor(cursor)
-                    .build();
+        try (CompilerContainer container = service.compile(file)) {
+            container.run(task -> {
+                Diagnostic<? extends JavaFileObject> diagnostic = DiagnosticUtil.getDiagnostic(task,
+                        cursor);
+                TreePath currentPath = TreeUtil.findCurrentPath(task, cursor);
+                ActionContext context = ActionContext.builder()
+                        .setContext(thisContext)
+                        .setMenu(menu)
+                        .setCompileTask(task)
+                        .setEditorInterface(editor)
+                        .setCurrentPath(currentPath)
+                        .setDiagnostic(diagnostic)
+                        .setCurrentFile(file)
+                        .setCompiler(service)
+                        .setCursor(cursor)
+                        .build();
 
-            List<ActionProvider> applicableActions = getApplicableActions(context);
-            for (ActionProvider actionProvider : applicableActions) {
-                actionProvider.addMenus(context);
-            }
+                List<ActionProvider> applicableActions = getApplicableActions(context);
+                for (ActionProvider actionProvider : applicableActions) {
+                    actionProvider.addMenus(context);
+                }
+            });
         }
     }
 

@@ -5,6 +5,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.lint.api.Detector;
@@ -66,27 +67,28 @@ public class JavaVisitor {
     }
 
     public void visitFile(JavaContext context) {
-        Tree compilationUnit = null;
         try {
-            try (CompileTask task = mCompiler.compile(context.file.toPath())) {
-                compilationUnit = task.root();
-                context.setCompileTask(task);
+            try (CompilerContainer container = mCompiler.compile(context.file.toPath())) {
+                container.run(task -> {
+                    Tree compilationUnit = task.root();
+                    context.setCompileTask(task);
 
-                for (VisitingDetector v : mAllDetectors) {
-                    v.setContext(context);
-                }
+                    for (VisitingDetector v : mAllDetectors) {
+                        v.setContext(context);
+                    }
 
-                if (!mMethodDetectors.isEmpty()) {
-                    JavaVoidVisitor visitor = new DelegatingJavaVisitor(context);
-                    compilationUnit.accept(visitor, null);
-                } else if (!mTreeTypeDetectors.isEmpty()) {
-                    JavaVoidVisitor visitor = new DispatchVisitor();
-                    compilationUnit.accept(visitor, null);
-                }
+                    if (!mMethodDetectors.isEmpty()) {
+                        JavaVoidVisitor visitor = new DelegatingJavaVisitor(context);
+                        compilationUnit.accept(visitor, null);
+                    } else if (!mTreeTypeDetectors.isEmpty()) {
+                        JavaVoidVisitor visitor = new DispatchVisitor();
+                        compilationUnit.accept(visitor, null);
+                    }
+                });
             }
         } catch (Throwable e) {
             Log.e("Lint", "Failed to analyze file", e);
-            ((JavaCompilerService) mCompiler).close();
+            ((JavaCompilerService) mCompiler).destroy();
         }
     }
 

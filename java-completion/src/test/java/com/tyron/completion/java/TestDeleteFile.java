@@ -58,18 +58,22 @@ public class TestDeleteFile {
     public void test() {
         mService = getNewService(mJavaFiles);
 
-        try (CompileTask task = mService.compile(mMainClass.toPath())) {
-            assertThat(task.diagnostics)
-                    .isEmpty();
+        try (CompilerContainer container = mService.compile(mMainClass.toPath())) {
+            container.run(task -> {
+                assertThat(task.diagnostics)
+                        .isEmpty();
+            });
         }
 
         mModule.removeJavaFile("com.test.MainSecond");
         mJavaFiles.remove(mClassToDelete);
         mService = getNewService(mJavaFiles);
 
-        try(CompileTask task = mService.compile(mMainClass.toPath())) {
-            assertThat(task.diagnostics)
-                    .isNotEmpty();
+        try(CompilerContainer container = mService.compile(mMainClass.toPath())) {
+            container.run(task-> {
+                assertThat(task.diagnostics)
+                        .isNotEmpty();
+            });
         }
     }
 

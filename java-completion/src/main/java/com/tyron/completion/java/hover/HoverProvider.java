@@ -6,6 +6,7 @@ import org.openjdk.source.util.DocTrees;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.provider.FindHelper;
 import com.tyron.completion.java.ParseTask;
@@ -35,19 +36,21 @@ public class HoverProvider {
     }
 
     public List<String> hover(Path file, int offset) {
-        try (CompileTask task = compiler.compile(file)) {
-            Element element = new FindHoverElement(task.task).scan(task.root(), (long) offset);
-            if (element == null) {
-                return NOT_SUPPORTED;
-            }
-            List<String> list =  new ArrayList<>();
-            String code = printType(element);
-            list.add(code);
-            String docs = docs(task, element);
-            if (!docs.isEmpty()) {
-                list.add(docs);
-            }
-            return list;
+        try (CompilerContainer container = compiler.compile(file)) {
+            return container.get(task -> {
+                Element element = new FindHoverElement(task.task).scan(task.root(), (long) offset);
+                if (element == null) {
+                    return NOT_SUPPORTED;
+                }
+                List<String> list =  new ArrayList<>();
+                String code = printType(element);
+                list.add(code);
+                String docs = docs(task, element);
+                if (!docs.isEmpty()) {
+                    list.add(docs);
+                }
+                return list;
+            });
         }
     }
 

@@ -16,6 +16,7 @@ import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.util.Debouncer;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.provider.CompletionEngine;
@@ -118,12 +119,14 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     SourceFileObject sourceFileObject =
                             new SourceFileObject(editor.getCurrentFile().toPath(),
                                     contents.toString(), Instant.now());
-                    try (CompileTask task =
+                    try (CompilerContainer container =
                                  service.compile(Collections.singletonList(sourceFileObject))) {
-                        if (!cancel.invoke()) {
-                            List<DiagnosticWrapper> collect = task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList());
-                            editor.setDiagnostics(collect);
-                        }
+                        container.run(task -> {
+                            if (!cancel.invoke()) {
+                                List<DiagnosticWrapper> collect = task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList());
+                                editor.setDiagnostics(collect);
+                            }
+                        });
                     }
                 } catch (Throwable e) {
                     service.destroy();

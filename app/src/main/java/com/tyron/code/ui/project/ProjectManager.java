@@ -14,6 +14,7 @@ import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.provider.CompletionEngine;
@@ -108,7 +109,7 @@ public class ProjectManager {
                 JavaCompilerService service = provider.get(project, (JavaModule) module);
                 ((JavaModule) module).getJavaFiles().forEach((key, value) -> {
                     //noinspection EmptyTryBlock
-                    try (CompileTask task = service.compile(value.toPath())) {
+                    try (CompilerContainer container = service.compile(value.toPath())) {
 
                     }
                 });

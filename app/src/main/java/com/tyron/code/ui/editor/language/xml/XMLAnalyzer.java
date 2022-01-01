@@ -16,6 +16,7 @@ import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompilerService;
 
@@ -260,7 +261,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
                         CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
                 JavaCompilerService service = provider.getCompiler(project, module);
                 //noinspection EmptyTryBlock
-                try (CompileTask compileTask = service.compile(resourceClass.toPath())) {
+                try (CompilerContainer container = service.compile(resourceClass.toPath())) {
 
                 }
             }

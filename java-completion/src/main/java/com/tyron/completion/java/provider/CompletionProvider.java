@@ -26,6 +26,7 @@ import org.openjdk.tools.javac.tree.JCTree;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.common.util.StringSearch;
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.rewrite.EditHelper;
@@ -131,24 +132,26 @@ public class CompletionProvider {
         boolean endsWithParen = endsWithParen(contents, (int) cursor);
 
         checkCanceled();
-        try (CompileTask task = compiler.compile(Collections.singletonList(source))) {
-            TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
-            switch (path.getLeaf().getKind()) {
-                case IDENTIFIER:
-                    return completeIdentifier(task, path, partial, endsWithParen);
-                case MEMBER_SELECT:
-                    return completeMemberSelect(task, path, partial, endsWithParen);
-                case MEMBER_REFERENCE:
-                    return completeMemberReference(task, path, partial);
-                case CASE:
-                    return completeSwitchConstant(task, path, partial);
-                case IMPORT:
-                    return completeImport(qualifiedPartialIdentifier(contents, (int) cursor));
-                default:
-                    CompletionList list = new CompletionList();
-                    addKeywords(path, partial, list);
-                    return list;
-            }
+        try (CompilerContainer container = compiler.compile(Collections.singletonList(source))) {
+            return container.get(task -> {
+                TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
+                switch (path.getLeaf().getKind()) {
+                    case IDENTIFIER:
+                        return completeIdentifier(task, path, partial, endsWithParen);
+                    case MEMBER_SELECT:
+                        return completeMemberSelect(task, path, partial, endsWithParen);
+                    case MEMBER_REFERENCE:
+                        return completeMemberReference(task, path, partial);
+                    case CASE:
+                        return completeSwitchConstant(task, path, partial);
+                    case IMPORT:
+                        return completeImport(qualifiedPartialIdentifier(contents, (int) cursor));
+                    default:
+                        CompletionList list = new CompletionList();
+                        addKeywords(path, partial, list);
+                        return list;
+                }
+            });
         }
     }
 
