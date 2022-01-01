@@ -4,6 +4,7 @@ import static com.tyron.completion.java.util.JavaParserTypesUtil.toType;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.Modifier;
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
@@ -154,13 +155,14 @@ public class JavaParserUtil {
         return classNames;
     }
 
+
     /**
-     * Print a method declaration into its string representation
-     * @param methodDeclaration method to print
+     * Print a node declaration into its string representation
+     * @param node node to print
      * @param delegate callback to whether a class name should be printed as fully qualified names
      * @return String representation of the method declaration properly formatted
      */
-    public static String prettyPrint(MethodDeclaration methodDeclaration, JavaParserTypesUtil.NeedFqnDelegate delegate) {
+    public static String prettyPrint(Node node, JavaParserTypesUtil.NeedFqnDelegate delegate) {
         PrinterConfiguration configuration = new DefaultPrinterConfiguration();
         JavaPrettyPrinterVisitor visitor =  new JavaPrettyPrinterVisitor(configuration) {
             @Override
@@ -177,6 +179,6 @@ public class JavaParserUtil {
             }
         };
         DefaultPrettyPrinter prettyPrinter = new DefaultPrettyPrinter(t -> visitor, configuration);
-        return prettyPrinter.print(methodDeclaration);
+        return prettyPrinter.print(node);
     }
 }

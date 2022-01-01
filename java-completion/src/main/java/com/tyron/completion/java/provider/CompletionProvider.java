@@ -4,6 +4,37 @@ import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
 import android.util.Log;
 
+import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.type.ReferenceType;
+import com.tyron.builder.model.SourceFileObject;
+import com.tyron.common.util.StringSearch;
+import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.CompilerContainer;
+import com.tyron.completion.java.JavaCompilerService;
+import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.rewrite.EditHelper;
+import com.tyron.completion.java.util.ElementUtil;
+import com.tyron.completion.java.util.JavaParserUtil;
+import com.tyron.completion.model.CompletionItem;
+import com.tyron.completion.model.CompletionList;
+import com.tyron.completion.model.DrawableKind;
+
+import org.openjdk.javax.lang.model.element.Element;
+import org.openjdk.javax.lang.model.element.ElementKind;
+import org.openjdk.javax.lang.model.element.ExecutableElement;
+import org.openjdk.javax.lang.model.element.Modifier;
+import org.openjdk.javax.lang.model.element.Name;
+import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.element.VariableElement;
+import org.openjdk.javax.lang.model.type.ArrayType;
+import org.openjdk.javax.lang.model.type.DeclaredType;
+import org.openjdk.javax.lang.model.type.ExecutableType;
+import org.openjdk.javax.lang.model.type.PrimitiveType;
+import org.openjdk.javax.lang.model.type.TypeMirror;
+import org.openjdk.javax.lang.model.type.TypeVariable;
+import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ExpressionTree;
@@ -18,23 +49,7 @@ import org.openjdk.source.tree.SwitchTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.api.BasicJavacTask;
-import org.openjdk.tools.javac.api.JavacTaskImpl;
-import org.openjdk.tools.javac.code.Type;
 import org.openjdk.tools.javac.tree.JCTree;
-
-import com.tyron.builder.model.SourceFileObject;
-import com.tyron.common.util.StringSearch;
-import com.tyron.completion.java.CompileTask;
-import com.tyron.completion.java.CompilerContainer;
-import com.tyron.completion.java.JavaCompilerService;
-import com.tyron.completion.java.ParseTask;
-import com.tyron.completion.java.rewrite.EditHelper;
-import com.tyron.completion.java.util.ActionUtil;
-import com.tyron.completion.java.util.ElementUtil;
-import com.tyron.completion.model.CompletionItem;
-import com.tyron.completion.model.CompletionList;
-import com.tyron.completion.model.DrawableKind;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -51,21 +66,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.Name;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.element.VariableElement;
-import org.openjdk.javax.lang.model.type.ArrayType;
-import org.openjdk.javax.lang.model.type.DeclaredType;
-import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.type.PrimitiveType;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.javax.lang.model.type.TypeVariable;
-import org.openjdk.javax.lang.model.util.Types;
 
 import me.xdrop.fuzzywuzzy.FuzzySearch;
 
@@ -543,9 +543,8 @@ public class CompletionProvider {
                             item.data = typeElement.getQualifiedName().toString();
                             item.iconKind = DrawableKind.Interface;
                             item.label = classElement.getSimpleName().toString() + " {...}";
-                            item.commitText = "" + classElement.getSimpleName() + "() {\n" +
-                                    "\t// TODO\n" +
-                                    "}";
+                            item.commitText = "" + classElement.getSimpleName() + "() {\n" + "\t" +
+                                    "// TODO\n" + "}";
                             item.cursorOffset = item.commitText.length();
                             item.detail = "";
                         }
@@ -853,11 +852,14 @@ public class CompletionProvider {
             }
 
             ExecutableType executableType = (ExecutableType) types.asMemberOf(type, element);
+            MethodDeclaration methodDeclaration = EditHelper.printMethod(element, executableType,
+                    element);
+            String text = JavaParserUtil.prettyPrint(methodDeclaration, className -> false);
 
             CompletionItem item = new CompletionItem();
-            item.label = getMethodLabel(element, executableType) + getThrowsType(element);
+            item.label = getMethodLabel(methodDeclaration);
             item.detail = EditHelper.printType(element.getReturnType()).toString();
-            item.commitText = EditHelper.printMethod(element, executableType, element).toString();
+            item.commitText = text;
             item.cursorOffset = item.commitText.length();
             item.iconKind = DrawableKind.Method;
             items.add(item);
@@ -880,14 +882,17 @@ public class CompletionProvider {
 
     private CompletionItem method(ExecutableElement first, boolean endsWithParen,
                                   boolean methodRef, ExecutableType type) {
+
+        MethodDeclaration methodDeclaration = JavaParserUtil.toMethodDeclaration(first, type);
+
         CompletionItem item = new CompletionItem();
-        item.label = getMethodLabel(first, type) + getThrowsType(first);
-        item.commitText = first.getSimpleName().toString() + ((methodRef || endsWithParen) ? "" :
+        item.label = getMethodLabel(methodDeclaration);
+        item.commitText = methodDeclaration.getName() + ((methodRef || endsWithParen) ? "" :
                 "()");
-        item.detail = simpleType(type.getReturnType());
+        item.detail = JavaParserUtil.prettyPrint(methodDeclaration.getType(), className -> false);
         item.iconKind = DrawableKind.Method;
         item.cursorOffset = item.commitText.length();
-        if (first.getParameters() != null && !first.getParameters().isEmpty()) {
+        if (methodDeclaration.getParameters() != null && !methodDeclaration.getParameters().isEmpty()) {
             item.cursorOffset = item.commitText.length() - ((methodRef || endsWithParen) ? 0 : 1);
         }
         return item;
@@ -934,6 +939,40 @@ public class CompletionProvider {
         String name = element.getSimpleName().toString();
         String params = EditHelper.printParameters(type, element);
         return name + "(" + params + ")";
+    }
+
+    private String getMethodLabel(MethodDeclaration declaration) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(declaration.getName());
+        sb.append("(");
+        boolean firstParam = true;
+        for (Parameter param : declaration.getParameters()) {
+            if (firstParam) {
+                firstParam = false;
+            } else {
+                sb.append(", ");
+            }
+            sb.append(JavaParserUtil.prettyPrint(param.getType(), className -> false));
+            if (param.isVarArgs()) {
+                sb.append("...");
+            }
+        }
+        sb.append(")");
+        NodeList<ReferenceType> thrownExceptions = declaration.getThrownExceptions();
+        if (thrownExceptions != null && thrownExceptions.isNonEmpty()) {
+            sb.append(" ");
+            boolean firstThrow = true;
+            for (ReferenceType thr : thrownExceptions) {
+                if (firstThrow) {
+                    firstThrow = false;
+                    sb.append(" throws ");
+                } else {
+                    sb.append(", ");
+                }
+                sb.append(JavaParserUtil.prettyPrint(thr, className -> false));
+            }
+        }
+        return sb.toString();
     }
 
     private CharSequence simpleName(String className) {
