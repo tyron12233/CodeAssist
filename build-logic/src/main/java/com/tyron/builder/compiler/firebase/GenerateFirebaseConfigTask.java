@@ -39,7 +39,7 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
 
     @Override
     public void prepare(BuildType type) throws IOException {
-        mConfigFile = new File(getModule().getRootFile(), "app/google-services.json");
+        mConfigFile = new File(getModule().getRootFile(), "google-services.json");
     }
 
     /**
