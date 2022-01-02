@@ -7,7 +7,6 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.RecentlyNonNull;
 
 import com.flipkart.android.proteus.Proteus;
 import com.flipkart.android.proteus.ProteusBuilder;

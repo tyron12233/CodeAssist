@@ -28,6 +28,7 @@ import kotlin.Pair;
 public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
 
     public static final String KEY_ATTRIBUTE_CHANGED = "ATTRIBUTE_CHANGED";
+    public static final String KEY_ATTRIBUTE_REMOVED = "ATTRIBUTE_REMOVED";
 
     public static AttributeEditorDialogFragment newInstance(ArrayList<Pair<String, String>> availableAttributes, ArrayList<Pair<String, String>> attributes) {
         Bundle args = new Bundle();
@@ -132,5 +133,19 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
             }));
             builder.show();
         });
+
+        getParentFragmentManager().setFragmentResultListener(KEY_ATTRIBUTE_REMOVED, getViewLifecycleOwner(), ((requestKey, result) -> {
+            String key = result.getString("key");
+            int index = -1;
+            for (Pair<String, String> pair : mAttributes) {
+                if (pair.getFirst().equals(key)) {
+                    index = mAttributes.indexOf(pair);
+                }
+            }
+            if (index != -1) {
+                mAttributes.remove(index);
+                mAdapter.submitList(mAttributes);
+            }
+        }));
     }
 }

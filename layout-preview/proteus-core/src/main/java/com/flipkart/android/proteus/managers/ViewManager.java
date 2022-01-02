@@ -17,6 +17,7 @@
 package com.flipkart.android.proteus.managers;
 
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -32,6 +33,8 @@ import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Value;
+import com.flipkart.android.proteus.view.UnknownView;
+import com.flipkart.android.proteus.view.UnknownViewGroup;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,7 +52,7 @@ public class ViewManager implements ProteusView.Manager {
     protected final ProteusContext context;
 
     @NonNull
-    protected final View view;
+    protected View view;
 
     @NonNull
     protected final Layout layout;
@@ -167,6 +170,30 @@ public class ViewManager implements ProteusView.Manager {
     @Override
     public ViewTypeParser<?> getViewTypeParser() {
         return parser;
+    }
+
+    @Override
+    public void removeAttribute(String attributeName) {
+        if (layout.attributes != null) {
+            int attributeId = ProteusHelper.getAttributeId((ProteusView) view, attributeName);
+            Layout.Attribute attribute = new Layout.Attribute(attributeId, null);
+            layout.attributes.remove(attribute);
+        }
+        if (layout.extras != null) {
+            layout.extras.remove(attributeName);
+        }
+
+        if (!(view instanceof UnknownView) && !(view instanceof UnknownViewGroup)) {
+            ViewGroup parent = (ViewGroup) view.getParent();
+            parent.removeView(view);
+
+            ProteusView view = parser.createView((ProteusContext) this.view.getContext(), layout,
+                    new ObjectValue(), parent, -1);
+            this.view = view.getAsView();
+            parser.onAfterCreateView(view, parent, -1);
+            view.setViewManager(this);
+            parent.addView(view.getAsView());
+        }
     }
 
     public void updateAttribute(String name, String string) {
