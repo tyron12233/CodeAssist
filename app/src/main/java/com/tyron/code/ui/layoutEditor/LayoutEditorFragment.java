@@ -405,9 +405,12 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     @Override
     public void onProjectOpen(Project module) {
+        if (getActivity() == null) {
+            return;
+        }
         if (isDumb) {
             isDumb = false;
-            createInflater();
+            requireActivity().runOnUiThread(this::createInflater);
         }
     }
 
