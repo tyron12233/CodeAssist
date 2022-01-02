@@ -90,10 +90,9 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
             new MaterialAlertDialogBuilder(requireContext())
                     .setTitle(attribute.getFirst())
                     .setView(v).setPositiveButton("apply", (d, w) -> {
-                List<Pair<String, String>> attributes = mAdapter.getAttributes();
-                attributes.set(pos, new Pair<>(attribute.getFirst(),
+                mAttributes.set(pos, new Pair<>(attribute.getFirst(),
                         editText.getText().toString()));
-                mAdapter.submitList(attributes);
+                mAdapter.submitList(mAttributes);
 
                 Bundle bundle = new Bundle();
                 bundle.putString("key", attribute.getFirst());
