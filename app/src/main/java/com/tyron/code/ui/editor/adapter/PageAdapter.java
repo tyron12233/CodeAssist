@@ -1,4 +1,4 @@
-package com.tyron.code.ui.main.adapter;
+package com.tyron.code.ui.editor.adapter;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 
 import com.tyron.code.ui.editor.CodeEditorFragment;
+import com.tyron.code.ui.editor.api.FileEditor;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -16,13 +17,13 @@ import java.util.Objects;
 
 public class PageAdapter extends FragmentStateAdapter {
 
-    private final List<File> data = new ArrayList<>();
+    private final List<FileEditor> data = new ArrayList<>();
 
     public PageAdapter(FragmentManager fm, Lifecycle lifecycle) {
         super(fm, lifecycle);
     }
 
-    public void submitList(List<File> files) {
+    public void submitList(List<FileEditor> files) {
         DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
             @Override
             public int getOldListSize() {
@@ -57,24 +58,6 @@ public class PageAdapter extends FragmentStateAdapter {
     @NonNull
     @Override
     public Fragment createFragment(int p1) {
-        return CodeEditorFragment.newInstance(data.get(p1));
-    }
-
-    @Override
-    public long getItemId(int position) {
-        if (data.isEmpty() || position > data.size()) {
-            return -1;
-        }
-        return data.get(position).getAbsolutePath().hashCode();
-    }
-
-    @Override
-    public boolean containsItem(long itemId) {
-        for (File file : data) {
-            if (file.getAbsolutePath().hashCode() == itemId) {
-                return true;
-            }
-        }
-        return false;
+        return data.get(p1).getFragment();
     }
 }
