@@ -46,12 +46,15 @@ public class AttributeResource extends Value {
   private static final Map<String, Class> sHashMap = new HashMap<>();
 
   public final int attributeId;
+  private final String value;
 
   private AttributeResource(final int attributeId) {
     this.attributeId = attributeId;
+    value = String.valueOf(attributeId);
   }
 
   private AttributeResource(String value, Context context) throws ClassNotFoundException, NoSuchFieldException, IllegalAccessException {
+    this.value = value;
     String attributeName;
     String packageName = null;
     Matcher matcher = sAttributePattern.matcher(value);
@@ -113,6 +116,10 @@ public class AttributeResource extends Value {
   @Override
   public Value copy() {
     return this;
+  }
+
+  public String toString() {
+    return value;
   }
 
   private static class AttributeCache {
