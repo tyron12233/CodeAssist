@@ -159,6 +159,9 @@ public class ActionUtil {
     public static boolean needsFqn(Set<String> imports, String className) {
         String name = getSimpleName(className);
         for (String fqn : imports) {
+            if (fqn.equals(className)) {
+                return false;
+            }
             String simpleName = getSimpleName(fqn);
             if (simpleName.equals(name)) {
                 return true;

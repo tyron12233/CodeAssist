@@ -13,7 +13,6 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompilerService;

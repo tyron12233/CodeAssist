@@ -15,7 +15,6 @@ import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.ast.type.VoidType;
 import com.github.javaparser.ast.type.WildcardType;
-import com.github.javaparser.ast.visitor.VoidVisitor;
 import com.github.javaparser.printer.DefaultPrettyPrinter;
 import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
 import com.github.javaparser.printer.configuration.PrinterConfiguration;
@@ -25,15 +24,15 @@ import org.openjdk.javax.lang.model.type.NoType;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.type.TypeVariable;
-import org.openjdk.source.tree.ErroneousTree;
+import org.openjdk.source.tree.IdentifierTree;
+import org.openjdk.source.tree.ParameterizedTypeTree;
 import org.openjdk.source.tree.PrimitiveTypeTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.WildcardTree;
+import org.openjdk.tools.javac.code.BoundKind;
 import org.openjdk.tools.javac.tree.JCTree;
 
 import java.util.Objects;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 public class JavaParserTypesUtil {
 
@@ -42,18 +41,83 @@ public class JavaParserTypesUtil {
     }
 
     // trees
-    public static Type toType(Tree type) {
-        if (type instanceof ErroneousTree) {
-            ErroneousTree erroneousTree = (ErroneousTree) type;
-            if (!erroneousTree.getErrorTrees().isEmpty()) {
-                return toType(erroneousTree.getErrorTrees().get(0));
-            } else {
-                return new UnknownType();
-            }
+    public static ClassOrInterfaceType toClassOrInterfaceType(Tree tree) {
+        ClassOrInterfaceType type = new ClassOrInterfaceType();
+        if (tree instanceof IdentifierTree) {
+            type.setName(((IdentifierTree) tree).getName().toString());
         }
-        return StaticJavaParser.parseType(type.toString());
+        if (tree instanceof ParameterizedTypeTree) {
+            ParameterizedTypeTree parameterizedTypeTree = (ParameterizedTypeTree) tree;
+            Type t = toType(parameterizedTypeTree.getType());
+
+            NodeList<Type> typeArguments = new NodeList<>();
+            for (Tree typeArgument : parameterizedTypeTree.getTypeArguments()) {
+                Type typ = toType(typeArgument);
+                typeArguments.add(typ);
+            }
+            if (t.isClassOrInterfaceType()) {
+                type.setName(t.asClassOrInterfaceType().getName());
+            }
+            type.setTypeArguments(typeArguments);
+        }
+        return type;
     }
 
+    public static Type toType(Tree tree) {
+        Type type;
+        if (tree instanceof PrimitiveTypeTree) {
+            type = getPrimitiveType((PrimitiveTypeTree) tree);
+        } else if (tree instanceof IdentifierTree) {
+            type = toClassOrInterfaceType(tree);
+        } else if (tree instanceof WildcardTree) {
+            JCTree.JCWildcard wildcardTree = (JCTree.JCWildcard) tree;
+            WildcardType wildcardType = new WildcardType();
+            Tree bound = wildcardTree.getBound();
+            Type boundType = toType(bound);
+            if (wildcardTree.kind.kind == BoundKind.EXTENDS) {
+                wildcardType.setExtendedType((ReferenceType) boundType);
+            } else {
+                wildcardType.setSuperType((ReferenceType) boundType);
+            }
+            type = wildcardType;
+        } else if (tree instanceof ParameterizedTypeTree) {
+            type = toClassOrInterfaceType(tree);
+        }
+        else {
+            type = StaticJavaParser.parseType(tree.toString());
+        }
+        return type;
+    }
+
+    public static Type getPrimitiveType(PrimitiveTypeTree tree) {
+        Type type;
+        switch (tree.getPrimitiveTypeKind()) {
+            case INT:
+                type = PrimitiveType.intType();
+                break;
+            case BOOLEAN:
+                type = PrimitiveType.booleanType();
+                break;
+            case LONG:
+                type = PrimitiveType.longType();
+                break;
+            case SHORT:
+                type = PrimitiveType.shortType();
+                break;
+            case CHAR:
+                type = PrimitiveType.charType();
+                break;
+            case FLOAT:
+                type = PrimitiveType.floatType();
+                break;
+            case VOID:
+                type = new VoidType();
+                break;
+            default:
+                type = new UnknownType();
+        }
+        return type;
+    }
 
 
 
@@ -117,11 +181,6 @@ public class JavaParserTypesUtil {
         return wildcardType;
     }
 
-    public static WildcardType toWildcardType(WildcardTree tree) {
-        WildcardType wildcardType = new WildcardType();
-        return wildcardType;
-    }
-
     public static PrimitiveType toPrimitiveType(org.openjdk.javax.lang.model.type.PrimitiveType type) {
         PrimitiveType.Primitive primitive = PrimitiveType.Primitive.valueOf(type.getKind().name());
         return new PrimitiveType(primitive);
@@ -141,10 +200,6 @@ public class JavaParserTypesUtil {
             classOrInterfaceType.setName(type.asElement().toString());
         }
         return classOrInterfaceType;
-    }
-
-    public static ClassOrInterfaceType toClassOrInterfaceType(Tree tree) {
-        return StaticJavaParser.parseClassOrInterfaceType(tree.toString());
     }
 
     public static String getName(Type type, NeedFqnDelegate needFqnDelegate) {
