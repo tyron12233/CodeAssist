@@ -23,21 +23,17 @@ import java.util.Objects;
 
 public class Project {
 
-    private final Map<Class<?>, Object> mComponentMap;
     private final List<Module> mModules;
     private final Module mMainModule;
     private final File mRoot;
-    private EventBus mEventBus;
 
     private final ProjectSettings mSettings;
     
     public Project(File root) {
-        mComponentMap = new HashMap<>();
         mRoot = root;
         mModules = new ArrayList<>();
         mMainModule = new AndroidModuleImpl(new File(mRoot, "app"));
         mSettings = new ProjectSettings(new File(root, "settings.json"));
-        mEventBus = new EventBus();
     }
 
     @NonNull
@@ -72,23 +68,6 @@ public class Project {
     @Override
     public int hashCode() {
         return Objects.hash(mRoot);
-    }
-
-    @NonNull
-    public EventBus getEventBus() {
-        return mEventBus;
-    }
-
-    @Nullable
-    public <T> T getComponent(Class<T> componentClass) {
-        return (T) mComponentMap.get(componentClass);
-    }
-
-    public void registerComponent(@NonNull Object component) {
-        if (mComponentMap.containsKey(component.getClass())) {
-            throw new IllegalArgumentException("Duplicate component class " + component.getClass());
-        }
-        mComponentMap.put(component.getClass(), component);
     }
 
 }
