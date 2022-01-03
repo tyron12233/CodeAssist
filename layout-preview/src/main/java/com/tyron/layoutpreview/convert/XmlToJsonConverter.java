@@ -22,11 +22,6 @@ import java.util.Set;
 
 public class XmlToJsonConverter {
 
-    public static final String INTEGER_PREFIX = "@integer/";
-    public static final String ID_NEW_PREFIX = "@+id/";
-    public static final String ID_PREFIX = "@id/";
-    public static final String ANDROID_NS_PREFIX = "android";
-
     private final Set<String> mAttributesToSkip = new HashSet<>();
 
     private final String[] ANDROID_WIDGET = new String[] {"TextView", "Button", "ImageView",
@@ -110,22 +105,6 @@ public class XmlToJsonConverter {
         }
 
         String tag = parser.getName();
-        if (!tag.contains(".")) {
-            for (String widget : ANDROID_WIDGET) {
-                if (widget.equals(tag)) {
-                    tag = "android.widget." + tag;
-                    break;
-                }
-            }
-        }
-        if (!tag.contains(".")) {
-            for (String view : ANDROID_VIEW) {
-                if (view.equals(tag)) {
-                    tag = "android.view." + tag;
-                    break;
-                }
-            }
-        }
 
         json.addProperty("type", tag);
 
