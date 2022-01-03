@@ -5,8 +5,11 @@ import androidx.annotation.Nullable;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
+import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
+import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
@@ -100,6 +103,15 @@ public class ProjectManager {
         module.index();
         mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
 
+        if (module instanceof AndroidModule) {
+            mListener.onTaskStarted("Generating resource files.");
+            IncrementalAapt2Task task = new IncrementalAapt2Task((AndroidModule) module, logger, false);
+            try {
+                task.generateResourceClasses();
+            } catch (IOException | CompilationFailedException e) {
+                logger.warning("Unable to generate resource classes " + e.getMessage());
+            }
+        }
         if (module instanceof JavaModule) {
             mListener.onTaskStarted("Indexing");
             try {
