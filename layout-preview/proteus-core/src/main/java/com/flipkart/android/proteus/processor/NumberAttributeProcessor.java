@@ -20,7 +20,7 @@ import android.view.View;
 
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Resource;
-import com.flipkart.android.proteus.value.StyleResource;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 
 import androidx.annotation.NonNull;
@@ -52,8 +52,8 @@ public abstract class NumberAttributeProcessor<V extends View> extends Attribute
   }
 
   @Override
-  public void handleStyleResource(V view, StyleResource style) {
-    setNumber(view, style.apply(view.getContext()).getFloat(0, 0f));
+  public void handleStyle(V view, Style style) {
+//    setNumber(view, style.apply(view.getContext()).getFloat(0, 0f));
   }
 
   public abstract void setNumber(V view, @NonNull Number value);

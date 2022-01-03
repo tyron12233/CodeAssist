@@ -19,8 +19,10 @@ package com.flipkart.android.proteus;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.flipkart.android.proteus.value.Color;
 import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Layout;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 import java.util.Locale;
 import java.util.Map;
@@ -49,15 +51,16 @@ public class ProteusResources {
 
     private final DrawableManager drawableManager;
 
-    ProteusResources(@NonNull Map<String, ViewTypeParser> parsers, @Nullable LayoutManager layoutManager,
-                     @NonNull FunctionManager functionManager, @Nullable StyleManager styleManager,
-                     StringManager stringManager, DrawableManager drawableManager) {
+    private final ColorManager colorManager;
+
+    ProteusResources(@NonNull Map<String, ViewTypeParser> parsers, @Nullable LayoutManager layoutManager, @NonNull FunctionManager functionManager, @Nullable StyleManager styleManager, StringManager stringManager, DrawableManager drawableManager, ColorManager colorManager) {
         this.parsers = parsers;
         this.layoutManager = layoutManager;
         this.functionManager = functionManager;
         this.styleManager = styleManager;
         this.stringManager = stringManager;
         this.drawableManager = drawableManager;
+        this.colorManager = colorManager;
     }
 
     @NonNull
@@ -83,13 +86,23 @@ public class ProteusResources {
         return null != drawableManager ? drawableManager.get(name) : null;
     }
 
+    public Value getColor(String name) {
+        if (name.startsWith("@color/")) {
+            name = name.substring("@color/".length());
+        }
+        return null != colorManager ? colorManager.getColor(name) : null;
+    }
+
     @NonNull
     public Map<String, ViewTypeParser> getParsers() {
         return parsers;
     }
 
     @Nullable
-    public Map<String, Value> getStyle(String name) {
+    public Style getStyle(String name) {
+        if (name.startsWith("@style/")) {
+            name = name.substring("@style/".length());
+        }
         return null != styleManager ? styleManager.get(name) : null;
     }
 }

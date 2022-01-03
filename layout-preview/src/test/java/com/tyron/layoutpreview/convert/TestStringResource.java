@@ -10,7 +10,7 @@ public class TestStringResource extends BaseTest {
 
     @Test
     public void testStringResource() {
-        Resource resource = new Resource(0, "@string/app_name");
+        Resource resource = new Resource("@string/app_name");
         String string = resource.getString(mInflater.getContext());
         Truth.assertThat(string)
                 .isEqualTo("TEST");

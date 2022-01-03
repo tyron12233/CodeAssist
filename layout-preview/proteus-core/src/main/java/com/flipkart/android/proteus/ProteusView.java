@@ -23,6 +23,7 @@ import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 
 import java.util.Collections;
@@ -75,6 +76,10 @@ public interface ProteusView {
      * @param data New data for the view
      */
     void update(@Nullable ObjectValue data);
+
+    default Style getStyle() {
+      return getContext().getStyle();
+    }
 
     default void updateAttribute(String name, String value) {
 

@@ -24,7 +24,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.value.Layout;
-import com.flipkart.android.proteus.value.Value;
+import com.flipkart.android.proteus.value.Style;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -149,8 +149,15 @@ public class ProteusContext extends ContextWrapper {
     }
 
     @Nullable
-    public Map<String, Value> getStyle(String name) {
+    public Style getStyle(String name) {
         return resources.getStyle(name);
+    }
+
+    /**
+     * @return The default style, typically from the application theme or the current activity
+     */
+    public Style getStyle() {
+        return resources.getStyle("Theme.MyApplication");
     }
 
     /**
@@ -184,6 +191,7 @@ public class ProteusContext extends ContextWrapper {
         private StringManager stringManager;
 
         private DrawableManager drawableManager;
+        private ColorManager colorManager;
 
         Builder(@NonNull Context context, @NonNull Map<String, ViewTypeParser> parsers, @NonNull FunctionManager functionManager) {
             this.base = context;
@@ -221,9 +229,14 @@ public class ProteusContext extends ContextWrapper {
             return this;
         }
 
+        public Builder setColorManager(ColorManager colorManager) {
+            this.colorManager = colorManager;
+            return this;
+        }
+
         public ProteusContext build() {
             ProteusResources resources = new ProteusResources(parsers, layoutManager,
-                    functionManager, styleManager, stringManager, drawableManager);
+                    functionManager, styleManager, stringManager, drawableManager, colorManager);
             return new ProteusContext(base, resources, loader, callback);
         }
 

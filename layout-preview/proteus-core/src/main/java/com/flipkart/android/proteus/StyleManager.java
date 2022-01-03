@@ -16,6 +16,7 @@
 
 package com.flipkart.android.proteus;
 
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 
 import java.util.Map;
@@ -30,10 +31,10 @@ import androidx.annotation.Nullable;
  */
 public abstract class StyleManager {
   @Nullable
-  protected abstract Styles getStyles();
+  protected abstract Map<String, Style> getStyles();
 
   @Nullable
-  public Map<String, Value> get(@NonNull String name) {
+  public Style get(@NonNull String name) {
     return null != getStyles() ? getStyles().get(name) : null;
   }
 }

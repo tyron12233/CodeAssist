@@ -66,6 +66,10 @@ public class Resource extends Value {
     public final int resId;
     private final String name;
 
+    public Resource(String name) {
+        this.resId = -1;
+        this.name = name;
+    }
     /**
      * @param resId only provide this for android resources
      * @param name the name of the resource, including the prefix
@@ -76,7 +80,7 @@ public class Resource extends Value {
     }
 
     private Resource(int id) {
-        this(id, null);
+        this(null);
     }
 
     public static boolean isAnimation(String string) {
@@ -123,17 +127,15 @@ public class Resource extends Value {
     }
 
     @Nullable
-    public static Integer getColor(int resId, Context context) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                return context.getResources().getColor(resId, context.getTheme());
-            } else {
-                //noinspection deprecation
-                return context.getResources().getColor(resId);
-            }
-        } catch (Resources.NotFoundException e) {
-            return null;
-        }
+    public static Color getColor(String name, ProteusContext context) {
+       Value value = context.getProteusResources().getColor(name);
+       if (value != null && value.isResource()) {
+           value = value.getAsResource().getColor(context);
+       }
+       if (value != null && value.isColor()) {
+           return value.getAsColor();
+       }
+       return Color.valueOf(name);
     }
 
     @Nullable
@@ -240,7 +242,7 @@ public class Resource extends Value {
         if (resource != null) {
             return resource;
         }
-        resource = new Resource(-1, value);
+        resource = new Resource(value);
         ResourceCache.cache.put(value, resource);
         return resource;
     }
@@ -260,8 +262,8 @@ public class Resource extends Value {
     }
 
     @Nullable
-    public Integer getColor(Context context) {
-        return getColor(resId, context);
+    public Color getColor(ProteusContext context) {
+        return getColor(name, context);
     }
 
     @Nullable
@@ -334,4 +336,13 @@ public class Resource extends Value {
     public String toString() {
         return name;
     }
+
+
+
+
+
+
+
+
+
 }

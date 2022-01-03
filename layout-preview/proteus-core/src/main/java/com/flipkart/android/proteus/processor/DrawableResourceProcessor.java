@@ -17,15 +17,17 @@
 package com.flipkart.android.proteus.processor;
 
 import android.content.res.TypedArray;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusLayoutInflater;
 import com.flipkart.android.proteus.value.AttributeResource;
+import com.flipkart.android.proteus.value.Color;
 import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Resource;
-import com.flipkart.android.proteus.value.StyleResource;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 
 import androidx.annotation.Nullable;
@@ -92,6 +94,12 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
     DrawableValue drawableValue = resource.getProteusDrawable(context);
     if (drawableValue == null) {
       Drawable d = resource.getDrawable(context);
+      if (d == null) {
+        Color color = resource.getColor(context);
+        if (color != null) {
+          d = new ColorDrawable(color.apply(context).color);
+        }
+      }
       if (null != d) {
         setDrawable(view, d);
       }
@@ -109,9 +117,9 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
   }
 
   @Override
-  public void handleStyleResource(V view, StyleResource style) {
-    TypedArray a = style.apply(view.getContext());
-    set(view, a);
+  public void handleStyle(V view, Style style) {
+//    TypedArray a = style.apply(view.getContext());
+//    set(view, a);
   }
 
   private void set(V view, TypedArray a) {

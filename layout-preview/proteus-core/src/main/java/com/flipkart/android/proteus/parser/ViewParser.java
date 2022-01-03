@@ -48,8 +48,9 @@ import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
+import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Resource;
-import com.flipkart.android.proteus.value.StyleResource;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 import com.flipkart.android.proteus.view.ProteusAndroidView;
 
@@ -165,6 +166,13 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDrawable(V view, Drawable drawable) {
         view.setBackground(drawable);
+      }
+
+      @Override
+      public void handleAttributeResource(V view, AttributeResource attribute) {
+        Value value =
+                ((ProteusView) view).getViewManager().getStyle().getValue(attribute.getName(), attribute);
+        ((ProteusView) view).getViewManager().updateAttribute(Attributes.View.Background, value.toString());
       }
     });
 
@@ -380,9 +388,11 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
 
       @Override
-      public void handleStyleResource(V view, StyleResource style) {
-        TypedArray a = style.apply(view.getContext());
-        view.setVisibility(a.getInt(0, View.GONE));
+      public void handleStyle(V view, Style style) {
+        Value gone = style.getValue(Attributes.View.Visibility, new Primitive("gone"));
+        if (view instanceof ProteusView) {
+          ((ProteusView) view).getViewManager().updateAttribute(Attributes.View.Visibility, gone.toString());
+        }
       }
 
       @Override
@@ -461,29 +471,56 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
     });
 
-    addAttributeProcessor(Attributes.View.Style, new StringAttributeProcessor<V>() {
+    addAttributeProcessor(Attributes.View.Style, new AttributeProcessor<V>() {
       @Override
-      public void setString(V view, String value) {
+      public void handleValue(V view, Value value) {
+        if (value.isStyle()) {
+          handleStyle(view, value.getAsStyle());
+        }
+      }
+
+      @Override
+      public void handleResource(V view, Resource resource) {
+
+      }
+
+      @Override
+      public void handleAttributeResource(V view, AttributeResource attribute) {
+
+      }
+
+//      @Override
+//      public void setString(V view, String value) {
+//        ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
+//        ProteusContext context = viewManager.getContext();
+//        Layout layout = viewManager.getLayout();
+//
+//        ViewTypeParser handler = context.getInflater().getParser(layout);
+//
+//        String[] styleSet = value.split(ProteusConstants.STYLE_DELIMITER);
+//        for (String styleName : styleSet) {
+//          Style style = context.getStyle(styleName);
+//          if (null != style) {
+//            process(style, (ProteusView) view, (handler != null ? handler : ViewParser.this));
+//          }
+//        }
+//      }
+
+      private void process(Style style, ProteusView proteusView, ViewTypeParser handler) {
+        for (Map.Entry<String, Value> entry : style.getValues().entrySet()) {
+          //noinspection unchecked
+          handler.handleAttribute(proteusView.getAsView(), handler.getAttributeId(entry.getKey()), entry.getValue());
+        }
+      }
+
+      @Override
+      public void handleStyle(V view, Style style) {
         ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
         ProteusContext context = viewManager.getContext();
         Layout layout = viewManager.getLayout();
 
         ViewTypeParser handler = context.getInflater().getParser(layout);
-
-        String[] styleSet = value.split(ProteusConstants.STYLE_DELIMITER);
-        for (String styleName : styleSet) {
-          Map<String, Value> style = context.getStyle(styleName);
-          if (null != style) {
-            process(style, (ProteusView) view, (handler != null ? handler : ViewParser.this));
-          }
-        }
-      }
-
-      private void process(Map<String, Value> style, ProteusView proteusView, ViewTypeParser handler) {
-        for (Map.Entry<String, Value> entry : style.entrySet()) {
-          //noinspection unchecked
-          handler.handleAttribute(proteusView.getAsView(), handler.getAttributeId(entry.getKey()), entry.getValue());
-        }
+        process(style, (ProteusView) view, (handler != null ? handler : ViewParser.this));
       }
     });
 

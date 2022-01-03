@@ -1,5 +1,7 @@
 package com.tyron.layoutpreview.convert.adapter;
 
+import android.view.View;
+
 import com.flipkart.android.proteus.FunctionManager;
 import com.flipkart.android.proteus.Proteus;
 import com.flipkart.android.proteus.ProteusConstants;
@@ -456,7 +458,8 @@ public class ProteusTypeAdapterFactory implements TypeAdapterFactory {
                 if (ProteusConstants.DATA.equals(name)) {
                     data = readData(in);
                 } else {
-                    ViewTypeParser.AttributeSet.Attribute attribute = proteus.has(type) ? proteus.getAttributeId(name, type) : null;
+                    ViewTypeParser<View> parser = context.getParser(type);
+                    ViewTypeParser.AttributeSet.Attribute attribute = parser != null ? parser.getAttributeSet().getAttribute(name) : null;
                     if (null != attribute) {
                         FunctionManager manager = PROTEUS_INSTANCE_HOLDER.getProteus().functions;
                         Value value = attribute.processor.precompile(VALUE_TYPE_ADAPTER.read(in), getContext(), manager);

@@ -110,7 +110,7 @@ public class Attributes {
     public static final String ScrollbarStyle = "android:scrollbarStyle";
     public static final String Selected = "android:selected";
     public static final String SoundEffectsEnabled = "android:soundEffectsEnabled";
-    public static final String Style = "android:style";
+    public static final String Style = "style";
     public static final String Tag = "android:tag";
     public static final String TextAlignment = "android:textAlignment";
     public static final String TextDirection = "android:textDirection";

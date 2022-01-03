@@ -25,12 +25,12 @@ import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.parser.ParseHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Binding;
-import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Gravity;
 import com.flipkart.android.proteus.value.NestedBinding;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Resource;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.StyleResource;
 import com.flipkart.android.proteus.value.Value;
 
@@ -68,8 +68,8 @@ public abstract class AttributeProcessor<V extends View> {
       }
 
       @Override
-      public void handleStyleResource(View view, StyleResource style) {
-        output[0] = new Primitive(style.apply(context).getString(0));
+      public void handleStyle(View view, Style style) {
+        output[0] = style;
       }
     };
 
@@ -89,9 +89,9 @@ public abstract class AttributeProcessor<V extends View> {
     } else if (Resource.isResource(string)) {
       return Resource.valueOf(string, context);
     } else if (AttributeResource.isAttributeResource(string)) {
-      return AttributeResource.valueOf(string, context);
-    } else if (StyleResource.isStyleResource(string)) {
-      return StyleResource.valueOf(string, context);
+      return AttributeResource.valueOf(string);
+    } else if (Style.isStyle(string)) {
+      return Style.valueOf(string, context);
     }
     return null;
   }
@@ -112,7 +112,7 @@ public abstract class AttributeProcessor<V extends View> {
       compiled = staticPreCompile(value.getAsPrimitive(), context, manager);
     } else if (value.isObject()) {
       compiled = staticPreCompile(value.getAsObject(), context, manager);
-    } else if (value.isBinding() || value.isResource() || value.isAttributeResource() || value.isStyleResource()) {
+    } else if (value.isBinding() || value.isResource() || value.isAttributeResource() || value.isStyle()) {
       return value;
     }
     return compiled;
@@ -125,8 +125,8 @@ public abstract class AttributeProcessor<V extends View> {
       handleResource(view, value.getAsResource());
     } else if (value.isAttributeResource()) {
       handleAttributeResource(view, value.getAsAttributeResource());
-    } else if (value.isStyleResource()) {
-      handleStyleResource(view, value.getAsStyleResource());
+    } else if (value.isStyle()) {
+      handleStyle(view, value.getAsStyle());
     } else {
       handleValue(view, value);
     }
@@ -144,7 +144,7 @@ public abstract class AttributeProcessor<V extends View> {
 
   public abstract void handleAttributeResource(V view, AttributeResource attribute);
 
-  public abstract void handleStyleResource(V view, StyleResource style);
+  public abstract void handleStyle(V view, Style style);
 
   public Value precompile(Value value, ProteusContext context, FunctionManager manager) {
     Value compiled = staticPreCompile(value, context, manager);

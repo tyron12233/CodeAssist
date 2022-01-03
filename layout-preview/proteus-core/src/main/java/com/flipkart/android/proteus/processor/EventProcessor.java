@@ -23,7 +23,7 @@ import com.flipkart.android.proteus.ProteusLayoutInflater;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Resource;
-import com.flipkart.android.proteus.value.StyleResource;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 
 /**
@@ -55,7 +55,7 @@ public abstract class EventProcessor<T extends View> extends AttributeProcessor<
   }
 
   @Override
-  public void handleStyleResource(T view, StyleResource style) {
+  public void handleStyle(T view, Style style) {
     setOnEventListener(view, style);
   }
 

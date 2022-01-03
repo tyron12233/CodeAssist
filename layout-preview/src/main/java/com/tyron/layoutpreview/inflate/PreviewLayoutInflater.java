@@ -13,7 +13,6 @@ import com.flipkart.android.proteus.ProteusBuilder;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusLayoutInflater;
 import com.flipkart.android.proteus.ProteusView;
-import com.flipkart.android.proteus.StringManager;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Layout;
@@ -34,8 +33,7 @@ import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
 import com.tyron.layoutpreview.manager.ResourceDrawableManager;
 import com.tyron.layoutpreview.manager.ResourceLayoutManager;
-import com.tyron.layoutpreview.manager.ResourceStringManager;
-import com.tyron.layoutpreview.manager.ResourceStyleManager;
+import com.tyron.layoutpreview.resource.ResourceValueParser;
 
 import java.io.File;
 import java.io.StringReader;
@@ -119,10 +117,8 @@ public class PreviewLayoutInflater {
         }
     };
 
-    private final ResourceStringManager mStringManager = new ResourceStringManager();
     private final ResourceDrawableManager mDrawableManager = new ResourceDrawableManager();
     private final ResourceLayoutManager mLayoutManager = new ResourceLayoutManager();
-    private final ResourceStyleManager mStyleManager = new ResourceStyleManager();
 
     private ProteusLayoutInflater.ImageLoader mImageLoader = (view, name, callback) -> {
         if (name.startsWith("@drawable")) {
@@ -145,12 +141,16 @@ public class PreviewLayoutInflater {
         mProteus = builder.build();
         mProject = project;
 
+        ResourceValueParser parser = new ResourceValueParser();
+        parser.parse(project);
+
         mContext = mProteus.createContextBuilder(base)
                 .setCallback(mCallback)
-                .setStringManager(mStringManager)
                 .setDrawableManager(mDrawableManager)
                 .setImageLoader(mImageLoader)
-                .setStyleManager(mStyleManager)
+                .setStyleManager(parser.getStyleManager())
+                .setStringManager(parser.getStringManager())
+                .setColorManager(parser.getColorManager())
                 .setLayoutManager(mLayoutManager)
                 .build();
         mContext.setParserFactory(new MaterialParserFactory(mContext));
@@ -161,7 +161,6 @@ public class PreviewLayoutInflater {
         return CompletableFuture.supplyAsync(() -> {
             ResourceManager resourceManager = new ResourceManager(mContext,
                     mProject.getAndroidResourcesDirectory(), mProject.getFileManager());
-            mStringManager.setStrings(resourceManager.getStrings());
             mDrawableManager.setDrawables(resourceManager.getDrawables());
             mLayoutManager.setLayouts(resourceManager.getLayouts());
             return this;
@@ -173,15 +172,8 @@ public class PreviewLayoutInflater {
         return mContext;
     }
 
-    public StringManager getStringManager() {
-        return mStringManager;
-    }
-
     public Optional<ProteusView> inflateLayout(@NonNull String name) {
         ProteusLayoutInflater inflater = mContext.getInflater();
-        if (inflater == null) {
-            return Optional.empty();
-        }
         if (mContext.getLayout(name) == null) {
             return Optional.empty();
         }

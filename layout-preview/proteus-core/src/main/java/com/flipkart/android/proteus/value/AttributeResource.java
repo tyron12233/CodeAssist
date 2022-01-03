@@ -48,6 +48,11 @@ public class AttributeResource extends Value {
   public final int attributeId;
   private final String value;
 
+  public AttributeResource(String value) {
+    attributeId = -1;
+    this.value = value;
+  }
+
   private AttributeResource(final int attributeId) {
     this.attributeId = attributeId;
     value = String.valueOf(attributeId);
@@ -83,10 +88,25 @@ public class AttributeResource extends Value {
     attributeId = field.getInt(null);
   }
 
+  public String getValue() {
+    return value;
+  }
+
+  public String getName() {
+    Matcher matcher = sAttributePattern.matcher(value);
+    if (matcher.matches()) {
+      return matcher.group(5);
+    }
+    return value;
+  }
+
   public static boolean isAttributeResource(String value) {
     return value.startsWith(ATTR_START_LITERAL) && value.contains(ATTR_LITERAL);
   }
 
+  public static AttributeResource valueOf(String value) {
+    return new AttributeResource(value);
+  }
   @Nullable
   public static AttributeResource valueOf(String value, Context context) {
     AttributeResource attribute = AttributeCache.cache.get(value);

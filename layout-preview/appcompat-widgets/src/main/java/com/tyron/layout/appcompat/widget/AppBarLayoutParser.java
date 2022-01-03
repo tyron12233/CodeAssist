@@ -17,7 +17,7 @@ import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Resource;
-import com.flipkart.android.proteus.value.StyleResource;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 import com.google.android.material.appbar.AppBarLayout;
 import com.tyron.layout.appcompat.AppCompatModuleAttributeHelper;
@@ -99,13 +99,13 @@ public class AppBarLayoutParser<V extends View> extends ViewTypeParser<V> {
             }
 
             @Override
-            public void handleStyleResource(V view, StyleResource style) {
-                TypedArray a = style.apply(view.getContext());
-                int orientation = a.getInt(0, AppBarLayout.VERTICAL);
-                //noinspection WrongConstant
-                if (view instanceof AppBarLayout) {
-                    ((AppBarLayout) view).setOrientation(orientation);
-                }
+            public void handleStyle(V view, Style style) {
+//                TypedArray a = style.apply(view.getContext());
+//                int orientation = a.getInt(0, AppBarLayout.VERTICAL);
+//                //noinspection WrongConstant
+//                if (view instanceof AppBarLayout) {
+//                    ((AppBarLayout) view).setOrientation(orientation);
+//                }
             }
 
             public Value compile(@Nullable Value value, Context context) {

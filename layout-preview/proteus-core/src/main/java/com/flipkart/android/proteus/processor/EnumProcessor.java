@@ -4,7 +4,7 @@ import android.view.View;
 
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Resource;
-import com.flipkart.android.proteus.value.StyleResource;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 
 import java.util.Map;
@@ -39,7 +39,7 @@ public abstract class EnumProcessor<V extends View> extends AttributeProcessor<V
     }
 
     @Override
-    public void handleStyleResource(V view, StyleResource style) {
+    public void handleStyle(V view, Style style) {
 
     }
 

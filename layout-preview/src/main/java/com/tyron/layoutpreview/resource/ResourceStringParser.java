@@ -106,7 +106,7 @@ public class ResourceStringParser {
         return strings;
     }
 
-    private Pair<String, Value> parseStringXmlInternal(XmlPullParser parser) throws IOException, XmlPullParserException {
+    public static Pair<String, Value> parseStringXmlInternal(XmlPullParser parser) throws IOException, XmlPullParserException {
         parser.require(XmlPullParser.START_TAG, null, "string");
         String name = null;
         for (int i = 0; i < parser.getAttributeCount(); i++) {
@@ -120,7 +120,7 @@ public class ResourceStringParser {
         return Pair.create(name, new Primitive(text));
     }
 
-    private Pair<String, Value> parseItemString(XmlPullParser parser) throws IOException, XmlPullParserException {
+    public static Pair<String, Value> parseItemString(XmlPullParser parser) throws IOException, XmlPullParserException {
         parser.require(XmlPullParser.START_TAG, null, "item");
         String name = null;
         for (int i = 0; i < parser.getAttributeCount(); i++) {

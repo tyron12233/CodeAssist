@@ -17,13 +17,14 @@
 package com.flipkart.android.proteus.processor;
 
 import android.content.res.TypedArray;
+import android.util.Log;
 import android.view.View;
 
 import com.flipkart.android.proteus.ProteusConstants;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Resource;
-import com.flipkart.android.proteus.value.StyleResource;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 
 import androidx.annotation.Nullable;
@@ -60,9 +61,10 @@ public abstract class StringAttributeProcessor<V extends View> extends Attribute
   }
 
   @Override
-  public void handleStyleResource(V view, StyleResource style) {
-    TypedArray a = style.apply(view.getContext());
-    setString(view, a.getString(0));
+  public void handleStyle(V view, Style style) {
+    Log.d("TEST", "Handle style called: " + style.toString());
+//    TypedArray a = style.apply(view.getContext());
+//    setString(view, a.getString(0));
   }
 
   /**

@@ -24,7 +24,7 @@ import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Dimension;
 import com.flipkart.android.proteus.value.Resource;
-import com.flipkart.android.proteus.value.StyleResource;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 
 import androidx.annotation.Nullable;
@@ -87,9 +87,9 @@ public abstract class DimensionAttributeProcessor<T extends View> extends Attrib
   }
 
   @Override
-  public void handleStyleResource(T view, StyleResource style) {
-    TypedArray a = style.apply(view.getContext());
-    setDimension(view, a.getDimensionPixelSize(0, 0));
+  public void handleStyle(T view, Style style) {
+//    TypedArray a = style.apply(view.getContext());
+//    setDimension(view, a.getDimensionPixelSize(0, 0));
   }
 
   /**

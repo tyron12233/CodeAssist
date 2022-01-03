@@ -38,7 +38,7 @@ import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.NestedBinding;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Resource;
-import com.flipkart.android.proteus.value.StyleResource;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 import com.flipkart.android.proteus.view.ProteusAspectRatioFrameLayout;
 
@@ -139,7 +139,7 @@ public class ViewGroupParser<T extends ViewGroup> extends ViewTypeParser<T> {
       }
 
       @Override
-      public void handleStyleResource(T view, StyleResource style) {
+      public void handleStyle(T view, Style style) {
         throw new IllegalArgumentException("children cannot be a style attribute");
       }
     });

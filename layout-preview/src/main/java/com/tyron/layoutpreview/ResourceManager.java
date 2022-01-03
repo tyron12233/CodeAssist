@@ -10,6 +10,7 @@ import com.tyron.layoutpreview.resource.ResourceLayoutParser;
 import com.tyron.layoutpreview.resource.ResourceStringParser;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.Map;
 
 public class ResourceManager {
@@ -24,10 +25,12 @@ public class ResourceManager {
         mFileManager = fileManager;
     }
 
-
+    /**
+     * @deprecated Use {@link com.tyron.layoutpreview.resource.ResourceValueParser} instead
+     */
+    @Deprecated
     public Map<String, Map<String, Value>> getStrings() {
-        ResourceStringParser parser = new ResourceStringParser(mResourceDir, mFileManager);
-        return parser.getStrings();
+        return Collections.emptyMap();
     }
 
     public Map<String, DrawableValue> getDrawables() {

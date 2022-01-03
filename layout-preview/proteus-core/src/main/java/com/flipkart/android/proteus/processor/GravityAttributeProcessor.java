@@ -22,10 +22,8 @@ import android.view.View;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.parser.ParseHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
-import com.flipkart.android.proteus.value.Gravity;
-import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Resource;
-import com.flipkart.android.proteus.value.StyleResource;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 
 import java.lang.annotation.Retention;
@@ -82,9 +80,9 @@ public abstract class GravityAttributeProcessor<V extends View> extends Attribut
   }
 
   @Override
-  public void handleStyleResource(V view, StyleResource style) {
-    TypedArray a = style.apply(view.getContext());
-    set(view, a);
+  public void handleStyle(V view, Style style) {
+//    TypedArray a = style.apply(view.getContext());
+//    set(view, a);
   }
 
   private void set(V view, TypedArray a) {

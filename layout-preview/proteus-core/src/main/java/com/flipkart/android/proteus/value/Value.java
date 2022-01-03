@@ -87,6 +87,10 @@ public abstract class Value {
     return this instanceof StyleResource;
   }
 
+  public boolean isStyle() {
+    return this instanceof Style;
+  }
+
   /**
    * @return
    */
@@ -213,6 +217,13 @@ public abstract class Value {
   public StyleResource getAsStyleResource() {
     if (isStyleResource()) {
       return (StyleResource) this;
+    }
+    throw new IllegalStateException("Not a StyleResource: " + this);
+  }
+
+  public Style getAsStyle() {
+    if (isStyle()) {
+      return (Style) this;
     }
     throw new IllegalStateException("Not a StyleResource: " + this);
   }
