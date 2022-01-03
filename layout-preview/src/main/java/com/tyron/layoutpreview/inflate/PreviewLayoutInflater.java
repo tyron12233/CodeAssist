@@ -54,8 +54,17 @@ public class PreviewLayoutInflater {
 
     private final ProteusLayoutInflater.Callback mCallback = new ProteusLayoutInflater.Callback() {
         @Override
-        public ProteusView onUnknownViewType(ProteusContext context, ViewGroup parent, String type, Layout layout, ObjectValue data, int index) {
+        public ProteusView onUnknownViewType(ProteusContext context,
+                                             ViewGroup parent,
+                                             String type,
+                                             Layout layout,
+                                             ObjectValue data,
+                                             int index) {
+            return getProteusView(context, parent, type, layout, data);
+        }
 
+        private ProteusView getProteusView(ProteusContext context, ViewGroup parent, String type,
+                                           Layout layout, ObjectValue data) {
             ProteusView view;
             Value children = null;
             // this View has a children, use a ViewGroup so the children can be laid out as well.
@@ -101,7 +110,6 @@ public class PreviewLayoutInflater {
                     }
                 }
             }
-
             return view;
         }
 

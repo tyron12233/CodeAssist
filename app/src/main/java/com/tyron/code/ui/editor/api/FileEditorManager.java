@@ -7,6 +7,7 @@ import java.io.File;
 public abstract class FileEditorManager {
 
     /**
+     *
      * @param file file to open. Parameter cannot be null. File should be valid.
      *
      * @return array of opened editors

@@ -7,8 +7,7 @@ import androidx.lifecycle.Lifecycle;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 
-import com.tyron.code.ui.editor.CodeEditorFragment;
-import com.tyron.code.ui.editor.api.FileEditor;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -17,13 +16,13 @@ import java.util.Objects;
 
 public class PageAdapter extends FragmentStateAdapter {
 
-    private final List<FileEditor> data = new ArrayList<>();
+    private final List<File> data = new ArrayList<>();
 
     public PageAdapter(FragmentManager fm, Lifecycle lifecycle) {
         super(fm, lifecycle);
     }
 
-    public void submitList(List<FileEditor> files) {
+    public void submitList(List<File> files) {
         DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
             @Override
             public int getOldListSize() {
@@ -58,6 +57,6 @@ public class PageAdapter extends FragmentStateAdapter {
     @NonNull
     @Override
     public Fragment createFragment(int p1) {
-        return data.get(p1).getFragment();
+        return FileEditorManagerImpl.getInstance().openFile(data.get(p1), true)[0].getFragment();
     }
 }

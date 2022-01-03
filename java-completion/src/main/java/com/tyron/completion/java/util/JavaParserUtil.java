@@ -31,6 +31,7 @@ import com.github.javaparser.ast.expr.LongLiteralExpr;
 import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
 import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.Name;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
@@ -302,7 +303,11 @@ public class JavaParserUtil {
                 .map(JavaParserUtil::toAnnotation)
                 .collect(NodeList.toNodeList()));
         methodDeclaration.setName(method.getName().toString());
-        methodDeclaration.setType(toType(method.getReturnType()));
+        if (type != null) {
+            methodDeclaration.setType(toType(type.getReturnType()));
+        } else {
+            methodDeclaration.setType(toType(method.getReturnType()));
+        }
         methodDeclaration.setModifiers(method.getModifiers().getFlags().stream()
                 .map(JavaParserUtil::toModifier)
                 .collect(NodeList.toNodeList()));
@@ -316,7 +321,9 @@ public class JavaParserUtil {
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(NodeList.toNodeList()));
-        methodDeclaration.setBody(toBlockStatement(method.getBody()));
+        if (method.getBody() != null) {
+            methodDeclaration.setBody(toBlockStatement(method.getBody()));
+        }
         if (method.getReceiverParameter() != null) {
             methodDeclaration.setReceiverParameter(toReceiverParameter(method.getReceiverParameter()));
         }
@@ -490,6 +497,12 @@ public class JavaParserUtil {
                 } else {
                     printer.print(ActionUtil.getSimpleName(identifier));
                 }
+            }
+
+
+            @Override
+            public void visit(Name n, Void arg) {
+                super.visit(n, arg);
             }
         };
         DefaultPrettyPrinter prettyPrinter = new DefaultPrettyPrinter(t -> visitor, configuration);

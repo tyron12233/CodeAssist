@@ -8,6 +8,8 @@ import androidx.lifecycle.ViewModel;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.ui.editor.api.FileEditor;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.language.LanguageManager;
 
 import java.io.File;
@@ -146,7 +148,9 @@ public class MainViewModel extends ViewModel {
      * @return whether the operation was successful
      */
     public boolean openFile(File file) {
-        if (!LanguageManager.getInstance().supports(file)) {
+        FileEditor[] fileEditors = FileEditorManagerImpl.getInstance().openFile(file, false);
+
+        if (fileEditors.length == 0) {
             return false;
         }
 

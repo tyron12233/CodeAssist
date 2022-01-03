@@ -18,6 +18,7 @@ package com.flipkart.android.proteus;
 
 import android.content.Context;
 import android.content.res.XmlResourceParser;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -26,6 +27,7 @@ import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.managers.ViewManager;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Value;
@@ -173,10 +175,20 @@ public abstract class ViewTypeParser<V extends View> {
     if (position < 0) {
       return null != parent && parent.handleAttribute(view, attributeId, value);
     }
-    //noinspection unchecked
-    AttributeProcessor<V> processor = processors[position];
-    processor.process(view, value);
-    return true;
+    try {
+      //noinspection unchecked
+      AttributeProcessor<V> processor = processors[position];
+      processor.process(view, value);
+      return true;
+    } catch (Throwable e) {
+      String name = "Unknown attribute";
+      String attributeValue = value.toString();
+      if (view instanceof ProteusView) {
+        name = ProteusHelper.getAttributeName(((ProteusView) view), attributeId);
+      }
+      Log.e("ViewTypeParser", "Unable to handle attribute: " + name + " value: " + attributeValue, e);
+      return false;
+    }
   }
 
   /**

@@ -18,19 +18,11 @@ import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.api.FileEditorManager;
-import com.tyron.code.ui.editor.api.FileEditorProvider;
-import com.tyron.code.ui.editor.api.FileEditorProviderManager;
-import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
-import com.tyron.code.ui.editor.impl.FileEditorProviderManagerImpl;
-import com.tyron.code.ui.editor.impl.text.TextEditorProvider;
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.editor.adapter.PageAdapter;
-import com.tyron.code.ui.project.ProjectManager;
-
-import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 
 import java.io.File;
-import java.util.Arrays;
 import java.util.Objects;
 
 public class EditorContainerFragment extends Fragment {
@@ -62,10 +54,6 @@ public class EditorContainerFragment extends Fragment {
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         requireActivity().getOnBackPressedDispatcher().addCallback(this,
                 mOnBackPressedCallback);
-
-        FileEditorProvider[] providers = {new TextEditorProvider()};
-        FileEditorProviderManager providerManager = new FileEditorProviderManagerImpl(providers);
-        mFileEditorManager = new FileEditorManagerImpl(ProjectManager.getInstance().getCurrentProject(), providerManager);
     }
 
     @Override
@@ -168,9 +156,7 @@ public class EditorContainerFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         mMainViewModel.getFiles().observe(getViewLifecycleOwner(), files -> {
-            if (!files.isEmpty()) {
-                mAdapter.submitList(Arrays.asList(mFileEditorManager.openFile(files.get(0), true)));
-            }
+            mAdapter.submitList(files);
             mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
         });
         mMainViewModel.getCurrentPosition().observe(getViewLifecycleOwner(), pos -> {

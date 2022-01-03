@@ -133,7 +133,14 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                     AttributeEditorDialogFragment.KEY_ATTRIBUTE_CHANGED,
                     getViewLifecycleOwner(),
                     (requestKey, result) -> {
-                manager.updateAttribute(result.getString("key"), result.getString("value"));
+                String key = result.getString("key", "");
+                String value = result.getString("value", "");
+                if (value.isEmpty()) {
+                    getChildFragmentManager().setFragmentResult(AttributeEditorDialogFragment.KEY_ATTRIBUTE_REMOVED, result);
+                    manager.removeAttribute(key);
+                } else {
+                    manager.updateAttribute(key, value);
+                }
                 getChildFragmentManager()
                         .clearFragmentResult(AttributeEditorDialogFragment.KEY_ATTRIBUTE_CHANGED);
             });
@@ -405,9 +412,12 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     @Override
     public void onProjectOpen(Project module) {
+        if (getActivity() == null) {
+            return;
+        }
         if (isDumb) {
             isDumb = false;
-            createInflater();
+            requireActivity().runOnUiThread(this::createInflater);
         }
     }
 

@@ -1,4 +1,4 @@
-package com.tyron.code.ui.editor;
+package com.tyron.code.ui.editor.impl.text.rosemoe;
 
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -28,6 +28,7 @@ import com.github.javaparser.ast.observer.ObservableProperty;
 import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.code.BuildConfig;
+import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
@@ -50,14 +51,10 @@ import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.Parser;
-import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.CodeActionManager;
 import com.tyron.completion.java.action.api.EditorInterface;
-import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.CompilationUnitConverter;
-import com.tyron.completion.java.util.JavaParserUtil;
-import com.tyron.completion.java.util.ThreadUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.java.provider.CompletionEngine;

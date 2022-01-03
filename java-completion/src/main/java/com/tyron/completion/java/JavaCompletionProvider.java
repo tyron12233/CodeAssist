@@ -58,13 +58,18 @@ public class JavaCompletionProvider extends CompletionProvider {
             return completionList;
         }
 
-        CompletionList complete = complete(project, (JavaModule) module, file, contents, index);
-        String newPrefix = prefix;
-        if (prefix.contains(".")) {
-            newPrefix = partialIdentifier(prefix, prefix.length());
+        try {
+            CompletionList complete = complete(project, (JavaModule) module, file, contents, index);
+            String newPrefix = prefix;
+            if (prefix.contains(".")) {
+                newPrefix = partialIdentifier(prefix, prefix.length());
+            }
+            mCachedCompletion = new CachedCompletion(file, line, column, newPrefix, complete);
+            return complete;
+        } catch (ProcessCanceledException e) {
+            mCachedCompletion = null;
+            return CompletionList.EMPTY;
         }
-        mCachedCompletion = new CachedCompletion(file, line, column, newPrefix, complete);
-        return complete;
     }
 
     public CompletionList complete(Project project, JavaModule module, File file, String contents
