@@ -46,6 +46,8 @@ public class ProteusContext extends ContextWrapper {
     private final ProteusLayoutInflater.ImageLoader loader;
 
     private ProteusLayoutInflater inflater;
+    private ProteusParserFactory parserFactory;
+
 
     ProteusContext(Context base, @NonNull ProteusResources resources,
                    @Nullable ProteusLayoutInflater.ImageLoader loader,
@@ -81,6 +83,10 @@ public class ProteusContext extends ContextWrapper {
         return loader;
     }
 
+    public void setParserFactory(@NonNull ProteusParserFactory factory) {
+        this.parserFactory = factory;
+    }
+
     @NonNull
     public ProteusLayoutInflater getInflater(@NonNull IdGenerator idGenerator) {
         if (null == this.inflater) {
@@ -96,10 +102,19 @@ public class ProteusContext extends ContextWrapper {
 
     @Nullable
     public <T extends View> ViewTypeParser<T> getParser(String type) {
-        if (resources.getParsers().containsKey(type)) {
-            return resources.getParsers().get(type);
+        ViewTypeParser<T> parser = null;
+        if (parserFactory != null) {
+            parser = parserFactory.getParser(type);
         }
-        return null;
+
+        if (parser == null) {
+            if (resources.getParsers().containsKey(type)) {
+                //noinspection unchecked
+                parser = resources.getParsers().get(type);
+            }
+        }
+
+        return parser;
     }
 
     @NonNull
