@@ -133,7 +133,14 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                     AttributeEditorDialogFragment.KEY_ATTRIBUTE_CHANGED,
                     getViewLifecycleOwner(),
                     (requestKey, result) -> {
-                manager.updateAttribute(result.getString("key"), result.getString("value"));
+                String key = result.getString("key", "");
+                String value = result.getString("value", "");
+                if (value.isEmpty()) {
+                    getChildFragmentManager().setFragmentResult(AttributeEditorDialogFragment.KEY_ATTRIBUTE_REMOVED, result);
+                    manager.removeAttribute(key);
+                } else {
+                    manager.updateAttribute(key, value);
+                }
                 getChildFragmentManager()
                         .clearFragmentResult(AttributeEditorDialogFragment.KEY_ATTRIBUTE_CHANGED);
             });
@@ -357,12 +364,16 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     private List<ViewPalette> populatePalettes() {
         List<ViewPalette> palettes = new ArrayList<>();
 
-        palettes.add(createPalette("android.widget.LinearLayout", R.drawable.ic_baseline_vertical_24));
-        palettes.add(createPalette("android.widget.FrameLayout", R.drawable.ic_baseline_frame_24));
-        palettes.add(createPalette("android.widget.ScrollView", R.drawable.ic_baseline_format_line_spacing_24));
-        palettes.add(createPalette("android.widget.HorizontalScrollView", R.drawable.ic_baseline_format_line_spacing_24));
-
-        palettes.add(createPalette("androidx.cardview.widget.CardView", R.drawable.ic_baseline_style_24));
+        palettes.add(createPalette("android.widget.LinearLayout", R.drawable.ic_baseline_vertical_24,
+                ImmutableMap.of(Attributes.View.MinWidth, Dimension.valueOf("50dp"), Attributes.View.MinHeight, Dimension.valueOf("25dp"))));
+        palettes.add(createPalette("android.widget.FrameLayout", R.drawable.ic_baseline_frame_24,
+                ImmutableMap.of(Attributes.View.MinWidth, Dimension.valueOf("50dp"), Attributes.View.MinHeight, Dimension.valueOf("25dp"))));
+        palettes.add(createPalette("android.widget.ScrollView", R.drawable.ic_baseline_format_line_spacing_24,
+                ImmutableMap.of(Attributes.View.MinWidth, Dimension.valueOf("50dp"), Attributes.View.MinHeight, Dimension.valueOf("25dp"))));
+        palettes.add(createPalette("android.widget.HorizontalScrollView", R.drawable.ic_baseline_format_line_spacing_24,
+                ImmutableMap.of(Attributes.View.MinWidth, Dimension.valueOf("50dp"), Attributes.View.MinHeight, Dimension.valueOf("25dp"))));
+        palettes.add(createPalette("androidx.cardview.widget.CardView", R.drawable.ic_baseline_style_24,
+                ImmutableMap.of(Attributes.View.MinWidth, Dimension.valueOf("50dp"), Attributes.View.MinHeight, Dimension.valueOf("25dp"))));
 
         palettes.add(createPalette("android.widget.Button",
                 R.drawable.ic_baseline_crop_16_9_24,
@@ -395,19 +406,21 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         ViewPalette.Builder builder = ViewPalette.builder()
                 .setClassName(className)
                 .setName(name)
-                .setIcon(icon)
-                .addDefaultValue(Attributes.View.MinHeight, Dimension.valueOf("25dp"))
-                .addDefaultValue(Attributes.View.MinWidth, Dimension.valueOf("50dp"));
-
+                .setIcon(icon);
+        builder.addDefaultValue(Attributes.View.Width, Dimension.valueOf("wrap_content"));
+        builder.addDefaultValue(Attributes.View.Height, Dimension.valueOf("wrap_content"));
         attributes.forEach(builder::addDefaultValue);
         return builder.build();
     }
 
     @Override
     public void onProjectOpen(Project module) {
+        if (getActivity() == null) {
+            return;
+        }
         if (isDumb) {
             isDumb = false;
-            createInflater();
+            requireActivity().runOnUiThread(this::createInflater);
         }
     }
 

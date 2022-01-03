@@ -26,6 +26,7 @@ import androidx.annotation.Nullable;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Value;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -36,6 +37,17 @@ import java.util.Map;
 
 public class ProteusContext extends ContextWrapper {
 
+    private static final Map<String, String> sInternalViewMap = new HashMap<>();
+
+    static {
+        sInternalViewMap.put("LinearLayout", "android.widget.LinearLayout");
+        sInternalViewMap.put("TextView", "android.widget.TextView");
+        sInternalViewMap.put("Button", "android.widget.Button");
+        sInternalViewMap.put("View", "android.view.View");
+        sInternalViewMap.put("ViewGroup", "android.view.ViewGroup");
+
+        // TODO: add other views
+    }
     @NonNull
     private final ProteusResources resources;
 
@@ -46,6 +58,18 @@ public class ProteusContext extends ContextWrapper {
     private final ProteusLayoutInflater.ImageLoader loader;
 
     private ProteusLayoutInflater inflater;
+    private ProteusParserFactory internalParserFactory = new ProteusParserFactory() {
+        @Nullable
+        @Override
+        public <T extends View> ViewTypeParser<T> getParser(@NonNull String type) {
+            if (type.contains(".")) {
+                return null;
+            }
+            return getParser(type);
+        }
+    };
+    private ProteusParserFactory parserFactory;
+
 
     ProteusContext(Context base, @NonNull ProteusResources resources,
                    @Nullable ProteusLayoutInflater.ImageLoader loader,
@@ -81,6 +105,10 @@ public class ProteusContext extends ContextWrapper {
         return loader;
     }
 
+    public void setParserFactory(@NonNull ProteusParserFactory factory) {
+        this.parserFactory = factory;
+    }
+
     @NonNull
     public ProteusLayoutInflater getInflater(@NonNull IdGenerator idGenerator) {
         if (null == this.inflater) {
@@ -96,10 +124,23 @@ public class ProteusContext extends ContextWrapper {
 
     @Nullable
     public <T extends View> ViewTypeParser<T> getParser(String type) {
-        if (resources.getParsers().containsKey(type)) {
-            return resources.getParsers().get(type);
+        ViewTypeParser<T> parser = null;
+        if (parserFactory != null) {
+            parser = parserFactory.getParser(type);
         }
-        return null;
+
+        if (parser == null) {
+            parser = internalParserFactory.getParser(type);
+        }
+
+        if (parser == null) {
+            if (resources.getParsers().containsKey(type)) {
+                //noinspection unchecked
+                parser = resources.getParsers().get(type);
+            }
+        }
+
+        return parser;
     }
 
     @NonNull

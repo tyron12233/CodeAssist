@@ -2,6 +2,8 @@ package com.tyron.completion.java.util;
 
 import static com.tyron.completion.java.util.JavaParserTypesUtil.toType;
 
+import com.github.javaparser.Position;
+import com.github.javaparser.Range;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
@@ -17,24 +19,28 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.ReceiverParameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.BooleanLiteralExpr;
+import com.github.javaparser.ast.expr.CharLiteralExpr;
+import com.github.javaparser.ast.expr.DoubleLiteralExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.IntegerLiteralExpr;
+import com.github.javaparser.ast.expr.LiteralExpr;
+import com.github.javaparser.ast.expr.LongLiteralExpr;
 import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
 import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.Name;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.Statement;
-import com.github.javaparser.ast.stmt.UnparsableStmt;
-import com.github.javaparser.ast.type.ArrayType;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.type.PrimitiveType;
-import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.WildcardType;
@@ -50,6 +56,7 @@ import org.openjdk.javax.lang.model.type.ExecutableType;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.type.TypeVariable;
 import org.openjdk.source.tree.AnnotationTree;
+import org.openjdk.source.tree.AssignmentTree;
 import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
@@ -58,6 +65,7 @@ import org.openjdk.source.tree.ExpressionStatementTree;
 import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.ImportTree;
+import org.openjdk.source.tree.LineMap;
 import org.openjdk.source.tree.LiteralTree;
 import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
@@ -67,14 +75,14 @@ import org.openjdk.source.tree.StatementTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.TypeParameterTree;
 import org.openjdk.source.tree.VariableTree;
-import org.openjdk.tools.javac.code.Type.ClassType;
+import org.openjdk.source.util.SourcePositions;
+import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.tree.JCTree;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class JavaParserUtil {
@@ -83,10 +91,7 @@ public class JavaParserUtil {
         CompilationUnit compilationUnit = new CompilationUnit();
         compilationUnit.setPackageDeclaration(toPackageDeclaration(tree.getPackage()));
         tree.getImports().forEach(importTree -> compilationUnit.addImport(toImportDeclaration(importTree)));
-
-        compilationUnit.setTypes(tree.getTypeDecls().stream()
-                .map(JavaParserUtil::toClassOrInterfaceDeclaration)
-                .collect(NodeList.toNodeList()));
+        compilationUnit.setTypes(tree.getTypeDecls().stream().map(JavaParserUtil::toClassOrInterfaceDeclaration).collect(NodeList.toNodeList()));
         return compilationUnit;
     }
 
@@ -144,6 +149,10 @@ public class JavaParserUtil {
             return toNameExpr(((IdentifierTree) tree));
         }
         if (tree instanceof LiteralTree) {
+            return toLiteralExpression(((LiteralTree) tree));
+        }
+        if (tree instanceof AssignmentTree) {
+            return toAssignExpression(((AssignmentTree) tree));
         }
         if (tree instanceof ErroneousTree) {
             ErroneousTree erroneousTree = (ErroneousTree) tree;
@@ -153,6 +162,13 @@ public class JavaParserUtil {
             }
         }
         return null;
+    }
+
+    private static AssignExpr toAssignExpression(AssignmentTree tree) {
+        AssignExpr assignExpr = new AssignExpr();
+        assignExpr.setTarget(toExpression(tree.getVariable()));
+        assignExpr.setValue(toExpression(tree.getExpression()));
+        return assignExpr;
     }
 
     public static ExpressionStmt toVariableDeclarationExpression(VariableTree tree) {
@@ -176,6 +192,29 @@ public class JavaParserUtil {
         NameExpr nameExpr = new NameExpr();
         nameExpr.setName(tree.getName().toString());
         return nameExpr;
+    }
+
+    public static LiteralExpr toLiteralExpression(LiteralTree tree) {
+        Object value = tree.getValue();
+        if (value instanceof String) {
+            return new StringLiteralExpr((String) value);
+        }
+        if (value instanceof Boolean) {
+            return new BooleanLiteralExpr((Boolean) value);
+        }
+        if (value instanceof Integer) {
+            return new IntegerLiteralExpr(String.valueOf(value));
+        }
+        if (value instanceof Character) {
+            return new CharLiteralExpr((Character) value);
+        }
+        if (value instanceof Long) {
+            return new LongLiteralExpr((Long) value);
+        }
+        if (value instanceof Double) {
+            return new DoubleLiteralExpr((Double) value);
+        }
+        return null;
     }
 
     public static MethodCallExpr toMethodCallExpression(MethodInvocationTree tree) {
@@ -231,12 +270,12 @@ public class JavaParserUtil {
             return toMethodDeclaration(((MethodTree) tree), null);
         }
         if (tree instanceof VariableTree) {
-            return toFieldDeclration((VariableTree) tree);
+            return toFieldDeclaration((VariableTree) tree);
         }
         return null;
     }
 
-    public static FieldDeclaration toFieldDeclration(VariableTree tree) {
+    public static FieldDeclaration toFieldDeclaration(VariableTree tree) {
         FieldDeclaration declaration = new FieldDeclaration();
         declaration.setModifiers(tree.getModifiers().getFlags().stream()
                 .map(JavaParserUtil::toModifier)
@@ -264,7 +303,11 @@ public class JavaParserUtil {
                 .map(JavaParserUtil::toAnnotation)
                 .collect(NodeList.toNodeList()));
         methodDeclaration.setName(method.getName().toString());
-        methodDeclaration.setType(toType(method.getReturnType()));
+        if (type != null) {
+            methodDeclaration.setType(toType(type.getReturnType()));
+        } else {
+            methodDeclaration.setType(toType(method.getReturnType()));
+        }
         methodDeclaration.setModifiers(method.getModifiers().getFlags().stream()
                 .map(JavaParserUtil::toModifier)
                 .collect(NodeList.toNodeList()));
@@ -278,7 +321,9 @@ public class JavaParserUtil {
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(NodeList.toNodeList()));
-        methodDeclaration.setBody(toBlockStatement(method.getBody()));
+        if (method.getBody() != null) {
+            methodDeclaration.setBody(toBlockStatement(method.getBody()));
+        }
         if (method.getReceiverParameter() != null) {
             methodDeclaration.setReceiverParameter(toReceiverParameter(method.getReceiverParameter()));
         }
@@ -301,9 +346,15 @@ public class JavaParserUtil {
         expr.setName(toType(tree.getAnnotationType()).toString());
         expr.setPairs(tree.getArguments().stream()
                 .map(arg -> {
-                    MemberValuePair pair = new MemberValuePair();
-                    pair.setValue(toExpression(arg));
-                    return pair;
+                    if (arg instanceof AssignmentTree) {
+                        AssignExpr assignExpr = toAssignExpression((AssignmentTree) arg);
+                        MemberValuePair pair = new MemberValuePair();
+                        pair.setName(assignExpr.getTarget().toString());
+                        pair.setValue(assignExpr.getValue());
+                        return pair;
+                    }
+                    // TODO: Handle erroneous trees
+                    return null;
                 })
                 .collect(NodeList.toNodeList()));
         return expr;
@@ -446,6 +497,12 @@ public class JavaParserUtil {
                 } else {
                     printer.print(ActionUtil.getSimpleName(identifier));
                 }
+            }
+
+
+            @Override
+            public void visit(Name n, Void arg) {
+                super.visit(n, arg);
             }
         };
         DefaultPrettyPrinter prettyPrinter = new DefaultPrettyPrinter(t -> visitor, configuration);

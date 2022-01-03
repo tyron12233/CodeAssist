@@ -25,7 +25,6 @@ import com.tyron.code.ui.library.LibraryManagerFragment;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.LogViewModel;
-import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.Project;
 import com.tyron.code.R;

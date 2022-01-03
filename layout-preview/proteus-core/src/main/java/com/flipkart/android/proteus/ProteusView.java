@@ -80,6 +80,10 @@ public interface ProteusView {
 
     }
 
+    default void removeAttribute(String name) {
+
+    }
+
     default String getAttributeName(int id) {
       return "Unknown";
     }

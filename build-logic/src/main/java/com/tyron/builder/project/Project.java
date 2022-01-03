@@ -1,13 +1,24 @@
 package com.tyron.builder.project;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.google.common.eventbus.EventBus;
 import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
 
+import org.jetbrains.kotlin.com.intellij.util.messages.MessageBusConnection;
+import org.jetbrains.kotlin.com.intellij.util.messages.MessageBusFactory;
+import org.jetbrains.kotlin.com.intellij.util.messages.SimpleMessageBusConnection;
+import org.jetbrains.kotlin.com.intellij.util.messages.impl.MessageBusFactoryImpl;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class Project {
@@ -25,6 +36,7 @@ public class Project {
         mSettings = new ProjectSettings(new File(root, "settings.json"));
     }
 
+    @NonNull
     public Module getMainModule() {
         return mMainModule;
     }
@@ -57,4 +69,5 @@ public class Project {
     public int hashCode() {
         return Objects.hash(mRoot);
     }
+
 }

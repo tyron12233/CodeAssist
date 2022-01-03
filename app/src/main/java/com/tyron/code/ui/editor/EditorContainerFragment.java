@@ -17,8 +17,10 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.tyron.code.R;
+import com.tyron.code.ui.editor.api.FileEditorManager;
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.main.MainViewModel;
-import com.tyron.code.ui.main.adapter.PageAdapter;
+import com.tyron.code.ui.editor.adapter.PageAdapter;
 
 import java.io.File;
 import java.util.Objects;
@@ -35,6 +37,8 @@ public class EditorContainerFragment extends Fragment {
     private BottomSheetBehavior<View> mBehavior;
 
     private MainViewModel mMainViewModel;
+
+    private FileEditorManager mFileEditorManager;
 
     private final OnBackPressedCallback mOnBackPressedCallback = new OnBackPressedCallback(false) {
         @Override

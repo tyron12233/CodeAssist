@@ -65,16 +65,16 @@ public class ProteusHelper {
             return "Unknown";
         }
         String layoutType = view.getViewManager().getLayout().type;
-        ViewTypeParser<View> parser = view.getViewManager()
-                .getContext()
-                .getParser(layoutType);
         String attributeName = "Unknown";
-        if (parser != null) {
-            attributeName = getAttributeName(parser.getAttributeSet(), id);
+        if (view.getAsView().getParent() instanceof ProteusView) {
+            attributeName = getAttributeName((ProteusView) view.getAsView().getParent(), id);
         }
         if ("Unknown".equals(attributeName)) {
-            if (view.getAsView().getParent() instanceof ProteusView) {
-                attributeName = getAttributeName((ProteusView) view.getAsView().getParent(), id);
+            ViewTypeParser<View> parser = view.getViewManager()
+                    .getContext()
+                    .getParser(layoutType);
+            if (parser != null) {
+                attributeName = getAttributeName(parser.getAttributeSet(), id);
             }
         }
         return attributeName;
