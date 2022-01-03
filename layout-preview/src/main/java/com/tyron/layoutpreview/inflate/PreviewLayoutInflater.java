@@ -153,6 +153,7 @@ public class PreviewLayoutInflater {
                 .setStyleManager(mStyleManager)
                 .setLayoutManager(mLayoutManager)
                 .build();
+        mContext.setParserFactory(new MaterialParserFactory(mContext));
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
     }
 
