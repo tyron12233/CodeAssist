@@ -17,6 +17,9 @@ public class ImageEditorProvider implements FileEditorProvider {
             return false;
         }
         String name = file.getName();
+        if (!name.contains(".")) {
+            return false;
+        }
         switch (name.substring(name.lastIndexOf('.'))) {
             case "png":
             case "jpg":
