@@ -23,6 +23,7 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.LevelListDrawable;
 import android.graphics.drawable.RippleDrawable;
@@ -72,6 +73,7 @@ public abstract class DrawableValue extends Value {
     private static final String DRAWABLE_LAYER_LIST = "layer-list";
     private static final String DRAWABLE_LEVEL_LIST = "level-list";
     private static final String DRAWABLE_RIPPLE = "ripple";
+    private static final String DRAWABLE_INSET = "inset";
 
     private static final String TYPE_CORNERS = "corners";
     private static final String TYPE_GRADIENT = "gradient";
@@ -112,6 +114,8 @@ public abstract class DrawableValue extends Value {
                 return LevelListValue.valueOf(value.getAsArray(CHILDREN), context);
             case DRAWABLE_RIPPLE:
                 return RippleValue.valueOf(value, context);
+            case DRAWABLE_INSET:
+                return new InsetValue(value, context);
             default:
                 return null;
         }
@@ -203,6 +207,96 @@ public abstract class DrawableValue extends Value {
         }
     }
 
+    public static class InsetValue extends DrawableValue {
+
+        private static final String INSET_LEFT = "android:insetLeft";
+        private static final String INSET_TOP = "android:insetTop";
+        private static final String INSET_RIGHT = "android:insetRight";
+        private static final String INSET_BOTTOM = "android:insetBottom";
+
+        private Dimension insetLeft;
+        private Dimension insetTop;
+        private Dimension insetRight;
+        private Dimension insetBottom;
+
+        private final DrawableValue drawableValue;
+
+        private InsetValue(ObjectValue value, ProteusContext context) {
+            Primitive insetLeft;
+            Primitive insetTop;
+            Primitive insetRight;
+            Primitive insetBottom;
+
+            insetLeft = value.getAsPrimitive(INSET_LEFT);
+            insetTop = value.getAsPrimitive(INSET_TOP);
+            insetRight = value.getAsPrimitive(INSET_RIGHT);
+            insetBottom = value.getAsPrimitive(INSET_BOTTOM);
+
+            if (insetLeft != null) {
+                this.insetLeft = Dimension.valueOf(insetLeft.toString());
+            }
+            if (insetTop != null) {
+                this.insetTop = Dimension.valueOf(insetTop.toString());
+            }
+            if (insetRight != null) {
+                this.insetRight = Dimension.valueOf(insetRight.toString());
+            }
+            if (insetBottom != null) {
+                this.insetBottom = Dimension.valueOf(insetBottom.toString());
+            }
+
+            DrawableValue drawableValue = null;
+            if (value.has(CHILDREN)) {
+                Value children = value.get(CHILDREN);
+                if (children.isArray()) {
+                    Value first = children.getAsArray().get(0);
+                    if (first.isObject()) {
+                        drawableValue = DrawableValue.valueOf(first.getAsObject(), context);
+                    }
+                }
+            }
+            this.drawableValue = drawableValue;
+        }
+
+        @Override
+        public void apply(View view, ProteusContext context,
+                          ProteusLayoutInflater.ImageLoader loader, Callback callback) {
+            if (drawableValue != null) {
+                final int insetLeft;
+                final int insetTop;
+                final int insetRight;
+                final int insetBottom;
+
+                if (this.insetLeft != null) {
+                    insetLeft = (int) this.insetLeft.apply(context);
+                } else {
+                    insetLeft = -1;
+                }
+                if (this.insetTop != null) {
+                    insetTop = (int) this.insetTop.apply(context);
+                } else {
+                    insetTop = -1;
+                }
+                if (this.insetRight != null) {
+                    insetRight = (int) this.insetRight.apply(context);
+                } else {
+                    insetRight = -1;
+                }
+                if (this.insetBottom != null) {
+                    insetBottom = (int) this.insetBottom.apply(context);
+                } else {
+                    insetBottom = -1;
+                }
+
+                drawableValue.apply(view, context, loader, drawable -> {
+                    InsetDrawable insetDrawable = new InsetDrawable(drawable, insetLeft, insetTop, insetRight, insetBottom);
+                    callback.apply(insetDrawable);
+                });
+            }
+        }
+    }
+
+
     public static class ShapeValue extends DrawableValue {
 
         private static final int SHAPE_NONE = -1;
@@ -226,48 +320,54 @@ public abstract class DrawableValue extends Value {
             this.shape = getShape(value.getAsString(SHAPE));
 
             Gradient gradient = null;
-            Array children = value.getAsArray(CHILDREN);
-            Iterator<Value> iterator = children.iterator();
+            DrawableElement[] elements = null;
+            if (value.has(CHILDREN)) {
+                Value childrenValue = value.get(CHILDREN);
+                if (childrenValue.isArray()) {
+                    Array children = childrenValue.getAsArray();
+                    if (children != null) {
+                        Iterator<Value> iterator = children.iterator();
+                        if (children.size() > 0) {
+                            elements = new DrawableElement[children.size()];
+                            int index = 0;
+                            while (iterator.hasNext()) {
+                                ObjectValue child = iterator.next().getAsObject();
+                                String typeKey = child.getAsString(TYPE);
+                                DrawableElement element = null;
+                                //noinspection ConstantConditions
+                                switch (typeKey) {
+                                    case TYPE_CORNERS:
+                                        element = Corners.valueOf(child, context);
+                                        break;
+                                    case TYPE_PADDING:
+                                        break;
+                                    case TYPE_SIZE:
+                                        element = Size.valueOf(child, context);
+                                        break;
+                                    case TYPE_SOLID:
+                                        element = Solid.valueOf(child, context);
+                                        break;
+                                    case TYPE_STROKE:
+                                        element = Stroke.valueOf(child, context);
+                                        break;
+                                    case TYPE_GRADIENT:
+                                        gradient = Gradient.valueOf(child, context);
+                                        element = gradient;
+                                        break;
+                                }
 
-            if (children.size() > 0) {
-                this.elements = new DrawableElement[children.size()];
-                int index = 0;
-                while (iterator.hasNext()) {
-                    ObjectValue child = iterator.next().getAsObject();
-                    String typeKey = child.getAsString(TYPE);
-                    DrawableElement element = null;
-                    //noinspection ConstantConditions
-                    switch (typeKey) {
-                        case TYPE_CORNERS:
-                            element = Corners.valueOf(child, context);
-                            break;
-                        case TYPE_PADDING:
-                            break;
-                        case TYPE_SIZE:
-                            element = Size.valueOf(child, context);
-                            break;
-                        case TYPE_SOLID:
-                            element = Solid.valueOf(child, context);
-                            break;
-                        case TYPE_STROKE:
-                            element = Stroke.valueOf(child, context);
-                            break;
-                        case TYPE_GRADIENT:
-                            gradient = Gradient.valueOf(child, context);
-                            element = gradient;
-                            break;
-                    }
-
-                    if (null != element) {
-                        this.elements[index] = element;
-                        index++;
+                                if (null != element) {
+                                    elements[index] = element;
+                                    index++;
+                                }
+                            }
+                        }
                     }
                 }
-                this.gradient = gradient;
-            } else {
-                this.elements = null;
-                this.gradient = null;
             }
+
+            this.elements = elements;
+            this.gradient = gradient;
         }
 
         private ShapeValue(int shape, @Nullable Gradient gradient, @Nullable DrawableElement[] elements) {
