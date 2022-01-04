@@ -4736,6 +4736,18 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
                 showContextMenu(xOffset, yOffset);
                 return true;
             }
+            if (keyCode == KeyEvent.KEYCODE_SPACE) {
+                int endLine = getCursor().getLeftLine();
+                int endColumn = getCursor().getLeftColumn();
+                if (isSelected()) {
+                    setSelection(endLine, endColumn);
+                }
+                showCompletionWindow(mText, endLine, endColumn);
+                if (mCompletionWindow.isShowing()) {
+                    updateCompletionWindowPosition();
+                }
+                return true;
+            }
         }
         if (event.isShiftPressed() && !event.isAltPressed() && !event.isCtrlPressed()) {
             if (keyCode == KeyEvent.KEYCODE_ENTER) {
@@ -5061,22 +5073,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         // Auto completion
         if (isAutoCompletionEnabled()) {
             if ((mConnection.mComposingLine == -1 || mCompletionOnComposing) && endColumn != 0 && startLine == endLine) {
-                int end = endColumn;
-                while (endColumn > 0) {
-                    if (mLanguage.isAutoCompleteChar(content.charAt(endLine, endColumn - 1))) {
-                        endColumn--;
-                    } else {
-                        break;
-                    }
-                }
-                if (end > endColumn) {
-                    String line = content.getLineString(endLine);
-                    String prefix = line.substring(endColumn, end);
-                    mCompletionWindow.setPrefix(prefix);
-                    mCompletionWindow.show();
-                } else {
-                    postHideCompletionWindow();
-                }
+                showCompletionWindow(content, endLine, endColumn);
             } else {
                 postHideCompletionWindow();
             }
@@ -5095,6 +5092,25 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
 
         onSelectionChanged();
         invalidateInCursor();
+    }
+
+    private void showCompletionWindow(Content content, int endLine, int endColumn) {
+        int end = endColumn;
+        while (endColumn > 0) {
+            if (mLanguage.isAutoCompleteChar(content.charAt(endLine, endColumn - 1))) {
+                endColumn--;
+            } else {
+                break;
+            }
+        }
+        if (end > endColumn) {
+            String line = content.getLineString(endLine);
+            String prefix = line.substring(endColumn, end);
+            mCompletionWindow.setPrefix(prefix);
+            mCompletionWindow.show();
+        } else {
+            postHideCompletionWindow();
+        }
     }
 
     @Override
