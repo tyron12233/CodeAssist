@@ -42,20 +42,23 @@ public class JavaCompletionProvider extends CompletionProvider {
 
         if (isIncrementalCompletion(mCachedCompletion, file, prefix, line, column)) {
             String partialIdentifier = partialIdentifier(prefix, prefix.length());
-            List<CompletionItem> narrowedList =
-                    mCachedCompletion.getCompletionList().items.stream().filter(item -> {
-                String label = item.label;
-                if (label.contains("(")) {
-                    label = label.substring(0, label.indexOf('('));
-                }
-                if (label.length() < partialIdentifier.length()) {
-                    return false;
-                }
-                return FuzzySearch.partialRatio(label, partialIdentifier) > 90;
-            }).collect(Collectors.toList());
-            CompletionList completionList = new CompletionList();
-            completionList.items = narrowedList;
-            return completionList;
+            CompletionList cachedList = mCachedCompletion.getCompletionList();
+            if (!cachedList.items.isEmpty()) {
+                List<CompletionItem> narrowedList =
+                        cachedList.items.stream().filter(item -> {
+                            String label = item.label;
+                            if (label.contains("(")) {
+                                label = label.substring(0, label.indexOf('('));
+                            }
+                            if (label.length() < partialIdentifier.length()) {
+                                return false;
+                            }
+                            return FuzzySearch.partialRatio(label, partialIdentifier) > 90;
+                        }).collect(Collectors.toList());
+                CompletionList completionList = new CompletionList();
+                completionList.items = narrowedList;
+                return completionList;
+            }
         }
 
         try {
