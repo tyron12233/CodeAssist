@@ -58,14 +58,18 @@ public class ProteusContext extends ContextWrapper {
     private final ProteusLayoutInflater.ImageLoader loader;
 
     private ProteusLayoutInflater inflater;
-    private ProteusParserFactory internalParserFactory = new ProteusParserFactory() {
+    private final ProteusParserFactory internalParserFactory = new ProteusParserFactory() {
         @Nullable
         @Override
         public <T extends View> ViewTypeParser<T> getParser(@NonNull String type) {
             if (type.contains(".")) {
                 return null;
             }
-            return getParser(type);
+            String s = sInternalViewMap.get(type);
+            if (s == null) {
+                return null;
+            }
+            return ProteusContext.this.getParser(s);
         }
     };
     private ProteusParserFactory parserFactory;
@@ -130,7 +134,9 @@ public class ProteusContext extends ContextWrapper {
         }
 
         if (parser == null) {
-            parser = internalParserFactory.getParser(type);
+            if (!type.contains(".")) {
+                parser = internalParserFactory.getParser(type);
+            }
         }
 
         if (parser == null) {
