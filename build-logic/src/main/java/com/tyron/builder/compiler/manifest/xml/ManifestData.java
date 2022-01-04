@@ -9,6 +9,8 @@ import com.tyron.builder.compiler.manifest.resources.Keyboard;
 import com.tyron.builder.compiler.manifest.resources.Navigation;
 import com.tyron.builder.compiler.manifest.resources.TouchScreen;
 
+import org.xml.sax.Attributes;
+
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.TreeSet;
@@ -68,6 +70,16 @@ public final class ManifestData {
     SupportsScreens mSupportsScreensValues;
     UsesConfiguration mUsesConfiguration;
 
+    private String theme;
+
+    public void setTheme(String theme) {
+        this.theme = theme;
+    }
+
+    public String getTheme() {
+        return theme;
+    }
+
     /**
      * Instrumentation info obtained from manifest
      */
@@ -104,6 +116,7 @@ public final class ManifestData {
         private boolean mHasAction = false;
         private boolean mHasMainAction = false;
         private boolean mHasLauncherCategory = false;
+        private String theme;
 
         public Activity(String name, boolean exported) {
             mName = name;
@@ -126,6 +139,10 @@ public final class ManifestData {
             return mHasMainAction && mHasLauncherCategory;
         }
 
+        public String getTheme() {
+            return theme;
+        }
+
         void setHasAction(boolean hasAction) {
             mHasAction = hasAction;
         }
@@ -146,6 +163,10 @@ public final class ManifestData {
 
         void setHasLauncherCategory(boolean hasLauncherCategory) {
             mHasLauncherCategory = hasLauncherCategory;
+        }
+
+        public void setTheme(String theme) {
+            this.theme = theme;
         }
     }
 

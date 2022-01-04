@@ -391,6 +391,7 @@ public class AndroidManifestParser {
          * @param attributes the attributes for the application node.
          */
         private void processApplicationNode(Attributes attributes) {
+
             String value =
                     getAttributeValue(
                             attributes, AndroidManifest.ATTRIBUTE_PROCESS, true /* hasNamespace */);
@@ -433,6 +434,14 @@ public class AndroidManifestParser {
                                 null,
                                 AndroidManifest.ATTRIBUTE_BACKUP_AGENT));
             }
+
+            value = getAttributeValue(
+                    attributes,
+                    AndroidManifest.ATTRIBUTE_THEME,
+                    true);
+            if (value != null) {
+                mManifestData.setTheme(value);
+            }
         }
 
         /**
@@ -453,6 +462,12 @@ public class AndroidManifestParser {
                 boolean exported = exportedStr == null ||
                         exportedStr.toLowerCase(Locale.US).equals("true"); //$NON-NLS-1$
                 mCurrentActivity = new Activity(activityName, exported);
+
+                String theme = getAttributeValue(attributes, AndroidManifest.ATTRIBUTE_THEME, true);
+                if (theme != null) {
+                    mCurrentActivity.setTheme(theme);
+                }
+
                 mManifestData.mActivities.add(mCurrentActivity);
 
                 if (mErrorHandler != null) {
