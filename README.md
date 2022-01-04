@@ -49,11 +49,11 @@
 
 ## CodeAssist Community
 
-Discord server: https://discord.gg/3YMZkgFS
+Discord server: https://discord.gg/pffnyE6prs
 
 
 
-English-language chat in Telegram: https://t.me/code_assist
+English-language chat in Telegram: https://t.me/codeassist_app
 
 
 
