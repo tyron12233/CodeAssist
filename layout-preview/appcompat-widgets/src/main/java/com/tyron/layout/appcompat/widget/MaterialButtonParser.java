@@ -31,7 +31,7 @@ public class MaterialButtonParser<V extends View> extends ViewTypeParser<V> {
     @Nullable
     @Override
     protected String getDefaultStyleName() {
-        return "@style/Widget.MaterialComponents.Button";
+        return "?attr/materialButtonStyle";
     }
 
     @NonNull

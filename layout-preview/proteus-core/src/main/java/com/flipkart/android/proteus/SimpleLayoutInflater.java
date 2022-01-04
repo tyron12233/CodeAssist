@@ -16,7 +16,9 @@
 
 package com.flipkart.android.proteus;
 
+import android.content.res.TypedArray;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -24,9 +26,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.exceptions.ProteusInflateException;
+import com.flipkart.android.proteus.processor.AttributeProcessor;
+import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
+import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Style;
+import com.flipkart.android.proteus.value.StyleResource;
 import com.flipkart.android.proteus.value.Value;
 
 import java.util.Iterator;
@@ -101,11 +107,9 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
 
         String defaultStyleName = parser.getDefaultStyleName();
         if (defaultStyleName != null) {
-            Style style = context.getStyle(defaultStyleName);
-            if (style != null) {
-                style.apply(view);
-            }
+            applyStyle(defaultStyleName, parser, view);
         }
+
 
         /*
          * Handle each attribute and set it on the view.
@@ -130,6 +134,51 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
         }
 
         return view;
+    }
+
+    private void applyStyle(String name, ViewTypeParser parser, ProteusView view) {
+        Value value = AttributeProcessor.staticPreCompile(new Primitive(name), context, context.getFunctionManager());
+        if (value != null) {
+            applyStyle(view, value);
+        }
+    }
+
+    private void applyStyle(ProteusView view, Value value) {
+        if (value.isStyle()) {
+            value.getAsStyle().apply(view);
+        } else if (value.isAttributeResource()) {
+            Style style = context.getStyle(value.getAsAttributeResource().getName());
+            if (style != null) {
+                style.apply(view);
+            } else {
+                AttributeResource attributeResource = AttributeResource.valueOf(value.getAsAttributeResource().getValue(), context);
+                if (attributeResource != null) {
+                    applyStyleAttribute(view, attributeResource);
+                }
+            }
+        }
+    }
+
+    private void applyStyleAttribute(ProteusView view, AttributeResource attributeResource) {
+        TypedArray apply = attributeResource.apply(context);
+        TypedValue typedValue = apply.peekValue(0);
+        CharSequence styleName = context.getResources().getResourceEntryName(typedValue.resourceId);
+        apply.recycle();
+
+        Style style = context.getStyle(styleName.toString());
+        if (style != null) {
+            style.apply(view);
+        } else {
+            StyleResource styleResource = StyleResource.valueOf(styleName.toString(), context);
+            if (styleResource != null) {
+                apply = styleResource.apply(context);
+                TypedValue t = apply.peekValue(0);
+                styleName = context.getResources().getResourceEntryName(t.resourceId);
+                apply.recycle();
+
+                applyStyle(view, new Primitive(styleName.toString()));
+            }
+        }
     }
 
     @NonNull
