@@ -4724,6 +4724,27 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         mKeyMetaStates.onKeyDown(event);
         boolean isShiftPressed = mKeyMetaStates.isShiftPressed();
+
+        if (event.isAltPressed()) {
+            if (keyCode == KeyEvent.KEYCODE_ENTER) {
+                float[] layoutOffset =
+                        mLayout.getCharLayoutOffset(getCursor().getLeftLine(),
+                                getCursor().getLeftColumn());
+                float xOffset = layoutOffset[1] + measureTextRegionOffset();
+                float yOffset = layoutOffset[0];
+
+                showContextMenu(xOffset, yOffset);
+                return true;
+            }
+        }
+        if (event.isShiftPressed() && !event.isAltPressed() && !event.isCtrlPressed()) {
+            if (keyCode == KeyEvent.KEYCODE_ENTER) {
+                moveSelectionEnd();
+                enterPressed();
+                return true;
+            }
+        }
+
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_DPAD_UP:
@@ -4761,44 +4782,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
                         mCompletionWindow.select();
                         return true;
                     }
-                    NewlineHandler[] handlers = mLanguage.getNewlineHandlers();
-                    if (handlers == null || getCursor().isSelected()) {
-                        mCursor.onCommitText("\n", true);
-                    } else {
-                        ContentLine line = mText.getLine(mCursor.getLeftLine());
-                        int index = mCursor.getLeftColumn();
-                        String beforeText = line.subSequence(0, index).toString();
-                        String afterText = line.subSequence(index, line.length()).toString();
-                        boolean consumed = false;
-                        for (NewlineHandler handler : handlers) {
-                            if (handler != null) {
-                                if (handler.matchesRequirement(beforeText, afterText)) {
-                                    try {
-                                        NewlineHandler.HandleResult result = handler.handleNewline(beforeText, afterText, getTabWidth());
-                                        if (result != null) {
-                                            mCursor.onCommitText(result.text, false);
-                                            int delta = result.shiftLeft;
-                                            if (delta != 0) {
-                                                int newSel = Math.max(getCursor().getLeft() - delta, 0);
-                                                CharPosition charPosition = getCursor().getIndexer().getCharPosition(newSel);
-                                                setSelection(charPosition.line, charPosition.column);
-                                            }
-                                            consumed = true;
-                                        } else {
-                                            continue;
-                                        }
-                                    } catch (Exception e) {
-                                        Log.w(LOG_TAG, "Error occurred while calling Language's NewlineHandler", e);
-                                    }
-                                    break;
-                                }
-                            }
-                        }
-                        if (!consumed) {
-                            mCursor.onCommitText("\n", true);
-                        }
-                    }
-                    notifyExternalCursorChange();
+                   enterPressed();
                 }
                 return true;
             }
@@ -4908,6 +4892,47 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
                 }
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    private void enterPressed() {
+        NewlineHandler[] handlers = mLanguage.getNewlineHandlers();
+        if (handlers == null || getCursor().isSelected()) {
+            mCursor.onCommitText("\n", true);
+        } else {
+            ContentLine line = mText.getLine(mCursor.getLeftLine());
+            int index = mCursor.getLeftColumn();
+            String beforeText = line.subSequence(0, index).toString();
+            String afterText = line.subSequence(index, line.length()).toString();
+            boolean consumed = false;
+            for (NewlineHandler handler : handlers) {
+                if (handler != null) {
+                    if (handler.matchesRequirement(beforeText, afterText)) {
+                        try {
+                            NewlineHandler.HandleResult result = handler.handleNewline(beforeText, afterText, getTabWidth());
+                            if (result != null) {
+                                mCursor.onCommitText(result.text, false);
+                                int delta = result.shiftLeft;
+                                if (delta != 0) {
+                                    int newSel = Math.max(getCursor().getLeft() - delta, 0);
+                                    CharPosition charPosition = getCursor().getIndexer().getCharPosition(newSel);
+                                    setSelection(charPosition.line, charPosition.column);
+                                }
+                                consumed = true;
+                            } else {
+                                continue;
+                            }
+                        } catch (Exception e) {
+                            Log.w(LOG_TAG, "Error occurred while calling Language's NewlineHandler", e);
+                        }
+                        break;
+                    }
+                }
+            }
+            if (!consumed) {
+                mCursor.onCommitText("\n", true);
+            }
+        }
+        notifyExternalCursorChange();
     }
 
     @Override
