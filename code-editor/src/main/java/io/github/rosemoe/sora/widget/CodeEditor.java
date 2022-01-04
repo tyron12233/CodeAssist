@@ -289,6 +289,17 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
      */
     private File mCurrentFile;
     private final List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
+    private final Cursor.CursorMoveDelegate mCursorMoveDelegate = new Cursor.CursorMoveDelegate() {
+        @Override
+        public void onCursorMove(int direction) {
+            switch (direction) {
+                case Cursor.Direction.LEFT: moveSelectionLeft(); break;
+                case Cursor.Direction.TOP: moveSelectionUp(); break;
+                case Cursor.Direction.RIGHT: moveSelectionRight(); break;
+                case Cursor.Direction.BOTTOM: moveSelectionDown(); break;
+            }
+        }
+    };
 
     public CodeEditor(Context context) {
         this(context, null);
@@ -4276,6 +4287,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         }
         mText = new Content(text);
         mCursor = mText.getCursor();
+        mCursor.setCursorMoveDelegate(mCursorMoveDelegate);
         mCursor.setAutoIndent(mAutoIndentEnabled);
         mCursor.setLanguage(mLanguage);
         mEventHandler.reset();

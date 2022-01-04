@@ -30,7 +30,14 @@ import io.github.rosemoe.sora.util.IntPair;
 
 import static io.github.rosemoe.sora.text.TextUtils.isEmoji;
 
+import androidx.annotation.IntDef;
+
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -39,6 +46,23 @@ import java.util.stream.Collectors;
  */
 public final class Cursor {
 
+    @IntDef(value = {Direction.LEFT, Direction.TOP, Direction.RIGHT, Direction.BOTTOM})
+    public @interface Direction {
+        int LEFT = 0;
+        int TOP = 1;
+        int RIGHT = 2;
+        int BOTTOM = 3;
+    }
+    /**
+     * Delegate for listening to different cursor events
+     */
+    public interface CursorMoveDelegate {
+        /**
+         * @param direction the
+         */
+        void onCursorMove(@Direction int direction);
+    }
+
     private final Content mContent;
     private final CachedIndexer mIndexer;
     private CharPosition mLeft, mRight;
@@ -46,6 +70,9 @@ public final class Cursor {
     private boolean mAutoIndentEnabled;
     private EditorLanguage mLanguage;
     private int mTabWidth;
+    private final Set<Character> mIgnoredCharacters;
+
+    private CursorMoveDelegate mCursorMoveDelegate;
 
     /**
      * Create a new Cursor for Content
@@ -58,6 +85,13 @@ public final class Cursor {
         mLeft = new CharPosition().zero();
         mRight = new CharPosition().zero();
         mTabWidth = 4;
+        mIgnoredCharacters = new HashSet<>();
+
+        Collections.addAll(mIgnoredCharacters, ')', '"', ']', '>');
+    }
+
+    public void setCursorMoveDelegate(CursorMoveDelegate delegate) {
+        mCursorMoveDelegate = delegate;
     }
 
     /**
@@ -256,35 +290,46 @@ public final class Cursor {
         if (isSelected()) {
             mContent.replace(getLeftLine(), getLeftColumn(), getRightLine(), getRightColumn(), text);
         } else {
-            if (mAutoIndentEnabled && text.length() != 0 && applyAutoIndent) {
-                char first = text.charAt(0);
-                if (first == '\n') {
-                    String line = mContent.getLineString(getLeftLine());
-                    int p = 0, count = 0;
-                    while (p < getLeftColumn()) {
-                        if (isWhitespace(line.charAt(p))) {
-                            if (line.charAt(p) == '\t') {
-                                count += mTabWidth;
-                            } else {
-                                count++;
-                            }
-                            p++;
-                        } else {
-                            break;
-                        }
-                    }
-                    String sub = line.substring(0, getLeftColumn());
-                    try {
-                        count += mLanguage.getIndentAdvance(sub);
-                    } catch (Exception e) {
-                        Log.w("EditorCursor", "Language object error", e);
-                    }
-                    StringBuilder sb = new StringBuilder(text);
-                    sb.insert(1, createIndent(count));
-                    text = sb;
+            if (text.length() == 1
+                    && mIgnoredCharacters.contains(text.charAt(0))
+                    && text.charAt(0) == mContent.charAt(getLeft())
+                    && mCursorMoveDelegate != null
+                    && getLeftColumn() < mContent.getColumnCount(getLeftLine())) {
+                char c = text.charAt(0);
+                if (mIgnoredCharacters.contains(c)) {
+                    mCursorMoveDelegate.onCursorMove(Direction.RIGHT);
                 }
+            } else {
+                if (mAutoIndentEnabled && text.length() != 0 && applyAutoIndent) {
+                    char first = text.charAt(0);
+                    if (first == '\n') {
+                        String line = mContent.getLineString(getLeftLine());
+                        int p = 0, count = 0;
+                        while (p < getLeftColumn()) {
+                            if (isWhitespace(line.charAt(p))) {
+                                if (line.charAt(p) == '\t') {
+                                    count += mTabWidth;
+                                } else {
+                                    count++;
+                                }
+                                p++;
+                            } else {
+                                break;
+                            }
+                        }
+                        String sub = line.substring(0, getLeftColumn());
+                        try {
+                            count += mLanguage.getIndentAdvance(sub);
+                        } catch (Exception e) {
+                            Log.w("EditorCursor", "Language object error", e);
+                        }
+                        StringBuilder sb = new StringBuilder(text);
+                        sb.insert(1, createIndent(count));
+                        text = sb;
+                    }
+                }
+                mContent.insert(getLeftLine(), getLeftColumn(), text);
             }
-            mContent.insert(getLeftLine(), getLeftColumn(), text);
         }
     }
 
