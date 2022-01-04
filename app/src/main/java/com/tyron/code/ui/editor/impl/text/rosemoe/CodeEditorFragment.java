@@ -16,16 +16,6 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ParseResult;
-import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.nodeTypes.NodeWithRange;
-import com.github.javaparser.ast.observer.AstObserverAdapter;
-import com.github.javaparser.ast.observer.ObservableProperty;
-import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.editor.Savable;
@@ -127,6 +117,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
             mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_COLLAPSED);
         }
     }
+
 
     public void hideEditorWindows() {
         mEditor.getTextActionPresenter().onExit();
@@ -464,54 +455,54 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     LayoutEditorFragment.newInstance(currentFile)).addToBackStack(null).commit();
         } else {
             // TODO: handle unknown files
-            JavaCompilerProvider service =
-                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-            JavaCompilerService compiler = service.getCompiler(ProjectManager.getInstance().getCurrentProject(),
-                    (JavaModule) ProjectManager.getInstance().getCurrentProject().getMainModule());
-            ParseTask parse = compiler.parse(mCurrentFile.toPath(), mEditor.getText().toString());
-            CompilationUnitConverter compilationUnitConverter = new CompilationUnitConverter(parse, mEditor.getText().toString(), new CompilationUnitConverter.LineColumnCallback() {
-                @Override
-                public int getLine(int pos) {
-                    return mEditor.getText().getIndexer().getCharLine(pos);
-                }
-
-                @Override
-                public int getColumn(int pos) {
-                    return mEditor.getText().getIndexer().getCharColumn(pos);
-                }
-            });
-            CompilationUnit compilationUnit = compilationUnitConverter.startScan();
-            compilationUnit.register(new AstObserverAdapter() {
-                @Override
-                public void listChange(NodeList<?> observedNode, ListChangeType type, int index,
-                                       Node node) {
-                    if (type == ListChangeType.ADDITION) {
-                        Optional<com.github.javaparser.Range> optionalRange = node.getRange();
-                        com.github.javaparser.Range range = optionalRange.get();
-                        mEditor.getText().insert(range.begin.line, range.begin.column - 1, node.toString());
-                    }
-                    System.out.println(observedNode + ", type: " + type + ", added: " + node.getRange());
-                }
-
-                @Override
-                public void propertyChange(Node observedNode, ObservableProperty property,
-                                           Object oldValue, Object newValue) {
-                    Optional<com.github.javaparser.Range> optionalRange = observedNode.getRange();
-                    if (oldValue instanceof NodeWithRange) {
-                        optionalRange = ((NodeWithRange<?>) oldValue).getRange();
-                    } else {
-                        optionalRange = observedNode.getRange();
-                    }
-                    if (!optionalRange.isPresent()) {
-                        return;
-                    }
-                    com.github.javaparser.Range range = optionalRange.get();
-                    mEditor.getText().replace(range.begin.line, range.begin.column, range.end.line, range.end.column, "");
-                    mEditor.getText().insert(range.begin.line, range.begin.column, newValue.toString());
-                    mEditor.hideAutoCompleteWindow();
-                }
-            }, Node.ObserverRegistrationMode.THIS_NODE_AND_EXISTING_DESCENDANTS);
-            System.out.println(compilationUnit);
+//            JavaCompilerProvider service =
+//                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+//            JavaCompilerService compiler = service.getCompiler(ProjectManager.getInstance().getCurrentProject(),
+//                    (JavaModule) ProjectManager.getInstance().getCurrentProject().getMainModule());
+//            ParseTask parse = compiler.parse(mCurrentFile.toPath(), mEditor.getText().toString());
+//            CompilationUnitConverter compilationUnitConverter = new CompilationUnitConverter(parse, mEditor.getText().toString(), new CompilationUnitConverter.LineColumnCallback() {
+//                @Override
+//                public int getLine(int pos) {
+//                    return mEditor.getText().getIndexer().getCharLine(pos);
+//                }
+//
+//                @Override
+//                public int getColumn(int pos) {
+//                    return mEditor.getText().getIndexer().getCharColumn(pos);
+//                }
+//            });
+//            CompilationUnit compilationUnit = compilationUnitConverter.startScan();
+//            compilationUnit.register(new AstObserverAdapter() {
+//                @Override
+//                public void listChange(NodeList<?> observedNode, ListChangeType type, int index,
+//                                       Node node) {
+//                    if (type == ListChangeType.ADDITION) {
+//                        Optional<com.github.javaparser.Range> optionalRange = node.getRange();
+//                        com.github.javaparser.Range range = optionalRange.get();
+//                        mEditor.getText().insert(range.begin.line, range.begin.column - 1, node.toString());
+//                    }
+//                    System.out.println(observedNode + ", type: " + type + ", added: " + node.getRange());
+//                }
+//
+//                @Override
+//                public void propertyChange(Node observedNode, ObservableProperty property,
+//                                           Object oldValue, Object newValue) {
+//                    Optional<com.github.javaparser.Range> optionalRange = observedNode.getRange();
+//                    if (oldValue instanceof NodeWithRange) {
+//                        optionalRange = ((NodeWithRange<?>) oldValue).getRange();
+//                    } else {
+//                        optionalRange = observedNode.getRange();
+//                    }
+//                    if (!optionalRange.isPresent()) {
+//                        return;
+//                    }
+//                    com.github.javaparser.Range range = optionalRange.get();
+//                    mEditor.getText().replace(range.begin.line, range.begin.column, range.end.line, range.end.column, "");
+//                    mEditor.getText().insert(range.begin.line, range.begin.column, newValue.toString());
+//                    mEditor.hideAutoCompleteWindow();
+//                }
+//            }, Node.ObserverRegistrationMode.THIS_NODE_AND_EXISTING_DESCENDANTS);
+//            System.out.println(compilationUnit);
         }
     }
 
