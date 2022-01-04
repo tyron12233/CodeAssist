@@ -3,6 +3,7 @@ package com.tyron.layoutpreview.resource;
 import android.util.Log;
 import android.util.Pair;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.ColorManager;
@@ -69,14 +70,18 @@ public class ResourceValueParser {
         File valuesDir = new File(resourcesDir, "values");
         File[] children = valuesDir.listFiles(c -> c.getName().endsWith(".xml"));
         if (children != null) {
-            for (File child : children) {
-                try {
-                    parse(child);
-                } catch (XmlPullParserException e) {
-                    Log.e("ResourceValueParser", "Unable to parse XML", e);
-                } catch (IOException e) {
-                    Log.e("ResourceValueParser", "File error", e);
-                }
+            parse(children);
+        }
+    }
+
+    private void parse(@NonNull File[] children) {
+        for (File child : children) {
+            try {
+                parse(child);
+            } catch (XmlPullParserException e) {
+                Log.e("ResourceValueParser", "Unable to parse XML", e);
+            } catch (IOException e) {
+                Log.e("ResourceValueParser", "File error", e);
             }
         }
     }

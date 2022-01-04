@@ -18,11 +18,14 @@ import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 import com.flipkart.android.proteus.view.UnknownView;
 import com.flipkart.android.proteus.view.UnknownViewGroup;
 import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonReader;
+import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
+import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.layout.appcompat.AppCompatModule;
@@ -36,6 +39,7 @@ import com.tyron.layoutpreview.manager.ResourceLayoutManager;
 import com.tyron.layoutpreview.resource.ResourceValueParser;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.StringReader;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -162,6 +166,21 @@ public class PreviewLayoutInflater {
             mDrawableManager.setDrawables(resourceManager.getDrawables());
             mLayoutManager.setLayouts(resourceManager.getLayouts());
             mParser.parse(mProject);
+
+            try {
+                ManifestData parse = AndroidManifestParser.parse(mProject.getManifestFile());
+                String theme = parse.getLauncherActivity().getTheme();
+                if (theme == null) {
+                    theme = parse.getTheme();
+                }
+
+                if (theme != null) {
+                    Style style = mContext.getStyle(theme);
+                    mContext.setStyle(style);
+                }
+            } catch (IOException e) {
+                // ignored
+            }
             return this;
         }, executor);
     }

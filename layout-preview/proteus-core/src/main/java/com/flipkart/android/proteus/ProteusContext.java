@@ -48,6 +48,9 @@ public class ProteusContext extends ContextWrapper {
 
         // TODO: add other views
     }
+
+    private Style style;
+
     @NonNull
     private final ProteusResources resources;
 
@@ -163,7 +166,14 @@ public class ProteusContext extends ContextWrapper {
      * @return The default style, typically from the application theme or the current activity
      */
     public Style getStyle() {
-        return resources.getStyle("Theme.MyApplication");
+        return style;
+    }
+
+    /**
+     * Sets the style to use for all the views that are inflated with this context
+     */
+    public void setStyle(Style style) {
+        this.style = style;
     }
 
     /**

@@ -8,8 +8,6 @@ import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.toolbox.ProteusHelper;
 
-import java.util.Map;
-
 public class Style extends Value {
 
     private static final String STYLE_PREFIX = "@style/";
