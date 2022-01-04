@@ -105,12 +105,7 @@ public class OverrideInheritedMethod implements Rewrite {
                 int tabCount = indent / 4;
 
                 String tabs = Strings.repeat("\t", tabCount);
-                String text = JavaParserUtil.prettyPrint(methodDeclaration, className -> {
-                    if (ActionUtil.needsFqn(importedClasses, className)) {
-                        return true;
-                    }
-                    return ActionUtil.hasImport(importedClasses, className);
-                });
+                String text = JavaParserUtil.prettyPrint(methodDeclaration, className -> false);
                 text = tabs + text.replace("\n", "\n" + tabs)
                         + "\n\n";
 

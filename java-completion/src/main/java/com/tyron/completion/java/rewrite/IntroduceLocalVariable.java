@@ -67,12 +67,7 @@ public class IntroduceLocalVariable implements Rewrite {
                 while (containsVariableAtScope(variableName, task)) {
                     variableName = getVariableName(variableName);
                 }
-                String typeName = JavaParserTypesUtil.getName(variableType, name -> {
-                    if (ActionUtil.needsFqn(task.root(), name)) {
-                        return true;
-                    }
-                    return ActionUtil.hasImport(task.root(), name);
-                });
+                String typeName = JavaParserTypesUtil.getName(variableType, name -> false);
                 TextEdit edit = new TextEdit(range, typeName + " " + variableName + " = ");
                 edits.add(edit);
 
