@@ -4,6 +4,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.ProteusContext;
+import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.toolbox.Attributes;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
+
+import java.util.Map;
 
 public class Style extends Value {
 
@@ -24,6 +29,10 @@ public class Style extends Value {
         this.parent = parent;
     }
 
+    /**
+     * Return whether a string value from xml is a style value
+     * This checks whether the string starts with {@code @style/}
+     */
     public static boolean isStyle(@NonNull String string) {
         return string.startsWith(STYLE_PREFIX);
     }
@@ -32,7 +41,14 @@ public class Style extends Value {
         return context.getProteusResources().getStyle(string);
     }
 
-    public Value getValue(String name, Value defaultValue) {
+    /**
+     * Get the the value from this style using its name
+     * @param name the name of the attribute
+     * @param defaultValue the value returned if the attribute does not exist
+     * @return the value corresponding to the name given
+     */
+    @Nullable
+    public Value getValue(@NonNull String name, @Nullable Value defaultValue) {
         Value value = values.get(name);
         if (value != null) {
             return value;
@@ -40,6 +56,33 @@ public class Style extends Value {
         return defaultValue;
     }
 
+    /**
+     * Apply the attributes of this style to a {@link ProteusView}
+     * It will also apply the attributes of the parent theme if it has one
+     * @param view the view to apply the styles to
+     */
+    public void apply(ProteusView view) {
+        ProteusView.Manager viewManager = view.getViewManager();
+        ProteusContext context = viewManager.getContext();
+        Style style = this;
+        while (style != null) {
+            int id = ProteusHelper.getAttributeId(view, Attributes.View.Style);
+            if (id != -1) {
+                viewManager.getViewTypeParser().handleAttribute(view.getAsView(), id, style);
+            }
+            if (style.parent != null) {
+                style = context.getStyle(style.parent);
+            } else {
+                style = null;
+            }
+        }
+    }
+
+    /**
+     * Add an attribute for this style
+     * @param name the name of the attribute
+     * @param value the value of the attribute
+     */
     public void addValue(String name, String value) {
         values.addProperty(name, value);
     }
