@@ -32,6 +32,7 @@ import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 import com.flipkart.android.proteus.view.UnknownView;
 import com.flipkart.android.proteus.view.UnknownViewGroup;
@@ -68,6 +69,9 @@ public class ViewManager implements ProteusView.Manager {
 
     @Nullable
     protected Object extras;
+
+    @Nullable
+    protected Style style;
 
     public ViewManager(@NonNull ProteusContext context, @NonNull ViewTypeParser parser,
                        @NonNull View view, @NonNull Layout layout,
@@ -154,6 +158,17 @@ public class ViewManager implements ProteusView.Manager {
     }
 
     @Override
+    public void setStyle(@Nullable Style style) {
+        this.style = style;
+    }
+
+    @Override
+    @Nullable
+    public Style getStyle() {
+        return context.getStyle();
+    }
+
+    @Override
     public Map<String, ViewTypeParser.AttributeSet.Attribute> getAvailableAttributes() {
         Map<String, ViewTypeParser.AttributeSet.Attribute> attributes =
                 new TreeMap<>(parser.getAttributeSet().getAttributes());
@@ -196,13 +211,10 @@ public class ViewManager implements ProteusView.Manager {
         }
     }
 
-    public void updateAttribute(String name, String string) {
-        Primitive primitive = new Primitive(string);
+    @Override
+    public void updateAttribute(String name, Value primitive) {
         Value value = AttributeProcessor.staticPreCompile(primitive, context,
                 context.getFunctionManager());
-        if (value == null) {
-            value = primitive;
-        }
         int attributeId = ProteusHelper.getAttributeId((ProteusView) view, name);
         ViewTypeParser<View> parser = ProteusHelper.getViewTypeParser((ProteusView) view, name);
         if (this.parser.equals(parser)) {
@@ -216,11 +228,18 @@ public class ViewManager implements ProteusView.Manager {
             if (layout.extras == null) {
                 layout.extras = new ObjectValue();
             }
-            layout.extras.addProperty(name, value.getAsString());
-            if (parser != null) {
-                parser.handleAttribute(view, attributeId, value);
+            if (value != null) {
+                layout.extras.addProperty(name, value.getAsString());
+                if (parser != null) {
+                    parser.handleAttribute(view, attributeId, value);
+                }
             }
         }
+    }
+
+    public void updateAttribute(String name, String string) {
+        Primitive primitive = new Primitive(string);
+        updateAttribute(name, primitive);
     }
 
     public String getAttributeName(int id) {

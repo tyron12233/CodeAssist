@@ -16,11 +16,13 @@
 
 package com.flipkart.android.proteus.processor;
 
+import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.view.View;
 
 import com.flipkart.android.proteus.ProteusContext;
+import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Color;
 import com.flipkart.android.proteus.value.Resource;
@@ -71,7 +73,9 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
   public void handleValue(final V view, Value value) {
     if (value.isColor()) {
       apply(view, value.getAsColor());
-    } else {
+    } else if  (value.isResource()) {
+      handleResource(view, value.getAsResource());
+    } else if (value.isPrimitive()) {
       process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
     }
   }
@@ -89,8 +93,11 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
 
   @Override
   public void handleAttributeResource(V view, AttributeResource attribute) {
-    TypedArray a = attribute.apply(view.getContext());
-    set(view, a);
+    String name = attribute.getName();
+    ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
+    ProteusContext context = viewManager.getContext();
+    Value value = viewManager.getStyle().getValue(name, Color.Int.BLACK);
+    process(view, value);
   }
 
   @Override
@@ -105,6 +112,15 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
       setColor(view, colors);
     } else {
       setColor(view, a.getColor(0, Color.Int.BLACK.value));
+    }
+  }
+
+  private void apply(ProteusContext context, V view, Value value) {
+    if (value.isResource()) {
+      value = value.getAsResource().getColor(context);
+    }
+    if (value != null) {
+      apply(view, value.getAsColor());
     }
   }
 

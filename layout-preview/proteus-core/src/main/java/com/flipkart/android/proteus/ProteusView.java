@@ -77,8 +77,9 @@ public interface ProteusView {
      */
     void update(@Nullable ObjectValue data);
 
-    default Style getStyle() {
-      return getContext().getStyle();
+
+    default void updateAttribute(String name, Value value) {
+
     }
 
     default void updateAttribute(String name, String value) {
@@ -87,6 +88,14 @@ public interface ProteusView {
 
     default void removeAttribute(String name) {
 
+    }
+
+    default void setStyle(Style style) {
+
+    }
+
+    default Style getStyle() {
+      return getContext().getStyle();
     }
 
     default String getAttributeName(int id) {

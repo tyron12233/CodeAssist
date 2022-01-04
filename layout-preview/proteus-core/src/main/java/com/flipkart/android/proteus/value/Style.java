@@ -64,6 +64,7 @@ public class Style extends Value {
     public void apply(ProteusView view) {
         ProteusView.Manager viewManager = view.getViewManager();
         ProteusContext context = viewManager.getContext();
+        viewManager.setStyle(this);
         Style style = this;
         while (style != null) {
             int id = ProteusHelper.getAttributeId(view, Attributes.View.Style);

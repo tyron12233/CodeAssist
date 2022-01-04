@@ -72,6 +72,11 @@ public abstract class ViewTypeParser<V extends View> {
   @Nullable
   public abstract String getParentType();
 
+  @Nullable
+  protected String getDefaultStyleName() {
+    return null;
+  }
+
   /**
    * @param context
    * @param layout

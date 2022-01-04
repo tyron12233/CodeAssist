@@ -45,6 +45,7 @@ import com.flipkart.android.proteus.processor.GravityAttributeProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
 import com.flipkart.android.proteus.processor.TweenAnimationResourceProcessor;
 import com.flipkart.android.proteus.toolbox.Attributes;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
@@ -170,9 +171,16 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
 
       @Override
       public void handleAttributeResource(V view, AttributeResource attribute) {
+        ProteusView proteusView = ((ProteusView) view);
         Value value =
-                ((ProteusView) view).getViewManager().getStyle().getValue(attribute.getName(), attribute);
-        ((ProteusView) view).getViewManager().updateAttribute(Attributes.View.Background, value.toString());
+                proteusView.getViewManager().getStyle().getValue(attribute.getName(), attribute);
+        int id = ProteusHelper.getAttributeId((ProteusView) view, attribute.getName());
+        if (id != -1) {
+          ViewTypeParser<View> viewTypeParser = proteusView.getViewManager().getViewTypeParser();
+          if (viewTypeParser != null) {
+            viewTypeParser.handleAttribute(view, id, value);
+          }
+        }
       }
     });
 

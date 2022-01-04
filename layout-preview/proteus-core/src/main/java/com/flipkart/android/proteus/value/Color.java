@@ -267,6 +267,11 @@ public abstract class Color extends Value {
     }
 
     @Override
+    public int getAsInt() {
+      return value;
+    }
+
+    @Override
     public Value copy() {
       return this;
     }

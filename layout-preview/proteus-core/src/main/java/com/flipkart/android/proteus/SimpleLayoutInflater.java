@@ -26,6 +26,7 @@ import androidx.annotation.Nullable;
 import com.flipkart.android.proteus.exceptions.ProteusInflateException;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
+import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 
 import java.util.Iterator;
@@ -96,6 +97,14 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
              * Set the View Manager on the view.
              */
             view.setViewManager(viewManager);
+        }
+
+        String defaultStyleName = parser.getDefaultStyleName();
+        if (defaultStyleName != null) {
+            Style style = context.getStyle(defaultStyleName);
+            if (style != null) {
+                style.apply(view);
+            }
         }
 
         /*

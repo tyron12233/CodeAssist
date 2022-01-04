@@ -95,7 +95,11 @@ public class AttributeResource extends Value {
   public String getName() {
     Matcher matcher = sAttributePattern.matcher(value);
     if (matcher.matches()) {
-      return matcher.group(5);
+      String name = matcher.group(5);
+      if (value.startsWith("?android:attr")) {
+        return "android:" + name;
+      }
+      return name;
     }
     return value;
   }
