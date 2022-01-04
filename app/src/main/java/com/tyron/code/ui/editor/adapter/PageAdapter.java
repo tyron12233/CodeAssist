@@ -54,6 +54,21 @@ public class PageAdapter extends FragmentStateAdapter {
         return data.size();
     }
 
+    @Override
+    public long getItemId(int position) {
+        return data.get(position).getAbsolutePath().hashCode();
+    }
+
+    @Override
+    public boolean containsItem(long itemId) {
+        for (File d : data) {
+            if (d.getAbsolutePath().hashCode() == itemId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @NonNull
     @Override
     public Fragment createFragment(int p1) {
