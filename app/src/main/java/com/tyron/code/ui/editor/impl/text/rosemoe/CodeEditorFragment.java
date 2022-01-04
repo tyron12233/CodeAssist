@@ -113,6 +113,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
         if (!CompletionEngine.isIndexing()) {
             mEditor.analyze();
         }
+
+        mEditor.requestFocus();
+
         if (BottomSheetBehavior.STATE_HIDDEN == mMainViewModel.getBottomSheetState().getValue()) {
             mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_COLLAPSED);
         }
@@ -272,33 +275,30 @@ public class CodeEditorFragment extends Fragment implements Savable,
             }
             mEditor.postHideCompletionWindow();
         });
+
+        mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
+            menu.clear();
+            menu.setHeaderTitle("Loading...");
+            if (currentProject != null) {
+                Module currentModule = currentProject.getModule(mCurrentFile);
+                if ((mLanguage instanceof JavaLanguage) && (currentModule instanceof JavaModule)) {
+                    JavaCompilerProvider service =
+                            CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+                    JavaCompilerService compiler = service.getCompiler(currentProject,
+                            (JavaModule) currentModule);
+                    if (compiler.isReady()) {
+                        addCodeActions(menu, compiler);
+                    }
+                }
+            }
+            menu.clearHeader();
+        });
+
         mEditor.setOnLongPressListener((start, end, event) -> {
             save();
-
-            if (currentProject == null) {
-                return;
-            }
-            Module currentModule = currentProject.getModule(mCurrentFile);
-            if (!(mLanguage instanceof JavaLanguage) && !(currentModule instanceof JavaModule)) {
-                return;
-            }
-
-            JavaCompilerProvider service =
-                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-            JavaCompilerService compiler = service.getCompiler(currentProject,
-                    (JavaModule) currentModule);
-            if (!compiler.isReady()) {
-                return;
-            }
-
-            mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
-                menu.clear();
-                menu.setHeaderTitle("Loading...");
-                addCodeActions(menu, compiler);
-                menu.clearHeader();
-            });
             mEditor.showContextMenu(event.getX(), event.getY());
         });
+        mEditor.requestFocus();
 
         getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
                 getViewLifecycleOwner(), ((requestKey, result) -> {
