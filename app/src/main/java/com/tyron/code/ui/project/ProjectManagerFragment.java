@@ -280,7 +280,7 @@ public class ProjectManagerFragment extends Fragment {
     private void openProject(Project project) {
         MainFragment fragment = MainFragment.newInstance(project.getRootFile().getAbsolutePath());
         getParentFragmentManager().beginTransaction()
-                .add(R.id.fragment_container, fragment)
+                .replace(R.id.fragment_container, fragment)
                 .addToBackStack(null)
                 .commit();
     }
