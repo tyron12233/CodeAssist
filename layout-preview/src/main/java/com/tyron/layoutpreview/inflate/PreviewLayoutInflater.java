@@ -117,6 +117,7 @@ public class PreviewLayoutInflater {
         }
     };
 
+    private final ResourceValueParser mParser = new ResourceValueParser();
     private final ResourceDrawableManager mDrawableManager = new ResourceDrawableManager();
     private final ResourceLayoutManager mLayoutManager = new ResourceLayoutManager();
 
@@ -141,16 +142,13 @@ public class PreviewLayoutInflater {
         mProteus = builder.build();
         mProject = project;
 
-        ResourceValueParser parser = new ResourceValueParser();
-        parser.parse(project);
-
         mContext = mProteus.createContextBuilder(base)
                 .setCallback(mCallback)
                 .setDrawableManager(mDrawableManager)
                 .setImageLoader(mImageLoader)
-                .setStyleManager(parser.getStyleManager())
-                .setStringManager(parser.getStringManager())
-                .setColorManager(parser.getColorManager())
+                .setStyleManager(mParser.getStyleManager())
+                .setStringManager(mParser.getStringManager())
+                .setColorManager(mParser.getColorManager())
                 .setLayoutManager(mLayoutManager)
                 .build();
         mContext.setParserFactory(new MaterialParserFactory(mContext));
@@ -163,6 +161,7 @@ public class PreviewLayoutInflater {
                     mProject.getAndroidResourcesDirectory(), mProject.getFileManager());
             mDrawableManager.setDrawables(resourceManager.getDrawables());
             mLayoutManager.setLayouts(resourceManager.getLayouts());
+            mParser.parse(mProject);
             return this;
         }, executor);
     }

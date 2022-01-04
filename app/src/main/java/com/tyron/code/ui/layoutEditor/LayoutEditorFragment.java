@@ -3,7 +3,9 @@ package com.tyron.code.ui.layoutEditor;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.LayoutTransition;
+import android.app.Dialog;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,6 +16,7 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.view.ViewCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -252,13 +255,14 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         ProjectManager.getInstance().removeOnProjectOpenListener(this);
     }
 
-    private void exit(String title, String message) {
-        new MaterialAlertDialogBuilder(requireActivity())
-                .setTitle(title)
-                .setMessage(message)
-                .setPositiveButton(android.R.string.ok, null)
-                .show();
+    private Dialog exit(String title, String message) {
+        AlertDialog show =
+                new MaterialAlertDialogBuilder(requireActivity())
+                        .setTitle(title)
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok, null).show();
         getParentFragmentManager().popBackStack();
+        return show;
     }
 
     private void createInflater() {
@@ -272,14 +276,14 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             exit(getString(R.string.error), "Layout preview is only for android projects.");
             return;
         }
-        mInflater = new PreviewLayoutInflater(requireContext(), (AndroidModule) module);
-
         setLoadingText("Parsing xml files");
+
+        mInflater = new PreviewLayoutInflater(requireContext(), (AndroidModule) module);
         mInflater.parseResources(mService).whenComplete((inflater, exception) ->
                 requireActivity().runOnUiThread(() -> {
                     if (inflater == null) {
                         exit(getString(R.string.error),
-                                "Unable to inflate layout: " + exception.getMessage());
+                                "Unable to inflate layout: \n" + Log.getStackTraceString(exception));
                     } else {
                         afterParse(inflater);
                     }
