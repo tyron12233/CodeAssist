@@ -41,7 +41,8 @@ public class MaterialButtonParser<V extends View> extends ViewTypeParser<V> {
                                   @NonNull ObjectValue data,
                                   @Nullable ViewGroup parent,
                                   int dataIndex) {
-        return new ProteusMaterialButton(context);
+        ProteusMaterialButton proteusMaterialButton = new ProteusMaterialButton(context);
+        ((MaterialButton) proteusMaterialButton.getAsView()).setShapeAppearanceModel(null); return proteusMaterialButton;
     }
 
     @Override

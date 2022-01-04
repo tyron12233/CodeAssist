@@ -17,6 +17,7 @@
 package com.flipkart.android.proteus.parser;
 
 import android.annotation.SuppressLint;
+import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
@@ -31,6 +32,7 @@ import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.view.ViewCompat;
 
 import com.flipkart.android.proteus.ProteusConstants;
 import com.flipkart.android.proteus.ProteusContext;
@@ -38,6 +40,7 @@ import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.processor.BooleanAttributeProcessor;
+import com.flipkart.android.proteus.processor.ColorResourceProcessor;
 import com.flipkart.android.proteus.processor.DimensionAttributeProcessor;
 import com.flipkart.android.proteus.processor.DrawableResourceProcessor;
 import com.flipkart.android.proteus.processor.EventProcessor;
@@ -600,6 +603,29 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
         }
       }
 
+    });
+
+
+
+
+    // AppCompat Attributes
+    addAttributeProcessor("app:backgroundTint", new ColorResourceProcessor<V>() {
+      @Override
+      public void setColor(V view, int color) {
+        ViewCompat.setBackgroundTintList(view, ColorStateList.valueOf(color));
+      }
+
+      @Override
+      public void setColor(V view, ColorStateList colors) {
+        ViewCompat.setBackgroundTintList(view, colors);
+      }
+    });
+
+    addAttributeProcessor("app:elevation", new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        ViewCompat.setElevation(view, dimension);
+      }
     });
   }
 
