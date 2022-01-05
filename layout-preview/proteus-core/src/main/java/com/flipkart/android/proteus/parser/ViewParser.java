@@ -504,7 +504,15 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
         if (style != null) {
           Value value = style.getValue(name, null);
           if (value != null) {
-            handleValue(view, value);
+            if (value.isStyle()) {
+              handleStyle(view, value.getAsStyle());
+            } else if (value.isPrimitive()) {
+              String styleName = value.toString();
+              Style style1 = context.getStyle(styleName);
+              if (style1 != null) {
+                handleStyle(view, style1);
+              }
+            }
           }
         }
       }
