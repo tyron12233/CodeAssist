@@ -108,8 +108,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
             mEditor.analyze();
         }
 
-        mEditor.requestFocus();
-
         if (BottomSheetBehavior.STATE_HIDDEN == mMainViewModel.getBottomSheetState().getValue()) {
             mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_COLLAPSED);
         }
@@ -300,8 +298,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     XmlFormatStyle.LAYOUT, "\n");
             mEditor.setText(xml);
         }));
-
-        requireActivity().runOnUiThread(() -> mEditor.requestFocus());
     }
 
     @Override
@@ -329,6 +325,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
     public void onPause() {
         super.onPause();
 
+        mEditor.clearFocus();
         hideEditorWindows();
 
         if (ProjectManager.getInstance().getCurrentProject() != null) {
