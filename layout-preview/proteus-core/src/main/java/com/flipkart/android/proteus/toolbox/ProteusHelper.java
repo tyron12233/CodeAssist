@@ -35,6 +35,32 @@ public class ProteusHelper {
         array.remove(child.getViewManager().getLayout());
     }
 
+    public static String getAttributeName(ProteusView view, int id, boolean extra) {
+        if (view == null) {
+            return "Unknown";
+        }
+        String layoutType = view.getViewManager().getLayout().type;
+        String attributeName = "Unknown";
+        String attributeNameFromParent = "Unknown";
+
+        if (view.getAsView().getParent() instanceof ProteusView) {
+            attributeNameFromParent = getAttributeName((ProteusView) view.getAsView().getParent(), id);
+        }
+
+        ViewTypeParser<View> parser = view.getViewManager()
+                .getContext()
+                .getParser(layoutType);
+        if (parser != null) {
+            attributeName = getAttributeName(parser.getAttributeSet(), id);
+        }
+
+        if (extra && !"Unknown".equals(attributeNameFromParent)) {
+            return attributeNameFromParent;
+        }
+
+        return attributeName;
+    }
+
     public static String getAttributeName(ProteusContext context, Layout parentLayout, String layoutType, int id) {
         ViewTypeParser<View> parser = context.getParser(layoutType);
         if (parser != null) {
@@ -66,17 +92,23 @@ public class ProteusHelper {
         }
         String layoutType = view.getViewManager().getLayout().type;
         String attributeName = "Unknown";
+        String attributeNameFromParent = "Unknown";
+
         if (view.getAsView().getParent() instanceof ProteusView) {
-            attributeName = getAttributeName((ProteusView) view.getAsView().getParent(), id);
+            attributeNameFromParent = getAttributeName((ProteusView) view.getAsView().getParent(), id);
         }
+
+        ViewTypeParser<View> parser = view.getViewManager()
+                .getContext()
+                .getParser(layoutType);
+        if (parser != null) {
+            attributeName = getAttributeName(parser.getAttributeSet(), id);
+        }
+
         if ("Unknown".equals(attributeName)) {
-            ViewTypeParser<View> parser = view.getViewManager()
-                    .getContext()
-                    .getParser(layoutType);
-            if (parser != null) {
-                attributeName = getAttributeName(parser.getAttributeSet(), id);
-            }
+            return attributeNameFromParent;
         }
+
         return attributeName;
     }
 

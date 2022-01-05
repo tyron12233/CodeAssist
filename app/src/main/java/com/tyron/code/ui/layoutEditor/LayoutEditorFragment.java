@@ -118,7 +118,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                         }
                     }
                     if (id != -1) {
-                        String name = ProteusHelper.getAttributeName(view, id);
+                        String name = ProteusHelper.getAttributeName(view, id, true);
                         attributes.add(new Pair<>(name, entry.getValue().toString()));
                     }
                 });
