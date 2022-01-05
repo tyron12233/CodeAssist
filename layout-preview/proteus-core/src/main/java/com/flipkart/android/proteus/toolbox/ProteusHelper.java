@@ -165,7 +165,7 @@ public class ProteusHelper {
     private static Layout.Attribute getChildrenAttribute(ProteusView view) {
         List<Layout.Attribute> attributes = view.getViewManager().getLayout().attributes;
         if (attributes == null) {
-            view.getViewManager().getLayout().attributes = new ArrayList<>();
+            attributes = new ArrayList<>();
         }
         ViewTypeParser.AttributeSet.Attribute attribute = view.getViewManager()
                 .getAvailableAttributes()
@@ -181,7 +181,9 @@ public class ProteusHelper {
         }
 
         Layout.Attribute layoutAttribute = new Layout.Attribute(attribute.id, new Array());
-        view.getViewManager().getLayout().attributes.add(layoutAttribute);
-        return null;
+        attributes.add(layoutAttribute);
+
+        view.getViewManager().getLayout().attributes = attributes;
+        return layoutAttribute;
     }
 }
