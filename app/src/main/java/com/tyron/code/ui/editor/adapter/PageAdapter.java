@@ -57,6 +57,9 @@ public class PageAdapter extends FragmentStateAdapter {
 
     @Override
     public long getItemId(int position) {
+        if (data.isEmpty()) {
+            return -1;
+        }
         return data.get(position).getAbsolutePath().hashCode();
     }
 
