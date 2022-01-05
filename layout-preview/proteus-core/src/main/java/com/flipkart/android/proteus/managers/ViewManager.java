@@ -212,9 +212,13 @@ public class ViewManager implements ProteusView.Manager {
     }
 
     @Override
-    public void updateAttribute(String name, Value primitive) {
-        Value value = AttributeProcessor.staticPreCompile(primitive, context,
-                context.getFunctionManager());
+    public void updateAttribute(String name, Value value) {
+        if (value.isPrimitive()) {
+            Value result = AttributeProcessor.staticPreCompile(value.getAsPrimitive(), context, context.getFunctionManager());
+            if (result != null) {
+                value = result;
+            }
+        }
         int attributeId = ProteusHelper.getAttributeId((ProteusView) view, name);
         ViewTypeParser<View> parser = ProteusHelper.getViewTypeParser((ProteusView) view, name);
         if (this.parser.equals(parser)) {
@@ -239,7 +243,9 @@ public class ViewManager implements ProteusView.Manager {
 
     public void updateAttribute(String name, String string) {
         Primitive primitive = new Primitive(string);
-        updateAttribute(name, primitive);
+        Value value = AttributeProcessor.staticPreCompile(primitive, context,
+                context.getFunctionManager());
+        updateAttribute(name, value);
     }
 
     public String getAttributeName(int id) {

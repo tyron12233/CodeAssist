@@ -206,7 +206,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                     .getInflater()
                     .inflate(layout, new ObjectValue(), parent, 0);
             palette.getDefaultValues().forEach((key, value) ->
-                    inflated.getViewManager().updateAttribute(key, value.toString()));
+                    inflated.getViewManager().updateAttribute(key, value));
             return inflated;
         });
         mDragListener.setDelegate(new EditorDragListener.Delegate() {
