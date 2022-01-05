@@ -18,6 +18,7 @@ package com.flipkart.android.proteus.managers;
 
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -198,16 +199,26 @@ public class ViewManager implements ProteusView.Manager {
             layout.extras.remove(attributeName);
         }
 
-        if (!(view instanceof UnknownView) && !(view instanceof UnknownViewGroup)) {
-            ViewGroup parent = (ViewGroup) view.getParent();
-            parent.removeView(view);
+        // when an attribute is removed, there is no way to undo the
+        // attributes that have already been set so we just recreate
+        // the view and add it again to the layout
 
-            ProteusView view = parser.createView((ProteusContext) this.view.getContext(), layout,
-                    new ObjectValue(), parent, -1);
-            this.view = view.getAsView();
-            parser.onAfterCreateView(view, parent, -1);
-            view.setViewManager(this);
-            parent.addView(view.getAsView());
+        if (!(view instanceof UnknownView) && !(view instanceof UnknownViewGroup)) {
+            ViewParent viewParent = view.getParent();
+            if (viewParent instanceof ViewGroup) {
+                ViewGroup parent = (ViewGroup) viewParent;
+
+                int index = parent.indexOfChild(parent);
+                parent.removeView(view);
+
+                ProteusView view = parser.createView((ProteusContext) this.view.getContext(), layout,
+                        new ObjectValue(), parent, -1);
+                this.view = view.getAsView();
+                parser.onAfterCreateView(view, parent, -1);
+                view.setViewManager(this);
+
+                parent.addView(view.getAsView(), index);
+            }
         }
     }
 
