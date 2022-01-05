@@ -107,7 +107,7 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
 
         String defaultStyleName = parser.getDefaultStyleName();
         if (defaultStyleName != null) {
-            applyStyle(defaultStyleName, parser, view);
+            applyStyle(defaultStyleName, view);
         }
 
 
@@ -136,7 +136,7 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
         return view;
     }
 
-    private void applyStyle(String name, ViewTypeParser parser, ProteusView view) {
+    private void applyStyle(String name, ProteusView view) {
         Value value = AttributeProcessor.staticPreCompile(new Primitive(name), context, context.getFunctionManager());
         if (value != null) {
             applyStyle(view, value);
@@ -147,14 +147,14 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
         if (value.isStyle()) {
             value.getAsStyle().apply(view);
         } else if (value.isAttributeResource()) {
-            Style style = context.getStyle(value.getAsAttributeResource().getName());
-            if (style != null) {
-                style.apply(view);
+            Style theme = context.getStyle();
+            Value style = theme.getValue(value.getAsAttributeResource().getName(), context, null);
+            if (style != null && style.isStyle()) {
+                style.getAsStyle().apply(view);
+            } else if (style != null && style.isPrimitive()) {
+                applyStyle(style.toString(), view);
             } else {
-                AttributeResource attributeResource = AttributeResource.valueOf(value.getAsAttributeResource().getValue(), context);
-                if (attributeResource != null) {
-                    applyStyleAttribute(view, attributeResource);
-                }
+               Log.d(TAG, "Unable to apply style: " + value);
             }
         }
     }

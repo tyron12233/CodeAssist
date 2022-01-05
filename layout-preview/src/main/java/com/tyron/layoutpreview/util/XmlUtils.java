@@ -9,7 +9,7 @@ import java.io.IOException;
 
 public class XmlUtils {
 
-    public static void advanceToRootNode(XmlPullParser parser) throws IOException, XmlPullParserException, ConvertException {
+    public static void advanceToRootNode(XmlPullParser parser) throws IOException, XmlPullParserException {
         // Look for the root node
         int type;
         while ((type = parser.next()) != XmlPullParser.START_TAG &&
@@ -18,7 +18,7 @@ public class XmlUtils {
         }
 
         if (type != XmlPullParser.START_TAG) {
-            throw new ConvertException(parser.getPositionDescription()
+            throw new XmlPullParserException(parser.getPositionDescription()
                     + ": No start tag found!");
         }
     }

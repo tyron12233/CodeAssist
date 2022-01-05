@@ -487,6 +487,14 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       public void handleValue(V view, Value value) {
         if (value.isStyle()) {
           handleStyle(view, value.getAsStyle());
+        } else {
+          if (value.isPrimitive()) {
+            ProteusContext context = (ProteusContext) view.getContext();
+            Value value1 = Style.valueOf(value.toString(), context);
+            if (value1 != null && value1.isStyle()) {
+              handleStyle(view, value1.getAsStyle());
+            }
+          }
         }
       }
 
@@ -537,7 +545,18 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       private void process(Style style, ProteusView proteusView, ViewTypeParser handler) {
         for (Map.Entry<String, Value> entry : style.getValues().entrySet()) {
           //noinspection unchecked
-          handler.handleAttribute(proteusView.getAsView(), handler.getAttributeId(entry.getKey()), entry.getValue());
+          int id = handler.getAttributeId(entry.getKey());
+          if (id == -1) {
+            // try app: namespace
+            id = handler.getAttributeId("app:" + entry.getKey());
+          }
+          if (id != -1) {
+            handler.handleAttribute(proteusView.getAsView(), id, entry.getValue());
+          } else {
+            if (ProteusConstants.isLoggingEnabled()) {
+              Log.d(TAG, "Unknown attribute: " + entry.getKey());
+            }
+          }
         }
       }
 

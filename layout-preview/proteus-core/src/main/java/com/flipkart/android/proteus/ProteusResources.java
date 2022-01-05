@@ -19,13 +19,15 @@ package com.flipkart.android.proteus;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.flipkart.android.proteus.value.Color;
 import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
+
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * ProteusResources
@@ -91,6 +93,13 @@ public class ProteusResources {
             name = name.substring("@color/".length());
         }
         return null != colorManager ? colorManager.getColor(name) : null;
+    }
+
+    public List<Style> findStyle(String name) {
+        return styleManager.getStyles().entrySet().stream()
+                .filter(e -> e.getKey().contains(name))
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList());
     }
 
     @NonNull

@@ -10,6 +10,7 @@ import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Value;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.layoutpreview.convert.ConvertException;
+import com.tyron.layoutpreview.util.XmlUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -123,18 +124,22 @@ public class ResourceStringParser {
     public static Pair<String, Value> parseItemString(XmlPullParser parser) throws IOException, XmlPullParserException {
         parser.require(XmlPullParser.START_TAG, null, "item");
         String name = null;
+        String type = null;
         for (int i = 0; i < parser.getAttributeCount(); i++) {
             if (parser.getAttributeName(i).equals("name")) {
                 name = parser.getAttributeValue(i);
             }
             if (parser.getAttributeName(i).equals("type")) {
-                if (!parser.getAttributeValue(i).equals("string")) {
-                    return null;
-                }
+               type = parser.getAttributeValue(i);
             }
         }
-        String text = readText(parser);
-        parser.require(XmlPullParser.END_TAG, null, "item");
-        return Pair.create(name, new Primitive(text));
+        if (type == null) {
+            XmlUtils.skip(parser);
+        } else {
+            String text = readText(parser);
+            parser.require(XmlPullParser.END_TAG, null, "item");
+            return Pair.create(name, new Primitive(text));
+        }
+        return null;
     }
 }

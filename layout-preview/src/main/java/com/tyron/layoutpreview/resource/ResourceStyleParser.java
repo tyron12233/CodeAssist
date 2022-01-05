@@ -30,7 +30,9 @@ public class ResourceStyleParser {
         }
 
         Style style = new Style(name, parent);
-        parseChildren(style, parser);
+        if (parser.next() != XmlPullParser.END_TAG) {
+            parseChildren(style, parser);
+        }
 
         parser.require(XmlPullParser.END_TAG, null, "style");
         return Pair.create(name, style);

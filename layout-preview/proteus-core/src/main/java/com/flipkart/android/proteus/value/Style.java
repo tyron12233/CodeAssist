@@ -54,6 +54,23 @@ public class Style extends Value {
         return defaultValue;
     }
 
+    @Nullable
+    public Value getValue(@NonNull String name, ProteusContext context, @Nullable Value def) {
+        Style style = this;
+        while (style != null) {
+            Value value = style.getValue(name, null);
+            if (value != null) {
+                return value;
+            }
+            if (style.parent == null) {
+                style = null;
+            } else {
+                style = context.getStyle(style.parent);
+            }
+        }
+        return def;
+    }
+
     /**
      * Apply the attributes of this style to a {@link ProteusView}
      * It will also apply the attributes of the parent theme if it has one

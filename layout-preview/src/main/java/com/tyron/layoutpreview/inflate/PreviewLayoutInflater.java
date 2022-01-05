@@ -178,6 +178,7 @@ public class PreviewLayoutInflater {
                     mParser.parse(children, "android");
                 }
             }
+
             try {
                 ManifestData parse = AndroidManifestParser.parse(mProject.getManifestFile());
                 String theme = parse.getLauncherActivity().getTheme();

@@ -39,7 +39,7 @@ public class ProteusConstants {
   public static final Primitive TRUE = new Primitive(true);
   public static final Primitive FALSE = new Primitive(false);
 
-  private static boolean isLoggingEnabled = false;
+  private static boolean isLoggingEnabled = BuildConfig.DEBUG;
 
   public static void setIsLoggingEnabled(boolean isLoggingEnabled) {
     ProteusConstants.isLoggingEnabled = isLoggingEnabled;
