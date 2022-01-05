@@ -89,7 +89,11 @@ public class ResourceDrawableParser {
                     .VALUE_TYPE_ADAPTER.read(new JsonReader(new StringReader(converted.toString())), true);
             ObjectValue objectValue = value.getAsObject();
             if (objectValue != null) {
-                return DrawableValue.valueOf(objectValue, mContext);
+                try {
+                    return DrawableValue.valueOf(objectValue, mContext);
+                } catch (Throwable e) {
+                    // TODO LOG
+                }
             }
         }
         return null;

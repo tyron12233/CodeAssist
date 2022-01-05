@@ -550,8 +550,18 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
             // try app: namespace
             id = handler.getAttributeId("app:" + entry.getKey());
           }
+
+          ProteusContext context = proteusView.getViewManager().getContext();
+
+          // try to resolve the value, this value may be a string and
+          // we want to resolve it to its proper type
+          Value value = AttributeProcessor.staticPreCompile(entry.getValue(), context, context.getFunctionManager());
+          if (value == null) {
+            // the value could not be resolved, fallback to the original value
+            value = entry.getValue();
+          }
           if (id != -1) {
-            handler.handleAttribute(proteusView.getAsView(), id, entry.getValue());
+            handler.handleAttribute(proteusView.getAsView(), id, value);
           } else {
             if (ProteusConstants.isLoggingEnabled()) {
               Log.d(TAG, "Unknown attribute: " + entry.getKey());

@@ -35,6 +35,9 @@ public class ResourceValueParser {
     private static final Set<String> sSupportedDirs = new HashSet<>();
 
     static {
+        sSupportedDirs.add("layout");
+        sSupportedDirs.add("color");
+        sSupportedDirs.add("drawable");
         sSupportedDirs.add("values");
         sSupportedDirs.add("values-night");
         sSupportedDirs.add("values-night-v8");

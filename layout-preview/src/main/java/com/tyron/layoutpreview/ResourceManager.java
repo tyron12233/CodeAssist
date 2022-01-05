@@ -4,6 +4,7 @@ import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.value.DrawableValue;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Value;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.layoutpreview.resource.ResourceDrawableParser;
 import com.tyron.layoutpreview.resource.ResourceLayoutParser;
@@ -15,13 +16,13 @@ import java.util.Map;
 
 public class ResourceManager {
 
-    private final File mResourceDir;
+    private final AndroidModule mAndroidModule;
     private final ProteusContext mContext;
     private final FileManager mFileManager;
 
-    public ResourceManager(ProteusContext context, File resourceDir, FileManager fileManager) {
+    public ResourceManager(ProteusContext context, AndroidModule module, FileManager fileManager) {
+        mAndroidModule = module;
         mContext = context;
-        mResourceDir = resourceDir;
         mFileManager = fileManager;
     }
 
@@ -34,13 +35,28 @@ public class ResourceManager {
     }
 
     public Map<String, DrawableValue> getDrawables() {
-        ResourceDrawableParser parser = new ResourceDrawableParser(mContext, mResourceDir,
+        ResourceDrawableParser parser = new ResourceDrawableParser(mContext, mAndroidModule.getAndroidResourcesDirectory(),
                 mFileManager);
-        return parser.getDefaultDrawables();
+        Map<String, DrawableValue> defaultDrawables = parser.getDefaultDrawables();
+
+        for (File library : mAndroidModule.getLibraries()) {
+            File parent = library.getParentFile();
+            if (parent == null) {
+                continue;
+            }
+
+            File resourcesDir = new File(parent, "res");
+            if (resourcesDir.exists()) {
+                parser = new ResourceDrawableParser(mContext, resourcesDir, mFileManager);
+                defaultDrawables.putAll(parser.getDefaultDrawables());
+            }
+        }
+
+        return defaultDrawables;
     }
 
     public Map<String, Layout> getLayouts() {
-        ResourceLayoutParser parser = new ResourceLayoutParser(mContext, mResourceDir, mFileManager);
+        ResourceLayoutParser parser = new ResourceLayoutParser(mContext, mAndroidModule.getAndroidResourcesDirectory(), mFileManager);
         return parser.getLayouts();
     }
 

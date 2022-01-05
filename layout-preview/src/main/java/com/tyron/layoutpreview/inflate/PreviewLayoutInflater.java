@@ -163,7 +163,7 @@ public class PreviewLayoutInflater {
     public CompletableFuture<PreviewLayoutInflater> parseResources(Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             ResourceManager resourceManager = new ResourceManager(mContext,
-                    mProject.getAndroidResourcesDirectory(), mProject.getFileManager());
+                    mProject, mProject.getFileManager());
             mDrawableManager.setDrawables(resourceManager.getDrawables());
             mLayoutManager.setLayouts(resourceManager.getLayouts());
 
