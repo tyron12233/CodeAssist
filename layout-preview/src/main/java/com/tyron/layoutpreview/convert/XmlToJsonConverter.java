@@ -59,7 +59,7 @@ public class XmlToJsonConverter {
         return convert(parser);
     }
 
-    private JsonObject convert(XmlPullParser parser) throws IOException, XmlPullParserException, ConvertException {
+    public JsonObject convert(XmlPullParser parser) throws IOException, XmlPullParserException, ConvertException {
 
         JsonObject json = parseXmlElement(parser);
 

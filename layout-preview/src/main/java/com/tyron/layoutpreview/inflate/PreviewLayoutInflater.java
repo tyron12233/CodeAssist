@@ -154,10 +154,13 @@ public class PreviewLayoutInflater {
                 .setStyleManager(mParser.getStyleManager())
                 .setStringManager(mParser.getStringManager())
                 .setColorManager(mParser.getColorManager())
+                .setDimensionManager(mParser.getDimensionManager())
                 .setLayoutManager(mLayoutManager)
                 .build();
         mContext.setParserFactory(new MaterialParserFactory(mContext));
         ProteusTypeAdapterFactory.PROTEUS_INSTANCE_HOLDER.setProteus(mProteus);
+
+        mParser.setProteusContext(mContext);
     }
 
     public CompletableFuture<PreviewLayoutInflater> parseResources(Executor executor) {

@@ -96,7 +96,7 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
     String name = attribute.getName();
     ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
     ProteusContext context = viewManager.getContext();
-    Value value = viewManager.getStyle().getValue(name, Color.Int.BLACK);
+    Value value = viewManager.getStyle().getValue(name, context, Color.Int.BLACK);
     process(view, value);
   }
 

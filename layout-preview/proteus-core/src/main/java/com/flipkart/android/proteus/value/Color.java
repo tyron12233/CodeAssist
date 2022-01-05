@@ -22,6 +22,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.LruCache;
 import android.util.StateSet;
+import android.view.View;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -30,6 +31,9 @@ import java.util.Map;
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import com.flipkart.android.proteus.ProteusContext;
+import com.flipkart.android.proteus.processor.ColorResourceProcessor;
 
 /**
  * ColorValue
@@ -285,6 +289,81 @@ public abstract class Color extends Value {
     @Override
     public String toString() {
       return "#" + Integer.toHexString(value);
+    }
+  }
+
+  public static class LazyStateList extends Color {
+
+    private final int[][] states;
+    private final Value[] colors;
+
+    public LazyStateList(int[][] states, Value[] colors) {
+
+      this.states = states;
+      this.colors = colors;
+    }
+
+    public static LazyStateList valueOf(int[][] states, Value[] colors) {
+      return new LazyStateList(states, colors);
+    }
+
+    private int getColor(ProteusContext context, Value value) {
+      if (value.isPrimitive()) {
+        return getColor(context, value.getAsPrimitive());
+      } else if (value.isResource()) {
+        return getColor(context, value.getAsResource());
+      } else if (value.isAttributeResource()) {
+        return getColor(context, value.getAsAttributeResource());
+      } else if (value.isColor()) {
+        return value.getAsColor().getAsInt();
+      }
+      return 0;
+    }
+
+    private int getColor(ProteusContext context, Resource resource) {
+      Color color = resource.getColor(context);
+      if (color != null) {
+        return getColor(context, color);
+      }
+      return 0;
+    }
+
+    private int getColor(ProteusContext context, AttributeResource attributeResource) {
+      String name = attributeResource.getName();
+      Style style = context.getStyle();
+      Value value = style.getValue(name, context, null);
+      if (value != null) {
+        return getColor(context, value);
+      }
+      return 0;
+    }
+
+    private int getColor(ProteusContext context, Primitive primitive) {
+      Value value = ColorResourceProcessor.staticCompile(primitive, context);
+      if (value == null) {
+        return 0;
+      }
+      return getColor(context, value);
+    }
+
+    @Override
+    public Result apply(Context context) {
+      ProteusContext proteusContext = (ProteusContext) context;
+      int[] colorInts = new int[colors.length];
+      for (int i = 0; i < colors.length; i++) {
+        Value color = colors[i];
+        if (color.isColor()) {
+          colorInts[i] = color.getAsInt();
+        } else {
+          colorInts[i] = getColor(proteusContext, color);
+        }
+      }
+      return new Result(0, new ColorStateList(states, colorInts));
+    }
+
+    @Override
+    public Value copy() {
+      return new LazyStateList(this.states, this.colors);
     }
   }
 

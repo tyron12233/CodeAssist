@@ -140,18 +140,14 @@ public class Resource extends Value {
     }
 
     @Nullable
-    public static ColorStateList getColorStateList(int resId, Context context) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                return context.getColorStateList(resId);
-            } else {
-                //noinspection deprecation
-                return context.getResources().getColorStateList(resId);
+    public static ColorStateList getColorStateList(String name, ProteusContext context) {
+        Value color = context.getProteusResources().getColor(name);
+        if (color != null) {
+            if (color instanceof Color.StateList || color instanceof Color.LazyStateList) {
+                return color.getAsColor().apply(context).colors;
             }
-
-        } catch (Resources.NotFoundException nfe) {
-            return null;
         }
+        return null;
     }
 
     @Nullable
@@ -289,7 +285,7 @@ public class Resource extends Value {
 
     @Nullable
     public ColorStateList getColorStateList(Context context) {
-        return getColorStateList(resId, context);
+        return getColorStateList(name, (ProteusContext) context);
     }
 
     public DrawableValue getProteusDrawable(ProteusContext context) {

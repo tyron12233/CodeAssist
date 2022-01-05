@@ -496,18 +496,18 @@ public abstract class DrawableValue extends Value {
     public static class StateListValue extends DrawableValue {
 
         private static final String DRAWABLE_STR = "drawable";
-        private static final Map<String, Integer> sStateMap = new HashMap<>();
+        public static final Map<String, Integer> sStateMap = new HashMap<>();
 
         static {
-            sStateMap.put("state_pressed", android.R.attr.state_pressed);
-            sStateMap.put("state_enabled", android.R.attr.state_enabled);
-            sStateMap.put("state_focused", android.R.attr.state_focused);
-            sStateMap.put("state_hovered", android.R.attr.state_hovered);
-            sStateMap.put("state_selected", android.R.attr.state_selected);
-            sStateMap.put("state_checkable", android.R.attr.state_checkable);
-            sStateMap.put("state_checked", android.R.attr.state_checked);
-            sStateMap.put("state_activated", android.R.attr.state_activated);
-            sStateMap.put("state_window_focused", android.R.attr.state_window_focused);
+            sStateMap.put("android:state_pressed", android.R.attr.state_pressed);
+            sStateMap.put("android:state_enabled", android.R.attr.state_enabled);
+            sStateMap.put("android:state_focused", android.R.attr.state_focused);
+            sStateMap.put("android:state_hovered", android.R.attr.state_hovered);
+            sStateMap.put("android:state_selected", android.R.attr.state_selected);
+            sStateMap.put("android:state_checkable", android.R.attr.state_checkable);
+            sStateMap.put("android:state_checked", android.R.attr.state_checked);
+            sStateMap.put("android:state_activated", android.R.attr.state_activated);
+            sStateMap.put("android:state_window_focused", android.R.attr.state_window_focused);
         }
 
         public final int[][] states;

@@ -95,7 +95,7 @@ public class DefaultModule implements ProteusTypeAdapterFactory.Module {
     /**
      *
      */
-    public final CustomValueTypeAdapterCreator<Color.StateList> COLOR_STATE_LIST = new CustomValueTypeAdapterCreator<Color.StateList>() {
+    public static final CustomValueTypeAdapterCreator<Color.StateList> COLOR_STATE_LIST = new CustomValueTypeAdapterCreator<Color.StateList>() {
         @Override
         public CustomValueTypeAdapter<Color.StateList> create(int type, ProteusTypeAdapterFactory factory) {
             return new CustomValueTypeAdapter<Color.StateList>(type) {

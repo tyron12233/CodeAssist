@@ -1,20 +1,31 @@
 package com.tyron.layoutpreview.resource;
 
+import android.content.res.ColorStateList;
 import android.util.Log;
 import android.util.Pair;
+import android.util.SparseIntArray;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.ColorManager;
 import com.flipkart.android.proteus.DimensionManager;
+import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.StringManager;
 import com.flipkart.android.proteus.StyleManager;
-import com.flipkart.android.proteus.value.Dimension;
+import com.flipkart.android.proteus.parser.ParseHelper;
+import com.flipkart.android.proteus.value.Array;
+import com.flipkart.android.proteus.value.Color;
+import com.flipkart.android.proteus.value.DrawableValue;
+import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
+import com.google.gson.JsonObject;
+import com.google.gson.stream.JsonReader;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.layoutpreview.convert.ConvertException;
+import com.tyron.layoutpreview.convert.XmlToJsonConverter;
+import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
 import com.tyron.layoutpreview.util.XmlUtils;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -23,12 +34,15 @@ import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -77,6 +91,12 @@ public class ResourceValueParser {
         }
     };
 
+    private ProteusContext mContext;
+
+    public void setProteusContext(ProteusContext context) {
+        mContext = context;
+    }
+
     public StringManager getStringManager() {
         return mStringManager;
     }
@@ -120,7 +140,11 @@ public class ResourceValueParser {
 
                 File[] children = file.listFiles(c -> c.getName().endsWith(".xml"));
                 if (children != null) {
-                    parse(children, prefix);
+                    if ("color".equals(file.getName())) {
+                        parseColor(children, prefix);
+                    } else {
+                        parse(children, prefix);
+                    }
                 }
             }
         }
@@ -195,6 +219,63 @@ public class ResourceValueParser {
             } catch (XmlPullParserException | IOException e) {
                 System.out.println(e);
             }
+        }
+    }
+
+    private void parseColor(File[] children, String namePrefix) {
+        for (File child : children) {
+            try {
+                XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
+                parser.setInput(new InputStreamReader(new FileInputStream(child)));
+                XmlUtils.advanceToRootNode(parser);
+
+                parseColor(parser, child.getName(), namePrefix);
+            } catch (XmlPullParserException | IOException e) {
+                // ignored
+            }
+        }
+    }
+    private void parseColor(XmlPullParser parser, String fileName, String namePrefix) throws IOException,
+            XmlPullParserException {
+        XmlToJsonConverter converter = new XmlToJsonConverter();
+        try {
+            JsonObject jsonObjects = converter.convert(parser);
+            Value read =
+                    new ProteusTypeAdapterFactory(mContext).VALUE_TYPE_ADAPTER.read(new JsonReader(new StringReader(jsonObjects.toString())), true);
+            if (read.isObject()) {
+                ObjectValue objectValue = read.getAsObject();
+                Array children = objectValue.getAsArray("children");
+                int[][] states = new int[children.size()][];
+                Value[] colors = new Value[children.size()];
+                for (int i = 0; i < children.size(); i++) {
+                    ObjectValue child = children.get(i).getAsObject();
+                    List<Integer> childStates = new ArrayList<>();
+                    for (Map.Entry<String, Value> entry : child.entrySet()) {
+                        Integer stateInteger =
+                                DrawableValue.StateListValue.sStateMap.get(entry.getKey());
+                        if (stateInteger != null) {
+                            int result = ParseHelper.parseBoolean(entry.getValue()) ? stateInteger : -stateInteger;
+                            childStates.add(result);
+                        }
+
+                        if ("android:color".equals(entry.getKey())) {
+                            colors[i] = entry.getValue();
+                        }
+                    }
+
+                    int[] temp = new int[childStates.size()];
+                    for (int j = 0; j < childStates.size(); j++) {
+                        Integer childState = childStates.get(j);
+                        temp[j] = childState;
+                    }
+                    states[i] = temp;
+                }
+
+                Color.LazyStateList lazyStateList = Color.LazyStateList.valueOf(states, colors);
+                mColors.put(fileName.replace(".xml", ""), lazyStateList);
+            }
+        } catch (ConvertException e) {
+            Log.e("ParseSelectorTag", "Unable to convert to json", e);
         }
     }
 
