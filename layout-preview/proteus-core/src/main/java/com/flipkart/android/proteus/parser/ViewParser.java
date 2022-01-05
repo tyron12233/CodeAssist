@@ -497,7 +497,16 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
 
       @Override
       public void handleAttributeResource(V view, AttributeResource attribute) {
-
+        ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
+        ProteusContext context = viewManager.getContext();
+        String name = attribute.getName();
+        Style style = context.getStyle();
+        if (style != null) {
+          Value value = style.getValue(name, null);
+          if (value != null) {
+            handleValue(view, value);
+          }
+        }
       }
 
 //      @Override
