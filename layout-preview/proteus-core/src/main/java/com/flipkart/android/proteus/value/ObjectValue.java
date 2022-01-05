@@ -200,6 +200,14 @@ public class ObjectValue extends Value {
         return members.get(memberName);
     }
 
+    public Value get(String memberName, Value def) {
+        Value value = members.get(memberName);
+        if (value == null) {
+            return def;
+        }
+        return value;
+    }
+
     /**
      * Convenience method to get the specified member as a Value.
      *
