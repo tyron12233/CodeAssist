@@ -26,9 +26,19 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 public class ResourceValueParser {
+
+    private static final Set<String> sSupportedDirs = new HashSet<>();
+
+    static {
+        sSupportedDirs.add("values");
+        sSupportedDirs.add("values-night");
+        sSupportedDirs.add("values-night-v8");
+    }
 
     public Map<String, Value> mStrings = new HashMap<>();
     public Map<String, Style> mStyles = new HashMap<>();
@@ -67,10 +77,34 @@ public class ResourceValueParser {
 
     public void parse(AndroidModule module) {
         File resourcesDir = module.getAndroidResourcesDirectory();
-        File valuesDir = new File(resourcesDir, "values");
-        File[] children = valuesDir.listFiles(c -> c.getName().endsWith(".xml"));
-        if (children != null) {
-            parse(children);
+        parseResDirectory(resourcesDir, "");
+
+        for (File library : module.getLibraries()) {
+            File parent = library.getParentFile();
+            if (parent == null) {
+                continue;
+            }
+            parseResDirectory(new File(parent, "res"), "");
+        }
+    }
+
+    private void parseResDirectory(File resDir, String prefix) {
+        if (resDir == null || !resDir.exists()) {
+            return;
+        }
+
+        File[] files = resDir.listFiles(File::isDirectory);
+        if (files != null) {
+            for (File file : files) {
+                if (!sSupportedDirs.contains(file.getName())) {
+                    continue;
+                }
+
+                File[] children = file.listFiles(c -> c.getName().endsWith(".xml"));
+                if (children != null) {
+                    parse(children, prefix);
+                }
+            }
         }
     }
 
@@ -87,7 +121,7 @@ public class ResourceValueParser {
     }
 
     private void parse(@NonNull File[] children) {
-       parse(children, "");
+        parse(children, "");
     }
 
     public void parse(File file, String namePrefix) throws IOException, XmlPullParserException {
@@ -107,17 +141,18 @@ public class ResourceValueParser {
             namePrefix = namePrefix + ":";
         }
         XmlPullParser parser = null;
-        try {
-            parser = XmlPullParserFactory.newInstance().newPullParser();
-            parser.setInput(reader);
 
-            XmlUtils.advanceToRootNode(parser);
+        parser = XmlPullParserFactory.newInstance().newPullParser();
+        parser.setInput(reader);
 
-            while (parser.next() != XmlPullParser.END_TAG) {
-                if (parser.getEventType() != XmlPullParser.START_TAG) {
-                    continue;
-                }
+        XmlUtils.advanceToRootNode(parser);
 
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            if (parser.getEventType() != XmlPullParser.START_TAG) {
+                continue;
+            }
+
+            try {
                 String tag = parser.getName();
                 switch (tag) {
                     case "string":
@@ -135,31 +170,33 @@ public class ResourceValueParser {
                     default:
                         XmlUtils.skip(parser);
                 }
-            }
 
-        } catch (XmlPullParserException | IOException | ConvertException e) {
-            if (parser != null) {
-                XmlUtils.skip(parser);
+            } catch (XmlPullParserException | IOException e) {
+                System.out.println(e);
             }
         }
     }
 
-    private void parseStyleTag(XmlPullParser parser, String namePrefix) throws IOException, XmlPullParserException {
+    private void parseStyleTag(XmlPullParser parser, String namePrefix) throws IOException,
+            XmlPullParserException {
         Pair<String, Style> pair = ResourceStyleParser.parseStyleTag(parser);
         mStyles.put(namePrefix + pair.first, pair.second);
     }
 
-    private void parseStringTag(XmlPullParser parser, String namePrefix) throws IOException, XmlPullParserException {
+    private void parseStringTag(XmlPullParser parser, String namePrefix) throws IOException,
+            XmlPullParserException {
         Pair<String, Value> pair = ResourceStringParser.parseStringXmlInternal(parser);
         mStrings.put(namePrefix + pair.first, pair.second);
     }
 
-    private void parseColorTag(XmlPullParser parser, String namePrefix) throws IOException, XmlPullParserException {
+    private void parseColorTag(XmlPullParser parser, String namePrefix) throws IOException,
+            XmlPullParserException {
         Pair<String, Value> pair = ResourceColorParser.parseColor(parser);
         mColors.put(namePrefix + pair.first, pair.second);
     }
 
-    private void parseItemTag(XmlPullParser parser, String namePrefix) throws IOException, XmlPullParserException {
+    private void parseItemTag(XmlPullParser parser, String namePrefix) throws IOException,
+            XmlPullParserException {
         Pair<String, Value> pair = ResourceStringParser.parseItemString(parser);
         if (pair != null) {
             mStrings.put(namePrefix + pair.first, pair.second);
