@@ -28,12 +28,6 @@ public class MaterialButtonParser<V extends View> extends ViewTypeParser<V> {
         return AppCompatButton.class.getName();
     }
 
-    @Nullable
-    @Override
-    protected String getDefaultStyleName() {
-        return "?attr/materialButtonStyle";
-    }
-
     @NonNull
     @Override
     public ProteusView createView(@NonNull ProteusContext context,
@@ -41,8 +35,7 @@ public class MaterialButtonParser<V extends View> extends ViewTypeParser<V> {
                                   @NonNull ObjectValue data,
                                   @Nullable ViewGroup parent,
                                   int dataIndex) {
-        ProteusMaterialButton proteusMaterialButton = new ProteusMaterialButton(context);
-        ((MaterialButton) proteusMaterialButton.getAsView()).setShapeAppearanceModel(null); return proteusMaterialButton;
+        return new ProteusMaterialButton(context);
     }
 
     @Override
