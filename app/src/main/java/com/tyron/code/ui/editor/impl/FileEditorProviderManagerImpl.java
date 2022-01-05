@@ -6,6 +6,7 @@ import com.tyron.code.ui.editor.api.FileEditorProvider;
 import com.tyron.code.ui.editor.api.FileEditorProviderManager;
 import com.tyron.code.ui.editor.impl.image.ImageEditorProvider;
 import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorProvider;
+import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorProvider;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -32,8 +33,9 @@ public class FileEditorProviderManagerImpl implements FileEditorProviderManager 
     }
 
     private void registerBuiltInProviders() {
-        registerProvider(new ImageEditorProvider());
         registerProvider(new RosemoeEditorProvider());
+        registerProvider(new LayoutTextEditorProvider());
+        registerProvider(new ImageEditorProvider());
     }
 
     @Override

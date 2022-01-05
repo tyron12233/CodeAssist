@@ -20,7 +20,7 @@ public class ImageEditorProvider implements FileEditorProvider {
         if (!name.contains(".")) {
             return false;
         }
-        switch (name.substring(name.lastIndexOf('.'))) {
+        switch (name.substring(name.lastIndexOf('.') + 1)) {
             case "png":
             case "jpg":
             case "jpeg":

@@ -71,8 +71,6 @@ import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 public class CodeEditorFragment extends Fragment implements Savable,
         SharedPreferences.OnSharedPreferenceChangeListener {
 
-    private static final String LAYOUT_EDITOR_PREFIX = "editor_";
-
     private CodeEditor mEditor;
     private CodeEditorEventListener mEditorEventListener;
 
@@ -363,6 +361,13 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
+    public CodeEditor getEditor() {
+        return mEditor;
+    }
+
+    /**
+     * Undo the text in the editor if possible, if not the call is ignored
+     */
     public void undo() {
         if (mEditor == null) {
             return;
@@ -372,6 +377,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
+    /**
+     * Redo the text in the editor if possible, if not the call is ignored
+     */
     public void redo() {
         if (mEditor == null) {
             return;
@@ -381,12 +389,21 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
+    /**
+     * Sets the position of the cursor in the editor
+     * @param line zero-based line.
+     * @param column zero-based column.
+     */
     public void setCursorPosition(int line, int column) {
         if (mEditor != null) {
             mEditor.getCursor().set(line, column);
         }
     }
 
+    /**
+     * Perform a shortcut item to the editor
+     * @param item the item to be performed
+     */
     public void performShortcut(ShortcutItem item) {
         for (ShortcutAction action : item.actions) {
             if (action.isApplicable(item.kind)) {
@@ -401,68 +418,12 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
+    /**
+     * Notifies the editor to analyze and highlight the current text
+     */
     public void analyze() {
         if (mEditor != null) {
             mEditor.analyze();
-        }
-    }
-
-    public void preview() {
-
-        File currentFile = mEditor.getCurrentFile();
-        if (ProjectUtils.isLayoutXMLFile(currentFile)) {
-            getChildFragmentManager().beginTransaction().add(R.id.layout_editor_container,
-                    LayoutEditorFragment.newInstance(currentFile)).addToBackStack(null).commit();
-        } else {
-            // TODO: handle unknown files
-//            JavaCompilerProvider service =
-//                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-//            JavaCompilerService compiler = service.getCompiler(ProjectManager.getInstance().getCurrentProject(),
-//                    (JavaModule) ProjectManager.getInstance().getCurrentProject().getMainModule());
-//            ParseTask parse = compiler.parse(mCurrentFile.toPath(), mEditor.getText().toString());
-//            CompilationUnitConverter compilationUnitConverter = new CompilationUnitConverter(parse, mEditor.getText().toString(), new CompilationUnitConverter.LineColumnCallback() {
-//                @Override
-//                public int getLine(int pos) {
-//                    return mEditor.getText().getIndexer().getCharLine(pos);
-//                }
-//
-//                @Override
-//                public int getColumn(int pos) {
-//                    return mEditor.getText().getIndexer().getCharColumn(pos);
-//                }
-//            });
-//            CompilationUnit compilationUnit = compilationUnitConverter.startScan();
-//            compilationUnit.register(new AstObserverAdapter() {
-//                @Override
-//                public void listChange(NodeList<?> observedNode, ListChangeType type, int index,
-//                                       Node node) {
-//                    if (type == ListChangeType.ADDITION) {
-//                        Optional<com.github.javaparser.Range> optionalRange = node.getRange();
-//                        com.github.javaparser.Range range = optionalRange.get();
-//                        mEditor.getText().insert(range.begin.line, range.begin.column - 1, node.toString());
-//                    }
-//                    System.out.println(observedNode + ", type: " + type + ", added: " + node.getRange());
-//                }
-//
-//                @Override
-//                public void propertyChange(Node observedNode, ObservableProperty property,
-//                                           Object oldValue, Object newValue) {
-//                    Optional<com.github.javaparser.Range> optionalRange = observedNode.getRange();
-//                    if (oldValue instanceof NodeWithRange) {
-//                        optionalRange = ((NodeWithRange<?>) oldValue).getRange();
-//                    } else {
-//                        optionalRange = observedNode.getRange();
-//                    }
-//                    if (!optionalRange.isPresent()) {
-//                        return;
-//                    }
-//                    com.github.javaparser.Range range = optionalRange.get();
-//                    mEditor.getText().replace(range.begin.line, range.begin.column, range.end.line, range.end.column, "");
-//                    mEditor.getText().insert(range.begin.line, range.begin.column, newValue.toString());
-//                    mEditor.hideAutoCompleteWindow();
-//                }
-//            }, Node.ObserverRegistrationMode.THIS_NODE_AND_EXISTING_DESCENDANTS);
-//            System.out.println(compilationUnit);
         }
     }
 

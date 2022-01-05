@@ -19,6 +19,7 @@ import com.google.android.material.tabs.TabLayoutMediator;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.api.FileEditorManager;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
+import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.editor.adapter.PageAdapter;
 
@@ -199,8 +200,8 @@ public class EditorContainerFragment extends Fragment {
     private void previewCurrent() {
         String tag = "f" + mAdapter.getItemId(mPager.getCurrentItem());
         Fragment fragment = getChildFragmentManager().findFragmentByTag(tag);
-        if (fragment instanceof CodeEditorFragment) {
-            ((CodeEditorFragment) fragment).preview();
+        if (fragment instanceof LayoutTextEditorFragment) {
+            ((LayoutTextEditorFragment) fragment).preview();
         }
     }
 

@@ -7,6 +7,7 @@ import androidx.lifecycle.Lifecycle;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 
+import com.tyron.code.ui.editor.api.FileEditor;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 
 import java.io.File;
@@ -72,6 +73,7 @@ public class PageAdapter extends FragmentStateAdapter {
     @NonNull
     @Override
     public Fragment createFragment(int p1) {
-        return FileEditorManagerImpl.getInstance().openFile(data.get(p1), true)[0].getFragment();
+        FileEditor[] fileEditors = FileEditorManagerImpl.getInstance().openFile(data.get(p1), true);
+        return fileEditors[0].getFragment();
     }
 }
