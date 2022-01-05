@@ -11,6 +11,8 @@ import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.value.Array;
 import com.flipkart.android.proteus.value.Layout;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class ProteusHelper {
@@ -161,8 +163,9 @@ public class ProteusHelper {
     }
 
     private static Layout.Attribute getChildrenAttribute(ProteusView view) {
-        if (view.getViewManager().getLayout().attributes == null) {
-            return null;
+        List<Layout.Attribute> attributes = view.getViewManager().getLayout().attributes;
+        if (attributes == null) {
+            view.getViewManager().getLayout().attributes = new ArrayList<>();
         }
         ViewTypeParser.AttributeSet.Attribute attribute = view.getViewManager()
                 .getAvailableAttributes()
@@ -171,11 +174,14 @@ public class ProteusHelper {
             return null;
         }
 
-        for (Layout.Attribute attr : view.getViewManager().getLayout().attributes) {
+        for (Layout.Attribute attr : attributes) {
             if (attribute.id == attr.id) {
                 return attr;
             }
         }
+
+        Layout.Attribute layoutAttribute = new Layout.Attribute(attribute.id, new Array());
+        view.getViewManager().getLayout().attributes.add(layoutAttribute);
         return null;
     }
 }
