@@ -71,7 +71,10 @@ public class ResourceStyleParser {
         }
 
         String text = XmlUtils.readText(parser);
-        style.addValue(name, text);
+        if (text.contains("@")) {
+            text = text.substring(text.indexOf("@"));
+        }
+        style.addValue(name, text.trim());
         parser.require(XmlPullParser.END_TAG, null, "item");
     }
 
