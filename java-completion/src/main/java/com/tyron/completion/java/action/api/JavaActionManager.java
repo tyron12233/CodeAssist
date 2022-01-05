@@ -6,6 +6,7 @@ import android.widget.Toast;
 
 import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
+import com.tyron.completion.java.action.context.DiagnosticInfoAction;
 import com.tyron.completion.java.action.context.IntroduceLocalVariableAction;
 import com.tyron.completion.java.action.context.OverrideInheritedMethodsAction;
 import com.tyron.completion.java.action.quickfix.ExceptionsQuickFix;
@@ -43,6 +44,7 @@ public class JavaActionManager {
     }
 
     private void registerBuiltinProviders() {
+        registerActionProvider(new DiagnosticInfoAction());
         registerActionProvider(new ExceptionsQuickFix());
         registerActionProvider(new ImplementAbstractMethodsFix());
         registerActionProvider(new OverrideInheritedMethodsAction());
