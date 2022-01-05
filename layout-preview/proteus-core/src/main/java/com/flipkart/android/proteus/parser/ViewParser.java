@@ -45,6 +45,7 @@ import com.flipkart.android.proteus.processor.DimensionAttributeProcessor;
 import com.flipkart.android.proteus.processor.DrawableResourceProcessor;
 import com.flipkart.android.proteus.processor.EventProcessor;
 import com.flipkart.android.proteus.processor.GravityAttributeProcessor;
+import com.flipkart.android.proteus.processor.ShapeAppearanceProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
 import com.flipkart.android.proteus.processor.TweenAnimationResourceProcessor;
 import com.flipkart.android.proteus.toolbox.Attributes;
@@ -57,6 +58,8 @@ import com.flipkart.android.proteus.value.Resource;
 import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 import com.flipkart.android.proteus.view.ProteusAndroidView;
+import com.google.android.material.shape.ShapeAppearanceModel;
+import com.google.android.material.shape.Shapeable;
 
 import java.util.Map;
 
@@ -671,6 +674,16 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDimension(V view, float dimension) {
         ViewCompat.setElevation(view, dimension);
+      }
+    });
+
+    addAttributeProcessor("app:shapeAppearance", new ShapeAppearanceProcessor<V>() {
+
+      @Override
+      public void setShapeAppearance(View view, ShapeAppearanceModel model) {
+        if (view instanceof Shapeable) {
+          ((Shapeable) view).setShapeAppearanceModel(model);
+        }
       }
     });
   }
