@@ -187,6 +187,7 @@ public class ResourceValueParser {
                         break;
                     case "dimen":
                         parseDimension(parser, namePrefix);
+                        break;
                     default:
                         XmlUtils.skip(parser);
                 }
