@@ -245,6 +245,9 @@ public class ViewManager implements ProteusView.Manager {
         Primitive primitive = new Primitive(string);
         Value value = AttributeProcessor.staticPreCompile(primitive, context,
                 context.getFunctionManager());
+        if (value == null) {
+            value = new Primitive(string);
+        }
         updateAttribute(name, value);
     }
 
