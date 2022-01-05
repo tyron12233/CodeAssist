@@ -55,7 +55,10 @@ public class ProteusResources {
 
     private final ColorManager colorManager;
 
-    ProteusResources(@NonNull Map<String, ViewTypeParser> parsers, @Nullable LayoutManager layoutManager, @NonNull FunctionManager functionManager, @Nullable StyleManager styleManager, StringManager stringManager, DrawableManager drawableManager, ColorManager colorManager) {
+    private final DimensionManager dimensionManager;
+
+
+    ProteusResources(@NonNull Map<String, ViewTypeParser> parsers, @Nullable LayoutManager layoutManager, @NonNull FunctionManager functionManager, @Nullable StyleManager styleManager, StringManager stringManager, DrawableManager drawableManager, ColorManager colorManager, DimensionManager dimensionManager) {
         this.parsers = parsers;
         this.layoutManager = layoutManager;
         this.functionManager = functionManager;
@@ -63,6 +66,7 @@ public class ProteusResources {
         this.stringManager = stringManager;
         this.drawableManager = drawableManager;
         this.colorManager = colorManager;
+        this.dimensionManager = dimensionManager;
     }
 
     @NonNull
@@ -113,5 +117,12 @@ public class ProteusResources {
             name = name.substring("@style/".length());
         }
         return null != styleManager ? styleManager.get(name) : null;
+    }
+
+    public Value getDimension(String name) {
+        if (name.startsWith("@dimen/")) {
+            name = name.substring("@dimen/".length());
+        }
+        return null != dimensionManager ? dimensionManager.getDimension(name) : null;
     }
 }

@@ -76,7 +76,7 @@ public abstract class DimensionAttributeProcessor<T extends View> extends Attrib
 
   @Override
   public void handleResource(T view, Resource resource) {
-    Float dimension = resource.getDimension(view.getContext());
+    Float dimension = resource.getDimension((ProteusContext) view.getContext());
     setDimension(view, null == dimension ? 0 : dimension);
   }
 

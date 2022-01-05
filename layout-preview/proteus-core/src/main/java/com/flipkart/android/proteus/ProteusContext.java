@@ -208,6 +208,7 @@ public class ProteusContext extends ContextWrapper {
 
         private DrawableManager drawableManager;
         private ColorManager colorManager;
+        private DimensionManager dimensionManager;
 
         Builder(@NonNull Context context, @NonNull Map<String, ViewTypeParser> parsers, @NonNull FunctionManager functionManager) {
             this.base = context;
@@ -250,9 +251,14 @@ public class ProteusContext extends ContextWrapper {
             return this;
         }
 
+        public Builder setDimensionManager(DimensionManager dimensionManager) {
+            this.dimensionManager = dimensionManager;
+            return this;
+        }
+
         public ProteusContext build() {
             ProteusResources resources = new ProteusResources(parsers, layoutManager,
-                    functionManager, styleManager, stringManager, drawableManager, colorManager);
+                    functionManager, styleManager, stringManager, drawableManager, colorManager, dimensionManager);
             return new ProteusContext(base, resources, loader, callback);
         }
 

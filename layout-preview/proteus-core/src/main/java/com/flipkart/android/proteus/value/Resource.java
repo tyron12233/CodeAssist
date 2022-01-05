@@ -28,6 +28,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringDef;
 
 import com.flipkart.android.proteus.ProteusContext;
+import com.flipkart.android.proteus.processor.AttributeProcessor;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -168,12 +169,32 @@ public class Resource extends Value {
     }
 
     @Nullable
-    public static Float getDimension(int resId, Context context) {
-        try {
-            return context.getResources().getDimension(resId);
-        } catch (Resources.NotFoundException e) {
+    public static Float getDimension(String name, ProteusContext context) {
+        Value dimension = context.getProteusResources().getDimension(name);
+        if (dimension == null) {
             return null;
         }
+
+        if (dimension.toString().endsWith("dp")) {
+            return Dimension.valueOf(dimension.toString()).apply(context);
+        }
+
+        Value value = AttributeProcessor.staticPreCompile(dimension, context,
+                context.getFunctionManager());
+        while (value != null && !value.isDimension()) {
+            if (value.isResource()) {
+                return value.getAsResource().getDimension(context);
+            }
+
+            if (value.isAttributeResource()) {
+                Style style = context.getStyle();
+                value = style.getValue(value.getAsAttributeResource().getName(), context,
+                        null);
+            } else {
+                break;
+            }
+        }
+        return null;
     }
 
     @Nullable
@@ -286,8 +307,8 @@ public class Resource extends Value {
     }
 
     @Nullable
-    public Float getDimension(Context context) {
-        return getDimension(resId, context);
+    public Float getDimension(ProteusContext context) {
+        return getDimension(name, context);
     }
 
     @Nullable

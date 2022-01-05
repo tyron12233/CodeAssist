@@ -7,8 +7,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.ColorManager;
+import com.flipkart.android.proteus.DimensionManager;
 import com.flipkart.android.proteus.StringManager;
 import com.flipkart.android.proteus.StyleManager;
+import com.flipkart.android.proteus.value.Dimension;
 import com.flipkart.android.proteus.value.Style;
 import com.flipkart.android.proteus.value.Value;
 import com.tyron.builder.project.api.AndroidModule;
@@ -46,6 +48,8 @@ public class ResourceValueParser {
     public Map<String, Value> mStrings = new HashMap<>();
     public Map<String, Style> mStyles = new HashMap<>();
     public Map<String, Value> mColors = new HashMap<>();
+    private Map<String, Value> mDimensions = new HashMap<>();
+
     private final StringManager mStringManager = new StringManager() {
         @Override
         public Map<String, Value> getStrings(@Nullable String tag) {
@@ -65,6 +69,13 @@ public class ResourceValueParser {
             return mColors;
         }
     };
+    private final DimensionManager mDimensionManager = new DimensionManager() {
+        @NonNull
+        @Override
+        protected Map<String, Value> getDimensions() {
+            return mDimensions;
+        }
+    };
 
     public StringManager getStringManager() {
         return mStringManager;
@@ -76,6 +87,10 @@ public class ResourceValueParser {
 
     public ColorManager getColorManager() {
         return mColorManager;
+    }
+
+    public DimensionManager getDimensionManager() {
+        return mDimensionManager;
     }
 
     public void parse(AndroidModule module) {
@@ -170,6 +185,8 @@ public class ResourceValueParser {
                     case "color":
                         parseColorTag(parser, namePrefix);
                         break;
+                    case "dimen":
+                        parseDimension(parser, namePrefix);
                     default:
                         XmlUtils.skip(parser);
                 }
@@ -178,6 +195,12 @@ public class ResourceValueParser {
                 System.out.println(e);
             }
         }
+    }
+
+    private void parseDimension(XmlPullParser parser, String namePrefix) throws IOException,
+            XmlPullParserException {
+        Pair<String, Value> pair = ResourceDimensionParser.parseDimension(parser);
+        mDimensions.put(namePrefix + pair.first, pair.second);
     }
 
     private void parseStyleTag(XmlPullParser parser, String namePrefix) throws IOException,
