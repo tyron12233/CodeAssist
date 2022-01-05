@@ -207,14 +207,11 @@ public class ViewManager implements ProteusView.Manager {
             ViewParent viewParent = view.getParent();
             if (viewParent instanceof ViewGroup) {
                 ViewGroup parent = (ViewGroup) viewParent;
-
                 int index = parent.indexOfChild(parent) - 1;
                 parent.removeView(view);
 
-                ProteusView view = parser.createView((ProteusContext) this.view.getContext(), layout,
-                        new ObjectValue(), parent, -1);
+                ProteusView view = context.getInflater().inflate(layout, new ObjectValue(), parent, -1);
                 this.view = view.getAsView();
-                parser.onAfterCreateView(view, parent, -1);
                 view.setViewManager(this);
 
                 parent.addView(view.getAsView(), index);
