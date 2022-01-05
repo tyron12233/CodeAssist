@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerContainer;
+import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
@@ -42,7 +43,8 @@ public class OverrideInheritedMethodsAction extends ActionProvider {
             return;
         }
 
-        MenuItem menuItem = context.addMenu("overrideMethods", "Override Inherited Methods");
+        String title = context.getContext().getString(R.string.menu_quickfix_override_inherited_methods_title);
+        MenuItem menuItem = context.addMenu("overrideMethods", title);
         menuItem.setOnMenuItemClickListener(item -> {
             perform(context);
             return true;

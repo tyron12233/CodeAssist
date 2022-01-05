@@ -5,6 +5,7 @@ import android.view.MenuItem;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
@@ -33,7 +34,8 @@ public class ImplementAbstractMethodsFix extends ActionProvider {
             Rewrite rewrite = new ImplementAbstractMethods(d);
             Action action = new Action(rewrite);
 
-            MenuItem item = context.addMenu("quickFix", "Implement abstract methods");
+            String title = context.getContext().getString(R.string.menu_quickfix_implement_abstract_methods_title);
+            MenuItem item = context.addMenu("quickFix", title);
             item.setOnMenuItemClickListener(i -> {
                 context.performAction(action);
                 return true;

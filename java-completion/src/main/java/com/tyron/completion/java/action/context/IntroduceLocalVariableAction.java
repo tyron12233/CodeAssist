@@ -5,6 +5,7 @@ import android.view.MenuItem;
 import androidx.annotation.NonNull;
 
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
@@ -52,7 +53,8 @@ public class IntroduceLocalVariableAction extends ActionProvider {
                 SourcePositions pos = Trees.instance(task.task).getSourcePositions();
                 long startPosition = pos.getStartPosition(path.getCompilationUnit(),
                         path.getLeaf());
-                MenuItem item = context.addMenu("context", "Introduce local variable");
+                String title = context.getContext().getString(R.string.menu_quickfix_introduce_local_variable_title);
+                MenuItem item = context.addMenu("context", title);
                 item.setOnMenuItemClickListener(i -> {
                     context.performAction(new Action(new IntroduceLocalVariable(context.getCurrentFile(), element.getSimpleName().toString(), returnType, startPosition)));
                     return true;

@@ -4,8 +4,10 @@ import static com.tyron.completion.java.util.DiagnosticUtil.findMethod;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
@@ -68,7 +70,7 @@ public class ExceptionsQuickFix extends ActionProvider {
                 if (!ElementUtil.isMemberOf(task, needsThrow.method, superClassElement)) {
                     Rewrite rewrite = new AddException(needsThrow.className,
                             needsThrow.methodName, needsThrow.erasedParameterTypes, exceptionName);
-                    addAction(context, new Action(rewrite), "Add 'throws'");
+                    addAction(context, new Action(rewrite), R.string.menu_quickfix_add_throws_title);
                 }
             }
 
@@ -79,7 +81,7 @@ public class ExceptionsQuickFix extends ActionProvider {
 
                 Rewrite rewrite = new AddCatchClause(context.getCurrentFile(), start,
                         exceptionName);
-                addAction(context, new Action(rewrite), "Add catch clause");
+                addAction(context, new Action(rewrite), R.string.menu_quickfix_add_catch_clause_title);
             } else {
                 int start = (int) sourcePositions.getStartPosition(task.root(),
                         surroundingPath.getLeaf());
@@ -88,12 +90,13 @@ public class ExceptionsQuickFix extends ActionProvider {
                 String contents = surroundingPath.getLeaf().toString();
                 Rewrite rewrite = new AddTryCatch(context.getCurrentFile(), contents, start, end,
                         exceptionName);
-                addAction(context, new Action(rewrite), "Surround with try-catch");
+                addAction(context, new Action(rewrite), R.string.menu_quickfix_surround_try_catch_title);
             }
         }
     }
 
-    private void addAction(ActionContext context, Action action, String title) {
+    private void addAction(ActionContext context, Action action, @StringRes int id) {
+        String title = context.getContext().getString(id);
         context.addMenu("quickFix", title).setOnMenuItemClickListener(item -> {
             context.performAction(action);
             return true;

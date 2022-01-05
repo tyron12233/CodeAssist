@@ -6,6 +6,7 @@ import android.view.MenuItem;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
@@ -50,7 +51,7 @@ public class ImportClassFix extends ActionProvider {
             Map<String, Rewrite> map = new TreeMap<>();
             for (String qualifiedName : context.getCompiler().publicTopLevelTypes()) {
                 if (qualifiedName.endsWith("." + simpleName)) {
-                    String title = "Import " + qualifiedName;
+                    String title = context.getContext().getString(R.string.import_class_name, qualifiedName);
                     Rewrite addImport = new AddImport(file.toFile(), qualifiedName);
                     map.put(title, addImport);
                 }
@@ -63,7 +64,7 @@ public class ImportClassFix extends ActionProvider {
 
             String[] titles = map.keySet().toArray(new String[0]);
             new AlertDialog.Builder(context.getContext())
-                    .setTitle("Import class")
+                    .setTitle(R.string.import_class_title)
                     .setItems(titles, (di, w) -> {
                         Rewrite rewrite = map.get(titles[w]);
                         context.performAction(new Action(rewrite));
