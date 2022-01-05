@@ -4,7 +4,6 @@ import android.content.Context;
 import android.view.Menu;
 import android.widget.Toast;
 
-import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.action.context.IntroduceLocalVariableAction;
@@ -13,7 +12,6 @@ import com.tyron.completion.java.action.quickfix.ExceptionsQuickFix;
 import com.tyron.completion.java.action.quickfix.ImplementAbstractMethodsFix;
 import com.tyron.completion.java.action.quickfix.ImportClassFieldFix;
 import com.tyron.completion.java.action.quickfix.ImportClassFix;
-import com.tyron.completion.java.action.quickfix.MigrateTypeFix;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.TreeUtil;
 
@@ -25,20 +23,20 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-public class CodeActionManager {
+public class JavaActionManager {
 
-    private static volatile CodeActionManager sInstance;
+    private static volatile JavaActionManager sInstance;
 
-    public static synchronized CodeActionManager getInstance() {
+    public static synchronized JavaActionManager getInstance() {
         if (sInstance == null) {
-            sInstance = new CodeActionManager();
+            sInstance = new JavaActionManager();
         }
         return sInstance;
     }
 
     private final List<ActionProvider> mActions;
 
-    public CodeActionManager() {
+    public JavaActionManager() {
         mActions = new ArrayList<>();
 
         registerBuiltinProviders();
@@ -51,7 +49,6 @@ public class CodeActionManager {
         registerActionProvider(new IntroduceLocalVariableAction());
         registerActionProvider(new ImportClassFix());
         registerActionProvider(new ImportClassFieldFix());
-        registerActionProvider(new MigrateTypeFix());
     }
 
     public void registerActionProvider(ActionProvider provider) {

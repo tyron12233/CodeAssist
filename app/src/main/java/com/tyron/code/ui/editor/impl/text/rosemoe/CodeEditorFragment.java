@@ -34,18 +34,15 @@ import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.layoutEditor.LayoutEditorFragment;
 import com.tyron.code.ui.main.MainViewModel;
-import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.Parser;
-import com.tyron.completion.java.action.api.CodeActionManager;
+import com.tyron.completion.java.action.api.JavaActionManager;
 import com.tyron.completion.java.action.api.EditorInterface;
 import com.tyron.completion.java.util.ActionUtil;
-import com.tyron.completion.java.util.CompilationUnitConverter;
-import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.java.rewrite.AddImport;
@@ -58,7 +55,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.Optional;
 
 import io.github.rosemoe.sora.interfaces.EditorEventListener;
 import io.github.rosemoe.sora.interfaces.EditorLanguage;
@@ -433,7 +429,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
         try {
             final Path current = mEditor.getCurrentFile().toPath();
-            CodeActionManager.getInstance().addActions(requireContext(), menu, compiler, current, mEditor.getCursor().getLeft(), new EditorInterface() {
+            JavaActionManager.getInstance().addActions(requireContext(), menu, compiler, current, mEditor.getCursor().getLeft(), new EditorInterface() {
                 @Override
                 public int getCharIndex(int line , int column) {
                     return mEditor.getText().getCharIndex(line, column);
