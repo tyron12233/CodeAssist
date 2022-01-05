@@ -288,19 +288,25 @@ public class ResourceValueParser {
     private void parseStyleTag(XmlPullParser parser, String namePrefix) throws IOException,
             XmlPullParserException {
         Pair<String, Style> pair = ResourceStyleParser.parseStyleTag(parser);
-        mStyles.put(namePrefix + pair.first, pair.second);
+        if (!mStyles.containsKey(pair.first)) {
+            mStyles.put(namePrefix + pair.first, pair.second);
+        }
     }
 
     private void parseStringTag(XmlPullParser parser, String namePrefix) throws IOException,
             XmlPullParserException {
         Pair<String, Value> pair = ResourceStringParser.parseStringXmlInternal(parser);
-        mStrings.put(namePrefix + pair.first, pair.second);
+        if (!mStrings.containsKey(pair.first)) {
+            mStrings.put(namePrefix + pair.first, pair.second);
+        }
     }
 
     private void parseColorTag(XmlPullParser parser, String namePrefix) throws IOException,
             XmlPullParserException {
         Pair<String, Value> pair = ResourceColorParser.parseColor(parser);
-        mColors.put(namePrefix + pair.first, pair.second);
+        if (!mColors.containsKey(pair.first)) {
+            mColors.put(namePrefix + pair.first, pair.second);
+        }
     }
 
     private void parseItemTag(XmlPullParser parser, String namePrefix) throws IOException,
