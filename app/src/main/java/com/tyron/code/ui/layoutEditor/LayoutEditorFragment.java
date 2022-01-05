@@ -379,10 +379,10 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         palettes.add(createPalette("androidx.cardview.widget.CardView", R.drawable.ic_baseline_style_24,
                 ImmutableMap.of(Attributes.View.MinWidth, Dimension.valueOf("50dp"), Attributes.View.MinHeight, Dimension.valueOf("25dp"))));
 
-        palettes.add(createPalette("android.widget.Button",
+        palettes.add(createPalette("Button",
                 R.drawable.ic_baseline_crop_16_9_24,
                 ImmutableMap.of(Attributes.TextView.Text, new Primitive("Button"))));
-        palettes.add(createPalette("android.widget.TextView",
+        palettes.add(createPalette("TextView",
                 R.drawable.ic_baseline_text_fields_24,
                 ImmutableMap.of(Attributes.TextView.Text, new Primitive("TextView"))));
         palettes.add(createPalette("android.widget.EditText",

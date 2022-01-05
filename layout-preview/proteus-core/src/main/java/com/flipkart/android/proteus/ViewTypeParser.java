@@ -187,7 +187,7 @@ public abstract class ViewTypeParser<V extends View> {
       return true;
     } catch (Throwable e) {
       String name = "Unknown attribute";
-      String attributeValue = value.toString();
+      String attributeValue = String.valueOf(value);
       if (view instanceof ProteusView) {
         name = ProteusHelper.getAttributeName(((ProteusView) view), attributeId);
       }
