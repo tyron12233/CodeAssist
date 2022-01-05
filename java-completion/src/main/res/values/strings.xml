@@ -12,4 +12,6 @@
 
     <string name="import_class_name">Import %1s</string>
     <string name="import_class_title">Import class</string>
+    <string name="menu_action_view_javadoc_title">View javadoc</string>
+    <string name="menu_action_no_javadoc_message">No javadoc found.</string>
 </resources>

@@ -55,7 +55,7 @@ public class HoverProvider {
     }
 
 
-    private String docs(CompileTask task, Element element) {
+    public String docs(CompileTask task, Element element) {
         if (element instanceof TypeElement) {
             TypeElement type = (TypeElement) element;
             String className = type.getQualifiedName().toString();
