@@ -28,6 +28,7 @@ import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.common.util.Decompress;
 import com.tyron.layout.appcompat.AppCompatModule;
 import com.tyron.layout.cardview.CardViewModule;
 import com.tyron.layout.constraintlayout.ConstraintLayoutModule;
@@ -165,8 +166,18 @@ public class PreviewLayoutInflater {
                     mProject.getAndroidResourcesDirectory(), mProject.getFileManager());
             mDrawableManager.setDrawables(resourceManager.getDrawables());
             mLayoutManager.setLayouts(resourceManager.getLayouts());
+
+
             mParser.parse(mProject);
 
+            File sources = extractAndGetAndroidXml();
+            File valuesFile = new File(sources, "android-31/data/res/values");
+            if (valuesFile.exists()) {
+                File[] children = valuesFile.listFiles(c -> c.getName().endsWith(".xml"));
+                if (children != null) {
+                    mParser.parse(children, "android");
+                }
+            }
             try {
                 ManifestData parse = AndroidManifestParser.parse(mProject.getManifestFile());
                 String theme = parse.getLauncherActivity().getTheme();
@@ -245,5 +256,13 @@ public class PreviewLayoutInflater {
                 DexClassLoader loader = new DexClassLoader(file.getAbsolutePath(), mContext.getCodeCacheDir().getAbsolutePath(), null, this.getClass().getClassLoader());
             }
         }
+    }
+
+    private File extractAndGetAndroidXml() {
+        File destination = new File(mContext.getFilesDir(), "sources");
+        if (!destination.exists()) {
+            Decompress.unzipFromAssets(mContext, "android-xml.zip", destination.getAbsolutePath());
+        }
+        return destination;
     }
 }

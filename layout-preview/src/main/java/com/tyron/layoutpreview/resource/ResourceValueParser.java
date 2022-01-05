@@ -74,10 +74,10 @@ public class ResourceValueParser {
         }
     }
 
-    private void parse(@NonNull File[] children) {
+    public void parse(@NonNull File[] children, String namePrefix) {
         for (File child : children) {
             try {
-                parse(child);
+                parse(child, namePrefix);
             } catch (XmlPullParserException e) {
                 Log.e("ResourceValueParser", "Unable to parse XML", e);
             } catch (IOException e) {
@@ -86,15 +86,26 @@ public class ResourceValueParser {
         }
     }
 
+    private void parse(@NonNull File[] children) {
+       parse(children, "");
+    }
+
+    public void parse(File file, String namePrefix) throws IOException, XmlPullParserException {
+        parse(new InputStreamReader(new FileInputStream(file)), namePrefix);
+    }
+
     public void parse(File file) throws IOException, XmlPullParserException {
-        parse(new InputStreamReader(new FileInputStream(file)));
+        parse(new InputStreamReader(new FileInputStream(file)), "");
     }
 
     public void parse(String contents) throws IOException, XmlPullParserException {
-        parse(new StringReader(contents));
+        parse(new StringReader(contents), "");
     }
 
-    public void parse(Reader reader) throws IOException, XmlPullParserException {
+    public void parse(Reader reader, String namePrefix) throws IOException, XmlPullParserException {
+        if (!namePrefix.isEmpty() && !namePrefix.endsWith(":")) {
+            namePrefix = namePrefix + ":";
+        }
         XmlPullParser parser = null;
         try {
             parser = XmlPullParserFactory.newInstance().newPullParser();
@@ -110,16 +121,16 @@ public class ResourceValueParser {
                 String tag = parser.getName();
                 switch (tag) {
                     case "string":
-                        parseStringTag(parser);
+                        parseStringTag(parser, namePrefix);
                         break;
                     case "item":
-                        parseItemTag(parser);
+                        parseItemTag(parser, namePrefix);
                         break;
                     case "style":
-                        parseStyleTag(parser);
+                        parseStyleTag(parser, namePrefix);
                         break;
                     case "color":
-                        parseColorTag(parser);
+                        parseColorTag(parser, namePrefix);
                         break;
                     default:
                         XmlUtils.skip(parser);
@@ -133,25 +144,25 @@ public class ResourceValueParser {
         }
     }
 
-    private void parseStyleTag(XmlPullParser parser) throws IOException, XmlPullParserException {
+    private void parseStyleTag(XmlPullParser parser, String namePrefix) throws IOException, XmlPullParserException {
         Pair<String, Style> pair = ResourceStyleParser.parseStyleTag(parser);
-        mStyles.put(pair.first, pair.second);
+        mStyles.put(namePrefix + pair.first, pair.second);
     }
 
-    private void parseStringTag(XmlPullParser parser) throws IOException, XmlPullParserException {
+    private void parseStringTag(XmlPullParser parser, String namePrefix) throws IOException, XmlPullParserException {
         Pair<String, Value> pair = ResourceStringParser.parseStringXmlInternal(parser);
-        mStrings.put(pair.first, pair.second);
+        mStrings.put(namePrefix + pair.first, pair.second);
     }
 
-    private void parseColorTag(XmlPullParser parser) throws IOException, XmlPullParserException {
+    private void parseColorTag(XmlPullParser parser, String namePrefix) throws IOException, XmlPullParserException {
         Pair<String, Value> pair = ResourceColorParser.parseColor(parser);
-        mColors.put(pair.first, pair.second);
+        mColors.put(namePrefix + pair.first, pair.second);
     }
 
-    private void parseItemTag(XmlPullParser parser) throws IOException, XmlPullParserException {
+    private void parseItemTag(XmlPullParser parser, String namePrefix) throws IOException, XmlPullParserException {
         Pair<String, Value> pair = ResourceStringParser.parseItemString(parser);
         if (pair != null) {
-            mStrings.put(pair.first, pair.second);
+            mStrings.put(namePrefix + pair.first, pair.second);
         }
     }
 }
