@@ -47,6 +47,7 @@ import com.flipkart.android.proteus.processor.EventProcessor;
 import com.flipkart.android.proteus.processor.GravityAttributeProcessor;
 import com.flipkart.android.proteus.processor.ShapeAppearanceProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
+import com.flipkart.android.proteus.processor.StyleResourceProcessor;
 import com.flipkart.android.proteus.processor.TweenAnimationResourceProcessor;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.toolbox.ProteusHelper;
@@ -485,104 +486,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
     });
 
-    addAttributeProcessor(Attributes.View.Style, new AttributeProcessor<V>() {
-      @Override
-      public void handleValue(V view, Value value) {
-        if (value.isStyle()) {
-          handleStyle(view, value.getAsStyle());
-        } else {
-          if (value.isPrimitive()) {
-            ProteusContext context = (ProteusContext) view.getContext();
-            Value value1 = Style.valueOf(value.toString(), context);
-            if (value1 != null && value1.isStyle()) {
-              handleStyle(view, value1.getAsStyle());
-            }
-          }
-        }
-      }
-
-      @Override
-      public void handleResource(V view, Resource resource) {
-
-      }
-
-      @Override
-      public void handleAttributeResource(V view, AttributeResource attribute) {
-        ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
-        ProteusContext context = viewManager.getContext();
-        String name = attribute.getName();
-        Style style = context.getStyle();
-        if (style != null) {
-          Value value = style.getValue(name, null);
-          if (value != null) {
-            if (value.isStyle()) {
-              handleStyle(view, value.getAsStyle());
-            } else if (value.isPrimitive()) {
-              String styleName = value.toString();
-              Style style1 = context.getStyle(styleName);
-              if (style1 != null) {
-                handleStyle(view, style1);
-              }
-            }
-          }
-        }
-      }
-
-//      @Override
-//      public void setString(V view, String value) {
-//        ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
-//        ProteusContext context = viewManager.getContext();
-//        Layout layout = viewManager.getLayout();
-//
-//        ViewTypeParser handler = context.getInflater().getParser(layout);
-//
-//        String[] styleSet = value.split(ProteusConstants.STYLE_DELIMITER);
-//        for (String styleName : styleSet) {
-//          Style style = context.getStyle(styleName);
-//          if (null != style) {
-//            process(style, (ProteusView) view, (handler != null ? handler : ViewParser.this));
-//          }
-//        }
-//      }
-
-      private void process(Style style, ProteusView proteusView, ViewTypeParser handler) {
-        for (Map.Entry<String, Value> entry : style.getValues().entrySet()) {
-          //noinspection unchecked
-          int id = handler.getAttributeId(entry.getKey());
-          if (id == -1) {
-            // try app: namespace
-            id = handler.getAttributeId("app:" + entry.getKey());
-          }
-
-          ProteusContext context = proteusView.getViewManager().getContext();
-
-          // try to resolve the value, this value may be a string and
-          // we want to resolve it to its proper type
-          Value value = AttributeProcessor.staticPreCompile(entry.getValue(), context, context.getFunctionManager());
-          if (value == null) {
-            // the value could not be resolved, fallback to the original value
-            value = entry.getValue();
-          }
-          if (id != -1) {
-            handler.handleAttribute(proteusView.getAsView(), id, value);
-          } else {
-            if (ProteusConstants.isLoggingEnabled()) {
-              Log.d(TAG, "Unknown attribute: " + entry.getKey());
-            }
-          }
-        }
-      }
-
-      @Override
-      public void handleStyle(V view, Style style) {
-        ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
-        ProteusContext context = viewManager.getContext();
-        Layout layout = viewManager.getLayout();
-
-        ViewTypeParser handler = context.getInflater().getParser(layout);
-        process(style, (ProteusView) view, (handler != null ? handler : ViewParser.this));
-      }
-    });
+    addAttributeProcessor(Attributes.View.Style, new StyleResourceProcessor<V>());
 
     addAttributeProcessor(Attributes.View.TransitionName, new StringAttributeProcessor<V>() {
       @Override
@@ -602,10 +506,6 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       public void setString(V view, String value) {
 
         switch (value) {
-          case NONE:
-            view.setVerticalFadingEdgeEnabled(false);
-            view.setHorizontalFadingEdgeEnabled(false);
-            break;
           case BOTH:
             view.setVerticalFadingEdgeEnabled(true);
             view.setHorizontalFadingEdgeEnabled(true);
@@ -618,6 +518,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
             view.setVerticalFadingEdgeEnabled(false);
             view.setHorizontalFadingEdgeEnabled(true);
             break;
+          case NONE:
           default:
             view.setVerticalFadingEdgeEnabled(false);
             view.setHorizontalFadingEdgeEnabled(false);

@@ -1,10 +1,13 @@
 package com.flipkart.android.proteus.value;
 
+import android.view.View;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.toolbox.ProteusHelper;
 
@@ -80,6 +83,7 @@ public class Style extends Value {
         ProteusView.Manager viewManager = view.getViewManager();
         ProteusContext context = viewManager.getContext();
         viewManager.setStyle(this);
+
         Style style = this;
         while (style != null) {
             int id = ProteusHelper.getAttributeId(view, Attributes.View.Style);
