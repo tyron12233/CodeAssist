@@ -6,6 +6,7 @@ import com.flipkart.android.proteus.ProteusConstants;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.processor.DimensionAttributeProcessor;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
@@ -27,7 +28,7 @@ public abstract class ShapeAppearanceProcessor<V extends View> extends Attribute
         } else if (value.isResource()) {
             handleResource(view, value.getAsResource());
         } else if (value.isPrimitive()) {
-            ProteusContext context = (ProteusContext) view.getContext();
+            ProteusContext context = ProteusHelper.getProteusContext(view);
             value = staticPreCompile(value, context, context.getFunctionManager());
             if (value != null) {
                 handleValue(view, value);

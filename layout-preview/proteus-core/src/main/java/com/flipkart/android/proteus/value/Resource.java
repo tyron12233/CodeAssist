@@ -284,7 +284,7 @@ public class Resource extends Value {
     }
 
     @Nullable
-    public ColorStateList getColorStateList(Context context) {
+    public ColorStateList getColorStateList(ProteusContext context) {
         return getColorStateList(name, (ProteusContext) context);
     }
 

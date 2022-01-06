@@ -83,7 +83,7 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
 
   @Override
   public void handleResource(V view, Resource resource) {
-    ColorStateList colors = resource.getColorStateList(view.getContext());
+    ColorStateList colors = resource.getColorStateList(ProteusHelper.getProteusContext(view));
     if (null != colors) {
       setColor(view, colors);
     } else {

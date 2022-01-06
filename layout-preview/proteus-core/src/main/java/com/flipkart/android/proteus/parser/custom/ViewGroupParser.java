@@ -32,6 +32,7 @@ import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.processor.BooleanAttributeProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
 import com.flipkart.android.proteus.toolbox.Attributes;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Binding;
 import com.flipkart.android.proteus.value.Layout;
@@ -147,7 +148,7 @@ public class ViewGroupParser<T extends ViewGroup> extends ViewTypeParser<T> {
 
   @Override
   public boolean handleChildren(T view, Value children) {
-    ProteusContext context = (ProteusContext) view.getContext();
+    ProteusContext context = ProteusHelper.getProteusContext(view);
     ProteusLayoutInflater layoutInflater = context.getInflater();
     ObjectValue data = new ObjectValue();
     int dataIndex = -1;

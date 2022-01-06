@@ -35,6 +35,13 @@ public class TextInputLayoutParser extends ViewTypeParser<View> {
         return LinearLayout.class.getName();
     }
 
+    @Nullable
+    @Override
+    protected String getDefaultStyleName() {
+        return "@style/Widget.Design.TextInputLayout";
+
+    }
+
     @NonNull
     @Override
     public ProteusView createView(@NonNull ProteusContext context, @NonNull Layout layout,
