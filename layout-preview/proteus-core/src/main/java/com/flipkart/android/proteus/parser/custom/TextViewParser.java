@@ -16,6 +16,7 @@
 
 package com.flipkart.android.proteus.parser.custom;
 
+import android.annotation.SuppressLint;
 import android.content.res.ColorStateList;
 import android.graphics.Paint;
 import android.graphics.Typeface;
@@ -36,6 +37,7 @@ import com.flipkart.android.proteus.processor.DimensionAttributeProcessor;
 import com.flipkart.android.proteus.processor.DrawableResourceProcessor;
 import com.flipkart.android.proteus.processor.GravityAttributeProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
+import com.flipkart.android.proteus.processor.StyleResourceProcessor;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
@@ -228,6 +230,7 @@ public class TextViewParser<T extends TextView> extends ViewTypeParser<T> {
     });
 
     addAttributeProcessor(Attributes.TextView.Suffix, new StringAttributeProcessor<T>() {
+      @SuppressLint("SetTextI18n")
       @Override
       public void setString(T view, String value) {
         view.setText(view.getText() + value);
@@ -261,5 +264,7 @@ public class TextViewParser<T extends TextView> extends ViewTypeParser<T> {
         view.setHint(value);
       }
     });
+
+    addAttributeProcessor("android:textAppearance", new StyleResourceProcessor<>());
   }
 }

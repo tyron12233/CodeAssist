@@ -16,6 +16,7 @@ import com.flipkart.android.proteus.processor.DrawableResourceProcessor;
 import com.flipkart.android.proteus.processor.GravityAttributeProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
 import com.flipkart.android.proteus.toolbox.Attributes;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.tyron.layout.appcompat.AppCompatModuleAttributeHelper;
@@ -82,7 +83,7 @@ public class CoordinatorLayoutParser<V extends View> extends ViewTypeParser<V> {
             public void setString(V view, String value) {
                 if (view.getLayoutParams() instanceof CoordinatorLayout.LayoutParams) {
                     ((CoordinatorLayout.LayoutParams) view.getLayoutParams()).setAnchorId(
-                            ((ProteusContext) view.getContext()).getInflater().getUniqueViewId(value));
+                            ProteusHelper.getProteusContext(view).getInflater().getUniqueViewId(value));
                 }
             }
         });

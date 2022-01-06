@@ -23,6 +23,7 @@ import android.view.View;
 
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusLayoutInflater;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Color;
 import com.flipkart.android.proteus.value.DrawableValue;
@@ -77,20 +78,20 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
     if (value.isDrawable()) {
       DrawableValue d = value.getAsDrawable();
       if (null != d) {
-        ProteusContext context = (ProteusContext) view.getContext();
+        ProteusContext context = ProteusHelper.getProteusContext(view);
         ProteusLayoutInflater.ImageLoader loader = context.getLoader();
         d.apply(view, context, loader, drawable -> {
           setDrawable(view, drawable);
         });
       }
     } else {
-      process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
+      process(view, precompile(value, ProteusHelper.getProteusContext(view), (ProteusHelper.getProteusContext(view)).getFunctionManager()));
     }
   }
 
   @Override
   public void handleResource(V view, Resource resource) {
-    ProteusContext context = (ProteusContext) view.getContext();
+    ProteusContext context = ProteusHelper.getProteusContext(view);
     DrawableValue drawableValue = resource.getProteusDrawable(context);
     if (drawableValue == null) {
       Drawable d = resource.getDrawable(context);

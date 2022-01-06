@@ -21,6 +21,7 @@ import android.content.res.TypedArray;
 import android.view.View;
 
 import com.flipkart.android.proteus.ProteusContext;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Dimension;
 import com.flipkart.android.proteus.value.Resource;
@@ -70,13 +71,13 @@ public abstract class DimensionAttributeProcessor<T extends View> extends Attrib
     if (value.isDimension()) {
       setDimension(view, value.getAsDimension().apply(view.getContext()));
     } else if (value.isPrimitive()) {
-      process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
+      process(view, precompile(value, ProteusHelper.getProteusContext(view), (ProteusHelper.getProteusContext(view)).getFunctionManager()));
     }
   }
 
   @Override
   public void handleResource(T view, Resource resource) {
-    Float dimension = resource.getDimension((ProteusContext) view.getContext());
+    Float dimension = resource.getDimension(ProteusHelper.getProteusContext(view));
     setDimension(view, null == dimension ? 0 : dimension);
   }
 

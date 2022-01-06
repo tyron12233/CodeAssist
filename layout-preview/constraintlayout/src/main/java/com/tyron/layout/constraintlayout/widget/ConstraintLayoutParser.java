@@ -13,6 +13,7 @@ import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.parser.ParseHelper;
 import com.flipkart.android.proteus.processor.NumberAttributeProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.tyron.layout.constraintlayout.view.ProteusConstraintLayout;
@@ -49,7 +50,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).leftToLeft =
                             value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID :
-                                    ((ProteusContext) view.getContext())
+                                    ProteusHelper.getProteusContext(view)
                                             .getInflater()
                                             .getUniqueViewId(ParseHelper.parseViewId(value));
                 }
@@ -61,7 +62,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).leftToRight =
                             value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID :
-                                    ((ProteusContext) view.getContext())
+                                    ProteusHelper.getProteusContext(view)
                                             .getInflater()
                                             .getUniqueViewId(ParseHelper.parseViewId(value));
                 }
@@ -72,7 +73,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
             public void setString(T view, String value) {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).rightToLeft =
-                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ((ProteusContext) view.getContext())
+                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ProteusHelper.getProteusContext(view)
                                     .getInflater()
                                     .getUniqueViewId(ParseHelper.parseViewId(value));
                 }
@@ -84,7 +85,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).rightToRight =
                             value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID :
-                                    ((ProteusContext) view.getContext())
+                                    ProteusHelper.getProteusContext(view)
                                             .getInflater().getUniqueViewId(ParseHelper.parseViewId(value));
                 }
             }
@@ -94,7 +95,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
             public void setString(T view, String value) {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).startToStart =
-                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ((ProteusContext) view.getContext())
+                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ProteusHelper.getProteusContext(view)
                                     .getInflater().getUniqueViewId(ParseHelper.parseViewId(value));
                 }
             }
@@ -104,7 +105,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
             public void setString(T view, String value) {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).startToEnd =
-                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ((ProteusContext) view.getContext())
+                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ProteusHelper.getProteusContext(view)
                                     .getInflater().getUniqueViewId(ParseHelper.parseViewId(value));
                 }
             }
@@ -114,7 +115,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
             public void setString(T view, String value) {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).endToStart =
-                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ((ProteusContext) view.getContext())
+                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ProteusHelper.getProteusContext(view)
                                     .getInflater().getUniqueViewId(ParseHelper.parseViewId(value));
                 }
             }
@@ -124,7 +125,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
             public void setString(T view, String value) {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).endToEnd =
-                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ((ProteusContext) view.getContext())
+                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ProteusHelper.getProteusContext(view)
                                     .getInflater().getUniqueViewId(ParseHelper.parseViewId(value));
                 }
             }
@@ -135,7 +136,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
             public void setString(T view, String value) {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).bottomToBottom =
-                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ((ProteusContext) view.getContext())
+                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ProteusHelper.getProteusContext(view)
                                     .getInflater().getUniqueViewId(ParseHelper.parseViewId(value));
                 }
             }
@@ -145,7 +146,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
             public void setString(T view, String value) {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).bottomToTop =
-                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ((ProteusContext) view.getContext())
+                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ProteusHelper.getProteusContext(view)
                                     .getInflater().getUniqueViewId(ParseHelper.parseViewId(value));
                 }
             }
@@ -155,7 +156,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
             public void setString(T view, String value) {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).topToBottom =
-                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ((ProteusContext) view.getContext())
+                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ProteusHelper.getProteusContext(view)
                                     .getInflater().getUniqueViewId(ParseHelper.parseViewId(value));
                 }
             }
@@ -165,7 +166,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
             public void setString(T view, String value) {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).topToTop =
-                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ((ProteusContext) view.getContext())
+                            value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ProteusHelper.getProteusContext(view)
                                     .getInflater()
                                     .getUniqueViewId(ParseHelper.parseViewId(value));
                 }

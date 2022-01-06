@@ -22,6 +22,7 @@ import android.view.View;
 
 import com.flipkart.android.proteus.ProteusConstants;
 import com.flipkart.android.proteus.ProteusContext;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Resource;
 import com.flipkart.android.proteus.value.Style;
@@ -50,7 +51,7 @@ public abstract class StringAttributeProcessor<V extends View> extends Attribute
 
   @Override
   public void handleResource(V view, Resource resource) {
-    String string = resource.getString((ProteusContext) view.getContext());
+    String string = resource.getString(ProteusHelper.getProteusContext(view));
     setString(view, null == string ? ProteusConstants.EMPTY : string);
   }
 

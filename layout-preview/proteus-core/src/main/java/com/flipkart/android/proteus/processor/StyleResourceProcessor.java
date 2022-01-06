@@ -22,7 +22,7 @@ public class StyleResourceProcessor<V extends View> extends AttributeProcessor<V
             handleStyle(view, value.getAsStyle());
         } else {
             if (value.isPrimitive()) {
-                ProteusContext context = (ProteusContext) view.getContext();
+                ProteusContext context = ProteusHelper.getProteusContext(view);
                 Value value1 = Style.valueOf(value.toString(), context);
                 if (value1 != null && value1.isStyle()) {
                     handleStyle(view, value1.getAsStyle());
@@ -38,8 +38,7 @@ public class StyleResourceProcessor<V extends View> extends AttributeProcessor<V
 
     @Override
     public void handleAttributeResource(View view, AttributeResource attribute) {
-        ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
-        ProteusContext context = viewManager.getContext();
+        ProteusContext context = ProteusHelper.getProteusContext(view);
         String name = attribute.getName();
         Style style = context.getStyle();
         if (style != null) {
@@ -66,8 +65,7 @@ public class StyleResourceProcessor<V extends View> extends AttributeProcessor<V
     }
 
     private void handleAttributeValue(View view, String attributeName, Value value ) {
-        ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
-        ProteusContext context = viewManager.getContext();
+        ProteusContext context = ProteusHelper.getProteusContext(view);
 
         // try to resolve the value, this value may be a string and
         // we want to resolve it to its proper type

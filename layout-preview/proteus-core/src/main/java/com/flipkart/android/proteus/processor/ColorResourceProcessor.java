@@ -23,6 +23,7 @@ import android.view.View;
 
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Color;
 import com.flipkart.android.proteus.value.Resource;
@@ -76,7 +77,7 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
     } else if  (value.isResource()) {
       handleResource(view, value.getAsResource());
     } else if (value.isPrimitive()) {
-      process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
+      process(view, precompile(value, ProteusHelper.getProteusContext(view), (ProteusHelper.getProteusContext(view)).getFunctionManager()));
     }
   }
 
@@ -86,7 +87,7 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
     if (null != colors) {
       setColor(view, colors);
     } else {
-      Color color = resource.getColor((ProteusContext) view.getContext());
+      Color color = resource.getColor(ProteusHelper.getProteusContext(view));
       setColor(view, null == color ? Color.Int.BLACK.value : color.getAsInt());
     }
   }

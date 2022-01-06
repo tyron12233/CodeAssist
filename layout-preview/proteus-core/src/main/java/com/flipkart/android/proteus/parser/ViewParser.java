@@ -386,7 +386,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
         if (value.isPrimitive() && value.getAsPrimitive().isNumber()) {
           view.setVisibility(value.getAsInt());
         } else {
-          process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
+          process(view, precompile(value,  ProteusHelper.getProteusContext(view), ProteusHelper.getProteusContext(view).getFunctionManager()));
         }
       }
 
@@ -421,7 +421,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setString(final V view, String value) {
         if (view.getContext() instanceof ProteusContext) {
-          view.setId(((ProteusContext) view.getContext())
+          view.setId(ProteusHelper.getProteusContext(view)
                   .getInflater()
                   .getUniqueViewId(ParseHelper.parseViewId(value)));
         }
@@ -554,8 +554,6 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
 
     });
-
-
 
 
     // AppCompat Attributes

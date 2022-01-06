@@ -1,5 +1,7 @@
 package com.flipkart.android.proteus.toolbox;
 
+import android.content.Context;
+import android.view.ContextThemeWrapper;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -10,12 +12,36 @@ import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
 import com.flipkart.android.proteus.value.Array;
 import com.flipkart.android.proteus.value.Layout;
+import com.google.android.material.textfield.TextInputLayout;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class ProteusHelper {
+
+    /**
+     * Sometimes other views such as {@link TextInputLayout} wraps the context, thus making
+     * the ProteusContext inaccessible
+     * @return the {@link ProteusContext} for a specified view
+     */
+    public static ProteusContext getProteusContext(View view) {
+        if (view instanceof ProteusView) {
+            ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
+            if (viewManager != null) {
+                return viewManager.getContext();
+            }
+        }
+        Context context = view.getContext();
+        if (context instanceof ProteusContext) {
+            return (ProteusContext) context;
+        }
+        if (context instanceof ContextThemeWrapper) {
+            return (ProteusContext) ((ContextThemeWrapper) context).getBaseContext();
+        }
+
+        throw new IllegalArgumentException("View argument is not using a ProteusContext");
+    }
 
     public static void addChildToLayout(ProteusView parent, ProteusView child) {
         Layout.Attribute attribute = getChildrenAttribute(parent);

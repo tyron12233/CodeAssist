@@ -22,6 +22,7 @@ import android.view.View;
 import com.flipkart.android.proteus.ProteusConstants;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.parser.ParseHelper;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Resource;
 import com.flipkart.android.proteus.value.Style;
@@ -42,7 +43,7 @@ public abstract class BooleanAttributeProcessor<V extends View> extends Attribut
     if (value.isPrimitive() && value.getAsPrimitive().isBoolean()) {
       setBoolean(view, value.getAsPrimitive().getAsBoolean());
     } else {
-      process(view, precompile(value, (ProteusContext) view.getContext(), ((ProteusContext) view.getContext()).getFunctionManager()));
+      process(view, precompile(value, (ProteusContext) view.getContext(), ProteusHelper.getProteusContext(view).getFunctionManager()));
     }
   }
 
