@@ -10,6 +10,7 @@ import com.tyron.layout.appcompat.widget.FloatingActionButtonParser;
 import com.tyron.layout.appcompat.widget.MaterialButtonParser;
 import com.tyron.layout.appcompat.widget.MaterialCardViewParser;
 import com.tyron.layout.appcompat.widget.RecyclerViewParser;
+import com.tyron.layout.appcompat.widget.TextInputLayoutParser;
 import com.tyron.layout.appcompat.widget.VisibilityAwareImageButtonParser;
 
 public class AppCompatModule implements ProteusBuilder.Module {
@@ -33,6 +34,7 @@ public class AppCompatModule implements ProteusBuilder.Module {
         builder.register(new AppCompatButtonParser<>());
         builder.register(new MaterialButtonParser<>());
         builder.register(new AppCompatToolbarParser<>());
+        builder.register(new TextInputLayoutParser());
         AppCompatModuleAttributeHelper.register(builder);
     }
 }
