@@ -62,6 +62,8 @@ import com.flipkart.android.proteus.view.ProteusAndroidView;
 import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.shape.Shapeable;
 
+import java.util.Map;
+
 /**
  * @author kiran.kumar
  */
@@ -484,13 +486,6 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
     });
 
-    addAttributeProcessor(Attributes.View.Style, new StyleResourceProcessor<V>() {
-      @Override
-      public void handleStyle(View parent, View view, Style style) {
-        style.apply(parent, (ProteusView) view, true);
-      }
-    });
-
     addAttributeProcessor(Attributes.View.TransitionName, new StringAttributeProcessor<V>() {
       @Override
       public void setString(V view, String value) {
@@ -572,13 +567,36 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
     });
 
+    addAttributeProcessor(Attributes.View.Style, new StyleResourceProcessor<V>() {
+      @Override
+      public void handleStyle(View parent, View view, Style style) {
+        style.apply(parent, (ProteusView) view, false);
+      }
+    });
+
     addAttributeProcessor("android:theme", new StyleResourceProcessor<V>() {
+      @Override
+      public void handleStyle(View parent, View view, Style style) {
+        ProteusView proteusView = (ProteusView) view;
+        ProteusView.Manager viewManager = proteusView.getViewManager();
+
+        // if the viewas already a theme set, then its most likely that this is
+        // a theme overlay, we just override the values from the exisiting theme
+        if (viewManager.getStyle() != null) {
+          for (Map.Entry<String, Value> entry : style.getValues().entrySet()) {
+            viewManager.getStyle().addValue(entry.getKey(), entry.getValue());
+          }
+        } else {
+          style.apply(parent, (ProteusView) view, true);
+        }
+      }
+    });
+    addAttributeProcessor("materialThemeOverlay",  new StyleResourceProcessor<V>() {
       @Override
       public void handleStyle(View parent, View view, Style style) {
         style.apply(parent, (ProteusView) view, true);
       }
     });
-    addAttributeProcessor("materialThemeOverlay", new StyleResourceProcessor<>());
 
 //    addAttributeProcessor("app:elevation", new DimensionAttributeProcessor<V>() {
 //      @Override

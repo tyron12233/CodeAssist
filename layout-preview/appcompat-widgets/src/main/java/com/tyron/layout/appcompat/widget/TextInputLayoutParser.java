@@ -69,7 +69,7 @@ public class TextInputLayoutParser extends ViewTypeParser<View> {
             @Override
             public void setColor(View view, int color) {
                 if (view instanceof TextInputLayout) {
-                    ((TextInputLayout) view).setBoxBackgroundColor(color);
+                    view.post(() -> ((TextInputLayout) view).setBoxBackgroundColor(color));
                 }
             }
 
@@ -122,7 +122,7 @@ public class TextInputLayoutParser extends ViewTypeParser<View> {
             @Override
             public void setDimension(View view, float dimension) {
                 if (view instanceof TextInputLayout) {
-                    ((TextInputLayout) view).setBoxStrokeWidth((int) dimension);
+                    view.post(() -> ((TextInputLayout) view).setBoxStrokeWidth((int) dimension));
                 }
             }
         });
@@ -131,7 +131,7 @@ public class TextInputLayoutParser extends ViewTypeParser<View> {
             @Override
             public void setDimension(View view, float dimension) {
                 if (view instanceof TextInputLayout) {
-                    ((TextInputLayout) view).setBoxStrokeWidthFocused((int) dimension);
+                    view.post(() -> ((TextInputLayout) view).setBoxStrokeWidthFocused((int) dimension));
                 }
             }
         });
@@ -147,7 +147,7 @@ public class TextInputLayoutParser extends ViewTypeParser<View> {
             @Override
             public void setColor(View view, ColorStateList colors) {
                 if (view instanceof TextInputLayout) {
-                    ((TextInputLayout) view).setBoxStrokeColorStateList(colors);
+                    view.post(() -> ((TextInputLayout) view).setBoxStrokeColorStateList(colors));
                 }
             }
         });

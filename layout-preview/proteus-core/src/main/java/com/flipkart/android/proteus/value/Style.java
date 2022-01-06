@@ -81,11 +81,11 @@ public class Style extends Value {
         ProteusView.Manager viewManager = view.getViewManager();
         ProteusContext context = viewManager.getContext();
 
+        Set<Integer> handledAttributes = new HashSet<>();
+
         if (setTheme) {
             viewManager.setStyle(this);
         }
-
-        Set<Integer> handledAttributes = new HashSet<>();
 
         Style style = this;
         while (style != null) {
@@ -135,6 +135,10 @@ public class Style extends Value {
      */
     public void addValue(String name, String value) {
         values.addProperty(name, value);
+    }
+
+    public void addValue(String name, @NonNull Value value) {
+        values.addProperty(name, value.toString());
     }
 
     public ObjectValue getValues() {

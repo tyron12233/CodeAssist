@@ -100,11 +100,6 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
             view.setViewManager(viewManager);
         }
 
-        String defaultStyleName = parser.getDefaultStyleName();
-        if (defaultStyleName != null) {
-            applyStyle(parent, defaultStyleName, view);
-        }
-
         /*
          * Handle each attribute and set it on the view.
          */
@@ -112,13 +107,31 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
             Iterator<Layout.Attribute> iterator = layout.attributes.iterator();
             Layout.Attribute attribute;
 
-            // handle theme attribute first so children can inherit from it
-            int theme = parser.getAttributeId("android:theme");
+            // handle theme attribute or style first so children can inherit from it
+            int theme = parser.getAttributeId("style");
             int index = layout.attributes.indexOf(new Layout.Attribute(theme, null));
             if (index != -1) {
                 Layout.Attribute themeAttribute = layout.attributes.get(index);
                 if (themeAttribute != null) {
                     handleAttribute(parser, view, parent, themeAttribute.id, themeAttribute.value);
+                }
+            }
+
+            boolean applyStyle = index == -1;
+
+            theme = parser.getAttributeId("android:theme");
+            index = layout.attributes.indexOf(new Layout.Attribute(theme, null));
+            if (index != -1) {
+                Layout.Attribute themeAttribute = layout.attributes.get(index);
+                if (themeAttribute != null) {
+                    handleAttribute(parser, view, parent, themeAttribute.id, themeAttribute.value);
+                }
+            }
+
+            if (applyStyle) {
+                String defaultStyleName = parser.getDefaultStyleName();
+                if (defaultStyleName != null) {
+                    applyStyle(parent, defaultStyleName, view);
                 }
             }
 

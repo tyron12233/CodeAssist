@@ -52,20 +52,23 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
 
   public static Value staticCompile(@Nullable Value value, ProteusContext context) {
     if (null == value) {
-      return Color.Int.BLACK;
+      return Color.Int.getDefaultColor();
     }
     if (value.isColor()) {
       return value;
     } else if (value.isObject()) {
       return Color.valueOf(value.getAsObject(), context);
     } else if (value.isPrimitive()) {
+      if ("@null".equals(value.toString())) {
+        return Color.Int.valueOf(android.graphics.Color.TRANSPARENT);
+      }
       Value precompiled = staticPreCompile(value.getAsPrimitive(), context, null);
       if (null != precompiled) {
         return precompiled;
       }
-      return Color.valueOf(value.getAsString(), Color.Int.BLACK);
+      return Color.valueOf(value.getAsString(), Color.Int.getDefaultColor());
     } else {
-      return Color.Int.BLACK;
+      return Color.Int.getDefaultColor();
     }
   }
 
@@ -87,7 +90,7 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
       setColor(view, colors);
     } else {
       Color color = resource.getColor(ProteusHelper.getProteusContext(view));
-      setColor(view, null == color ? Color.Int.BLACK.value : color.getAsInt());
+      setColor(view, null == color ? Color.Int.getDefaultColor().value : color.getAsInt());
     }
   }
 
@@ -97,7 +100,7 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
     ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
     ProteusContext context = viewManager.getContext();
     Value value = context.obtainStyledAttribute(parent, view, name);
-    process(parent, view, value != null ? value : Color.Int.BLACK);
+    process(parent, view, value != null ? value : Color.Int.getDefaultColor());
   }
 
   @Override
@@ -111,7 +114,7 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
     if (null != colors) {
       setColor(view, colors);
     } else {
-      setColor(view, a.getColor(0, Color.Int.BLACK.value));
+      setColor(view, a.getColor(0, Color.Int.getDefaultColor().value));
     }
   }
 

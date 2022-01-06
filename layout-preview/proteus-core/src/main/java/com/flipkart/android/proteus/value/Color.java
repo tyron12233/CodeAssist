@@ -171,7 +171,7 @@ public abstract class Color extends Value {
       }
     }
 
-    return Int.BLACK;
+    return Int.getDefaultColor();
   }
 
   private static int apply(String value) {
@@ -180,7 +180,7 @@ public abstract class Color extends Value {
     if (color instanceof Int) {
       colorInt = ((Int) color).value;
     } else {
-      colorInt = Int.BLACK.value;
+      colorInt = Int.getDefaultColor().value;
     }
     return colorInt;
   }
@@ -253,7 +253,11 @@ public abstract class Color extends Value {
 
   public static class Int extends Color {
 
-    public static final Int BLACK = new Int(0xfffe6262);
+    public static final Int BLACK = new Int(0);
+
+    public static Int getDefaultColor() {
+      return BLACK;
+    }
 
     @ColorInt
     public final int value;
