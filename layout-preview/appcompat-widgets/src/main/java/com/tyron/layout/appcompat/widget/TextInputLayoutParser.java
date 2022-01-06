@@ -16,10 +16,12 @@ import com.flipkart.android.proteus.processor.ColorResourceProcessor;
 import com.flipkart.android.proteus.processor.DimensionAttributeProcessor;
 import com.flipkart.android.proteus.processor.NumberAttributeProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
+import com.flipkart.android.proteus.processor.StyleResourceProcessor;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.google.android.material.textfield.TextInputLayout;
+import com.tyron.layout.appcompat.R;
 import com.tyron.layout.appcompat.view.ProteusTextInputLayout;
 
 public class TextInputLayoutParser extends ViewTypeParser<View> {
@@ -38,7 +40,7 @@ public class TextInputLayoutParser extends ViewTypeParser<View> {
     @Nullable
     @Override
     protected String getDefaultStyleName() {
-        return "@style/Widget.Design.TextInputLayout";
+        return "?attr/textInputStyle";
 
     }
 
@@ -74,7 +76,17 @@ public class TextInputLayoutParser extends ViewTypeParser<View> {
             @Override
             public void setColor(View view, ColorStateList colors) {
                 if (view instanceof TextInputLayout) {
-                    ((TextInputLayout) view).setBoxBackgroundColorStateList(colors);
+                    // wait for the box background mode to be set
+                    view.post(() -> ((TextInputLayout) view).setBoxBackgroundColorStateList(colors));
+                }
+            }
+        });
+
+        addAttributeProcessor("app:elevation", new DimensionAttributeProcessor<View>() {
+            @Override
+            public void setDimension(View view, float dimension) {
+                if (view instanceof TextInputLayout) {
+                    ((TextInputLayout) view).setElevation(dimension);
                 }
             }
         });
@@ -87,11 +99,13 @@ public class TextInputLayoutParser extends ViewTypeParser<View> {
                     case "filled":
                         mode = TextInputLayout.BOX_BACKGROUND_FILLED;
                         break;
+                    case "outline":
+                        mode = TextInputLayout.BOX_BACKGROUND_OUTLINE;
+                        break;
+                    default:
                     case "none":
                         mode = TextInputLayout.BOX_BACKGROUND_NONE;
-                    default:
-                    case "outline":
-                        mode = TextInputLayout.BOX_BACKGROUND_NONE;
+                        break;
                 }
                 if (view instanceof TextInputLayout) {
                     ((TextInputLayout) view).setBoxBackgroundMode(mode);
@@ -188,7 +202,44 @@ public class TextInputLayoutParser extends ViewTypeParser<View> {
             }
         });
 
+        addAttributeProcessor("app:counterTextAppearance", new StyleResourceProcessor<>());
+        addAttributeProcessor("app:hintTextAppearance", new StyleResourceProcessor<>());
+        addAttributeProcessor("app:errorTextAppearance", new StyleResourceProcessor<>());
+        addAttributeProcessor("app:counterOverflowTextAppearance", new StyleResourceProcessor<>());
+        addAttributeProcessor("app:placeholderTextAppearance", new StyleResourceProcessor<>());
+        addAttributeProcessor("app:helperTextTextAppearance", new StyleResourceProcessor<>());
 
+        addAttributeProcessor(Attributes.TextView.TextColorHint, new ColorResourceProcessor<View>() {
+            @Override
+            public void setColor(View view, int color) {
+                if (view instanceof TextInputLayout) {
+                    ((TextInputLayout) view).setDefaultHintTextColor(ColorStateList.valueOf(color));
+                }
+            }
+
+            @Override
+            public void setColor(View view, ColorStateList colors) {
+                if (view instanceof TextInputLayout) {
+                    ((TextInputLayout) view).setDefaultHintTextColor(colors);
+                }
+            }
+        });
+
+        addAttributeProcessor("app:hintTextColor", new ColorResourceProcessor<View>() {
+            @Override
+            public void setColor(View view, int color) {
+                if (view instanceof TextInputLayout) {
+                    ((TextInputLayout) view).setHintTextColor(ColorStateList.valueOf(color));
+                }
+            }
+
+            @Override
+            public void setColor(View view, ColorStateList colors) {
+                if (view instanceof TextInputLayout) {
+                    ((TextInputLayout) view).setHintTextColor(colors);
+                }
+            }
+        });
     }
 
     /**

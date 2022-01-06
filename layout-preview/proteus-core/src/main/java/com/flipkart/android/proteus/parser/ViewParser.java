@@ -62,8 +62,6 @@ import com.flipkart.android.proteus.view.ProteusAndroidView;
 import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.shape.Shapeable;
 
-import java.util.Map;
-
 /**
  * @author kiran.kumar
  */
@@ -177,7 +175,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
 
       @Override
-      public void handleAttributeResource(V view, AttributeResource attribute) {
+      public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
         ProteusView proteusView = ((ProteusView) view);
         Value value =
                 proteusView.getViewManager().getStyle().getValue(attribute.getName(), attribute);
@@ -185,7 +183,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
         if (id != -1) {
           ViewTypeParser<View> viewTypeParser = proteusView.getViewManager().getViewTypeParser();
           if (viewTypeParser != null) {
-            viewTypeParser.handleAttribute(view, id, value);
+            viewTypeParser.handleAttribute((View) view.getParent(), view, id, value);
           }
         }
       }
@@ -369,7 +367,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
     addAttributeProcessor(Attributes.View.Elevation, new DimensionAttributeProcessor<V>() {
       @Override
       public void setDimension(V view, float dimension) {
-        view.setElevation(dimension);
+        ViewCompat.setElevation(view, dimension);
       }
     });
 
@@ -382,28 +380,28 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
 
     addAttributeProcessor(Attributes.View.Visibility, new AttributeProcessor<V>() {
       @Override
-      public void handleValue(V view, Value value) {
+      public void handleValue(View parent, V view, Value value) {
         if (value.isPrimitive() && value.getAsPrimitive().isNumber()) {
           view.setVisibility(value.getAsInt());
         } else {
-          process(view, precompile(value,  ProteusHelper.getProteusContext(view), ProteusHelper.getProteusContext(view).getFunctionManager()));
+          process((View) view.getParent(), view, precompile(value,  ProteusHelper.getProteusContext(view), ProteusHelper.getProteusContext(view).getFunctionManager()));
         }
       }
 
       @Override
-      public void handleResource(V view, Resource resource) {
+      public void handleResource(View parent, V view, Resource resource) {
         Integer visibility = resource.getInteger(view.getContext());
         view.setVisibility(null != visibility ? visibility : View.GONE);
       }
 
       @Override
-      public void handleAttributeResource(V view, AttributeResource attribute) {
+      public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
         TypedArray a = attribute.apply(view.getContext());
         view.setVisibility(a.getInt(0, View.GONE));
       }
 
       @Override
-      public void handleStyle(V view, Style style) {
+      public void handleStyle(View parent, V view, Style style) {
         Value gone = style.getValue(Attributes.View.Visibility, new Primitive("gone"));
         if (view instanceof ProteusView) {
           ((ProteusView) view).getViewManager().updateAttribute(Attributes.View.Visibility, gone.toString());
@@ -486,7 +484,12 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
     });
 
-    addAttributeProcessor(Attributes.View.Style, new StyleResourceProcessor<V>());
+    addAttributeProcessor(Attributes.View.Style, new StyleResourceProcessor<V>() {
+      @Override
+      public void handleStyle(View parent, View view, Style style) {
+        style.apply(parent, (ProteusView) view, true);
+      }
+    });
 
     addAttributeProcessor(Attributes.View.TransitionName, new StringAttributeProcessor<V>() {
       @Override
@@ -569,14 +572,32 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
     });
 
-    addAttributeProcessor("app:elevation", new DimensionAttributeProcessor<V>() {
+    addAttributeProcessor("android:theme", new StyleResourceProcessor<V>() {
       @Override
-      public void setDimension(V view, float dimension) {
-        ViewCompat.setElevation(view, dimension);
+      public void handleStyle(View parent, View view, Style style) {
+        style.apply(parent, (ProteusView) view, true);
+      }
+    });
+    addAttributeProcessor("materialThemeOverlay", new StyleResourceProcessor<>());
+
+//    addAttributeProcessor("app:elevation", new DimensionAttributeProcessor<V>() {
+//      @Override
+//      public void setDimension(V view, float dimension) {
+//        ViewCompat.setElevation(view, dimension);
+//      }
+//    });
+
+    addAttributeProcessor("app:shapeAppearance", new ShapeAppearanceProcessor<V>() {
+
+      @Override
+      public void setShapeAppearance(View view, ShapeAppearanceModel model) {
+        if (view instanceof Shapeable) {
+          ((Shapeable) view).setShapeAppearanceModel(model);
+        }
       }
     });
 
-    addAttributeProcessor("app:shapeAppearance", new ShapeAppearanceProcessor<V>() {
+    addAttributeProcessor("app:shapeAppearanceOverlay", new ShapeAppearanceProcessor<V>() {
 
       @Override
       public void setShapeAppearance(View view, ShapeAppearanceModel model) {
