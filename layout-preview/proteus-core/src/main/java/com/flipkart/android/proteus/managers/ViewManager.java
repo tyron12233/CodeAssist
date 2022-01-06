@@ -166,7 +166,7 @@ public class ViewManager implements ProteusView.Manager {
     @Override
     @Nullable
     public Style getStyle() {
-        return context.getStyle();
+        return this.style;
     }
 
     @Override
@@ -221,6 +221,8 @@ public class ViewManager implements ProteusView.Manager {
 
     @Override
     public void updateAttribute(String name, Value value) {
+        removeAttribute(name);
+
         if (value.isPrimitive()) {
             Value result = AttributeProcessor.staticPreCompile(value.getAsPrimitive(), context, context.getFunctionManager());
             if (result != null) {
@@ -228,14 +230,15 @@ public class ViewManager implements ProteusView.Manager {
             }
         }
         int attributeId = ProteusHelper.getAttributeId((ProteusView) view, name);
-        ViewTypeParser<View> parser = ProteusHelper.getViewTypeParser((ProteusView) view, name);
+        boolean isExtra = !ProteusHelper.isAttributeFromView((ProteusView) view, name, attributeId);
+        ViewTypeParser<View> parser = ProteusHelper.getViewTypeParser((ProteusView) view, name, isExtra);
         if (this.parser.equals(parser)) {
             if (layout.attributes == null) {
                 layout.attributes = new ArrayList<>();
             }
             layout.attributes.remove(new Layout.Attribute(attributeId, null));
             layout.attributes.add(new Layout.Attribute(attributeId, value));
-            parser.handleAttribute(view, attributeId, value);
+            parser.handleAttribute((View) view.getParent(), view, attributeId, value);
         } else {
             if (layout.extras == null) {
                 layout.extras = new ObjectValue();
@@ -243,7 +246,7 @@ public class ViewManager implements ProteusView.Manager {
             if (value != null) {
                 layout.extras.addProperty(name, value.getAsString());
                 if (parser != null) {
-                    parser.handleAttribute(view, attributeId, value);
+                    parser.handleAttribute((View) view.getParent(), view, attributeId, value);
                 }
             }
         }
@@ -287,6 +290,6 @@ public class ViewManager implements ProteusView.Manager {
 
     private void handleBinding(BoundAttribute boundAttribute) {
         //noinspection unchecked
-        parser.handleAttribute(view, boundAttribute.attributeId, boundAttribute.binding);
+        parser.handleAttribute((View) view.getParent(), view, boundAttribute.attributeId, boundAttribute.binding);
     }
 }

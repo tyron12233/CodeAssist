@@ -23,6 +23,7 @@ public class ProteusHelper {
     /**
      * Sometimes other views such as {@link TextInputLayout} wraps the context, thus making
      * the ProteusContext inaccessible
+     *
      * @return the {@link ProteusContext} for a specified view
      */
     public static ProteusContext getProteusContext(View view) {
@@ -41,6 +42,11 @@ public class ProteusHelper {
         }
 
         throw new IllegalArgumentException("View argument is not using a ProteusContext");
+    }
+
+    public static boolean isAttributeFromView(ProteusView view, String name, int id) {
+        String attributeName = getAttributeName(view, id, false);
+        return name.equals(attributeName);
     }
 
     public static void addChildToLayout(ProteusView parent, ProteusView child) {
@@ -72,12 +78,11 @@ public class ProteusHelper {
         String attributeNameFromParent = "Unknown";
 
         if (view.getAsView().getParent() instanceof ProteusView) {
-            attributeNameFromParent = getAttributeName((ProteusView) view.getAsView().getParent(), id);
+            attributeNameFromParent = getAttributeName((ProteusView) view.getAsView().getParent()
+                    , id);
         }
 
-        ViewTypeParser<View> parser = view.getViewManager()
-                .getContext()
-                .getParser(layoutType);
+        ViewTypeParser<View> parser = view.getViewManager().getContext().getParser(layoutType);
         if (parser != null) {
             attributeName = getAttributeName(parser.getAttributeSet(), id);
         }
@@ -89,7 +94,8 @@ public class ProteusHelper {
         return attributeName;
     }
 
-    public static String getAttributeName(ProteusContext context, Layout parentLayout, String layoutType, int id) {
+    public static String getAttributeName(ProteusContext context, Layout parentLayout,
+                                          String layoutType, int id) {
         ViewTypeParser<View> parser = context.getParser(layoutType);
         if (parser != null) {
             return getAttributeName(parser.getAttributeSet(), id);
@@ -123,12 +129,11 @@ public class ProteusHelper {
         String attributeNameFromParent = "Unknown";
 
         if (view.getAsView().getParent() instanceof ProteusView) {
-            attributeNameFromParent = getAttributeName((ProteusView) view.getAsView().getParent(), id);
+            attributeNameFromParent = getAttributeName((ProteusView) view.getAsView().getParent()
+                    , id);
         }
 
-        ViewTypeParser<View> parser = view.getViewManager()
-                .getContext()
-                .getParser(layoutType);
+        ViewTypeParser<View> parser = view.getViewManager().getContext().getParser(layoutType);
         if (parser != null) {
             attributeName = getAttributeName(parser.getAttributeSet(), id);
         }
@@ -140,7 +145,42 @@ public class ProteusHelper {
         return attributeName;
     }
 
-    public static ViewTypeParser<View> getViewTypeParser(@NonNull ProteusView view, String attributeName) {
+    @SuppressWarnings({"unchecked", "CastCanBeRemovedNarrowingVariableType"})
+    public static ViewTypeParser<View> getViewTypeParser(@NonNull ProteusView view,
+                                                         String attributeName, boolean isExtra) {
+        ProteusView.Manager viewManager = view.getViewManager();
+        int id = viewManager.getViewTypeParser().getAttributeId(attributeName);
+        ViewTypeParser<?> parser = null;
+        if (id != -1) {
+            parser = viewManager.getViewTypeParser();
+        }
+
+        ViewTypeParser<?> parentParser = null;
+
+        if (view.getAsView().getParent() instanceof ProteusView) {
+            ProteusView parent = (ProteusView) view.getAsView().getParent();
+            parentParser = parent.getViewManager().getViewTypeParser();
+        }
+
+        if (parser != null && parentParser != null) {
+            if (isExtra) {
+                //noinspection unchecked
+                return (ViewTypeParser<View>) parentParser;
+            } else {
+                return (ViewTypeParser<View>) parser;
+            }
+        }
+
+        if (parser != null) {
+            return (ViewTypeParser<View>) parser;
+        } else {
+            return (ViewTypeParser<View>) parentParser;
+        }
+    }
+
+
+    public static ViewTypeParser<View> getViewTypeParser(@NonNull ProteusView view,
+                                                         String attributeName) {
         ProteusView.Manager viewManager = view.getViewManager();
         int id = viewManager.getViewTypeParser().getAttributeId(attributeName);
         if (id != -1) {
@@ -150,7 +190,7 @@ public class ProteusHelper {
         if (view.getAsView().getParent() instanceof ProteusView) {
             ProteusView parent = (ProteusView) view.getAsView().getParent();
             //noinspection unchecked
-            return  parent.getViewManager().getViewTypeParser();
+            return parent.getViewManager().getViewTypeParser();
         }
         return null;
     }
@@ -170,7 +210,8 @@ public class ProteusHelper {
     }
 
     private static String getAttributeName(ViewTypeParser.AttributeSet attrs, int id) {
-        for (Map.Entry<String, ViewTypeParser.AttributeSet.Attribute> entry : attrs.getLayoutParamsAttributes().entrySet()) {
+        for (Map.Entry<String, ViewTypeParser.AttributeSet.Attribute> entry :
+                attrs.getLayoutParamsAttributes().entrySet()) {
             String k = entry.getKey();
             ViewTypeParser.AttributeSet.Attribute v = entry.getValue();
             if (v.id == id) {
@@ -178,7 +219,8 @@ public class ProteusHelper {
             }
         }
 
-        for (Map.Entry<String, ViewTypeParser.AttributeSet.Attribute> entry : attrs.getAttributes().entrySet()) {
+        for (Map.Entry<String, ViewTypeParser.AttributeSet.Attribute> entry :
+                attrs.getAttributes().entrySet()) {
             String k = entry.getKey();
             ViewTypeParser.AttributeSet.Attribute v = entry.getValue();
             if (v.id == id) {
@@ -193,9 +235,8 @@ public class ProteusHelper {
         if (attributes == null) {
             attributes = new ArrayList<>();
         }
-        ViewTypeParser.AttributeSet.Attribute attribute = view.getViewManager()
-                .getAvailableAttributes()
-                .get("children");
+        ViewTypeParser.AttributeSet.Attribute attribute =
+                view.getViewManager().getAvailableAttributes().get("children");
         if (attribute == null) {
             return null;
         }
