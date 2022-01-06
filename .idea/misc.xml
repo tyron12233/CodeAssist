@@ -107,6 +107,7 @@
         <entry key="app/src/main/res/xml/build_preferences.xml" value="0.25" />
         <entry key="app/src/main/res/xml/editor_preferences.xml" value="0.22" />
         <entry key="app/src/main/res/xml/root_preferences.xml" value="0.22" />
+        <entry key="layout-preview/src/main/res/layout/test_layout.xml" value="0.1" />
       </map>
     </option>
   </component>
