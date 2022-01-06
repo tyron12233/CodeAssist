@@ -4,6 +4,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.LayoutTransition;
 import android.app.Dialog;
+import android.content.ClipData;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -92,7 +93,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
 
     private final View.OnLongClickListener mOnLongClickListener = v -> {
         View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v);
-        ViewCompat.startDragAndDrop(v, null, shadowBuilder, v, 0);
+        ViewCompat.startDragAndDrop(v, ClipData.newPlainText("", ""), shadowBuilder, v, 0);
         return true;
     };
 
