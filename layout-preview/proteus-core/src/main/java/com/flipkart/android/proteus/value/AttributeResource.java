@@ -19,8 +19,10 @@ package com.flipkart.android.proteus.value;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.util.LruCache;
+import android.view.View;
 
 import com.flipkart.android.proteus.ProteusConstants;
+import com.flipkart.android.proteus.ProteusContext;
 
 import java.lang.reflect.Field;
 import java.util.HashMap;
@@ -135,6 +137,10 @@ public class AttributeResource extends Value {
 
   public TypedArray apply(@NonNull Context context) {
     return context.obtainStyledAttributes(new int[]{attributeId});
+  }
+
+  public Value resolve(View parent, View view, ProteusContext context) {
+    return context.obtainStyledAttribute(parent, view, getName());
   }
 
   @Override

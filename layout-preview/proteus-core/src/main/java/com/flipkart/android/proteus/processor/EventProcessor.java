@@ -40,22 +40,22 @@ import com.flipkart.android.proteus.value.Value;
 public abstract class EventProcessor<T extends View> extends AttributeProcessor<T> {
 
   @Override
-  public void handleValue(T view, Value value) {
+  public void handleValue(View parent, T view, Value value) {
     setOnEventListener(view, value);
   }
 
   @Override
-  public void handleResource(T view, Resource resource) {
+  public void handleResource(View parent, T view, Resource resource) {
     setOnEventListener(view, resource);
   }
 
   @Override
-  public void handleAttributeResource(T view, AttributeResource attribute) {
+  public void handleAttributeResource(View parent, T view, AttributeResource attribute) {
     setOnEventListener(view, attribute);
   }
 
   @Override
-  public void handleStyle(T view, Style style) {
+  public void handleStyle(View parent, T view, Style style) {
     setOnEventListener(view, style);
   }
 

@@ -39,28 +39,28 @@ import androidx.annotation.Nullable;
 public abstract class BooleanAttributeProcessor<V extends View> extends AttributeProcessor<V> {
 
   @Override
-  public void handleValue(V view, Value value) {
+  public void handleValue(View parent, V view, Value value) {
     if (value.isPrimitive() && value.getAsPrimitive().isBoolean()) {
       setBoolean(view, value.getAsPrimitive().getAsBoolean());
     } else {
-      process(view, precompile(value, (ProteusContext) view.getContext(), ProteusHelper.getProteusContext(view).getFunctionManager()));
+      process(parent, view, precompile(value, (ProteusContext) view.getContext(), ProteusHelper.getProteusContext(view).getFunctionManager()));
     }
   }
 
   @Override
-  public void handleResource(V view, Resource resource) {
+  public void handleResource(View parent, V view, Resource resource) {
     Boolean bool = resource.getBoolean(view.getContext());
     setBoolean(view, null != bool ? bool : false);
   }
 
   @Override
-  public void handleAttributeResource(V view, AttributeResource attribute) {
+  public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
     TypedArray a = attribute.apply(view.getContext());
     setBoolean(view, a.getBoolean(0, false));
   }
 
   @Override
-  public void handleStyle(V view, Style style) {
+  public void handleStyle(View parent, V view, Style style) {
 //    TypedArray a = style.apply(view.getContext());
 //    setBoolean(view, a.getBoolean(0, false));
   }

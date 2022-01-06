@@ -469,7 +469,7 @@ public abstract class Binding extends Value {
       //noinspection ConstantConditions because we want it to crash, it is an illegal state anyway
       Value[] out = new Value[in.length];
       for (int i = 0; i < in.length; i++) {
-        out[i] = AttributeProcessor.evaluate(context, in[i], data, index);
+        out[i] = AttributeProcessor.evaluate(context, null, in[i], data, index);
       }
 
       return out;

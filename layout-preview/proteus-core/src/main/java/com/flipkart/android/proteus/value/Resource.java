@@ -20,8 +20,8 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
 import android.util.LruCache;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -29,6 +29,7 @@ import androidx.annotation.StringDef;
 
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -140,11 +141,11 @@ public class Resource extends Value {
     }
 
     @Nullable
-    public static ColorStateList getColorStateList(String name, ProteusContext context) {
+    public static ColorStateList getColorStateList(String name, View parent, View view, ProteusContext context) {
         Value color = context.getProteusResources().getColor(name);
         if (color != null) {
             if (color instanceof Color.StateList || color instanceof Color.LazyStateList) {
-                return color.getAsColor().apply(context).colors;
+                return color.getAsColor().apply(parent, view).colors;
             }
         }
         return null;
@@ -165,14 +166,14 @@ public class Resource extends Value {
     }
 
     @Nullable
-    public static Float getDimension(String name, ProteusContext context) {
+    public static Dimension getDimension(String name, ProteusContext context) {
         Value dimension = context.getProteusResources().getDimension(name);
         if (dimension == null) {
             return null;
         }
 
         if (dimension.toString().endsWith("dp")) {
-            return Dimension.valueOf(dimension.toString()).apply(context);
+            return Dimension.valueOf(dimension.toString());
         }
 
         Value value = AttributeProcessor.staticPreCompile(dimension, context,
@@ -183,9 +184,7 @@ public class Resource extends Value {
             }
 
             if (value.isAttributeResource()) {
-                Style style = context.getStyle();
-                value = style.getValue(value.getAsAttributeResource().getName(), context,
-                        null);
+                value = context.obtainStyledAttribute(null, null, value.getAsAttributeResource().getName());
             } else {
                 break;
             }
@@ -284,8 +283,14 @@ public class Resource extends Value {
     }
 
     @Nullable
-    public ColorStateList getColorStateList(ProteusContext context) {
-        return getColorStateList(name, (ProteusContext) context);
+    public ColorStateList getColorStateList(View view) {
+        return getColorStateList(name, null, view, ProteusHelper.getProteusContext(view));
+    }
+
+
+    @Nullable
+    public ColorStateList getColorStateList(View parent, View view) {
+        return getColorStateList(name, parent, view, ProteusHelper.getProteusContext(view));
     }
 
     public DrawableValue getProteusDrawable(ProteusContext context) {
@@ -303,7 +308,7 @@ public class Resource extends Value {
     }
 
     @Nullable
-    public Float getDimension(ProteusContext context) {
+    public Dimension getDimension(ProteusContext context) {
         return getDimension(name, context);
     }
 

@@ -193,6 +193,16 @@ public class ParseHelper {
     return number;
   }
 
+  public static float parseFloat(Value v) {
+    String value;
+    if (v.isPrimitive()) {
+      value = v.toString();
+    } else {
+      return 0;
+    }
+    return parseFloat(value);
+  }
+
   public static double parseDouble(String attributeValue) {
     double number;
     if (ProteusConstants.DATA_NULL.equals(attributeValue)) {

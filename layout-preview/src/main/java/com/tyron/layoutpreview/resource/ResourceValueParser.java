@@ -62,7 +62,7 @@ public class ResourceValueParser {
     public Map<String, Value> mStrings = new HashMap<>();
     public Map<String, Style> mStyles = new HashMap<>();
     public Map<String, Value> mColors = new HashMap<>();
-    private Map<String, Value> mDimensions = new HashMap<>();
+    private final Map<String, Value> mDimensions = new HashMap<>();
 
     private final StringManager mStringManager = new StringManager() {
         @Override
@@ -247,7 +247,11 @@ public class ResourceValueParser {
                 Array children = objectValue.getAsArray("children");
                 int[][] states = new int[children.size()][];
                 Value[] colors = new Value[children.size()];
+                float[] alphas = new float[children.size()];
                 for (int i = 0; i < children.size(); i++) {
+                    // set the alpha to be 1 by default
+                    alphas[i] = 1;
+
                     ObjectValue child = children.get(i).getAsObject();
                     List<Integer> childStates = new ArrayList<>();
                     for (Map.Entry<String, Value> entry : child.entrySet()) {
@@ -260,6 +264,8 @@ public class ResourceValueParser {
 
                         if ("android:color".equals(entry.getKey())) {
                             colors[i] = entry.getValue();
+                        } else if ("android:alpha".equals(entry.getKey())) {
+                            alphas[i] = ParseHelper.parseFloat(entry.getValue());
                         }
                     }
 
@@ -271,7 +277,7 @@ public class ResourceValueParser {
                     states[i] = temp;
                 }
 
-                Color.LazyStateList lazyStateList = Color.LazyStateList.valueOf(states, colors);
+                Color.LazyStateList lazyStateList = Color.LazyStateList.valueOf(states, colors, alphas);
                 mColors.put(fileName.replace(".xml", ""), lazyStateList);
             }
         } catch (ConvertException e) {

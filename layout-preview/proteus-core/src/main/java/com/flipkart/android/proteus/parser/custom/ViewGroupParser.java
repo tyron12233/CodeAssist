@@ -120,27 +120,27 @@ public class ViewGroupParser<T extends ViewGroup> extends ViewTypeParser<T> {
 
     addAttributeProcessor(Attributes.ViewGroup.Children, new AttributeProcessor<T>() {
       @Override
-      public void handleBinding(T view, Binding value) {
+      public void handleBinding(View parent, T view, Binding value) {
         handleDataBoundChildren(view, value);
       }
 
       @Override
-      public void handleValue(T view, Value value) {
+      public void handleValue(View parent, T view, Value value) {
         handleChildren(view, value);
       }
 
       @Override
-      public void handleResource(T view, Resource resource) {
+      public void handleResource(View parent, T view, Resource resource) {
         throw new IllegalArgumentException("children cannot be a resource");
       }
 
       @Override
-      public void handleAttributeResource(T view, AttributeResource attribute) {
+      public void handleAttributeResource(View parent, T view, AttributeResource attribute) {
         throw new IllegalArgumentException("children cannot be a resource");
       }
 
       @Override
-      public void handleStyle(T view, Style style) {
+      public void handleStyle(View parent, T view, Style style) {
         throw new IllegalArgumentException("children cannot be a style attribute");
       }
     });

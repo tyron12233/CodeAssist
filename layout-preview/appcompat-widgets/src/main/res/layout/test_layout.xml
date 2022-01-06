@@ -8,7 +8,8 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
-        <TextView
+        <com.google.android.material.textfield.TextInputEditText
+            android:editTextBackground="@null"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content" />
     </com.google.android.material.textfield.TextInputLayout>

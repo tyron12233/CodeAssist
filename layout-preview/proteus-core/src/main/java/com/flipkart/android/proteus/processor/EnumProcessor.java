@@ -18,7 +18,7 @@ public abstract class EnumProcessor<V extends View> extends AttributeProcessor<V
     }
 
     @Override
-    public void handleValue(V view, Value value) {
+    public void handleValue(View parent, V view, Value value) {
         String name = value.getAsString();
         Integer integer = values.get(name);
         if (integer != null) {
@@ -29,17 +29,17 @@ public abstract class EnumProcessor<V extends View> extends AttributeProcessor<V
     }
 
     @Override
-    public void handleResource(V view, Resource resource) {
+    public void handleResource(View parent, V view, Resource resource) {
 
     }
 
     @Override
-    public void handleAttributeResource(V view, AttributeResource attribute) {
+    public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
 
     }
 
     @Override
-    public void handleStyle(V view, Style style) {
+    public void handleStyle(View parent, V view, Style style) {
 
     }
 

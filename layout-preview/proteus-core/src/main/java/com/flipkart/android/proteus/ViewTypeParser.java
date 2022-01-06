@@ -16,7 +16,6 @@
 
 package com.flipkart.android.proteus;
 
-import android.content.Context;
 import android.content.res.XmlResourceParser;
 import android.util.Log;
 import android.view.View;
@@ -170,20 +169,22 @@ public abstract class ViewTypeParser<V extends View> {
   protected abstract void addAttributeProcessors();
 
   /**
+   *
+   * @param parent
    * @param view
    * @param attributeId
    * @param value
    * @return
    */
-  public boolean handleAttribute(V view, int attributeId, Value value) {
+  public boolean handleAttribute(View parent, V view, int attributeId, Value value) {
     int position = getPosition(attributeId);
     if (position < 0) {
-      return null != parent && parent.handleAttribute(view, attributeId, value);
+      return null != this.parent && this.parent.handleAttribute(parent, view, attributeId, value);
     }
     try {
       //noinspection unchecked
       AttributeProcessor<V> processor = processors[position];
-      processor.process(view, value);
+      processor.process(parent, view, value);
       return true;
     } catch (Throwable e) {
       String name = "Unknown attribute";

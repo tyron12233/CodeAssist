@@ -7,9 +7,12 @@ import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
-import com.flipkart.android.proteus.ViewTypeParser;
-import com.flipkart.android.proteus.toolbox.Attributes;
+import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.toolbox.ProteusHelper;
+
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 public class Style extends Value {
 
@@ -74,21 +77,39 @@ public class Style extends Value {
         return def;
     }
 
-    /**
-     * Apply the attributes of this style to a {@link ProteusView}
-     * It will also apply the attributes of the parent theme if it has one
-     * @param view the view to apply the styles to
-     */
-    public void apply(ProteusView view) {
+    public void apply(View parent, ProteusView view, boolean setTheme) {
         ProteusView.Manager viewManager = view.getViewManager();
         ProteusContext context = viewManager.getContext();
-        viewManager.setStyle(this);
+
+        if (setTheme) {
+            viewManager.setStyle(this);
+        }
+
+        Set<Integer> handledAttributes = new HashSet<>();
 
         Style style = this;
         while (style != null) {
-            int id = ProteusHelper.getAttributeId(view, Attributes.View.Style);
-            if (id != -1) {
-                viewManager.getViewTypeParser().handleAttribute(view.getAsView(), id, style);
+
+            ObjectValue values = style.getValues();
+            for (Map.Entry<String, Value> entry : values.entrySet()) {
+                int id = ProteusHelper.getAttributeId(view, entry.getKey());
+                if (id == -1) {
+                    id = ProteusHelper.getAttributeId(view, "app:" + entry.getKey());
+                }
+                if (id != -1) {
+                    Value value = entry.getValue();
+                    if (value.isPrimitive()) {
+                        value = AttributeProcessor.staticPreCompile(value.getAsPrimitive(), context, context.getFunctionManager());
+                    }
+                    if (value == null) {
+                        value = entry.getValue();
+                    }
+                    if (!handledAttributes.contains(id)) {
+                        if (viewManager.getViewTypeParser().handleAttribute(parent, view.getAsView(), id, value)) {
+                            handledAttributes.add(id);
+                        }
+                    }
+                }
             }
             if (style.parent != null) {
                 style = context.getStyle(style.parent);
@@ -96,6 +117,15 @@ public class Style extends Value {
                 style = null;
             }
         }
+    }
+    /**
+     * Apply the attributes of this style to a {@link ProteusView}
+     * It will also apply the attributes of the parent theme if it has one
+     * @param parent
+     * @param view the view to apply the styles to
+     */
+    public void apply(View parent, ProteusView view) {
+        apply(parent, view, false);
     }
 
     /**

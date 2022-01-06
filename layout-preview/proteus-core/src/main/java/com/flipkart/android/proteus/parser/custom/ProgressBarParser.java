@@ -27,6 +27,7 @@ import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.ShapeDrawable;
 import android.os.Build;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ProgressBar;
 
@@ -92,7 +93,7 @@ public class ProgressBarParser<T extends ProgressBar> extends ViewTypeParser<T> 
 
     addAttributeProcessor(Attributes.ProgressBar.ProgressTint, new AttributeProcessor<T>() {
       @Override
-      public void handleValue(T view, Value value) {
+      public void handleValue(View parent, T view, Value value) {
         if (!value.isObject()) {
           return;
         }
@@ -112,19 +113,19 @@ public class ProgressBarParser<T extends ProgressBar> extends ViewTypeParser<T> 
       }
 
       @Override
-      public void handleResource(T view, Resource resource) {
+      public void handleResource(View parent, T view, Resource resource) {
         Drawable d = resource.getDrawable(ProteusHelper.getProteusContext(view));
         view.setProgressDrawable(d);
       }
 
       @Override
-      public void handleAttributeResource(T view, AttributeResource attribute) {
+      public void handleAttributeResource(View parent, T view, AttributeResource attribute) {
         TypedArray a = attribute.apply(view.getContext());
         view.setProgressDrawable(a.getDrawable(0));
       }
 
       @Override
-      public void handleStyle(T view, Style style) {
+      public void handleStyle(View parent, T view, Style style) {
 
       }
     });

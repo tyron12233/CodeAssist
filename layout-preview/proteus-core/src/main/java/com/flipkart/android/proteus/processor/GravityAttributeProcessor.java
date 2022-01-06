@@ -51,7 +51,7 @@ public abstract class GravityAttributeProcessor<V extends View> extends Attribut
           new com.flipkart.android.proteus.value.Gravity(android.view.Gravity.NO_GRAVITY);
 
   @Override
-  public void handleValue(V view, Value value) {
+  public void handleValue(View parent, V view, Value value) {
     int gravity = android.view.Gravity.NO_GRAVITY;
     if (value instanceof com.flipkart.android.proteus.value.Gravity) {
       gravity = value.getAsInt();
@@ -67,20 +67,20 @@ public abstract class GravityAttributeProcessor<V extends View> extends Attribut
   }
 
   @Override
-  public void handleResource(V view, Resource resource) {
+  public void handleResource(View parent, V view, Resource resource) {
     Integer gravity = resource.getInteger(view.getContext());
     //noinspection WrongConstant
     setGravity(view, null != gravity ? gravity : android.view.Gravity.NO_GRAVITY);
   }
 
   @Override
-  public void handleAttributeResource(V view, AttributeResource attribute) {
+  public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
     TypedArray a = attribute.apply(view.getContext());
     set(view, a);
   }
 
   @Override
-  public void handleStyle(V view, Style style) {
+  public void handleStyle(View parent, V view, Style style) {
 //    TypedArray a = style.apply(view.getContext());
 //    set(view, a);
   }

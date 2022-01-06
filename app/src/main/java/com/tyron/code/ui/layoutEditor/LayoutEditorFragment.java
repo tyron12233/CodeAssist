@@ -17,6 +17,7 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.view.ContextThemeWrapper;
 import androidx.core.view.ViewCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -278,7 +279,10 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         }
         setLoadingText("Parsing xml files");
 
-        mInflater = new PreviewLayoutInflater(requireContext(), (AndroidModule) module);
+        // need to wrap the context to a default theme so
+        // material widgets wont use CodeAssist's theme
+        ContextThemeWrapper wrapper = new ContextThemeWrapper(requireContext(), R.style.Theme_MaterialComponents_DayNight);
+        mInflater = new PreviewLayoutInflater(wrapper, (AndroidModule) module);
         mInflater.parseResources(mService).whenComplete((inflater, exception) ->
                 requireActivity().runOnUiThread(() -> {
                     if (inflater == null) {

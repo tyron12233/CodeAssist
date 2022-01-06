@@ -95,7 +95,7 @@ public class PreviewLayoutInflater {
                     layout.extras.entrySet().forEach(entry -> {
                         int id = viewParser.getAttributeId(entry.getKey());
                         if (id != -1) {
-                            viewParser.handleAttribute(view.getAsView(), id, entry.getValue());
+                            viewParser.handleAttribute(parent, view.getAsView(), id, entry.getValue());
                         } else {
                             if (parent != null) {
                                 //noinspection unchecked
@@ -103,7 +103,7 @@ public class PreviewLayoutInflater {
                                         .getViewManager().getViewTypeParser();
                                 id = parser.getAttributeId(entry.getKey());
                                 if (id != -1) {
-                                    parser.handleAttribute(view.getAsView(), id, entry.getValue());
+                                    parser.handleAttribute(parent, view.getAsView(), id, entry.getValue());
                                 }
                             }
                         }
@@ -212,7 +212,8 @@ public class PreviewLayoutInflater {
         }
         ObjectValue value = new ObjectValue();
         value.add("layout_name", new Primitive(name));
-        return Optional.of(inflater.inflate(name, value));
+        return Optional.of(inflater.
+                inflate(name, value));
     }
 
     @Deprecated

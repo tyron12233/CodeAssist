@@ -16,9 +16,7 @@
 
 package com.flipkart.android.proteus;
 
-import android.content.res.TypedArray;
 import android.util.Log;
-import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -27,12 +25,9 @@ import androidx.annotation.Nullable;
 
 import com.flipkart.android.proteus.exceptions.ProteusInflateException;
 import com.flipkart.android.proteus.processor.AttributeProcessor;
-import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
-import com.flipkart.android.proteus.value.Style;
-import com.flipkart.android.proteus.value.StyleResource;
 import com.flipkart.android.proteus.value.Value;
 
 import java.util.Iterator;
@@ -107,9 +102,8 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
 
         String defaultStyleName = parser.getDefaultStyleName();
         if (defaultStyleName != null) {
-            applyStyle(defaultStyleName, view);
+            applyStyle(parent, defaultStyleName, view);
         }
-
 
         /*
          * Handle each attribute and set it on the view.
@@ -117,8 +111,39 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
         if (layout.attributes != null) {
             Iterator<Layout.Attribute> iterator = layout.attributes.iterator();
             Layout.Attribute attribute;
+
+            // handle theme attribute first so children can inherit from it
+            int theme = parser.getAttributeId("android:theme");
+            int index = layout.attributes.indexOf(new Layout.Attribute(theme, null));
+            if (index != -1) {
+                Layout.Attribute themeAttribute = layout.attributes.get(index);
+                if (themeAttribute != null) {
+                    handleAttribute(parser, view, parent, themeAttribute.id, themeAttribute.value);
+                }
+            }
+
+            // then handle the children
+            ViewTypeParser<View> viewGroupParser = context.getParser(ViewGroup.class.getName());
+            // never null
+            assert viewGroupParser != null;
+
+            int children = viewGroupParser.getAttributeId("children");
+            index = layout.attributes.indexOf(new Layout.Attribute(children, null));
+            if (index != -1) {
+                Layout.Attribute childrenAttribute = layout.attributes.get(index);
+                if (childrenAttribute != null) {
+                    handleAttribute(viewGroupParser, view, parent, childrenAttribute.id, childrenAttribute.value);
+                }
+            }
+
             while (iterator.hasNext()) {
                 attribute = iterator.next();
+                if (children != -1 && attribute.id == children) {
+                    continue;
+                }
+                if (theme != -1 && attribute.id == theme) {
+                    continue;
+                }
                 handleAttribute(parser, view, parent, attribute.id, attribute.value);
             }
         }
@@ -128,55 +153,32 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
                 ViewTypeParser parentParser = context.getParser(getType(parent));
                 int id = parentParser.getAttributeId(entry.getKey());
                 if (id != -1) {
-                    parentParser.handleAttribute(view.getAsView(), id, entry.getValue());
+                    parentParser.handleAttribute(parent, view.getAsView(), id, entry.getValue());
                 }
             }
         }
-
         return view;
     }
 
-    private void applyStyle(String name, ProteusView view) {
+    private void applyStyle(View parent, String name, ProteusView view) {
         Value value = AttributeProcessor.staticPreCompile(new Primitive(name), context, context.getFunctionManager());
         if (value != null) {
-            applyStyle(view, value);
+            applyStyle(parent, view, value);
         }
     }
 
-    private void applyStyle(ProteusView view, Value value) {
+    private void applyStyle(View parent, ProteusView view, Value value) {
         if (value.isStyle()) {
-            value.getAsStyle().apply(view);
+            boolean apply = view.getViewManager().getStyle() == null;
+            value.getAsStyle().apply(parent, view, apply);
         } else if (value.isAttributeResource()) {
-            Style theme = context.getStyle();
-            Value style = theme.getValue(value.getAsAttributeResource().getName(), context, null);
+            Value style = context.obtainStyledAttribute(parent, view.getAsView(), value.getAsAttributeResource().getName());
             if (style != null && style.isStyle()) {
-                style.getAsStyle().apply(view);
+                style.getAsStyle().apply(parent, view);
             } else if (style != null && style.isPrimitive()) {
-                applyStyle(style.toString(), view);
+                applyStyle(parent, style.toString(), view);
             } else {
-               Log.d(TAG, "Unable to apply style: " + value);
-            }
-        }
-    }
-
-    private void applyStyleAttribute(ProteusView view, AttributeResource attributeResource) {
-        TypedArray apply = attributeResource.apply(context);
-        TypedValue typedValue = apply.peekValue(0);
-        CharSequence styleName = context.getResources().getResourceEntryName(typedValue.resourceId);
-        apply.recycle();
-
-        Style style = context.getStyle(styleName.toString());
-        if (style != null) {
-            style.apply(view);
-        } else {
-            StyleResource styleResource = StyleResource.valueOf(styleName.toString(), context);
-            if (styleResource != null) {
-                apply = styleResource.apply(context);
-                TypedValue t = apply.peekValue(0);
-                styleName = context.getResources().getResourceEntryName(t.resourceId);
-                apply.recycle();
-
-                applyStyle(view, new Primitive(styleName.toString()));
+               Log.d(TAG, "Unable to apply style: " + value + " style value: " + style);
             }
         }
     }
@@ -212,7 +214,8 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
     @NonNull
     @Override
     public ProteusView inflate(@NonNull String name, @NonNull ObjectValue data) {
-        return inflate(name, data, null, -1);
+        ProteusView inflate = inflate(name, data, null, -1);
+        return inflate;
     }
 
     @Override
@@ -263,19 +266,7 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
             Log.d(TAG, "Handle '" + attribute + "' : " + value);
         }
 
-        boolean success = parser.handleAttribute(view.getAsView(), attribute, value);
-
-//        if (!success) {
-//            ViewTypeParser parentParser = context.getParser(getType(parent));
-//            if (parentParser != null) {
-//                boolean found = parentParser.handleAttribute(view.getAsView(), attribute, value);
-//                if (found) {
-//                    return true;
-//                }
-//            }
-//        }
-
-        return success;
+        return parser.handleAttribute(parent, view.getAsView(), attribute, value);
     }
 
     private String getType(View view) {

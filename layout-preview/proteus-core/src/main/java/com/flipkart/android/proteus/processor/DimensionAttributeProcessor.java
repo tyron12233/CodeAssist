@@ -47,7 +47,7 @@ public abstract class DimensionAttributeProcessor<T extends View> extends Attrib
         result[0] = dimension;
       }
     };
-    processor.process(view, value);
+    processor.process((View) view.getParent(), view, value);
 
     return result[0];
   }
@@ -67,28 +67,28 @@ public abstract class DimensionAttributeProcessor<T extends View> extends Attrib
   }
 
   @Override
-  public final void handleValue(T view, Value value) {
+  public final void handleValue(View parent, T view, Value value) {
     if (value.isDimension()) {
       setDimension(view, value.getAsDimension().apply(view.getContext()));
     } else if (value.isPrimitive()) {
-      process(view, precompile(value, ProteusHelper.getProteusContext(view), (ProteusHelper.getProteusContext(view)).getFunctionManager()));
+      process(parent, view, precompile(value, ProteusHelper.getProteusContext(view), (ProteusHelper.getProteusContext(view)).getFunctionManager()));
     }
   }
 
   @Override
-  public void handleResource(T view, Resource resource) {
-    Float dimension = resource.getDimension(ProteusHelper.getProteusContext(view));
-    setDimension(view, null == dimension ? 0 : dimension);
+  public void handleResource(View parent, T view, Resource resource) {
+    Dimension dimension = resource.getDimension(ProteusHelper.getProteusContext(view));
+    setDimension(view, null == dimension ? 0 : dimension.apply(ProteusHelper.getProteusContext(view)));
   }
 
   @Override
-  public void handleAttributeResource(T view, AttributeResource attribute) {
+  public void handleAttributeResource(View parent, T view, AttributeResource attribute) {
     TypedArray a = attribute.apply(view.getContext());
     setDimension(view, a.getDimensionPixelSize(0, 0));
   }
 
   @Override
-  public void handleStyle(T view, Style style) {
+  public void handleStyle(View parent, T view, Style style) {
 //    TypedArray a = style.apply(view.getContext());
 //    setDimension(view, a.getDimensionPixelSize(0, 0));
   }

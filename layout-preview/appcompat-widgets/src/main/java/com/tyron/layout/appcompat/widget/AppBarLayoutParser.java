@@ -70,7 +70,7 @@ public class AppBarLayoutParser<V extends View> extends ViewTypeParser<V> {
             private final Primitive HORIZONTAL = new Primitive(AppBarLayout.HORIZONTAL);
 
             @Override
-            public void handleValue(V view, Value value) {
+            public void handleValue(View parent, V view, Value value) {
                 //noinspection WrongConstant
                 if (view instanceof AppBarLayout) {
                     ((AppBarLayout) view).setOrientation(value.getAsInt());
@@ -78,7 +78,7 @@ public class AppBarLayoutParser<V extends View> extends ViewTypeParser<V> {
             }
 
             @Override
-            public void handleResource(V view, Resource resource) {
+            public void handleResource(View parent, V view, Resource resource) {
                 Integer orientation = resource.getInteger(view.getContext());
                 if (orientation != null) {
                     //noinspection WrongConstant
@@ -89,7 +89,7 @@ public class AppBarLayoutParser<V extends View> extends ViewTypeParser<V> {
             }
 
             @Override
-            public void handleAttributeResource(V view, AttributeResource attribute) {
+            public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
                 TypedArray a = attribute.apply(view.getContext());
                 int orientation = a.getInt(0, AppBarLayout.VERTICAL);
                 //noinspection WrongConstant
@@ -99,7 +99,7 @@ public class AppBarLayoutParser<V extends View> extends ViewTypeParser<V> {
             }
 
             @Override
-            public void handleStyle(V view, Style style) {
+            public void handleStyle(View parent, V view, Style style) {
 //                TypedArray a = style.apply(view.getContext());
 //                int orientation = a.getInt(0, AppBarLayout.VERTICAL);
 //                //noinspection WrongConstant

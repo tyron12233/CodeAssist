@@ -16,7 +16,6 @@
 
 package com.flipkart.android.proteus.processor;
 
-import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.view.View;
@@ -47,7 +46,7 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
         result[0] = Color.Result.colors(colors);
       }
     };
-    processor.process(view, value);
+    processor.process((View) view.getParent(), view, value);
     return result[0];
   }
 
@@ -71,19 +70,19 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
   }
 
   @Override
-  public void handleValue(final V view, Value value) {
+  public void handleValue(View parent, final V view, Value value) {
     if (value.isColor()) {
-      apply(view, value.getAsColor());
+      apply(parent, view, value.getAsColor());
     } else if  (value.isResource()) {
-      handleResource(view, value.getAsResource());
+      handleResource(parent, view, value.getAsResource());
     } else if (value.isPrimitive()) {
-      process(view, precompile(value, ProteusHelper.getProteusContext(view), (ProteusHelper.getProteusContext(view)).getFunctionManager()));
+      process(parent, view, precompile(value, ProteusHelper.getProteusContext(view), (ProteusHelper.getProteusContext(view)).getFunctionManager()));
     }
   }
 
   @Override
-  public void handleResource(V view, Resource resource) {
-    ColorStateList colors = resource.getColorStateList(ProteusHelper.getProteusContext(view));
+  public void handleResource(View parent, V view, Resource resource) {
+    ColorStateList colors = resource.getColorStateList(parent, view);
     if (null != colors) {
       setColor(view, colors);
     } else {
@@ -93,16 +92,16 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
   }
 
   @Override
-  public void handleAttributeResource(V view, AttributeResource attribute) {
+  public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
     String name = attribute.getName();
     ProteusView.Manager viewManager = ((ProteusView) view).getViewManager();
     ProteusContext context = viewManager.getContext();
-    Value value = viewManager.getStyle().getValue(name, context, Color.Int.BLACK);
-    process(view, value);
+    Value value = context.obtainStyledAttribute(parent, view, name);
+    process(parent, view, value != null ? value : Color.Int.BLACK);
   }
 
   @Override
-  public void handleStyle(V view, Style style) {
+  public void handleStyle(View parent, V view, Style style) {
 //    TypedArray a = style.apply(view.getContext());
 //    set(view, a);
   }
@@ -116,17 +115,17 @@ public abstract class ColorResourceProcessor<V extends View> extends AttributePr
     }
   }
 
-  private void apply(ProteusContext context, V view, Value value) {
-    if (value.isResource()) {
-      value = value.getAsResource().getColor(context);
-    }
-    if (value != null) {
-      apply(view, value.getAsColor());
-    }
-  }
+//  private void apply(ProteusContext context, V view, Value value) {
+//    if (value.isResource()) {
+//      value = value.getAsResource().getColor(context);
+//    }
+//    if (value != null) {
+//      apply(parent, view, value.getAsColor());
+//    }
+//  }
 
-  private void apply(V view, Color color) {
-    Color.Result result = color.apply(view.getContext());
+  private void apply(View parent, V view, Color color) {
+    Color.Result result = color.apply(parent, view);
     if (null != result.colors) {
       setColor(view, result.colors);
     } else {

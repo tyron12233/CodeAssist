@@ -40,7 +40,7 @@ public abstract class TweenAnimationResourceProcessor<V extends View> extends At
   private static final String TAG = "TweenAnimationResource";
 
   @Override
-  public void handleValue(V view, Value value) {
+  public void handleValue(View parent, V view, Value value) {
     Animation animation = AnimationUtils.loadAnimation(view.getContext(), value);
     if (null != animation) {
       setAnimation(view, animation);
@@ -52,17 +52,17 @@ public abstract class TweenAnimationResourceProcessor<V extends View> extends At
   }
 
   @Override
-  public void handleResource(V view, Resource resource) {
+  public void handleResource(View parent, V view, Resource resource) {
 
   }
 
   @Override
-  public void handleAttributeResource(V view, AttributeResource attribute) {
+  public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
 
   }
 
   @Override
-  public void handleStyle(V view, Style style) {
+  public void handleStyle(View parent, V view, Style style) {
 
   }
 

@@ -23,8 +23,10 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.flipkart.android.proteus.processor.AttributeProcessor;
 import com.flipkart.android.proteus.value.Layout;
 import com.flipkart.android.proteus.value.Style;
+import com.flipkart.android.proteus.value.Value;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -168,6 +170,49 @@ public class ProteusContext extends ContextWrapper {
      */
     public Style getStyle() {
         return style;
+    }
+
+    public Value obtainStyledAttribute(View parent, View view, String name) {
+        View current = view;
+
+        boolean replaceNextParent = false;
+        if (current == null || view.getParent() == null) {
+            replaceNextParent = true;
+        }
+        while (current instanceof ProteusView) {
+            ProteusView proteusView = (ProteusView) current;
+            ProteusView.Manager viewManager = proteusView.getViewManager();
+            Style style = viewManager.getStyle();
+            if (style != null) {
+                Value value = style.getValue(name, this, null);
+                if (value != null) {
+                    return value;
+                }
+
+                // try searching on the themeOverlay
+                Value materialThemeOverlay = style.getValue("materialThemeOverlay", this, null);
+                if (materialThemeOverlay != null) {
+                    Value overlayValue =
+                            AttributeProcessor.staticPreCompile(materialThemeOverlay.getAsPrimitive(), this, getFunctionManager());
+                    if (overlayValue != null) {
+                        Value overlay = overlayValue.getAsStyle().getValue(name, this, null);
+                        if (overlay != null) {
+                            return overlay;
+                        }
+                    }
+                }
+            }
+            if (replaceNextParent) {
+                if (!parent.equals(current)) {
+                    current = parent;
+                } else {
+                    current = null;
+                }
+            } else {
+                current = (View) current.getParent();
+            }
+        }
+        return style.getValue(name, this, null);
     }
 
     /**

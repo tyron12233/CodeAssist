@@ -23,6 +23,7 @@ import com.flipkart.android.proteus.FunctionManager;
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.parser.ParseHelper;
+import com.flipkart.android.proteus.toolbox.ProteusHelper;
 import com.flipkart.android.proteus.value.AttributeResource;
 import com.flipkart.android.proteus.value.Binding;
 import com.flipkart.android.proteus.value.Gravity;
@@ -31,7 +32,6 @@ import com.flipkart.android.proteus.value.ObjectValue;
 import com.flipkart.android.proteus.value.Primitive;
 import com.flipkart.android.proteus.value.Resource;
 import com.flipkart.android.proteus.value.Style;
-import com.flipkart.android.proteus.value.StyleResource;
 import com.flipkart.android.proteus.value.Value;
 
 import androidx.annotation.Nullable;
@@ -42,39 +42,39 @@ import androidx.annotation.Nullable;
  */
 public abstract class AttributeProcessor<V extends View> {
 
-  public static Value evaluate(final ProteusContext context, final Value input, final Value data, final int index) {
+  public static Value evaluate(final ProteusContext context, final View parent, final Value input, final Value data, final int index) {
     final Value[] output = new Value[1];
 
     AttributeProcessor processor = new AttributeProcessor<View>() {
 
       @Override
-      public void handleBinding(View view, Binding binding) {
+      public void handleBinding(View parent, View view, Binding binding) {
         output[0] = binding.evaluate(context, data, index);
       }
 
       @Override
-      public void handleValue(View view, Value value) {
+      public void handleValue(View parent, View view, Value value) {
         output[0] = value;
       }
 
       @Override
-      public void handleResource(View view, Resource resource) {
+      public void handleResource(View parent, View view, Resource resource) {
         output[0] = new Primitive(resource.getString(context));
       }
 
       @Override
-      public void handleAttributeResource(View view, AttributeResource attribute) {
+      public void handleAttributeResource(View parent, View view, AttributeResource attribute) {
         output[0] = new Primitive(attribute.apply(context).getString(0));
       }
 
       @Override
-      public void handleStyle(View view, Style style) {
+      public void handleStyle(View parent, View view, Style style) {
         output[0] = style;
       }
     };
 
     //noinspection unchecked
-    processor.process(null, input);
+    processor.process(parent, null, input);
 
     return output[0];
   }
@@ -118,33 +118,33 @@ public abstract class AttributeProcessor<V extends View> {
     return compiled;
   }
 
-  public void process(V view, Value value) {
+  public void process(View parent, V view, Value value) {
     if (value.isBinding()) {
-      handleBinding(view, value.getAsBinding());
+      handleBinding(parent, view, value.getAsBinding());
     } else if (value.isResource()) {
-      handleResource(view, value.getAsResource());
+      handleResource(parent, view, value.getAsResource());
     } else if (value.isAttributeResource()) {
-      handleAttributeResource(view, value.getAsAttributeResource());
+      handleAttributeResource(parent, view, value.getAsAttributeResource());
     } else if (value.isStyle()) {
-      handleStyle(view, value.getAsStyle());
+      handleStyle(parent, view, value.getAsStyle());
     } else {
-      handleValue(view, value);
+      handleValue(parent, view, value);
     }
   }
 
-  public void handleBinding(V view, Binding value) {
+  public void handleBinding(View parent, V view, Binding value) {
     DataContext dataContext = ((ProteusView) view).getViewManager().getDataContext();
-    Value resolved = evaluate(value, (ProteusContext) view.getContext(), dataContext.getData(), dataContext.getIndex());
-    handleValue(view, resolved);
+    Value resolved = evaluate(value, ProteusHelper.getProteusContext(view), dataContext.getData(), dataContext.getIndex());
+    handleValue(parent, view, resolved);
   }
 
-  public abstract void handleValue(V view, Value value);
+  public abstract void handleValue(View parent, V view, Value value);
 
-  public abstract void handleResource(V view, Resource resource);
+  public abstract void handleResource(View parent, V view, Resource resource);
 
-  public abstract void handleAttributeResource(V view, AttributeResource attribute);
+  public abstract void handleAttributeResource(View parent, V view, AttributeResource attribute);
 
-  public abstract void handleStyle(V view, Style style);
+  public abstract void handleStyle(View parent, V view, Style style);
 
   public Value precompile(Value value, ProteusContext context, FunctionManager manager) {
     Value compiled = staticPreCompile(value, context, manager);

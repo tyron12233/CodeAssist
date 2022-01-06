@@ -34,25 +34,25 @@ import androidx.annotation.NonNull;
 public abstract class NumberAttributeProcessor<V extends View> extends AttributeProcessor<V> {
 
   @Override
-  public void handleValue(V view, Value value) {
+  public void handleValue(View parent, V view, Value value) {
     if (value.isPrimitive()) {
       setNumber(view, value.getAsPrimitive().getAsNumber());
     }
   }
 
   @Override
-  public void handleResource(V view, Resource resource) {
+  public void handleResource(View parent, V view, Resource resource) {
     Integer number = resource.getInteger(view.getContext());
     setNumber(view, null != number ? number : 0);
   }
 
   @Override
-  public void handleAttributeResource(V view, AttributeResource attribute) {
+  public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
     setNumber(view, attribute.apply(view.getContext()).getFloat(0, 0f));
   }
 
   @Override
-  public void handleStyle(V view, Style style) {
+  public void handleStyle(View parent, V view, Style style) {
 //    setNumber(view, style.apply(view.getContext()).getFloat(0, 0f));
   }
 

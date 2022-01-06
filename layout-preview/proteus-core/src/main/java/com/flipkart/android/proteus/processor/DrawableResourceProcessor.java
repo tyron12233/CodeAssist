@@ -50,7 +50,7 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
         d[0] = drawable;
       }
     };
-    processor.process(view, value);
+    processor.process((View) view.getParent(), view, value);
     return d[0];
   }
 
@@ -74,7 +74,7 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
   }
 
   @Override
-  public void handleValue(final V view, Value value) {
+  public void handleValue(View parent, final V view, Value value) {
     if (value.isDrawable()) {
       DrawableValue d = value.getAsDrawable();
       if (null != d) {
@@ -85,12 +85,16 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
         });
       }
     } else {
-      process(view, precompile(value, ProteusHelper.getProteusContext(view), (ProteusHelper.getProteusContext(view)).getFunctionManager()));
+      if (value.isPrimitive() && value.toString().equals("@null")) {
+        setDrawable(view, null);
+      } else {
+        process(parent, view, precompile(value, ProteusHelper.getProteusContext(view), (ProteusHelper.getProteusContext(view)).getFunctionManager()));
+      }
     }
   }
 
   @Override
-  public void handleResource(V view, Resource resource) {
+  public void handleResource(View parent, V view, Resource resource) {
     ProteusContext context = ProteusHelper.getProteusContext(view);
     DrawableValue drawableValue = resource.getProteusDrawable(context);
     if (drawableValue == null) {
@@ -98,7 +102,7 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
       if (d == null) {
         Color color = resource.getColor(context);
         if (color != null) {
-          d = new ColorDrawable(color.apply(context).color);
+          d = new ColorDrawable(color.apply(parent, view).color);
         }
       }
       if (null != d) {
@@ -112,13 +116,13 @@ public abstract class DrawableResourceProcessor<V extends View> extends Attribut
   }
 
   @Override
-  public void handleAttributeResource(V view, AttributeResource attribute) {
+  public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
     TypedArray a = attribute.apply(view.getContext());
     set(view, a);
   }
 
   @Override
-  public void handleStyle(V view, Style style) {
+  public void handleStyle(View parent, V view, Style style) {
 //    TypedArray a = style.apply(view.getContext());
 //    set(view, a);
   }

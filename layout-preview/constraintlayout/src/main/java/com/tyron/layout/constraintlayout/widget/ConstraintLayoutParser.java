@@ -1,5 +1,7 @@
 package com.tyron.layout.constraintlayout.widget;
 
+import static androidx.constraintlayout.widget.ConstraintLayout.*;
+
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -126,7 +128,7 @@ public class ConstraintLayoutParser<T extends View> extends ViewTypeParser<T> {
                 if (view.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
                     ((ConstraintLayout.LayoutParams) view.getLayoutParams()).endToEnd =
                             value.equals("parent") ? ConstraintLayout.LayoutParams.PARENT_ID : ProteusHelper.getProteusContext(view)
-                                    .getInflater().getUniqueViewId(ParseHelper.parseViewId(value));
+                                    .getInflater().getUniqueViewId(ParseHelper.parseViewId(value));;
                 }
             }
         });

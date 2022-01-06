@@ -18,6 +18,7 @@ public class MaterialParserFactory implements ProteusParserFactory {
 
     static {
         sMappings.put("Button", "com.google.android.material.button.MaterialButton");
+        sMappings.put("EditText", "com.google.android.material.textfield.TextInputEditText");
     }
 
     private final ProteusContext mContext;

@@ -37,11 +37,12 @@ import androidx.annotation.Nullable;
 public abstract class StringAttributeProcessor<V extends View> extends AttributeProcessor<V> {
 
   /**
+   * @param parent
    * @param view  View
    * @param value
    */
   @Override
-  public void handleValue(V view, Value value) {
+  public void handleValue(View parent, V view, Value value) {
     if (value.isPrimitive() || value.isNull()) {
       setString(view, value.getAsString());
     } else {
@@ -50,19 +51,19 @@ public abstract class StringAttributeProcessor<V extends View> extends Attribute
   }
 
   @Override
-  public void handleResource(V view, Resource resource) {
+  public void handleResource(View parent, V view, Resource resource) {
     String string = resource.getString(ProteusHelper.getProteusContext(view));
     setString(view, null == string ? ProteusConstants.EMPTY : string);
   }
 
   @Override
-  public void handleAttributeResource(V view, AttributeResource attribute) {
+  public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
     TypedArray a = attribute.apply(view.getContext());
     setString(view, a.getString(0));
   }
 
   @Override
-  public void handleStyle(V view, Style style) {
+  public void handleStyle(View parent, V view, Style style) {
     Log.d("TEST", "Handle style called: " + style.toString());
 //    TypedArray a = style.apply(view.getContext());
 //    setString(view, a.getString(0));
