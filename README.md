@@ -1,6 +1,6 @@
 <p align='center'>
-<img width='300px%' height='300px' src='logo-light.png#gh-light-mode-only' >
-<img width='300px' height='300px' src='logo-dark.png#gh-dark-mode-only'>
+<img width='300px%' height='300px' src='https://raw.githubusercontent.com/KrishnaVyshak/CodeAssist/main/logo-dark.png#gh-dark-mode-only' >
+<img width='300px' height='300px' src='https://raw.githubusercontent.com/KrishnaVyshak/CodeAssist/main/logo-light.png#gh-light-mode-only'>
 </p>
 
 
@@ -13,13 +13,13 @@
 
 </div>
 
-<img style="width: 35%; height: 80%; padding-right: 10px" src=".github/resources/screenshot/screenshots_title_light.png?raw=true#gh-light-mode-only">
-<img style="width: 35%; height: 80%; padding-right: 10px" src=".github/resources/screenshot/screenshots_title_dark.png?raw=true#gh-dark-mode-only">
+<img style="width: 45%; height: 100%; padding-right: 10px" src="https://raw.githubusercontent.com/KrishnaVyshak/CodeAssist/main/.github/resources/screenshot/screenshots_title_light.png#gh-light-mode-only">
+<img style="width: 45%; height: 100%; padding-right: 10px" src="https://raw.githubusercontent.com/KrishnaVyshak/CodeAssist/main/.github/resources/screenshot/screenshots_title_dark.png#gh-dark-mode-only">
 
 <img style="width: 25%; height: 80%; padding-right: 10px" src=".github/resources/screenshot/screenshot1.webp?raw=true"><img style="width: 25%; height: 80%" src=".github/resources/screenshot/screenshot2.webp?raw=true"><img style="width: 25%; height: 80%" src=".github/resources/screenshot/screenshot3.webp?raw=true"><img style="width: 25%; height: 80%" src=".github/resources/screenshot/screenshot4.webp?raw=true">
 
-<img style="width: 35%; height: 80%; padding-right: 10px" src=".github/resources/images/features_title_dark.png?raw=true#gh-light-mode-only">
-<img style="width: 35%; height: 80%; padding-right: 10px" src=".github/resources/images/features_title_light.png?raw=true#gh-dark-mode-only">
+<img style="width: 45%; height: 100%; padding-right: 10px" src=".github/resources/images/features_title_dark.png?raw=true#gh-light-mode-only">
+<img style="width: 45%; height: 100%; padding-right: 10px" src=".github/resources/images/features_title_light.png?raw=true#gh-dark-mode-only">
 
 - [x] APK Compilation
 
