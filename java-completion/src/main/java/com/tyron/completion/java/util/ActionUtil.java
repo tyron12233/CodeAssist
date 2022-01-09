@@ -289,9 +289,10 @@ public class ActionUtil {
     public static Set<String> getTypesToImport(ExecutableType type) {
         Set<String> types = new HashSet<>();
 
-        if (type.getReturnType() != null) {
-            if (type.getReturnType().getKind() != TypeKind.VOID) {
-                String fqn = getTypeToImport(type.getReturnType());
+        TypeMirror returnType = type.getReturnType();
+        if (returnType != null) {
+            if (returnType.getKind() != TypeKind.VOID && returnType.getKind() != TypeKind.TYPEVAR) {
+                String fqn = getTypeToImport(returnType);
                 if (fqn != null) {
                     types.add(fqn);
                 }
@@ -320,6 +321,11 @@ public class ActionUtil {
         if (type.getKind().isPrimitive()) {
             return null;
         }
+
+        if (type.getKind() == TypeKind.TYPEVAR) {
+            return null;
+        }
+
         String fqn = EditHelper.printType(type, true).toString();
         if (type.getKind() == TypeKind.ARRAY) {
             fqn = removeArray(fqn);
