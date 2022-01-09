@@ -17,6 +17,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.project.ProjectManager;
@@ -289,6 +290,12 @@ public class CodeEditorFragment extends Fragment implements Savable,
         mEditor.setOnLongPressListener((start, end, event) -> {
             save();
             mEditor.showContextMenu(event.getX(), event.getY());
+        });
+
+        LogViewModel logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
+
+        mEditor.setDiagnosticsListener(diagnostics -> {
+            logViewModel.updateLogs(LogViewModel.DEBUG, diagnostics);
         });
 
         getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,

@@ -35,15 +35,12 @@ public class LogViewModel extends ViewModel {
         return log.get(id);
     }
 
-    public void updateLogs(int id, List<Diagnostic<? extends JavaFileObject>> diagnostics) {
+    public void updateLogs(int id, List<DiagnosticWrapper> diagnostics) {
         if (log == null) {
             log = init();
         }
         MutableLiveData<List<DiagnosticWrapper>> logData = this.log.get(id);
-        logData.setValue(diagnostics.stream()
-                .filter(Objects::nonNull)
-                .map(DiagnosticWrapper::new)
-                .collect(Collectors.toList()));
+        logData.setValue(diagnostics);
     }
 
     private List<MutableLiveData<List<DiagnosticWrapper>>> init() {
