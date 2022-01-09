@@ -1,7 +1,9 @@
 package com.tyron.code.ui.main;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -21,6 +23,10 @@ import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.google.gson.Gson;
+import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.ui.library.LibraryManagerFragment;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
@@ -37,12 +43,14 @@ import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.settings.SettingsActivity;
 import com.tyron.completion.java.provider.CompletionEngine;
 
+import org.openjdk.javax.tools.Diagnostic;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class MainFragment extends Fragment {
+public class MainFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
 
     public static MainFragment newInstance(@NonNull String projectPath) {
         Bundle bundle = new Bundle();
@@ -62,6 +70,7 @@ public class MainFragment extends Fragment {
     private View mRoot;
     private Toolbar mToolbar;
     private LinearProgressIndicator mProgressBar;
+    private BroadcastReceiver mLogReceiver;
 
     private final OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {
         @Override
@@ -94,6 +103,7 @@ public class MainFragment extends Fragment {
         String projectPath = requireArguments().getString("project_path");
         mProject = new Project(new File(projectPath));
         mProjectManager = ProjectManager.getInstance();
+        mProjectManager.addOnProjectOpenListener(this);
         mLogViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
@@ -233,6 +243,12 @@ public class MainFragment extends Fragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
+
+        ProjectManager.getInstance().removeOnProjectOpenListener(this);
+
+        if (mLogReceiver != null) {
+            requireActivity().unregisterReceiver(mLogReceiver);
+        }
     }
 
     @Override
@@ -325,5 +341,38 @@ public class MainFragment extends Fragment {
         requireActivity().startService(new Intent(requireContext(), CompilerService.class));
         requireActivity().bindService(new Intent(requireContext(), CompilerService.class),
                 mServiceConnection, Context.BIND_IMPORTANT);
+    }
+
+    @Override
+    public void onProjectOpen(Project project) {
+        Module module = project.getMainModule();
+        if (module instanceof AndroidModule) {
+            mLogReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    String type = intent.getExtras().getString("type", "DEBUG");
+                    String message = intent.getExtras().getString("message", "No message provided");
+                    DiagnosticWrapper wrapped = ILogger.wrap(message);
+
+                    switch (type) {
+                        case "DEBUG":
+                        case "INFO":
+                            wrapped.setKind(Diagnostic.Kind.NOTE);
+                            mLogViewModel.d(LogViewModel.APP_LOG, wrapped);
+                            break;
+                        case "ERROR":
+                            wrapped.setKind(Diagnostic.Kind.ERROR);
+                            mLogViewModel.e(LogViewModel.APP_LOG, wrapped);
+                            break;
+                        case "WARNING":
+                            wrapped.setKind(Diagnostic.Kind.WARNING);
+                            mLogViewModel.w(LogViewModel.APP_LOG, wrapped);
+                            break;
+                    }
+                }
+            };
+            requireActivity().registerReceiver(mLogReceiver,
+                    new IntentFilter(((AndroidModule) module).getPackageName() + ".LOG"));
+        }
     }
 }
