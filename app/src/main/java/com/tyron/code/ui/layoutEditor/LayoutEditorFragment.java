@@ -323,7 +323,9 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     }
 
     private void setDragListeners(ViewGroup viewGroup) {
-        viewGroup.setOnDragListener(mDragListener);
+        if (viewGroup instanceof ProteusView) {
+            ((ProteusView) viewGroup).getViewManager().setOnDragListener(mDragListener);
+        }
 
         try {
             LayoutTransition transition = new LayoutTransition();
@@ -343,8 +345,10 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     }
 
     private void setClickListeners(View view) {
-        view.setOnLongClickListener(mOnLongClickListener);
-        view.setOnClickListener(mOnClickListener);
+        if (view instanceof ProteusView) {
+            ((ProteusView) view).getViewManager().setOnClickListener(mOnClickListener);
+            ((ProteusView) view).getViewManager().setOnLongClickListener(mOnLongClickListener);
+        }
         if (view instanceof ViewGroup && !(view instanceof UnknownViewGroup)) {
             ViewGroup parent = (ViewGroup) view;
             for (int i = 0; i < parent.getChildCount(); i++) {
