@@ -570,7 +570,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
     addAttributeProcessor(Attributes.View.Style, new StyleResourceProcessor<V>() {
       @Override
       public void handleStyle(View parent, View view, Style style) {
-        style.apply(parent, (ProteusView) view, false);
+        style.applyStyle(parent, (ProteusView) view, false);
       }
     });
 
@@ -580,21 +580,49 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
         ProteusView proteusView = (ProteusView) view;
         ProteusView.Manager viewManager = proteusView.getViewManager();
 
-        // if the viewas already a theme set, then its most likely that this is
-        // a theme overlay, we just override the values from the exisiting theme
-        if (viewManager.getStyle() != null) {
+        // if the view has already a theme set, then its most likely that this is
+        // a theme overlay, we just override the values from the existing theme
+        Style currentTheme = viewManager.getTheme();
+        Style currentStyle = viewManager.getStyle();
+        if (currentTheme != null) {
+          currentTheme = currentTheme.copy().getAsStyle();
           for (Map.Entry<String, Value> entry : style.getValues().entrySet()) {
-            viewManager.getStyle().addValue(entry.getKey(), entry.getValue());
+            currentTheme.addValue(entry.getKey(), entry.getValue());
+            if (currentStyle != null) {
+              currentStyle.addValue(entry.getKey(), entry.getValue());
+            }
+          }
+
+          currentTheme.applyTheme(parent, (ProteusView) view,true);
+
+          if (viewManager.getStyle() != null) {
+             viewManager.getStyle().applyStyle(parent, (ProteusView) view, false);
           }
         } else {
-          style.apply(parent, (ProteusView) view, true);
+          style.applyTheme(parent, (ProteusView) view, true);
         }
       }
     });
     addAttributeProcessor("materialThemeOverlay",  new StyleResourceProcessor<V>() {
       @Override
       public void handleStyle(View parent, View view, Style style) {
-        style.apply(parent, (ProteusView) view, true);
+        ProteusView proteusView = (ProteusView) view;
+        ProteusView.Manager viewManager = proteusView.getViewManager();
+//        // wait for the other attributes to be applied
+////        view.post(() -> {
+          if (viewManager.getTheme() != null) {
+            Style currentTheme = viewManager.getTheme().copy().getAsStyle();
+            currentTheme.getValues().remove("materialThemeOverlay");
+
+            for (Map.Entry<String, Value> entry : style.getValues().entrySet()) {
+                currentTheme.addValue(entry.getKey(), entry.getValue());
+            }
+
+            currentTheme.applyTheme(parent, (ProteusView) view, false);
+          } else {
+            style.applyTheme(parent, (ProteusView) view, false);
+          }
+//        });
       }
     });
 

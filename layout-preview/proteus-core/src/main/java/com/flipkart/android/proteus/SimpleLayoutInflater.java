@@ -107,6 +107,11 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
             Iterator<Layout.Attribute> iterator = layout.attributes.iterator();
             Layout.Attribute attribute;
 
+            String defaultStyleName = parser.getDefaultStyleName();
+            if (defaultStyleName != null) {
+                applyStyle(parent, defaultStyleName, view);
+            }
+
             // handle theme attribute or style first so children can inherit from it
             int theme = parser.getAttributeId("style");
             int index = layout.attributes.indexOf(new Layout.Attribute(theme, null));
@@ -125,13 +130,6 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
                 Layout.Attribute themeAttribute = layout.attributes.get(index);
                 if (themeAttribute != null) {
                     handleAttribute(parser, view, parent, themeAttribute.id, themeAttribute.value);
-                }
-            }
-
-            if (applyStyle) {
-                String defaultStyleName = parser.getDefaultStyleName();
-                if (defaultStyleName != null) {
-                    applyStyle(parent, defaultStyleName, view);
                 }
             }
 
@@ -182,12 +180,11 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
 
     private void applyStyle(View parent, ProteusView view, Value value) {
         if (value.isStyle()) {
-            boolean apply = view.getViewManager().getStyle() == null;
-            value.getAsStyle().apply(parent, view, apply);
+            value.getAsStyle().applyStyle(parent, view, true);
         } else if (value.isAttributeResource()) {
             Value style = context.obtainStyledAttribute(parent, view.getAsView(), value.getAsAttributeResource().getName());
             if (style != null && style.isStyle()) {
-                style.getAsStyle().apply(parent, view);
+                style.getAsStyle().applyTheme(parent, view);
             } else if (style != null && style.isPrimitive()) {
                 applyStyle(parent, style.toString(), view);
             } else {

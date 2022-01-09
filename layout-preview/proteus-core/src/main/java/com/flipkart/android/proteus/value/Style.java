@@ -19,7 +19,9 @@ public class Style extends Value {
     private static final String STYLE_PREFIX = "@style/";
 
     private final String name;
-    /** The name of the parent of this style */
+    /**
+     * The name of the parent of this style
+     */
     private final String parent;
     private final ObjectValue values = new ObjectValue();
 
@@ -47,7 +49,8 @@ public class Style extends Value {
 
     /**
      * Get the the value from this style using its name
-     * @param name the name of the attribute
+     *
+     * @param name         the name of the attribute
      * @param defaultValue the value returned if the attribute does not exist
      * @return the value corresponding to the name given
      */
@@ -77,21 +80,59 @@ public class Style extends Value {
         return def;
     }
 
-    public void apply(View parent, ProteusView view, boolean setTheme) {
+    public void applyStyle(View parent, ProteusView view, boolean b) {
+        ProteusView.Manager viewManager = view.getViewManager();
+        ProteusContext context = viewManager.getContext();
+
+        ObjectValue allValues = getAllValues(context);
+        for (Map.Entry<String, Value> entry : allValues.entrySet()) {
+            int id = ProteusHelper.getAttributeId(view, entry.getKey());
+            if (id == -1) {
+                id = ProteusHelper.getAttributeId(view, "app:" + entry.getKey());
+            }
+            if (id != -1) {
+                Value value = entry.getValue();
+                if (value.isPrimitive()) {
+                    value = AttributeProcessor.staticPreCompile(value.getAsPrimitive(), context,
+                            context.getFunctionManager());
+                }
+                if (value == null) {
+                    value = entry.getValue();
+                }
+
+                viewManager.getViewTypeParser().handleAttribute(parent, (View) view, id, value);
+            }
+        }
+
+        if (b) {
+            if (viewManager.getStyle() == null) {
+                viewManager.setStyle(this);
+            } else {
+//                ObjectValue styleValues = viewManager.getStyle().getValues();
+//                for (Map.Entry<String, Value> entry : this.getValues().entrySet()) {
+//                    if (!styleValues.has(entry.getKey())) {
+//                        styleValues.add(entry.getKey(), entry.getValue());
+//                    }
+//                }
+            }
+        }
+    }
+
+    public void applyTheme(View parent, ProteusView view, boolean setTheme) {
         ProteusView.Manager viewManager = view.getViewManager();
         ProteusContext context = viewManager.getContext();
 
         Set<Integer> handledAttributes = new HashSet<>();
 
         if (setTheme) {
-            viewManager.setStyle(this);
+            viewManager.setTheme(this);
         }
-
         Style style = this;
         while (style != null) {
 
             ObjectValue values = style.getValues();
             for (Map.Entry<String, Value> entry : values.entrySet()) {
+
                 int id = ProteusHelper.getAttributeId(view, entry.getKey());
                 if (id == -1) {
                     id = ProteusHelper.getAttributeId(view, "app:" + entry.getKey());
@@ -99,13 +140,20 @@ public class Style extends Value {
                 if (id != -1) {
                     Value value = entry.getValue();
                     if (value.isPrimitive()) {
-                        value = AttributeProcessor.staticPreCompile(value.getAsPrimitive(), context, context.getFunctionManager());
+                        value = AttributeProcessor.staticPreCompile(value.getAsPrimitive(),
+                                context, context.getFunctionManager());
                     }
                     if (value == null) {
                         value = entry.getValue();
                     }
+
+                    if (entry.getKey().equals("materialThemeOverlay")) {
+                        System.out.println(value);
+                    }
+
                     if (!handledAttributes.contains(id)) {
-                        if (viewManager.getViewTypeParser().handleAttribute(parent, view.getAsView(), id, value)) {
+                        if (viewManager.getViewTypeParser().handleAttribute(parent,
+                                view.getAsView(), id, value)) {
                             handledAttributes.add(id);
                         }
                     }
@@ -118,19 +166,22 @@ public class Style extends Value {
             }
         }
     }
+
     /**
      * Apply the attributes of this style to a {@link ProteusView}
      * It will also apply the attributes of the parent theme if it has one
+     *
      * @param parent
-     * @param view the view to apply the styles to
+     * @param view   the view to apply the styles to
      */
-    public void apply(View parent, ProteusView view) {
-        apply(parent, view, false);
+    public void applyTheme(View parent, ProteusView view) {
+        applyTheme(parent, view, false);
     }
 
     /**
      * Add an attribute for this style
-     * @param name the name of the attribute
+     *
+     * @param name  the name of the attribute
      * @param value the value of the attribute
      */
     public void addValue(String name, String value) {
@@ -145,6 +196,27 @@ public class Style extends Value {
         return values;
     }
 
+    public ObjectValue getAllValues(ProteusContext context) {
+        ObjectValue values = new ObjectValue();
+        Style current = this;
+        while (current != null) {
+
+            ObjectValue currentValues = current.getValues();
+            for (Map.Entry<String, Value> entry : currentValues.entrySet()) {
+                if (!values.has(entry.getKey())) {
+                    values.add(entry.getKey(), entry.getValue());
+                }
+            }
+            if (current.parent != null) {
+                current = context.getStyle(current.parent);
+            } else {
+                current = null;
+            }
+        }
+
+        return values;
+    }
+
     @Override
     public String toString() {
         return "Style{" + "name='" + name + '\'' + ", parent='" + parent + '\'' + ", values=" + values + '}';
@@ -152,6 +224,6 @@ public class Style extends Value {
 
     @Override
     public Value copy() {
-        return null;
+        return new Style(this.name, this.parent);
     }
 }

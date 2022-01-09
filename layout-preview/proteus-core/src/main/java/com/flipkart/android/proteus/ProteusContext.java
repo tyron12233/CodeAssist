@@ -182,7 +182,7 @@ public class ProteusContext extends ContextWrapper {
         while (current instanceof ProteusView) {
             ProteusView proteusView = (ProteusView) current;
             ProteusView.Manager viewManager = proteusView.getViewManager();
-            Style style = viewManager.getStyle();
+            Style style = viewManager.getTheme();
             if (style != null) {
                 Value value = style.getValue(name, this, null);
                 if (value != null) {

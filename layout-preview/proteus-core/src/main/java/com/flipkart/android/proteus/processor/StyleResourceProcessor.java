@@ -53,6 +53,6 @@ public class StyleResourceProcessor<V extends View> extends AttributeProcessor<V
 
     @Override
     public void handleStyle(View parent, View view, Style style) {
-        style.apply(parent, (ProteusView) view);
+        style.applyStyle(parent, (ProteusView) view, false);
     }
 }

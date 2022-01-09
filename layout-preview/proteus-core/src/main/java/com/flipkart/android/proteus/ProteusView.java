@@ -94,6 +94,14 @@ public interface ProteusView {
 
     }
 
+    default void setTheme(Style theme) {
+
+    }
+
+    default Style getTheme() {
+      return null;
+    }
+
     default Style getStyle() {
       return getContext().getStyle();
     }
