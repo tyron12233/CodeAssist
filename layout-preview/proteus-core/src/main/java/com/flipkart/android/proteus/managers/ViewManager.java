@@ -253,7 +253,7 @@ public class ViewManager implements ProteusView.Manager {
             ViewParent viewParent = view.getParent();
             if (viewParent instanceof ViewGroup) {
                 ViewGroup parent = (ViewGroup) viewParent;
-                int index = parent.indexOfChild(parent) - 1;
+                int index = parent.indexOfChild(view);
                 parent.removeView(view);
 
                 ProteusView view = context.getInflater().inflate(layout, new ObjectValue(), parent, -1);
