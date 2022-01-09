@@ -94,9 +94,12 @@ public class JavaParserTypesUtil {
                     .map(JavaParserTypesUtil::toClassOrInterfaceType)
                     .collect(NodeList.toNodeList()));
             type = typeParameter;
-        }
-        else {
-            type = StaticJavaParser.parseType(tree.toString());
+        } else {
+            if (tree != null) {
+                type = StaticJavaParser.parseType(tree.toString());
+            } else {
+                type = null;
+            }
         }
         return type;
     }
@@ -172,7 +175,8 @@ public class JavaParserTypesUtil {
         TypeParameter typeParameter = new TypeParameter();
         TypeMirror upperBound = typeVariable.getUpperBound();
 
-        if (!typeVariable.getUpperBound().equals(upperBound)) {
+
+        if (!typeVariable.equals(upperBound)) {
             Type type = toType(upperBound);
             if (type != null) {
                 if (type.isIntersectionType()) {

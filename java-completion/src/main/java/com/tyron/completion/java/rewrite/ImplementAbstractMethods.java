@@ -138,9 +138,8 @@ public class ImplementAbstractMethods implements Rewrite {
                         String tabs = Strings.repeat("\t", tabCount);
                         ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType
                                 , method);
-                        Set<String> classes = ActionUtil.getTypesToImport(parameterizedType);
-                        typesToImport.clear();
-                        typesToImport.addAll(classes);
+
+                        typesToImport.addAll(ActionUtil.getTypesToImport(parameterizedType));
 
 
                         MethodDeclaration methodDeclaration;
@@ -152,19 +151,6 @@ public class ImplementAbstractMethods implements Rewrite {
 
                         String text = JavaParserUtil.prettyPrint(methodDeclaration, className -> false);
 
-                        for (String type : typesToImport) {
-                            String fqn = ActionUtil.removeDiamond(type);
-                            if (!ActionUtil.hasImport(task.root(), fqn)) {
-                                Rewrite addImport = new AddImport(file.toFile(), fqn);
-                                Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-                                TextEdit[] textEdits = rewrite.get(file);
-                                if (textEdits != null) {
-                                    Collections.addAll(edits, textEdits);
-                                }
-                                importedClasses.add(fqn);
-                            }
-                        }
-
                         text = tabs + text.replace("\n", "\n" + tabs);
                         text += "\n";
                         insertText.add(text);
@@ -174,6 +160,20 @@ public class ImplementAbstractMethods implements Rewrite {
                 Position insert = EditHelper.insertAtEndOfClass(task.task, task.root(), thisTree);
                 edits.add(new TextEdit(new Range(insert, insert), insertText + "\n"));
                 edits.addAll(importEdits);
+
+                for (String type : typesToImport) {
+                    String fqn = ActionUtil.removeDiamond(type);
+                    if (!ActionUtil.hasImport(task.root(), fqn)) {
+                        Rewrite addImport = new AddImport(file.toFile(), fqn);
+                        Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+                        TextEdit[] textEdits = rewrite.get(file);
+                        if (textEdits != null) {
+                            Collections.addAll(edits, textEdits);
+                        }
+                        importedClasses.add(fqn);
+                    }
+                }
+
                 return Collections.singletonMap(file, edits.toArray(new TextEdit[0]));
             });
         }

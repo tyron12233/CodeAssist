@@ -458,6 +458,16 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 public void formatCodeAsync(int startIndex, int endIndex) {
                     mEditor.formatCodeAsync();
                 }
+
+                @Override
+                public void beginBatchEdit() {
+                    mEditor.getText().beginBatchEdit();
+                }
+
+                @Override
+                public void endBatchEdit() {
+                    mEditor.getText().endBatchEdit();
+                }
             });
         } catch (Throwable e) {
             compiler.close();

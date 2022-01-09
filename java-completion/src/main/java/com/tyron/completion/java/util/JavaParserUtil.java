@@ -38,9 +38,11 @@ import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.type.ArrayType;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
@@ -50,6 +52,7 @@ import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
 import com.github.javaparser.printer.configuration.PrinterConfiguration;
 import com.tyron.completion.java.rewrite.EditHelper;
 
+import org.jetbrains.kotlin.fir.resolve.diagnostics.ConeNoTypeArgumentsOnRhsError;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.TypeParameterElement;
 import org.openjdk.javax.lang.model.element.VariableElement;
@@ -313,10 +316,7 @@ public class JavaParserUtil {
         }
 
         if (returnType != null) {
-            if (returnType.isTypeParameter()) {
-                returnType = new ClassOrInterfaceType(returnType.asTypeParameter().getName().toString());
-            }
-            methodDeclaration.setType(returnType);
+            methodDeclaration.setType(getTypeWithoutBounds(returnType));
         }
 
         methodDeclaration.setModifiers(method.getModifiers().getFlags().stream()
@@ -324,6 +324,10 @@ public class JavaParserUtil {
                 .collect(NodeList.toNodeList()));
         methodDeclaration.setParameters(method.getParameters().stream()
                 .map(JavaParserUtil::toParameter)
+                .peek(parameter -> {
+                    Type firstType = getTypeWithoutBounds(parameter.getType());
+                    parameter.setType(firstType);
+                })
                 .collect(NodeList.toNodeList()));
         methodDeclaration.setTypeParameters(method.getTypeParameters().stream()
                 .map(it -> toType(((Tree) it)))
@@ -419,7 +423,19 @@ public class JavaParserUtil {
 
     public static MethodDeclaration toMethodDeclaration(ExecutableElement method, ExecutableType type) {
         MethodDeclaration methodDeclaration = new MethodDeclaration();
-        methodDeclaration.setType(toType(type.getReturnType()));
+
+        Type returnType;
+        if (type != null) {
+            returnType = toType(type.getReturnType());
+        } else {
+            returnType = toType(method.getReturnType());
+        }
+
+        if (returnType != null) {
+            methodDeclaration.setType(getTypeWithoutBounds(returnType));
+        }
+
+
         methodDeclaration.setDefault(method.isDefault());
         methodDeclaration.setName(method.getSimpleName().toString());
         methodDeclaration.setModifiers(method.getModifiers().stream()
@@ -427,6 +443,10 @@ public class JavaParserUtil {
                 .toArray(Modifier.Keyword[]::new));
         methodDeclaration.setParameters(IntStream.range(0, method.getParameters().size())
                 .mapToObj(i -> toParameter(type.getParameterTypes().get(i), method.getParameters().get(i)))
+                .peek(parameter -> {
+                    Type firstType = getTypeWithoutBounds(parameter.getType());
+                    parameter.setType(firstType);
+                })
                 .collect(NodeList.toNodeList()));
         methodDeclaration.setTypeParameters(type.getTypeVariables().stream()
                 .map(it -> toType(((TypeMirror) it)))
@@ -436,6 +456,51 @@ public class JavaParserUtil {
                 .map(Optional::get)
                 .collect(NodeList.toNodeList()));
         return methodDeclaration;
+    }
+
+    public static Type getFirstArrayType(Type type) {
+        if (type.isTypeParameter()) {
+            TypeParameter typeParameter = type.asTypeParameter();
+            if (typeParameter.getTypeBound().isNonEmpty()) {
+                Optional<ClassOrInterfaceType> first = typeParameter.getTypeBound().getFirst();
+                if (first.isPresent()) {
+                    return new ArrayType(first.get());
+                }
+            }
+        }
+        return type;
+    }
+
+    public static Type getFirstType(Type type) {
+        if (type.isTypeParameter()) {
+            TypeParameter typeParameter = type.asTypeParameter();
+            if (typeParameter.getTypeBound().isNonEmpty()) {
+                Optional<ClassOrInterfaceType> first = typeParameter.getTypeBound().getFirst();
+                if (first.isPresent()) {
+                    return first.get();
+                }
+            }
+        }
+        if (type.isArrayType()) {
+            return getFirstArrayType(type.asArrayType().getComponentType());
+        }
+        return type;
+    }
+
+    public static Type getTypeWithoutBounds(Type type) {
+        if (type.isArrayType() && !type.asArrayType().getComponentType().isTypeParameter()) {
+            return type;
+        }
+        if (!type.isArrayType() && !type.isTypeParameter()) {
+            return type;
+        }
+        if (type instanceof NodeWithSimpleName) {
+            return new ClassOrInterfaceType(((NodeWithSimpleName<?>) type).getNameAsString());
+        }
+        if (type.isArrayType()) {
+            return new ArrayType(getTypeWithoutBounds(type.asArrayType().getComponentType()));
+        }
+        return type;
     }
 
 

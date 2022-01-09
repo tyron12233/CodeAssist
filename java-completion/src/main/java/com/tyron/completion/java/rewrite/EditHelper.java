@@ -6,6 +6,7 @@ import com.github.javaparser.ast.Modifier.Keyword;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.BooleanLiteralExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -53,6 +54,7 @@ import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.code.Symbol;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
@@ -107,6 +109,12 @@ public class EditHelper {
 
     private static void printMethodInternal(MethodDeclaration methodDeclaration, ExecutableElement method) {
         methodDeclaration.addMarkerAnnotation(Override.class);
+        Optional<AnnotationExpr> recentlyNonNull = methodDeclaration.getAnnotationByName(
+                "RecentlyNonNull");
+        if (recentlyNonNull.isPresent()) {
+            methodDeclaration.remove(recentlyNonNull.get());
+            methodDeclaration.addMarkerAnnotation(NonNull.class);
+        }
         BlockStmt blockStmt = new BlockStmt();
         if (method.getModifiers().contains(Modifier.ABSTRACT)) {
             methodDeclaration.removeModifier(Keyword.ABSTRACT);
@@ -120,7 +128,9 @@ public class EditHelper {
         } else {
             MethodCallExpr methodCallExpr = new MethodCallExpr();
             methodCallExpr.setName(methodDeclaration.getName());
-            methodCallExpr.setArguments(methodDeclaration.getParameters().stream().map(NodeWithSimpleName::getNameAsExpression).collect(NodeList.toNodeList()));
+            methodCallExpr.setArguments(methodDeclaration.getParameters().stream()
+                    .map(NodeWithSimpleName::getNameAsExpression)
+                    .collect(NodeList.toNodeList()));
             methodCallExpr.setScope(new SuperExpr());
             if (methodDeclaration.getType().isVoidType()) {
                 blockStmt.addStatement(methodCallExpr);

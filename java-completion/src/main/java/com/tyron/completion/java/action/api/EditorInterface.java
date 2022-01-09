@@ -17,4 +17,8 @@ public interface EditorInterface {
     void replace(int line, int column, int endLine, int endColumn, String string);
     
     void formatCodeAsync(int startIndex, int endIndex);
+
+    void beginBatchEdit();
+
+    void endBatchEdit();
 }
