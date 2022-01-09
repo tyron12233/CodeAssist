@@ -66,7 +66,7 @@ public interface ProteusView {
    */
   interface Manager {
 
-    default ViewTypeParser getViewTypeParser() {
+    default <T extends View> ViewTypeParser<T> getViewTypeParser() {
       return null;
     }
 

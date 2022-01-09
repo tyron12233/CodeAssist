@@ -72,6 +72,9 @@ public class ViewManager implements ProteusView.Manager {
     protected Object extras;
 
     @Nullable
+    protected Style theme;
+
+    @Nullable
     protected Style style;
 
     public ViewManager(@NonNull ProteusContext context, @NonNull ViewTypeParser parser,
@@ -169,6 +172,14 @@ public class ViewManager implements ProteusView.Manager {
         return this.style;
     }
 
+    public void setTheme(Style theme) {
+        this.theme = theme;
+    }
+
+    public Style getTheme() {
+        return theme;
+    }
+
     @Override
     public Map<String, ViewTypeParser.AttributeSet.Attribute> getAvailableAttributes() {
         Map<String, ViewTypeParser.AttributeSet.Attribute> attributes =
@@ -184,7 +195,7 @@ public class ViewManager implements ProteusView.Manager {
     }
 
     @Override
-    public ViewTypeParser<?> getViewTypeParser() {
+    public <T extends View> ViewTypeParser<T> getViewTypeParser() {
         return parser;
     }
 
