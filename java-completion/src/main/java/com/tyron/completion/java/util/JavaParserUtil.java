@@ -41,6 +41,7 @@ import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.WildcardType;
@@ -303,11 +304,21 @@ public class JavaParserUtil {
                 .map(JavaParserUtil::toAnnotation)
                 .collect(NodeList.toNodeList()));
         methodDeclaration.setName(method.getName().toString());
+
+        Type returnType;
         if (type != null) {
-            methodDeclaration.setType(toType(type.getReturnType()));
+            returnType = toType(type.getReturnType());
         } else {
-            methodDeclaration.setType(toType(method.getReturnType()));
+            returnType = toType(method.getReturnType());
         }
+
+        if (returnType != null) {
+            if (returnType.isTypeParameter()) {
+                returnType = new ClassOrInterfaceType(returnType.asTypeParameter().getName().toString());
+            }
+            methodDeclaration.setType(returnType);
+        }
+
         methodDeclaration.setModifiers(method.getModifiers().getFlags().stream()
                 .map(JavaParserUtil::toModifier)
                 .collect(NodeList.toNodeList()));
@@ -315,7 +326,7 @@ public class JavaParserUtil {
                 .map(JavaParserUtil::toParameter)
                 .collect(NodeList.toNodeList()));
         methodDeclaration.setTypeParameters(method.getTypeParameters().stream()
-                .map(it -> toType(((TypeMirror) it)))
+                .map(it -> toType(((Tree) it)))
                 .filter(Objects::nonNull)
                 .map(type1 -> type1 != null ? type1.toTypeParameter() : Optional.<TypeParameter>empty())
                 .filter(Optional::isPresent)

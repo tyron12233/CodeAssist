@@ -18,6 +18,7 @@ import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.PrimitiveType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.printer.configuration.ConfigurationOption;
 import com.github.javaparser.printer.configuration.DefaultConfigurationOption;
 import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
@@ -50,7 +51,6 @@ import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.code.Symbol;
-import org.openjdk.tools.javac.code.Type;
 
 import java.util.List;
 import java.util.StringJoiner;
@@ -270,7 +270,8 @@ public class EditHelper {
     }
 
     public static com.github.javaparser.ast.type.Type printType(TypeMirror type, boolean fqn) {
-        return JavaParserTypesUtil.toType(type);
+        Type type1 = JavaParserTypesUtil.toType(type);
+        return type1;
     }
 
     public static String printTypeParameters(List<? extends TypeMirror> arguments) {

@@ -15,13 +15,15 @@ import com.tyron.completion.java.util.ActionUtil;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.element.TypeParameterElement;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.tree.Scope;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
+
+import java.util.List;
 
 public class IntroduceLocalVariableAction extends ActionProvider {
 

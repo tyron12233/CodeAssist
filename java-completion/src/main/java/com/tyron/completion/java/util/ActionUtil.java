@@ -7,6 +7,7 @@ import com.tyron.completion.java.rewrite.EditHelper;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
+import org.openjdk.javax.lang.model.element.TypeParameterElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
 import org.openjdk.javax.lang.model.type.ExecutableType;
 import org.openjdk.javax.lang.model.type.TypeKind;
@@ -29,14 +30,11 @@ import org.openjdk.source.tree.TryTree;
 import org.openjdk.source.tree.WhileLoopTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.code.Type;
 import org.openjdk.tools.javac.tree.JCTree;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class ActionUtil {
@@ -327,5 +325,13 @@ public class ActionUtil {
             fqn = removeArray(fqn);
         }
         return removeDiamond(fqn);
+    }
+
+    public static List<? extends TypeParameterElement> getTypeParameters(JavacTask task, TreePath path, ExecutableElement element) {
+        if (path.getLeaf() instanceof JCTree.JCNewClass) {
+            JCTree.JCNewClass newClass = (JCTree.JCNewClass) path.getLeaf();
+            //return newClass.getTypeArguments();
+        }
+        return element.getTypeParameters();
     }
 }

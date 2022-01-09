@@ -3,6 +3,7 @@ package com.tyron.completion.java.rewrite;
 import com.github.javaparser.ast.type.Type;
 import com.google.common.collect.ImmutableMap;
 
+import org.openjdk.javax.lang.model.element.TypeParameterElement;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.source.tree.Scope;
 import org.openjdk.source.tree.Tree;
@@ -42,7 +43,6 @@ public class IntroduceLocalVariable implements Rewrite {
     private final String methodName;
     private final TypeMirror type;
     private final long position;
-
     public IntroduceLocalVariable(Path file, String methodName, TypeMirror type, long position) {
         this.file = file;
         this.methodName = methodName;
@@ -57,6 +57,9 @@ public class IntroduceLocalVariable implements Rewrite {
                 List<TextEdit> edits = new ArrayList<>();
                 Range range = new Range(position, position);
                 Type variableType = EditHelper.printType(type, true);
+                if (variableType.isTypeParameter()) {
+                    variableType = variableType.asTypeParameter().getTypeBound().get(0);
+                }
                 String variableName = ActionUtil.guessNameFromMethodName(methodName);
                 if (variableName == null) {
                     variableName = ActionUtil.guessNameFromType(type);
