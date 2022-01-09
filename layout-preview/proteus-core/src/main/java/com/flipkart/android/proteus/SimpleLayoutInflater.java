@@ -161,10 +161,12 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
 
         if (layout.extras != null && parent != null) {
             for (Map.Entry<String, Value> entry : layout.extras.entrySet()) {
-                ViewTypeParser parentParser = context.getParser(getType(parent));
-                int id = parentParser.getAttributeId(entry.getKey());
-                if (id != -1) {
-                    parentParser.handleAttribute(parent, view.getAsView(), id, entry.getValue());
+                ViewTypeParser<View> parentParser = context.getParser(getType(parent));
+                if (parentParser != null) {
+                    int id = parentParser.getAttributeId(entry.getKey());
+                    if (id != -1) {
+                        parentParser.handleAttribute(parent, view.getAsView(), id, entry.getValue());
+                    }
                 }
             }
         }
