@@ -184,13 +184,8 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
         if (value == null) {
           value = attribute;
         }
-        int id = ProteusHelper.getAttributeId((ProteusView) view, attribute.getName());
-        if (id != -1) {
-          ViewTypeParser<View> viewTypeParser = proteusView.getViewManager().getViewTypeParser();
-          if (viewTypeParser != null) {
-            viewTypeParser.handleAttribute((View) view.getParent(), view, id, value);
-          }
-        }
+        Drawable evaluate = DrawableResourceProcessor.evaluate(value, view);
+        setDrawable(view, evaluate);
       }
     });
 
@@ -330,7 +325,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
     });
 
-    addAttributeProcessor("layout_marginStart", new DimensionAttributeProcessor<V>() {
+    addAttributeProcessor("android:layout_marginStart", new DimensionAttributeProcessor<V>() {
       @Override
       public void setDimension(V view, float dimension) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
@@ -343,7 +338,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       }
     });
 
-    addAttributeProcessor("layout_marginEnd", new DimensionAttributeProcessor<V>() {
+    addAttributeProcessor("android:layout_marginEnd", new DimensionAttributeProcessor<V>() {
       @Override
       public void setDimension(V view, float dimension) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
