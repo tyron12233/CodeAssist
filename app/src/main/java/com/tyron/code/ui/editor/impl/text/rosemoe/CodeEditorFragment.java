@@ -17,6 +17,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.project.ProjectManager;
@@ -291,6 +292,12 @@ public class CodeEditorFragment extends Fragment implements Savable,
             mEditor.showContextMenu(event.getX(), event.getY());
         });
 
+        LogViewModel logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
+
+        mEditor.setDiagnosticsListener(diagnostics -> {
+            logViewModel.updateLogs(LogViewModel.DEBUG, diagnostics);
+        });
+
         getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
                 getViewLifecycleOwner(), ((requestKey, result) -> {
             String xml = result.getString("text", mEditor.getText().toString());
@@ -457,6 +464,16 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 @Override
                 public void formatCodeAsync(int startIndex, int endIndex) {
                     mEditor.formatCodeAsync();
+                }
+
+                @Override
+                public void beginBatchEdit() {
+                    mEditor.getText().beginBatchEdit();
+                }
+
+                @Override
+                public void endBatchEdit() {
+                    mEditor.getText().endBatchEdit();
                 }
             });
         } catch (Throwable e) {

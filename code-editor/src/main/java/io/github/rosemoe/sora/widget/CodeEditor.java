@@ -73,8 +73,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.annotation.RequiresApi;
+import androidx.lifecycle.ViewModelProvider;
 
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.code.ui.editor.DiagnosticsListener;
+
+import org.openjdk.javax.tools.DiagnosticListener;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
@@ -287,6 +291,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     /**
      * CodeAssist added fields
      */
+    private DiagnosticsListener mDiagnosticsListener;
     private File mCurrentFile;
     private final List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
     private final Cursor.CursorMoveDelegate mCursorMoveDelegate = new Cursor.CursorMoveDelegate() {
@@ -300,6 +305,10 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
             }
         }
     };
+
+    public void setDiagnosticsListener(DiagnosticsListener diagnosticsListener) {
+        mDiagnosticsListener = diagnosticsListener;
+    }
 
     public CodeEditor(Context context) {
         this(context, null);
@@ -463,6 +472,9 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         mDiagnostics.addAll(diagnostics);
         if (mLanguage.getAnalyzer() != null) {
             mLanguage.getAnalyzer().setDiagnostics(diagnostics);
+        }
+        if (mDiagnosticsListener != null) {
+            post(() ->  mDiagnosticsListener.onDiagnosticsUpdate(mDiagnostics));
         }
         analyze(false);
     }

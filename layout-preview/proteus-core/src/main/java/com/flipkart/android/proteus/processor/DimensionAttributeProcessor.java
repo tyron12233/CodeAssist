@@ -89,6 +89,7 @@ public abstract class DimensionAttributeProcessor<T extends View> extends Attrib
 
   @Override
   public void handleStyle(View parent, T view, Style style) {
+    System.out.println("Handle style: " + style);
 //    TypedArray a = style.apply(view.getContext());
 //    setDimension(view, a.getDimensionPixelSize(0, 0));
   }

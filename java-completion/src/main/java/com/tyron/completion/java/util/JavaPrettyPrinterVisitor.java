@@ -6,6 +6,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.Name;
 import com.github.javaparser.ast.expr.SimpleName;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.printer.DefaultPrettyPrinter;
 import com.github.javaparser.printer.DefaultPrettyPrinterVisitor;
 import com.github.javaparser.printer.SourcePrinter;
@@ -40,6 +41,28 @@ public class JavaPrettyPrinterVisitor extends DefaultPrettyPrinterVisitor {
         }
         printer.print(n.getIdentifier());
         printOrphanCommentsEnding(n);
+    }
+
+    @Override
+    public void visit(ClassOrInterfaceType n, Void arg) {
+        printOrphanCommentsBeforeThisChildNode(n);
+        printComment(n.getComment(), arg);
+
+        if (false) {
+            if (n.getScope().isPresent()) {
+                n.getScope().get().accept(this, arg);
+                printer.print(".");
+            }
+        }
+        printAnnotations(n.getAnnotations(), false, arg);
+
+        n.getName().accept(this, arg);
+
+        if (n.isUsingDiamondOperator()) {
+            printer.print("<>");
+        } else {
+            printTypeArgs(n, arg);
+        }
     }
 
     @Override

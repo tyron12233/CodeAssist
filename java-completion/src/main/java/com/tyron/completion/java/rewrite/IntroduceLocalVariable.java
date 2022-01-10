@@ -1,8 +1,11 @@
 package com.tyron.completion.java.rewrite;
 
+import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.google.common.collect.ImmutableMap;
 
+import org.openjdk.javax.lang.model.element.TypeParameterElement;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.source.tree.Scope;
 import org.openjdk.source.tree.Tree;
@@ -27,6 +30,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,7 +46,6 @@ public class IntroduceLocalVariable implements Rewrite {
     private final String methodName;
     private final TypeMirror type;
     private final long position;
-
     public IntroduceLocalVariable(Path file, String methodName, TypeMirror type, long position) {
         this.file = file;
         this.methodName = methodName;
@@ -57,6 +60,14 @@ public class IntroduceLocalVariable implements Rewrite {
                 List<TextEdit> edits = new ArrayList<>();
                 Range range = new Range(position, position);
                 Type variableType = EditHelper.printType(type, true);
+                if (variableType.isTypeParameter()) {
+                    NodeList<ClassOrInterfaceType> typeBound =
+                            variableType.asTypeParameter().getTypeBound();
+                    Optional<ClassOrInterfaceType> first = typeBound.getFirst();
+                    if (first.isPresent()) {
+                        variableType = first.get();
+                    }
+                }
                 String variableName = ActionUtil.guessNameFromMethodName(methodName);
                 if (variableName == null) {
                     variableName = ActionUtil.guessNameFromType(type);

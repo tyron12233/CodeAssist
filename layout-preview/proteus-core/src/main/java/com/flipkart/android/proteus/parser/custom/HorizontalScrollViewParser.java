@@ -18,6 +18,7 @@ package com.flipkart.android.proteus.parser.custom;
 
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 
 import com.flipkart.android.proteus.ProteusContext;
@@ -43,13 +44,13 @@ public class HorizontalScrollViewParser<T extends View> extends ViewTypeParser<T
   @NonNull
   @Override
   public String getType() {
-    return "android.widget.HorizontalScrollView";
+    return HorizontalScrollView.class.getName();
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "android.widget.FrameLayout";
+    return FrameLayout.class.getName();
   }
 
   @NonNull

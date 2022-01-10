@@ -180,14 +180,12 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
         ProteusView proteusView = ((ProteusView) view);
         Value value =
-                proteusView.getViewManager().getStyle().getValue(attribute.getName(), attribute);
-        int id = ProteusHelper.getAttributeId((ProteusView) view, attribute.getName());
-        if (id != -1) {
-          ViewTypeParser<View> viewTypeParser = proteusView.getViewManager().getViewTypeParser();
-          if (viewTypeParser != null) {
-            viewTypeParser.handleAttribute((View) view.getParent(), view, id, value);
-          }
+                proteusView.getViewManager().getContext().obtainStyledAttribute(parent, view, attribute.getName());
+        if (value == null) {
+          value = attribute;
         }
+        Drawable evaluate = DrawableResourceProcessor.evaluate(value, view);
+        setDrawable(view, evaluate);
       }
     });
 
@@ -267,14 +265,16 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDimension(V view, float dimension) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams layoutParams;
-          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
-          layoutParams.setMargins((int) dimension, layoutParams.topMargin, layoutParams.rightMargin, layoutParams.bottomMargin);
-          view.setLayoutParams(layoutParams);
-        } else {
-          if (ProteusConstants.isLoggingEnabled()) {
-            Log.e(TAG, "margins can only be applied to views with parent ViewGroup");
-          }
+          MarginHelper.setMarginLeft(view, (int) dimension);
+        }
+      }
+    });
+
+    addAttributeProcessor("android:layout_marginStart", new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+          MarginHelper.setMarginLeft(view, (int) dimension);
         }
       }
     });
@@ -286,7 +286,6 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
           ViewGroup.MarginLayoutParams layoutParams;
           layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
           layoutParams.setMargins(layoutParams.leftMargin, (int) dimension, layoutParams.rightMargin, layoutParams.bottomMargin);
-          view.setLayoutParams(layoutParams);
         } else {
           if (ProteusConstants.isLoggingEnabled()) {
             Log.e(TAG, "margins can only be applied to views with parent ViewGroup");
@@ -299,14 +298,16 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDimension(V view, float dimension) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams layoutParams;
-          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
-          layoutParams.setMargins(layoutParams.leftMargin, layoutParams.topMargin, (int) dimension, layoutParams.bottomMargin);
-          view.setLayoutParams(layoutParams);
-        } else {
-          if (ProteusConstants.isLoggingEnabled()) {
-            Log.e(TAG, "margins can only be applied to views with parent ViewGroup");
-          }
+          MarginHelper.setMarginRight(view, (int) dimension);
+        }
+      }
+    });
+
+    addAttributeProcessor("android:layout_marginEnd", new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+          MarginHelper.setMarginRight(view, (int) dimension);
         }
       }
     });
@@ -315,39 +316,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDimension(V view, float dimension) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams layoutParams;
-          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
-          layoutParams.setMargins(layoutParams.leftMargin, layoutParams.topMargin, layoutParams.rightMargin, (int) dimension);
-          view.setLayoutParams(layoutParams);
-        } else {
-          if (ProteusConstants.isLoggingEnabled()) {
-            Log.e(TAG, "margins can only be applied to views with parent ViewGroup");
-          }
-        }
-      }
-    });
-
-    addAttributeProcessor("layout_marginStart", new DimensionAttributeProcessor<V>() {
-      @Override
-      public void setDimension(V view, float dimension) {
-        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams layoutParams;
-          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
-          layoutParams.setMarginStart((int) dimension);
-          layoutParams.resolveLayoutDirection(view.getLayoutDirection());
-          layoutParams.setMargins(layoutParams.leftMargin, layoutParams.topMargin, layoutParams.rightMargin, layoutParams.bottomMargin);
-        }
-      }
-    });
-
-    addAttributeProcessor("layout_marginEnd", new DimensionAttributeProcessor<V>() {
-      @Override
-      public void setDimension(V view, float dimension) {
-        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams layoutParams = new ViewGroup.MarginLayoutParams(view.getLayoutParams());
-          layoutParams.setMarginEnd((int) dimension);
-          layoutParams.setMarginStart(((ViewGroup.MarginLayoutParams) view.getLayoutParams()).getMarginStart());
-          view.setLayoutParams(layoutParams);
+          MarginHelper.setMarginBottom(view, (int) dimension);
         }
       }
     });
@@ -392,13 +361,13 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
 
       @Override
       public void handleResource(View parent, V view, Resource resource) {
-        Integer visibility = resource.getInteger(view.getContext());
+        Integer visibility = resource.getInteger(ProteusHelper.getProteusContext(view));
         view.setVisibility(null != visibility ? visibility : View.GONE);
       }
 
       @Override
       public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
-        TypedArray a = attribute.apply(view.getContext());
+        TypedArray a = attribute.apply(ProteusHelper.getProteusContext(view));
         view.setVisibility(a.getInt(0, View.GONE));
       }
 
@@ -420,11 +389,12 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
     addAttributeProcessor(Attributes.View.Id, new StringAttributeProcessor<V>() {
       @Override
       public void setString(final V view, String value) {
-        if (view.getContext() instanceof ProteusContext) {
-          view.setId(ProteusHelper.getProteusContext(view)
+        ProteusContext context = ProteusHelper.getProteusContext(view);
+
+          view.setId(context
                   .getInflater()
                   .getUniqueViewId(ParseHelper.parseViewId(value)));
-        }
+
         // set view id resource name
         final String resourceName = value;
         view.setAccessibilityDelegate(new View.AccessibilityDelegate() {
@@ -570,7 +540,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
     addAttributeProcessor(Attributes.View.Style, new StyleResourceProcessor<V>() {
       @Override
       public void handleStyle(View parent, View view, Style style) {
-        style.apply(parent, (ProteusView) view, false);
+        style.applyStyle(parent, (ProteusView) view, false);
       }
     });
 
@@ -580,21 +550,49 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
         ProteusView proteusView = (ProteusView) view;
         ProteusView.Manager viewManager = proteusView.getViewManager();
 
-        // if the viewas already a theme set, then its most likely that this is
-        // a theme overlay, we just override the values from the exisiting theme
-        if (viewManager.getStyle() != null) {
+        // if the view has already a theme set, then its most likely that this is
+        // a theme overlay, we just override the values from the existing theme
+        Style currentTheme = viewManager.getTheme();
+        Style currentStyle = viewManager.getStyle();
+        if (currentTheme != null) {
+          currentTheme = currentTheme.copy().getAsStyle();
           for (Map.Entry<String, Value> entry : style.getValues().entrySet()) {
-            viewManager.getStyle().addValue(entry.getKey(), entry.getValue());
+            currentTheme.addValue(entry.getKey(), entry.getValue());
+            if (currentStyle != null) {
+              currentStyle.addValue(entry.getKey(), entry.getValue());
+            }
+          }
+
+          currentTheme.applyTheme(parent, (ProteusView) view,true);
+
+          if (viewManager.getStyle() != null) {
+             viewManager.getStyle().applyStyle(parent, (ProteusView) view, false);
           }
         } else {
-          style.apply(parent, (ProteusView) view, true);
+          style.applyTheme(parent, (ProteusView) view, true);
         }
       }
     });
     addAttributeProcessor("materialThemeOverlay",  new StyleResourceProcessor<V>() {
       @Override
       public void handleStyle(View parent, View view, Style style) {
-        style.apply(parent, (ProteusView) view, true);
+        ProteusView proteusView = (ProteusView) view;
+        ProteusView.Manager viewManager = proteusView.getViewManager();
+//        // wait for the other attributes to be applied
+////        view.post(() -> {
+          if (viewManager.getTheme() != null) {
+            Style currentTheme = viewManager.getTheme().copy().getAsStyle();
+            currentTheme.getValues().remove("materialThemeOverlay");
+
+            for (Map.Entry<String, Value> entry : style.getValues().entrySet()) {
+                currentTheme.addValue(entry.getKey(), entry.getValue());
+            }
+
+            currentTheme.applyTheme(parent, (ProteusView) view, false);
+          } else {
+            style.applyTheme(parent, (ProteusView) view, false);
+          }
+//        });
       }
     });
 

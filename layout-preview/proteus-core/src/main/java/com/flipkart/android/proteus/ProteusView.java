@@ -42,7 +42,6 @@ import java.util.Map;
  * @author adtityasharat
  */
 public interface ProteusView {
-
   /**
    * @return The View Manager of this Proteus View.
    */
@@ -66,7 +65,32 @@ public interface ProteusView {
    */
   interface Manager {
 
-    default ViewTypeParser getViewTypeParser() {
+    default void setOnDragListener(View.OnDragListener listener) {
+      ;
+    }
+
+    default View.OnDragListener getOnDragListener() {
+      return null;
+    }
+
+    default void setOnClickListener(View.OnClickListener listener) {
+
+    }
+
+    default View.OnClickListener getOnClickListener() {
+      return null;
+    }
+
+    default void setOnLongClickListener(View.OnLongClickListener listener) {
+
+    }
+
+    default View.OnLongClickListener getOnLongClickListener() {
+      return null;
+    }
+
+
+    default <T extends View> ViewTypeParser<T> getViewTypeParser() {
       return null;
     }
 
@@ -92,6 +116,14 @@ public interface ProteusView {
 
     default void setStyle(Style style) {
 
+    }
+
+    default void setTheme(Style theme) {
+
+    }
+
+    default Style getTheme() {
+      return null;
     }
 
     default Style getStyle() {

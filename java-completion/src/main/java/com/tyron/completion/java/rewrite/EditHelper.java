@@ -6,6 +6,7 @@ import com.github.javaparser.ast.Modifier.Keyword;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.BooleanLiteralExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -18,6 +19,7 @@ import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.PrimitiveType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.printer.configuration.ConfigurationOption;
 import com.github.javaparser.printer.configuration.DefaultConfigurationOption;
 import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
@@ -50,9 +52,9 @@ import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.code.Symbol;
-import org.openjdk.tools.javac.code.Type;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
@@ -107,6 +109,12 @@ public class EditHelper {
 
     private static void printMethodInternal(MethodDeclaration methodDeclaration, ExecutableElement method) {
         methodDeclaration.addMarkerAnnotation(Override.class);
+        Optional<AnnotationExpr> recentlyNonNull = methodDeclaration.getAnnotationByName(
+                "RecentlyNonNull");
+        if (recentlyNonNull.isPresent()) {
+            methodDeclaration.remove(recentlyNonNull.get());
+            methodDeclaration.addMarkerAnnotation(NonNull.class);
+        }
         BlockStmt blockStmt = new BlockStmt();
         if (method.getModifiers().contains(Modifier.ABSTRACT)) {
             methodDeclaration.removeModifier(Keyword.ABSTRACT);
@@ -120,7 +128,9 @@ public class EditHelper {
         } else {
             MethodCallExpr methodCallExpr = new MethodCallExpr();
             methodCallExpr.setName(methodDeclaration.getName());
-            methodCallExpr.setArguments(methodDeclaration.getParameters().stream().map(NodeWithSimpleName::getNameAsExpression).collect(NodeList.toNodeList()));
+            methodCallExpr.setArguments(methodDeclaration.getParameters().stream()
+                    .map(NodeWithSimpleName::getNameAsExpression)
+                    .collect(NodeList.toNodeList()));
             methodCallExpr.setScope(new SuperExpr());
             if (methodDeclaration.getType().isVoidType()) {
                 blockStmt.addStatement(methodCallExpr);
@@ -270,7 +280,8 @@ public class EditHelper {
     }
 
     public static com.github.javaparser.ast.type.Type printType(TypeMirror type, boolean fqn) {
-        return JavaParserTypesUtil.toType(type);
+        Type type1 = JavaParserTypesUtil.toType(type);
+        return type1;
     }
 
     public static String printTypeParameters(List<? extends TypeMirror> arguments) {

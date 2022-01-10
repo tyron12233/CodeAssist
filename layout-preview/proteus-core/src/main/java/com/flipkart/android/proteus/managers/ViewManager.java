@@ -72,7 +72,14 @@ public class ViewManager implements ProteusView.Manager {
     protected Object extras;
 
     @Nullable
+    protected Style theme;
+
+    @Nullable
     protected Style style;
+
+    private View.OnDragListener onDragListener;
+    private View.OnClickListener onClickListener;
+    private View.OnLongClickListener onLongClickListener;
 
     public ViewManager(@NonNull ProteusContext context, @NonNull ViewTypeParser parser,
                        @NonNull View view, @NonNull Layout layout,
@@ -122,6 +129,33 @@ public class ViewManager implements ProteusView.Manager {
         return view.findViewById(context.getInflater().getUniqueViewId(id));
     }
 
+    public View.OnDragListener getOnDragListener() {
+        return onDragListener;
+    }
+
+    public void setOnDragListener(View.OnDragListener onDragListener) {
+        view.setOnDragListener(onDragListener);
+        this.onDragListener = onDragListener;
+    }
+
+    public void setOnClickListener(View.OnClickListener onClickListener) {
+        view.setOnClickListener(onClickListener);
+        this.onClickListener = onClickListener;
+    }
+
+    public View.OnClickListener getOnClickListener() {
+        return onClickListener;
+    }
+
+    public void setOnLongClickListener(View.OnLongClickListener onLongClickListener) {
+        view.setOnLongClickListener(onLongClickListener);
+        this.onLongClickListener = onLongClickListener;
+    }
+
+    public View.OnLongClickListener getOnLongClickListener() {
+        return onLongClickListener;
+    }
+
     @NonNull
     @Override
     public ProteusContext getContext() {
@@ -169,6 +203,14 @@ public class ViewManager implements ProteusView.Manager {
         return this.style;
     }
 
+    public void setTheme(Style theme) {
+        this.theme = theme;
+    }
+
+    public Style getTheme() {
+        return theme;
+    }
+
     @Override
     public Map<String, ViewTypeParser.AttributeSet.Attribute> getAvailableAttributes() {
         Map<String, ViewTypeParser.AttributeSet.Attribute> attributes =
@@ -184,7 +226,7 @@ public class ViewManager implements ProteusView.Manager {
     }
 
     @Override
-    public ViewTypeParser<?> getViewTypeParser() {
+    public <T extends View> ViewTypeParser<T> getViewTypeParser() {
         return parser;
     }
 
@@ -199,6 +241,10 @@ public class ViewManager implements ProteusView.Manager {
             layout.extras.remove(attributeName);
         }
 
+        View.OnDragListener listener = getOnDragListener();
+        View.OnClickListener onClickListener = getOnClickListener();
+        View.OnLongClickListener onLongClickListener = getOnLongClickListener();
+
         // when an attribute is removed, there is no way to undo the
         // attributes that have already been set so we just recreate
         // the view and add it again to the layout
@@ -207,12 +253,16 @@ public class ViewManager implements ProteusView.Manager {
             ViewParent viewParent = view.getParent();
             if (viewParent instanceof ViewGroup) {
                 ViewGroup parent = (ViewGroup) viewParent;
-                int index = parent.indexOfChild(parent) - 1;
+                int index = parent.indexOfChild(view);
                 parent.removeView(view);
 
                 ProteusView view = context.getInflater().inflate(layout, new ObjectValue(), parent, -1);
                 this.view = view.getAsView();
                 view.setViewManager(this);
+
+                view.getViewManager().setOnClickListener(onClickListener);
+                view.getViewManager().setOnDragListener(listener);
+                view.getViewManager().setOnLongClickListener(onLongClickListener);
 
                 parent.addView(view.getAsView(), index);
             }

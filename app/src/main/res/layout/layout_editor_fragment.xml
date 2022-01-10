@@ -3,17 +3,16 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:background="@color/colorBackground"
-    android:weightSum="100">
+    android:weightSum="100"
+    android:background="@color/colorBackground">
 
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/palette_container"
+        android:name="com.tyron.code.ui.layoutEditor.ViewPaletteFragment"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_weight="35"
         android:orientation="vertical"
-        android:name="com.tyron.code.ui.layoutEditor.ViewPaletteFragment"
+        android:layout_weight="35"
         tools:layout="@layout/view_palette_fragment">
 
     </androidx.fragment.app.FragmentContainerView>
@@ -26,8 +25,8 @@
     <FrameLayout
         android:id="@+id/editor_layout"
         android:layout_width="0dp"
-        android:layout_height="match_parent"
         android:layout_weight="65"
+        android:layout_height="match_parent"
         android:orientation="vertical">
 
         <com.tyron.layoutpreview.BoundaryDrawingFrameLayout

@@ -19,6 +19,23 @@ package com.flipkart.android.proteus;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.RelativeLayout;
+import android.widget.ScrollView;
+import android.widget.SeekBar;
+import android.widget.TextView;
+import android.widget.Toolbar;
+import android.widget.VideoView;
+import android.widget.ViewFlipper;
+import android.widget.ViewSwitcher;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -42,13 +59,25 @@ public class ProteusContext extends ContextWrapper {
     private static final Map<String, String> sInternalViewMap = new HashMap<>();
 
     static {
-        sInternalViewMap.put("LinearLayout", "android.widget.LinearLayout");
-        sInternalViewMap.put("TextView", "android.widget.TextView");
-        sInternalViewMap.put("Button", "android.widget.Button");
-        sInternalViewMap.put("View", "android.view.View");
-        sInternalViewMap.put("ViewGroup", "android.view.ViewGroup");
-        sInternalViewMap.put("EditText", "android.widget.EditText");
+        sInternalViewMap.put("LinearLayout", LinearLayout.class.getName());
+        sInternalViewMap.put("ViewGroup", ViewGroup.class.getName());
+        sInternalViewMap.put("FrameLayout", FrameLayout.class.getName());
+        sInternalViewMap.put("RelativeLayout", RelativeLayout.class.getName());
+        sInternalViewMap.put("ScrollView", ScrollView.class.getName());
+        sInternalViewMap.put("ViewFlipper", ViewFlipper.class.getName());
+        sInternalViewMap.put("ViewSwitcher", ViewSwitcher.class.getName());
 
+        sInternalViewMap.put("View", View.class.getName());
+        sInternalViewMap.put("ImageView", ImageView.class.getName());
+        sInternalViewMap.put("VideoView", VideoView.class.getName());
+        sInternalViewMap.put("CheckBox", CheckBox.class.getName());
+        sInternalViewMap.put("Toolbar", Toolbar.class.getName());
+        sInternalViewMap.put("TextView", TextView.class.getName());
+        sInternalViewMap.put("ImageButton", ImageButton.class.getName());
+        sInternalViewMap.put("Button", Button.class.getName());
+        sInternalViewMap.put("EditText", EditText.class.getName());
+        sInternalViewMap.put("ProgressBar", ProgressBar.class.getName());
+        sInternalViewMap.put("SeekBar", SeekBar.class.getName());
         // TODO: add other views
     }
 
@@ -182,7 +211,7 @@ public class ProteusContext extends ContextWrapper {
         while (current instanceof ProteusView) {
             ProteusView proteusView = (ProteusView) current;
             ProteusView.Manager viewManager = proteusView.getViewManager();
-            Style style = viewManager.getStyle();
+            Style style = viewManager.getTheme();
             if (style != null) {
                 Value value = style.getValue(name, this, null);
                 if (value != null) {

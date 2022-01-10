@@ -5,11 +5,16 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.LayoutTransition;
 import android.app.Dialog;
 import android.content.ClipData;
+import android.content.Context;
+import android.graphics.Point;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Display;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -317,13 +322,43 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             mEditorRoot.addView(optionalView.get().getAsView());
             setDragListeners(mEditorRoot);
             setClickListeners(mEditorRoot);
+
+            resizeLayoutEditor(mEditorRoot);
         } else {
             exit(getString(R.string.error), "Unable to inflate layout.");
         }
     }
 
+    private void resizeLayoutEditor(View root) {
+        final Point point = new Point();
+        ((WindowManager)requireActivity().getSystemService(Context.WINDOW_SERVICE))
+                .getDefaultDisplay().getRealSize(point);
+        final int screenWidth = point.x;
+        final int screenHeight = point.y;
+
+        final float xScale = (float) root.getWidth() / (float) screenWidth;
+        final float yScale = (float) root.getHeight() / (float) screenHeight;
+        final float minScale = Math.min(xScale, yScale);
+
+        root.setScaleX(minScale);
+        root.setScaleY(minScale);
+
+        final float xCorrection = (screenWidth - (screenWidth * minScale)) / 2;
+        root.setTranslationX(-xCorrection);
+        final float yCorrection = (screenHeight - (screenHeight * minScale)) / 2;
+        root.setTranslationY(-yCorrection);
+
+        // keep the original layout params
+        ViewGroup.LayoutParams layoutParams = root.getLayoutParams();
+        layoutParams.width = screenWidth;
+        layoutParams.height = screenHeight;
+    }
+
+
     private void setDragListeners(ViewGroup viewGroup) {
-        viewGroup.setOnDragListener(mDragListener);
+        if (viewGroup instanceof ProteusView) {
+            ((ProteusView) viewGroup).getViewManager().setOnDragListener(mDragListener);
+        }
 
         try {
             LayoutTransition transition = new LayoutTransition();
@@ -343,8 +378,10 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     }
 
     private void setClickListeners(View view) {
-        view.setOnLongClickListener(mOnLongClickListener);
-        view.setOnClickListener(mOnClickListener);
+        if (view instanceof ProteusView) {
+            ((ProteusView) view).getViewManager().setOnClickListener(mOnClickListener);
+            ((ProteusView) view).getViewManager().setOnLongClickListener(mOnLongClickListener);
+        }
         if (view instanceof ViewGroup && !(view instanceof UnknownViewGroup)) {
             ViewGroup parent = (ViewGroup) view;
             for (int i = 0; i < parent.getChildCount(); i++) {

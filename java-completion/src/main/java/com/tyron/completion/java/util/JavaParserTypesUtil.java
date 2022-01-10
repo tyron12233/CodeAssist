@@ -2,6 +2,8 @@ package com.tyron.completion.java.util;
 
 import static com.github.javaparser.utils.PositionUtils.sortByBeginPosition;
 
+import android.view.View;
+
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.SimpleName;
@@ -28,10 +30,13 @@ import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.ParameterizedTypeTree;
 import org.openjdk.source.tree.PrimitiveTypeTree;
 import org.openjdk.source.tree.Tree;
+import org.openjdk.source.tree.TypeParameterTree;
 import org.openjdk.source.tree.WildcardTree;
 import org.openjdk.tools.javac.code.BoundKind;
 import org.openjdk.tools.javac.tree.JCTree;
 
+import java.io.Serializable;
+import java.util.List;
 import java.util.Objects;
 
 public class JavaParserTypesUtil {
@@ -82,9 +87,19 @@ public class JavaParserTypesUtil {
             type = wildcardType;
         } else if (tree instanceof ParameterizedTypeTree) {
             type = toClassOrInterfaceType(tree);
-        }
-        else {
-            type = StaticJavaParser.parseType(tree.toString());
+        } else if (tree instanceof TypeParameterTree) {
+            TypeParameter typeParameter = new TypeParameter();
+            typeParameter.setName(((TypeParameterTree) tree).getName().toString());
+            typeParameter.setTypeBound(((TypeParameterTree) tree).getBounds().stream()
+                    .map(JavaParserTypesUtil::toClassOrInterfaceType)
+                    .collect(NodeList.toNodeList()));
+            type = typeParameter;
+        } else {
+            if (tree != null) {
+                type = StaticJavaParser.parseType(tree.toString());
+            } else {
+                type = null;
+            }
         }
         return type;
     }
@@ -159,12 +174,17 @@ public class JavaParserTypesUtil {
     public static Type toType(TypeVariable typeVariable) {
         TypeParameter typeParameter = new TypeParameter();
         TypeMirror upperBound = typeVariable.getUpperBound();
-        Type type = toType(upperBound);
-        if (type != null && type.isIntersectionType()) {
-            typeParameter.setTypeBound(type.asIntersectionType().getElements().stream()
-                    .filter(Type::isClassOrInterfaceType)
-                    .map(Type::asClassOrInterfaceType)
-                    .collect(NodeList.toNodeList()));
+
+
+        if (!typeVariable.equals(upperBound)) {
+            Type type = toType(upperBound);
+            if (type != null) {
+                if (type.isIntersectionType()) {
+                    typeParameter.setTypeBound(type.asIntersectionType().getElements().stream().filter(Type::isClassOrInterfaceType).map(Type::asClassOrInterfaceType).collect(NodeList.toNodeList()));
+                } else if (type.isClassOrInterfaceType()) {
+                    typeParameter.setTypeBound(NodeList.nodeList(type.asClassOrInterfaceType()));
+                }
+            }
         }
         typeParameter.setName(typeVariable.toString());
         return typeParameter;
