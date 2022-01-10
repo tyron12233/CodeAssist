@@ -43,10 +43,21 @@ public class ProteusContext extends ContextWrapper {
 
     static {
         sInternalViewMap.put("LinearLayout", "android.widget.LinearLayout");
-        sInternalViewMap.put("TextView", "android.widget.TextView");
-        sInternalViewMap.put("Button", "android.widget.Button");
-        sInternalViewMap.put("View", "android.view.View");
         sInternalViewMap.put("ViewGroup", "android.view.ViewGroup");
+        sInternalViewMap.put("FrameLayout", "android.widget.FrameLayout");
+        sInternalViewMap.put("RelativeLayout", "android.widget.RelativeLayout");
+        sInternalViewMap.put("ScrollView", "android.widget.ScrollView");
+        sInternalViewMap.put("ImageView", "android.widget.ImageView");
+        sInternalViewMap.put("ViewFlipper", "android.widget.ViewFlipper");
+        sInternalViewMap.put("ViewSwitcher", "android.widget.ViewSwitcher");
+
+        sInternalViewMap.put("VideoView", "android.widget.VideoView");
+        sInternalViewMap.put("CheckBox", "android.widget.TextBox");
+        sInternalViewMap.put("Toolbar", "android.widget.Toolbar");
+        sInternalViewMap.put("TextView", "android.widget.TextView");
+        sInternalViewMap.put("ImageButton", "adroid.widget.ImageButton");
+        sInternalViewMap.put("Button", "android.widget.Button");
+        sInternalViewMap.put("View", "android.view.View");;
         sInternalViewMap.put("EditText", "android.widget.EditText");
 
         // TODO: add other views
