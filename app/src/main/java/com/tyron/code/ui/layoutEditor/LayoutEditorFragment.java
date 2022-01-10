@@ -14,6 +14,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -243,31 +244,8 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         return root;
     }
 
-    private void resizeLayoutEditor(View root) {
-        final Point point = new Point();
-        ((WindowManager)requireActivity().getSystemService(Context.WINDOW_SERVICE))
-                .getDefaultDisplay().getRealSize(point);
-        final int screenWidth = point.x;
-        final int screenHeight = point.y;
-
-        final float xScale = (float) root.getWidth() / (float) screenWidth;
-        final float yScale = (float) root.getHeight() / (float) screenHeight;
-        final float minScale = Math.min(xScale, yScale);
-
-        root.setScaleX(minScale);
-        root.setScaleY(minScale);
-
-        final float xCorrection = (screenWidth - (screenWidth * minScale)) / 2;
-        root.setTranslationX(-xCorrection);
-        final float yCorrection = (screenHeight - (screenHeight * minScale)) / 2;
-        root.setTranslationY(-yCorrection);
-
-        root.setLayoutParams(new LinearLayout.LayoutParams(screenWidth, screenHeight));
-    }
-
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        view.post(()-> resizeLayoutEditor(view.findViewById(R.id.editor_layout)));
         mEditorViewModel.setPalettes(populatePalettes());
         if (isDumb) {
             ProjectManager.getInstance().addOnProjectOpenListener(this);
@@ -344,10 +322,38 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             mEditorRoot.addView(optionalView.get().getAsView());
             setDragListeners(mEditorRoot);
             setClickListeners(mEditorRoot);
+
+            resizeLayoutEditor(mEditorRoot);
         } else {
             exit(getString(R.string.error), "Unable to inflate layout.");
         }
     }
+
+    private void resizeLayoutEditor(View root) {
+        final Point point = new Point();
+        ((WindowManager)requireActivity().getSystemService(Context.WINDOW_SERVICE))
+                .getDefaultDisplay().getRealSize(point);
+        final int screenWidth = point.x;
+        final int screenHeight = point.y;
+
+        final float xScale = (float) root.getWidth() / (float) screenWidth;
+        final float yScale = (float) root.getHeight() / (float) screenHeight;
+        final float minScale = Math.min(xScale, yScale);
+
+        root.setScaleX(minScale);
+        root.setScaleY(minScale);
+
+        final float xCorrection = (screenWidth - (screenWidth * minScale)) / 2;
+        root.setTranslationX(-xCorrection);
+        final float yCorrection = (screenHeight - (screenHeight * minScale)) / 2;
+        root.setTranslationY(-yCorrection);
+
+        // keep the original layout params
+        ViewGroup.LayoutParams layoutParams = root.getLayoutParams();
+        layoutParams.width = screenWidth;
+        layoutParams.height = screenHeight;
+    }
+
 
     private void setDragListeners(ViewGroup viewGroup) {
         if (viewGroup instanceof ProteusView) {
