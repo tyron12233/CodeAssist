@@ -19,10 +19,14 @@ package com.flipkart.android.proteus.parser.custom;
 
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.ScrollView;
 
 import com.flipkart.android.proteus.ProteusContext;
 import com.flipkart.android.proteus.ProteusView;
 import com.flipkart.android.proteus.ViewTypeParser;
+import com.flipkart.android.proteus.processor.BooleanAttributeProcessor;
 import com.flipkart.android.proteus.processor.StringAttributeProcessor;
 import com.flipkart.android.proteus.toolbox.Attributes;
 import com.flipkart.android.proteus.value.Layout;
@@ -40,13 +44,13 @@ public class ScrollViewParser<T extends View> extends ViewTypeParser<T> {
   @NonNull
   @Override
   public String getType() {
-    return "android.widget.ScrollView";
+    return ScrollView.class.getName();
   }
 
   @Nullable
   @Override
   public String getParentType() {
-    return "android.widget.FrameLayout";
+    return FrameLayout.class.getName();
   }
 
   @NonNull
@@ -58,6 +62,15 @@ public class ScrollViewParser<T extends View> extends ViewTypeParser<T> {
 
   @Override
   protected void addAttributeProcessors() {
+
+    addAttributeProcessor(Attributes.HorizontalScrollView.FillViewPort, new BooleanAttributeProcessor<T>() {
+      @Override
+      public void setBoolean(T view, boolean value) {
+        if (view instanceof ScrollView) {
+          ((ScrollView) view).setFillViewport(value);
+        }
+      }
+    });
 
     addAttributeProcessor(Attributes.ScrollView.Scrollbars, new StringAttributeProcessor<T>() {
       @Override
