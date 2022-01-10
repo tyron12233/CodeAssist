@@ -265,14 +265,16 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDimension(V view, float dimension) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams layoutParams;
-          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
-          layoutParams.setMargins((int) dimension, layoutParams.topMargin, layoutParams.rightMargin, layoutParams.bottomMargin);
-          view.setLayoutParams(layoutParams);
-        } else {
-          if (ProteusConstants.isLoggingEnabled()) {
-            Log.e(TAG, "margins can only be applied to views with parent ViewGroup");
-          }
+          MarginHelper.setMarginLeft(view, (int) dimension);
+        }
+      }
+    });
+
+    addAttributeProcessor("android:layout_marginStart", new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+          MarginHelper.setMarginLeft(view, (int) dimension);
         }
       }
     });
@@ -284,7 +286,6 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
           ViewGroup.MarginLayoutParams layoutParams;
           layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
           layoutParams.setMargins(layoutParams.leftMargin, (int) dimension, layoutParams.rightMargin, layoutParams.bottomMargin);
-          view.setLayoutParams(layoutParams);
         } else {
           if (ProteusConstants.isLoggingEnabled()) {
             Log.e(TAG, "margins can only be applied to views with parent ViewGroup");
@@ -297,43 +298,7 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDimension(V view, float dimension) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams layoutParams;
-          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
-          layoutParams.setMargins(layoutParams.leftMargin, layoutParams.topMargin, (int) dimension, layoutParams.bottomMargin);
-          view.setLayoutParams(layoutParams);
-        } else {
-          if (ProteusConstants.isLoggingEnabled()) {
-            Log.e(TAG, "margins can only be applied to views with parent ViewGroup");
-          }
-        }
-      }
-    });
-
-    addAttributeProcessor(Attributes.View.MarginBottom, new DimensionAttributeProcessor<V>() {
-      @Override
-      public void setDimension(V view, float dimension) {
-        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams layoutParams;
-          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
-          layoutParams.setMargins(layoutParams.leftMargin, layoutParams.topMargin, layoutParams.rightMargin, (int) dimension);
-          view.setLayoutParams(layoutParams);
-        } else {
-          if (ProteusConstants.isLoggingEnabled()) {
-            Log.e(TAG, "margins can only be applied to views with parent ViewGroup");
-          }
-        }
-      }
-    });
-
-    addAttributeProcessor("android:layout_marginStart", new DimensionAttributeProcessor<V>() {
-      @Override
-      public void setDimension(V view, float dimension) {
-        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams layoutParams;
-          layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
-          layoutParams.setMarginStart((int) dimension);
-          layoutParams.resolveLayoutDirection(view.getLayoutDirection());
-          layoutParams.setMargins(layoutParams.leftMargin, layoutParams.topMargin, layoutParams.rightMargin, layoutParams.bottomMargin);
+          MarginHelper.setMarginRight(view, (int) dimension);
         }
       }
     });
@@ -342,10 +307,16 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       @Override
       public void setDimension(V view, float dimension) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams layoutParams = new ViewGroup.MarginLayoutParams(view.getLayoutParams());
-          layoutParams.setMarginEnd((int) dimension);
-          layoutParams.setMarginStart(((ViewGroup.MarginLayoutParams) view.getLayoutParams()).getMarginStart());
-          view.setLayoutParams(layoutParams);
+          MarginHelper.setMarginRight(view, (int) dimension);
+        }
+      }
+    });
+
+    addAttributeProcessor(Attributes.View.MarginBottom, new DimensionAttributeProcessor<V>() {
+      @Override
+      public void setDimension(V view, float dimension) {
+        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+          MarginHelper.setMarginBottom(view, (int) dimension);
         }
       }
     });
