@@ -395,13 +395,13 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
 
       @Override
       public void handleResource(View parent, V view, Resource resource) {
-        Integer visibility = resource.getInteger(view.getContext());
+        Integer visibility = resource.getInteger(ProteusHelper.getProteusContext(view));
         view.setVisibility(null != visibility ? visibility : View.GONE);
       }
 
       @Override
       public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
-        TypedArray a = attribute.apply(view.getContext());
+        TypedArray a = attribute.apply(ProteusHelper.getProteusContext(view));
         view.setVisibility(a.getInt(0, View.GONE));
       }
 
@@ -423,11 +423,12 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
     addAttributeProcessor(Attributes.View.Id, new StringAttributeProcessor<V>() {
       @Override
       public void setString(final V view, String value) {
-        if (view.getContext() instanceof ProteusContext) {
-          view.setId(ProteusHelper.getProteusContext(view)
+        ProteusContext context = ProteusHelper.getProteusContext(view);
+
+          view.setId(context
                   .getInflater()
                   .getUniqueViewId(ParseHelper.parseViewId(value)));
-        }
+
         // set view id resource name
         final String resourceName = value;
         view.setAccessibilityDelegate(new View.AccessibilityDelegate() {
