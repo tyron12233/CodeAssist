@@ -180,7 +180,10 @@ public class ViewParser<V extends View> extends ViewTypeParser<V> {
       public void handleAttributeResource(View parent, V view, AttributeResource attribute) {
         ProteusView proteusView = ((ProteusView) view);
         Value value =
-                proteusView.getViewManager().getStyle().getValue(attribute.getName(), attribute);
+                proteusView.getViewManager().getContext().obtainStyledAttribute(parent, view, attribute.getName());
+        if (value == null) {
+          value = attribute;
+        }
         int id = ProteusHelper.getAttributeId((ProteusView) view, attribute.getName());
         if (id != -1) {
           ViewTypeParser<View> viewTypeParser = proteusView.getViewManager().getViewTypeParser();

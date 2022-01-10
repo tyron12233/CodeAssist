@@ -138,12 +138,15 @@ public class SimpleLayoutInflater implements ProteusLayoutInflater {
             // never null
             assert viewGroupParser != null;
 
-            int children = viewGroupParser.getAttributeId("children");
-            index = layout.attributes.indexOf(new Layout.Attribute(children, null));
-            if (index != -1) {
-                Layout.Attribute childrenAttribute = layout.attributes.get(index);
-                if (childrenAttribute != null) {
-                    handleAttribute(viewGroupParser, view, parent, childrenAttribute.id, childrenAttribute.value);
+            int children = -1;
+            if (view instanceof ViewGroup) {
+                children = parser.getAttributeId("children");
+                index = layout.attributes.indexOf(new Layout.Attribute(children, null));
+                if (index != -1) {
+                    Layout.Attribute childrenAttribute = layout.attributes.get(index);
+                    if (childrenAttribute != null) {
+                        handleAttribute(parser, view, parent, childrenAttribute.id, childrenAttribute.value);
+                    }
                 }
             }
 
