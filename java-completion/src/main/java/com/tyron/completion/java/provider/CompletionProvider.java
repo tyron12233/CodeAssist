@@ -54,6 +54,7 @@ import org.openjdk.tools.javac.tree.JCTree;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -132,6 +133,8 @@ public class CompletionProvider {
         boolean endsWithParen = endsWithParen(contents, (int) cursor);
 
         checkCanceled();
+        Instant now = Instant.now();
+        Log.d(TAG, "Parsing took " + Duration.between(now, Instant.now()).toMillis());
         try (CompilerContainer container = compiler.compile(Collections.singletonList(source))) {
             return container.get(task -> {
                 TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
@@ -242,20 +245,6 @@ public class CompletionProvider {
             path = path.getParentPath();
         }
         throw new RuntimeException("empty path");
-    }
-
-    private boolean isAnnotationTree(TreePath path) {
-        if (path == null) {
-            return false;
-        }
-
-        if (path.getLeaf() instanceof JCTree.JCIdent) {
-            if (path.getParentPath().getLeaf() instanceof JCTree.JCAnnotation) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private CompletionList completeIdentifier(CompileTask task, TreePath path,
@@ -401,13 +390,6 @@ public class CompletionProvider {
             return FuzzySearch.partialRatio(label, partial) > 90;
         };
 
-        if (path.getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
-            list.addAll(addLambda(task, path.getParentPath(), partial));
-        }
-
-        if (path.getParentPath().getLeaf().getKind() == Tree.Kind.NEW_CLASS) {
-            list.addAll(addAnonymous(task, path.getParentPath(), partial));
-        }
         for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
             if (element.getKind() == ElementKind.METHOD) {
                 ExecutableElement executableElement = (ExecutableElement) element;
