@@ -115,7 +115,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
     @Override
     public void onProjectOpen(Project project) {
         if (isDumb) {
-            loadDependencies(project);
+            requireActivity().runOnUiThread(() -> loadDependencies(project));
         }
     }
 
