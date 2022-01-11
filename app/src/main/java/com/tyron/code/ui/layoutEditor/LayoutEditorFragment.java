@@ -323,7 +323,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             setDragListeners(mEditorRoot);
             setClickListeners(mEditorRoot);
 
-            resizeLayoutEditor(mEditorRoot);
+            requireActivity().runOnUiThread(() -> resizeLayoutEditor(mEditorRoot));
         } else {
             exit(getString(R.string.error), "Unable to inflate layout.");
         }
