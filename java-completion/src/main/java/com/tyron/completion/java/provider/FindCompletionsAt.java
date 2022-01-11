@@ -19,13 +19,11 @@ import org.openjdk.source.util.Trees;
 public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
     
     private static final String TAG = FindCompletionsAt.class.getSimpleName();
-    
-	private final JavacTask task;
-	private CompilationUnitTree root;
-    private SourcePositions pos;
+
+    private CompilationUnitTree root;
+    private final SourcePositions pos;
     
 	public FindCompletionsAt(JavacTask task) {
-		this.task = task;
         pos = Trees.instance(task).getSourcePositions();
 	}
 
