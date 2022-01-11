@@ -5,6 +5,7 @@ import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ErroneousTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.ImportTree;
+import org.openjdk.source.tree.LiteralTree;
 import org.openjdk.source.tree.MemberReferenceTree;
 import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.SwitchTree;
@@ -29,67 +30,62 @@ public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
 	}
 
     @Override
+    public TreePath visitLiteral(LiteralTree t, Long find) {
+        if (isInside(t, find)) {
+            return getCurrentPath();
+        }
+        return super.visitLiteral(t, find);
+    }
+
+    @Override
     public TreePath visitCompilationUnit(CompilationUnitTree node, Long p) {
         root = node;
         return reduce(super.visitCompilationUnit(node, p), getCurrentPath());
     }
-    
 
 	@Override
-	public TreePath visitIdentifier(IdentifierTree node, Long find) {
-        long start = pos.getStartPosition(root, node);
-        long end = pos.getEndPosition(root, node);
-        if (start <= find && find <= end) {
+	public TreePath visitIdentifier(IdentifierTree t, Long find) {
+        if (isInside(t, find)) {
             return getCurrentPath();
         }
-		return super.visitIdentifier(node, find);
+		return super.visitIdentifier(t, find);
 	}
 
     @Override
-    public TreePath visitImport(ImportTree node, Long find) {
-        long start = pos.getStartPosition(root, node);
-        long end = pos.getEndPosition(root, node);
-        if (start <= find && find <= end) {
+    public TreePath visitImport(ImportTree t, Long find) {
+        if (isInside(t, find)) {
             return getCurrentPath();
         }
-        return super.visitImport(node, find);
+        return super.visitImport(t, find);
     }
     
     @Override
-    public TreePath visitMemberSelect(MemberSelectTree node, Long find) {
-        long start = pos.getEndPosition(root, node.getExpression()) + 1;
-        long end = pos.getEndPosition(root, node);
-        if (start <= find && find <= end) {
+    public TreePath visitMemberSelect(MemberSelectTree t, Long find) {
+        if (isInside(t, find)) {
             return getCurrentPath();
         }
-        return super.visitMemberSelect(node, find);
+        return super.visitMemberSelect(t, find);
     }
 
     @Override
     public TreePath visitMemberReference(MemberReferenceTree t, Long find) {
-        long start = pos.getEndPosition(root, t.getQualifierExpression()) + 2;
-        long end = pos.getEndPosition(root, t);
-        if (start <= find && find <= end) {
+        if (isInside(t, find)) {
             return getCurrentPath();
         }
         return super.visitMemberReference(t, find);
     }
     
     @Override
-    public TreePath visitCase(CaseTree node, Long find) {
-        long start = pos.getStartPosition(root, node);
-        long end = pos.getEndPosition(root, node);
-        if (start <= find && find <= end) {
+    public TreePath visitCase(CaseTree t, Long find) {
+        if (isInside(t, find)) {
             return getCurrentPath();
         }
-        return super.visitCase(node, find);
+        return super.visitCase(t, find);
     }
 
     @Override
     public TreePath visitSwitch(SwitchTree t, Long find) {
-        long start = pos.getStartPosition(root, t);
-        long end = pos.getEndPosition(root, t);
-        if (start <= find && find <= end) {
+        if (isInside(t, find)) {
             return getCurrentPath();
         }
         return super.visitSwitch(t, find);
@@ -107,6 +103,15 @@ public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
             }
         }
         return null;
+    }
+
+    private boolean isInside(Tree t, long find) {
+        long start = pos.getStartPosition(root, t);
+        long end = pos.getEndPosition(root, t);
+        if (start <= find && find <= end) {
+            return true;
+        }
+        return false;
     }
 
 	@Override

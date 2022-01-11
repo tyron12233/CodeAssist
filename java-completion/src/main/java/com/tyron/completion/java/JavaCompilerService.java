@@ -421,7 +421,7 @@ public class JavaCompilerService implements CompilerProvider {
      * @return a CompileTask for this compilation
      */
     @Override
-    public synchronized CompilerContainer compile(Collection<? extends JavaFileObject> sources) {
+    public CompilerContainer compile(Collection<? extends JavaFileObject> sources) {
         synchronized (mContainer) {
             CompileBatch compile = compileBatch(sources);
             CompileTask task = new CompileTask(compile);
