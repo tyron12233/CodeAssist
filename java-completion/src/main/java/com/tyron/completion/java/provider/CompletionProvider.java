@@ -87,7 +87,7 @@ public class CompletionProvider {
     private static final String[] METHOD_BODY_KEYWORDS = {"new", "assert", "try", "catch",
             "finally", "throw", "return", "break", "case", "continue", "default", "do", "while",
             "for", "switch", "if", "else", "instanceof", "final", "class", "void", "boolean",
-            "int", "long", "float", "double", "var"};
+            "int", "long", "float", "double"};
     //private final JavaParser parser;
     private final JavaCompilerService compiler;
 
