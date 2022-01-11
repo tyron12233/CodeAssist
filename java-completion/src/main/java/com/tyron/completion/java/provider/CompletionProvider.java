@@ -149,6 +149,8 @@ public class CompletionProvider {
                         return completeSwitchConstant(task, path, partial);
                     case IMPORT:
                         return completeImport(qualifiedPartialIdentifier(contents, (int) cursor));
+                    case STRING_LITERAL:
+                        return new CompletionList();
                     default:
                         CompletionList list = new CompletionList();
                         addKeywords(path, partial, list);
