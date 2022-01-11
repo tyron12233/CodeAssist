@@ -403,12 +403,14 @@ public class JavaCompilerService implements CompilerProvider {
      * @return a CompileTask for this compilation
      */
     @Override
-    public synchronized CompilerContainer compile(Path... files) {
-        List<JavaFileObject> sources = new ArrayList<>();
-        for (Path f : files) {
-            sources.add(new SourceFileObject(f, mCurrentModule));
-        }
-        return compile(sources);
+    public CompilerContainer compile(Path... files) {
+        return mContainer.get(task -> {
+            List<JavaFileObject> sources = new ArrayList<>();
+            for (Path f : files) {
+                sources.add(new SourceFileObject(f, mCurrentModule));
+            }
+            return compile(sources);
+        });
     }
 
     /**
