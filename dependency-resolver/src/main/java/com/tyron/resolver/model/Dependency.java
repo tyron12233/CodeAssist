@@ -2,10 +2,26 @@ package com.tyron.resolver.model;
 
 import androidx.annotation.NonNull;
 
+import java.util.Objects;
+
 public class Dependency {
+
+    public static Dependency valueOf(String declaration) {
+        String[] names = declaration.split(":");
+        if (names.length < 3) {
+            throw new IllegalStateException("Unknown format: " + declaration);
+        }
+        return new Dependency(names[0], names[1], names[2]);
+    }
 
     public Dependency() {
 
+    }
+
+    public Dependency(String groupId, String artifactId, String versionName) {
+        this.groupId = groupId;
+        this.artifactId = artifactId;
+        this.versionName = versionName;
     }
 
     public String getArtifactId() {
@@ -73,5 +89,19 @@ public class Dependency {
 
     public void setScope(String scope) {
         this.scope = scope;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Dependency that = (Dependency) o;
+        return Objects.equals(artifactId, that.artifactId) && Objects.equals(groupId,
+                that.groupId) && Objects.equals(versionName, that.versionName) && Objects.equals(scope, that.scope) && Objects.equals(type, that.type);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(artifactId, groupId, versionName, scope, type);
     }
 }

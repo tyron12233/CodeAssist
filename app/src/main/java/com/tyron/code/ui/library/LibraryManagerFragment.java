@@ -3,6 +3,9 @@ package com.tyron.code.ui.library;
 import android.app.ProgressDialog;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -10,6 +13,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -22,13 +26,16 @@ import com.google.android.material.transition.MaterialFade;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
+import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.library.adapter.LibraryManagerAdapter;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.code.util.DependencyUtils;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
@@ -95,6 +102,46 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         RecyclerView recyclerView = view.findViewById(R.id.libraries_recyclerview);
         recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         recyclerView.setAdapter(mAdapter);
+
+        Toolbar toolbar = view.findViewById(R.id.toolbar);
+        toolbar.addMenuProvider(new MenuProvider() {
+            @Override
+            public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
+                menu.add(R.string.menu_add_libs_gradle)
+                        .setOnMenuItemClickListener(item -> {
+                            Project currentProject =
+                                    ProjectManager.getInstance().getCurrentProject();
+                            if (currentProject != null) {
+                                Module mainModule = currentProject.getMainModule();
+                                File rootFile = mainModule.getRootFile();
+                                File gradleFile = new File(rootFile, "build.gradle");
+                                if (gradleFile.exists()) {
+                                    try {
+                                        List<Dependency> poms = DependencyUtils.parseGradle(mPomRepository,
+                                                gradleFile, ILogger.EMPTY);
+                                        List<Dependency> data = mAdapter.getData();
+                                        poms.forEach(dependency -> {
+                                            if (!data.contains(dependency)) {
+                                                mAdapter.addDependency(dependency);
+                                            }
+                                        });
+                                    } catch (IOException e) {
+                                        new MaterialAlertDialogBuilder(requireContext())
+                                                .setTitle(R.string.error)
+                                                .setMessage(e.getMessage())
+                                                .show();
+                                    }
+                                }
+                            }
+                            return true;
+                        });
+            }
+
+            @Override
+            public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
+                return false;
+            }
+        });
 
         return view;
     }

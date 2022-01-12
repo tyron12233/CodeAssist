@@ -188,4 +188,5 @@
     <string name="menu_display_dependencies">List dependencies</string>
     <string name="attributes_editor">Attributes Editor</string>
     <string name="attribute_value">Attribute value</string>
+    <string name="menu_add_libs_gradle">Add libraries from build.gradle</string>
 </resources>

@@ -24,6 +24,39 @@ import java.util.regex.Pattern;
 
 public class DependencyUtils {
 
+    private static final Pattern GRADLE_IMPL = Pattern.compile("\\s*(implementation)\\s*(')([a-zA-Z0-9.'/-:\\-]+)(')");
+    private static final Pattern GRADLE_IMPL_QUOT = Pattern.compile("\\s*(implementation)\\s*(\")([a-zA-Z0-9.'/-:\\-]+)(\")");
+
+    /**
+     * Parses a build.gradle file and gets the dependencies out of it
+     *
+     * @param file input build.gradle file
+     * @return Library dependencies
+     */
+    public static List<Dependency> parseGradle(PomRepository repository, File file, ILogger logger) throws IOException {
+        String readString = FileUtils.readFileToString(file, Charset.defaultCharset());
+        // remove all comments
+        readString = readString.replaceAll("\\s*//.*", "");
+        Matcher matcher = GRADLE_IMPL.matcher(readString);
+
+        List<Dependency> deps = new ArrayList<>();
+        while (matcher.find()) {
+            String declaration = matcher.group(3);
+            if (declaration != null) {
+                deps.add(Dependency.valueOf(declaration));
+            }
+        }
+
+        matcher = GRADLE_IMPL_QUOT.matcher(readString);
+        while (matcher.find()) {
+            String declaration = matcher.group(3);
+            if (declaration != null) {
+                deps.add(Dependency.valueOf(declaration));
+            }
+        }
+        return deps;
+    }
+
     public static List<Dependency> parseLibraries(File libraries, ILogger logger) {
         String contents;
         try {
