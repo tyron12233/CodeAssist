@@ -12,6 +12,7 @@ import com.tyron.builder.project.api.FileManager;
 import com.tyron.layoutpreview.convert.ConvertException;
 import com.tyron.layoutpreview.convert.XmlToJsonConverter;
 import com.tyron.layoutpreview.convert.adapter.ProteusTypeAdapterFactory;
+import com.tyron.vectorparser.VectorValue;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -89,6 +90,9 @@ public class ResourceDrawableParser {
                     .VALUE_TYPE_ADAPTER.read(new JsonReader(new StringReader(converted.toString())), true);
             ObjectValue objectValue = value.getAsObject();
             if (objectValue != null) {
+                if ("vector".equals(objectValue.getAsString("type"))) {
+                    return new VectorValue(contentsString);
+                }
                 try {
                     return DrawableValue.valueOf(objectValue, mContext);
                 } catch (Throwable e) {
