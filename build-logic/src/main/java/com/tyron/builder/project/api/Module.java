@@ -16,6 +16,10 @@ public interface Module extends UserDataHolderEx, CacheHolder {
 
     File getRootFile();
 
+    default String getName() {
+        return getRootFile().getName();
+    }
+
     /**
      * Start parsing the project contents such as manifest data, project settings, etc.
      *

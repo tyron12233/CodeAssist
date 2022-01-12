@@ -34,7 +34,7 @@ public abstract class BuilderImpl<T extends Module> implements Builder<T> {
     }
 
     @Override
-    public T getProject() {
+    public T getModule() {
         return mProject;
     }
 

@@ -18,7 +18,7 @@ public interface Builder<T extends Module> {
 
     void setTaskListener(TaskListener taskListener);
 
-    T getProject();
+    T getModule();
 
     void build(BuildType type) throws CompilationFailedException, IOException;
 

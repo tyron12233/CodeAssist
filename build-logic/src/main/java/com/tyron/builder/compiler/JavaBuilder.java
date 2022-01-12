@@ -20,8 +20,8 @@ public class JavaBuilder extends BuilderImpl<JavaModule> {
     @Override
     public List<Task<? super JavaModule>> getTasks(BuildType type) {
         List<Task<? super JavaModule>> tasks = new ArrayList<>();
-        tasks.add(new IncrementalJavaTask(getProject(), getLogger()));
-        tasks.add(new JavaD8Task(getProject(), getLogger()));
+        tasks.add(new IncrementalJavaTask(getModule(), getLogger()));
+        tasks.add(new JavaD8Task(getModule(), getLogger()));
         return tasks;
     }
 }

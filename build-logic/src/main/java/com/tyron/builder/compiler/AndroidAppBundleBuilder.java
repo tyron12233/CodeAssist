@@ -25,19 +25,19 @@ public class AndroidAppBundleBuilder extends BuilderImpl<AndroidModule> {
     @Override
     public List<Task<? super AndroidModule>> getTasks(BuildType type) {
         List<Task<? super AndroidModule>> tasks = new ArrayList<>();
-        tasks.add(new CleanTask(getProject(), getLogger()));
-        tasks.add(new ManifestMergeTask(getProject(), getLogger()));
-        tasks.add(new GenerateFirebaseConfigTask(getProject(), getLogger()));
-        tasks.add(new IncrementalAapt2Task(getProject(), getLogger(), true));
-        tasks.add(new MergeSymbolsTask(getProject(), getLogger()));
-        tasks.add(new IncrementalKotlinCompiler(getProject(), getLogger()));
-        tasks.add(new IncrementalJavaTask(getProject(), getLogger()));
-        if (getProject().getSettings().getBoolean(ModuleSettings.USE_R8, false)) {
-            tasks.add(new R8Task(getProject(), getLogger()));
+        tasks.add(new CleanTask(getModule(), getLogger()));
+        tasks.add(new ManifestMergeTask(getModule(), getLogger()));
+        tasks.add(new GenerateFirebaseConfigTask(getModule(), getLogger()));
+        tasks.add(new IncrementalAapt2Task(getModule(), getLogger(), true));
+        tasks.add(new MergeSymbolsTask(getModule(), getLogger()));
+        tasks.add(new IncrementalKotlinCompiler(getModule(), getLogger()));
+        tasks.add(new IncrementalJavaTask(getModule(), getLogger()));
+        if (getModule().getSettings().getBoolean(ModuleSettings.USE_R8, false)) {
+            tasks.add(new R8Task(getModule(), getLogger()));
         } else {
-            tasks.add(new IncrementalD8Task(getProject(), getLogger()));
+            tasks.add(new IncrementalD8Task(getModule(), getLogger()));
         }
-        tasks.add(new AabTask(getProject(), getLogger()));
+        tasks.add(new AabTask(getModule(), getLogger()));
         return tasks;
     }
 }

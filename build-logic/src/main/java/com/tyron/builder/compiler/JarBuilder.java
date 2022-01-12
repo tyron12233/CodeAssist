@@ -16,8 +16,8 @@ public class JarBuilder extends BuilderImpl<JavaModule> {
     @Override
     public List<Task<? super JavaModule>> getTasks(BuildType type) {
         List<Task<? super JavaModule>> tasks = new ArrayList<>();
-        tasks.add(new IncrementalJavaTask(getProject(), getLogger()));
-        tasks.add(new JarTask(getProject(), getLogger()));
+        tasks.add(new IncrementalJavaTask(getModule(), getLogger()));
+        tasks.add(new JarTask(getModule(), getLogger()));
         return tasks;
     }
 }

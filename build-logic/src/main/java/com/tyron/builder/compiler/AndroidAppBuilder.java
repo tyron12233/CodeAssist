@@ -27,24 +27,24 @@ public class AndroidAppBuilder extends BuilderImpl<AndroidModule> {
     @Override
     public List<Task<? super AndroidModule>> getTasks(BuildType type) {
         List<Task<? super AndroidModule>> tasks = new ArrayList<>();
-        tasks.add(new CleanTask(getProject(), getLogger()));
-        tasks.add(new ManifestMergeTask(getProject(), getLogger()));
-        tasks.add(new GenerateFirebaseConfigTask(getProject(), getLogger()));
+        tasks.add(new CleanTask(getModule(), getLogger()));
+        tasks.add(new ManifestMergeTask(getModule(), getLogger()));
+        tasks.add(new GenerateFirebaseConfigTask(getModule(), getLogger()));
         if (type == BuildType.DEBUG) {
-            tasks.add(new InjectLoggerTask(getProject(), getLogger()));
+            tasks.add(new InjectLoggerTask(getModule(), getLogger()));
         }
-        tasks.add(new IncrementalAapt2Task(getProject(), getLogger(), false));
-        tasks.add(new MergeSymbolsTask(getProject(), getLogger()));
-        tasks.add(new IncrementalKotlinCompiler(getProject(), getLogger()));
-        tasks.add(new IncrementalJavaTask(getProject(), getLogger()));
-        if (getProject().getSettings().getBoolean(ModuleSettings.USE_R8, false) &&
+        tasks.add(new IncrementalAapt2Task(getModule(), getLogger(), false));
+        tasks.add(new MergeSymbolsTask(getModule(), getLogger()));
+        tasks.add(new IncrementalKotlinCompiler(getModule(), getLogger()));
+        tasks.add(new IncrementalJavaTask(getModule(), getLogger()));
+        if (getModule().getSettings().getBoolean(ModuleSettings.USE_R8, false) &&
                 type == BuildType.RELEASE) {
-            tasks.add(new R8Task(getProject(), getLogger()));
+            tasks.add(new R8Task(getModule(), getLogger()));
         } else {
-            tasks.add(new IncrementalD8Task(getProject(), getLogger()));
+            tasks.add(new IncrementalD8Task(getModule(), getLogger()));
         }
-        tasks.add(new PackageTask(getProject(), getLogger()));
-        tasks.add(new SignTask(getProject(), getLogger()));
+        tasks.add(new PackageTask(getModule(), getLogger()));
+        tasks.add(new SignTask(getModule(), getLogger()));
         return tasks;
     }
 }
