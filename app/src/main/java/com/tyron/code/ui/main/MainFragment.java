@@ -22,11 +22,13 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.transition.MaterialSharedAxis;
+import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.library.LibraryManagerFragment;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
@@ -46,6 +48,7 @@ import com.tyron.completion.java.provider.CompletionEngine;
 import org.openjdk.javax.tools.Diagnostic;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -173,7 +176,17 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                     }
                 }
             } else if (item.getItemId() == R.id.action_build_debug) {
-                compile(BuildType.DEBUG);
+                Project project = ProjectManager.getInstance().getCurrentProject();
+                if (project != null) {
+                    List<Module> buildOrder = null;
+                    try {
+                        buildOrder = project.getBuildOrder();
+                        ApplicationLoader.showToast(buildOrder.stream().map(Module::getName).collect(Collectors.joining(", ")));
+                    } catch (IOException e) {
+                        ApplicationLoader.showToast(e.getMessage());
+                    }
+                }
+//                compile(BuildType.DEBUG);
             } else if (item.getItemId() == R.id.action_build_release) {
                 compile(BuildType.RELEASE);
             } else if (item.getItemId() == R.id.action_build_aab) {

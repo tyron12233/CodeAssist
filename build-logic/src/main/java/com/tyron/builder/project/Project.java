@@ -4,6 +4,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.common.eventbus.EventBus;
+import com.google.common.graph.ElementOrder;
+import com.google.common.graph.Graph;
+import com.google.common.graph.GraphBuilder;
+import com.google.common.graph.Graphs;
+import com.google.common.graph.MutableGraph;
 import com.tyron.builder.model.ProjectSettings;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
@@ -14,12 +19,14 @@ import org.jetbrains.kotlin.com.intellij.util.messages.SimpleMessageBusConnectio
 import org.jetbrains.kotlin.com.intellij.util.messages.impl.MessageBusFactoryImpl;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class Project {
 
@@ -68,6 +75,42 @@ public class Project {
     @Override
     public int hashCode() {
         return Objects.hash(mRoot);
+    }
+
+    @SuppressWarnings("UnstableApiUsage")
+    public List<Module> getBuildOrder() throws IOException  {
+        MutableGraph<Module> graph = GraphBuilder
+                .directed()
+                .allowsSelfLoops(false).build();
+        graph.addNode(mMainModule);
+        addEdges(graph, mMainModule);
+        Set<Module> modules = Graphs.reachableNodes(graph, mMainModule);
+        ArrayList<Module> list = new ArrayList<>(modules);
+        Collections.reverse(list);
+        return list;
+    }
+
+    @SuppressWarnings("UnstableApiUsage")
+    private void addEdges(MutableGraph<Module> graph, Module module) throws IOException {
+        Set<String> modules = module.getSettings().getStringSet("modules",
+                Collections.emptySet());
+        if (modules == null) {
+            return;
+        }
+
+        for (String s : modules) {
+            File moduleRoot = new File(mRoot, s);
+            if (!moduleRoot.exists()) {
+                continue;
+            }
+            Module subModule = ModuleUtil.fromDirectory(moduleRoot);
+            if (subModule != null) {
+                subModule.open();
+                graph.putEdge(module, subModule);
+
+                addEdges(graph, subModule);
+            }
+        }
     }
 
 }

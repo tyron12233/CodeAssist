@@ -20,4 +20,5 @@ public class JarBuilder extends BuilderImpl<JavaModule> {
         tasks.add(new JarTask(getModule(), getLogger()));
         return tasks;
     }
+
 }

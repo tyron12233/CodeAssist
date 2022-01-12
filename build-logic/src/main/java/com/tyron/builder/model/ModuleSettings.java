@@ -15,9 +15,13 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.Executors;
 
 @SuppressWarnings({"unchecked", "ConstantConditions"})
@@ -35,6 +39,7 @@ public class ModuleSettings implements SharedPreferences {
     public static final String VERSION_CODE = "versionCode";
     public static final String JAVA_TARGET_VERSION = "javaTargetVersion";
     public static final String JAVA_SOURCE_VERSION = "javaSourceVersion";
+    public static final String MODULE_TYPE = "moduleType";
 
     private final File mConfigFile;
     private final Map<String, Object> mConfigMap;
@@ -57,7 +62,7 @@ public class ModuleSettings implements SharedPreferences {
     }
 
     protected Map<String, Object> getDefaults() {
-        Map<String, Object> map = new HashMap<>();
+        Map<String, Object> map = new TreeMap<>();
         map.put(USE_R8, false);
         map.put(MIN_SDK_VERSION, 21);
         map.put(TARGET_SDK_VERSION, 30);
@@ -87,7 +92,11 @@ public class ModuleSettings implements SharedPreferences {
     @Nullable
     @Override
     public Set<String> getStringSet(String s, @Nullable Set<String> set) {
-        return (Set<String>) mConfigMap.getOrDefault(s, set);
+        Object o = mConfigMap.get(s);
+        if (o != null) {
+            return new TreeSet<>(((ArrayList<String>) o));
+        }
+        return set;
     }
 
     @Override

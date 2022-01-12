@@ -19,6 +19,7 @@ import com.tyron.builder.compiler.AndroidAppBundleBuilder;
 import com.tyron.builder.compiler.ApkBuilder;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Builder;
+import com.tyron.builder.compiler.ProjectBuilder;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
@@ -167,16 +168,17 @@ public class CompilerService extends Service {
 
         Executors.newSingleThreadExecutor().execute(() -> {
             Module module = project.getMainModule();
-            Builder<? extends Module> projectBuilder = getBuilderForProject(module, type);
-
-            module.clear();
-            module.index();
+//            Builder<? extends Module> projectBuilder = getBuilderForProject(module, type);
+//
+//            module.clear();
+//            module.index();
 
             boolean success = true;
 
-            projectBuilder.setTaskListener(this::updateNotification);
+//            projectBuilder.setTaskListener(this::updateNotification);
 
             try {
+                ProjectBuilder projectBuilder = new ProjectBuilder(project, logger);
                 projectBuilder.build(type);
             } catch (Exception e) {
                 mMainHandler.post(() -> onResultListener.onComplete(false, e.getMessage()));
