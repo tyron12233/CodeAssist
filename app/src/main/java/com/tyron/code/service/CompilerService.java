@@ -168,17 +168,16 @@ public class CompilerService extends Service {
 
         Executors.newSingleThreadExecutor().execute(() -> {
             Module module = project.getMainModule();
-//            Builder<? extends Module> projectBuilder = getBuilderForProject(module, type);
-//
-//            module.clear();
-//            module.index();
+            Builder<? extends Module> projectBuilder = getBuilderForProject(module, type);
+
+            module.clear();
+            module.index();
 
             boolean success = true;
 
-//            projectBuilder.setTaskListener(this::updateNotification);
+            projectBuilder.setTaskListener(this::updateNotification);
 
             try {
-                ProjectBuilder projectBuilder = new ProjectBuilder(project, logger);
                 projectBuilder.build(type);
             } catch (Exception e) {
                 mMainHandler.post(() -> onResultListener.onComplete(false, e.getMessage()));

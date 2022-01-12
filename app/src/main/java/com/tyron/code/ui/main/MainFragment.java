@@ -176,17 +176,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                     }
                 }
             } else if (item.getItemId() == R.id.action_build_debug) {
-                Project project = ProjectManager.getInstance().getCurrentProject();
-                if (project != null) {
-                    List<Module> buildOrder = null;
-                    try {
-                        buildOrder = project.getBuildOrder();
-                        ApplicationLoader.showToast(buildOrder.stream().map(Module::getName).collect(Collectors.joining(", ")));
-                    } catch (IOException e) {
-                        ApplicationLoader.showToast(e.getMessage());
-                    }
-                }
-//                compile(BuildType.DEBUG);
+                compile(BuildType.DEBUG);
             } else if (item.getItemId() == R.id.action_build_release) {
                 compile(BuildType.RELEASE);
             } else if (item.getItemId() == R.id.action_build_aab) {
