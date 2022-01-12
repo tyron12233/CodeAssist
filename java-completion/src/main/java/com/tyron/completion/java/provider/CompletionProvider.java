@@ -8,6 +8,7 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.type.ReferenceType;
+import com.github.javaparser.ast.type.Type;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.common.util.StringSearch;
 import com.tyron.completion.java.CompileTask;
@@ -873,7 +874,9 @@ public class CompletionProvider {
         item.label = getMethodLabel(methodDeclaration);
         item.commitText = methodDeclaration.getName() + ((methodRef || endsWithParen) ? "" :
                 "()");
-        item.detail = JavaParserUtil.prettyPrint(methodDeclaration.getType(), className -> false);
+        Type returnType = methodDeclaration.getType();
+        returnType = JavaParserUtil.getFirstType(returnType);
+        item.detail = JavaParserUtil.prettyPrint(returnType, className -> false);
         item.iconKind = DrawableKind.Method;
         item.cursorOffset = item.commitText.length();
         if (methodDeclaration.getParameters() != null && !methodDeclaration.getParameters().isEmpty()) {

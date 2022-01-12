@@ -481,6 +481,28 @@ public class JavaParserUtil {
                 }
             }
         }
+        if (type.isClassOrInterfaceType()) {
+            Optional<NodeList<Type>> typeArguments =
+                    type.asClassOrInterfaceType().getTypeArguments();
+            if (typeArguments.isPresent()) {
+                if (typeArguments.get().isNonEmpty()) {
+                    Optional<Type> first = typeArguments.get().getFirst();
+                    if (first.isPresent()) {
+                        if (first.get().isTypeParameter()) {
+                            NodeList<ClassOrInterfaceType> typeBound =
+                                    first.get().asTypeParameter().getTypeBound();
+                            if (typeBound.isNonEmpty()) {
+                                Optional<ClassOrInterfaceType> first1 = typeBound.getFirst();
+                                if (first1.isPresent()) {
+                                    type.asClassOrInterfaceType().setTypeArguments(first1.get());
+                                    return type;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if (type.isArrayType()) {
             return getFirstArrayType(type.asArrayType().getComponentType());
         }

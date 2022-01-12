@@ -60,14 +60,7 @@ public class IntroduceLocalVariable implements Rewrite {
                 List<TextEdit> edits = new ArrayList<>();
                 Range range = new Range(position, position);
                 Type variableType = EditHelper.printType(type, true);
-                if (variableType.isTypeParameter()) {
-                    NodeList<ClassOrInterfaceType> typeBound =
-                            variableType.asTypeParameter().getTypeBound();
-                    Optional<ClassOrInterfaceType> first = typeBound.getFirst();
-                    if (first.isPresent()) {
-                        variableType = first.get();
-                    }
-                }
+                variableType = JavaParserUtil.getFirstType(variableType);
                 String variableName = ActionUtil.guessNameFromMethodName(methodName);
                 if (variableName == null) {
                     variableName = ActionUtil.guessNameFromType(type);
