@@ -119,12 +119,17 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                                     try {
                                         List<Dependency> poms = DependencyUtils.parseGradle(mPomRepository,
                                                 gradleFile, ILogger.EMPTY);
-                                        List<Dependency> data = mAdapter.getData();
+                                        List<Dependency> data = new ArrayList<>(mAdapter.getData());
                                         poms.forEach(dependency -> {
                                             if (!data.contains(dependency)) {
-                                                mAdapter.addDependency(dependency);
+                                                data.add(dependency);
                                             }
                                         });
+                                        mAdapter.submitList(data);
+                                        if (!data.isEmpty()) {
+                                            toggleEmptyView(false, false, "");
+                                        }
+                                        save(((JavaModule) mainModule).getLibraryFile(), data);
                                     } catch (IOException e) {
                                         new MaterialAlertDialogBuilder(requireContext())
                                                 .setTitle(R.string.error)
