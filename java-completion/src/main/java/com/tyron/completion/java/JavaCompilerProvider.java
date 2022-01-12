@@ -24,7 +24,7 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
     }
 
     @Override
-    public JavaCompilerService get(Project project, Module module) {
+    public synchronized JavaCompilerService get(Project project, Module module) {
         if (module instanceof JavaModule) {
             return getCompiler(project, (JavaModule) module);
         }
@@ -36,7 +36,7 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
         mProvider = null;
     }
 
-    public JavaCompilerService getCompiler(Project project, JavaModule module) {
+    public synchronized JavaCompilerService getCompiler(Project project, JavaModule module) {
 
         List<Module> dependencies = new ArrayList<>();
         if (project != null) {
@@ -54,11 +54,6 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
             }
         }
 
-        String target =
-                CompletionModule.getPreferences().getString(SharedPreferenceKeys.JAVA_COMPLETIONS_TARGET_VERSION, "8");
-        String source =
-                CompletionModule.getPreferences().getString(SharedPreferenceKeys.JAVA_COMPLETIONS_SOURCE_VERSION, "8");
-
         if (mProvider == null || changed(mCachedPaths, paths)) {
             mProvider = new JavaCompilerService(project, paths, Collections.emptySet(),
                     Collections.emptySet());
@@ -71,7 +66,7 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
         return mProvider;
     }
 
-    private boolean changed(Set<File> oldFiles, Set<File> newFiles) {
+    private synchronized boolean changed(Set<File> oldFiles, Set<File> newFiles) {
         if (oldFiles.size() != newFiles.size()) {
             return true;
         }
