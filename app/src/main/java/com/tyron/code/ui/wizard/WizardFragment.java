@@ -482,8 +482,8 @@ public class WizardFragment extends Fragment {
 
                 if (mListener != null) {
                     requireActivity().runOnUiThread(() -> {
-                        mListener.onProjectCreated(project);
                         getParentFragmentManager().popBackStack();
+                        mListener.onProjectCreated(project);
                     });
                 }
             } catch (IOException e) {

@@ -139,7 +139,7 @@ public class ProjectManagerFragment extends Fragment {
             WizardFragment wizardFragment = new WizardFragment();
             wizardFragment.setOnProjectCreatedListener(this::openProject);
             getParentFragmentManager().beginTransaction()
-                    .add(R.id.fragment_container, wizardFragment)
+                    .replace(R.id.fragment_container, wizardFragment)
                     .addToBackStack(null)
                     .commit();
         });
@@ -328,9 +328,13 @@ public class ProjectManagerFragment extends Fragment {
         if (getActivity() == null || isDetached()) {
             return;
         }
+        View view = getView();
+        if (view == null) {
+            return;
+        }
 
-        View recycler = requireView().findViewById(R.id.projects_recycler);
-        View empty = requireView().findViewById(R.id.empty_projects);
+        View recycler = view.findViewById(R.id.projects_recycler);
+        View empty = view.findViewById(R.id.empty_projects);
 
         TransitionManager.beginDelayedTransition(
                 (ViewGroup) recycler.getParent(), new MaterialFade());
