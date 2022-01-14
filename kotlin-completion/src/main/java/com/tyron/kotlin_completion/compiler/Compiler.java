@@ -80,11 +80,11 @@ public class Compiler implements Closeable {
         return PsiFileFactory.getInstance(mDefaultCompileEnvironment.getEnvironment().getProject());
     }
 
-    public synchronized Pair<BindingContext, ComponentProvider> compileKtFile(KtFile file, Collection<KtFile> sourcePath) {
+    public Pair<BindingContext, ComponentProvider> compileKtFile(KtFile file, Collection<KtFile> sourcePath) {
         return compileKtFiles(Collections.singletonList(file), sourcePath, CompletionKind.DEFAULT);
     }
 
-    public synchronized Pair<BindingContext, ComponentProvider> compileKtFiles(Collection<? extends KtFile> files, Collection<KtFile> sourcePath, CompletionKind kind) {
+    public Pair<BindingContext, ComponentProvider> compileKtFiles(Collection<? extends KtFile> files, Collection<KtFile> sourcePath, CompletionKind kind) {
         mCompileLock.lock();
         try {
             Pair<ComponentProvider, BindingTraceContext> pair = mDefaultCompileEnvironment.createContainer(sourcePath);

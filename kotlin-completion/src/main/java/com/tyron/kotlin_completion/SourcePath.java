@@ -140,7 +140,7 @@ public class SourcePath {
             }
         }
 
-        private synchronized void doCompile() {
+        private void doCompile() {
             if (this.path.toFile().getName().endsWith(".kt")) {
                 Pair<BindingContext, ComponentProvider> pair = cp.getCompiler().compileKtFile(parsed, allIncludingThis());
                 parsedDataWriteLock.lock();

@@ -68,7 +68,7 @@ public class KotlinAnalyzer implements CodeAnalyzer {
                     editor.postDelayed(() -> {
                         CompletionEngine.getInstance((AndroidModule) module)
                                 .doLint(editor.getCurrentFile(), content.toString(), editor::setDiagnostics);
-                    }, 1000);
+                    }, 1500);
                 }
             }
         }
