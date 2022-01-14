@@ -66,12 +66,14 @@
     <string name="menu_create_project">Создать проект</string>
     <string name="menu_run">Запустить</string>
     <string name="menu_refresh">Обновить проект</string>
+    <string name="menu_library_manager">Библиотеки</string>
     <string name="menu_format">Форматировать</string>
     <string name="menu_settings">Настройки</string>
 
     <!-- preferences -->
     <string name="settings_title_editor">Редактор</string>
     <string name="title_activity_settings">Настройки</string>
+
 
     <!-- Editor settings -->
     <string name="code_engine_title">Движок автозавершения</string>
@@ -89,14 +91,31 @@
     <string name="font_size_summary">Укажите размер шрифта редактора по умолчанию</string>
     <string name="keyboard_settings_title">Клавиатура</string>
     <string name="keyboard_enable_suggestions_description">Включить подсказки клавиатуры</string>
+    <string name="settings_build_run_title">Сборка и запуск</string>
+    <string name="settings_build_run_desc">Настройки сборки и запуска</string>
+    <string name="run_title">Зпапуск</string>
+    <string name="settings_install_apk_title">Запрос на установку APK</string>
+    <string name="settings_install_desc">Показ диалога об установке APK после успешной компиляции.</string>
+
+    <!-- about page -->
+    <string name="settings_about_us_title">О нас</string>
+    <string name="settings_about_us_desc">Доп. информация о разработчиках</string>
+    <string name="app_description">Мощная и легкая IDE для разработки приложений Android прямо у вас в кармане.</string>
+    <string name="app_version">Версия %1$s</string>
+    <string name="contact_group_title">Связь</string>
+    <string name="app_source_title">Исходный код</string>
+    <string name="sketchub_team">Команда Sketchub</string>
+    <string name="community">Сообщество</string>
 
     <!-- file manager menu -->
     <string name="error">Error</string>
     <string name="error_resource_name_restriction">Имена ресурсов должны содержать только строчные буквы a–z, 0–9 и знаки подчеркивания.</string>
     <string name="menu_action_new_java_class">Класс Java </string>
     <string name="menu_action_new_kotlin_class">Класс Kotlin</string>
-    <string name="menu_action_new_directory">Директория</string>
-    <string name="directory_name">Имя директории</string>
+    <string name="menu_action_new_directory">Папка</string>
+    <string name="menu_action_new_file">Файл</string>
+    <string name="directory_name">Имя папки</string>
+    <string name="file_name">Имя файла</string>
     <string name="menu_new">Новый</string>
     <string name="menu_refactor">Рефакторинг</string>
     <string name="item_project">Проект</string>
@@ -106,16 +125,50 @@
     <string name="create_class_dialog_class_type">Тип класса</string>
     <string name="create_class_dialog_invalid_name">Недействительное название класса</string>
 
+    <string name="success">Успешно</string>
+    <string name="delete_success">Успешно удалено.</string>
     <string name="dialog_confirm_delete">Вы уверены, что хотите удалить %1$s?</string>
     <string name="dialog_delete">Удалить</string>
     <string name="menu_preview_layout">Предпросмотр интерфейса</string>
     <string name="action_menu_build_release">Собрать release APK</string>
     <string name="action_menu_build_debug">Собрать debug APK</string>
     <string name="action_menu_build_aab">Собрать AAB</string>
-
+    
+    <string name="project_manager_alpha_notice_title">Уведомление об альфа-версии</string>
+    <string name="project_manager_alpha_notice">CodeAssist все еще находится в альфа-версии,
+        вы можете столкнуться со сбоями, ошибками и ограниченным функционалом.\nВы
+        можете сообщить об этих проблемах на https://github.com/tyron12233/CodeAssist/issues</string>
+    <string name="project_manager_save_location_title">Выбрать место сохранения</string>
+    <string name="project_manager_permission_denied">Доступ запрещен</string>
+    <string name="project_manager_button_request_again">Запросить еще раз</string>
+    <string name="project_manager_button_continue">Продолжить</string>
+    <string name="project_manager_rationale_title">Разрешение на хранилище</string>
+    <string name="project_manager_button_allow">Разрешить</string>
+    <string name="project_manager_button_use_internal">Использовать внутреннее хранилище</string>
+    <string name="project_manager_permission_rationale">Приложению требуется разрешение на хранилище
+        чтобы сохранить файлы модулей, которые не будут удалены при удалении
+        приложения. В качестве альтернативы вы можете сохранить файлы модуля во внутреннем хранилище приложения.</string>
+    <string name="project_manager_android11_notice">Проекты будут сохранены во внутреннем хранилище приложения.
+        Сделайте копию ваших модулей перед удалением приложения.</string>
     <string name="project_manager_projects">Проекты</string>
-    <string name="project_manager_empty">Отсутствуют проекты</string>
-    <string name="project_manager_create_project">Создать проект</string>
-    <string name="attributes_editor">Attributes Editor</string>
-    <string name="attribute_value">Attribute value</string>
+    <string name="project_manager_empty">Отсутствуют проекты</string>`
+    <string name="project_manager_create_project">Создать модуль</string>
+    <string name="project_path_menu_title">Путь к проектам</string>
+    <string name="project_manager_null_projects">Проекты не найдены</string>
+    <string name="project_manager_suggestions">Советы:\n\n  - Создать новый проект\n  - Изменить путь к проекту</string>
+    
+    <!-- Compiler Service -->
+    <string name="compilation_state_compiling">Компиляция</string>
+    <string name="compilation_button_install">УСТАНОВИТЬ</string>
+    <string name="compilation_result_success">Успешная компиляция</string>
+    <string name="compilation_result_failed">Сбой компиляции</string>
+
+    <!-- Library manager -->
+    <string name="library_manager_title">Библиотек: %1s</string>
+    <string name="group_id">Group ID</string>
+    <string name="artifact_id">Artifact ID</string>
+    <string name="version_name">Имя версии</string>
+    <string name="menu_display_dependencies">Список зависимостей</string>
+    <string name="attributes_editor">Редактор атрибутов</string>
+    <string name="attribute_value">Значение атрибута</string>
 </resources>
