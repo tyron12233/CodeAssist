@@ -56,7 +56,7 @@ fun completions(
 
     val elementItemList = elementItems.toList()
     val elementItemLabels = elementItemList.mapNotNull { it.label }.toSet()
-
+//
     val items = (elementItemList.asSequence()
 //            + (if (!isExhaustive) indexCompletionItems(
 //        file,

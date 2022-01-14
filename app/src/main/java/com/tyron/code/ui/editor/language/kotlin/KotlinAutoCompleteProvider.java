@@ -82,6 +82,10 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
                 column,
                 mEditor.getCursor().getLeft());
 
+        if (mTask.isCancelled()) {
+            return null;
+        }
+
         try {
             return mTask.get().items.stream().map(CompletionItem::new)
                     .collect(Collectors.toList());

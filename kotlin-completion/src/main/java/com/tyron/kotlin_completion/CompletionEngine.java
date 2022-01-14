@@ -15,6 +15,7 @@ import com.tyron.kotlin_completion.completion.CompletionUtilsKt;
 import com.tyron.kotlin_completion.completion.Completions;
 import com.tyron.kotlin_completion.diagnostic.ConvertDiagnosticKt;
 import com.tyron.kotlin_completion.util.AsyncExecutor;
+import com.tyron.kotlin_completion.util.StringUtilsKt;
 
 import org.jetbrains.kotlin.diagnostics.Diagnostic;
 import org.jetbrains.kotlin.resolve.BindingContext;
@@ -29,6 +30,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
@@ -124,21 +126,41 @@ public class CompletionEngine {
         if (isIndexing()) {
             return CompletableFuture.completedFuture(CompletionList.EMPTY);
         }
+
+        if (isIncrementalCompletion(cachedCompletion, file, prefix, line, column)) {
+            String partialIdentifier = partialIdentifier(prefix, prefix.length());
+            CompletionList cachedList = cachedCompletion.getCompletionList();
+            if (!cachedList.items.isEmpty()) {
+                List<CompletionItem> narrowedList =
+                        cachedList.items.stream().filter(item -> {
+                            String label = item.label;
+                            if (label.contains("(")) {
+                                label = label.substring(0, label.indexOf('('));
+                            }
+                            if (label.length() < partialIdentifier.length()) {
+                                return false;
+                            }
+                            return StringUtilsKt.containsCharactersInOrder(label, partialIdentifier, false);
+                        }).collect(Collectors.toList());
+                CompletionList completionList = new CompletionList();
+                completionList.items = narrowedList;
+                return CompletableFuture.completedFuture(completionList);
+            }
+        }
         try {
             ProgressManager.getInstance().setCanceled(true);
             return async.compute(() -> {
                 ProgressManager.getInstance().setCanceled(false);
                 ProgressManager.getInstance().setRunning(true);
-                Instant now = Instant.now();
                 Pair<CompiledFile, Integer> recover = recover(file, contents, Recompile.NEVER, cursor);
-                Log.d("RECOVER", "Took " + Duration.between(now, Instant.now()).toMillis());
-                CompletionList list = CompletionUtilsKt.completions(recover.first, cursor, sp.getIndex(), partialIdentifier(contents, cursor));
-
-                ProgressManager.getInstance().setRunning(false);
-                return list;
+                String partialIdentifier = partialIdentifier(contents, cursor);
+                CompletionList completions = CompletionUtilsKt.completions(recover.first, cursor,
+                        sp.getIndex(), partialIdentifier);
+                cachedCompletion = new CachedCompletion(file, line, column, partialIdentifier, completions);
+                return completions;
             });
         } finally {
-
+            ProgressManager.getInstance().setRunning(false);
         }
     }
 
