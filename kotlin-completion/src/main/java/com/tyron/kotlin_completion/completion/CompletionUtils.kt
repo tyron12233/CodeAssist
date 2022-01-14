@@ -48,23 +48,17 @@ fun completions(
 
     val (elementItems, isExhaustive, receiver) = elementCompletionItems(file, cursor, partial)
 
-    if (true) {
-        val list = CompletionList()
-        list.items.addAll(elementItems)
-        return list
-    }
-
     val elementItemList = elementItems.toList()
     val elementItemLabels = elementItemList.mapNotNull { it.label }.toSet()
 //
     val items = (elementItemList.asSequence()
-//            + (if (!isExhaustive) indexCompletionItems(
-//        file,
-//        cursor,
-//        receiver,
-//        index,
-//        partial
-//    ).filter { it.label !in elementItemLabels } else emptySequence())
+            + (if (!isExhaustive) indexCompletionItems(
+        file,
+        cursor,
+        receiver,
+        index,
+        partial
+    ).filter { it.label !in elementItemLabels } else emptySequence())
             + (if (elementItemList.isEmpty()) keywordCompletionItems(partial) else emptySequence())
             )
 
@@ -182,10 +176,10 @@ private fun keywordCompletionItems(partial: String): Sequence<CompletionItem> {
 }
 
 fun functionInsertText(desc: FunctionDescriptor, snippetsEnabled: Boolean, name: String): String {
-    return if (snippetsEnabled) {
-        val parameters = desc.valueParameters
-        val hasTrailingLambda = RenderCompletionItem.isFunctionType(parameters.lastOrNull()?.type)
+    val parameters = desc.valueParameters
+    val hasTrailingLambda = RenderCompletionItem.isFunctionType(parameters.lastOrNull()?.type)
 
+    return if (snippetsEnabled) {
         if (hasTrailingLambda) {
             val parenthesizedParams =
                 parameters.dropLast(1).ifEmpty { null }?.let { "(${valueParametersSnippet(it)})" }
@@ -195,7 +189,11 @@ fun functionInsertText(desc: FunctionDescriptor, snippetsEnabled: Boolean, name:
             "$name(${valueParametersSnippet(parameters)})"
         }
     } else {
-        name
+        if (hasTrailingLambda) {
+            "$name { }"
+        } else {
+            "$name()"
+        }
     }
 }
 
@@ -213,12 +211,12 @@ private fun elementCompletionItems(
 ): ElementCompletionItems {
     ProgressManager.checkCanceled()
 
+
     val surroundingElement = completableElement(file, cursor) ?: return ElementCompletionItems(
         emptySequence(),
         true,
         null
     )
-
 
     val completions = elementCompletions(file, cursor, surroundingElement)
 
@@ -255,8 +253,9 @@ private fun completionItem(
     surroundingElement: KtElement,
     file: CompiledFile
 ): CompletionItem {
-    val renderWithSnippets = surroundingElement !is KtCallableReferenceExpression
-            && surroundingElement !is KtImportDirective
+    val renderWithSnippets = false
+    //surroundingElement !is KtCallableReferenceExpression
+    //            && surroundingElement !is KtImportDirective
     val result = d.accept(RenderCompletionItem(renderWithSnippets), null)
 
     result.label = methodSignature.find(result.detail)?.groupValues?.get(1) ?: result.label

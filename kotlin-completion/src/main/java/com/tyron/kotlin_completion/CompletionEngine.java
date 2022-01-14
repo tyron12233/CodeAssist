@@ -48,7 +48,7 @@ public class CompletionEngine {
     private final AsyncExecutor async = new AsyncExecutor();
     private CachedCompletion cachedCompletion;
 
-    private Debouncer debounceLint = new Debouncer(Duration.ofMillis(500));
+    private final Debouncer debounceLint = new Debouncer(Duration.ofMillis(500));
     private Set<File> lintTodo = new HashSet<>();
     private int lintCount = 0;
 
@@ -80,7 +80,7 @@ public class CompletionEngine {
         return sp;
     }
 
-    public Pair<CompiledFile, Integer> recover(File file, String contents, Recompile recompile, int offset) {
+    public synchronized Pair<CompiledFile, Integer> recover(File file, String contents, Recompile recompile, int offset) {
         boolean shouldRecompile = true;
         switch (recompile) {
             case NEVER:
@@ -244,7 +244,8 @@ public class CompletionEngine {
     }
 
     public void doLint(File file, String contents, Function0<Boolean> cancelCallback, LintCallback callback) {
-        BindingContext context = recover(file, contents, Recompile.ALWAYS, 0).first.getCompile();
+        sp.put(file, contents, false);
+        BindingContext context = sp.compileFiles(Collections.singletonList(file));
         if (!cancelCallback.invoke()) {
             List<DiagnosticWrapper> diagnosticWrappers =
                     new ArrayList<>();
