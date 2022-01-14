@@ -5,6 +5,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -20,6 +21,7 @@ import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.editor.log.AppLogFragment;
+import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.editor.shortcuts.ShortcutsAdapter;
 import com.tyron.code.ui.editor.shortcuts.action.CursorMoveAction;
@@ -30,10 +32,14 @@ import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.AndroidUtilities;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import io.github.rosemoe.sora.text.Cursor;
+import io.github.rosemoe.sora.widget.CodeEditor;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class BottomEditorFragment extends Fragment {
@@ -139,14 +145,28 @@ public class BottomEditorFragment extends Fragment {
 
     private List<ShortcutItem> getShortcuts() {
         List<String> strings = Arrays.asList("<", ">", ";", "{", "}", ":");
-        List<ShortcutItem> items = strings.stream()
+        List<ShortcutItem> items = new ArrayList<>();
+        items.add(new ShortcutItem(Collections.singletonList(new ShortcutAction() {
+
+            @Override
+            public boolean isApplicable(String kind) {
+                return "tab".equals(kind);
+            }
+
+            @Override
+            public void apply(CodeEditor editor, ShortcutItem item) {
+                Cursor cursor = editor.getCursor();
+                editor.getText().insert(cursor.getLeftLine(), cursor.getLeftColumn(), "\t");
+            }
+        }), "->", "tab"));
+        items.addAll(strings.stream()
                 .map(item -> {
                     ShortcutItem it = new ShortcutItem();
                     it.label = item;
                     it.kind = TextInsertAction.KIND;
                     it.actions = Collections.singletonList(new TextInsertAction());
                     return it;
-                }).collect(Collectors.toList());
+                }).collect(Collectors.toList()));
         Collections.addAll(items,
                 new ShortcutItem(Collections.singletonList(new UndoAction()), "⬿", UndoAction.KIND),
                 new ShortcutItem(Collections.singletonList(new RedoAction()), "⤳", RedoAction.KIND),
