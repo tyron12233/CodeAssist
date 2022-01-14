@@ -50,4 +50,8 @@ class Debouncer(
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.DAYS)
         }
     }
+
+    fun cancel() {
+        pendingTask?.cancel(true)
+    }
 }

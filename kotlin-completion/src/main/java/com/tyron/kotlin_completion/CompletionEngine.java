@@ -147,6 +147,9 @@ public class CompletionEngine {
                 return CompletableFuture.completedFuture(completionList);
             }
         }
+
+        debounceLint.cancel();
+
         try {
             ProgressManager.getInstance().setCanceled(true);
             return async.compute(() -> {
