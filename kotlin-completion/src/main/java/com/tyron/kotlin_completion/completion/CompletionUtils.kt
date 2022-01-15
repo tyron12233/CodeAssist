@@ -122,7 +122,7 @@ private fun indexCompletionItems(
                     Symbol.Kind.INTERFACE -> DrawableKind.Interface
                     Symbol.Kind.FUNCTION -> DrawableKind.Method
                     Symbol.Kind.VARIABLE -> DrawableKind.LocalVariable
-                    Symbol.Kind.FIELD -> DrawableKind.Filed
+                    Symbol.Kind.FIELD -> DrawableKind.Field
                     else -> DrawableKind.Method
                 }
                 detail = "(import from ${it.fqName.parent()})"

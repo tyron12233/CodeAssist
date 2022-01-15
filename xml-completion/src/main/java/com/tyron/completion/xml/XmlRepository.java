@@ -24,17 +24,32 @@ public class XmlRepository {
 
     private File mAttrsFile;
     private Map<String, DeclareStyleable> mDeclareStyleables;
+    private final Map<String, AttributeInfo> mExtraAttributes = new TreeMap<>();
+
+    private boolean mInitialized = false;
+
+    public Map<String, DeclareStyleable> getDeclareStyleables() {
+        return mDeclareStyleables;
+    }
+
+    public AttributeInfo getExtraAttribute(String name) {
+        return mExtraAttributes.get(name);
+    }
 
     public void initialize() {
+        if (mInitialized) {
+            return;
+        }
         mAttrsFile = getOrExtractFiles();
         try {
-            mDeclareStyleables = parse(mAttrsFile);
+            mDeclareStyleables = parse(mAttrsFile, "android");
+            mInitialized = true;
         } catch (XmlPullParserException | IOException e) {
             e.printStackTrace();
         }
     }
 
-    private Map<String, DeclareStyleable> parse(File file) throws XmlPullParserException, IOException {
+    private Map<String, DeclareStyleable> parse(File file, String namespace) throws XmlPullParserException, IOException {
         XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
         XmlPullParser parser = factory.newPullParser();
         parser.setInput(new FileReader(file));
@@ -44,15 +59,18 @@ public class XmlRepository {
         while (parser.next() != XmlPullParser.END_DOCUMENT) {
             String name = parser.getName();
             if ("declare-styleable".equals(name)) {
-                DeclareStyleable declareStyleable = parseDeclareStyleable(parser);
+                DeclareStyleable declareStyleable = parseDeclareStyleable(parser, namespace);
                 declareStyleables.put(declareStyleable.getName(), declareStyleable);
+            } else if ("attr".equals(name)) {
+                AttributeInfo attributeInfo = parseAttributeInfo(parser);
+                mExtraAttributes.put(attributeInfo.getName(), attributeInfo);
             }
         }
 
         return declareStyleables;
     }
 
-    private DeclareStyleable parseDeclareStyleable(XmlPullParser parser) throws IOException,
+    private DeclareStyleable parseDeclareStyleable(XmlPullParser parser, String namespace) throws IOException,
             XmlPullParserException {
 
         String name = getAttributeValue(parser, "name", "");
@@ -69,6 +87,7 @@ public class XmlRepository {
             String tag = parser.getName();
             if ("attr".equals(tag)) {
                 AttributeInfo attributeInfo = parseAttributeInfo(parser);
+                attributeInfo.setNamespace(namespace);
                 attributeInfos.add(attributeInfo);
             }
         }

@@ -184,7 +184,7 @@ public class RenderCompletionItem implements DeclarationDescriptorVisitor<Comple
     public CompletionItem visitPropertyGetterDescriptor(PropertyGetterDescriptor propertyGetterDescriptor, Void unused) {
         setDefaults(propertyGetterDescriptor);
 
-        result.iconKind = DrawableKind.Filed;
+        result.iconKind = DrawableKind.Field;
 
         return result;
     }
@@ -193,7 +193,7 @@ public class RenderCompletionItem implements DeclarationDescriptorVisitor<Comple
     public CompletionItem visitPropertySetterDescriptor(PropertySetterDescriptor propertySetterDescriptor, Void unused) {
         setDefaults(propertySetterDescriptor);
 
-        result.iconKind = DrawableKind.Filed;
+        result.iconKind = DrawableKind.Field;
         return result;
     }
 

@@ -11,6 +11,7 @@ public class AttributeInfo implements Comparable<AttributeInfo> {
     private Set<Format> formats;
 
     private List<String> values;
+    private String namespace;
 
     public AttributeInfo(String name, Set<Format> formats, List<String> values) {
         this.name = name;
@@ -21,5 +22,25 @@ public class AttributeInfo implements Comparable<AttributeInfo> {
     @Override
     public int compareTo(AttributeInfo o) {
         return Objects.compare(this.name, o.name, String::compareTo);
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public List<String> getValues() {
+        return values;
+    }
+
+    public Set<Format> getFormats() {
+        return formats;
+    }
+
+    public void setNamespace(String namespace) {
+        this.namespace = namespace;
+    }
+
+    public String getNamespace() {
+        return namespace;
     }
 }

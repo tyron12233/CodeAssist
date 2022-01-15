@@ -50,7 +50,6 @@ import org.openjdk.source.tree.SwitchTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.tree.JCTree;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -977,7 +976,7 @@ public class CompletionProvider {
             case INTERFACE:
                 return DrawableKind.Interface;
             case FIELD:
-                return DrawableKind.Filed;
+                return DrawableKind.Field;
             default:
                 return DrawableKind.LocalVariable;
         }

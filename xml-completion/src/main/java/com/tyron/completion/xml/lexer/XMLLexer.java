@@ -1,5 +1,5 @@
 // Generated from C:/Users/admin/StudioProjects/CodeAssist/app/src/main/java/com/tyron/code/ui/editor/language/xml\XMLLexer.g4 by ANTLR 4.9.1
-package com.tyron.code.ui.editor.language.xml;
+package com.tyron.completion.xml.lexer;
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.Token;
