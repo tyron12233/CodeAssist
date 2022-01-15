@@ -11,8 +11,8 @@ public class ApplicationProvider {
 
     private static Context sApplicationContext;
 
-    public static Context initialize(@NonNull Context context) {
-        return context.getApplicationContext();
+    public static void initialize(@NonNull Context context) {
+        sApplicationContext = context.getApplicationContext();
     }
 
     public static Context getApplicationContext() {

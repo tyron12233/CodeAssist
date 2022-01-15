@@ -10,6 +10,8 @@ import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.main.CompletionEngine;
+import com.tyron.completion.xml.XmlCompletionProvider;
+import com.tyron.completion.xml.XmlIndexProvider;
 
 public class MainActivity extends AppCompatActivity {
     @Override
@@ -19,10 +21,14 @@ public class MainActivity extends AppCompatActivity {
 
         StartupManager startupManager = new StartupManager();
         startupManager.addStartupActivity(() -> {
-            CompilerService.getInstance().clear();
-            CompletionEngine.getInstance().clear();
-            CompilerService.getInstance().registerIndexProvider(JavaCompilerProvider.KEY, new JavaCompilerProvider());
-            CompletionEngine.getInstance().registerCompletionProvider(new JavaCompletionProvider());
+            CompletionEngine engine = CompletionEngine.getInstance();
+            CompilerService index = CompilerService.getInstance();
+            index.clear();
+            engine.clear();
+            index.registerIndexProvider(JavaCompilerProvider.KEY, new JavaCompilerProvider());
+            index.registerIndexProvider(XmlIndexProvider.KEY, new XmlIndexProvider());
+            engine.registerCompletionProvider(new JavaCompletionProvider());
+            engine.registerCompletionProvider(new XmlCompletionProvider());
         });
         startupManager.startup();
 
