@@ -12,6 +12,7 @@ import androidx.preference.PreferenceManager;
 
 import com.developer.crashx.config.CrashConfig;
 import com.tyron.builder.BuildModule;
+import com.tyron.common.ApplicationProvider;
 import com.tyron.completion.java.CompletionModule;
 
 public class ApplicationLoader extends Application {
@@ -23,6 +24,7 @@ public class ApplicationLoader extends Application {
     public void onCreate() {
         super.onCreate();
         applicationContext = this;
+        ApplicationProvider.initialize(applicationContext);
         CompletionModule.initialize(applicationContext);
         BuildModule.initialize(applicationContext);
         CrashConfig.Builder.create()
