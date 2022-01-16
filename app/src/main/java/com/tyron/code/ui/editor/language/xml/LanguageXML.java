@@ -78,7 +78,7 @@ public class LanguageXML implements EditorLanguage {
 
 	@Override
 	public SymbolPairMatch getSymbolPairs() {
-		return null;
+		return new SymbolPairMatch.DefaultSymbolPairs();
 	}
 
 	@Override
