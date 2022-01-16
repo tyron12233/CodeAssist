@@ -331,6 +331,10 @@ public class XmlCompletionProvider extends CompletionProvider {
             }
         }
 
+        if (parentTag == null && previousTag != null) {
+            parentTag = previousTag;
+        }
+
         return Pair.create(parentTag, tag);
     }
 
