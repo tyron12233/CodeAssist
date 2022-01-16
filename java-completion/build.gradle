@@ -41,8 +41,6 @@ dependencies {
     
     implementation 'androidx.annotation:annotation:1.3.0'
 
-    // fuzzy search
-    implementation 'me.xdrop:fuzzywuzzy:1.3.1'
     implementation project(path: ':common')
     implementation project(path: ':completion-api')
     api project(path: ':build-logic')

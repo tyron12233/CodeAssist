@@ -29,6 +29,8 @@ android {
 
 dependencies {
 
+    api 'me.xdrop:fuzzywuzzy:1.3.1'
+
     implementation project(path: ':build-logic')
 
     testImplementation 'junit:junit:4.+'
