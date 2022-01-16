@@ -56,17 +56,14 @@ public class StyleUtils {
             }
 
             builder.add(current.getSimpleName() + "_Layout");
+
+            if ("ViewGroup".equals(current.getSimpleName())) {
+                builder.add("ViewGroup_MarginLayout");
+            }
+
             current = current.getSuperclass();
         }
         sLayoutParamsMap.put(viewGroup.getSimpleName() + "_Layout", builder.build());
-    }
-
-    private static void putStyle(Class<? extends View> view, String... styles) {
-        ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-        for (String style : styles) {
-            builder.add(style);
-        }
-        sViewStyleMap.put(view.getSimpleName(), builder.build());
     }
 
     private static void putStyle(@NonNull Class<? extends View> view) {
@@ -121,7 +118,7 @@ public class StyleUtils {
                     continue;
                 }
 
-                params.addAll(getLayoutParam(map, name));
+                params.addAll(getLayoutParam(map, string));
             }
         }
         return params;
