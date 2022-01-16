@@ -220,7 +220,7 @@ public class XmlCompletionProvider extends CompletionProvider {
         } else {
             for (DeclareStyleable style : styles) {
                 for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
-                    CompletionItem item = getAttributeItem(attributeInfo, shouldShowNamespace, fullPrefix);
+                    CompletionItem item = getAttributeItem(repository, attributeInfo, shouldShowNamespace, fullPrefix);
                     list.items.add(item);
                 }
             }
@@ -228,8 +228,8 @@ public class XmlCompletionProvider extends CompletionProvider {
             xmlCachedCompletion.setFilterPrefix(fixedPrefix);
             xmlCachedCompletion.setFilter((it, pre) -> {
                 if (pre.contains(":")) {
-                    if (it.label.startsWith(pre)) {
-                        return true;
+                    if (!it.label.startsWith(pre)) {
+                        return false;
                     }
                 }
                 if (it.label.startsWith(pre)) {
@@ -246,8 +246,14 @@ public class XmlCompletionProvider extends CompletionProvider {
         return xmlCachedCompletion;
     }
 
-    private CompletionItem getAttributeItem(AttributeInfo attributeInfo, boolean shouldShowNamespace, String fixedPrefix) {
+    private CompletionItem getAttributeItem(XmlRepository repository, AttributeInfo attributeInfo, boolean shouldShowNamespace, String fixedPrefix) {
 
+        if (attributeInfo.getFormats() == null || attributeInfo.getFormats().isEmpty()) {
+            AttributeInfo extraAttributeInfo = repository.getExtraAttribute(attributeInfo.getName());
+            if (extraAttributeInfo != null) {
+                attributeInfo = extraAttributeInfo;
+            }
+        }
         String commitText = "";
         if (shouldShowNamespace) {
             commitText = (TextUtils.isEmpty(attributeInfo.getNamespace())
@@ -258,7 +264,10 @@ public class XmlCompletionProvider extends CompletionProvider {
 
         CompletionItem item = new CompletionItem();
         item.action = CompletionItem.Kind.NORMAL;
-        item.label = commitText;
+        item.label = (TextUtils.isEmpty(attributeInfo.getNamespace())
+                ? ""
+                : attributeInfo.getNamespace() + ":")
+                + attributeInfo.getName();
         item.iconKind = DrawableKind.Attribute;
         item.detail = attributeInfo.getFormats().stream()
                 .map(Format::name)

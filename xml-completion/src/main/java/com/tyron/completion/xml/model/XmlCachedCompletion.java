@@ -7,6 +7,7 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -44,7 +45,10 @@ public class XmlCachedCompletion extends CachedCompletion {
 
     @SuppressLint("NewApi")
     public CompletionList getCompletionList() {
-        CompletionList completionList = super.getCompletionList();
+        CompletionList original = super.getCompletionList();
+        CompletionList completionList = new CompletionList();
+        completionList.isIncomplete = original.isIncomplete;
+        completionList.items = new ArrayList<>(original.items);
         if (mFilter != null) {
             completionList.items = completionList.items.stream()
                     .filter(it -> mFilter.invoke(it, mFilterPrefix))
