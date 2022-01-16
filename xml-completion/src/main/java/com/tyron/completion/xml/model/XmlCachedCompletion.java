@@ -56,4 +56,8 @@ public class XmlCachedCompletion extends CachedCompletion {
         }
         return completionList;
     }
+
+    public String getFilterPrefix() {
+        return mFilterPrefix;
+    }
 }

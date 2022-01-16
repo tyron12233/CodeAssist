@@ -32,10 +32,13 @@ import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import me.xdrop.fuzzywuzzy.FuzzySearch;
 
 public class XmlCompletionProvider extends CompletionProvider {
 
@@ -81,7 +84,15 @@ public class XmlCompletionProvider extends CompletionProvider {
             } else {
                 mCachedCompletion.setFilterPrefix(partialIdentifier);
             }
-            return mCachedCompletion.getCompletionList();
+            CompletionList completionList = mCachedCompletion.getCompletionList();
+            Collections.sort(completionList.items, (item1, item2) -> {
+                String filterPrefix = mCachedCompletion.getFilterPrefix();
+                int first = FuzzySearch.partialRatio(item1.label, filterPrefix);
+                int second = FuzzySearch.partialRatio(item2.label, filterPrefix);
+                return Integer.compare(first, second);
+            });
+            Collections.reverse(completionList.items);
+            return completionList;
         }
         try {
             XmlCachedCompletion list =
@@ -239,7 +250,9 @@ public class XmlCompletionProvider extends CompletionProvider {
                     return true;
                 }
 
-                return getAttributeNameFromPrefix(it.label).startsWith(getAttributeNameFromPrefix(pre));
+                String labelPrefix = getAttributeNameFromPrefix(it.label);
+                String prePrefix = getAttributeNameFromPrefix(pre);
+                return FuzzySearch.partialRatio(labelPrefix, prePrefix) >= 70;
             });
         }
         return xmlCachedCompletion;
