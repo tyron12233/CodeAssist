@@ -8,6 +8,7 @@ import android.util.Pair;
 import androidx.annotation.RequiresApi;
 
 import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
@@ -19,6 +20,7 @@ import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.Format;
+import com.tyron.completion.xml.model.XmlCachedCompletion;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
@@ -51,7 +53,7 @@ public class XmlCompletionProvider extends CompletionProvider {
         sParserFactory = sParserFactory1;
     }
 
-    private CachedCompletion mCachedCompletion;
+    private XmlCachedCompletion mCachedCompletion;
 
     public XmlCompletionProvider() {
 
@@ -66,47 +68,32 @@ public class XmlCompletionProvider extends CompletionProvider {
     @Override
     public CompletionList complete(Project project, Module module, File file, String contents,
                                    String prefix, int line, int column, long index) {
+
+        if (!(module instanceof AndroidModule)) {
+            return CompletionList.EMPTY;
+        }
+
         String partialIdentifier = partialIdentifier(contents, (int) index);
 
         if (isIncrementalCompletion(mCachedCompletion, file, prefix, line, column)) {
-            CompletionList list = new CompletionList();
-            list.items = filter(partialIdentifier, mCachedCompletion.getCompletionList().items);
-            return list;
+            if (mCachedCompletion.getCompletionType() == XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE) {
+                mCachedCompletion.setFilterPrefix(prefix);
+            } else {
+                mCachedCompletion.setFilterPrefix(partialIdentifier);
+            }
+            return mCachedCompletion.getCompletionList();
         }
         try {
-            CompletionList list =
-                    completeInternal(project, module, file, contents, prefix, line, column, index);
-            list.items = filter(partialIdentifier, list.items);
-            mCachedCompletion = new CachedCompletion(file, line, column, prefix, list);
-            return list;
+            XmlCachedCompletion list =
+                    completeInternal(project, (AndroidModule) module,
+                            file, contents, prefix, line, column, index);
+            mCachedCompletion = list;
+            return list.getCompletionList();
         } catch (XmlPullParserException | IOException e) {
             e.printStackTrace();
         }
 
         return CompletionList.EMPTY;
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.N)
-    private List<CompletionItem> filter(String fixedPrefix, List<CompletionItem> items) {
-        return items.stream()
-                .filter(it -> {
-                    if (fixedPrefix.contains(":")) {
-                        if (it.label.startsWith(fixedPrefix)) {
-                            return true;
-                        }
-                    }
-                    if (it.label.startsWith(fixedPrefix)) {
-                        return true;
-                    }
-
-                    if (getAttributeValueFromPrefix(it.label).startsWith(getAttributeValueFromPrefix(fixedPrefix))) {
-                        return true;
-                    }
-
-                    return getAttributeNameFromPrefix(it.label)
-                            .startsWith(getAttributeNameFromPrefix(fixedPrefix));
-                })
-                .collect(Collectors.toList());
     }
 
     private boolean isIncrementalCompletion(CachedCompletion cachedCompletion, File file,
@@ -149,12 +136,16 @@ public class XmlCompletionProvider extends CompletionProvider {
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
-    private CompletionList completeInternal(Project project, Module module, File file, String contents,
-                                            String prefix, int line, int column, long index) throws XmlPullParserException, IOException {
+    private XmlCachedCompletion completeInternal(Project project, AndroidModule module, File file, String contents,
+                                                 String prefix, int line, int column, long index) throws XmlPullParserException, IOException {
+        CompletionList list = new CompletionList();
+        XmlCachedCompletion xmlCachedCompletion = new XmlCachedCompletion(file,
+                line, column, prefix, list);
+
         XmlIndexProvider indexProvider =
                 CompilerService.getInstance().getIndex(XmlIndexProvider.KEY);
         XmlRepository repository = indexProvider.get(project, module);
-        repository.initialize();
+        repository.initialize(module);
         Map<String, DeclareStyleable> declareStyleables = repository.getDeclareStyleables();
 
         String fixedPrefix = partialIdentifier(contents, (int) index);
@@ -164,7 +155,6 @@ public class XmlCompletionProvider extends CompletionProvider {
         XmlPullParser parser = sParserFactory.newPullParser();
         parser.setInput(new StringReader(contents));
 
-        CompletionList list = new CompletionList();
         list.items = new ArrayList<>();
 
         Pair<String, String> tagPair = getTagAtPosition(parser, line + 1, column + 1);
@@ -224,6 +214,9 @@ public class XmlCompletionProvider extends CompletionProvider {
                     }
                 }
             }
+            xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE);
+            xmlCachedCompletion.setFilterPrefix(prefix);
+            xmlCachedCompletion.setFilter((item, pre) -> item.label.startsWith(pre));
         } else {
             for (DeclareStyleable style : styles) {
                 for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
@@ -231,8 +224,26 @@ public class XmlCompletionProvider extends CompletionProvider {
                     list.items.add(item);
                 }
             }
+            xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_ATTRIBUTE);
+            xmlCachedCompletion.setFilterPrefix(fixedPrefix);
+            xmlCachedCompletion.setFilter((it, pre) -> {
+                if (pre.contains(":")) {
+                    if (it.label.startsWith(pre)) {
+                        return true;
+                    }
+                }
+                if (it.label.startsWith(pre)) {
+                    return true;
+                }
+
+                if (getAttributeValueFromPrefix(it.label).startsWith(getAttributeValueFromPrefix(pre))) {
+                    return true;
+                }
+
+                return getAttributeNameFromPrefix(it.label).startsWith(getAttributeNameFromPrefix(pre));
+            });
         }
-        return list;
+        return xmlCachedCompletion;
     }
 
     private CompletionItem getAttributeItem(AttributeInfo attributeInfo, boolean shouldShowNamespace, String fixedPrefix) {

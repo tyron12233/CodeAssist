@@ -1,5 +1,6 @@
 package com.tyron.completion.xml;
 
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.util.Decompress;
 import com.tyron.completion.xml.model.AttributeInfo;
@@ -36,16 +37,34 @@ public class XmlRepository {
         return mExtraAttributes.get(name);
     }
 
-    public void initialize() {
+    public void initialize(AndroidModule module) {
         if (mInitialized) {
             return;
         }
         mAttrsFile = getOrExtractFiles();
         try {
             mDeclareStyleables = parse(mAttrsFile, "android");
-            mInitialized = true;
         } catch (XmlPullParserException | IOException e) {
             e.printStackTrace();
+        }
+
+        for (File library : module.getLibraries()) {
+            File parent = library.getParentFile();
+            if (parent == null) {
+                continue;
+            }
+            File valuesDir = new File(parent, "res/values");
+            File[] children = valuesDir.listFiles(c -> c.getName().endsWith(".xml"));
+            if (children != null) {
+                for (File child : children) {
+                    try {
+                        Map<String, DeclareStyleable> app = parse(child, "app");
+                        mDeclareStyleables.putAll(app);
+                    } catch (XmlPullParserException | IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
         }
     }
 
