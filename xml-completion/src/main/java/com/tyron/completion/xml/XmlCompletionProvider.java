@@ -3,6 +3,7 @@ package com.tyron.completion.xml;
 import android.annotation.SuppressLint;
 import android.os.Build;
 import android.text.TextUtils;
+import android.util.Pair;
 
 import androidx.annotation.RequiresApi;
 
@@ -18,7 +19,6 @@ import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.Format;
 
-import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
 import org.xmlpull.v1.XmlPullParser;
@@ -77,23 +77,33 @@ public class XmlCompletionProvider extends CompletionProvider {
         repository.initialize();
         Map<String, DeclareStyleable> declareStyleables = repository.getDeclareStyleables();
 
+        String fixedPrefix = partialIdentifier(contents, (int) index);
+        String fullPrefix = fullIdentifier(contents, (int) index);
+        boolean shouldShowNamespace = !fixedPrefix.contains(":");
+
+
         XmlPullParser parser = sParserFactory.newPullParser();
         parser.setInput(new StringReader(contents));
 
         CompletionList list = new CompletionList();
         list.items = new ArrayList<>();
 
-        String tag = getTagAtPosition(parser, line + 1, column + 1);
+        Pair<String, String> tagPair = getTagAtPosition(parser, line + 1, column + 1);
+        String parentTag = tagPair.first;
+        String tag = tagPair.second;
+
+        // first get the attributes based on the current tag
         Set<DeclareStyleable> styles = StyleUtils.getStyles(declareStyleables, tag);
-        if (styles.isEmpty()) {
-            styles = StyleUtils.getStyles(declareStyleables, "android.view.View");
-        }
+
+        // get the layout params attributes from parent
+        // in android convention, layout attributes will end with _Layout
+        styles.addAll(StyleUtils.getLayoutParam(declareStyleables, parentTag));
+
+
+        // parent is unknown, display all attributes
         if (styles.isEmpty()) {
             styles.addAll(declareStyleables.values());
         }
-        boolean shouldShowNameSpace = prefix.contains(":");
-
-        String fixedPrefix = partialIdentifier(contents, (int) index);
 
         if (isInAttributeValue(contents, (int) index)) {
             for (DeclareStyleable style : styles) {
@@ -141,17 +151,7 @@ public class XmlCompletionProvider extends CompletionProvider {
         } else {
             for (DeclareStyleable style : styles) {
                 for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
-                    CompletionItem item = new CompletionItem();
-                    item.action = CompletionItem.Kind.NORMAL;
-                    item.label = (shouldShowNameSpace ?  attributeInfo.getNamespace() + ":" : "")
-                            + attributeInfo.getName();
-                    item.commitText = (TextUtils.isEmpty(attributeInfo.getNamespace()) ? "" : attributeInfo.getNamespace() + ":")
-                            + attributeInfo.getName();
-                    item.cursorOffset = item.commitText.length();
-                    item.iconKind = DrawableKind.Attribute;
-                    item.detail = attributeInfo.getFormats().stream()
-                            .map(Format::name)
-                            .collect(Collectors.joining("|"));
+                    CompletionItem item = getAttributeItem(attributeInfo, shouldShowNamespace, fullPrefix);
                     list.items.add(item);
                 }
             }
@@ -162,7 +162,7 @@ public class XmlCompletionProvider extends CompletionProvider {
                                 return true;
                             }
                         }
-                        if (getAttributeNameFromPrefix(it.label).startsWith(fixedPrefix)) {
+                        if (it.label.startsWith(fixedPrefix)) {
                             return true;
                         }
                         return getAttributeNameFromPrefix(it.label)
@@ -173,6 +173,35 @@ public class XmlCompletionProvider extends CompletionProvider {
         return list;
     }
 
+    private CompletionItem getAttributeItem(AttributeInfo attributeInfo, boolean shouldShowNamespace, String fixedPrefix) {
+
+        String commitText = "";
+        if (shouldShowNamespace) {
+            commitText = (TextUtils.isEmpty(attributeInfo.getNamespace())
+                    ? ""
+                    : attributeInfo.getNamespace() + ":");
+        }
+        commitText += attributeInfo.getName();
+
+        CompletionItem item = new CompletionItem();
+        item.action = CompletionItem.Kind.NORMAL;
+        item.label = commitText;
+        item.iconKind = DrawableKind.Attribute;
+        item.detail = attributeInfo.getFormats().stream()
+                .map(Format::name)
+                .collect(Collectors.joining("|"));
+        item.commitText = commitText;
+        if (!fixedPrefix.contains("=")) {
+            item.commitText += "=\"\"";
+            item.cursorOffset = item.commitText.length() - 1;
+        } else {
+            item.cursorOffset = item.commitText.length() + 2;
+        }
+        return item;
+    }
+
+
+
     private String partialIdentifier(String contents, int end) {
         int start = end;
         while (start > 0 && !XmlCharacter.isNonXmlCharacterPart(contents.charAt(start - 1))) {
@@ -181,18 +210,12 @@ public class XmlCompletionProvider extends CompletionProvider {
         return contents.substring(start, end);
     }
 
-    private String getAttributeValueFromPrefix(String prefix) {
-        String attributeValue = prefix;
-        if (attributeValue.contains("=")) {
-            attributeValue = attributeValue.substring(attributeValue.indexOf('=') + 1);
+    private String fullIdentifier(String contents, int start) {
+        int end = start;
+        while (end < contents.length() && !XmlCharacter.isNonXmlCharacterPart(contents.charAt(end - 1))) {
+            end++;
         }
-        if (attributeValue.startsWith("\"")) {
-            attributeValue = attributeValue.substring(1);
-        }
-        if (attributeValue.endsWith("\"")) {
-            attributeValue = attributeValue.substring(0, attributeValue.length() - 1);
-        }
-        return attributeValue;
+        return contents.substring(start, end);
     }
 
     private String getAttributeNameFromPrefix(String prefix) {
@@ -206,22 +229,32 @@ public class XmlCompletionProvider extends CompletionProvider {
         return attributeName;
     }
 
-    private String getTagAtPosition(XmlPullParser parser, int line, int column) {
+    private Pair<String, String> getTagAtPosition(XmlPullParser parser, int line, int column) {
         int lineNumber = parser.getLineNumber();
+        int previousDepth = parser.getDepth();
+        String previousTag = "";
+        String parentTag = "";
         String tag = parser.getName();
         while (lineNumber < line) {
+            previousTag = parser.getName();
             try {
                 parser.nextTag();
             } catch (Throwable e) {
                 // ignored, keep parsing
             }
             lineNumber = parser.getLineNumber();
+
             if (parser.getName() != null) {
                 tag = parser.getName();
             }
+
+            if (parser.getDepth() > previousDepth) {
+                previousDepth = parser.getDepth();
+                parentTag = previousTag;
+            }
         }
 
-        return tag;
+        return Pair.create(parentTag, tag);
     }
 
     private boolean isInAttributeValue(String contents, int index) {
