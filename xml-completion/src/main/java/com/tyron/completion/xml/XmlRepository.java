@@ -82,6 +82,15 @@ public class XmlRepository {
                 declareStyleables.put(declareStyleable.getName(), declareStyleable);
             } else if ("attr".equals(name)) {
                 AttributeInfo attributeInfo = parseAttributeInfo(parser);
+                if (!attributeInfo.getName().contains(":")) {
+                    attributeInfo.setNamespace(namespace);
+                } else {
+                    String ns = attributeInfo.getName();
+                    String newName = ns.substring(ns.indexOf(':') + 1);
+                    ns = attributeInfo.getName().substring(0, ns.indexOf(':'));
+                    attributeInfo.setName(newName);
+                    attributeInfo.setNamespace(ns);
+                }
                 mExtraAttributes.put(attributeInfo.getName(), attributeInfo);
             }
         }
@@ -110,7 +119,9 @@ public class XmlRepository {
                     attributeInfo.setNamespace(namespace);
                 } else {
                     String ns = attributeInfo.getName();
+                    String newName = ns.substring(ns.indexOf(':') + 1);
                     ns = attributeInfo.getName().substring(0, ns.indexOf(':'));
+                    attributeInfo.setName(newName);
                     attributeInfo.setNamespace(ns);
                 }
                 attributeInfos.add(attributeInfo);

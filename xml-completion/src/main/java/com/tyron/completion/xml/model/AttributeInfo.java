@@ -24,6 +24,10 @@ public class AttributeInfo implements Comparable<AttributeInfo> {
         return Objects.compare(this.name, o.name, String::compareTo);
     }
 
+    public void setName(String name) {
+        this.name = name;
+    }
+
     public String getName() {
         return name;
     }
