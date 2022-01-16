@@ -106,7 +106,13 @@ public class XmlRepository {
             String tag = parser.getName();
             if ("attr".equals(tag)) {
                 AttributeInfo attributeInfo = parseAttributeInfo(parser);
-                attributeInfo.setNamespace(namespace);
+                if (!attributeInfo.getName().contains(":")) {
+                    attributeInfo.setNamespace(namespace);
+                } else {
+                    String ns = attributeInfo.getName();
+                    ns = attributeInfo.getName().substring(0, ns.indexOf(':'));
+                    attributeInfo.setNamespace(ns);
+                }
                 attributeInfos.add(attributeInfo);
             }
         }
