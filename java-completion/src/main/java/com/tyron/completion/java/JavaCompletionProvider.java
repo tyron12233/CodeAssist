@@ -1,13 +1,11 @@
 package com.tyron.completion.java;
 
-import android.util.Log;
-
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.java.model.CachedCompletion;
+import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.progress.ProcessCanceledException;

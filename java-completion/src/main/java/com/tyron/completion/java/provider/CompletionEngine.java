@@ -3,40 +3,23 @@ package com.tyron.completion.java.provider;
 import android.annotation.SuppressLint;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.builder.compiler.BuildType;
-import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
-import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
-import com.tyron.builder.project.api.Module;
-import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.JavaCompilerService;
-import com.tyron.completion.java.model.CachedCompletion;
-import com.tyron.completion.model.CompletionItem;
+import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionList;
 
-import org.apache.commons.io.FileUtils;
 import org.openjdk.javax.tools.DiagnosticListener;
 import org.openjdk.javax.tools.JavaFileObject;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.jar.JarFile;
-import java.util.stream.Collectors;
-
-import me.xdrop.fuzzywuzzy.FuzzySearch;
 
 public class CompletionEngine {
     private static final String TAG = CompletionEngine.class.getSimpleName();

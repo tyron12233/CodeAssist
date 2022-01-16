@@ -1,4 +1,4 @@
-package com.tyron.completion.java.model;
+package com.tyron.completion.model;
 
 import com.tyron.completion.model.CompletionList;
 
