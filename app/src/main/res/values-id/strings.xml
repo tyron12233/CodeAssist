@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">CodeAssist</string>
+    <string name="hello_world">Halo dunia!</string>
+    <item name="paste" type="string">Tempel</item>
+    <item name="copy" type="string">Salin</item>
+    <item name="selectAll" formatted="true" type="string">Pilih semua</item>
+    <item name="saveToProject" translatable="false" type="string">Proyek</item>
+    <item name="cut" type="string" translatable="false">Potong</item>
+    <item name="last" type="string">Akhir</item>
+    <item name="next" type="string">Selanjutnya</item>
+    <item name="replace" type="string">Ganti</item>
+    <item name="replaceAll" type="string">Ganti semua</item>
+    <item name="replacement" type="string">Penggantian</item>
+    <item name="cancel" type="string">Batal</item>
+    <item name="text_to_search" type="string">Teks untuk dicari</item>
+
+    <item name="more" translatable="false" type="string">Lebih</item>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">Pesan-pesan</string>
+    <string name="sync_header">Sinkron</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">Tanda tanganmu</string>
+    <string name="reply_title">Tindakan balasan default</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">Sinkron email secara berkala</string>
+    <string name="attachment_title">Unduh lampiran mendatang</string>
+    <string name="attachment_summary_on">Unduh lampiran dari email-email mendatang secara otomatis
+    </string>
+    <string name="attachment_summary_off">Hanya unduh lampiran ketika diminta secara manual</string>
+
+
+    <!-- wizard -->
+    <string name="wizard_next">Selanjutnya</string>
+    <string name="wizard_finish">Selesai</string>
+    <string name="wizard_cancel">Batalkan</string>
+    <string name="wizard_templates">Templat-templat</string>
+    <string name="wizard_exit">Keluar</string>
+    <string name="wizard_desc">Pilih dari templat Activity</string>
+    <string name="wizard_empty_templates">Tidak ada templat :(</string>
+    <string name="wizard_loading">Memuat templat-templat</string>
+    <string name="wizard_app_name">Nama aplikasi</string>
+    <string name="wizard_package_name">com.my.myapplication</string>
+    <string name="wizard_save_location">Lokasi penyimpanan</string>
+    <string name="wizard_language">Bahasa</string>
+    <string name="wizard_minimum_sdk">SDK Minimum</string>
+    <string name="wizard_create">Buat</string>
+    <string name="wizard_previous">Sebelumnya</string>
+    <string name="wizard_scoped_storage_info">Karena pembatasan "scoped storage" yang dimiliki android 11, anda hanya bisa menyimpan file di penyimpanan internal milik aplikasi.</string>
+    <string name="wizard_file_not_writable">Direktori tidak dapat di tulis, mohon memilih lokasi lainnya</string>
+    <string name="wizard_path_exceeds">Jalur lokasi melebihi 240 karakter.</string>
+    <string name="wizard_package_illegal">Nama paket terdapat karakter ilegal.</string>
+    <string name="wizard_package_too_short">Nama paket terlalu pendek.</string>
+    <string name="wizard_package_contains_spaces">Nama paket tidak boleh memiliki spasi.</string>
+    <string name="wizard_error_name_empty">Nama tidak boleh kosong.</string>
+    <string name="wizard_error_name_illegal">Nama tidak boleh terdapat karakter ilegal</string>
+    <string name="wizard_package_empty">Nama paket tidak boleh kosong.</string>
+    <string name="wizard_select_min_sdk">Pilih SDK minimum.</string>
+    <string name="wizard_select_save_location">Pilih lokasi penyimpanan</string>
+
+    <string name="menu_open_project">Buka modul</string>
+    <string name="menu_create_project">Buat modul</string>
+    <string name="menu_run">Jalankan</string>
+    <string name="menu_refresh">Segarkan modul</string>
+    <string name="menu_library_manager">Pengelola library</string>
+    <string name="menu_format">Format</string>
+    <string name="menu_settings">Setelan</string>
+
+    <!-- preferences -->
+    <string name="settings_title_editor">Editor</string>
+    <string name="title_activity_settings">Setelan</string>
+    
+
+    <!-- Editor settings -->
+    <string name="code_engine_title">Mesin Penyelesaian</string>
+    <string name="settings_code_completions">Nyalakan penyelesaian kode</string>
+    <string name="settings_kotlin_completions">Nyalakan penyelesaian kode untuk Kotlin</string>
+    <string name="settings_kotlin_completions_desc">Fitur ini sedang eksperimental dan mungkin lambat.
+        Membutuhkan perangkat yang kuat.
+    </string>
+    <string name="code_editor_error_highlight">Nyalakan penyorotan kesalahan</string>
+
+    <string name="editor_settings_title">Setelan editor kode</string>
+    <string name="editor_settings_wordwrap">Mode word wrap</string>
+    <string name="font_size_title">Ukuran huruf</string>
+    <string name="font_size_message">Atur ukuran huruf editor</string>
+    <string name="font_size_summary">Tentukan ukuran huruf default editor</string>
+    <string name="keyboard_settings_title">Keyboard</string>
+    <string name="keyboard_enable_suggestions_description">Nyalakan saran keyboard</string>
+    <string name="settings_build_run_title">Build &amp; Jalankan</string>
+    <string name="settings_build_run_desc">Konfigurasikan build dan setelan eksekusi</string>
+    <string name="run_title">Jalankan</string>
+    <string name="settings_install_apk_title">Prompt Penginstalan APK</string>
+    <string name="settings_install_desc">Tunjukkan prompt penginstalan APK setelah kompilasi berhasil.</string>
+    <string-array name="java_versions" translatable="false">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+    </string-array>
+    <string name="completion_settings_kotlin_title">Kotlin</string>
+    <string name="completion_settings_java_title">Java</string>
+    <string name="completion_java_target_version_title">Versi target</string>
+    <string name="completion_java_source_version_title">Versi sumber kode</string>
+
+    <!-- about page -->
+    <string name="settings_about_us_title">Tentang kami</string>
+    <string name="settings_about_us_desc">Info lanjutan tentang pengembang.</string>
+    <string name="app_description">IDE yang kuat dan ringan untuk pengembangan aplikasi Android tepat di kantong anda.</string>
+    <string name="app_version">Versi %1$s</string>
+    <string name="contact_group_title">Kontak</string>
+    <string name="app_source_title">Sumber kode</string>
+    <string name="sketchub_team">Tim Sketchub</string>
+    <string name="community">Komunitas</string>
+    <!-- file manager menu -->
+    <string name="error">Error</string>
+    <string name="error_resource_name_restriction">Nama resource hanya boleh berisi huruf kecil a-z, 0-9 atau underscore.</string>
+    <string name="menu_action_new_java_class">Kelas Java </string>
+    <string name="menu_action_new_kotlin_class">Kelas Kotlin</string>
+    <string name="menu_action_new_directory">Direktori</string>
+    <string name="menu_action_new_file">File</string>
+    <string name="directory_name">Nama direktori</string>
+    <string name="file_name">Nama file</string>
+    <string name="menu_new">Buat</string>
+    <string name="menu_refactor">Faktor ulang</string>
+    <string name="item_project">Proyek</string>
+    <string name="dialog_create_class_title">Buat sebuah kelas</string>
+    <string name="create_class_dialog_class_name">Nama kelas</string>
+    <string name="create_class_dialog_positive">Buat</string>
+    <string name="create_class_dialog_class_type">Tipe kelas</string>
+    <string name="create_class_dialog_invalid_name">Nama kelas tidak valid</string>
+
+    <string name="success">Berhasil</string>
+    <string name="delete_success">Hapus keberhasilan.</string>
+    <string name="dialog_confirm_delete">Apakah anda yakin ingin menghapus %1$s?</string>
+    <string name="dialog_delete">Hapus</string>
+    <string name="menu_preview_layout">Pratinjau layout</string>
+    <string name="action_menu_build_release">Bangun APK rilis</string>
+    <string name="action_menu_build_debug">Bangun APK debug</string>
+    <string name="action_menu_build_aab">Bangun AAB</string>
+
+    <string name="project_manager_alpha_notice_title">Pemberitahuan alpha</string>
+    <string name="project_manager_alpha_notice">CodeAssist sedang dalam versi alpha,
+        Anda mungkin mengalami error, bug, dan fitur yang tidak lengkap.\nAnda
+        dapat melaporkan masalah-masalah tersebut di https://github.com/tyron12233/CodeAssist/issues</string>
+    <string name="project_manager_save_location_title">Pilih lokasi penyimpanan</string>
+    <string name="project_manager_permission_denied">Izin ditolak</string>
+    <string name="project_manager_button_request_again">Izin lagi</string>
+    <string name="project_manager_button_continue">Lanjutkan</string>
+    <string name="project_manager_rationale_title">Izin penyimpanan</string>
+    <string name="project_manager_button_allow">Izinkan</string>
+    <string name="project_manager_button_use_internal">Gunakan penyimpanan internal</string>
+    <string name="project_manager_permission_rationale">Aplikasi membutuhkan izin penyimpanan
+        untuk menyimpan file modul yang tidak akan dihapus ketika anda menghapus aplikasi,
+        atau anda dapat memilih untuk menyimpan file modul pada penyimpanan internal aplikasi.</string>
+    <string name="project_manager_android11_notice">Proyek-proyek akan di simpan ke penyimpanan internal aplikasi.
+        Cadangkan modul-modul anda sebelum menghapus aplikasi</string>
+    <string name="project_manager_projects">Proyek-proyek</string>
+    <string name="project_manager_empty">Proyek-proyek kosong</string>
+    <string name="project_manager_create_project">Buat modul</string>
+    <string name="project_path_menu_title">Jalur Proyek</string>
+    <string name="project_manager_null_projects">Tidak ada proyek yang ditemukan</string>
+    <string name="project_manager_suggestions">Saran:\n\n  - Buat Proyek Baru\n  - Ganti Jalur Proyek</string>
+    
+
+    <!-- Compiler Service -->
+    <string name="compilation_state_compiling">Sedang melakukan kompilasi</string>
+    <string name="compilation_button_install">INSTALL</string>
+    <string name="compilation_result_success">Kompilasi berhasil</string>
+    <string name="compilation_result_failed">Kompilasi gagal</string>
+
+    <!-- Library manager -->
+    <string name="library_manager_title">%1s Libraries</string>
+    <string name="group_id">Id Grup</string>
+    <string name="artifact_id">Id Artefak</string>
+    <string name="version_name">Nama Versi</string>
+    <string name="menu_display_dependencies">Tunjukkan dependensi-dependensi</string>
+    <string name="attributes_editor">Editor Atribut</string>
+    <string name="attribute_value">Nilai atribut</string>
+    <string name="menu_add_libs_gradle">Tambah library-library dari build.gradle</string>
+</resources>
