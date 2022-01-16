@@ -125,6 +125,9 @@ public class StyleUtils {
     }
 
     private static String getSimpleName(String name) {
+        if (name == null) {
+            return "";
+        }
         if (name.contains(".")) {
             return name.substring(name.lastIndexOf('.') + 1);
         }
