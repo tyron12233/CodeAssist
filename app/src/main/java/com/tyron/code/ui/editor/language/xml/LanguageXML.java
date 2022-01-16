@@ -100,6 +100,8 @@ public class LanguageXML implements EditorLanguage {
 				advance++;
 			} else if (token.getType() == XMLLexer.SLASH_CLOSE) {
 				advance--;
+			} else if (token.getType() == XMLLexer.CLOSE) {
+				advance--;
 			}
 		}
 		advance = Math.max(0, advance);
