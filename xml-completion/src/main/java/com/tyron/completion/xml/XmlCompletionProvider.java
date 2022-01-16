@@ -228,15 +228,14 @@ public class XmlCompletionProvider extends CompletionProvider {
             xmlCachedCompletion.setFilterPrefix(fixedPrefix);
             xmlCachedCompletion.setFilter((it, pre) -> {
                 if (pre.contains(":")) {
-                    if (!it.label.startsWith(pre)) {
-                        return false;
+                    if (it.label.contains(":")) {
+                        if (!it.label.startsWith(pre)) {
+                            return false;
+                        }
+                        it.label = it.label.substring(it.label.indexOf(':') + 1);
                     }
                 }
                 if (it.label.startsWith(pre)) {
-                    return true;
-                }
-
-                if (getAttributeValueFromPrefix(it.label).startsWith(getAttributeValueFromPrefix(pre))) {
                     return true;
                 }
 
@@ -255,19 +254,14 @@ public class XmlCompletionProvider extends CompletionProvider {
             }
         }
         String commitText = "";
-        if (shouldShowNamespace) {
-            commitText = (TextUtils.isEmpty(attributeInfo.getNamespace())
+        commitText = (TextUtils.isEmpty(attributeInfo.getNamespace())
                     ? ""
                     : attributeInfo.getNamespace() + ":");
-        }
         commitText += attributeInfo.getName();
 
         CompletionItem item = new CompletionItem();
         item.action = CompletionItem.Kind.NORMAL;
-        item.label = (TextUtils.isEmpty(attributeInfo.getNamespace())
-                ? ""
-                : attributeInfo.getNamespace() + ":")
-                + attributeInfo.getName();
+        item.label = commitText;
         item.iconKind = DrawableKind.Attribute;
         item.detail = attributeInfo.getFormats().stream()
                 .map(Format::name)

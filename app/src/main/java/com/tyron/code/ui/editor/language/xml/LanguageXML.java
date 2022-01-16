@@ -35,7 +35,9 @@ public class LanguageXML implements EditorLanguage {
 
 	@Override
 	public boolean isAutoCompleteChar(char ch) {
-		return MyCharacter.isJavaIdentifierPart(ch) || ch == '<';
+		return MyCharacter.isJavaIdentifierPart(ch)
+				|| ch == '<'
+				|| ch == ':';
 	}
 
 	@Override
