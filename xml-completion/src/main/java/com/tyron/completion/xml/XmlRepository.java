@@ -66,6 +66,8 @@ public class XmlRepository {
                 }
             }
         }
+
+        mInitialized = true;
     }
 
     private Map<String, DeclareStyleable> parse(File file, String namespace) throws XmlPullParserException, IOException {
