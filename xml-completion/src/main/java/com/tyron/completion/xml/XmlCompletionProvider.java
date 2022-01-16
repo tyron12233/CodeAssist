@@ -11,6 +11,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
@@ -36,6 +37,7 @@ import java.util.stream.Collectors;
 
 public class XmlCompletionProvider extends CompletionProvider {
 
+    private static final String EXTENSION = ".xml";
     private static final XmlPullParserFactory sParserFactory;
 
     static {
@@ -49,7 +51,11 @@ public class XmlCompletionProvider extends CompletionProvider {
         sParserFactory = sParserFactory1;
     }
 
-    private static final String EXTENSION = ".xml";
+    private CachedCompletion mCachedCompletion;
+
+    public XmlCompletionProvider() {
+
+    }
 
     @Override
     public String getFileExtension() {
@@ -60,12 +66,86 @@ public class XmlCompletionProvider extends CompletionProvider {
     @Override
     public CompletionList complete(Project project, Module module, File file, String contents,
                                    String prefix, int line, int column, long index) {
+        String partialIdentifier = partialIdentifier(contents, (int) index);
+
+        if (isIncrementalCompletion(mCachedCompletion, file, prefix, line, column)) {
+            CompletionList list = new CompletionList();
+            list.items = filter(partialIdentifier, mCachedCompletion.getCompletionList().items);
+            return list;
+        }
         try {
-            return completeInternal(project, module, file, contents, prefix, line, column, index);
+            CompletionList list =
+                    completeInternal(project, module, file, contents, prefix, line, column, index);
+            list.items = filter(partialIdentifier, list.items);
+            mCachedCompletion = new CachedCompletion(file, line, column, prefix, list);
+            return list;
         } catch (XmlPullParserException | IOException e) {
             e.printStackTrace();
         }
+
         return CompletionList.EMPTY;
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    private List<CompletionItem> filter(String fixedPrefix, List<CompletionItem> items) {
+        return items.stream()
+                .filter(it -> {
+                    if (fixedPrefix.contains(":")) {
+                        if (it.label.startsWith(fixedPrefix)) {
+                            return true;
+                        }
+                    }
+                    if (it.label.startsWith(fixedPrefix)) {
+                        return true;
+                    }
+
+                    if (getAttributeValueFromPrefix(it.label).startsWith(getAttributeValueFromPrefix(fixedPrefix))) {
+                        return true;
+                    }
+
+                    return getAttributeNameFromPrefix(it.label)
+                            .startsWith(getAttributeNameFromPrefix(fixedPrefix));
+                })
+                .collect(Collectors.toList());
+    }
+
+    private boolean isIncrementalCompletion(CachedCompletion cachedCompletion, File file,
+                                            String prefix, int line, int column) {
+        prefix = partialIdentifier(prefix, prefix.length());
+
+        if (line == -1) {
+            return false;
+        }
+
+        if (column == -1) {
+            return false;
+        }
+
+        if (cachedCompletion == null) {
+            return false;
+        }
+
+        if (!file.equals(cachedCompletion.getFile())) {
+            return false;
+        }
+
+        if (prefix.endsWith(".")) {
+            return false;
+        }
+
+        if (cachedCompletion.getLine() != line) {
+            return false;
+        }
+
+        if (cachedCompletion.getColumn() > column) {
+            return false;
+        }
+
+        if (!prefix.startsWith(cachedCompletion.getPrefix())) {
+            return false;
+        }
+
+        return prefix.length() - cachedCompletion.getPrefix().length() == column - cachedCompletion.getColumn();
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
@@ -80,7 +160,6 @@ public class XmlCompletionProvider extends CompletionProvider {
         String fixedPrefix = partialIdentifier(contents, (int) index);
         String fullPrefix = fullIdentifier(contents, (int) index);
         boolean shouldShowNamespace = !fixedPrefix.contains(":");
-
 
         XmlPullParser parser = sParserFactory.newPullParser();
         parser.setInput(new StringReader(contents));
@@ -145,9 +224,6 @@ public class XmlCompletionProvider extends CompletionProvider {
                     }
                 }
             }
-            list.items = list.items.stream()
-                    .filter(it -> it.label.startsWith(prefix))
-                    .collect(Collectors.toList());
         } else {
             for (DeclareStyleable style : styles) {
                 for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
@@ -155,20 +231,6 @@ public class XmlCompletionProvider extends CompletionProvider {
                     list.items.add(item);
                 }
             }
-            list.items = list.items.stream()
-                    .filter(it -> {
-                        if (fixedPrefix.contains(":")) {
-                            if (it.label.startsWith(fixedPrefix)) {
-                                return true;
-                            }
-                        }
-                        if (it.label.startsWith(fixedPrefix)) {
-                            return true;
-                        }
-                        return getAttributeNameFromPrefix(it.label)
-                                .startsWith(getAttributeNameFromPrefix(fixedPrefix));
-                    })
-                    .collect(Collectors.toList());
         }
         return list;
     }
@@ -200,8 +262,6 @@ public class XmlCompletionProvider extends CompletionProvider {
         return item;
     }
 
-
-
     private String partialIdentifier(String contents, int end) {
         int start = end;
         while (start > 0 && !XmlCharacter.isNonXmlCharacterPart(contents.charAt(start - 1))) {
@@ -218,6 +278,20 @@ public class XmlCompletionProvider extends CompletionProvider {
         return contents.substring(start, end);
     }
 
+    private String getAttributeValueFromPrefix(String prefix) {
+        String attributeValue = prefix;
+        if (attributeValue.contains("=")) {
+            attributeValue = attributeValue.substring(attributeValue.indexOf('=') + 1);
+        }
+        if (attributeValue.startsWith("\"")) {
+            attributeValue = attributeValue.substring(1);
+        }
+        if (attributeValue.endsWith("\"")) {
+            attributeValue = attributeValue.substring(0, attributeValue.length() - 1);
+        }
+        return attributeValue;
+    }
+
     private String getAttributeNameFromPrefix(String prefix) {
         String attributeName = prefix;
         if (attributeName.contains("=")) {
@@ -229,6 +303,9 @@ public class XmlCompletionProvider extends CompletionProvider {
         return attributeName;
     }
 
+    /**
+     * @return pair of the parent tag and the current tag at the current position
+     */
     private Pair<String, String> getTagAtPosition(XmlPullParser parser, int line, int column) {
         int lineNumber = parser.getLineNumber();
         int previousDepth = parser.getDepth();
@@ -257,6 +334,10 @@ public class XmlCompletionProvider extends CompletionProvider {
         return Pair.create(parentTag, tag);
     }
 
+    /**
+     * @return whether the current index is inside an attribute value,
+     * e.g {@code attribute="CURSOR"}
+     */
     private boolean isInAttributeValue(String contents, int index) {
         XMLLexer lexer = new XMLLexer(CharStreams.fromString(contents));
         Token token;
