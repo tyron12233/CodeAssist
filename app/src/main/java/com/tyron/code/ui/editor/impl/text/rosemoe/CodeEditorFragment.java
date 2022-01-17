@@ -452,6 +452,15 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     public void format() {
         if (mEditor != null) {
+            if (mEditor.getCursor().isSelected()) {
+                if (mLanguage instanceof JavaLanguage) {
+                    Cursor cursor = mEditor.getCursor();
+                    CharSequence format = mLanguage.format(mEditor.getText(), cursor.getLeft(),
+                            cursor.getRight());
+                    mEditor.setText(format);
+                    return;
+                }
+            }
             mEditor.formatCodeAsync();
         }
     }
