@@ -82,7 +82,7 @@
         android:title="Keyboard">
 
         <SwitchPreference
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:iconSpaceReserved="false"
             android:key="keyboard_enable_suggestions"
             app:iconSpaceReserved="false"
