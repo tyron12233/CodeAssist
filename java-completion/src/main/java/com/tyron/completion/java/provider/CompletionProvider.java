@@ -133,8 +133,6 @@ public class CompletionProvider {
         boolean endsWithParen = endsWithParen(contents, (int) cursor);
 
         checkCanceled();
-        Instant now = Instant.now();
-        Log.d(TAG, "Parsing took " + Duration.between(now, Instant.now()).toMillis());
         try (CompilerContainer container = compiler.compile(Collections.singletonList(source))) {
             return container.get(task -> {
                 TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
@@ -341,8 +339,7 @@ public class CompletionProvider {
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         for (Element member : task.task.getElements().getAllMembers(typeElement)) {
             if (member.getKind() == ElementKind.CONSTRUCTOR) continue;
-            if (!StringSearch.matchesPartialName(member.getSimpleName(), partial) && !partial.endsWith("."))
-                continue;
+            if (FuzzySearch.partialRatio(String.valueOf(member.getSimpleName()), partial) < 70 && !partial.endsWith(".") && !partial.isEmpty()) continue;
             if (!trees.isAccessible(scope, member, type)) continue;
             if (isStatic != member.getModifiers().contains(Modifier.STATIC)) continue;
             if (member.getKind() == ElementKind.METHOD) {
@@ -389,7 +386,7 @@ public class CompletionProvider {
             if (label.contains("(")) {
                 label = label.substring(0, label.indexOf('('));
             }
-            return FuzzySearch.partialRatio(label, partial) > 90;
+            return FuzzySearch.partialRatio(label, partial) >= 70;
         };
 
         for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
@@ -555,7 +552,7 @@ public class CompletionProvider {
             for (Element member : type.getEnclosedElements()) {
                 if (!member.getModifiers().contains(Modifier.STATIC)) continue;
                 if (!memberMatchesImport(id.getIdentifier(), member)) continue;
-                if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) continue;
+                if (FuzzySearch.partialRatio(String.valueOf(member.getSimpleName()), partial) < 70) continue;
                 if (member.getKind() == ElementKind.METHOD) {
                     methods.clear();
                     putMethod((ExecutableElement) member, methods);
@@ -683,7 +680,7 @@ public class CompletionProvider {
         TypeElement typeElement = (TypeElement) type.asElement();
         List<CompletionItem> list = new ArrayList<>();
         for (Element member : task.task.getElements().getAllMembers(typeElement)) {
-            if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) continue;
+            if (FuzzySearch.partialRatio(String.valueOf(member.getSimpleName()), partial) < 70) continue;
             if (member.getKind() != ElementKind.METHOD) continue;
             if (!trees.isAccessible(scope, member, type)) continue;
             if (!isStatic && member.getModifiers().contains(Modifier.STATIC)) continue;

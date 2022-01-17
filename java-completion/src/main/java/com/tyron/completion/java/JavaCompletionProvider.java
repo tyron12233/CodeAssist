@@ -51,7 +51,7 @@ public class JavaCompletionProvider extends CompletionProvider {
                             if (label.length() < partialIdentifier.length()) {
                                 return false;
                             }
-                            return FuzzySearch.partialRatio(label, partialIdentifier) > 90;
+                            return FuzzySearch.partialRatio(label, partialIdentifier) > 70;
                         }).collect(Collectors.toList());
                 CompletionList completionList = new CompletionList();
                 completionList.items = narrowedList;
