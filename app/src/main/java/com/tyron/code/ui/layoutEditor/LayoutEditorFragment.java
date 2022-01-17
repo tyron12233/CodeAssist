@@ -340,18 +340,20 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         final float yScale = (float) root.getHeight() / (float) screenHeight;
         final float minScale = Math.min(xScale, yScale);
 
-        root.setScaleX(minScale);
-        root.setScaleY(minScale);
-
-        final float xCorrection = (screenWidth - (screenWidth * minScale)) / 2;
-        root.setTranslationX(-xCorrection);
-        final float yCorrection = (screenHeight - (screenHeight * minScale)) / 2;
-        root.setTranslationY(-yCorrection);
-
         // keep the original layout params
         ViewGroup.LayoutParams layoutParams = root.getLayoutParams();
         layoutParams.width = screenWidth;
         layoutParams.height = screenHeight;
+
+        root.setScaleX(minScale);
+        root.setScaleY(minScale);
+
+        root.postDelayed(() -> {
+            final float xCorrection = (screenWidth - (screenWidth * minScale)) / 2;
+            root.setTranslationX(-xCorrection);
+            final float yCorrection = (screenHeight - (screenHeight * minScale)) / 2;
+            root.setTranslationY(-yCorrection);
+        }, 500);
     }
 
 
