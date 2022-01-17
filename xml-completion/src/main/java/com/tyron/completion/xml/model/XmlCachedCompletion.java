@@ -17,6 +17,7 @@ public class XmlCachedCompletion extends CachedCompletion {
 
     public static final int TYPE_ATTRIBUTE = 0;
     public static final int TYPE_ATTRIBUTE_VALUE = 1;
+    public static final int TYPE_TAG = 2;
 
     private Function2<CompletionItem, String, Boolean> mFilter;
     private String mFilterPrefix;

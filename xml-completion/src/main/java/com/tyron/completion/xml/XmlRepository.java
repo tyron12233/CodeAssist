@@ -3,10 +3,12 @@ package com.tyron.completion.xml;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.util.Decompress;
+import com.tyron.completion.xml.lexer.BytecodeScanner;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.Format;
 
+import org.apache.bcel.classfile.JavaClass;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
@@ -26,11 +28,16 @@ public class XmlRepository {
     private File mAttrsFile;
     private Map<String, DeclareStyleable> mDeclareStyleables;
     private final Map<String, AttributeInfo> mExtraAttributes = new TreeMap<>();
+    private final Map<String, JavaClass> mJavaViewClasses = new TreeMap<>();
 
     private boolean mInitialized = false;
 
     public Map<String, DeclareStyleable> getDeclareStyleables() {
         return mDeclareStyleables;
+    }
+
+    public Map<String, JavaClass> getJavaViewClasses() {
+        return mJavaViewClasses;
     }
 
     public AttributeInfo getExtraAttribute(String name) {
@@ -63,6 +70,19 @@ public class XmlRepository {
                     } catch (XmlPullParserException | IOException e) {
                         e.printStackTrace();
                     }
+                }
+            }
+
+            File classesFile = new File(parent, "classes.jar");
+            if (classesFile.exists()) {
+                try {
+                    List<JavaClass> scan =
+                            BytecodeScanner.scan(classesFile);
+                    for (JavaClass javaClass : scan) {
+                        mJavaViewClasses.put(javaClass.getClassName(), javaClass);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
         }

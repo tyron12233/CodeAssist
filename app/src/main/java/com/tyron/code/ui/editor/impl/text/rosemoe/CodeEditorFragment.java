@@ -232,8 +232,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 window.setCancelShowUp(true);
 
                 int length = window.getLastPrefix().length();
-                if (window.getLastPrefix().contains(".")) {
-                    length -= window.getLastPrefix().lastIndexOf(".") + 1;
+                if (mLanguage instanceof JavaLanguage) {
+                    if (window.getLastPrefix().contains(".")) {
+                        length -= window.getLastPrefix().lastIndexOf(".") + 1;
+                    }
                 }
                 mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - length,
                         cursor.getLeftLine(), cursor.getLeftColumn());

@@ -104,7 +104,7 @@ public class StyleUtils {
         putStyle(AppCompatSeekBar.class);
     }
 
-    private static void putLayoutParams(@NonNull Class<? extends ViewGroup> viewGroup) {
+    public static void putLayoutParams(@NonNull Class<? extends ViewGroup> viewGroup) {
         ImmutableSet.Builder<String> builder = ImmutableSet.builder();
         Class<?> current = viewGroup;
         while (current != null) {
@@ -185,7 +185,7 @@ public class StyleUtils {
         return params;
     }
 
-    private static String getSimpleName(String name) {
+    public static String getSimpleName(String name) {
         if (name == null) {
             return "";
         }

@@ -24,6 +24,7 @@ import com.tyron.completion.xml.model.XmlCachedCompletion;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
+import org.apache.bcel.classfile.JavaClass;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
@@ -40,6 +41,7 @@ import java.util.stream.Collectors;
 
 import me.xdrop.fuzzywuzzy.FuzzySearch;
 
+@SuppressLint("NewApi")
 public class XmlCompletionProvider extends CompletionProvider {
 
     private static final String EXTENSION = ".xml";
@@ -67,7 +69,6 @@ public class XmlCompletionProvider extends CompletionProvider {
         return EXTENSION;
     }
 
-    @SuppressLint("NewApi")
     @Override
     public CompletionList complete(Project project, Module module, File file, String contents,
                                    String prefix, int line, int column, long index) {
@@ -161,7 +162,6 @@ public class XmlCompletionProvider extends CompletionProvider {
 
         String fixedPrefix = partialIdentifier(contents, (int) index);
         String fullPrefix = fullIdentifier(contents, (int) index);
-        boolean shouldShowNamespace = !fixedPrefix.contains(":");
 
         XmlPullParser parser = sParserFactory.newPullParser();
         parser.setInput(new StringReader(contents));
@@ -185,77 +185,126 @@ public class XmlCompletionProvider extends CompletionProvider {
             styles.addAll(declareStyleables.values());
         }
 
-        if (isInAttributeValue(contents, (int) index)) {
-            for (DeclareStyleable style : styles) {
-                for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
-                    String attributeName = getAttributeNameFromPrefix(fixedPrefix);
-                    String namespace = "";
-                    if (fixedPrefix.contains(":")) {
-                        namespace = fixedPrefix.substring(0, fixedPrefix.indexOf(':'));
-                        if (namespace.contains("=")) {
-                            namespace = namespace.substring(0, namespace.indexOf('='));
-                        }
-                    }
-                    if (!namespace.equals(attributeInfo.getNamespace())) {
-                        continue;
-                    }
-                    if (!attributeName.equals(attributeInfo.getName())) {
-                        continue;
-                    }
-
-                    List<String> values = attributeInfo.getValues();
-                    if (values == null || values.isEmpty()) {
-                        AttributeInfo extraAttribute =
-                                repository.getExtraAttribute(attributeInfo.getName());
-                        if (extraAttribute != null) {
-                            values = extraAttribute.getValues();
-                        }
-                    }
-                    if (values != null) {
-                        for (String value : values) {
-                            CompletionItem item = new CompletionItem();
-                            item.action = CompletionItem.Kind.NORMAL;
-                            item.label = value;
-                            item.commitText = value;
-                            item.iconKind = DrawableKind.Attribute;
-                            item.cursorOffset = value.length();
-                            item.detail = "Attribute";
-                            list.items.add(item);
-                        }
-                    }
-                }
-            }
-            xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE);
-            xmlCachedCompletion.setFilterPrefix(prefix);
-            xmlCachedCompletion.setFilter((item, pre) -> item.label.startsWith(pre));
+        if (prefix.startsWith("<")) {
+            addTagItems(repository, prefix, list, xmlCachedCompletion);
         } else {
-            for (DeclareStyleable style : styles) {
-                for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
-                    CompletionItem item = getAttributeItem(repository, attributeInfo, shouldShowNamespace, fullPrefix);
-                    list.items.add(item);
-                }
+            if (isInAttributeValue(contents, (int) index)) {
+                addAttributeValueItems(styles, prefix, fixedPrefix, repository, list, xmlCachedCompletion);
+            } else {
+                addAttributeItems(styles, fullPrefix, fixedPrefix, repository, list, xmlCachedCompletion);
             }
-            xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_ATTRIBUTE);
-            xmlCachedCompletion.setFilterPrefix(fixedPrefix);
-            xmlCachedCompletion.setFilter((it, pre) -> {
-                if (pre.contains(":")) {
-                    if (it.label.contains(":")) {
-                        if (!it.label.startsWith(pre)) {
-                            return false;
-                        }
-                        it.label = it.label.substring(it.label.indexOf(':') + 1);
-                    }
-                }
-                if (it.label.startsWith(pre)) {
-                    return true;
-                }
-
-                String labelPrefix = getAttributeNameFromPrefix(it.label);
-                String prePrefix = getAttributeNameFromPrefix(pre);
-                return FuzzySearch.partialRatio(labelPrefix, prePrefix) >= 70;
-            });
         }
         return xmlCachedCompletion;
+    }
+
+    private void addTagItems(XmlRepository repository, String prefix, CompletionList list, XmlCachedCompletion xmlCachedCompletion) {
+        xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_TAG);
+        xmlCachedCompletion.setFilterPrefix(prefix);
+        xmlCachedCompletion.setFilter((item, pre) -> {
+            String prefixSet = pre;
+            if (pre.startsWith("<")) {
+                prefixSet = pre.substring(1);
+            }
+
+            if (prefixSet.contains(".")) {
+                if (FuzzySearch.partialRatio(prefixSet, item.detail) >= 80) {
+                    return true;
+                }
+            } else {
+                if (FuzzySearch.partialRatio(prefixSet, item.label) >= 80) {
+                    return true;
+                }
+            }
+
+            String className = item.detail + "." + item.label;
+            return FuzzySearch.partialRatio(prefixSet, className) >= 30;
+
+        });
+        for (Map.Entry<String, JavaClass> entry :
+                repository.getJavaViewClasses().entrySet()) {
+            CompletionItem item = new CompletionItem();
+            item.label = StyleUtils.getSimpleName(entry.getKey());
+            item.detail = entry.getValue().getPackageName();
+            item.iconKind = DrawableKind.Class;
+            item.commitText = "<" + entry.getValue().getClassName();
+            item.cursorOffset = item.commitText.length();
+            list.items.add(item);
+        }
+    }
+
+    private void addAttributeItems(Set<DeclareStyleable> styles, String fullPrefix, String fixedPrefix, XmlRepository repository, CompletionList list, XmlCachedCompletion xmlCachedCompletion) {
+        boolean shouldShowNamespace = !fixedPrefix.contains(":");
+
+        for (DeclareStyleable style : styles) {
+            for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
+                CompletionItem item = getAttributeItem(repository, attributeInfo, shouldShowNamespace, fullPrefix);
+                list.items.add(item);
+            }
+        }
+        xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_ATTRIBUTE);
+        xmlCachedCompletion.setFilterPrefix(fixedPrefix);
+        xmlCachedCompletion.setFilter((it, pre) -> {
+            if (pre.contains(":")) {
+                if (it.label.contains(":")) {
+                    if (!it.label.startsWith(pre)) {
+                        return false;
+                    }
+                    it.label = it.label.substring(it.label.indexOf(':') + 1);
+                }
+            }
+            if (it.label.startsWith(pre)) {
+                return true;
+            }
+
+            String labelPrefix = getAttributeNameFromPrefix(it.label);
+            String prePrefix = getAttributeNameFromPrefix(pre);
+            return FuzzySearch.partialRatio(labelPrefix, prePrefix) >= 70;
+        });
+    }
+
+    private void addAttributeValueItems(Set<DeclareStyleable> styles, String prefix, String fixedPrefix, XmlRepository repository, CompletionList list, XmlCachedCompletion xmlCachedCompletion) {
+        for (DeclareStyleable style : styles) {
+            for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
+                String attributeName = getAttributeNameFromPrefix(fixedPrefix);
+                String namespace = "";
+                if (fixedPrefix.contains(":")) {
+                    namespace = fixedPrefix.substring(0, fixedPrefix.indexOf(':'));
+                    if (namespace.contains("=")) {
+                        namespace = namespace.substring(0, namespace.indexOf('='));
+                    }
+                }
+                if (!namespace.equals(attributeInfo.getNamespace())) {
+                    continue;
+                }
+                if (!attributeName.equals(attributeInfo.getName())) {
+                    continue;
+                }
+
+                List<String> values = attributeInfo.getValues();
+                if (values == null || values.isEmpty()) {
+                    AttributeInfo extraAttribute =
+                            repository.getExtraAttribute(attributeInfo.getName());
+                    if (extraAttribute != null) {
+                        values = extraAttribute.getValues();
+                    }
+                }
+                if (values != null) {
+                    for (String value : values) {
+                        CompletionItem item = new CompletionItem();
+                        item.action = CompletionItem.Kind.NORMAL;
+                        item.label = value;
+                        item.commitText = value;
+                        item.iconKind = DrawableKind.Attribute;
+                        item.cursorOffset = value.length();
+                        item.detail = "Attribute";
+                        list.items.add(item);
+                    }
+                }
+            }
+        }
+        xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE);
+        xmlCachedCompletion.setFilterPrefix(prefix);
+        xmlCachedCompletion.setFilter((item, pre) -> item.label.startsWith(pre));
     }
 
     private CompletionItem getAttributeItem(XmlRepository repository, AttributeInfo attributeInfo, boolean shouldShowNamespace, String fixedPrefix) {
@@ -378,6 +427,24 @@ public class XmlCompletionProvider extends CompletionProvider {
 
             if (start <= index && index <= end) {
                 return token.getType() == XMLLexer.STRING;
+            }
+
+            if (end > index) {
+                break;
+            }
+        }
+        return false;
+    }
+
+    private boolean isInAttributeTag(String contents, int index) {
+        XMLLexer lexer = new XMLLexer(CharStreams.fromString(contents));
+        Token token;
+        while ((token = lexer.nextToken()) != null) {
+            int start = token.getStartIndex();
+            int end = token.getStopIndex();
+
+            if (start <= index && index <= end) {
+                return token.getType() == XMLLexer.ATTRIBUTE;
             }
 
             if (end > index) {

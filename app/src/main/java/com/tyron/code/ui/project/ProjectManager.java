@@ -20,6 +20,8 @@ import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.provider.CompletionEngine;
+import com.tyron.completion.xml.XmlIndexProvider;
+import com.tyron.completion.xml.XmlRepository;
 
 import org.apache.commons.io.FileUtils;
 
@@ -124,13 +126,24 @@ public class ProjectManager {
 
                     }
                 });
-                mListener.onComplete(project, true, "Index successful");
             } catch (Throwable e) {
                 String message = "Failure indexing project.\n" +
                         Throwables.getStackTraceAsString(e);
                 mListener.onComplete(project, false, message);
             }
         }
+
+        if (module instanceof AndroidModule) {
+            mListener.onTaskStarted("Indexing XML files.");
+
+            XmlIndexProvider index = CompilerService.getInstance().getIndex(XmlIndexProvider.KEY);
+            index.clear();
+
+            XmlRepository xmlRepository = index.get(project, module);
+            xmlRepository.initialize((AndroidModule) module);
+        }
+
+        mListener.onComplete(project, true, "Index successful");
     }
 
     private void downloadLibraries(JavaModule project, TaskListener listener, ILogger logger) throws IOException {
