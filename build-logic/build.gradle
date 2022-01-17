@@ -52,7 +52,6 @@ dependencies {
     api files (
             'libs/javac-new.jar',
             'libs/apksigner.jar',
-            'libs/zip4j.jar',
             'libs/ecj.jar'
     )
 }

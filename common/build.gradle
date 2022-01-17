@@ -38,4 +38,5 @@ dependencies {
     api 'com.google.guava:guava:30.1.1-jre'
     api 'com.google.code.gson:gson:2.8.8'
     api 'commons-io:commons-io:2.11.0'
+    api 'net.lingala.zip4j:zip4j:2.9.1'
 }

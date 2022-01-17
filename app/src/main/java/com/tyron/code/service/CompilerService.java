@@ -8,6 +8,7 @@ import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationChannelCompat;
@@ -25,6 +26,7 @@ import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.BuildConfig;
 import com.tyron.code.R;
 import com.tyron.code.util.ApkInstaller;
 
@@ -180,7 +182,13 @@ public class CompilerService extends Service {
             try {
                 projectBuilder.build(type);
             } catch (Exception e) {
-                mMainHandler.post(() -> onResultListener.onComplete(false, e.getMessage()));
+                String message;
+                if (BuildConfig.DEBUG) {
+                    message = Log.getStackTraceString(e);
+                } else {
+                    message = e.getMessage();
+                }
+                mMainHandler.post(() -> onResultListener.onComplete(false, message));
                 success = false;
             }
 

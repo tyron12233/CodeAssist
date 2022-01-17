@@ -1,19 +1,35 @@
 package com.tyron.builder.compiler.aab;
 
+import static com.android.sdklib.build.ApkBuilder.checkFileForPackaging;
+import static com.android.sdklib.build.ApkBuilder.checkFolderForPackaging;
+
+import android.util.Log;
+
+import com.android.sdklib.build.ApkBuilder;
+import com.android.sdklib.build.DuplicateFileException;
+import com.android.sdklib.internal.build.SignedJarBuilder;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
+import com.tyron.builder.compiler.manifest.SdkConstants;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.BinaryExecutor;
 import com.tyron.common.util.Decompress;
 
+import net.lingala.zip4j.ZipFile;
+import net.lingala.zip4j.exception.ZipException;
+import net.lingala.zip4j.model.ZipParameters;
+import net.lingala.zip4j.model.enums.CompressionLevel;
+import net.lingala.zip4j.util.Zip4jUtil;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,7 +41,12 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -41,6 +62,9 @@ public class AabTask extends Task<AndroidModule> {
     private File mBinDir;
     private File base;
     private File manifest;
+
+    private final JavaAndNativeResourceFilter mFilter = new JavaAndNativeResourceFilter();
+    private final HashMap<String, File> mAddedFiles = new HashMap<>();
 
     @Override
     public String getName() {
@@ -66,6 +90,7 @@ public class AabTask extends Task<AndroidModule> {
             throw new IOException("Failed to create resource output directory");
         }
 
+        mAddedFiles.clear();
     }
 
     public void run() throws IOException, CompilationFailedException {
@@ -74,6 +99,19 @@ public class AabTask extends Task<AndroidModule> {
         copyJni();
         copyDexFiles();
         baseZip();
+        try {
+            copyLibraries();
+        } catch (SignedJarBuilder.IZipEntryFilter.ZipAbortException e) {
+            String message = e.getMessage();
+            if (e instanceof DuplicateFileException) {
+                DuplicateFileException duplicateFileException = (DuplicateFileException) e;
+                message += "\n" +
+                        "file 1: " + duplicateFileException.getFile1() + "\n" +
+                        "file 2: " + duplicateFileException.getFile2() + "\n" +
+                        "path: " + duplicateFileException.getArchivePath();
+            }
+            throw new CompilationFailedException(message);
+        }
         budletool();
         aab();
         buildApks();
@@ -246,6 +284,68 @@ public class AabTask extends Task<AndroidModule> {
         String fromDirectory = getModule().getNativeLibrariesDirectory().getAbsolutePath();
         String toToDirectory = base.getAbsolutePath() + "/lib";
         copyDirectoryFileVisitor(fromDirectory, toToDirectory);
+
+        List<File> libraries = getModule().getLibraries();
+        for (File library : libraries) {
+            File parent = library.getParentFile();
+            if (parent == null) {
+                continue;
+            }
+
+            File jniDir = new File(parent, "jni");
+            if (jniDir.exists()) {
+                fromDirectory = jniDir.getAbsolutePath();
+                copyDirectoryFileVisitor(fromDirectory, toToDirectory);
+            }
+        }
+    }
+
+    private void copyLibraries() throws IOException, SignedJarBuilder.IZipEntryFilter.ZipAbortException {
+        List<File> libraryJars = getModule().getLibraries();
+        File originalFile = new File(mBinDir, "Base-Module.zip");
+        try (ZipFile zipFile = new ZipFile(originalFile)) {
+            for (File libraryJar : libraryJars) {
+                if (!libraryJar.exists()) {
+                    continue;
+                }
+
+                mFilter.reset(libraryJar);
+                try (JarFile jarFile = new JarFile(libraryJar)) {
+                    Enumeration<JarEntry> entries = jarFile.entries();
+                    jar : while (entries.hasMoreElements()) {
+                        JarEntry jarEntry = entries.nextElement();
+
+                        String name = "root/" + jarEntry.getName();
+                        String[] names = name.split("/");
+                        if (names.length == 0) {
+                            continue;
+                        }
+                        for (String s : names) {
+                            boolean checkFolder = checkFolderForPackaging(s);
+                            if (!checkFolder) {
+                                continue jar;
+                            }
+                        }
+
+                        if (jarEntry.isDirectory() || jarEntry.getName().startsWith("META-INF")) {
+                            continue;
+                        }
+
+                        boolean b = mFilter.checkEntry(name);
+                        if (!b) {
+                            continue;
+                        }
+                        InputStream inputStream = jarFile.getInputStream(jarEntry);
+                        ZipParameters zipParameters = new ZipParameters();
+                        zipParameters.setFileNameInZip(name);
+                        zipParameters.setCompressionLevel(CompressionLevel.FASTEST);
+                        zipFile.addStream(inputStream, zipParameters);
+                    }
+                } catch (ZipException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 
     public static void copyDirectoryFileVisitor(String source, String target)
@@ -260,5 +360,84 @@ public class AabTask extends Task<AndroidModule> {
         String zipFilePath = mBinDir.getAbsolutePath() + "/proto-format.zip";
         String destDir = base.getAbsolutePath() + "";
         Decompress.unzip(zipFilePath, destDir);
+    }
+
+    /**
+     * Custom {@link SignedJarBuilder.IZipEntryFilter} to filter out everything that is not a standard java
+     * resources, and also record whether the zip file contains native libraries.
+     * <p>Used in {@link SignedJarBuilder#writeZip(java.io.InputStream, SignedJarBuilder.IZipEntryFilter)} when
+     * we only want the java resources from external jars.
+     */
+    private final class JavaAndNativeResourceFilter implements SignedJarBuilder.IZipEntryFilter {
+        private final List<String> mNativeLibs = new ArrayList<String>();
+        private boolean mNativeLibsConflict = false;
+        private File mInputFile;
+
+        @Override
+        public boolean checkEntry(String archivePath) throws ZipAbortException {
+            // split the path into segments.
+            String[] segments = archivePath.split("/");
+
+            // empty path? skip to next entry.
+            if (segments.length == 0) {
+                return false;
+            }
+
+            // Check each folders to make sure they should be included.
+            // Folders like CVS, .svn, etc.. should already have been excluded from the
+            // jar file, but we need to exclude some other folder (like /META-INF) so
+            // we check anyway.
+            for (int i = 0 ; i < segments.length - 1; i++) {
+                if (!checkFolderForPackaging(segments[i])) {
+                    return false;
+                }
+            }
+
+            // get the file name from the path
+            String fileName = segments[segments.length-1];
+
+            boolean check = checkFileForPackaging(fileName);
+
+            // only do additional checks if the file passes the default checks.
+            if (check) {
+                File duplicate = checkFileForDuplicate(archivePath);
+                if (duplicate != null) {
+                    throw new DuplicateFileException(archivePath, duplicate, mInputFile);
+                } else {
+                    mAddedFiles.put(archivePath, mInputFile);
+                }
+
+                if (archivePath.endsWith(".so") || archivePath.endsWith(".bc")) {
+                    mNativeLibs.add(archivePath);
+
+                    // only .so located in lib/ will interfere with the installation
+                    if (archivePath.startsWith(SdkConstants.FD_APK_NATIVE_LIBS + "/")) {
+                        mNativeLibsConflict = true;
+                    }
+                } else if (archivePath.endsWith(".jnilib")) {
+                    mNativeLibs.add(archivePath);
+                }
+            }
+
+            return check;
+        }
+
+        List<String> getNativeLibs() {
+            return mNativeLibs;
+        }
+
+        boolean getNativeLibsConflict() {
+            return mNativeLibsConflict;
+        }
+
+        void reset(File inputFile) {
+            mInputFile = inputFile;
+            mNativeLibs.clear();
+            mNativeLibsConflict = false;
+        }
+    }
+
+    private File checkFileForDuplicate(String archivePath) {
+        return mAddedFiles.get(archivePath);
     }
 }
