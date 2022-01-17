@@ -19,6 +19,8 @@ import android.widget.RelativeLayout;
 import android.widget.SeekBar;
 import android.widget.TableLayout;
 import android.widget.TextView;
+import android.widget.ViewFlipper;
+import android.widget.ViewSwitcher;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.widget.AppCompatButton;
@@ -88,6 +90,8 @@ public class StyleUtils {
         putStyle(GridLayout.class);
         putStyle(CalendarView.class);
         putStyle(DatePicker.class);
+        putStyle(ViewFlipper.class);
+        putStyle(ViewSwitcher.class);
     }
 
     public static void putStyles(JavaClass javaClass) {

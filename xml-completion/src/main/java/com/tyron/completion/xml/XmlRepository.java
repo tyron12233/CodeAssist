@@ -1,5 +1,27 @@
 package com.tyron.completion.xml;
 
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.AbsoluteLayout;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.ImageButton;
+import android.widget.ImageSwitcher;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ListView;
+import android.widget.ProgressBar;
+import android.widget.RelativeLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.ViewFlipper;
+import android.widget.ViewSwitcher;
+
+import com.android.tools.r8.ProgramConsumer;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.util.Decompress;
@@ -8,6 +30,7 @@ import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.Format;
 
+import org.apache.bcel.Repository;
 import org.apache.bcel.classfile.JavaClass;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -88,8 +111,46 @@ public class XmlRepository {
             }
         }
 
+        addFrameworkViews();
+
         mInitialized = true;
     }
+
+    private void addFrameworkViews() {
+        addFrameworkView(View.class);
+        addFrameworkView(ViewGroup.class);
+        addFrameworkView(FrameLayout.class);
+        addFrameworkView(RelativeLayout.class);
+        addFrameworkView(LinearLayout.class);
+        addFrameworkView(AbsoluteLayout.class);
+        addFrameworkView(ListView.class);
+        addFrameworkView(EditText.class);
+        addFrameworkView(Button.class);
+        addFrameworkView(TextView.class);
+        addFrameworkView(ImageView.class);
+        addFrameworkView(ImageButton.class);
+        addFrameworkView(ImageSwitcher.class);
+        addFrameworkView(ViewFlipper.class);
+        addFrameworkView(ViewSwitcher.class);
+        addFrameworkView(ScrollView.class);
+        addFrameworkView(HorizontalScrollView.class);
+        addFrameworkView(CompoundButton.class);
+        addFrameworkView(ProgressBar.class);
+        addFrameworkView(CheckBox.class);
+    }
+
+    private void addFrameworkView(Class<? extends View> viewClass) {
+        org.apache.bcel.util.Repository repository = Repository.getRepository();
+        try {
+            JavaClass javaClass = repository.loadClass(viewClass);
+            if (javaClass != null) {
+                mJavaViewClasses.put(javaClass.getClassName(), javaClass);
+            }
+        } catch (ClassNotFoundException e) {
+            // ignored
+        }
+    }
+
 
     private Map<String, DeclareStyleable> parse(File file, String namespace) throws XmlPullParserException, IOException {
         XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
