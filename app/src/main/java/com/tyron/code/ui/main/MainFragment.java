@@ -257,6 +257,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     @Override
     public void onPause() {
         super.onPause();
+
+        saveAll();
         mServiceConnection.setShouldShowNotification(true);
     }
 
