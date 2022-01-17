@@ -40,6 +40,8 @@ public class ScopeHelper {
             }
             for (Element member : scope.getLocalElements()) {
                 if (!filter.test(member.getSimpleName())) continue;
+                if ("<init>".contentEquals(member.getSimpleName())) continue;
+                if ("<clinit>".contentEquals(member.getSimpleName())) continue;
                 if (isStatic && member.getSimpleName().contentEquals("this")) continue;
                 if (isStatic && member.getSimpleName().contentEquals("super")) continue;
                 list.add(member);
