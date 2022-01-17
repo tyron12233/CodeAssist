@@ -12,6 +12,7 @@ import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.CompletionEngine;
 
+import java.nio.channels.ClosedByInterruptException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -73,14 +74,16 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
         if (engine.isIndexing()) {
             return null;
         }
-        
-        // waiting for code editor to support async code completions
-        mTask = engine.complete(mEditor.getCurrentFile(),
-                mEditor.getText().toString(),
-                prefix,
-                line,
-                column,
-                mEditor.getCursor().getLeft());
+
+        try {
+            // waiting for code editor to support async code completions
+            mTask = engine.complete(mEditor.getCurrentFile(), mEditor.getText().toString(), prefix, line, column, mEditor.getCursor().getLeft());
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof ClosedByInterruptException) {
+                throw new InterruptedException(e.getCause().getMessage());
+            }
+            throw e;
+        }
 
         if (mTask.isCancelled()) {
             return null;
