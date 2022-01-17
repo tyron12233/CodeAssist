@@ -11,6 +11,7 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.index.CompilerService;
@@ -237,7 +238,9 @@ public class XMLAnalyzer implements CodeAnalyzer {
                             try {
                                 doGenerate(project, (AndroidModule) module, file, contents);
                             } catch (IOException | CompilationFailedException e) {
-                                Log.e("XMLAnalyzer", "Failed compiling", e);
+                                if (BuildConfig.DEBUG) {
+                                    Log.e("XMLAnalyzer", "Failed compiling", e);
+                                }
                             }
                         }
                     }
@@ -247,6 +250,10 @@ public class XMLAnalyzer implements CodeAnalyzer {
 
         private void doGenerate(Project project, AndroidModule module, File file,
                                 String contents) throws IOException, CompilationFailedException {
+            if (!file.canWrite() || !file.canRead()) {
+                return;
+            }
+
             FileUtils.writeStringToFile(file, contents, StandardCharsets.UTF_8);
             IncrementalAapt2Task task = new IncrementalAapt2Task(module, ILogger.EMPTY, false);
             task.prepare(BuildType.DEBUG);
