@@ -4,16 +4,20 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AbsoluteLayout;
 import android.widget.Button;
+import android.widget.CalendarView;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
+import android.widget.DatePicker;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.GridLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
+import android.widget.TableLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -63,6 +67,8 @@ public class StyleUtils {
         putLayoutParams(FrameLayout.class);
         putLayoutParams(RelativeLayout.class);
         putLayoutParams(LinearLayout.class);
+        putLayoutParams(GridLayout.class);
+        putLayoutParams(TableLayout.class);
 
         putStyle(View.class);
         putStyle(ViewGroup.class);;
@@ -78,33 +84,10 @@ public class StyleUtils {
         putStyle(CheckBox.class);
         putStyle(ProgressBar.class);
         putStyle(SeekBar.class);
-
-        // material views
-        putLayoutParams(ConstraintLayout.class);
-        putLayoutParams(CoordinatorLayout.class);
-        putLayoutParams(MotionLayout.class);
-
-        putStyle(MaterialButton.class);
-        putStyle(MaterialTextView.class);
-        putStyle(MaterialCardView.class);
-        putStyle(MaterialToolbar.class);
-        putStyle(MaterialButtonToggleGroup.class);
-        putStyle(MaterialCheckBox.class);
-        putStyle(MaterialAutoCompleteTextView.class);
-        putStyle(TextInputEditText.class);
-        putStyle(TextInputLayout.class);
-        putStyle(RecyclerView.class);
-
-        // app compat
-        putStyle(AppCompatButton.class);
-        putStyle(AppCompatEditText.class);
-        putStyle(AppCompatTextView.class);
-        putStyle(AppCompatImageView.class);
-        putStyle(AppCompatImageButton.class);
-        putStyle(AppCompatCheckBox.class);
-        putStyle(AppCompatCheckedTextView.class);
-        putStyle(AppCompatRadioButton.class);
-        putStyle(AppCompatSeekBar.class);
+        putStyle(TableLayout.class);
+        putStyle(GridLayout.class);
+        putStyle(CalendarView.class);
+        putStyle(DatePicker.class);
     }
 
     public static void putStyles(JavaClass javaClass) {
