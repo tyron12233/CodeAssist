@@ -4,6 +4,8 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 import com.tyron.completion.index.CompilerProvider;
 
+import org.apache.bcel.Repository;
+
 public class XmlIndexProvider extends CompilerProvider<XmlRepository> {
 
     public static final String KEY = XmlIndexProvider.class.getSimpleName();
@@ -19,6 +21,7 @@ public class XmlIndexProvider extends CompilerProvider<XmlRepository> {
     }
 
     public void clear() {
+        Repository.clearCache();
         mRepository = null;
     }
 }
