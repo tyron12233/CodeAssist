@@ -41,7 +41,10 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.textview.MaterialTextView;
 import com.google.common.collect.ImmutableSet;
+import com.tyron.completion.xml.lexer.BytecodeScanner;
 import com.tyron.completion.xml.model.DeclareStyleable;
+
+import org.apache.bcel.classfile.JavaClass;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -104,15 +107,56 @@ public class StyleUtils {
         putStyle(AppCompatSeekBar.class);
     }
 
+    public static void putStyles(JavaClass javaClass) {
+        ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+        try {
+            JavaClass[] superClasses = javaClass.getSuperClasses();
+            for (JavaClass superClass : superClasses) {
+                if (Object.class.getName().equals(superClass.getClassName())) {
+                    continue;
+                }
+                builder.add(getSimpleName(superClass.getClassName()));
+            }
+        } catch (ClassNotFoundException e) {
+            // ignored
+        }
+        sViewStyleMap.put(getSimpleName(javaClass.getClassName()), builder.build());
+
+        if (BytecodeScanner.isViewGroup(javaClass)) {
+            putLayoutParams(javaClass);
+        }
+    }
+
+    public static void putLayoutParams(JavaClass javaClass) {
+        ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+        try {
+            JavaClass[] superClasses = javaClass.getSuperClasses();
+            for (JavaClass superClass : superClasses) {
+                if (Object.class.getName().equals(superClass.getClassName())) {
+                    continue;
+                }
+
+                if (View.class.getName().equals(superClass.getClassName())) {
+                    continue;
+                }
+
+                builder.add(getSimpleName(superClass.getClassName()) + "_Layout");
+            }
+            sLayoutParamsMap.put(getSimpleName(javaClass.getClassName()) + "_Layout", builder.build());
+        } catch (ClassNotFoundException e) {
+            // ignored
+        }
+    }
+
     public static void putLayoutParams(@NonNull Class<? extends ViewGroup> viewGroup) {
         ImmutableSet.Builder<String> builder = ImmutableSet.builder();
         Class<?> current = viewGroup;
         while (current != null) {
-            if ("java.lang.Object".equals(current.getName())) {
+            if (Object.class.getName().equals(current.getName())) {
                 break;
             }
             // no layout params for view
-            if ("android.view.View".equals(current.getName())) {
+            if (View.class.getName().equals(current.getName())) {
                 break;
             }
 

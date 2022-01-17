@@ -3,6 +3,7 @@ package com.tyron.completion.xml.lexer;
 import android.content.Context;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.ViewGroup;
 
 import com.tyron.builder.BuildModule;
 
@@ -49,6 +50,21 @@ public class BytecodeScanner {
             }
         }
         return viewClasses;
+    }
+
+    public static boolean isViewGroup(JavaClass javaClass) {
+        JavaClass[] superClasses;
+        try {
+            superClasses = javaClass.getSuperClasses();
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
+        for (JavaClass superClass : superClasses) {
+            if (ViewGroup.class.getName().equals(superClass.getClassName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void scanBootstrapIfNeeded() {

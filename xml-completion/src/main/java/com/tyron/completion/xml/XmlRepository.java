@@ -79,6 +79,7 @@ public class XmlRepository {
                     List<JavaClass> scan =
                             BytecodeScanner.scan(classesFile);
                     for (JavaClass javaClass : scan) {
+                        StyleUtils.putStyles(javaClass);
                         mJavaViewClasses.put(javaClass.getClassName(), javaClass);
                     }
                 } catch (IOException e) {
