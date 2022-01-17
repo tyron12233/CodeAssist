@@ -72,11 +72,6 @@ public class XmlRepository {
             return;
         }
         mAttrsFile = getOrExtractFiles();
-        try {
-            mDeclareStyleables = parse(mAttrsFile, "android");
-        } catch (XmlPullParserException | IOException e) {
-            e.printStackTrace();
-        }
 
         for (File library : module.getLibraries()) {
             File parent = library.getParentFile();
@@ -108,6 +103,12 @@ public class XmlRepository {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+            }
+
+            try {
+                mDeclareStyleables = parse(mAttrsFile, "android");
+            } catch (XmlPullParserException | IOException e) {
+                e.printStackTrace();
             }
         }
 
