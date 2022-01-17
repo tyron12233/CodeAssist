@@ -93,6 +93,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
     private MainViewModel mMainViewModel;
     private SharedPreferences mPreferences;
 
+    private boolean mCanSave;
+
     public static CodeEditorFragment newInstance(File file) {
         CodeEditorFragment fragment = new CodeEditorFragment();
         Bundle args = new Bundle();
@@ -113,8 +115,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
 
-        if (ProjectManager.getInstance().getCurrentProject() != null) {
-            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().setSnapshotContent(mCurrentFile, mEditor.getText().toString());
+        if (mCanSave) {
+            if (ProjectManager.getInstance().getCurrentProject() != null) {
+                ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().setSnapshotContent(mCurrentFile, mEditor.getText().toString());
+            }
         }
     }
 
@@ -215,13 +219,17 @@ public class CodeEditorFragment extends Fragment implements Savable,
             String text;
             try {
                 text = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
+                mCanSave = true;
             } catch (IOException e) {
                 text = "File does not exist: " + e.getMessage();
+                mCanSave = false;
             }
             if (module != null) {
                 module.getFileManager().openFileForSnapshot(mCurrentFile, text);
             }
             mEditor.setText(text);
+        } else {
+            mCanSave = false;
         }
 
         mEditorEventListener = new CodeEditorEventListener(module, mCurrentFile);
@@ -354,13 +362,24 @@ public class CodeEditorFragment extends Fragment implements Savable,
         mEditor.clearFocus();
         hideEditorWindows();
 
-        if (ProjectManager.getInstance().getCurrentProject() != null) {
-            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().setSnapshotContent(mCurrentFile, mEditor.getText().toString());
+        if (mCanSave) {
+            if (ProjectManager.getInstance().getCurrentProject() != null) {
+                ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().setSnapshotContent(mCurrentFile, mEditor.getText().toString());
+            } else {
+                try {
+                    FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(), StandardCharsets.UTF_8);
+                } catch (IOException e) {
+                    // ignored
+                }
+            }
         }
     }
 
     @Override
     public void save() {
+        if (!mCanSave) {
+            return;
+        }
         if (mCurrentFile.exists()) {
             String oldContents = "";
             try {
