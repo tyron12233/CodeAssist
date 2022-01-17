@@ -174,10 +174,9 @@ public class StyleUtils {
     public static Set<DeclareStyleable> getStyles(Map<String, DeclareStyleable> map, String name) {
         Set<DeclareStyleable> styles = new TreeSet<>();
         String simpleName = getSimpleName(name);
-        if (!map.containsKey(simpleName)) {
-            return styles;
+        if (map.containsKey(simpleName)) {
+            styles.add(map.get(simpleName));
         }
-        styles.add(map.get(simpleName));
 
         ImmutableSet<String> strings = sViewStyleMap.get(simpleName);
         if (strings != null) {
