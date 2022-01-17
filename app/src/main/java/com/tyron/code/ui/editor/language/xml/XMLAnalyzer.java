@@ -257,7 +257,7 @@ public class XMLAnalyzer implements CodeAnalyzer {
             FileUtils.writeStringToFile(file, contents, StandardCharsets.UTF_8);
             IncrementalAapt2Task task = new IncrementalAapt2Task(module, ILogger.EMPTY, false);
             task.prepare(BuildType.DEBUG);
-            task.generateResourceClasses();
+            task.run();
 
 
             // work around to refresh R.java file
