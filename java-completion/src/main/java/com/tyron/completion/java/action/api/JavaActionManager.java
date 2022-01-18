@@ -64,29 +64,28 @@ public class JavaActionManager {
             Toast.makeText(thisContext, "Compiler is busy", Toast.LENGTH_SHORT).show();
             return;
         }
-        try (CompilerContainer container = service.compile(file)) {
-            container.run(task -> {
-                Diagnostic<? extends JavaFileObject> diagnostic = DiagnosticUtil.getDiagnostic(task,
-                        cursor);
-                TreePath currentPath = TreeUtil.findCurrentPath(task, cursor);
-                ActionContext context = ActionContext.builder()
-                        .setContext(thisContext)
-                        .setMenu(menu)
-                        .setCompileTask(task)
-                        .setEditorInterface(editor)
-                        .setCurrentPath(currentPath)
-                        .setDiagnostic(diagnostic)
-                        .setCurrentFile(file)
-                        .setCompiler(service)
-                        .setCursor(cursor)
-                        .build();
+        CompilerContainer container = service.compile(file);
+        container.run(task -> {
+            Diagnostic<? extends JavaFileObject> diagnostic = DiagnosticUtil.getDiagnostic(task,
+                    cursor);
+            TreePath currentPath = TreeUtil.findCurrentPath(task, cursor);
+            ActionContext context = ActionContext.builder()
+                    .setContext(thisContext)
+                    .setMenu(menu)
+                    .setCompileTask(task)
+                    .setEditorInterface(editor)
+                    .setCurrentPath(currentPath)
+                    .setDiagnostic(diagnostic)
+                    .setCurrentFile(file)
+                    .setCompiler(service)
+                    .setCursor(cursor)
+                    .build();
 
-                List<ActionProvider> applicableActions = getApplicableActions(context);
-                for (ActionProvider actionProvider : applicableActions) {
-                    actionProvider.addMenus(context);
-                }
-            });
-        }
+            List<ActionProvider> applicableActions = getApplicableActions(context);
+            for (ActionProvider actionProvider : applicableActions) {
+                actionProvider.addMenus(context);
+            }
+        });
     }
 
     private List<ActionProvider> getApplicableActions(ActionContext context) {

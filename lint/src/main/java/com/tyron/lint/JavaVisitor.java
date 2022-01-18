@@ -37,8 +37,7 @@ public class JavaVisitor {
     private final List<VisitingDetector> mAllDetectors;
     private final Map<Class<? extends Tree>, List<VisitingDetector>> mTreeTypeDetectors =
             new HashMap<>(16);
-    private final Map<String, List<VisitingDetector>> mMethodDetectors =
-            new HashMap<>(16);
+    private final Map<String, List<VisitingDetector>> mMethodDetectors = new HashMap<>(16);
 
     public JavaVisitor(JavaCompilerService compiler, @NonNull List<Detector> detectors) {
         mCompiler = compiler;
@@ -51,7 +50,8 @@ public class JavaVisitor {
             List<Class<? extends Tree>> treeTypes = detector.getApplicableTypes();
             if (treeTypes != null) {
                 for (Class<? extends Tree> tree : treeTypes) {
-                    List<VisitingDetector> list = mTreeTypeDetectors.computeIfAbsent(tree, k -> new ArrayList<>(SAME_TYPE_COUNT));
+                    List<VisitingDetector> list = mTreeTypeDetectors.computeIfAbsent(tree,
+                            k -> new ArrayList<>(SAME_TYPE_COUNT));
                     list.add(v);
                 }
             }
@@ -59,7 +59,8 @@ public class JavaVisitor {
             List<String> names = detector.getApplicableMethodNames();
             if (names != null) {
                 for (String name : names) {
-                    List<VisitingDetector> list = mMethodDetectors.computeIfAbsent(name, k -> new ArrayList<>(SAME_TYPE_COUNT));
+                    List<VisitingDetector> list = mMethodDetectors.computeIfAbsent(name,
+                            k -> new ArrayList<>(SAME_TYPE_COUNT));
                     list.add(v);
                 }
             }
@@ -68,24 +69,23 @@ public class JavaVisitor {
 
     public void visitFile(JavaContext context) {
         try {
-            try (CompilerContainer container = mCompiler.compile(context.file.toPath())) {
-                container.run(task -> {
-                    Tree compilationUnit = task.root();
-                    context.setCompileTask(task);
+            CompilerContainer container = mCompiler.compile(context.file.toPath());
+            container.run(task -> {
+                Tree compilationUnit = task.root();
+                context.setCompileTask(task);
 
-                    for (VisitingDetector v : mAllDetectors) {
-                        v.setContext(context);
-                    }
+                for (VisitingDetector v : mAllDetectors) {
+                    v.setContext(context);
+                }
 
-                    if (!mMethodDetectors.isEmpty()) {
-                        JavaVoidVisitor visitor = new DelegatingJavaVisitor(context);
-                        compilationUnit.accept(visitor, null);
-                    } else if (!mTreeTypeDetectors.isEmpty()) {
-                        JavaVoidVisitor visitor = new DispatchVisitor();
-                        compilationUnit.accept(visitor, null);
-                    }
-                });
-            }
+                if (!mMethodDetectors.isEmpty()) {
+                    JavaVoidVisitor visitor = new DelegatingJavaVisitor(context);
+                    compilationUnit.accept(visitor, null);
+                } else if (!mTreeTypeDetectors.isEmpty()) {
+                    JavaVoidVisitor visitor = new DispatchVisitor();
+                    compilationUnit.accept(visitor, null);
+                }
+            });
         } catch (Throwable e) {
             Log.e("Lint", "Failed to analyze file", e);
             ((JavaCompilerService) mCompiler).destroy();
@@ -134,8 +134,7 @@ public class JavaVisitor {
 
         @Override
         public Void visitAnnotation(AnnotationTree annotationTree, Void unused) {
-            List<VisitingDetector> list =
-                    mTreeTypeDetectors.get(AnnotationTree.class);
+            List<VisitingDetector> list = mTreeTypeDetectors.get(AnnotationTree.class);
             if (list != null) {
                 for (VisitingDetector v : list) {
                     v.getVisitor().visitAnnotation(annotationTree, unused);
@@ -146,8 +145,7 @@ public class JavaVisitor {
 
         @Override
         public Void visitVariable(VariableTree variableTree, Void unused) {
-            List<VisitingDetector> list =
-                    mTreeTypeDetectors.get(VariableTree.class);
+            List<VisitingDetector> list = mTreeTypeDetectors.get(VariableTree.class);
             if (list != null) {
                 for (VisitingDetector v : list) {
                     v.getVisitor().visitVariable(variableTree, unused);
@@ -158,8 +156,7 @@ public class JavaVisitor {
 
         @Override
         public Void visitMethodInvocation(MethodInvocationTree methodInvocationTree, Void unused) {
-            List<VisitingDetector> list =
-                    mTreeTypeDetectors.get(MethodInvocationTree.class);
+            List<VisitingDetector> list = mTreeTypeDetectors.get(MethodInvocationTree.class);
             if (list != null) {
                 for (VisitingDetector v : list) {
                     v.getVisitor().visitMethodInvocation(methodInvocationTree, unused);
@@ -191,8 +188,10 @@ public class JavaVisitor {
         }
     }
 
-    /** Performs common AST searches for method calls and R-type-field references.
-     * Note that this is a specialized form of the {@link DispatchVisitor}. */
+    /**
+     * Performs common AST searches for method calls and R-type-field references.
+     * Note that this is a specialized form of the {@link DispatchVisitor}.
+     */
     private class DelegatingJavaVisitor extends DispatchVisitor {
         private final JavaContext mContext;
         private final boolean mVisitResources;

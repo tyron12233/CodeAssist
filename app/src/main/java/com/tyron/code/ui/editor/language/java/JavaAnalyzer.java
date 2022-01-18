@@ -10,6 +10,7 @@ import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.BuildConfig;
 import com.tyron.code.lint.DefaultLintClient;
 import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.code.ui.project.ProjectManager;
@@ -133,19 +134,22 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                     SourceFileObject sourceFileObject =
                             new SourceFileObject(editor.getCurrentFile().toPath(),
                                     contents.toString(), Instant.now());
-                    try (CompilerContainer container =
-                                 service.compile(Collections.singletonList(sourceFileObject))) {
-                        container.run(task -> {
-                            if (!cancel.invoke()) {
-                                List<DiagnosticWrapper> collect = task.diagnostics.stream()
-                                        .map(d -> modifyDiagnostic(task, d))
-                                        .collect(Collectors.toList());
-                                editor.setDiagnostics(collect);
-                            }
-                        });
-                    }
+                    CompilerContainer container =
+                                 service.compile(Collections.singletonList(sourceFileObject));
+                    container.run(task -> {
+                        if (!cancel.invoke()) {
+                            List<DiagnosticWrapper> collect =
+                                    task.diagnostics.stream()
+                                            .map(d -> modifyDiagnostic(task, d))
+                                            .collect(Collectors.toList());
+                            editor.setDiagnostics(collect);
+                        }
+                    });
                 } catch (Throwable e) {
-                    service.destroy();
+                    if (BuildConfig.DEBUG) {
+                        Log.e(TAG, "Unable to get diagnostics", e);
+                    }
+                    service.close();
                 }
             }
         }

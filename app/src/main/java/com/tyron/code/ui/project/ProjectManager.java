@@ -123,10 +123,10 @@ public class ProjectManager {
                         .getIndex(JavaCompilerProvider.KEY);
                 JavaCompilerService service = provider.get(project, (JavaModule) module);
                 ((JavaModule) module).getJavaFiles().forEach((key, value) -> {
-                    //noinspection EmptyTryBlock
-                    try (CompilerContainer container = service.compile(value.toPath())) {
+                    CompilerContainer container = service.compile(value.toPath());
+                    container.run(__ -> {
 
-                    }
+                    });
                 });
             } catch (Throwable e) {
                 String message = "Failure indexing project.\n" +

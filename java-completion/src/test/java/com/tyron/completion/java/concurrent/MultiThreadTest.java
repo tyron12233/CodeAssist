@@ -40,7 +40,8 @@ public class MultiThreadTest {
     public void setup() throws IOException {
         CompletionModule.initialize(ApplicationProvider.getApplicationContext());
         CompletionModule.setAndroidJar(new File(resolveBasePath(), "classpath/rt.jar"));
-        CompletionModule.setLambdaStubs(new File(resolveBasePath(), "classpath/core-lambda-stubs.jar"));
+        CompletionModule.setLambdaStubs(new File(resolveBasePath(),
+                "classpath/core-lambda-stubs" + ".jar"));
 
         JavaCompilerProvider provider = new JavaCompilerProvider();
         CompilerService.getInstance().registerIndexProvider(JavaCompilerProvider.KEY, provider);
@@ -51,8 +52,8 @@ public class MultiThreadTest {
         mModule = new MockAndroidModule(mRoot, mFileManager);
         mModule.open();
 
-        File[] testFiles = new File(mRoot, "completion").listFiles(c ->
-                c.getName().endsWith(".java"));
+        File[] testFiles = new File(mRoot, "completion").listFiles(c -> c.getName().endsWith(
+                ".java"));
         if (testFiles != null) {
             for (File testFile : testFiles) {
                 mModule.addJavaFile(testFile);
@@ -70,22 +71,26 @@ public class MultiThreadTest {
         List<Thread> threads = new ArrayList<>();
 
         Thread thread = new Thread(() -> {
-            try (CompilerContainer container = mService.compile(file.toPath())) {
-                container.run(task -> {
-                    System.out.println(Thread.currentThread().getName());
-                });
-            }
+            CompilerContainer container = mService.compile(file.toPath());
+            container.run(task -> {
+                System.out.println(Thread.currentThread().getName());
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            });
         }, "Slow task");
         threads.add(thread);
         thread.start();
 
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 300; i++) {
+            int finalI = i;
             Thread t = new Thread(() -> {
-                try (CompilerContainer container = mService.compile(file.toPath())) {
-                    container.run((task -> {
-                        System.out.println(Thread.currentThread().getName());
-                    }));
-                }
+                CompilerContainer container = mService.compile(file.toPath());
+                container.run((task -> {
+                    System.out.println(Thread.currentThread().getName());
+                }));
             }, "Thread " + i);
             threads.add(t);
             t.start();

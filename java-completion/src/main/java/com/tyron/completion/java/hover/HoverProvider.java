@@ -5,6 +5,7 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.DocTrees;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
+
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
@@ -36,22 +37,21 @@ public class HoverProvider {
     }
 
     public List<String> hover(Path file, int offset) {
-        try (CompilerContainer container = compiler.compile(file)) {
-            return container.get(task -> {
-                Element element = new FindHoverElement(task.task).scan(task.root(), (long) offset);
-                if (element == null) {
-                    return NOT_SUPPORTED;
-                }
-                List<String> list =  new ArrayList<>();
-                String code = printType(element);
-                list.add(code);
-                String docs = docs(task, element);
-                if (!docs.isEmpty()) {
-                    list.add(docs);
-                }
-                return list;
-            });
-        }
+        CompilerContainer container = compiler.compile(file);
+        return container.get(task -> {
+            Element element = new FindHoverElement(task.task).scan(task.root(), (long) offset);
+            if (element == null) {
+                return NOT_SUPPORTED;
+            }
+            List<String> list = new ArrayList<>();
+            String code = printType(element);
+            list.add(code);
+            String docs = docs(task, element);
+            if (!docs.isEmpty()) {
+                list.add(docs);
+            }
+            return list;
+        });
     }
 
 
@@ -113,7 +113,8 @@ public class HoverProvider {
                 if (member instanceof ExecutableElement || member instanceof VariableElement) {
                     lines.add("  " + printType(member) + ";");
                 } else if (member instanceof TypeElement) {
-                    lines.add("  " + hoverTypeDeclaration((TypeElement) member) + " { /* removed */ }");
+                    lines.add("  " + hoverTypeDeclaration((TypeElement) member) + " { /* removed " +
+                            "*/ }");
                 }
             }
             lines.add("}");

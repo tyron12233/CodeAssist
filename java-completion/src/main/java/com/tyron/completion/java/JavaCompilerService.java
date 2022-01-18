@@ -139,14 +139,17 @@ public class JavaCompilerService implements CompilerProvider {
      * @param sources Files to compile
      * @return CompileBatch for this compilation
      */
-    private CompileBatch compileBatch(Collection<? extends JavaFileObject> sources) {
-        if (needsCompile(sources)) {
-            loadCompile(sources);
-        } else {
-            Log.d("JavaCompilerService", "Using cached compile");
-        }
-        return cachedCompile;
-
+    private CompilerContainer compileBatch(Collection<? extends JavaFileObject> sources) {
+        mContainer.initialize(() -> {
+            if (needsCompile(sources)) {
+                loadCompile(sources);
+            } else {
+                Log.d("JavaCompilerService", "Using cached compile");
+            }
+            CompileTask task = new CompileTask(cachedCompile);
+            mContainer.setCompileTask(task);
+        });
+        return mContainer;
     }
     
     public void clearDiagnostics() {
@@ -404,13 +407,11 @@ public class JavaCompilerService implements CompilerProvider {
      */
     @Override
     public CompilerContainer compile(Path... files) {
-        return mContainer.get(task -> {
-            List<JavaFileObject> sources = new ArrayList<>();
-            for (Path f : files) {
-                sources.add(new SourceFileObject(f, mCurrentModule));
-            }
-            return compile(sources);
-        });
+        List<JavaFileObject> sources = new ArrayList<>();
+        for (Path f : files) {
+            sources.add(new SourceFileObject(f, mCurrentModule));
+        }
+        return compile(sources);
     }
 
     /**
@@ -422,12 +423,7 @@ public class JavaCompilerService implements CompilerProvider {
      */
     @Override
     public CompilerContainer compile(Collection<? extends JavaFileObject> sources) {
-        synchronized (mContainer) {
-            CompileBatch compile = compileBatch(sources);
-            CompileTask task = new CompileTask(compile);
-            mContainer.setCompileTask(task);
-            return mContainer;
-        }
+        return compileBatch(sources);
     }
 
     public synchronized void close() {

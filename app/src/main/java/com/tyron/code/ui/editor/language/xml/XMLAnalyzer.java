@@ -268,10 +268,10 @@ public class XMLAnalyzer implements CodeAnalyzer {
                 JavaCompilerService service = provider.getCompiler(project, module);
 
                 if (service.isReady()) {
-                    //noinspection EmptyTryBlock
-                    try (CompilerContainer container = service.compile(resourceClass.toPath())) {
+                    CompilerContainer container = service.compile(resourceClass.toPath());
+                    container.run(__ -> {
 
-                    }
+                    });
                 }
             }
         }

@@ -37,7 +37,8 @@ public class TestDeleteFile {
     @Before
     public void setup() throws IOException {
         CompletionModule.setAndroidJar(new File(resolveBasePath(), "classpath/rt.jar"));
-        CompletionModule.setLambdaStubs(new File(resolveBasePath(), "classpath/core-lambda-stubs.jar"));
+        CompletionModule.setLambdaStubs(new File(resolveBasePath(),
+                "classpath/core-lambda-stubs" + ".jar"));
 
         mRoot = new File(resolveBasePath(), "EmptyProject");
         mProject = new Project(mRoot);
@@ -58,23 +59,19 @@ public class TestDeleteFile {
     public void test() {
         mService = getNewService(mJavaFiles);
 
-        try (CompilerContainer container = mService.compile(mMainClass.toPath())) {
-            container.run(task -> {
-                assertThat(task.diagnostics)
-                        .isEmpty();
-            });
-        }
+        CompilerContainer container = mService.compile(mMainClass.toPath());
+        container.run(task -> {
+            assertThat(task.diagnostics).isEmpty();
+        });
 
         mModule.removeJavaFile("com.test.MainSecond");
         mJavaFiles.remove(mClassToDelete);
         mService = getNewService(mJavaFiles);
 
-        try(CompilerContainer container = mService.compile(mMainClass.toPath())) {
-            container.run(task-> {
-                assertThat(task.diagnostics)
-                        .isNotEmpty();
-            });
-        }
+        container = mService.compile(mMainClass.toPath());
+        container.run(task -> {
+            assertThat(task.diagnostics).isNotEmpty();
+        });
     }
 
     private JavaCompilerService getNewService(Set<File> paths) {

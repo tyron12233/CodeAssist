@@ -46,6 +46,7 @@ public class IntroduceLocalVariable implements Rewrite {
     private final String methodName;
     private final TypeMirror type;
     private final long position;
+
     public IntroduceLocalVariable(Path file, String methodName, TypeMirror type, long position) {
         this.file = file;
         this.methodName = methodName;
@@ -55,42 +56,41 @@ public class IntroduceLocalVariable implements Rewrite {
 
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
-        try (CompilerContainer container = compiler.compile(file)) {
-            return container.get(task -> {
-                List<TextEdit> edits = new ArrayList<>();
-                Range range = new Range(position, position);
-                Type variableType = EditHelper.printType(type, true);
-                variableType = JavaParserUtil.getFirstType(variableType);
-                String variableName = ActionUtil.guessNameFromMethodName(methodName);
-                if (variableName == null) {
-                    variableName = ActionUtil.guessNameFromType(type);
-                }
-                if (variableName == null) {
-                    variableName = "variable";
-                }
-                while (containsVariableAtScope(variableName, task)) {
-                    variableName = getVariableName(variableName);
-                }
-                String typeName = JavaParserTypesUtil.getName(variableType, name -> false);
-                TextEdit edit = new TextEdit(range, typeName + " " + variableName + " = ");
-                edits.add(edit);
+        CompilerContainer container = compiler.compile(file);
+        return container.get(task -> {
+            List<TextEdit> edits = new ArrayList<>();
+            Range range = new Range(position, position);
+            Type variableType = EditHelper.printType(type, true);
+            variableType = JavaParserUtil.getFirstType(variableType);
+            String variableName = ActionUtil.guessNameFromMethodName(methodName);
+            if (variableName == null) {
+                variableName = ActionUtil.guessNameFromType(type);
+            }
+            if (variableName == null) {
+                variableName = "variable";
+            }
+            while (containsVariableAtScope(variableName, task)) {
+                variableName = getVariableName(variableName);
+            }
+            String typeName = JavaParserTypesUtil.getName(variableType, name -> false);
+            TextEdit edit = new TextEdit(range, typeName + " " + variableName + " = ");
+            edits.add(edit);
 
-                if (!type.getKind().isPrimitive()) {
-                    List<String> classes = JavaParserUtil.getClassNames(variableType);
-                    for (String aClass : classes) {
-                        if (!ActionUtil.hasImport(task.root(), aClass)) {
-                            AddImport addImport = new AddImport(file.toFile(), aClass);
-                            Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-                            TextEdit[] imports = rewrite.get(file);
-                            if (imports != null) {
-                                Collections.addAll(edits, imports);
-                            }
+            if (!type.getKind().isPrimitive()) {
+                List<String> classes = JavaParserUtil.getClassNames(variableType);
+                for (String aClass : classes) {
+                    if (!ActionUtil.hasImport(task.root(), aClass)) {
+                        AddImport addImport = new AddImport(file.toFile(), aClass);
+                        Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+                        TextEdit[] imports = rewrite.get(file);
+                        if (imports != null) {
+                            Collections.addAll(edits, imports);
                         }
                     }
                 }
-                return ImmutableMap.of(file, edits.toArray(new TextEdit[0]));
-            });
-        }
+            }
+            return ImmutableMap.of(file, edits.toArray(new TextEdit[0]));
+        });
     }
 
     private boolean containsVariableAtScope(String name, CompileTask parse) {

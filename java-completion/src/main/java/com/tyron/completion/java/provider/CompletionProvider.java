@@ -133,29 +133,29 @@ public class CompletionProvider {
         boolean endsWithParen = endsWithParen(contents, (int) cursor);
 
         checkCanceled();
-        try (CompilerContainer container = compiler.compile(Collections.singletonList(source))) {
-            return container.get(task -> {
-                TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
-                switch (path.getLeaf().getKind()) {
-                    case IDENTIFIER:
-                        return completeIdentifier(task, path, partial, endsWithParen);
-                    case MEMBER_SELECT:
-                        return completeMemberSelect(task, path, partial, endsWithParen);
-                    case MEMBER_REFERENCE:
-                        return completeMemberReference(task, path, partial);
-                    case CASE:
-                        return completeSwitchConstant(task, path, partial);
-                    case IMPORT:
-                        return completeImport(qualifiedPartialIdentifier(contents, (int) cursor));
-                    case STRING_LITERAL:
-                        return new CompletionList();
-                    default:
-                        CompletionList list = new CompletionList();
-                        addKeywords(path, partial, list);
-                        return list;
-                }
-            });
-        }
+        CompilerContainer container = compiler.compile(Collections.singletonList(source));
+        return container.get(task -> {
+            TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
+            switch (path.getLeaf().getKind()) {
+                case IDENTIFIER:
+                    return completeIdentifier(task, path, partial, endsWithParen);
+                case MEMBER_SELECT:
+                    return completeMemberSelect(task, path, partial, endsWithParen);
+                case MEMBER_REFERENCE:
+                    return completeMemberReference(task, path, partial);
+                case CASE:
+                    return completeSwitchConstant(task, path, partial);
+                case IMPORT:
+                    return completeImport(qualifiedPartialIdentifier(contents, (int) cursor));
+                case STRING_LITERAL:
+                    return new CompletionList();
+                default:
+                    CompletionList list = new CompletionList();
+                    addKeywords(path, partial, list);
+                    return list;
+            }
+        });
+
     }
 
     private void addTopLevelSnippets(ParseTask task, CompletionList list) {

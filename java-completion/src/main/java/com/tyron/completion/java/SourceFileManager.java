@@ -117,6 +117,14 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
         return super.getFileForInput(location, packageName, relativeName);
     }
 
+    @Override
+    public boolean contains(Location location, FileObject fileObject) throws IOException {
+        System.out.println("Contains called at location " + location + " " +
+                "\n" +
+                "file object: " + fileObject);
+        return super.contains(location, fileObject);
+    }
+
     public void setLocation(Location location, Iterable<? extends  File> path) throws IOException {
 	    fileManager.setLocation(location, path);
     }

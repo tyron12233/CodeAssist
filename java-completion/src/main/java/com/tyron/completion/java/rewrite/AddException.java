@@ -25,7 +25,8 @@ public class AddException implements Rewrite {
     private final String[] erasedParameterTypes;
     private String exceptionType;
 
-    public AddException(String className, String methodName, String[] erasedParameterTypes, String exceptionType) {
+    public AddException(String className, String methodName, String[] erasedParameterTypes,
+                        String exceptionType) {
         this.className = className;
         this.methodName = methodName;
         this.erasedParameterTypes = erasedParameterTypes;
@@ -38,31 +39,31 @@ public class AddException implements Rewrite {
         if (file == CompilerProvider.NOT_FOUND) {
             return CANCELLED;
         }
-        try (CompilerContainer container = compiler.compile(file)) {
-            return container.get(task -> {
-                Trees trees = Trees.instance(task.task);
-                ExecutableElement methodElement = FindHelper.findMethod(task, className, methodName,
-                        erasedParameterTypes);
-                MethodTree methodTree = trees.getTree(methodElement);
-                SourcePositions pos = trees.getSourcePositions();
-                LineMap lines = task.root().getLineMap();
-                long startBody = pos.getStartPosition(task.root(), methodTree.getBody());
-                String packageName = "";
-                String simpleName = exceptionType;
-                int lastDot = simpleName.lastIndexOf('.');
-                if (lastDot != -1) {
-                    packageName = exceptionType.substring(0, lastDot);
-                    simpleName = exceptionType.substring(lastDot + 1);
-                }
-                String insertText ;
-                if (methodTree.getThrows().isEmpty()) {
-                    insertText = " throws " + simpleName + " ";
-                } else {
-                    insertText = ", " + simpleName + " ";
-                }
-                TextEdit insertThrows = new TextEdit(new Range(startBody - 1, startBody - 1), insertText);
-                return ImmutableMap.of(file, new TextEdit[]{insertThrows});
-            });
-        }
+        CompilerContainer container = compiler.compile(file);
+        return container.get(task -> {
+            Trees trees = Trees.instance(task.task);
+            ExecutableElement methodElement = FindHelper.findMethod(task, className, methodName,
+                    erasedParameterTypes);
+            MethodTree methodTree = trees.getTree(methodElement);
+            SourcePositions pos = trees.getSourcePositions();
+            LineMap lines = task.root().getLineMap();
+            long startBody = pos.getStartPosition(task.root(), methodTree.getBody());
+            String packageName = "";
+            String simpleName = exceptionType;
+            int lastDot = simpleName.lastIndexOf('.');
+            if (lastDot != -1) {
+                packageName = exceptionType.substring(0, lastDot);
+                simpleName = exceptionType.substring(lastDot + 1);
+            }
+            String insertText;
+            if (methodTree.getThrows().isEmpty()) {
+                insertText = " throws " + simpleName + " ";
+            } else {
+                insertText = ", " + simpleName + " ";
+            }
+            TextEdit insertThrows = new TextEdit(new Range(startBody - 1, startBody - 1),
+                    insertText);
+            return ImmutableMap.of(file, new TextEdit[]{insertThrows});
+        });
     }
 }

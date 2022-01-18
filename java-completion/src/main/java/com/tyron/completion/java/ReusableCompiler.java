@@ -27,10 +27,17 @@ import org.openjdk.tools.javac.util.Log;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+
+import me.xdrop.diffutils.DiffUtils;
 
 /**
  * A pool of reusable JavacTasks. When a task is no valid anymore, it is returned to the pool, and its Context may be
@@ -59,7 +66,7 @@ public class ReusableCompiler {
     private static final Logger LOG = Logger.getLogger("main");
     private static final JavacTool systemProvider = JavacTool.create();
 
-    private List<String> currentOptions = new ArrayList<>();
+    private final List<String> currentOptions = new ArrayList<>();
     private ReusableContext currentContext;
     private boolean checkedOut;
 
@@ -91,12 +98,15 @@ public class ReusableCompiler {
         }
         checkedOut = true;
         List<String> opts =
-			StreamSupport.stream(options.spliterator(), false).collect(Collectors.toCollection(ArrayList::new));
+			StreamSupport.stream(options.spliterator(), false)
+                    .collect(Collectors.toList());
         if (!opts.equals(currentOptions)) {
-            LOG.warning(String.format("Options changed from %s to %s, creating new compiler", options, opts));
+            List<String> difference = new ArrayList<>(currentOptions);
+            difference.removeAll(opts);
+            LOG.warning("Options changed, creating new compiler \n difference: " + difference);
             currentOptions.clear();
             currentOptions.addAll(opts);
-            currentContext = new ReusableContext(opts);
+            currentContext = new ReusableContext(new ArrayList<>(opts));
         }
         JavacTaskImpl task =
 			(JavacTaskImpl)
