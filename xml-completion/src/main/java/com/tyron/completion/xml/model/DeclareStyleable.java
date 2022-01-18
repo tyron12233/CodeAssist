@@ -36,6 +36,9 @@ public class DeclareStyleable implements Comparable<DeclareStyleable>{
         String[] parents = parent.split(" ");
         for (String parent : parents) {
             DeclareStyleable declareStyleable = repository.getDeclareStyleables().get(parent);
+            if (declareStyleable == null) {
+                declareStyleable = repository.getManifestAttrs().get(parent);
+            }
             if (declareStyleable != null) {
                 attributeInfos.addAll(declareStyleable.getAttributeInfosWithParents(repository));
             }

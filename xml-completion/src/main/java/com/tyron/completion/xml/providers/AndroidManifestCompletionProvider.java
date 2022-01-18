@@ -161,7 +161,7 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
 
         for (AttributeInfo attributeInfo : attributeInfos) {
             CompletionItem item = getAttributeItem(repository, attributeInfo,
-                    shouldShowNamespace, fixedPrefix);
+                    shouldShowNamespace, fixedPrefix + fullPrefix);
             list.items.add(item);
         }
 
