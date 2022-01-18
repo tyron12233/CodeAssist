@@ -266,6 +266,11 @@ public class XmlRepository {
                 skip(parser);
             }
         }
+
+        if (formats.contains(Format.BOOLEAN)) {
+            values.add("true");
+            values.add("false");
+        }
         return new AttributeInfo(name, formats, values);
     }
 
