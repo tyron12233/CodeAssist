@@ -59,6 +59,15 @@ import com.tyron.completion.java.rewrite.AddImport;
 import com.tyron.completion.model.CompletionItem;
 
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileListener;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManagerListener;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFilePropertyEvent;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileSystem;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.ex.VirtualFileManagerEx;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.VirtualFileManagerImpl;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.VariableElement;
@@ -72,6 +81,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import io.github.rosemoe.sora.interfaces.EditorEventListener;
@@ -132,6 +142,19 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         if (BottomSheetBehavior.STATE_HIDDEN == mMainViewModel.getBottomSheetState().getValue()) {
             mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_COLLAPSED);
+        }
+
+        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+        if (currentProject != null) {
+            Module module = currentProject.getModule(mCurrentFile);
+            Optional<CharSequence> fileContent =
+                    module.getFileManager().getFileContent(mCurrentFile);
+            if (fileContent.isPresent()) {
+                int line = mEditor.getCursor().getLeftLine();
+                int column = mEditor.getCursor().getLeftColumn();
+                mEditor.setText(fileContent.get());
+                mEditor.getCursor().set(line, column);
+            }
         }
     }
 

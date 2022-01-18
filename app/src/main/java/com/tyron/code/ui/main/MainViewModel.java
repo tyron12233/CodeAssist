@@ -154,7 +154,12 @@ public class MainViewModel extends ViewModel {
         int index = -1;
         List<FileEditor> value = getFiles().getValue();
         if (value != null) {
-            index = value.indexOf(file);
+            for (int i = 0; i < value.size(); i++) {
+                FileEditor editor = value.get(i);
+                if (file.getFile().equals(editor.getFile())) {
+                    index = i;
+                }
+            }
         }
         if (index != -1) {
             updateCurrentPosition(index);
