@@ -49,7 +49,7 @@ import java.util.TreeSet;
 public class XmlRepository {
 
     private File mAttrsFile;
-    private Map<String, DeclareStyleable> mDeclareStyleables;
+    private Map<String, DeclareStyleable> mDeclareStyleables = new TreeMap<>();
     private final Map<String, AttributeInfo> mExtraAttributes = new TreeMap<>();
     private final Map<String, JavaClass> mJavaViewClasses = new TreeMap<>();
 
@@ -106,7 +106,8 @@ public class XmlRepository {
             }
 
             try {
-                mDeclareStyleables = parse(mAttrsFile, "android");
+                Map<String, DeclareStyleable> android = parse(mAttrsFile, "android");
+                mDeclareStyleables.putAll(android);
             } catch (XmlPullParserException | IOException e) {
                 e.printStackTrace();
             }
