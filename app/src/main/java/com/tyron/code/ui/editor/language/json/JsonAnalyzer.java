@@ -27,12 +27,14 @@ public class JsonAnalyzer extends AbstractCodeAnalyzer {
 
     @Override
     public void setup() {
+        putColor(EditorColorScheme.TEXT_NORMAL, JSONLexer.LBRACKET,
+                JSONLexer.RBRACKET);
         putColor(EditorColorScheme.KEYWORD, JSONLexer.TRUE,
                 JSONLexer.FALSE, JSONLexer.NULL,
                 JSONLexer.COLON, JSONLexer.COMMA);
         putColor(EditorColorScheme.OPERATOR, JSONLexer.COLON);
         putColor(EditorColorScheme.LITERAL, JSONLexer.NUMBER);
-        putColor(EditorColorScheme.FUNCTION_NAME, JSONLexer.STRING);
+        putColor(EditorColorScheme.ATTRIBUTE_NAME, JSONLexer.STRING);
     }
 
     @Override
@@ -71,7 +73,7 @@ public class JsonAnalyzer extends AbstractCodeAnalyzer {
                         colors.addBlockLine(b);
                     }
                 }
-                return true;
+                return false;
             case JSONLexer.LBRACKET:
                 if (mBlockLines.isEmpty()) {
                     if (mCurrSwitch > mMaxSwitch) {
@@ -84,7 +86,7 @@ public class JsonAnalyzer extends AbstractCodeAnalyzer {
                 block.startLine = line;
                 block.startColumn = column;
                 mBlockLines.push(block);
-                return true;
+                return false;
         }
         return false;
     }
