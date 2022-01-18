@@ -10,7 +10,8 @@ import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.main.CompletionEngine;
-import com.tyron.completion.xml.XmlCompletionProvider;
+import com.tyron.completion.xml.providers.AndroidManifestCompletionProvider;
+import com.tyron.completion.xml.providers.XmlCompletionProvider;
 import com.tyron.completion.xml.XmlIndexProvider;
 
 public class MainActivity extends AppCompatActivity {
@@ -29,6 +30,7 @@ public class MainActivity extends AppCompatActivity {
             index.registerIndexProvider(XmlIndexProvider.KEY, new XmlIndexProvider());
             engine.registerCompletionProvider(new JavaCompletionProvider());
             engine.registerCompletionProvider(new XmlCompletionProvider());
+            engine.registerCompletionProvider(new AndroidManifestCompletionProvider());
         });
         startupManager.startup();
 

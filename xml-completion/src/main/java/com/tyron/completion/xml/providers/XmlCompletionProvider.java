@@ -1,8 +1,11 @@
 package com.tyron.completion.xml.providers;
 
+import static com.tyron.completion.xml.util.XmlUtils.fullIdentifier;
+import static com.tyron.completion.xml.util.XmlUtils.getAttributeItem;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeNameFromPrefix;
 import static com.tyron.completion.xml.util.XmlUtils.getTagAtPosition;
 import static com.tyron.completion.xml.util.XmlUtils.isInAttributeValue;
+import static com.tyron.completion.xml.util.XmlUtils.partialIdentifier;
 
 import android.annotation.SuppressLint;
 import android.os.Build;
@@ -304,54 +307,6 @@ public class XmlCompletionProvider extends CompletionProvider {
         xmlCachedCompletion.setFilterPrefix(prefix);
         xmlCachedCompletion.setFilter((item, pre) -> item.label.startsWith(pre));
     }
-
-    private CompletionItem getAttributeItem(XmlRepository repository, AttributeInfo attributeInfo, boolean shouldShowNamespace, String fixedPrefix) {
-
-        if (attributeInfo.getFormats() == null || attributeInfo.getFormats().isEmpty()) {
-            AttributeInfo extraAttributeInfo = repository.getExtraAttribute(attributeInfo.getName());
-            if (extraAttributeInfo != null) {
-                attributeInfo = extraAttributeInfo;
-            }
-        }
-        String commitText = "";
-        commitText = (TextUtils.isEmpty(attributeInfo.getNamespace())
-                    ? ""
-                    : attributeInfo.getNamespace() + ":");
-        commitText += attributeInfo.getName();
-
-        CompletionItem item = new CompletionItem();
-        item.action = CompletionItem.Kind.NORMAL;
-        item.label = commitText;
-        item.iconKind = DrawableKind.Attribute;
-        item.detail = attributeInfo.getFormats().stream()
-                .map(Format::name)
-                .collect(Collectors.joining("|"));
-        item.commitText = commitText;
-        if (!fixedPrefix.contains("=")) {
-            item.commitText += "=\"\"";
-            item.cursorOffset = item.commitText.length() - 1;
-        } else {
-            item.cursorOffset = item.commitText.length() + 2;
-        }
-        return item;
-    }
-
-    private String partialIdentifier(String contents, int end) {
-        int start = end;
-        while (start > 0 && !XmlCharacter.isNonXmlCharacterPart(contents.charAt(start - 1))) {
-            start--;
-        }
-        return contents.substring(start, end);
-    }
-
-    private String fullIdentifier(String contents, int start) {
-        int end = start;
-        while (end < contents.length() && !XmlCharacter.isNonXmlCharacterPart(contents.charAt(end - 1))) {
-            end++;
-        }
-        return contents.substring(start, end);
-    }
-
 
     private boolean isInAttributeTag(String contents, int index) {
         XMLLexer lexer = new XMLLexer(CharStreams.fromString(contents));

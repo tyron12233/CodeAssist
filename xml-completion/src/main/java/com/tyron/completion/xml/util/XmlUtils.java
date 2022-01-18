@@ -1,14 +1,24 @@
 package com.tyron.completion.xml.util;
 
+import android.annotation.SuppressLint;
+import android.text.TextUtils;
 import android.util.Pair;
 
+import com.tyron.completion.model.CompletionItem;
+import com.tyron.completion.model.DrawableKind;
+import com.tyron.completion.xml.XmlCharacter;
+import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.lexer.XMLLexer;
+import com.tyron.completion.xml.model.AttributeInfo;
+import com.tyron.completion.xml.model.Format;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
+
+import java.util.stream.Collectors;
 
 public class XmlUtils {
 
@@ -27,6 +37,22 @@ public class XmlUtils {
 
     public static XmlPullParser newPullParser() throws XmlPullParserException {
         return sParserFactory.newPullParser();
+    }
+
+    public static String partialIdentifier(String contents, int end) {
+        int start = end;
+        while (start > 0 && !XmlCharacter.isNonXmlCharacterPart(contents.charAt(start - 1))) {
+            start--;
+        }
+        return contents.substring(start, end);
+    }
+
+    public static String fullIdentifier(String contents, int start) {
+        int end = start;
+        while (end < contents.length() && !XmlCharacter.isNonXmlCharacterPart(contents.charAt(end - 1))) {
+            end++;
+        }
+        return contents.substring(start, end);
     }
 
     public static String getAttributeValueFromPrefix(String prefix) {
@@ -58,7 +84,8 @@ public class XmlUtils {
     /**
      * @return pair of the parent tag and the current tag at the current position
      */
-    public static Pair<String, String> getTagAtPosition(XmlPullParser parser, int line, int column) {
+    public static Pair<String, String> getTagAtPosition(XmlPullParser parser, int line,
+                                                        int column) {
         int lineNumber = parser.getLineNumber();
         int previousDepth = parser.getDepth();
         String previousTag = "";
@@ -111,4 +138,40 @@ public class XmlUtils {
         }
         return false;
     }
+
+
+    @SuppressLint("NewApi")
+    public static CompletionItem getAttributeItem(XmlRepository repository, AttributeInfo attributeInfo,
+                                            boolean shouldShowNamespace,
+                                            String fixedPrefix) {
+
+        if (attributeInfo.getFormats() == null || attributeInfo.getFormats().isEmpty()) {
+            AttributeInfo extraAttributeInfo =
+                    repository.getExtraAttribute(attributeInfo.getName());
+            if (extraAttributeInfo != null) {
+                attributeInfo = extraAttributeInfo;
+            }
+        }
+        String commitText = "";
+        commitText = (TextUtils.isEmpty(attributeInfo.getNamespace()) ? "" :
+                attributeInfo.getNamespace() + ":");
+        commitText += attributeInfo.getName();
+
+        CompletionItem item = new CompletionItem();
+        item.action = CompletionItem.Kind.NORMAL;
+        item.label = commitText;
+        item.iconKind = DrawableKind.Attribute;
+        item.detail = attributeInfo.getFormats().stream()
+                .map(Format::name).collect(Collectors.joining("|"));
+        item.commitText = commitText;
+        if (!fixedPrefix.contains("=")) {
+            item.commitText += "=\"\"";
+            item.cursorOffset = item.commitText.length() - 1;
+        } else {
+            item.cursorOffset = item.commitText.length() + 2;
+        }
+        return item;
+    }
+
+
 }

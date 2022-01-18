@@ -199,6 +199,8 @@ public class XmlRepository {
             XmlPullParserException {
 
         String name = getAttributeValue(parser, "name", "");
+        String parent = getAttributeValue(parser, "parent", "");
+
         Set<AttributeInfo> attributeInfos = new TreeSet<>();
 
         final int depth = parser.getDepth();
@@ -225,7 +227,7 @@ public class XmlRepository {
             }
         }
 
-        return new DeclareStyleable(name, attributeInfos);
+        return new DeclareStyleable(name, attributeInfos, parent);
     }
 
     private AttributeInfo parseAttributeInfo(XmlPullParser parser) throws IOException,
@@ -235,8 +237,6 @@ public class XmlRepository {
         List<String> values = new ArrayList<>();
 
         String formatString = getAttributeValue(parser, "format", null);
-        String parent = getAttributeValue(parser, "parent", "");
-
         if (formatString != null) {
             formats.addAll(Format.fromString(formatString));
         }
@@ -266,7 +266,7 @@ public class XmlRepository {
                 skip(parser);
             }
         }
-        return new AttributeInfo(name, formats, values, parent);
+        return new AttributeInfo(name, formats, values);
     }
 
     public static String getAttributeValue(XmlPullParser parser, String name, String defaultValue) {
