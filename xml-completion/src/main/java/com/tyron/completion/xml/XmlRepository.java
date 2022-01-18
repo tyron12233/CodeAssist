@@ -27,6 +27,7 @@ import com.tyron.common.util.Decompress;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.Format;
+import com.tyron.completion.xml.util.StyleUtils;
 
 import org.apache.bcel.Repository;
 import org.apache.bcel.classfile.JavaClass;
@@ -47,11 +48,16 @@ import java.util.TreeSet;
 public class XmlRepository {
 
     private File mAttrsFile;
-    private Map<String, DeclareStyleable> mDeclareStyleables = new TreeMap<>();
+    private final Map<String, DeclareStyleable> mDeclareStyleables = new TreeMap<>();
+    private final Map<String, DeclareStyleable> mManifestAttrs = new TreeMap<>();
     private final Map<String, AttributeInfo> mExtraAttributes = new TreeMap<>();
     private final Map<String, JavaClass> mJavaViewClasses = new TreeMap<>();
 
     private boolean mInitialized = false;
+
+    public Map<String, DeclareStyleable> getManifestAttrs() {
+        return mManifestAttrs;
+    }
 
     public Map<String, DeclareStyleable> getDeclareStyleables() {
         return mDeclareStyleables;
@@ -106,6 +112,13 @@ public class XmlRepository {
             try {
                 Map<String, DeclareStyleable> android = parse(mAttrsFile, "android");
                 mDeclareStyleables.putAll(android);
+
+                File manifestAttrsFile = new File(mAttrsFile.getParentFile(), "attrs_manifest.xml");
+                if (manifestAttrsFile.exists()) {
+                    Map<String, DeclareStyleable> android1 = parse(manifestAttrsFile, "android");
+                    mManifestAttrs.putAll(android1);
+                }
+
             } catch (XmlPullParserException | IOException e) {
                 e.printStackTrace();
             }
@@ -222,6 +235,8 @@ public class XmlRepository {
         List<String> values = new ArrayList<>();
 
         String formatString = getAttributeValue(parser, "format", null);
+        String parent = getAttributeValue(parser, "parent", "");
+
         if (formatString != null) {
             formats.addAll(Format.fromString(formatString));
         }
@@ -251,7 +266,7 @@ public class XmlRepository {
                 skip(parser);
             }
         }
-        return new AttributeInfo(name, formats, values);
+        return new AttributeInfo(name, formats, values, parent);
     }
 
     public static String getAttributeValue(XmlPullParser parser, String name, String defaultValue) {
