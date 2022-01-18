@@ -246,7 +246,19 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         BinaryExecutor exec = new BinaryExecutor();
         exec.setCommands(args);
         if (!exec.execute().trim().isEmpty()) {
-            throw new CompilationFailedException(exec.getLog());
+            String log = exec.getLog();
+            String[] lines = log.split("\n");
+            boolean containsError = false;
+            for (String line : lines) {
+                if (line.startsWith("error:")) {
+                    containsError = true;
+                    break;
+                }
+            }
+
+            if (containsError) {
+                throw new CompilationFailedException(exec.getLog());
+            }
         }
     }
     /**
