@@ -125,6 +125,18 @@ public class PackageTask extends Task<AndroidModule> {
                     }
                 }
             }
+
+            File resourcesDir = getModule().getResourcesDir();
+            String resourcesPath = resourcesDir.getAbsolutePath();
+            File[] files = resourcesDir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    String path = file.getAbsolutePath();
+                    String zipPath = path.substring(resourcesPath.length() + 1);
+                    builder.addFile(file, zipPath);
+                }
+            }
+
             builder.sealApk();
         } catch (ApkCreationException | SealedApkException e) {
             throw new CompilationFailedException(e);
