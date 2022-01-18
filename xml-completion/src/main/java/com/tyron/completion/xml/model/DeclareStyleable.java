@@ -33,16 +33,11 @@ public class DeclareStyleable implements Comparable<DeclareStyleable>{
 
     public Set<AttributeInfo> getAttributeInfosWithParents(XmlRepository repository) {
         Set<AttributeInfo> attributeInfos = new TreeSet<>(getAttributeInfos());
-        String parent = this.parent;
-        while (!TextUtils.isEmpty(parent)) {
+        String[] parents = parent.split(" ");
+        for (String parent : parents) {
             DeclareStyleable declareStyleable = repository.getDeclareStyleables().get(parent);
             if (declareStyleable != null) {
-                Set<AttributeInfo> parentAttrs = declareStyleable.getAttributeInfos();
-                attributeInfos.addAll(parentAttrs);
-
-                parent = declareStyleable.getParent();
-            } else {
-                parent = null;
+                attributeInfos.addAll(declareStyleable.getAttributeInfosWithParents(repository));
             }
         }
         return attributeInfos;
