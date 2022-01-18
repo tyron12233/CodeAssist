@@ -74,6 +74,8 @@ dependencies {
     implementation 'com.github.bumptech.glide:glide:4.12.0'
 
     implementation 'org.antlr:antlr4-runtime:4.9.2'
+
+
     implementation files (
         'libs/google-java-format-1.7.jar',
         'libs/language-base-0.5.0.jar',

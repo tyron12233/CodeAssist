@@ -1,22 +1,15 @@
 package com.tyron.code.ui.editor.language.groovy;
 
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
-import com.tyron.code.ui.editor.language.kotlin.KotlinAnalyzer;
 
 import org.antlr.v4.runtime.CharStream;
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.Token;
-import org.antlr.v4.runtime.TokenSource;
 
 import java.util.Stack;
 
 import io.github.rosemoe.sora.data.BlockLine;
-import io.github.rosemoe.sora.data.Span;
-import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.text.TextAnalyzer;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.EditorColorScheme;
 
