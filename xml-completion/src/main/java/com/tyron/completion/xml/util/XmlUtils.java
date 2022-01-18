@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.text.TextUtils;
 import android.util.Pair;
 
+import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;
 import com.tyron.completion.xml.XmlCharacter;
@@ -18,6 +19,7 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
+import java.io.File;
 import java.util.stream.Collectors;
 
 public class XmlUtils {
@@ -139,6 +141,44 @@ public class XmlUtils {
         return false;
     }
 
+    public static boolean isIncrementalCompletion(CachedCompletion cachedCompletion, File file,
+                                            String prefix, int line, int column) {
+        prefix = partialIdentifier(prefix, prefix.length());
+
+        if (line == -1) {
+            return false;
+        }
+
+        if (column == -1) {
+            return false;
+        }
+
+        if (cachedCompletion == null) {
+            return false;
+        }
+
+        if (!file.equals(cachedCompletion.getFile())) {
+            return false;
+        }
+
+        if (prefix.endsWith(".")) {
+            return false;
+        }
+
+        if (cachedCompletion.getLine() != line) {
+            return false;
+        }
+
+        if (cachedCompletion.getColumn() > column) {
+            return false;
+        }
+
+        if (!prefix.startsWith(cachedCompletion.getPrefix())) {
+            return false;
+        }
+
+        return prefix.length() - cachedCompletion.getPrefix().length() == column - cachedCompletion.getColumn();
+    }
 
     @SuppressLint("NewApi")
     public static CompletionItem getAttributeItem(XmlRepository repository, AttributeInfo attributeInfo,

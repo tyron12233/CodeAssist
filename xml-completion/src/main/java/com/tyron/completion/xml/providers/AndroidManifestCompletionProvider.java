@@ -5,6 +5,7 @@ import static com.tyron.completion.xml.util.XmlUtils.getAttributeItem;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeNameFromPrefix;
 import static com.tyron.completion.xml.util.XmlUtils.partialIdentifier;
 
+import android.Manifest;
 import android.util.Pair;
 
 import com.tyron.builder.project.Project;
@@ -28,7 +29,9 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.StringReader;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -93,6 +96,12 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
         return sManifestTagMappings.get(tag);
     }
 
+    private XmlCachedCompletion mCachedCompletion;
+
+    public AndroidManifestCompletionProvider() {
+
+    }
+
     @Override
     public boolean accept(File file) {
         return file.isFile() && "AndroidManifest.xml".equals(file.getName());
@@ -101,16 +110,44 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
     @Override
     public CompletionList complete(Project project, Module module, File file, String contents,
                                    String prefix, int line, int column, long index) {
-        try {
-            return completeInternal(project, module, file, contents, prefix, line, column, index);
-        } catch (XmlPullParserException e) {
+
+        if (!(module instanceof AndroidModule)) {
             return CompletionList.EMPTY;
         }
+
+        String partialIdentifier = partialIdentifier(contents, (int) index);
+
+        if (isIncrementalCompletion(mCachedCompletion, file, prefix, line, column)) {
+            if (mCachedCompletion.getCompletionType() == XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE) {
+                mCachedCompletion.setFilterPrefix(prefix);
+            } else {
+                mCachedCompletion.setFilterPrefix(partialIdentifier);
+            }
+            CompletionList completionList = mCachedCompletion.getCompletionList();
+            Collections.sort(completionList.items, (item1, item2) -> {
+                String filterPrefix = mCachedCompletion.getFilterPrefix();
+                int first = FuzzySearch.partialRatio(item1.label, filterPrefix);
+                int second = FuzzySearch.partialRatio(item2.label, filterPrefix);
+                return Integer.compare(first, second);
+            });
+            Collections.reverse(completionList.items);
+            return completionList;
+        }
+        try {
+            XmlCachedCompletion list = completeInternal(project, (AndroidModule) module, file,
+                    contents, prefix, line, column, index);
+            mCachedCompletion = list;
+            return list.getCompletionList();
+        } catch (XmlPullParserException e) {
+            e.printStackTrace();
+        }
+
+        return CompletionList.EMPTY;
     }
 
-    public CompletionList completeInternal(Project project, Module module, File file,
-                                           String contents, String prefix, int line, int column,
-                                           long index) throws XmlPullParserException {
+    public XmlCachedCompletion completeInternal(Project project, Module module, File file,
+                                                String contents, String prefix, int line,
+                                                int column, long index) throws XmlPullParserException {
         CompletionList list = new CompletionList();
         XmlCachedCompletion xmlCachedCompletion = new XmlCachedCompletion(file, line, column,
                 prefix, list);
@@ -129,23 +166,56 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
         Pair<String, String> tagAtPosition = getTagAtPosition(parser, line, column);
         String currentTag = getTag(tagAtPosition.second);
         if (currentTag == null) {
-            return CompletionList.EMPTY;
+            return xmlCachedCompletion;
         }
 
         Set<DeclareStyleable> styles = StyleUtils.getStyles(manifestAttrs, currentTag);
 
         if (prefix.startsWith("<")) {
+            xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_TAG);
+            xmlCachedCompletion.setFilterPrefix(prefix);
+
+
+            xmlCachedCompletion.setFilter((item, pre) -> {
+                String prefixSet = pre;
+                if (pre.startsWith("<")) {
+                    prefixSet = pre.substring(1);
+                }
+
+                if (prefixSet.contains(".")) {
+                    if (FuzzySearch.partialRatio(prefixSet, item.detail) >= 80) {
+                        return true;
+                    }
+                } else {
+                    if (FuzzySearch.partialRatio(prefixSet, item.label) >= 80) {
+                        return true;
+                    }
+                }
+
+                String className = item.detail + "." + item.label;
+                return FuzzySearch.partialRatio(prefixSet, className) >= 30;
+
+            });
+            for (String s : sManifestTagMappings.keySet()) {
+                CompletionItem item = new CompletionItem();
+                item.label = s;
+                item.commitText = "<" + s;
+                item.cursorOffset = item.commitText.length();
+                item.iconKind = DrawableKind.Package;
+                item.detail = "Tag";
+                list.items.add(item);
+            }
 
         } else {
             if (isInAttributeValue(contents, (int) index)) {
                 addAttributeValueItems(styles, repository, prefix, fixedPrefix, list,
                         xmlCachedCompletion);
             } else {
-                addAttributeItems(styles, fullPrefix,
-                        fixedPrefix, repository, list, xmlCachedCompletion);
+                addAttributeItems(styles, fullPrefix, fixedPrefix, repository, list,
+                        xmlCachedCompletion);
             }
         }
-        return list;
+        return xmlCachedCompletion;
     }
 
     private void addAttributeItems(Set<DeclareStyleable> styles, String fullPrefix,
@@ -160,8 +230,8 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
         }
 
         for (AttributeInfo attributeInfo : attributeInfos) {
-            CompletionItem item = getAttributeItem(repository, attributeInfo,
-                    shouldShowNamespace, fixedPrefix + fullPrefix);
+            CompletionItem item = getAttributeItem(repository, attributeInfo, shouldShowNamespace
+                    , fixedPrefix + fullPrefix);
             list.items.add(item);
         }
 

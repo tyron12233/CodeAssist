@@ -5,6 +5,7 @@ import static com.tyron.completion.xml.util.XmlUtils.getAttributeItem;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeNameFromPrefix;
 import static com.tyron.completion.xml.util.XmlUtils.getTagAtPosition;
 import static com.tyron.completion.xml.util.XmlUtils.isInAttributeValue;
+import static com.tyron.completion.xml.util.XmlUtils.isIncrementalCompletion;
 import static com.tyron.completion.xml.util.XmlUtils.partialIdentifier;
 
 import android.annotation.SuppressLint;
@@ -107,45 +108,6 @@ public class XmlCompletionProvider extends CompletionProvider {
         }
 
         return CompletionList.EMPTY;
-    }
-
-    private boolean isIncrementalCompletion(CachedCompletion cachedCompletion, File file,
-                                            String prefix, int line, int column) {
-        prefix = partialIdentifier(prefix, prefix.length());
-
-        if (line == -1) {
-            return false;
-        }
-
-        if (column == -1) {
-            return false;
-        }
-
-        if (cachedCompletion == null) {
-            return false;
-        }
-
-        if (!file.equals(cachedCompletion.getFile())) {
-            return false;
-        }
-
-        if (prefix.endsWith(".")) {
-            return false;
-        }
-
-        if (cachedCompletion.getLine() != line) {
-            return false;
-        }
-
-        if (cachedCompletion.getColumn() > column) {
-            return false;
-        }
-
-        if (!prefix.startsWith(cachedCompletion.getPrefix())) {
-            return false;
-        }
-
-        return prefix.length() - cachedCompletion.getPrefix().length() == column - cachedCompletion.getColumn();
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
