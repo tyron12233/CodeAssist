@@ -71,12 +71,16 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
 
     @Override
     public TreePath visitMethodInvocation(MethodInvocationTree tree, Long cursor) {
+        TreePath smaller = super.visitMethodInvocation(tree, cursor);
+        if (smaller != null) {
+            return smaller;
+        }
         if (tree instanceof JCTree.JCMethodInvocation) {
             if (isInside(tree, cursor - 1)) {
                 return getCurrentPath();
             }
         }
-        return super.visitMethodInvocation(tree, cursor);
+        return null;
     }
 
     @Override
