@@ -1,6 +1,7 @@
 package com.tyron.code.ui.file.action.xml;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.code.ui.editor.api.FileEditorManager;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.R;
 import com.tyron.code.template.CodeTemplate;
@@ -53,8 +54,9 @@ public class CreateLayoutAction extends FileAction {
 
                             context.getTreeView().addNode(context.getCurrentNode(), newNode);
                             context.getTreeView().refreshTreeView();
-                            context.getFragment().getMainViewModel()
-                                    .addFile(createdFile);
+                            FileEditorManager.getInstance().openFile(context.getFragment().requireContext(),
+                                    createdFile,
+                                    fileEditor -> context.getFragment().getMainViewModel().openFile(fileEditor));
                         } catch (IOException e) {
                             new MaterialAlertDialogBuilder(context.getFragment().requireContext())
                                     .setMessage(e.getMessage())

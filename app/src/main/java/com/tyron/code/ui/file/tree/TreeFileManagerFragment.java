@@ -13,8 +13,12 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.component.tree.TreeView;
+import com.tyron.code.ui.editor.api.FileEditor;
+import com.tyron.code.ui.editor.api.FileEditorManager;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.file.action.FileActionManager;
 import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewBinder.TreeFileNodeListener;
@@ -23,6 +27,7 @@ import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.code.ui.main.MainViewModel;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.Executors;
 
@@ -97,7 +102,11 @@ public class TreeFileManagerFragment extends Fragment {
             @Override
             public void onNodeToggled(TreeNode<TreeFile> treeNode, boolean expanded) {
                 if (treeNode.isLeaf()) {
-                    mMainViewModel.openFile(treeNode.getContent().getFile());
+                    FileEditorManager.getInstance().openFile(requireContext(),
+                            treeNode.getValue().getFile(),
+                            fileEditor -> {
+                                mMainViewModel.openFile(fileEditor);;
+                            });
                 }
             }
 

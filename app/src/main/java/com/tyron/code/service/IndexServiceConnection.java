@@ -8,6 +8,9 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.model.ProjectSettings;
+import com.tyron.code.ui.editor.api.FileEditor;
+import com.tyron.code.ui.editor.api.FileEditorManager;
+import com.tyron.code.ui.editor.impl.FileEditorSavedState;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
@@ -16,6 +19,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.code.ui.main.MainViewModel;
 
 import java.io.File;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -52,15 +56,17 @@ public class IndexServiceConnection implements ServiceConnection {
         mMainViewModel.setCurrentState(null);
     }
 
-    private List<File> getOpenedFiles(ProjectSettings settings) {
+    private List<FileEditor> getOpenedFiles(ProjectSettings settings) {
         String openedFilesString = settings.getString(ProjectSettings.SAVED_EDITOR_FILES, null);
         if (openedFilesString != null) {
-            List<String> paths = new Gson().fromJson(openedFilesString,
-                    new TypeToken<List<String>>(){}.getType());
-            return paths.stream()
-                    .map(File::new)
-                    .filter(File::exists)
-                    .collect(Collectors.toList());
+            try {
+                Type type = new TypeToken<List<FileEditorSavedState>>(){}.getType();
+                List<FileEditorSavedState> savedStates = new Gson().fromJson(openedFilesString, type);
+                return savedStates.stream().filter(it -> it.getFile().exists()).map(FileEditorManager.getInstance()::openFile).collect(Collectors.toList());
+            } catch (Throwable e) {
+                // ignored, users may have edited the file manually and is corrupt
+                // just return an empty editor list
+            }
         }
         return new ArrayList<>();
     }

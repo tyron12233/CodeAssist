@@ -5,6 +5,8 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
+import java.io.File;
+
 /**
  * Represents the Tab view and can contain different views based on it's function
  */
@@ -37,4 +39,9 @@ public interface FileEditor {
      * if the file it represents have been deleted.
      */
     boolean isValid();
+
+    /**
+     * @return the file this editor is editing
+     */
+    File getFile();
 }

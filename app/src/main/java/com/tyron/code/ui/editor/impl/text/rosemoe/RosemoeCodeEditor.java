@@ -8,6 +8,7 @@ import androidx.fragment.app.Fragment;
 import com.tyron.code.ui.editor.api.TextEditor;
 
 import java.io.File;
+import java.util.Objects;
 
 public class RosemoeCodeEditor implements TextEditor {
 
@@ -38,7 +39,7 @@ public class RosemoeCodeEditor implements TextEditor {
     @NonNull
     @Override
     public String getName() {
-        return "rosemoe-code-editor";
+        return "Rosemoe Code Editor";
     }
 
     @Override
@@ -49,5 +50,23 @@ public class RosemoeCodeEditor implements TextEditor {
     @Override
     public boolean isValid() {
         return true;
+    }
+
+    @Override
+    public File getFile() {
+        return mFile;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        RosemoeCodeEditor that = (RosemoeCodeEditor) o;
+        return Objects.equals(mFile, that.mFile);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mFile);
     }
 }

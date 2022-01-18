@@ -17,13 +17,13 @@ import java.util.Objects;
 
 public class PageAdapter extends FragmentStateAdapter {
 
-    private final List<File> data = new ArrayList<>();
+    private final List<FileEditor> data = new ArrayList<>();
 
     public PageAdapter(FragmentManager fm, Lifecycle lifecycle) {
         super(fm, lifecycle);
     }
 
-    public void submitList(List<File> files) {
+    public void submitList(List<FileEditor> files) {
         DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
             @Override
             public int getOldListSize() {
@@ -60,13 +60,13 @@ public class PageAdapter extends FragmentStateAdapter {
         if (data.isEmpty()) {
             return -1;
         }
-        return data.get(position).getAbsolutePath().hashCode();
+        return data.get(position).hashCode();
     }
 
     @Override
     public boolean containsItem(long itemId) {
-        for (File d : data) {
-            if (d.getAbsolutePath().hashCode() == itemId) {
+        for (FileEditor d : data) {
+            if (d.hashCode() == itemId) {
                 return true;
             }
         }
@@ -76,7 +76,6 @@ public class PageAdapter extends FragmentStateAdapter {
     @NonNull
     @Override
     public Fragment createFragment(int p1) {
-        FileEditor[] fileEditors = FileEditorManagerImpl.getInstance().openFile(data.get(p1), true);
-        return fileEditors[0].getFragment();
+       return data.get(p1).getFragment();
     }
 }

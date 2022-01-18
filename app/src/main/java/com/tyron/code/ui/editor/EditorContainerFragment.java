@@ -125,7 +125,8 @@ public class EditorContainerFragment extends Fragment {
             }
         });
         new TabLayoutMediator(mTabLayout, mPager, true, false, (tab, pos) -> {
-            File current = Objects.requireNonNull(mMainViewModel.getFiles().getValue()).get(pos);
+            File current = Objects.requireNonNull(mMainViewModel.getFiles().getValue()).get(pos)
+                    .getFile();
             tab.setText(current != null ? current.getName() : "Unknown");
         }).attach();
 

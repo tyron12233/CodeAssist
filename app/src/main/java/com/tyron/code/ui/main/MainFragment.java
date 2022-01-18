@@ -29,6 +29,8 @@ import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
+import com.tyron.code.ui.editor.api.FileEditor;
+import com.tyron.code.ui.editor.impl.FileEditorSavedState;
 import com.tyron.code.ui.library.LibraryManagerFragment;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
@@ -284,7 +286,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
      *
      * @param file file to open
      */
-    public void openFile(File file) {
+    public void openFile(FileEditor file) {
         mMainViewModel.openFile(file);
     }
 
@@ -323,10 +325,12 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             return;
         }
 
-        List<File> items = mMainViewModel.getFiles().getValue();
+        List<FileEditor> items = mMainViewModel.getFiles().getValue();
         if (items != null) {
             String itemString =
-                    new Gson().toJson(items.stream().map(File::getAbsolutePath).collect(Collectors.toList()));
+                    new Gson().toJson(items.stream()
+                            .map(FileEditorSavedState::new)
+                            .collect(Collectors.toList()));
             settings.edit().putString(ProjectSettings.SAVED_EDITOR_FILES, itemString).apply();
         }
     }

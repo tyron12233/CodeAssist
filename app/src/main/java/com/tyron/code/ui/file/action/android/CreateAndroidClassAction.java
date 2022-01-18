@@ -1,6 +1,7 @@
 package com.tyron.code.ui.file.action.android;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.code.ui.editor.api.FileEditorManager;
 import com.tyron.code.ui.file.tree.TreeUtil;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.api.AndroidModule;
@@ -38,8 +39,9 @@ public class CreateAndroidClassAction extends CreateClassAction {
                             TreeUtil.updateNode(context.getCurrentNode().getParent());
                             context.getTreeView().refreshTreeView();
 
-                            context.getFragment().getMainViewModel()
-                                    .addFile(createdFile);
+                            FileEditorManager.getInstance().openFile(context.getFragment().requireContext(),
+                                    createdFile,
+                                    fileEditor -> context.getFragment().getMainViewModel().openFile(fileEditor));
 
                             Module currentModule = ProjectManager.getInstance()
                                     .getCurrentProject()

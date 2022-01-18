@@ -15,6 +15,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
+import com.tyron.code.ui.editor.api.FileEditorManager;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
@@ -58,7 +60,9 @@ public class AppLogFragment extends Fragment
         mAdapter = new LogAdapter();
         mAdapter.setListener(diagnostic -> {
             if (diagnostic.getSource() != null) {
-                mMainViewModel.openFile(diagnostic.getSource());
+                if (getContext() != null) {
+                    FileEditorManager.getInstance().openFile(requireContext(), diagnostic.getSource(), fileEditor -> mMainViewModel.openFile(fileEditor));
+                }
             }
         });
         mRecyclerView = new RecyclerView(requireContext());

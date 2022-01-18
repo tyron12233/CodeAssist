@@ -3,6 +3,7 @@ package com.tyron.code.ui.file.action.kotlin;
 import android.view.SubMenu;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.code.ui.editor.api.FileEditorManager;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.api.KotlinModule;
 import com.tyron.builder.project.api.Module;
@@ -56,8 +57,9 @@ public class CreateKotlinClassAction extends FileAction {
 
                             context.getTreeView().addNode(context.getCurrentNode(), newNode);
                             context.getTreeView().refreshTreeView();
-                            context.getFragment().getMainViewModel()
-                                    .addFile(createdFile);
+                            FileEditorManager.getInstance().openFile(context.getFragment().requireContext(),
+                                    createdFile,
+                                    fileEditor -> context.getFragment().getMainViewModel().openFile(fileEditor));
 
                             Module currentModule = ProjectManager.getInstance()
                                     .getCurrentProject()

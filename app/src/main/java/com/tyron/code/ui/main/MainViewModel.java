@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ui.editor.api.FileEditor;
+import com.tyron.code.ui.editor.api.FileEditorManager;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.language.LanguageManager;
 
@@ -21,7 +22,7 @@ public class MainViewModel extends ViewModel {
     /**
      * The files currently opened in the editor
      */
-    private MutableLiveData<List<File>> mFiles;
+    private MutableLiveData<List<FileEditor>> mFiles;
 
     /**
      * Whether the current completion engine is indexing
@@ -93,14 +94,14 @@ public class MainViewModel extends ViewModel {
         mIndexing.setValue(indexing);
     }
 
-    public LiveData<List<File>> getFiles() {
+    public LiveData<List<FileEditor>> getFiles() {
         if (mFiles == null) {
             mFiles = new MutableLiveData<>(new ArrayList<>());
         }
         return mFiles;
     }
 
-    public void setFiles(@NonNull List<File> files) {
+    public void setFiles(@NonNull List<FileEditor> files) {
         if (mFiles == null) {
             mFiles = new MutableLiveData<>(new ArrayList<>());
         }
@@ -120,7 +121,7 @@ public class MainViewModel extends ViewModel {
     }
 
     public File getCurrentFile() {
-        List<File> files = getFiles().getValue();
+        List<FileEditor> files = getFiles().getValue();
         if (files == null) {
             return null;
         }
@@ -134,7 +135,7 @@ public class MainViewModel extends ViewModel {
             return null;
         }
 
-        return files.get(currentPos);
+        return files.get(currentPos).getFile();
     }
 
     public void clear() {
@@ -147,21 +148,11 @@ public class MainViewModel extends ViewModel {
      * @param file The fle to be opened
      * @return whether the operation was successful
      */
-    public boolean openFile(File file) {
-        FileEditor[] fileEditors = FileEditorManagerImpl.getInstance().openFile(file, false);
-
-        if (fileEditors.length == 0) {
-            return false;
-        }
-
-        if (!file.exists()) {
-            return false;
-        }
-
+    public boolean openFile(FileEditor file) {
         setDrawerState(false);
 
         int index = -1;
-        List<File> value = getFiles().getValue();
+        List<FileEditor> value = getFiles().getValue();
         if (value != null) {
             index = value.indexOf(file);
         }
@@ -173,8 +164,8 @@ public class MainViewModel extends ViewModel {
         return true;
     }
 
-    public void addFile(File file) {
-        List<File> files = getFiles().getValue();
+    public void addFile(FileEditor file) {
+        List<FileEditor> files = getFiles().getValue();
         if (files == null) {
             files = new ArrayList<>();
         }
@@ -183,24 +174,41 @@ public class MainViewModel extends ViewModel {
         updateCurrentPosition(files.indexOf(file));
     }
 
-    public void removeFile(File file) {
-        List<File> files = getFiles().getValue();
+    public void removeFile(@NonNull File file) {
+        List<FileEditor> files = getFiles().getValue();
         if (files == null) {
             return;
         }
-        files.remove(file);
-        mFiles.setValue(files);
+        FileEditor find = null;
+        for (FileEditor fileEditor : files) {
+            if (file.equals(fileEditor.getFile())) {
+                find = fileEditor;
+            }
+        }
+        if (find != null) {
+            files.remove(find);
+            mFiles.setValue(files);
+        }
     }
 
     /**
      * Remove all the files except the given file
      */
     public void removeOthers(File file) {
-        List<File> files = getFiles().getValue();
+        List<FileEditor> files = getFiles().getValue();
         if (files != null) {
-            files.clear();
-            files.add(file);
-            setFiles(files);
+            FileEditor find = null;
+            for (FileEditor fileEditor : files) {
+                if (file.equals(fileEditor.getFile())) {
+                    find = fileEditor;
+                }
+            }
+
+            if (find != null) {
+                files.clear();
+                files.add(find);
+                setFiles(files);
+            }
         }
     }
 
