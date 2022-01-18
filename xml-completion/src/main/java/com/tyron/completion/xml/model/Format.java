@@ -18,6 +18,14 @@ public enum Format {
      */
     BOOLEAN,
 
+    INTEGER,
+
+    FRACTION,
+
+    FLOAT,
+
+    COLOR,
+
     /**
      * An attribute that references another attribute such as {@code @color/purple}
      */
@@ -34,6 +42,9 @@ public enum Format {
      */
     ENUM,
 
+    /**
+     * An attribute that can have multiple values separated by {@code |}
+     */
     FLAG;
 
     /**
@@ -59,8 +70,13 @@ public enum Format {
             case "string": return Format.STRING;
             case "boolean": return Format.BOOLEAN;
             case "dimension": return Format.DIMENSION;
+            case "integer": return Format.INTEGER;
+            case "float": return Format.FLOAT;
+            case "fraction": return Format.FRACTION;
             case "enum": return Format.ENUM;
-            case "flag": return Format.FLAG;
+            case "color": return Format.COLOR;
+            case "flag":
+            case "flags": return Format.FLAG;
             case "reference": return Format.REFERENCE;
         }
         return null;
