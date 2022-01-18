@@ -28,8 +28,8 @@ public class JavaCompletionProvider extends CompletionProvider {
     }
 
     @Override
-    public String getFileExtension() {
-        return ".java";
+    public boolean accept(File file) {
+        return file.isFile() && file.getName().endsWith(".java");
     }
 
     @Override

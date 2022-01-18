@@ -16,11 +16,7 @@ import java.io.File;
  */
 public abstract class CompletionProvider {
 
-    /**
-     * @return The file extension this CompletionProvider is applicable to
-     * including the dot.
-     */
-    public abstract String getFileExtension();
+    public abstract boolean accept(File file);
 
     public abstract CompletionList complete(Project project,
                                             Module module,

@@ -8,8 +8,12 @@ import com.tyron.completion.progress.ProcessCanceledException;
 import com.tyron.completion.progress.ProgressManager;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Main entry point for the completions api.
@@ -25,18 +29,24 @@ public class CompletionEngine {
         return sInstance;
     }
 
-    private final Map<String, CompletionProvider> mCompletionProviders;
+    private final Set<CompletionProvider> mCompletionProviders;
 
     public CompletionEngine() {
-        mCompletionProviders = new HashMap<>();
+        mCompletionProviders = new HashSet<>();
     }
 
     public void registerCompletionProvider(CompletionProvider provider) {
-        mCompletionProviders.put(provider.getFileExtension(), provider);
+        mCompletionProviders.add(provider);
     }
 
-    public CompletionProvider getCompletionProvider(String extension) {
-        return mCompletionProviders.get(extension);
+    public List<CompletionProvider> getCompletionProviders(File file) {
+        List<CompletionProvider> providers = new ArrayList<>();
+        for (CompletionProvider provider : mCompletionProviders) {
+            if (provider.accept(file)) {
+                providers.add(provider);
+            }
+        }
+        return providers;
     }
 
     public CompletionList complete(Project project,
@@ -47,32 +57,27 @@ public class CompletionEngine {
                                    int line,
                                    int column,
                                    long index) {
-        String extension = getExtension(file);
         if (ProgressManager.getInstance().isRunning()) {
             ProgressManager.getInstance().setCanceled(true);
         }
-        CompletionProvider provider = getCompletionProvider(extension);
-        if (provider != null) {
+        CompletionList list = new CompletionList();
+        list.items = new ArrayList<>();
+
+        List<CompletionProvider> providers = getCompletionProviders(file);
+        for (CompletionProvider provider : providers) {
             try {
                 ProgressManager.getInstance().setRunning(true);
                 ProgressManager.getInstance().setCanceled(false);
-                return provider.complete(project, module, file, contents, prefix, line, column, index);
+                CompletionList complete = provider.complete(project, module, file, contents,
+                        prefix, line, column, index);
+                list.items.addAll(complete.items);
             } catch(ProcessCanceledException e) {
                 // ignore
             } {
                 ProgressManager.getInstance().setRunning(false);
             }
         }
-        return CompletionList.EMPTY;
-    }
-
-    private String getExtension(File file) {
-        String name = file.getName();
-        int dotIndex = name.lastIndexOf('.');
-        if (dotIndex == -1) {
-            return "";
-        }
-        return name.substring(dotIndex);
+        return list;
     }
 
     public void clear() {

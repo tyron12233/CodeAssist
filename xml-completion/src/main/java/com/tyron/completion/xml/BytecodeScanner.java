@@ -1,4 +1,4 @@
-package com.tyron.completion.xml.lexer;
+package com.tyron.completion.xml;
 
 import android.content.Context;
 import android.util.AttributeSet;

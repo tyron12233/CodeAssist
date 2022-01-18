@@ -37,18 +37,7 @@ public class IntroduceLocalVariableAction extends ActionProvider {
         CompileTask task = context.getCompileTask();
         TreePath path = context.getCurrentPath();
         Element element = Trees.instance(task.task).getElement(path);
-        Scope scope = Trees.instance(task.task).getScope(path);
-        boolean isStaticContext = false;
-         if (scope.getEnclosingMethod() != null) {
-             isStaticContext = scope.getEnclosingMethod()
-                     .getModifiers()
-                     .contains(Modifier.STATIC);
-         }
         if (element instanceof ExecutableElement) {
-            boolean isStatic = element.getModifiers().contains(Modifier.STATIC);
-            if (isStaticContext && !isStatic) {
-                return;
-            }
             TypeMirror returnType = ActionUtil.getReturnType(task.task, path,
                     (ExecutableElement) element);
             if (returnType.getKind() != TypeKind.VOID) {

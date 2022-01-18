@@ -21,6 +21,7 @@ import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.Format;
 import com.tyron.completion.xml.model.XmlCachedCompletion;
+import com.tyron.completion.xml.util.AndroidResourcesUtils;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
@@ -65,8 +66,8 @@ public class XmlCompletionProvider extends CompletionProvider {
     }
 
     @Override
-    public String getFileExtension() {
-        return EXTENSION;
+    public boolean accept(File file) {
+        return file.isFile() && AndroidResourcesUtils.isLayoutXMLFile(file);
     }
 
     @Override
