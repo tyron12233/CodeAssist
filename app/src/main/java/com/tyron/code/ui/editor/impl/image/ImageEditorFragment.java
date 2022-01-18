@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import com.bumptech.glide.Glide;
 import com.tyron.code.R;
 
 import java.io.File;
@@ -29,7 +30,15 @@ public class ImageEditorFragment extends Fragment {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         ImageView imageView = new ImageView(requireContext());
-        imageView.setImageResource(R.mipmap.ic_launcher);
+        if (getArguments() != null) {
+            String file = requireArguments().getString("file", "");
+            File imageFile = new File(file);
+            if (imageFile.exists()) {
+                Glide.with(imageView)
+                        .load(imageFile)
+                        .into(imageView);
+            }
+        }
         return imageView;
     }
 }
