@@ -39,7 +39,7 @@ public class ImageEditor implements FileEditor {
     @NonNull
     @Override
     public String getName() {
-        return "image-editor";
+        return "Image Editor";
     }
 
     @Override
