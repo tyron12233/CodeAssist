@@ -72,7 +72,7 @@ public class CompletionEngine {
                         prefix, line, column, index);
                 list.items.addAll(complete.items);
             } catch(ProcessCanceledException e) {
-                // ignore
+                return list;
             } {
                 ProgressManager.getInstance().setRunning(false);
             }
