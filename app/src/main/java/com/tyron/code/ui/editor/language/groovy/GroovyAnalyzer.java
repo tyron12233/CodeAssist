@@ -1,10 +1,12 @@
 package com.tyron.code.ui.editor.language.groovy;
 
+import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
 import com.tyron.code.ui.editor.language.kotlin.KotlinAnalyzer;
 
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
+import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenSource;
 
@@ -18,143 +20,102 @@ import io.github.rosemoe.sora.text.TextAnalyzer;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.EditorColorScheme;
 
-public class GroovyAnalyzer implements CodeAnalyzer {
+public class GroovyAnalyzer extends AbstractCodeAnalyzer {
 
     private final CodeEditor mEditor;
+
+    int maxSwitch = 1;
+    int currSwitch;
+    private final Stack<BlockLine> mBlockLines = new Stack<>();
 
     public GroovyAnalyzer(CodeEditor editor) {
         mEditor = editor;
     }
 
     @Override
-    public void analyze(CharSequence content, TextAnalyzeResult result, TextAnalyzer.AnalyzeThread.Delegate delegate) {
-        try {
-            CodePointCharStream stream = CharStreams.fromString(String.valueOf(content));
-            GroovyLexer lexer = new GroovyLexer(stream);
-
-            Stack<BlockLine> stack = new Stack<>();
-            int maxSwitch = 1, currSwitch = 0;
-            int lastLine = 0;
-            int line, column;
-            Token previous = UnknownToken.INSTANCE;
-            Token token = null;
-
-            while (delegate.shouldAnalyze()) {
-                token = lexer.nextToken();
-                if (token == null) {
-                    break;
-                }
-
-                if (token.getType() == GroovyLexer.EOF) {
-                    break;
-                }
-
-                line = token.getLine() - 1;
-                column = token.getCharPositionInLine();
-                lastLine = line;
-
-                switch (token.getType()) {
-                    case GroovyLexer.KW_DO:
-                    case GroovyLexer.KW_TRUE:
-                    case GroovyLexer.KW_FALSE:
-                        result.addIfNeeded(line, Span.obtain(column, EditorColorScheme.KEYWORD));
-                        break;
-                    case GroovyLexer.INTEGER:
-                    case GroovyLexer.STRING:
-                        result.addIfNeeded(line, Span.obtain(column, EditorColorScheme.LITERAL));
-                        break;
-                    case GroovyLexer.RCURVE:
-                        if (!stack.isEmpty()) {
-                            BlockLine b = stack.pop();
-                            b.endLine = line;
-                            b.endColumn = column;
-                            if (b.startLine != b.endLine) {
-                                result.addBlockLine(b);
-                            }
-                        }
-                        break;
-                    case GroovyLexer.LCURVE:
-                        if (stack.isEmpty()) {
-                            if (currSwitch > maxSwitch) {
-                                maxSwitch = currSwitch;
-                            }
-                            currSwitch = 0;
-                        }
-                        currSwitch++;
-                        BlockLine block = result.obtainNewBlock();
-                        block.startLine = line;
-                        block.startColumn = column;
-                        stack.push(block);
-                        break;
-                    default:
-                        result.addIfNeeded(line, Span.obtain(column, EditorColorScheme.TEXT_NORMAL));
-                }
-            }
-
-            result.determine(lastLine);
-            if (stack.isEmpty()) {
-                if (currSwitch > maxSwitch) {
-                    maxSwitch = currSwitch;
-                }
-            }
-            result.setSuppressSwitch(maxSwitch + 10);
-        } catch (Throwable ignore) {
-
-        }
+    public Lexer getLexer(CharStream input) {
+        return new GroovyLexer(input);
     }
 
-    private static class UnknownToken implements Token {
+    @Override
+    public void setup() {
+        putColor(EditorColorScheme.KEYWORD, GroovyLexer.KW_DO,
+                GroovyLexer.KW_ABSTRACT, GroovyLexer.KW_FALSE,
+                GroovyLexer.KW_TRUE, GroovyLexer.KW_CASE,
+                GroovyLexer.KW_CATCH, GroovyLexer.KW_AS,
+                GroovyLexer.KW_WHILE, GroovyLexer.KW_TRY,
+                GroovyLexer.KW_BREAK, GroovyLexer.KW_THIS,
+                GroovyLexer.KW_ASSERT, GroovyLexer.KW_VOLATILE,
+                GroovyLexer.KW_NULL, GroovyLexer.KW_NEW,
+                GroovyLexer.KW_RETURN, GroovyLexer.KW_PACKAGE,
+                GroovyLexer.KW_FOR, GroovyLexer.KW_IF,
+                GroovyLexer.SEMICOLON);
+        putColor(EditorColorScheme.LITERAL, GroovyLexer.STRING,
+                GroovyLexer.INTEGER);
+        putColor(EditorColorScheme.OPERATOR, GroovyLexer.PLUS,
+                GroovyLexer.MINUS, GroovyLexer.MULT, GroovyLexer.DIV,
+                GroovyLexer.PLUS_ASSIGN, GroovyLexer.MINUS_ASSIGN,
+                GroovyLexer.MULT_ASSIGN, GroovyLexer.DIV_ASSIGN,
+                GroovyLexer.MOD, GroovyLexer.MOD_ASSIGN,
+                GroovyLexer.OR, GroovyLexer.AND, GroovyLexer.BAND,
+                GroovyLexer.BAND_ASSIGN, GroovyLexer.LSHIFT,
+                GroovyLexer.LSHIFT_ASSIGN, GroovyLexer.RSHIFT_ASSIGN,
+                GroovyLexer.XOR_ASSIGN, GroovyLexer.XOR);
+        putColor(EditorColorScheme.IDENTIFIER_NAME, GroovyLexer.IDENTIFIER);
+    }
 
-        public static UnknownToken INSTANCE = new UnknownToken();
+    @Override
+    public void analyzeInBackground(CharSequence contents) {
 
-        @Override
-        public String getText() {
-            return "";
+    }
+
+    @Override
+    protected void beforeAnalyze() {
+        mBlockLines.clear();
+        maxSwitch = 1;
+        currSwitch = 0;
+    }
+
+    @Override
+    public boolean onNextToken(Token currentToken, TextAnalyzeResult colors) {
+        int line = currentToken.getLine() - 1;
+        int column = currentToken.getCharPositionInLine();
+
+        switch (currentToken.getType()) {
+            case GroovyLexer.RCURVE:
+                if (!mBlockLines.isEmpty()) {
+                    BlockLine b = mBlockLines.pop();
+                    b.endLine = line;
+                    b.endColumn = column;
+                    if (b.startLine != b.endLine) {
+                        colors.addBlockLine(b);
+                    }
+                }
+                return true;
+            case GroovyLexer.LCURVE:
+                if (mBlockLines.isEmpty()) {
+                    if (currSwitch > maxSwitch) {
+                        maxSwitch = currSwitch;
+                    }
+                    currSwitch = 0;
+                }
+                currSwitch++;
+                BlockLine block = colors.obtainNewBlock();
+                block.startLine = line;
+                block.startColumn = column;
+                mBlockLines.push(block);
+                return true;
         }
+        return false;
+    }
 
-        @Override
-        public int getType() {
-            return -1;
+    @Override
+    protected void afterAnalyze(TextAnalyzeResult colors) {
+        if (mBlockLines.isEmpty()) {
+            if (currSwitch > maxSwitch) {
+                maxSwitch = currSwitch;
+            }
         }
-
-        @Override
-        public int getLine() {
-            return 0;
-        }
-
-        @Override
-        public int getCharPositionInLine() {
-            return 0;
-        }
-
-        @Override
-        public int getChannel() {
-            return 0;
-        }
-
-        @Override
-        public int getTokenIndex() {
-            return 0;
-        }
-
-        @Override
-        public int getStartIndex() {
-            return 0;
-        }
-
-        @Override
-        public int getStopIndex() {
-            return 0;
-        }
-
-        @Override
-        public TokenSource getTokenSource() {
-            return null;
-        }
-
-        @Override
-        public CharStream getInputStream() {
-            return null;
-        }
+        colors.setSuppressSwitch(maxSwitch + 10);
     }
 }
