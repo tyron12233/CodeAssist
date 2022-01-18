@@ -95,15 +95,15 @@ public class ParseHelper {
     sVisibilityMap.put(View.INVISIBLE, new Primitive(View.INVISIBLE));
     sVisibilityMap.put(View.GONE, new Primitive(View.GONE));
 
-    sGravityMap.put(CENTER, new Primitive(Gravity.CENTER));
-    sGravityMap.put(CENTER_HORIZONTAL, new Primitive(Gravity.CENTER_HORIZONTAL));
-    sGravityMap.put(CENTER_VERTICAL, new Primitive(Gravity.CENTER_VERTICAL));
     sGravityMap.put(LEFT, new Primitive(Gravity.LEFT));
     sGravityMap.put(RIGHT, new Primitive(Gravity.RIGHT));
     sGravityMap.put(TOP, new Primitive(Gravity.TOP));
     sGravityMap.put(BOTTOM, new Primitive(Gravity.BOTTOM));
     sGravityMap.put(START, new Primitive(Gravity.START));
     sGravityMap.put(END, new Primitive(Gravity.END));
+    sGravityMap.put(CENTER, new Primitive(Gravity.CENTER));
+    sGravityMap.put(CENTER_HORIZONTAL, new Primitive(Gravity.CENTER_HORIZONTAL));
+    sGravityMap.put(CENTER_VERTICAL, new Primitive(Gravity.CENTER_VERTICAL));
 
     sDividerMode.put(END, LinearLayout.SHOW_DIVIDER_END);
     sDividerMode.put(MIDDLE, LinearLayout.SHOW_DIVIDER_MIDDLE);

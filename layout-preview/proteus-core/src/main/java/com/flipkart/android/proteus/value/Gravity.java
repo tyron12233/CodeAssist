@@ -47,6 +47,7 @@ public class Gravity extends Value {
     public String getAsString() {
         StringBuilder sb = new StringBuilder();
 
+
         GRAVITY_VALUES.forEach((k, v) -> {
             if ((gravity & k) == k) {
                 sb.append(v);

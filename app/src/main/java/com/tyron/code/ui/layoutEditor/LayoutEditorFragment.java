@@ -108,6 +108,10 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
             ProteusView.Manager manager = view.getViewManager();
             ProteusContext context = manager.getContext();
             Layout layout = manager.getLayout();
+            String tag = layout.type;
+            String parentTag = view.getAsView().getParent() instanceof ProteusView
+                    ? ((ProteusView) view.getAsView().getParent()).getViewManager().getLayout().type
+                    : "";
             ArrayList<Pair<String, String>> attributes = new ArrayList<>();
             for (Layout.Attribute attribute :
                     layout.getAttributes()) {
@@ -136,7 +140,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                 availableAttributes.add(new Pair<>(key, ""));
             });
 
-            AttributeEditorDialogFragment.newInstance(availableAttributes, attributes)
+            AttributeEditorDialogFragment.newInstance(tag, parentTag, availableAttributes, attributes)
                     .show(getChildFragmentManager(), null);
 
             getChildFragmentManager().setFragmentResultListener(

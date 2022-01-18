@@ -93,6 +93,7 @@
         <entry key="app/src/main/res/font/mono_font.xml" value="0.22708333333333333" />
         <entry key="app/src/main/res/layout/add_dependency_dialog.xml" value="0.1" />
         <entry key="app/src/main/res/layout/attribute_editor_dialog_fragment.xml" value="0.18" />
+        <entry key="app/src/main/res/layout/attribute_editor_input.xml" value="0.33" />
         <entry key="app/src/main/res/layout/attribute_editor_item.xml" value="0.1068840579710145" />
         <entry key="app/src/main/res/layout/bottom_editor_fragment.xml" value="0.1" />
         <entry key="app/src/main/res/layout/completion_result_item.xml" value="0.33" />

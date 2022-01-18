@@ -1,27 +1,38 @@
 package com.tyron.code.ui.layoutEditor.attributeEditor;
 
-import android.content.DialogInterface;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.EditText;
-import android.widget.FrameLayout;
+import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.fragment.app.DialogFragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.tyron.code.ApplicationLoader;
+import com.google.android.material.textfield.MaterialAutoCompleteTextView;
+import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
+import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.completion.index.CompilerProvider;
+import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.xml.StyleUtils;
+import com.tyron.completion.xml.XmlIndexProvider;
+import com.tyron.completion.xml.XmlRepository;
+import com.tyron.completion.xml.model.AttributeInfo;
+import com.tyron.completion.xml.model.DeclareStyleable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import kotlin.Pair;
 
@@ -30,10 +41,12 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
     public static final String KEY_ATTRIBUTE_CHANGED = "ATTRIBUTE_CHANGED";
     public static final String KEY_ATTRIBUTE_REMOVED = "ATTRIBUTE_REMOVED";
 
-    public static AttributeEditorDialogFragment newInstance(ArrayList<Pair<String, String>> availableAttributes, ArrayList<Pair<String, String>> attributes) {
+    public static AttributeEditorDialogFragment newInstance(String tag, String parentTag, ArrayList<Pair<String, String>> availableAttributes, ArrayList<Pair<String, String>> attributes) {
         Bundle args = new Bundle();
         args.putSerializable("attributes", attributes);
         args.putSerializable("availableAttributes", availableAttributes);
+        args.putString("parentTag", parentTag);
+        args.putString("tag", tag);
         AttributeEditorDialogFragment fragment = new AttributeEditorDialogFragment();
         fragment.setArguments(args);
         return fragment;
@@ -42,6 +55,8 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
     private AttributeEditorAdapter mAdapter;
     private ArrayList<Pair<String, String>> mAvailableAttributes;
     private ArrayList<Pair<String, String>> mAttributes;
+    private String mTag;
+    private String mParentTag;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -61,6 +76,9 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
         if (mAvailableAttributes == null) {
             mAvailableAttributes = new ArrayList<>();
         }
+
+        mTag = requireArguments().getString("tag", "");
+        mParentTag = requireArguments().getString("parentTag", "");
     }
 
     @Nullable
@@ -83,23 +101,7 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
             getDialog().getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
 
-        mAdapter.setItemClickListener((pos, attribute) -> {
-            View v = LayoutInflater.from(requireContext()).inflate(R.layout.attribute_editor_input, null);
-            EditText editText = v.findViewById(R.id.value);
-            editText.setText(attribute.getSecond());
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle(attribute.getFirst())
-                    .setView(v).setPositiveButton("apply", (d, w) -> {
-                mAttributes.set(pos, new Pair<>(attribute.getFirst(),
-                        editText.getText().toString()));
-                mAdapter.submitList(mAttributes);
-
-                Bundle bundle = new Bundle();
-                bundle.putString("key", attribute.getFirst());
-                bundle.putString("value", editText.getText().toString());
-                getParentFragmentManager().setFragmentResult(KEY_ATTRIBUTE_CHANGED, bundle);
-            }).show();
-        });
+        mAdapter.setItemClickListener(this::onAttributeItemClick);
         mAdapter.submitList(mAttributes);
 
         LinearLayout linearAdd = view.findViewById(R.id.linear_add);
@@ -146,5 +148,76 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
                 mAdapter.submitList(mAttributes);
             }
         }));
+    }
+
+    private void onAttributeItemClick(int pos, Pair<String, String> attribute) {
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.attribute_editor_input, null);
+        MaterialAutoCompleteTextView editText = v.findViewById(R.id.value);
+        XmlRepository xmlRepository = getXmlRepository();
+
+        String attributeName = attribute.getFirst();
+        String attributeNamespace = "";
+        if (attributeName.contains(":")) {
+            attributeNamespace = attributeName.substring(0, attributeName.indexOf(':'));
+            attributeName = attributeName.substring(attributeName.indexOf(':') + 1);
+        }
+        if (xmlRepository != null) {
+            List<String> values = new ArrayList<>();
+            Set<DeclareStyleable> styles = new HashSet<>();
+            Map<String, DeclareStyleable> declareStyleables =
+                    xmlRepository.getDeclareStyleables();
+            styles.addAll(StyleUtils.getStyles(declareStyleables, mTag));
+            styles.addAll(StyleUtils.getLayoutParam(declareStyleables, mParentTag));
+
+            for (DeclareStyleable style : styles) {
+                for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
+                    if (!attributeNamespace.equals(attributeInfo.getNamespace())) {
+                        continue;
+                    }
+                    if (!attributeName.equals(attributeInfo.getName())) {
+                        continue;
+                    }
+
+                    if (attributeInfo.getFormats() == null || attributeInfo.getFormats().isEmpty()) {
+                        AttributeInfo extraAttribute =
+                                xmlRepository.getExtraAttribute(attributeName);
+                        if (extraAttribute != null) {
+                            attributeInfo = extraAttribute;
+                        }
+                    }
+                    values.addAll(attributeInfo.getValues());
+                }
+            }
+            editText.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_list_item_1, values));
+        }
+
+        editText.setText(attribute.getSecond());
+        new MaterialAlertDialogBuilder(requireContext()).setTitle(attribute.getFirst()).setView(v).setPositiveButton("apply", (d, w) -> {
+            mAttributes.set(pos, new Pair<>(attribute.getFirst(), editText.getText().toString()));
+            mAdapter.submitList(mAttributes);
+
+            Bundle bundle = new Bundle();
+            bundle.putString("key", attribute.getFirst());
+            bundle.putString("value", editText.getText().toString());
+            getParentFragmentManager().setFragmentResult(KEY_ATTRIBUTE_CHANGED, bundle);
+        }).show();
+    }
+
+    @Nullable
+    private XmlRepository getXmlRepository() {
+        ProjectManager projectManager = ProjectManager.getInstance();
+        Project currentProject = projectManager.getCurrentProject();
+        if (currentProject == null) {
+            return null;
+        }
+        Module mainModule = currentProject.getMainModule();
+        if (!(mainModule instanceof AndroidModule)) {
+            return null;
+        }
+
+        XmlIndexProvider index = CompilerService.getInstance().getIndex(XmlIndexProvider.KEY);
+        XmlRepository xmlRepository = index.get(currentProject, mainModule);
+        xmlRepository.initialize((AndroidModule) mainModule);
+        return xmlRepository;
     }
 }
