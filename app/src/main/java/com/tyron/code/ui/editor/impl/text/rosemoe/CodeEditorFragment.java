@@ -154,6 +154,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 int column = mEditor.getCursor().getLeftColumn();
                 mEditor.setText(fileContent.get());
                 mEditor.getCursor().set(line, column);
+                mEditor.notifyExternalCursorChange();
             }
         }
     }
@@ -167,10 +168,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @Override
     public void onStart() {
         super.onStart();
-
-        if (!CompletionEngine.isIndexing()) {
-            mEditor.analyze();
-        }
     }
 
     @Override
@@ -382,7 +379,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     public void onPause() {
         super.onPause();
 
-        mEditor.clearFocus();
         hideEditorWindows();
 
         if (mCanSave) {

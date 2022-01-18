@@ -4536,7 +4536,7 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
     /**
      * Notify input method that text has been changed for external reason
      */
-    protected void notifyExternalCursorChange() {
+    public void notifyExternalCursorChange() {
         updateExtractedText();
         updateSelection();
         updateCursorAnchor();
