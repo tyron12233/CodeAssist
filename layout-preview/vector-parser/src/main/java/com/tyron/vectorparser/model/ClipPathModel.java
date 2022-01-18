@@ -27,9 +27,7 @@ public class ClipPathModel {
     }
 
     public void buildPath(boolean useLegacyParser) {
-
         originalPath = PathParser.doPath(pathData);
-
         path = new Path(originalPath);
     }
 

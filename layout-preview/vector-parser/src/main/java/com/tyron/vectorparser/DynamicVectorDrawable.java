@@ -40,8 +40,8 @@ public class DynamicVectorDrawable extends Drawable {
     private float offsetY;
     private float scaleRatio;
     private float strokeRatio;
-    private float scaleX;
-    private float scaleY;
+    private float scaleX = 1.0f;
+    private float scaleY = 1.0f;
 
     private final ProteusContext mContext;
 

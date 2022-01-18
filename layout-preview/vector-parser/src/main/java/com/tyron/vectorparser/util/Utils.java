@@ -15,6 +15,9 @@ import com.flipkart.android.proteus.value.Value;
 public class Utils {
 
     public static int getColor(Value value, ProteusContext context) {
+        if (value == null) {
+            return Color.WHITE;
+        }
         if (value.isPrimitive()) {
             Value staticValue = ColorResourceProcessor.staticCompile(value, context);
             return getColor(staticValue, context);

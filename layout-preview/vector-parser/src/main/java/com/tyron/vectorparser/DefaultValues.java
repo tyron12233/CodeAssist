@@ -22,7 +22,7 @@ public class DefaultValues {
 
     public static final int PATH_FILL_COLOR = Color.TRANSPARENT;
     public static final int PATH_STROKE_COLOR = Color.TRANSPARENT;
-    public static final float PATH_STROKE_WIDTH = 0.0f;
+    public static final float PATH_STROKE_WIDTH = 1.0f;
     public static final float PATH_STROKE_ALPHA = 1.0f;
     public static final float PATH_FILL_ALPHA = 1.0f;
     public static final Paint.Cap PATH_STROKE_LINE_CAP = Paint.Cap.BUTT;
