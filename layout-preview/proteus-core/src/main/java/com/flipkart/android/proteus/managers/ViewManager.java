@@ -260,14 +260,34 @@ public class ViewManager implements ProteusView.Manager {
                 this.view = view.getAsView();
                 view.setViewManager(this);
 
-                view.getViewManager().setOnClickListener(onClickListener);
-                view.getViewManager().setOnDragListener(listener);
-                view.getViewManager().setOnLongClickListener(onLongClickListener);
+                setOnClickListeners(view, onClickListener, onLongClickListener, listener);
 
                 parent.addView(view.getAsView(), index);
             }
         }
     }
+
+    private void setOnClickListeners(ProteusView view,
+                                     View.OnClickListener onClickListener,
+                                     View.OnLongClickListener onLongClickListener,
+                                     View.OnDragListener onDragListener) {
+        view.getViewManager().setOnClickListener(onClickListener);
+        view.getViewManager().setOnLongClickListener(onLongClickListener);
+
+        if (view.getAsView() instanceof ViewGroup) {
+            view.getViewManager().setOnDragListener(onDragListener);
+
+            ViewGroup viewGroup = (ViewGroup) view.getAsView();
+            for (int i = 0; i < viewGroup.getChildCount(); i++) {
+                View childAt = viewGroup.getChildAt(i);
+                if (childAt instanceof ProteusView) {
+                    setOnClickListeners((ProteusView) childAt,
+                            onClickListener, onLongClickListener, onDragListener);
+                }
+            }
+        }
+    }
+
 
     @Override
     public void updateAttribute(String name, Value value) {
