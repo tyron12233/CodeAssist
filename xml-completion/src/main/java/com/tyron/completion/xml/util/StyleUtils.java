@@ -1,4 +1,4 @@
-package com.tyron.completion.xml;
+package com.tyron.completion.xml.util;
 
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,6 +25,7 @@ import android.widget.ViewSwitcher;
 import androidx.annotation.NonNull;
 
 import com.google.common.collect.ImmutableSet;
+import com.tyron.completion.xml.BytecodeScanner;
 import com.tyron.completion.xml.model.DeclareStyleable;
 
 import org.apache.bcel.classfile.JavaClass;

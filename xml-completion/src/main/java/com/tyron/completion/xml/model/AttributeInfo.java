@@ -6,17 +6,23 @@ import java.util.Set;
 
 public class AttributeInfo implements Comparable<AttributeInfo> {
 
+    private final String parent;
     private String name;
 
-    private Set<Format> formats;
+    private final Set<Format> formats;
 
-    private List<String> values;
+    private final List<String> values;
     private String namespace;
 
     public AttributeInfo(String name, Set<Format> formats, List<String> values) {
+        this(name, formats, values, "");
+    }
+
+    public AttributeInfo(String name, Set<Format> formats, List<String> values, String parent) {
         this.name = name;
         this.formats = formats;
         this.values = values;
+        this.parent = parent;
     }
 
     @Override
@@ -46,5 +52,9 @@ public class AttributeInfo implements Comparable<AttributeInfo> {
 
     public String getNamespace() {
         return namespace;
+    }
+
+    public String getParent() {
+        return parent;
     }
 }
