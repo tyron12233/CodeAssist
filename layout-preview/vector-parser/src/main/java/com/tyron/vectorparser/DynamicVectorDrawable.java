@@ -70,111 +70,145 @@ public class DynamicVectorDrawable extends Drawable {
                 String name = mParser.getName();
                 switch (event) {
                     case XmlPullParser.START_TAG:
-                        if (name.equals("vector")) {
-                            tempPosition = getAttrPosition(mParser, "android:viewportWidth");
-                            vectorModel.setViewportWidth((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.VECTOR_VIEWPORT_WIDTH);
+                        switch (name) {
+                            case "vector":
+                                tempPosition = getAttrPosition(mParser, "android:viewportWidth");
+                                vectorModel.setViewportWidth((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.VECTOR_VIEWPORT_WIDTH);
 
-                            tempPosition = getAttrPosition(mParser, "android:viewportHeight");
-                            vectorModel.setViewportHeight((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.VECTOR_VIEWPORT_HEIGHT);
+                                tempPosition = getAttrPosition(mParser, "android:viewportHeight");
+                                vectorModel.setViewportHeight((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.VECTOR_VIEWPORT_HEIGHT);
 
-                            tempPosition = getAttrPosition(mParser, "android:alpha");
-                            vectorModel.setAlpha((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.VECTOR_ALPHA);
+                                tempPosition = getAttrPosition(mParser, "android:alpha");
+                                vectorModel.setAlpha((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.VECTOR_ALPHA);
 
-                            tempPosition = getAttrPosition(mParser, "android:name");
-                            vectorModel.setName((tempPosition != -1) ? mParser.getAttributeValue(tempPosition) : null);
+                                tempPosition = getAttrPosition(mParser, "android:name");
+                                vectorModel.setName((tempPosition != -1) ?
+                                        mParser.getAttributeValue(tempPosition) : null);
 
-                            tempPosition = getAttrPosition(mParser, "android:width");
-                            vectorModel.setWidth((tempPosition != -1) ? Utils.getFloatFromDimensionString(mParser.getAttributeValue(tempPosition), mContext) : DefaultValues.VECTOR_WIDTH);
+                                tempPosition = getAttrPosition(mParser, "android:width");
+                                vectorModel.setWidth((tempPosition != -1) ?
+                                        Utils.getFloatFromDimensionString(mParser.getAttributeValue(tempPosition), mContext) : DefaultValues.VECTOR_WIDTH);
 
-                            tempPosition = getAttrPosition(mParser, "android:height");
-                            vectorModel.setHeight((tempPosition != -1) ? Utils.getFloatFromDimensionString(mParser.getAttributeValue(tempPosition), mContext) : DefaultValues.VECTOR_HEIGHT);
+                                tempPosition = getAttrPosition(mParser, "android:height");
+                                vectorModel.setHeight((tempPosition != -1) ?
+                                        Utils.getFloatFromDimensionString(mParser.getAttributeValue(tempPosition), mContext) : DefaultValues.VECTOR_HEIGHT);
 
-                            tempPosition = getAttrPosition(mParser, "android:tint");
-                            vectorModel.setTint((tempPosition != -1) ? Utils.getColorFromString(mParser.getAttributeValue(tempPosition), mContext) : 0);
-                        } else if (name.equals("path")) {
-                            pathModel = new PathModel();
+                                tempPosition = getAttrPosition(mParser, "android:tint");
+                                vectorModel.setTint((tempPosition != -1) ?
+                                        Utils.getColorFromString(mParser.getAttributeValue(tempPosition), mContext) : 0);
+                                break;
+                            case "path":
+                                pathModel = new PathModel();
 
-                            tempPosition = getAttrPosition(mParser, "android:name");
-                            pathModel.setName((tempPosition != -1) ? mParser.getAttributeValue(tempPosition) : null);
+                                tempPosition = getAttrPosition(mParser, "android:name");
+                                pathModel.setName((tempPosition != -1) ?
+                                        mParser.getAttributeValue(tempPosition) : null);
 
-                            tempPosition = getAttrPosition(mParser, "android:fillAlpha");
-                            pathModel.setFillAlpha((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_FILL_ALPHA);
+                                tempPosition = getAttrPosition(mParser, "android:fillAlpha");
+                                pathModel.setFillAlpha((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_FILL_ALPHA);
 
-                            tempPosition = getAttrPosition(mParser, "android:fillColor");
-                            pathModel.setFillColor((tempPosition != -1) ? Utils.getColorFromString(mParser.getAttributeValue(tempPosition), mContext) : DefaultValues.PATH_FILL_COLOR);
+                                tempPosition = getAttrPosition(mParser, "android:fillColor");
+                                pathModel.setFillColor((tempPosition != -1) ?
+                                        Utils.getColorFromString(mParser.getAttributeValue(tempPosition), mContext) : DefaultValues.PATH_FILL_COLOR);
 
-                            tempPosition = getAttrPosition(mParser, "android:fillType");
-                            pathModel.setFillType((tempPosition != -1) ? Utils.getFillTypeFromString(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_FILL_TYPE);
+                                tempPosition = getAttrPosition(mParser, "android:fillType");
+                                pathModel.setFillType((tempPosition != -1) ?
+                                        Utils.getFillTypeFromString(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_FILL_TYPE);
 
-                            tempPosition = getAttrPosition(mParser, "android:pathData");
-                            pathModel.setPathData((tempPosition != -1) ? mParser.getAttributeValue(tempPosition) : null);
+                                tempPosition = getAttrPosition(mParser, "android:pathData");
+                                pathModel.setPathData((tempPosition != -1) ?
+                                        mParser.getAttributeValue(tempPosition) : null);
 
-                            tempPosition = getAttrPosition(mParser, "android:strokeAlpha");
-                            pathModel.setStrokeAlpha((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_STROKE_ALPHA);
+                                tempPosition = getAttrPosition(mParser, "android:strokeAlpha");
+                                pathModel.setStrokeAlpha((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_STROKE_ALPHA);
 
-                            tempPosition = getAttrPosition(mParser, "android:strokeColor");
-                            pathModel.setStrokeColor((tempPosition != -1) ? Utils.getColorFromString(mParser.getAttributeValue(tempPosition), mContext) : DefaultValues.PATH_STROKE_COLOR);
+                                tempPosition = getAttrPosition(mParser, "android:strokeColor");
+                                pathModel.setStrokeColor((tempPosition != -1) ?
+                                        Utils.getColorFromString(mParser.getAttributeValue(tempPosition), mContext) : DefaultValues.PATH_STROKE_COLOR);
 
-                            tempPosition = getAttrPosition(mParser, "android:strokeLineCap");
-                            pathModel.setStrokeLineCap((tempPosition != -1) ? Utils.getLineCapFromString(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_STROKE_LINE_CAP);
+                                tempPosition = getAttrPosition(mParser, "android:strokeLineCap");
+                                pathModel.setStrokeLineCap((tempPosition != -1) ?
+                                        Utils.getLineCapFromString(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_STROKE_LINE_CAP);
 
-                            tempPosition = getAttrPosition(mParser, "android:strokeLineJoin");
-                            pathModel.setStrokeLineJoin((tempPosition != -1) ? Utils.getLineJoinFromString(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_STROKE_LINE_JOIN);
+                                tempPosition = getAttrPosition(mParser, "android:strokeLineJoin");
+                                pathModel.setStrokeLineJoin((tempPosition != -1) ?
+                                        Utils.getLineJoinFromString(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_STROKE_LINE_JOIN);
 
-                            tempPosition = getAttrPosition(mParser, "android:strokeMiterLimit");
-                            pathModel.setStrokeMiterLimit((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_STROKE_MITER_LIMIT);
+                                tempPosition = getAttrPosition(mParser, "android:strokeMiterLimit");
+                                pathModel.setStrokeMiterLimit((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_STROKE_MITER_LIMIT);
 
-                            tempPosition = getAttrPosition(mParser, "android:strokeWidth");
-                            pathModel.setStrokeWidth((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_STROKE_WIDTH);
+                                tempPosition = getAttrPosition(mParser, "android:strokeWidth");
+                                pathModel.setStrokeWidth((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_STROKE_WIDTH);
 
-                            tempPosition = getAttrPosition(mParser, "android:trimPathEnd");
-                            pathModel.setTrimPathEnd((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_TRIM_PATH_END);
+                                tempPosition = getAttrPosition(mParser, "android:trimPathEnd");
+                                pathModel.setTrimPathEnd((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_TRIM_PATH_END);
 
-                            tempPosition = getAttrPosition(mParser, "android:trimPathOffset");
-                            pathModel.setTrimPathOffset((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_TRIM_PATH_OFFSET);
+                                tempPosition = getAttrPosition(mParser, "android:trimPathOffset");
+                                pathModel.setTrimPathOffset((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_TRIM_PATH_OFFSET);
 
-                            tempPosition = getAttrPosition(mParser, "android:trimPathStart");
-                            pathModel.setTrimPathStart((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_TRIM_PATH_START);
+                                tempPosition = getAttrPosition(mParser, "android:trimPathStart");
+                                pathModel.setTrimPathStart((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.PATH_TRIM_PATH_START);
 
-                            pathModel.buildPath(false);
-                        } else if (name.equals("group")) {
-                            groupModel = new GroupModel();
+                                pathModel.buildPath(false);
+                                break;
+                            case "group":
+                                groupModel = new GroupModel();
 
-                            tempPosition = getAttrPosition(mParser, "android:name");
-                            groupModel.setName((tempPosition != -1) ? mParser.getAttributeValue(tempPosition) : null);
+                                tempPosition = getAttrPosition(mParser, "android:name");
+                                groupModel.setName((tempPosition != -1) ?
+                                        mParser.getAttributeValue(tempPosition) : null);
 
-                            tempPosition = getAttrPosition(mParser, "android:pivotX");
-                            groupModel.setPivotX((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_PIVOT_X);
+                                tempPosition = getAttrPosition(mParser, "android:pivotX");
+                                groupModel.setPivotX((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_PIVOT_X);
 
-                            tempPosition = getAttrPosition(mParser, "android:pivotY");
-                            groupModel.setPivotY((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_PIVOT_Y);
+                                tempPosition = getAttrPosition(mParser, "android:pivotY");
+                                groupModel.setPivotY((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_PIVOT_Y);
 
-                            tempPosition = getAttrPosition(mParser, "android:rotation");
-                            groupModel.setRotation((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_ROTATION);
+                                tempPosition = getAttrPosition(mParser, "android:rotation");
+                                groupModel.setRotation((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_ROTATION);
 
-                            tempPosition = getAttrPosition(mParser, "android:scaleX");
-                            groupModel.setScaleX((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_SCALE_X);
+                                tempPosition = getAttrPosition(mParser, "android:scaleX");
+                                groupModel.setScaleX((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_SCALE_X);
 
-                            tempPosition = getAttrPosition(mParser, "android:scaleY");
-                            groupModel.setScaleY((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_SCALE_Y);
+                                tempPosition = getAttrPosition(mParser, "android:scaleY");
+                                groupModel.setScaleY((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_SCALE_Y);
 
-                            tempPosition = getAttrPosition(mParser, "android:translateX");
-                            groupModel.setTranslateX((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_TRANSLATE_X);
+                                tempPosition = getAttrPosition(mParser, "android:translateX");
+                                groupModel.setTranslateX((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_TRANSLATE_X);
 
-                            tempPosition = getAttrPosition(mParser, "android:translateY");
-                            groupModel.setTranslateY((tempPosition != -1) ? Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_TRANSLATE_Y);
+                                tempPosition = getAttrPosition(mParser, "android:translateY");
+                                groupModel.setTranslateY((tempPosition != -1) ?
+                                        Float.parseFloat(mParser.getAttributeValue(tempPosition)) : DefaultValues.GROUP_TRANSLATE_Y);
 
-                            groupModelStack.push(groupModel);
-                        } else if (name.equals("clip-path")) {
-                            clipPathModel = new ClipPathModel();
+                                groupModelStack.push(groupModel);
+                                break;
+                            case "clip-path":
+                                clipPathModel = new ClipPathModel();
 
-                            tempPosition = getAttrPosition(mParser, "android:name");
-                            clipPathModel.setName((tempPosition != -1) ? mParser.getAttributeValue(tempPosition) : null);
+                                tempPosition = getAttrPosition(mParser, "android:name");
+                                clipPathModel.setName((tempPosition != -1) ? mParser.getAttributeValue(tempPosition) : null);
 
-                            tempPosition = getAttrPosition(mParser, "android:pathData");
-                            clipPathModel.setPathData((tempPosition != -1) ? mParser.getAttributeValue(tempPosition) : null);
+                                tempPosition = getAttrPosition(mParser, "android:pathData");
+                                clipPathModel.setPathData((tempPosition != -1) ? mParser.getAttributeValue(tempPosition) : null);
 
-                            clipPathModel.buildPath(false);
+                                clipPathModel.buildPath(false);
+                                break;
                         }
                         break;
 

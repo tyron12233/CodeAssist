@@ -20,20 +20,21 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
 
-        if (getSupportFragmentManager().findFragmentByTag(ProjectManagerFragment.TAG) == null) {
-            StartupManager startupManager = new StartupManager();
-            startupManager.addStartupActivity(() -> {
-                CompletionEngine engine = CompletionEngine.getInstance();
-                CompilerService index = CompilerService.getInstance();
-                index.clear();
-                engine.clear();
+        StartupManager startupManager = new StartupManager();
+        startupManager.addStartupActivity(() -> {
+            CompletionEngine engine = CompletionEngine.getInstance();
+            CompilerService index = CompilerService.getInstance();
+            if (index.isEmpty()) {
                 index.registerIndexProvider(JavaCompilerProvider.KEY, new JavaCompilerProvider());
                 index.registerIndexProvider(XmlIndexProvider.KEY, new XmlIndexProvider());
                 engine.registerCompletionProvider(new JavaCompletionProvider());
                 engine.registerCompletionProvider(new XmlCompletionProvider());
                 engine.registerCompletionProvider(new AndroidManifestCompletionProvider());
-            });
-            startupManager.startup();
+            }
+        });
+        startupManager.startup();
+
+        if (getSupportFragmentManager().findFragmentByTag(ProjectManagerFragment.TAG) == null) {
             getSupportFragmentManager().beginTransaction()
                     .replace(R.id.fragment_container,
                             new ProjectManagerFragment(),

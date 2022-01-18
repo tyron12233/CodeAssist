@@ -41,4 +41,8 @@ public class CompilerService {
     public void clear() {
         mIndexProviders.clear();
     }
+
+    public boolean isEmpty() {
+        return mIndexProviders.isEmpty();
+    }
 }
