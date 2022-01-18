@@ -55,6 +55,7 @@ public abstract class FileEditorManager {
                     .setTitle(R.string.file_editor_selection_title)
                     .setItems(items, (__, which) ->
                             callback.accept(fileEditors[which]))
+                    .setNegativeButton(android.R.string.cancel, null)
                     .show();
         } else {
             callback.accept(fileEditors[0]);
