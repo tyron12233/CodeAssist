@@ -80,4 +80,16 @@ public class TreeUtil {
         }
         return true;
     }
+
+    public static TreePath findParentOfType(TreePath tree, Class<? extends Tree> type) {
+        TreePath current = tree;
+        while (current != null) {
+            Tree leaf = current.getLeaf();
+            if (type.isAssignableFrom(leaf.getClass())) {
+                return current;
+            }
+            current = current.getParentPath();
+        }
+        return null;
+    }
 }

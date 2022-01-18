@@ -20,8 +20,22 @@ import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.provider.CompletionEngine;
+import com.tyron.completion.java.util.ErrorCodes;
+import com.tyron.completion.java.util.TreeUtil;
 
 import org.openjdk.javax.tools.Diagnostic;
+import org.openjdk.javax.tools.JavaFileObject;
+import org.openjdk.source.tree.BlockTree;
+import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.MethodTree;
+import org.openjdk.source.tree.Tree;
+import org.openjdk.source.util.SourcePositions;
+import org.openjdk.source.util.TreePath;
+import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.api.ClientCodeWrapper;
+import org.openjdk.tools.javac.tree.JCTree;
+import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.lang.ref.WeakReference;
 import java.time.Duration;
@@ -123,7 +137,9 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                                  service.compile(Collections.singletonList(sourceFileObject))) {
                         container.run(task -> {
                             if (!cancel.invoke()) {
-                                List<DiagnosticWrapper> collect = task.diagnostics.stream().map(DiagnosticWrapper::new).collect(Collectors.toList());
+                                List<DiagnosticWrapper> collect = task.diagnostics.stream()
+                                        .map(d -> modifyDiagnostic(task, d))
+                                        .collect(Collectors.toList());
                                 editor.setDiagnostics(collect);
                             }
                         });
@@ -133,6 +149,73 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 }
             }
         }
+    }
+
+    private DiagnosticWrapper modifyDiagnostic(CompileTask task, Diagnostic<? extends JavaFileObject> diagnostic) {
+        DiagnosticWrapper wrapped = new DiagnosticWrapper(diagnostic);
+
+        if (diagnostic instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
+            Trees trees = Trees.instance(task.task);
+            SourcePositions positions = trees.getSourcePositions();
+
+            JCDiagnostic jcDiagnostic = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) diagnostic).d;
+            JCDiagnostic.DiagnosticPosition diagnosticPosition =
+                    jcDiagnostic.getDiagnosticPosition();
+            JCTree tree = diagnosticPosition.getTree();
+
+            if (tree != null) {
+                TreePath treePath = trees.getPath(task.root(), tree);
+                String code = jcDiagnostic.getCode();
+
+                TreePath modifiedPath = null;
+                switch (code) {
+                    case ErrorCodes.MISSING_RETURN_STATEMENT:
+                        modifiedPath = TreeUtil.findParentOfType(treePath, MethodTree.class);
+                        break;
+                    case ErrorCodes.DOES_NOT_OVERRIDE_ABSTRACT:
+                        modifiedPath = TreeUtil.findParentOfType(treePath, ClassTree.class);
+                        break;
+                }
+
+                if (modifiedPath != null) {
+                    setDiagnosticPosition(wrapped, positions, modifiedPath.getCompilationUnit(), modifiedPath.getLeaf());
+                }
+            }
+        }
+        return wrapped;
+    }
+
+    private void setDiagnosticPosition(DiagnosticWrapper wrapped,
+                                       SourcePositions positions,
+                                       CompilationUnitTree root, Tree tree) {
+        long startPosition = positions.getStartPosition(root, tree);
+        long endPosition = getEndPosition(positions, root, tree);
+        wrapped.setStartPosition(startPosition);
+        wrapped.setEndPosition(endPosition);
+    }
+
+    private long getStartPosition(SourcePositions positions, CompilationUnitTree root, Tree tree) {
+        return positions.getStartPosition(root, tree);
+    }
+
+    private long getEndPosition(SourcePositions positions, CompilationUnitTree root, Tree tree) {
+        if (tree instanceof MethodTree) {
+            BlockTree body = ((MethodTree) tree).getBody();
+            if (body != null) {
+                return positions.getStartPosition(root, body);
+            }
+        } else if (tree instanceof ClassTree) {
+            List<? extends Tree> implementsClause = ((ClassTree) tree).getImplementsClause();
+            if (implementsClause != null) {
+                Tree last = implementsClause.get(implementsClause.size() - 1);
+                return positions.getEndPosition(root, last);
+            }
+            Tree extendsClause = ((ClassTree) tree).getExtendsClause();
+            if (extendsClause != null) {
+                return positions.getEndPosition(root, extendsClause);
+            }
+        }
+        return positions.getEndPosition(root, tree);
     }
 
     public void analyze(CharSequence content, TextAnalyzeResult colors,
