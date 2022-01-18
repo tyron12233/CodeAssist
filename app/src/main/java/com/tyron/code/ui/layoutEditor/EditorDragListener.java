@@ -1,6 +1,7 @@
 package com.tyron.code.ui.layoutEditor;
 
 import android.animation.LayoutTransition;
+import android.util.Log;
 import android.view.DragEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -9,10 +10,13 @@ import android.widget.LinearLayout;
 import androidx.annotation.NonNull;
 
 import com.flipkart.android.proteus.ProteusView;
+import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.layoutEditor.model.EditorShadowView;
 import com.tyron.code.ui.layoutEditor.model.ViewPalette;
 
 public class EditorDragListener implements View.OnDragListener {
+
+    private static final String TAG = EditorDragListener.class.getSimpleName();
 
     /**
      * Callbacks when views are added to the editor.
@@ -73,7 +77,13 @@ public class EditorDragListener implements View.OnDragListener {
                 Object state = event.getLocalState();
 
                 if (state instanceof ProteusView) {
-                    addProteusView(hostView, ((ProteusView) state), event);
+                    try {
+                        addProteusView(hostView, ((ProteusView) state), event);
+                    } catch (Throwable e) {
+                        if (BuildConfig.DEBUG) {
+                            Log.e(TAG, "Unable to add view", e);
+                        }
+                    }
                 } else if (state instanceof ViewPalette) {
                     addPalette(hostView, ((ViewPalette) state), event);
                 }
