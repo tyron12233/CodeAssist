@@ -102,10 +102,10 @@ public class EditorContainerFragment extends Fragment {
                 popup.setOnMenuItemClickListener(item -> {
                     switch (item.getItemId()) {
                         case 0:
-                            mMainViewModel.removeFile(mMainViewModel.getCurrentFile());
+                            mMainViewModel.removeFile(mMainViewModel.getCurrentFileEditor().getFile());
                             break;
                         case 1:
-                            mMainViewModel.removeOthers(mMainViewModel.getCurrentFile());
+                            mMainViewModel.removeOthers(mMainViewModel.getCurrentFileEditor().getFile());
                             break;
                         case 2:
                             mMainViewModel.clear();

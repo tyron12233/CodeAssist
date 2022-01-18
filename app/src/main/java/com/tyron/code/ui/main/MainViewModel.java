@@ -120,7 +120,7 @@ public class MainViewModel extends ViewModel {
         currentPosition.setValue(pos);
     }
 
-    public File getCurrentFile() {
+    public FileEditor getCurrentFileEditor() {
         List<FileEditor> files = getFiles().getValue();
         if (files == null) {
             return null;
@@ -135,7 +135,7 @@ public class MainViewModel extends ViewModel {
             return null;
         }
 
-        return files.get(currentPos).getFile();
+        return files.get(currentPos);
     }
 
     public void clear() {

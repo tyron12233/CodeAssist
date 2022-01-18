@@ -5,7 +5,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -19,6 +18,7 @@ import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.R;
+import com.tyron.code.ui.editor.api.FileEditor;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
@@ -106,12 +106,10 @@ public class BottomEditorFragment extends Fragment {
         mShortcutsRecyclerView.setAdapter(adapter);
 
         adapter.setOnShortcutSelectedListener((item, pos) -> {
-            File currentFile = mFilesViewModel.getCurrentFile();
+            FileEditor currentFile = mFilesViewModel.getCurrentFileEditor();
             if (currentFile != null) {
-                CodeEditorFragment fragment = (CodeEditorFragment) getParentFragmentManager()
-                        .findFragmentByTag("f" + currentFile.getAbsolutePath().hashCode());
-                if (fragment != null) {
-                    fragment.performShortcut(item);
+                if (currentFile.getFragment() instanceof CodeEditorFragment) {
+                    ((CodeEditorFragment) currentFile.getFragment()).performShortcut(item);
                 }
             }
         });
