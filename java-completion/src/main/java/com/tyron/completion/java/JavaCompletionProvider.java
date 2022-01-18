@@ -1,5 +1,7 @@
 package com.tyron.completion.java;
 
+import android.util.Log;
+
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
@@ -84,6 +86,9 @@ public class JavaCompletionProvider extends CompletionProvider {
         } catch (Throwable e) {
             if (e instanceof ProcessCanceledException) {
                 throw e;
+            }
+            if (BuildConfig.DEBUG) {
+                Log.e("JavaCompletionProvider", "Unable to get completions", e);
             }
             compilerProvider.destroy();
         } finally {

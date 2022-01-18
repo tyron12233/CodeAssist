@@ -140,16 +140,18 @@ public class JavaCompilerService implements CompilerProvider {
      * @return CompileBatch for this compilation
      */
     private CompilerContainer compileBatch(Collection<? extends JavaFileObject> sources) {
-        mContainer.initialize(() -> {
-            if (needsCompile(sources)) {
-                loadCompile(sources);
-            } else {
-                Log.d("JavaCompilerService", "Using cached compile");
-            }
-            CompileTask task = new CompileTask(cachedCompile);
-            mContainer.setCompileTask(task);
-        });
-        return mContainer;
+        synchronized (mContainer) {
+            mContainer.initialize(() -> {
+                if (needsCompile(sources)) {
+                    loadCompile(sources);
+                } else {
+                    Log.d("JavaCompilerService", "Using cached compile");
+                }
+                CompileTask task = new CompileTask(cachedCompile);
+                mContainer.setCompileTask(task);
+            });
+            return mContainer;
+        }
     }
     
     public void clearDiagnostics() {

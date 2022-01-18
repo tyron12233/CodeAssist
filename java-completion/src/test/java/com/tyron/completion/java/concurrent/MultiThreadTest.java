@@ -26,6 +26,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * The java language server is single threaded and requires threads that
+ * accesses the CompileBatch to be synchronized, this test ensured that threads
+ * are properly synchronized and doesn't throw a RuntimeException with Compiler still in use error.
+ */
 @RunWith(RobolectricTestRunner.class)
 @Config(manifest = Config.NONE, resourceDir = Config.NONE)
 public class MultiThreadTest {

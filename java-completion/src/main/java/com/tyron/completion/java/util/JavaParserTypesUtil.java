@@ -26,6 +26,7 @@ import org.openjdk.javax.lang.model.type.NoType;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.type.TypeVariable;
+import org.openjdk.source.doctree.DocCommentTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.ParameterizedTypeTree;
 import org.openjdk.source.tree.PrimitiveTypeTree;
@@ -38,6 +39,7 @@ import org.openjdk.tools.javac.tree.JCTree;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 public class JavaParserTypesUtil {
 
@@ -193,8 +195,14 @@ public class JavaParserTypesUtil {
     public static WildcardType toWildcardType(org.openjdk.javax.lang.model.type.WildcardType type) {
         WildcardType wildcardType = new WildcardType();
         if (type.getSuperBound() != null) {
-            wildcardType.setSuperType((ReferenceType) toType(type.getSuperBound()));
+            Type result = toType(type.getSuperBound());
+            if (result instanceof ReferenceType) {
+                wildcardType.setSuperType((ReferenceType) result);
+            } else if (result instanceof WildcardType) {
+                wildcardType = result.asWildcardType();
+            }
         }
+
         if (type.getExtendsBound() != null) {
             wildcardType.setExtendedType((ReferenceType) toType(type.getExtendsBound()));
         }
