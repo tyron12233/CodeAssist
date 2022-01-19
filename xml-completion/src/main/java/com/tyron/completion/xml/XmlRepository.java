@@ -108,20 +108,20 @@ public class XmlRepository {
                     e.printStackTrace();
                 }
             }
+        }
 
-            try {
-                Map<String, DeclareStyleable> android = parse(mAttrsFile, "android");
-                mDeclareStyleables.putAll(android);
+        try {
+            Map<String, DeclareStyleable> android = parse(mAttrsFile, "android");
+            mDeclareStyleables.putAll(android);
 
-                File manifestAttrsFile = new File(mAttrsFile.getParentFile(), "attrs_manifest.xml");
-                if (manifestAttrsFile.exists()) {
-                    Map<String, DeclareStyleable> android1 = parse(manifestAttrsFile, "android");
-                    mManifestAttrs.putAll(android1);
-                }
-
-            } catch (XmlPullParserException | IOException e) {
-                e.printStackTrace();
+            File manifestAttrsFile = new File(mAttrsFile.getParentFile(), "attrs_manifest.xml");
+            if (manifestAttrsFile.exists()) {
+                Map<String, DeclareStyleable> android1 = parse(manifestAttrsFile, "android");
+                mManifestAttrs.putAll(android1);
             }
+
+        } catch (XmlPullParserException | IOException e) {
+            e.printStackTrace();
         }
 
         addFrameworkViews();
