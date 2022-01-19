@@ -4,7 +4,6 @@ import android.util.Log;
 
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
-import com.tyron.builder.project.api.Module;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
@@ -42,17 +41,14 @@ public class JavaCompletionProvider extends CompletionProvider {
         ProgressManager.checkCanceled();
 
         if (isIncrementalCompletion(mCachedCompletion, params)) {
-            String partialIdentifier = partialIdentifier(params.getPrefix(), params.getPrefix().length());
+            String partial = partialIdentifier(params.getPrefix(),
+                    params.getPrefix().length());
             CompletionList cachedList = mCachedCompletion.getCompletionList();
             if (!cachedList.items.isEmpty()) {
-                List<CompletionItem> narrowedList = cachedList.items.stream().filter(item ->
-                        FuzzySearch.partialRatio(getLabel(item), partialIdentifier) > 70).sorted((t1, t2) -> {
-                    String t1label = getLabel(t1);
-                    String t2label = getLabel(t2);
-                    int t1ratio = FuzzySearch.partialRatio(t1label, partialIdentifier);
-                    int t2ratio = FuzzySearch.partialRatio(t2label, partialIdentifier);
-                    return Integer.compare(t1ratio, t2ratio);
-                }).collect(Collectors.toList());
+                List<CompletionItem> narrowedList =
+                        cachedList.items.stream().filter(item -> getRatio(item, partial) > 70)
+                                .sorted(Comparator.comparingInt((CompletionItem it) -> getRatio(it, partial)).reversed())
+                                .collect(Collectors.toList());
                 CompletionList completionList = new CompletionList();
                 completionList.items = narrowedList;
                 return completionList;
@@ -61,16 +57,14 @@ public class JavaCompletionProvider extends CompletionProvider {
 
         try {
             CompletionList complete = complete(params.getProject(),
-                    (JavaModule) params.getModule(),
-                    params.getFile(),
-                    params.getContents(),
+                    (JavaModule) params.getModule(), params.getFile(), params.getContents(),
                     params.getIndex());
             String newPrefix = params.getPrefix();
             if (params.getPrefix().contains(".")) {
                 newPrefix = partialIdentifier(params.getPrefix(), params.getPrefix().length());
             }
-            mCachedCompletion = new CachedCompletion(params.getFile(),
-                    params.getLine(), params.getColumn(), newPrefix, complete);
+            mCachedCompletion = new CachedCompletion(params.getFile(), params.getLine(),
+                    params.getColumn(), newPrefix, complete);
             return complete;
         } catch (ProcessCanceledException e) {
             mCachedCompletion = null;
@@ -108,6 +102,10 @@ public class JavaCompletionProvider extends CompletionProvider {
         return contents.substring(start, end);
     }
 
+    private int getRatio(CompletionItem item, String partialIdentifier) {
+        String label = getLabel(item);
+        return FuzzySearch.partialRatio(label, partialIdentifier);
+    }
 
     private String getLabel(CompletionItem item) {
         String label = item.label;
@@ -116,6 +114,7 @@ public class JavaCompletionProvider extends CompletionProvider {
         }
         return label;
     }
+
     private boolean isIncrementalCompletion(CachedCompletion cachedCompletion,
                                             CompletionParameters params) {
         String prefix = params.getPrefix();
