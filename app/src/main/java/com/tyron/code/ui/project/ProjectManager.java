@@ -7,6 +7,7 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
+import com.tyron.builder.compiler.manifest.ManifestMergeTask;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
@@ -108,8 +109,13 @@ public class ProjectManager {
 
         if (module instanceof AndroidModule) {
             mListener.onTaskStarted("Generating resource files.");
+
+            ManifestMergeTask manifestMergeTask = new ManifestMergeTask((AndroidModule) module, logger);
             IncrementalAapt2Task task = new IncrementalAapt2Task((AndroidModule) module, logger, false);
             try {
+                manifestMergeTask.prepare(BuildType.DEBUG);
+                manifestMergeTask.run();
+
                 task.prepare(BuildType.DEBUG);
                 task.run();
             } catch (IOException | CompilationFailedException e) {
