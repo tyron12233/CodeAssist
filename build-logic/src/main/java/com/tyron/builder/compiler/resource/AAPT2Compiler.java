@@ -2,9 +2,12 @@ package com.tyron.builder.compiler.resource;
 
 import android.util.Log;
 
+import com.android.tools.aapt2.Aapt2Jni;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.log.LogUtils;
+import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.Project;
 import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.BinaryExecutor;
@@ -50,19 +53,18 @@ public class AAPT2Compiler {
 		FileManager.deleteDir(new File(mProject.getBuildDirectory(), "gen"));
 
 		List<String> args = new ArrayList<>();
-		args.add(getBinary().getAbsolutePath());
-		args.add("compile");
 		args.add("--dir");
 		args.add(mProject.getResourceDirectory().getAbsolutePath());
 		args.add("-o");
 		args.add(createNewFile(getOutputPath(), "project.zip").getAbsolutePath());
 
-		BinaryExecutor exec = new BinaryExecutor();
-		exec.setCommands(args);
-		if (!exec.execute().trim().isEmpty()) {
-			throw new CompilationFailedException(exec.getLog());
-		}
+		int compile = Aapt2Jni.compile(args);
+		List<DiagnosticWrapper> logs = Aapt2Jni.getLogs();
+		LogUtils.log(logs, mLogger);
 
+		if (compile != 0) {
+			throw new CompilationFailedException("Compilation failed, check logs for more details.");
+		}
 		compileLibraries();
 
 	}
@@ -92,10 +94,12 @@ public class AAPT2Compiler {
 			args.add("-o");
 			args.add(createNewFile(getOutputPath(), parent.getName() + ".zip").getAbsolutePath());
 
-			BinaryExecutor exec = new BinaryExecutor();
-			exec.setCommands(args);
-			if (!exec.execute().trim().isEmpty()) {
-				throw new CompilationFailedException(exec.getLog());
+			int compile = Aapt2Jni.compile(args);
+			List<DiagnosticWrapper> logs = Aapt2Jni.getLogs();
+			LogUtils.log(logs, mLogger);
+
+			if (compile != 0) {
+				throw new CompilationFailedException("Compilation failed, check logs for more details.");
 			}
 		}
 	}
@@ -104,9 +108,7 @@ public class AAPT2Compiler {
 		mLogger.debug("Linking resources");
 
 		List<String> args = new ArrayList<>();
-		
-		args.add(getBinary().getAbsolutePath());
-		args.add("link");
+
 		args.add("-I");
 		args.add(BuildModule.getAndroidJar().getAbsolutePath());
 		args.add("--allow-reserved-package-id");
@@ -154,10 +156,12 @@ public class AAPT2Compiler {
 		}
 		args.add(file.getAbsolutePath());
 
-		BinaryExecutor exec = new BinaryExecutor();
-		exec.setCommands(args);
-		if (!exec.execute().trim().isEmpty()) {
-			throw new CompilationFailedException(exec.getLog());
+		int compile = Aapt2Jni.link(args);
+		List<DiagnosticWrapper> logs = Aapt2Jni.getLogs();
+		LogUtils.log(logs, mLogger);
+
+		if (compile != 0) {
+			throw new CompilationFailedException("Compilation failed, check logs for more details.");
 		}
 	}
 	

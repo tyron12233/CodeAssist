@@ -2,11 +2,15 @@ package com.tyron.builder.compiler.incremental.resource;
 
 import androidx.annotation.VisibleForTesting;
 
+import com.android.tools.aapt2.Aapt2Jni;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
+import com.tyron.builder.compiler.resource.AAPT2Compiler;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.log.LogUtils;
+import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.BinaryExecutor;
 
@@ -71,8 +75,6 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
     private void compileProject(Map<String, List<File>> files)
             throws IOException, CompilationFailedException {
         List<String> args = new ArrayList<>();
-        args.add(getBinary().getAbsolutePath());
-        args.add("compile");
 
         for (String resourceType : files.keySet()) {
             List<File> filesToCompile = files.get(resourceType);
@@ -90,10 +92,12 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         }
         args.add(outputCompiled.getAbsolutePath());
 
-        BinaryExecutor executor = new BinaryExecutor();
-        executor.setCommands(args);
-        if (!executor.execute().isEmpty()) {
-            throw new CompilationFailedException(executor.getLog());
+        int compile = Aapt2Jni.compile(args);
+        List<DiagnosticWrapper> logs = Aapt2Jni.getLogs();
+        LogUtils.log(logs, getLogger());
+
+        if (compile != 0) {
+            throw new CompilationFailedException("Compilation failed, check logs for more details.");
         }
 
         copyMapToDir(files);
@@ -123,17 +127,17 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
             for (File inside : files) {
                 if (inside.isDirectory() && inside.getName().equals("res")) {
                     List<String> args = new ArrayList<>();
-                    args.add(getBinary().getAbsolutePath());
-                    args.add("compile");
                     args.add("--dir");
                     args.add(inside.getAbsolutePath());
                     args.add("-o");
                     args.add(createNewFile(output, parent.getName() + ".zip").getAbsolutePath());
 
-                    BinaryExecutor exec = new BinaryExecutor();
-                    exec.setCommands(args);
-                    if (!exec.execute().trim().isEmpty()) {
-                        throw new CompilationFailedException(exec.getLog());
+                    int compile = Aapt2Jni.compile(args);
+                    List<DiagnosticWrapper> logs = Aapt2Jni.getLogs();
+                    LogUtils.log(logs, getLogger());
+
+                    if (compile != 0) {
+                        throw new CompilationFailedException("Compilation failed, check logs for more details.");
                     }
                 }
             }
@@ -144,8 +148,6 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         getLogger().debug("Linking resources");
 
         List<String> args = new ArrayList<>();
-        args.add(getBinary().getAbsolutePath());
-        args.add("link");
         args.add("-I");
         args.add(getModule().getBootstrapJarFile().getAbsolutePath());  File files = new File(getOutputPath(), "compiled");
         args.add("--allow-reserved-package-id");
@@ -243,22 +245,12 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
             args.add(getModule().getAssetsDirectory().getAbsolutePath());
         }
 
-        BinaryExecutor exec = new BinaryExecutor();
-        exec.setCommands(args);
-        if (!exec.execute().trim().isEmpty()) {
-            String log = exec.getLog();
-            String[] lines = log.split("\n");
-            boolean containsError = false;
-            for (String line : lines) {
-                if (line.startsWith("error:")) {
-                    containsError = true;
-                    break;
-                }
-            }
+        int compile = Aapt2Jni.link(args);
+        List<DiagnosticWrapper> logs = Aapt2Jni.getLogs();
+        LogUtils.log(logs, getLogger());
 
-            if (containsError) {
-                throw new CompilationFailedException(exec.getLog());
-            }
+        if (compile != 0) {
+            throw new CompilationFailedException("Compilation failed, check logs for more details.");
         }
     }
     /**
