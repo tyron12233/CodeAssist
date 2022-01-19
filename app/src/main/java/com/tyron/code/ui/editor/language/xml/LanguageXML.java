@@ -29,8 +29,12 @@ public class LanguageXML implements EditorLanguage {
 
 	private final CodeEditor mEditor;
 
+	private final XMLAnalyzer mAnalyzer;
+
 	public LanguageXML(CodeEditor codeEditor) {
 		mEditor = codeEditor;
+
+		mAnalyzer = new XMLAnalyzer(codeEditor);
 	}
 
 	@Override
@@ -76,7 +80,7 @@ public class LanguageXML implements EditorLanguage {
 
 	@Override
 	public CodeAnalyzer getAnalyzer() {
-		return new XMLAnalyzer(mEditor);
+		return mAnalyzer;
 	}
 
 	@Override

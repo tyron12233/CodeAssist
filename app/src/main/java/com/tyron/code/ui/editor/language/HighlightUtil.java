@@ -103,4 +103,17 @@ public class HighlightUtil {
         }
         return end;
     }
+
+    /**
+     * Used in xml diagnostics where line is only given
+     */
+    public static void setErrorSpan(TextAnalyzeResult colors, int line) {
+        int lineCount = colors.getSpanMap().size();
+        int realLine = line - 1;
+        List<Span> spans = colors.getSpanMap().get(Math.min(realLine, lineCount - 1));
+
+        for (Span span : spans) {
+            span.problemFlags = Span.FLAG_ERROR;
+        }
+    }
 }
