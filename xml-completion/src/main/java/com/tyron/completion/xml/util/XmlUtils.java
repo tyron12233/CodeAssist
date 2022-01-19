@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.text.TextUtils;
 import android.util.Pair;
 
+import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;
@@ -141,8 +142,13 @@ public class XmlUtils {
         return false;
     }
 
-    public static boolean isIncrementalCompletion(CachedCompletion cachedCompletion, File file,
-                                            String prefix, int line, int column) {
+    public static boolean isIncrementalCompletion(CachedCompletion cachedCompletion,
+                                                  CompletionParameters parameters) {
+        File file = parameters.getFile();
+        String prefix = parameters.getPrefix();
+        int line = parameters.getLine();
+        int column = parameters.getColumn();
+
         prefix = partialIdentifier(prefix, prefix.length());
 
         if (line == -1) {

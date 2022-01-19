@@ -2,6 +2,7 @@ package com.tyron.completion.main;
 
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
+import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.progress.ProcessCanceledException;
@@ -63,13 +64,23 @@ public class CompletionEngine {
         CompletionList list = new CompletionList();
         list.items = new ArrayList<>();
 
+        CompletionParameters parameters = CompletionParameters.builder()
+                .setProject(project)
+                .setModule(module)
+                .setFile(file)
+                .setContents(contents)
+                .setPrefix(prefix)
+                .setLine(line)
+                .setColumn(column)
+                .setIndex(index)
+                .build();
+
         List<CompletionProvider> providers = getCompletionProviders(file);
         for (CompletionProvider provider : providers) {
             try {
                 ProgressManager.getInstance().setRunning(true);
                 ProgressManager.getInstance().setCanceled(false);
-                CompletionList complete = provider.complete(project, module, file, contents,
-                        prefix, line, column, index);
+                CompletionList complete = provider.complete(parameters);
                 list.items.addAll(complete.items);
             } catch(ProcessCanceledException e) {
                 return list;

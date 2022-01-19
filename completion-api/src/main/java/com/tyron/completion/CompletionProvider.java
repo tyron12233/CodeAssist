@@ -18,12 +18,5 @@ public abstract class CompletionProvider {
 
     public abstract boolean accept(File file);
 
-    public abstract CompletionList complete(Project project,
-                                            Module module,
-                                            File file,
-                                            String contents,
-                                            String prefix,
-                                            int line,
-                                            int column,
-                                            long index);
+    public abstract CompletionList complete(CompletionParameters parameters);
 }

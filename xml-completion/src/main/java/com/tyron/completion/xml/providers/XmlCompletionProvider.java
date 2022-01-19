@@ -18,6 +18,7 @@ import androidx.annotation.RequiresApi;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.model.CachedCompletion;
@@ -72,16 +73,17 @@ public class XmlCompletionProvider extends CompletionProvider {
     }
 
     @Override
-    public CompletionList complete(Project project, Module module, File file, String contents,
-                                   String prefix, int line, int column, long index) {
+    public CompletionList complete(CompletionParameters params) {
 
-        if (!(module instanceof AndroidModule)) {
+        if (!(params.getModule() instanceof AndroidModule)) {
             return CompletionList.EMPTY;
         }
 
-        String partialIdentifier = partialIdentifier(contents, (int) index);
+        String contents = params.getContents();
+        String prefix = params.getPrefix();
+        String partialIdentifier = partialIdentifier(contents, (int) params.getIndex());
 
-        if (isIncrementalCompletion(mCachedCompletion, file, prefix, line, column)) {
+        if (isIncrementalCompletion(mCachedCompletion, params)) {
             if (mCachedCompletion.getCompletionType() == XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE) {
                 mCachedCompletion.setFilterPrefix(prefix);
             } else {
@@ -99,8 +101,14 @@ public class XmlCompletionProvider extends CompletionProvider {
         }
         try {
             XmlCachedCompletion list =
-                    completeInternal(project, (AndroidModule) module,
-                            file, contents, prefix, line, column, index);
+                    completeInternal(params.getProject(),
+                            (AndroidModule) params.getModule(),
+                            params.getFile(),
+                            contents,
+                            prefix,
+                            params.getLine(),
+                            params.getColumn(),
+                            params.getIndex());
             mCachedCompletion = list;
             return list.getCompletionList();
         } catch (XmlPullParserException | IOException e) {
