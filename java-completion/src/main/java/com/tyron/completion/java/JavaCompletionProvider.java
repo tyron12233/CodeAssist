@@ -45,10 +45,14 @@ public class JavaCompletionProvider extends CompletionProvider {
             String partialIdentifier = partialIdentifier(params.getPrefix(), params.getPrefix().length());
             CompletionList cachedList = mCachedCompletion.getCompletionList();
             if (!cachedList.items.isEmpty()) {
-                List<CompletionItem> narrowedList =
-                        cachedList.items.stream().filter(item ->
-                                FuzzySearch.partialRatio(getLabel(item), partialIdentifier) > 70)
-                                .collect(Collectors.toList());
+                List<CompletionItem> narrowedList = cachedList.items.stream().filter(item ->
+                        FuzzySearch.partialRatio(getLabel(item), partialIdentifier) > 70).sorted((t1, t2) -> {
+                    String t1label = getLabel(t1);
+                    String t2label = getLabel(t2);
+                    int t1ratio = FuzzySearch.partialRatio(t1label, partialIdentifier);
+                    int t2ratio = FuzzySearch.partialRatio(t2label, partialIdentifier);
+                    return Integer.compare(t1ratio, t2ratio);
+                }).collect(Collectors.toList());
                 CompletionList completionList = new CompletionList();
                 completionList.items = narrowedList;
                 return completionList;
