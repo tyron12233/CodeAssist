@@ -8,7 +8,6 @@ import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.Token;
-import org.apache.commons.io.input.CharSequenceInputStream;
 import org.apache.commons.io.input.CharSequenceReader;
 
 import java.io.IOException;
@@ -102,6 +101,7 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
 
                 boolean skip = onNextToken(token, result);
                 if (skip) {
+                    mPreviousToken = token;
                     continue;
                 }
 
@@ -119,7 +119,7 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
                 result.determine(mPreviousToken.getLine() - 1);
             }
 
-            afterAnalyze(result);
+            afterAnalyze(content, result);
         } catch (IOException e) {
             // ignored
         }
@@ -128,7 +128,7 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
     /**
      * Called after the analysis has been done, used to finalize the {@link TextAnalyzeResult}
      */
-    protected void afterAnalyze(TextAnalyzeResult colors) {
+    protected void afterAnalyze(CharSequence content, TextAnalyzeResult colors) {
 
     }
 
