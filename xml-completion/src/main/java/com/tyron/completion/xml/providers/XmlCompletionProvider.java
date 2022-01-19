@@ -90,14 +90,16 @@ public class XmlCompletionProvider extends CompletionProvider {
                 mCachedCompletion.setFilterPrefix(partialIdentifier);
             }
             CompletionList completionList = mCachedCompletion.getCompletionList();
-            Collections.sort(completionList.items, (item1, item2) -> {
-                String filterPrefix = mCachedCompletion.getFilterPrefix();
-                int first = FuzzySearch.partialRatio(item1.label, filterPrefix);
-                int second = FuzzySearch.partialRatio(item2.label, filterPrefix);
-                return Integer.compare(first, second);
-            });
-            Collections.reverse(completionList.items);
-            return completionList;
+            if (!completionList.items.isEmpty()) {
+                Collections.sort(completionList.items, (item1, item2) -> {
+                    String filterPrefix = mCachedCompletion.getFilterPrefix();
+                    int first = FuzzySearch.partialRatio(item1.label, filterPrefix);
+                    int second = FuzzySearch.partialRatio(item2.label, filterPrefix);
+                    return Integer.compare(first, second);
+                });
+                Collections.reverse(completionList.items);
+                return completionList;
+            }
         }
         try {
             XmlCachedCompletion list =
