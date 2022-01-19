@@ -1,9 +1,7 @@
 package com.tyron.code.ui.editor.language.json;
 
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
-import com.tyron.code.ui.editor.language.groovy.GroovyLexer;
 
-import org.antlr.v4.runtime.BufferedTokenStream;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.Token;
@@ -92,7 +90,7 @@ public class JsonAnalyzer extends AbstractCodeAnalyzer {
     }
 
     @Override
-    protected void afterAnalyze(TextAnalyzeResult colors) {
+    protected void afterAnalyze(CharSequence content, TextAnalyzeResult colors) {
         if (mBlockLines.isEmpty()) {
             if (mMaxSwitch > mCurrSwitch) {
                 mMaxSwitch = mCurrSwitch;

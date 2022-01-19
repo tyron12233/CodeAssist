@@ -103,7 +103,7 @@ public class GroovyAnalyzer extends AbstractCodeAnalyzer {
     }
 
     @Override
-    protected void afterAnalyze(TextAnalyzeResult colors) {
+    protected void afterAnalyze(CharSequence content, TextAnalyzeResult colors) {
         if (mBlockLines.isEmpty()) {
             if (currSwitch > maxSwitch) {
                 maxSwitch = currSwitch;
