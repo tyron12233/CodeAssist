@@ -139,4 +139,8 @@ public class Presentation {
         fireBooleanPropertyChange(PROP_VISIBLE, old, visible);
         mIsVisible = visible;
     }
+
+    public String getDescription() {
+        return mDescriptionSupplier.get();
+    }
 }
