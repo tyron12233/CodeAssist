@@ -5,6 +5,9 @@ import android.os.Bundle;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.tyron.actions.ActionManager;
+import com.tyron.code.ui.main.action.compile.CompileActionGroup;
+import com.tyron.code.ui.main.action.project.ProjectActionGroup;
 import com.tyron.code.ui.project.ProjectManagerFragment;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
@@ -31,6 +34,10 @@ public class MainActivity extends AppCompatActivity {
                 engine.registerCompletionProvider(new XmlCompletionProvider());
                 engine.registerCompletionProvider(new AndroidManifestCompletionProvider());
             }
+        });
+        startupManager.addStartupActivity(() -> {
+            ActionManager.getInstance().registerAction(CompileActionGroup.ID, new CompileActionGroup());
+            ActionManager.getInstance().registerAction(ProjectActionGroup.ID, new ProjectActionGroup());
         });
         startupManager.startup();
 
