@@ -74,6 +74,10 @@ public class ImportClassAction extends AnAction {
             }
         }
 
+        if (classNames.isEmpty()) {
+            return;
+        }
+
         if (classNames.size() > 1) {
             presentation.setText(event.getDataContext().getString(R.string.import_class_title));
         } else {
