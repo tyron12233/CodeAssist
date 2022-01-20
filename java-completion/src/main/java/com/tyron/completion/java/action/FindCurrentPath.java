@@ -3,6 +3,7 @@ package com.tyron.completion.java.action;
 import com.android.tools.r8.graph.P;
 import com.tyron.completion.java.FindNewTypeDeclarationAt;
 
+import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ExpressionStatementTree;
@@ -12,6 +13,7 @@ import org.openjdk.source.tree.LambdaExpressionTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
+import org.openjdk.source.tree.PrimitiveTypeTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.VariableTree;
 import org.openjdk.source.util.JavacTask;
@@ -79,6 +81,35 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
             if (isInside(tree, cursor)) {
                 return getCurrentPath();
             }
+        }
+        return null;
+    }
+
+    @Override
+    public TreePath visitPrimitiveType(PrimitiveTypeTree t, Long find) {
+        if (isInside(t, find)) {
+            return getCurrentPath();
+        }
+        return super.visitPrimitiveType(t, find);
+    }
+
+    @Override
+    public TreePath visitIdentifier(IdentifierTree t, Long find) {
+        if (isInside(t, find)) {
+            return getCurrentPath();
+        }
+        return super.visitIdentifier(t, find);
+    }
+
+    @Override
+    public TreePath visitBlock(BlockTree t, Long find) {
+        TreePath smaller = super.visitBlock(t, find);
+        if (smaller != null) {
+            return smaller;
+        }
+
+        if (isInside(t, find)) {
+            return getCurrentPath();
         }
         return null;
     }
