@@ -10,8 +10,11 @@ import com.tyron.actions.ActionGroup;
 import com.tyron.actions.ActionManager;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.Presentation;
+
+import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -29,6 +32,10 @@ public class ActionManagerImpl extends ActionManager {
                     value.getTemplatePresentation(),
                     isContext,
                     isToolbar);
+
+            // Inject values
+            event.injectData(CommonDataKeys.CONTEXT, context);
+
             value.update(event);
             fillMenu(menu, value, event);
         }
@@ -64,6 +71,7 @@ public class ActionManagerImpl extends ActionManager {
 
         menuItem.setEnabled(presentation.isEnabled());
         menuItem.setVisible(presentation.isVisible());
+        menuItem.setIcon(presentation.getIcon());
         menuItem.setOnMenuItemClickListener(item -> {
             action.actionPerformed(event);
             return true;
@@ -71,12 +79,10 @@ public class ActionManagerImpl extends ActionManager {
     }
 
     private void fillSubMenu(SubMenu subMenu, AnAction action, AnActionEvent event) {
-        String id = getId(action);
-        assert id != null;
-
         Presentation presentation = action.getTemplatePresentation();
         MenuItem menuItem;
-        if (isGroup(id)) {
+
+        if (isGroup(action)) {
             ActionGroup group = (ActionGroup) action;
             SubMenu subSubMenu = subMenu.addSubMenu(presentation.getText());
             menuItem = subSubMenu.getItem();
@@ -100,6 +106,8 @@ public class ActionManagerImpl extends ActionManager {
 
         menuItem.setEnabled(presentation.isEnabled());
         menuItem.setVisible(presentation.isVisible());
+        menuItem.setIcon(presentation.getIcon());
+        menuItem.setContentDescription(presentation.getDescription());
         menuItem.setOnMenuItemClickListener(item -> {
             action.actionPerformed(event);
             return true;
@@ -134,6 +142,10 @@ public class ActionManagerImpl extends ActionManager {
 
     @Override
     public boolean isGroup(@NonNull String actionId) {
-        return mIdToAction.get(actionId) instanceof ActionGroup;
+        return isGroup(mIdToAction.get(actionId));
+    }
+
+    private boolean isGroup(AnAction action) {
+        return action instanceof ActionGroup;
     }
 }

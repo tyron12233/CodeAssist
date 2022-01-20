@@ -1,6 +1,7 @@
 package com.tyron.actions;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.RestrictTo;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 
@@ -47,5 +48,10 @@ public class AnActionEvent implements PlaceProvider {
 
     public DataContext getDataContext() {
         return mDataContext;
+    }
+
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    public <T> void injectData(Key<T> key, T value) {
+        mDataContext.putData(key, value);
     }
 }
