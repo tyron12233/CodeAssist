@@ -102,11 +102,11 @@ public class TreeFileManagerFragment extends Fragment {
             @Override
             public void onNodeToggled(TreeNode<TreeFile> treeNode, boolean expanded) {
                 if (treeNode.isLeaf()) {
-                    FileEditorManager.getInstance().openFile(requireContext(),
-                            treeNode.getValue().getFile(),
-                            fileEditor -> {
-                                mMainViewModel.openFile(fileEditor);;
-                            });
+                    if (treeNode.getValue().getFile().isFile()) {
+                        FileEditorManager.getInstance().openFile(requireContext(), treeNode.getValue().getFile(), fileEditor -> {
+                            mMainViewModel.openFile(fileEditor);
+                        });
+                    }
                 }
             }
 

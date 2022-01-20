@@ -47,6 +47,9 @@ public abstract class FileEditorManager {
      */
     public void openFile(@NonNull Context context, File file, Consumer<FileEditor> callback) {
         FileEditor[] fileEditors = openFile(file, true);
+        if (fileEditors.length == 0) {
+            return;
+        }
         if (fileEditors.length > 1) {
             CharSequence[] items = Arrays.stream(fileEditors)
                     .map(FileEditor::getName)
