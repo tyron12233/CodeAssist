@@ -9,6 +9,7 @@ import com.tyron.actions.ActionManager;
 import com.tyron.code.ui.editor.action.CloseAllEditorAction;
 import com.tyron.code.ui.editor.action.CloseFileEditorAction;
 import com.tyron.code.ui.editor.action.CloseOtherEditorAction;
+import com.tyron.code.ui.editor.action.DiagnosticInfoAction;
 import com.tyron.code.ui.main.action.compile.CompileActionGroup;
 import com.tyron.code.ui.main.action.project.ProjectActionGroup;
 import com.tyron.code.ui.project.ProjectManagerFragment;
@@ -50,6 +51,8 @@ public class MainActivity extends AppCompatActivity {
             manager.registerAction(CloseOtherEditorAction.ID, new CloseOtherEditorAction());
             manager.registerAction(CloseAllEditorAction.ID, new CloseAllEditorAction());
 
+            // editor actions
+            manager.registerAction(DiagnosticInfoAction.ID, new DiagnosticInfoAction());
             // java actions
             CompletionModule.registerActions(manager);
         });
