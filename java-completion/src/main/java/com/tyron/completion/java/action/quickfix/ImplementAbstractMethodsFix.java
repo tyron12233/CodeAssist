@@ -5,41 +5,76 @@ import android.view.MenuItem;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.actions.AnAction;
+import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
+import com.tyron.actions.Presentation;
+import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
+import com.tyron.completion.java.action.CommonJavaContextKeys;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
+import com.tyron.completion.java.action.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.ImplementAbstractMethods;
 import com.tyron.completion.java.rewrite.Rewrite;
+import com.tyron.completion.java.util.DiagnosticUtil;
+import com.tyron.editor.Editor;
 
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
-public class ImplementAbstractMethodsFix extends ActionProvider {
+import java.io.File;
+
+public class ImplementAbstractMethodsFix extends AnAction {
+
+    public static final String ID = "javaImplementAbstractMethodsFix";
 
     public static final String ERROR_CODE = "compiler.err.does.not.override.abstract";
 
     @Override
-    public boolean isApplicable(ActionContext context, @Nullable String errorCode) {
-       return ERROR_CODE.equals(errorCode);
+    public void update(@NonNull AnActionEvent event) {
+        Presentation presentation = event.getPresentation();
+        presentation.setVisible(false);
+
+        Diagnostic<?> diagnostic = event.getData(CommonJavaContextKeys.DIAGNOSTIC);
+        if (diagnostic == null) {
+            return;
+        }
+
+        ClientCodeWrapper.DiagnosticSourceUnwrapper diagnosticSourceUnwrapper = DiagnosticUtil.getDiagnosticSourceUnwrapper(diagnostic);
+        if (diagnosticSourceUnwrapper == null) {
+            return;
+        }
+
+        if (!ERROR_CODE.equals(diagnostic.getCode())) {
+            return;
+        }
+
+        JavaCompilerService compiler = event.getData(CommonJavaContextKeys.COMPILER);
+        if (compiler == null) {
+            return;
+        }
+
+        presentation.setVisible(true);
+        presentation.setText(event.getDataContext().getString(R.string.menu_quickfix_implement_abstract_methods_title));
     }
 
     @Override
-    public void addMenus(@NonNull ActionContext context) {
-        Diagnostic<? extends JavaFileObject> diagnostic = context.getDiagnostic();
-        if (diagnostic instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
-            JCDiagnostic d = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) diagnostic).d;
-            Rewrite rewrite = new ImplementAbstractMethods(d);
-            Action action = new Action(rewrite);
-
-            String title = context.getContext().getString(R.string.menu_quickfix_implement_abstract_methods_title);
-            MenuItem item = context.addMenu("quickFix", title);
-            item.setOnMenuItemClickListener(i -> {
-                context.performAction(action);
-                return true;
-            });
+    public void actionPerformed(@NonNull AnActionEvent e) {
+        Editor editor = e.getData(CommonDataKeys.EDITOR);
+        File file = e.getData(CommonDataKeys.FILE);
+        JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
+        Diagnostic<?> diagnostic = e.getData(CommonJavaContextKeys.DIAGNOSTIC);
+        ClientCodeWrapper.DiagnosticSourceUnwrapper diagnosticSourceUnwrapper =
+                DiagnosticUtil.getDiagnosticSourceUnwrapper(diagnostic);
+        if (diagnosticSourceUnwrapper == null) {
+            return;
         }
+        JCDiagnostic jcDiagnostic = diagnosticSourceUnwrapper.d;
+        Rewrite rewrite = new ImplementAbstractMethods(jcDiagnostic);
+        RewriteUtil.performRewrite(editor, file, compiler, rewrite);
     }
 }
