@@ -306,6 +306,10 @@ public class CodeEditor extends View implements ContentListener, TextAnalyzer.Ca
         }
     };
 
+    public List<DiagnosticWrapper> getDiagnostics() {
+        return mDiagnostics;
+    }
+
     public void setDiagnosticsListener(DiagnosticsListener diagnosticsListener) {
         mDiagnosticsListener = diagnosticsListener;
     }
