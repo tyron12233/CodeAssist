@@ -11,9 +11,13 @@ import androidx.annotation.VisibleForTesting;
 import com.tyron.actions.ActionManager;
 import com.tyron.builder.BuildModule;
 import com.tyron.common.util.Decompress;
+import com.tyron.completion.java.action.context.IntroduceLocalVariableAction;
+import com.tyron.completion.java.action.context.OverrideInheritedMethodsAction;
 import com.tyron.completion.java.action.quickfix.AddCatchClauseAction;
 import com.tyron.completion.java.action.quickfix.AddThrowsAction;
+import com.tyron.completion.java.action.quickfix.ImplementAbstractMethodsFix;
 import com.tyron.completion.java.action.quickfix.ImportClassAction;
+import com.tyron.completion.java.action.quickfix.ImportClassFieldFix;
 import com.tyron.completion.java.action.quickfix.SurroundWithTryCatchAction;
 
 import java.io.File;
@@ -30,6 +34,10 @@ public class CompletionModule {
         actionManager.registerAction(AddCatchClauseAction.ID, new AddCatchClauseAction());
         actionManager.registerAction(SurroundWithTryCatchAction.ID, new SurroundWithTryCatchAction());
         actionManager.registerAction(ImportClassAction.ID, new ImportClassAction());
+        actionManager.registerAction(ImportClassFieldFix.ID, new ImportClassFieldFix());
+        actionManager.registerAction(IntroduceLocalVariableAction.ID, new IntroduceLocalVariableAction());
+        actionManager.registerAction(ImplementAbstractMethodsFix.ID, new ImplementAbstractMethodsFix());
+        actionManager.registerAction(OverrideInheritedMethodsAction.ID, new OverrideInheritedMethodsAction());
     }
 
 

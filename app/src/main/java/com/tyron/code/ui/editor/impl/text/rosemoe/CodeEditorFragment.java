@@ -3,95 +3,65 @@ package com.tyron.code.ui.editor.impl.text.rosemoe;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.util.Log;
-import android.view.Gravity;
 import android.view.LayoutInflater;
-import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
-import android.widget.PopupWindow;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.widget.TooltipCompat;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
-import com.google.android.material.tooltip.TooltipDrawable;
 import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.util.DataContextUtils;
-import com.tyron.builder.log.LogViewModel;
-import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.code.BuildConfig;
-import com.tyron.code.ui.editor.Savable;
-import com.tyron.code.ui.main.MainFragment;
-import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
+import com.tyron.builder.log.LogViewModel;
+import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.layoutEditor.LayoutEditorFragment;
+import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.Parser;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
 import com.tyron.completion.java.action.FindCurrentPath;
-import com.tyron.completion.java.action.api.JavaActionManager;
-import com.tyron.completion.java.action.api.EditorInterface;
-import com.tyron.completion.java.provider.FindHelper;
-import com.tyron.completion.java.rewrite.EditHelper;
-import com.tyron.completion.java.util.ActionUtil;
-import com.tyron.completion.java.util.DiagnosticUtil;
-import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.java.rewrite.AddImport;
+import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.model.CompletionItem;
+import com.tyron.completion.model.TextEdit;
 
 import org.apache.commons.io.FileUtils;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileListener;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManagerListener;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFilePropertyEvent;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileSystem;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.ex.VirtualFileManagerEx;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.VirtualFileManagerImpl;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.VariableElement;
-import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import io.github.rosemoe.sora.interfaces.EditorEventListener;
 import io.github.rosemoe.sora.interfaces.EditorLanguage;
@@ -342,11 +312,14 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     JavaCompilerService compiler = service.getCompiler(currentProject,
                             (JavaModule) currentModule);
                     if (compiler.isReady()) {
-                        ParseTask parse = compiler.parse(mCurrentFile.toPath());
-                        FindCurrentPath findCurrentPath = new FindCurrentPath(parse.task);
-                        TreePath currentPath = findCurrentPath.scan(parse.root,
-                                (long) mEditor.getCursor().getLeft());
-                        dataContext.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
+                        compiler.compile(mCurrentFile.toPath()).run(task -> {
+                            if (task != null) {
+                                FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
+                                TreePath currentPath = findCurrentPath.scan(task.root(),
+                                        (long) mEditor.getCursor().getLeft());
+                                dataContext.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
+                            }
+                        });
                         dataContext.putData(CommonJavaContextKeys.COMPILER, compiler);
 
                         DiagnosticWrapper diagnosticWrapper =
@@ -521,63 +494,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     public void analyze() {
         if (mEditor != null) {
             mEditor.analyze();
-        }
-    }
-
-    private void addCodeActions(Menu menu, JavaCompilerService compiler) {
-        if (compiler == null) {
-            return;
-        }
-        try {
-            final Path current = mEditor.getCurrentFile().toPath();
-            JavaActionManager.getInstance().addActions(requireContext(), menu, compiler, current, mEditor.getCursor().getLeft(), new EditorInterface() {
-                @Override
-                public int getCharIndex(int line , int column) {
-                    return mEditor.getText().getCharIndex(line, column);
-                }
-
-                @Override
-                public CharPositionWrapper getCharPosition(int index) {
-                    CharPosition charPosition =
-                            mEditor.getText().getIndexer().getCharPosition(index);
-                    CharPositionWrapper wrapper = new CharPositionWrapper();
-                    wrapper.column = charPosition.column;
-                    wrapper.index = charPosition.index;
-                    wrapper.line = charPosition.line;
-                    return wrapper;
-                }
-
-                @Override
-                public void insert(int line, int column, String string) {
-                    mEditor.getText().insert(line, column, string);
-                }
-
-                @Override
-                public void replace(int line, int column, int endLine, int endColumn,
-                                    String string) {
-                    mEditor.getText().replace(line, column, endLine, endColumn, string);
-                }
-
-                @Override
-                public void formatCodeAsync(int startIndex, int endIndex) {
-                    mEditor.formatCodeAsync();
-                }
-
-                @Override
-                public void beginBatchEdit() {
-                    mEditor.getText().beginBatchEdit();
-                }
-
-                @Override
-                public void endBatchEdit() {
-                    mEditor.getText().endBatchEdit();
-                }
-            });
-        } catch (Throwable e) {
-            compiler.close();
-            if (BuildConfig.DEBUG) {
-                Log.d("getCodeActions()", "Unable to get code actions", e);
-            }
         }
     }
 
