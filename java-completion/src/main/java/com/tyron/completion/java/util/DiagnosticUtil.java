@@ -78,7 +78,7 @@ public class DiagnosticUtil {
 
     public static DiagnosticWrapper getXmlDiagnosticWrapper(List<DiagnosticWrapper> diagnostics, int line) {
         for (DiagnosticWrapper diagnostic : diagnostics) {
-            if (diagnostic.getLineNumber() == line) {
+            if (diagnostic.getLineNumber() - 1 == line) {
                 return diagnostic;
             }
         }

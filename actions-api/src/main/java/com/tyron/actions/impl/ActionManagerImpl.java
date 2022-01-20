@@ -107,7 +107,9 @@ public class ActionManagerImpl extends ActionManager {
 
         menuItem.setEnabled(presentation.isEnabled());
         menuItem.setVisible(presentation.isVisible());
-        menuItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+        if (presentation.getIcon() != null) {
+            menuItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+        }
         menuItem.setIcon(presentation.getIcon());
         menuItem.setContentDescription(presentation.getDescription());
         menuItem.setOnMenuItemClickListener(item -> {
