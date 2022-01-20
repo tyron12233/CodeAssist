@@ -38,8 +38,8 @@ public class Presentation {
     private boolean mIsVisible;
     private boolean mIsEnabled;
 
-    private Supplier<String> mTextSupplier;
-    private Supplier<String> mDescriptionSupplier;
+    private Supplier<String> mTextSupplier = NULL_STRING;
+    private Supplier<String> mDescriptionSupplier = NULL_STRING;
 
     private PropertyChangeSupport mChangeSupport;
 
@@ -114,6 +114,10 @@ public class Presentation {
 
     public void setIcon(Drawable icon) {
         mIcon = icon;
+    }
+
+    public Drawable getIcon() {
+        return mIcon;
     }
 
     public boolean isVisible() {
