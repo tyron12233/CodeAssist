@@ -36,7 +36,7 @@ public class Presentation {
 
     private Drawable mIcon;
     private boolean mIsVisible;
-    private boolean mIsEnabled;
+    private boolean mIsEnabled = true;
 
     private Supplier<String> mTextSupplier = NULL_STRING;
     private Supplier<String> mDescriptionSupplier = NULL_STRING;
