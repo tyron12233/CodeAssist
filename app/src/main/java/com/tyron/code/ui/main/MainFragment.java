@@ -27,6 +27,7 @@ import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
+import com.tyron.actions.util.DataContextUtils;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
@@ -400,15 +401,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                     new IntentFilter(((AndroidModule) module).getPackageName() + ".LOG"));
         }
     }
-
-    private DataContext getDataContext(View view) {
-        Context context = view.getContext();
-        if (context instanceof DataContext) {
-            return (DataContext) context;
-        }
-        return new DataContext(context);
-    }
-
     private void injectData(DataContext context) {
         context.putData(CommonDataKeys.PROJECT, ProjectManager.getInstance().getCurrentProject());
         context.putData(MAIN_VIEW_MODEL_KEY, mMainViewModel);
@@ -419,7 +411,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     public void refreshToolbar() {
         mToolbar.getMenu().clear();
 
-        DataContext context = getDataContext(mToolbar);
+        DataContext context = DataContextUtils.getDataContext(mToolbar);
         injectData(context);
 
         ActionManager.getInstance().fillMenu(context,
