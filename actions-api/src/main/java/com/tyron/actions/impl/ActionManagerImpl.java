@@ -28,6 +28,7 @@ public class ActionManagerImpl extends ActionManager {
                     value.getTemplatePresentation(),
                     isContext,
                     isToolbar);
+            value.update(event);
             fillMenu(menu, value, event);
         }
     }
@@ -35,8 +36,8 @@ public class ActionManagerImpl extends ActionManager {
     private void fillMenu(Menu menu, AnAction action, AnActionEvent event) {
         String id = getId(action);
         assert id != null;
-
         Presentation presentation = event.getPresentation();
+
 
         MenuItem menuItem;
         if (isGroup(id)) {
