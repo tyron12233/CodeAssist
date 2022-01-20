@@ -52,7 +52,7 @@ public class OverrideInheritedMethodsAction extends AnAction {
             return;
         }
 
-        if (!(currentPath instanceof ClassTree)) {
+        if (!(currentPath.getLeaf() instanceof ClassTree)) {
             return;
         }
 
