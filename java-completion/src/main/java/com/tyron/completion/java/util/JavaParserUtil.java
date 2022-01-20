@@ -534,6 +534,11 @@ public class JavaParserUtil {
     public static Parameter toParameter(TypeMirror type, VariableElement name) {
         Parameter parameter = new Parameter();
         parameter.setType(EditHelper.printType(type));
+        if (parameter.getType().isArrayType()) {
+            if (((org.openjdk.tools.javac.code.Type.ArrayType) type).isVarargs()) {
+                parameter.setVarArgs(true);
+            }
+        }
         parameter.setName(name.getSimpleName().toString());
         parameter.setModifiers(name.getModifiers().stream()
                 .map(JavaParserUtil::toModifier)
