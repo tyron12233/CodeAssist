@@ -13,18 +13,23 @@ import org.openjdk.javax.lang.model.type.ExecutableType;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.doctree.ThrowsTree;
+import org.openjdk.source.tree.AnnotationTree;
 import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.EnhancedForLoopTree;
 import org.openjdk.source.tree.ExpressionStatementTree;
 import org.openjdk.source.tree.ForLoopTree;
+import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.IfTree;
 import org.openjdk.source.tree.ImportTree;
+import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
+import org.openjdk.source.tree.ParameterizedTypeTree;
 import org.openjdk.source.tree.ParenthesizedTree;
+import org.openjdk.source.tree.PrimitiveTypeTree;
 import org.openjdk.source.tree.ReturnTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.TryTree;
@@ -47,6 +52,43 @@ public class ActionUtil {
             return false;
         }
 
+        if (path.getLeaf() instanceof ParameterizedTypeTree) {
+            return false;
+        }
+
+        if (path.getLeaf() instanceof AnnotationTree) {
+            return false;
+        }
+
+        if (path.getLeaf() instanceof JCTree.JCVariableDecl) {
+            return false;
+        }
+
+        if (path.getLeaf() instanceof MemberSelectTree) {
+            return ActionUtil.canIntroduceLocalVariable(path.getParentPath());
+        }
+
+        if (path.getLeaf() instanceof PrimitiveTypeTree) {
+            return ActionUtil.canIntroduceLocalVariable(path.getParentPath());
+        }
+
+        if (path.getLeaf() instanceof IdentifierTree) {
+            return ActionUtil.canIntroduceLocalVariable(path.getParentPath());
+        }
+
+        if (path.getLeaf() instanceof MethodInvocationTree) {
+            JCTree.JCMethodInvocation methodInvocation = (JCTree.JCMethodInvocation) path.getLeaf();
+            // void return type
+            if (isVoid(methodInvocation)) {
+                return false;
+            }
+
+            TreePath decl = TreeUtil.findParentOfType(path, JCTree.JCVariableDecl.class);
+            if (decl != null) {
+                return false;
+            }
+        }
+
         if (path.getLeaf() instanceof BlockTree) {
             // method() { cursor }
             if (parent.getLeaf() instanceof MethodTree) {
@@ -55,9 +97,6 @@ public class ActionUtil {
         }
 
         if (parent == null) {
-            return false;
-        }
-        if (parent.getLeaf() instanceof JCTree.JCVariableDecl) {
             return false;
         }
 
@@ -109,6 +148,13 @@ public class ActionUtil {
             return false;
         }
         return !(parent.getLeaf() instanceof ThrowsTree);
+    }
+
+    private static boolean isVoid(JCTree.JCMethodInvocation methodInvocation) {
+        if (!methodInvocation.type.isPrimitive()) {
+            return methodInvocation.type.isPrimitiveOrVoid();
+        }
+        return false;
     }
 
     public static TreePath findSurroundingPath(TreePath path) {
