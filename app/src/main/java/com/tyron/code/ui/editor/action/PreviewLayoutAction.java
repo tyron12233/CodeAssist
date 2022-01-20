@@ -1,7 +1,10 @@
 package com.tyron.code.ui.editor.action;
 
+import android.view.View;
+
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentActivity;
 
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
@@ -12,6 +15,7 @@ import com.tyron.code.ui.editor.api.FileEditor;
 import com.tyron.code.ui.editor.impl.xml.LayoutEditor;
 import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
 import com.tyron.code.ui.main.MainFragment;
+import com.tyron.code.util.AndroidUtilities;
 
 public class PreviewLayoutAction extends AnAction {
 
@@ -39,6 +43,16 @@ public class PreviewLayoutAction extends AnAction {
     public void actionPerformed(@NonNull AnActionEvent e) {
         FileEditor fileEditor = e.getData(MainFragment.FILE_EDITOR_KEY);
         Fragment fragment = fileEditor.getFragment();
+        if (fragment == null || fragment.isDetached()) {
+            return;
+        }
+        FragmentActivity activity = fragment.requireActivity();
+        View currentFocus = activity.getCurrentFocus();
+        if (currentFocus == null) {
+            currentFocus = new View(activity);
+        }
+        AndroidUtilities.hideKeyboard(currentFocus);
+
         if (fragment instanceof LayoutTextEditorFragment) {
             ((LayoutTextEditorFragment) fragment).preview();
         }
