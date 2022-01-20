@@ -20,6 +20,7 @@ import com.tyron.code.R;
 import com.tyron.code.ui.editor.api.FileEditorManager;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
+import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.editor.adapter.PageAdapter;
 
@@ -122,6 +123,9 @@ public class EditorContainerFragment extends Fragment {
                 if (fragment instanceof CodeEditorFragment) {
                     ((CodeEditorFragment) fragment).analyze();
                 }
+
+                getParentFragmentManager()
+                        .setFragmentResult(MainFragment.REFRESH_TOOLBAR_KEY, Bundle.EMPTY);
             }
         });
         new TabLayoutMediator(mTabLayout, mPager, true, false, (tab, pos) -> {
