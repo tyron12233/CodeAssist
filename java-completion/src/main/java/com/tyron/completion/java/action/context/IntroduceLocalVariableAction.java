@@ -1,11 +1,7 @@
 package com.tyron.completion.java.action.context;
 
-import android.content.Context;
-import android.view.MenuItem;
-
 import androidx.annotation.NonNull;
 
-import com.android.tools.r8.internal.ev;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
@@ -15,9 +11,6 @@ import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.action.api.Action;
-import com.tyron.completion.java.action.api.ActionContext;
-import com.tyron.completion.java.action.api.ActionProvider;
 import com.tyron.completion.java.action.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.IntroduceLocalVariable;
 import com.tyron.completion.java.rewrite.Rewrite;
@@ -26,18 +19,13 @@ import com.tyron.editor.Editor;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.TypeParameterElement;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.source.tree.Scope;
-import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
 import java.io.File;
-import java.util.List;
 
 public class IntroduceLocalVariableAction extends AnAction {
 

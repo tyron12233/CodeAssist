@@ -1,22 +1,15 @@
 package com.tyron.completion.java.action.context;
 
-import android.app.AlertDialog;
-import android.view.MenuItem;
-
 import androidx.annotation.NonNull;
 
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.Presentation;
-import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.action.api.Action;
-import com.tyron.completion.java.action.api.ActionContext;
-import com.tyron.completion.java.action.api.ActionProvider;
 import com.tyron.completion.java.rewrite.OverrideInheritedMethod;
 import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.DiagnosticUtil;
@@ -29,7 +22,6 @@ import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.TypeElement;
 import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 

@@ -11,15 +11,10 @@ import com.tyron.actions.Presentation;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.action.api.ActionContext;
-import com.tyron.completion.java.action.api.ActionProvider;
 import com.tyron.completion.java.hover.HoverProvider;
 import com.tyron.editor.Editor;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
 
 import java.io.File;
 import java.util.List;

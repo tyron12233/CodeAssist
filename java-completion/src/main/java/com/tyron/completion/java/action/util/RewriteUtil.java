@@ -1,7 +1,6 @@
 package com.tyron.completion.java.action.util;
 
 import com.tyron.completion.java.JavaCompilerService;
-import com.tyron.completion.java.action.api.EditorInterface;
 import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.ThreadUtil;
 import com.tyron.completion.model.Range;
