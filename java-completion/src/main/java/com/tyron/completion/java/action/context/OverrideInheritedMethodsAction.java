@@ -1,5 +1,7 @@
 package com.tyron.completion.java.action.context;
 
+import android.app.AlertDialog;
+
 import androidx.annotation.NonNull;
 
 import com.tyron.actions.AnAction;
@@ -10,6 +12,7 @@ import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
+import com.tyron.completion.java.action.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.OverrideInheritedMethod;
 import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.DiagnosticUtil;
@@ -24,6 +27,7 @@ import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.model.FilteredMemberList;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -65,7 +69,19 @@ public class OverrideInheritedMethodsAction extends AnAction {
         JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
         TreePath currentPath = e.getData(CommonJavaContextKeys.CURRENT_PATH);
 
-        performInternal(compiler, file.toPath(), currentPath, editor.getCaret().getStart());
+        Map<String, Rewrite> rewriteMap = performInternal(compiler, file.toPath(),
+                currentPath, editor.getCaret().getStart());
+
+        String[] titles = rewriteMap.keySet().toArray(new String[0]);
+
+        new AlertDialog.Builder(e.getDataContext())
+                .setTitle(R.string.menu_quickfix_implement_abstract_methods_title)
+                .setItems(titles, (d, which) -> {
+                    Rewrite rewrite = rewriteMap.get(titles[which]);
+                    RewriteUtil.performRewrite(editor, file, compiler, rewrite);
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private Map<String, Rewrite> performInternal(JavaCompilerService compiler,
