@@ -76,7 +76,7 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
             return smaller;
         }
         if (tree instanceof JCTree.JCMethodInvocation) {
-            if (isInside(tree, cursor - 1)) {
+            if (isInside(tree, cursor)) {
                 return getCurrentPath();
             }
         }
