@@ -130,7 +130,7 @@ public class Presentation {
         mIsEnabled = enabled;
     }
 
-    private void setVisible(boolean visible) {
+    public void setVisible(boolean visible) {
         boolean old = mIsVisible;
         fireBooleanPropertyChange(PROP_VISIBLE, old, visible);
         mIsVisible = visible;
