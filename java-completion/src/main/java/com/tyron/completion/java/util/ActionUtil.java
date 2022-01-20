@@ -41,10 +41,19 @@ import java.util.stream.Collectors;
 public class ActionUtil {
 
     public static boolean canIntroduceLocalVariable(@NonNull TreePath path) {
+        TreePath parent = path.getParentPath();
+
         if (path.getLeaf() instanceof MethodTree) {
             return false;
         }
-        TreePath parent = path.getParentPath();
+
+        if (path.getLeaf() instanceof BlockTree) {
+            // method() { cursor }
+            if (parent.getLeaf() instanceof MethodTree) {
+                return false;
+            }
+        }
+
         if (parent == null) {
             return false;
         }
