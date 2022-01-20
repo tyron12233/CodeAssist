@@ -6,6 +6,9 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.tyron.actions.ActionManager;
+import com.tyron.code.ui.editor.action.CloseAllEditorAction;
+import com.tyron.code.ui.editor.action.CloseFileEditorAction;
+import com.tyron.code.ui.editor.action.CloseOtherEditorAction;
 import com.tyron.code.ui.main.action.compile.CompileActionGroup;
 import com.tyron.code.ui.main.action.project.ProjectActionGroup;
 import com.tyron.code.ui.project.ProjectManagerFragment;
@@ -36,8 +39,15 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         startupManager.addStartupActivity(() -> {
-            ActionManager.getInstance().registerAction(CompileActionGroup.ID, new CompileActionGroup());
-            ActionManager.getInstance().registerAction(ProjectActionGroup.ID, new ProjectActionGroup());
+            ActionManager manager = ActionManager.getInstance();
+            // main toolbar actions
+            manager.registerAction(CompileActionGroup.ID, new CompileActionGroup());
+            manager.registerAction(ProjectActionGroup.ID, new ProjectActionGroup());
+
+            // editor tab actions
+            manager.registerAction(CloseFileEditorAction.ID, new CloseFileEditorAction());
+            manager.registerAction(CloseOtherEditorAction.ID, new CloseOtherEditorAction());
+            manager.registerAction(CloseAllEditorAction.ID, new CloseAllEditorAction());
         });
         startupManager.startup();
 

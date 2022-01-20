@@ -11,4 +11,9 @@ public class ActionPlaces {
      * Inside a CodeEditorFragment
      */
     public static final String EDITOR = "editor";
+
+    /**
+     * The tab layout in an EditorContainerFragment
+     */
+    public static final String EDITOR_TAB = "editorTab";
 }

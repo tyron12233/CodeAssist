@@ -192,4 +192,9 @@
 
     <!-- File Editor Manager -->
     <string name="file_editor_selection_title">Which editor would you like to open?</string>
+
+    <!-- Editor tabs -->
+    <string name="menu_close_file">Close</string>
+    <string name="menu_close_others">Close others</string>
+    <string name="menu_close_all">Close all</string>
 </resources>

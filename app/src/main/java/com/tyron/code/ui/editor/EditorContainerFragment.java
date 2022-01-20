@@ -16,6 +16,11 @@ import androidx.viewpager2.widget.ViewPager2;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
+import com.tyron.actions.ActionManager;
+import com.tyron.actions.ActionPlaces;
+import com.tyron.actions.CommonDataKeys;
+import com.tyron.actions.DataContext;
+import com.tyron.actions.util.DataContextUtils;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.api.FileEditorManager;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
@@ -23,6 +28,9 @@ import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.editor.adapter.PageAdapter;
+import com.tyron.code.ui.project.ProjectManager;
+
+import org.jetbrains.kotlin.ir.interpreter.state.Common;
 
 import java.io.File;
 import java.util.Objects;
@@ -97,22 +105,33 @@ public class EditorContainerFragment extends Fragment {
             @Override
             public void onTabReselected(TabLayout.Tab p1) {
                 PopupMenu popup = new PopupMenu(requireActivity(), p1.view);
-                popup.getMenu().add(0, 0, 1, "Close");
-                popup.getMenu().add(0, 1, 2, "Close others");
-                popup.getMenu().add(0, 2, 3, "Close all");
-                popup.setOnMenuItemClickListener(item -> {
-                    switch (item.getItemId()) {
-                        case 0:
-                            mMainViewModel.removeFile(mMainViewModel.getCurrentFileEditor().getFile());
-                            break;
-                        case 1:
-                            mMainViewModel.removeOthers(mMainViewModel.getCurrentFileEditor().getFile());
-                            break;
-                        case 2:
-                            mMainViewModel.clear();
-                    }
-                    return true;
-                });
+
+                DataContext dataContext = DataContextUtils.getDataContext(mTabLayout);
+                dataContext.putData(CommonDataKeys.PROJECT, ProjectManager.getInstance().getCurrentProject());
+                dataContext.putData(CommonDataKeys.FRAGMENT, EditorContainerFragment.this);
+                dataContext.putData(MainFragment.MAIN_VIEW_MODEL_KEY, mMainViewModel);
+                dataContext.putData(MainFragment.FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
+
+                ActionManager.getInstance().fillMenu(dataContext,
+                        popup.getMenu(), ActionPlaces.EDITOR_TAB,
+                        true,
+                        false);
+//                popup.getMenu().add(0, 0, 1, "Close");
+//                popup.getMenu().add(0, 1, 2, "Close others");
+//                popup.getMenu().add(0, 2, 3, "Close all");
+//                popup.setOnMenuItemClickListener(item -> {
+//                    switch (item.getItemId()) {
+//                        case 0:
+//                            mMainViewModel.removeFile(mMainViewModel.getCurrentFileEditor().getFile());
+//                            break;
+//                        case 1:
+//                            mMainViewModel.removeOthers(mMainViewModel.getCurrentFileEditor().getFile());
+//                            break;
+//                        case 2:
+//                            mMainViewModel.clear();
+//                    }
+//                    return true;
+//                });
                 popup.show();
             }
 
