@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-   <io.github.rosemoe.sora.widget.CodeEditor
+   <com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView
        android:id="@+id/code_editor"
        android:layout_width="match_parent"
        android:layout_height="match_parent"/>
