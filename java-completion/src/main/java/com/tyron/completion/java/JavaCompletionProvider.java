@@ -87,7 +87,7 @@ public class JavaCompletionProvider extends CompletionProvider {
             if (BuildConfig.DEBUG) {
                 Log.e("JavaCompletionProvider", "Unable to get completions", e);
             }
-            compilerProvider.destroy();
+            service.close();
         } finally {
             service.close();
         }
