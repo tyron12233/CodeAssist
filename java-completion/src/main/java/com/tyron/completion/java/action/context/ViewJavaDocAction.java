@@ -4,6 +4,7 @@ import android.app.AlertDialog;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
@@ -25,6 +26,10 @@ public class ViewJavaDocAction extends AnAction {
     public void update(@NonNull AnActionEvent event) {
         Presentation presentation = event.getPresentation();
         presentation.setVisible(false);
+
+        if (!ActionPlaces.EDITOR.equals(event.getPlace())) {
+            return;
+        }
 
         File file = event.getData(CommonDataKeys.FILE);
         if (file == null) {

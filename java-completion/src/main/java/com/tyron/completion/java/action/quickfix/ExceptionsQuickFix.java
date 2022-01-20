@@ -2,6 +2,7 @@ package com.tyron.completion.java.action.quickfix;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
@@ -19,10 +20,14 @@ public abstract class ExceptionsQuickFix extends AnAction {
 
     @Override
     public void update(@NonNull AnActionEvent event) {
-        Diagnostic<?> diagnostic = event.getData(CommonDataKeys.DIAGNOSTIC);
-
         event.getPresentation().setVisible(false);
+
+        Diagnostic<?> diagnostic = event.getData(CommonDataKeys.DIAGNOSTIC);
         if (diagnostic == null) {
+            return;
+        }
+
+        if (!ActionPlaces.EDITOR.equals(event.getPlace())) {
             return;
         }
 

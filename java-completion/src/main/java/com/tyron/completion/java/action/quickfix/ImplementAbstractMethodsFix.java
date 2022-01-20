@@ -2,6 +2,7 @@ package com.tyron.completion.java.action.quickfix;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
@@ -37,7 +38,11 @@ public class ImplementAbstractMethodsFix extends AnAction {
             return;
         }
 
-        ClientCodeWrapper.DiagnosticSourceUnwrapper diagnosticSourceUnwrapper = DiagnosticUtil.getDiagnosticSourceUnwrapper(diagnostic);
+        if (!ActionPlaces.EDITOR.equals(event.getPlace())) {
+            return;
+        }
+
+            ClientCodeWrapper.DiagnosticSourceUnwrapper diagnosticSourceUnwrapper = DiagnosticUtil.getDiagnosticSourceUnwrapper(diagnostic);
         if (diagnosticSourceUnwrapper == null) {
             return;
         }
