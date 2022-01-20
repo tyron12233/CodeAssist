@@ -5,6 +5,7 @@ import android.content.Context;
 import androidx.fragment.app.Fragment;
 
 import com.tyron.builder.project.Project;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 
@@ -31,4 +32,6 @@ public class CommonDataKeys {
      * The current opened project
      */
     public static final Key<Project> PROJECT = Key.create("project");
+
+    public static final Key<Editor> EDITOR = Key.create("editor");
 }
