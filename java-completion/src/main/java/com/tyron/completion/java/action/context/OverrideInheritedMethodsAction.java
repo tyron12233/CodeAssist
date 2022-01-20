@@ -5,15 +5,22 @@ import android.view.MenuItem;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.actions.AnAction;
+import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
+import com.tyron.actions.Presentation;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerContainer;
+import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
+import com.tyron.completion.java.action.CommonJavaContextKeys;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
 import com.tyron.completion.java.rewrite.OverrideInheritedMethod;
 import com.tyron.completion.java.rewrite.Rewrite;
 import com.tyron.completion.java.util.DiagnosticUtil;
+import com.tyron.editor.Editor;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
@@ -26,37 +33,57 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.TreeMap;
 
-public class OverrideInheritedMethodsAction extends ActionProvider {
+public class OverrideInheritedMethodsAction extends AnAction {
+
+    public static final String ID = "javaOverrideInheritedMethodsAction";
 
     @Override
-    public boolean isApplicable(ActionContext context, @NonNull TreePath currentPath) {
-        return currentPath.getLeaf() instanceof ClassTree;
-    }
+    public void update(@NonNull AnActionEvent event) {
+        Presentation presentation = event.getPresentation();
+        presentation.setVisible(false);
 
-    @Override
-    public void addMenus(@NonNull ActionContext context) {
-        Tree leaf = context.getCurrentPath().getLeaf();
-        if (!(leaf instanceof ClassTree)) {
+        TreePath currentPath = event.getData(CommonJavaContextKeys.CURRENT_PATH);
+        if (currentPath == null) {
             return;
         }
 
-        String title =
-                context.getContext().getString(R.string.menu_quickfix_override_inherited_methods_title);
-        MenuItem menuItem = context.addMenu("overrideMethods", title);
-        menuItem.setOnMenuItemClickListener(item -> {
-            perform(context);
-            return true;
-        });
+        if (!(currentPath instanceof ClassTree)) {
+            return;
+        }
+
+
+        JavaCompilerService compiler = event.getData(CommonJavaContextKeys.COMPILER);
+        if (compiler == null) {
+            return;
+        }
+
+        presentation.setVisible(true);
+        presentation.setText(event.getDataContext().getString(R.string.menu_quickfix_override_inherited_methods_title));
     }
 
-    private void perform(ActionContext context) {
-        CompilerContainer container = context.getCompiler().compile(context.getCurrentFile());
-        container.run(task -> {
+    @Override
+    public void actionPerformed(@NonNull AnActionEvent e) {
+        Editor editor = e.getData(CommonDataKeys.EDITOR);
+        File file = e.getData(CommonDataKeys.FILE);
+        JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
+        TreePath currentPath = e.getData(CommonJavaContextKeys.CURRENT_PATH);
+
+        performInternal(compiler, file.toPath(), currentPath, editor.getCaret().getStart());
+    }
+
+    private Map<String, Rewrite> performInternal(JavaCompilerService compiler,
+                                                 Path file,
+                                                 TreePath currentPath,
+                                                 int index) {
+        CompilerContainer container = compiler.compile(file);
+        return container.get(task -> {
             Trees trees = Trees.instance(task.task);
-            Element classElement = trees.getElement(context.getCurrentPath());
+            Element classElement = trees.getElement(currentPath);
             Elements elements = task.task.getElements();
             Map<String, Rewrite> rewriteMap = new TreeMap<>();
             for (Element member : elements.getAllMembers((TypeElement) classElement)) {
@@ -79,17 +106,12 @@ public class OverrideInheritedMethodsAction extends ActionProvider {
                 }
                 DiagnosticUtil.MethodPtr ptr = new DiagnosticUtil.MethodPtr(task.task, method);
                 Rewrite rewrite = new OverrideInheritedMethod(ptr.className, ptr.methodName,
-                        ptr.erasedParameterTypes, context.getCurrentFile(), context.getCursor());
+                        ptr.erasedParameterTypes, file, index);
                 String title = "Override " + method.getSimpleName() + " from " + ptr.className;
                 rewriteMap.put(title, rewrite);
             }
 
-            String[] strings = rewriteMap.keySet().toArray(new String[0]);
-
-            new AlertDialog.Builder(context.getContext()).setTitle("Override inherited methods").setItems(strings, (d, w) -> {
-                Rewrite rewrite = rewriteMap.get(strings[w]);
-                context.performAction(new Action(rewrite));
-            }).setNegativeButton(android.R.string.cancel, null).show();
+            return rewriteMap;
         });
     }
 }
