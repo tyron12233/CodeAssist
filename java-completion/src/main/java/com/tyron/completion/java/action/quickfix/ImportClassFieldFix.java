@@ -40,12 +40,12 @@ public class ImportClassFieldFix extends AnAction {
         Presentation presentation = event.getPresentation();
         presentation.setVisible(false);
 
-        Diagnostic<?> diagnostic = event.getData(CommonDataKeys.DIAGNOSTIC);
-        if (diagnostic == null) {
+        if (!ActionPlaces.EDITOR.equals(event.getPlace())) {
             return;
         }
 
-        if (!ActionPlaces.EDITOR.equals(event.getPlace())) {
+        Diagnostic<?> diagnostic = event.getData(CommonDataKeys.DIAGNOSTIC);
+        if (diagnostic == null) {
             return;
         }
 

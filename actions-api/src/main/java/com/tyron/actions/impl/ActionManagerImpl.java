@@ -1,5 +1,6 @@
 package com.tyron.actions.impl;
 
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.SubMenu;
@@ -16,8 +17,12 @@ import com.tyron.actions.DataContext;
 import com.tyron.actions.Presentation;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
+import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
@@ -42,29 +47,31 @@ public class ActionManagerImpl extends ActionManager {
 
     @Override
     public void fillMenu(DataContext context, Menu menu, String place, boolean isContext, boolean isToolbar) {
+        // Inject values
+        context.putData(CommonDataKeys.CONTEXT, context);
+
         for (AnAction value : mIdToAction.values()) {
+
             AnActionEvent event = new AnActionEvent(context,
                     place,
                     value.getTemplatePresentation(),
                     isContext,
                     isToolbar);
 
-            // Inject values
-            event.injectData(CommonDataKeys.CONTEXT, context);
-
             value.update(event);
-            fillMenu(menu, value, event);
+
+            if (value.getTemplatePresentation().isVisible()) {
+                fillMenu(menu, value, event);
+            }
         }
     }
 
+
     private void fillMenu(Menu menu, AnAction action, AnActionEvent event) {
-        String id = getId(action);
-        assert id != null;
         Presentation presentation = event.getPresentation();
 
-
         MenuItem menuItem;
-        if (isGroup(id)) {
+        if (isGroup(action)) {
             SubMenu subMenu = menu.addSubMenu(presentation.getText());
             menuItem = subMenu.getItem();
 
@@ -72,13 +79,13 @@ public class ActionManagerImpl extends ActionManager {
             AnAction[] children = actionGroup.getChildren(event);
             if (children != null) {
                 for (AnAction child : children) {
-                    AnActionEvent childEvent = new AnActionEvent(event.getDataContext(),
-                            event.getPlace(),
-                            child.getTemplatePresentation(),
-                            event.isContextMenuAction(),
-                            event.isActionToolbar());
-                    child.update(childEvent);
-                    fillSubMenu(subMenu, child, event);
+                    event.setPresentation(child.getTemplatePresentation());
+
+                    child.update(event);
+
+                    if (event.getPresentation().isVisible()) {
+                        fillSubMenu(subMenu, child, event);
+                    }
                 }
             }
         } else {
@@ -86,7 +93,6 @@ public class ActionManagerImpl extends ActionManager {
         }
 
         menuItem.setEnabled(presentation.isEnabled());
-        menuItem.setVisible(presentation.isVisible());
         if (presentation.getIcon() != null) {
             menuItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         } else {
@@ -101,6 +107,7 @@ public class ActionManagerImpl extends ActionManager {
 
     private void fillSubMenu(SubMenu subMenu, AnAction action, AnActionEvent event) {
         Presentation presentation = action.getTemplatePresentation();
+
         MenuItem menuItem;
 
         if (isGroup(action)) {
@@ -111,14 +118,13 @@ public class ActionManagerImpl extends ActionManager {
             AnAction[] children = group.getChildren(event);
             if (children != null) {
                 for (AnAction child : children) {
-                    AnActionEvent childEvent = new AnActionEvent(
-                            event.getDataContext(),
-                            event.getPlace(),
-                            child.getTemplatePresentation(),
-                            event.isContextMenuAction(),
-                            event.isActionToolbar());
-                    child.update(childEvent);
-                    fillSubMenu(subSubMenu, child, childEvent);
+                    event.setPresentation(child.getTemplatePresentation());
+
+                    child.update(event);
+
+                    if (event.getPresentation().isVisible()) {
+                        fillSubMenu(subSubMenu, child, event);
+                    }
                 }
             }
         } else {
@@ -126,7 +132,6 @@ public class ActionManagerImpl extends ActionManager {
         }
 
         menuItem.setEnabled(presentation.isEnabled());
-        menuItem.setVisible(presentation.isVisible());
         if (presentation.getIcon() != null) {
             menuItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         } else {

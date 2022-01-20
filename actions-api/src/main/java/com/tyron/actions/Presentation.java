@@ -89,17 +89,17 @@ public class Presentation {
     }
 
     private void fireObjectPropertyChange(String propertyName, Object oldValue, Object newValue) {
-        PropertyChangeSupport support = mChangeSupport;
-        if (support != null && !Objects.equals(oldValue, newValue)) {
-            support.firePropertyChange(propertyName, oldValue, newValue);
-        }
+//        PropertyChangeSupport support = mChangeSupport;
+//        if (support != null && !Objects.equals(oldValue, newValue)) {
+//            support.firePropertyChange(propertyName, oldValue, newValue);
+//        }
     }
 
     private void fireBooleanPropertyChange(String propertyName, boolean oldValue, boolean newValue) {
-        PropertyChangeSupport support = mChangeSupport;
-        if (support != null && oldValue != newValue) {
-            support.firePropertyChange(propertyName, oldValue, newValue);
-        }
+//        PropertyChangeSupport support = mChangeSupport;
+//        if (support != null && oldValue != newValue) {
+//            support.firePropertyChange(propertyName, oldValue, newValue);
+//        }
     }
 
     @NonNull

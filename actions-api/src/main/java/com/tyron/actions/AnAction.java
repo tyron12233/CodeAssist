@@ -47,10 +47,8 @@ public abstract class AnAction {
     }
 
     public final Presentation getTemplatePresentation() {
-        Presentation presentation = mTemplatePresentation;
-        if (presentation == null) {
-            presentation = createTemplatePresentation();
-            mTemplatePresentation = presentation;
+        if (mTemplatePresentation == null) {
+            mTemplatePresentation = createTemplatePresentation();
         }
         return mTemplatePresentation;
     }

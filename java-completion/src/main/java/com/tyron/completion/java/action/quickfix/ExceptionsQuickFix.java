@@ -22,12 +22,12 @@ public abstract class ExceptionsQuickFix extends AnAction {
     public void update(@NonNull AnActionEvent event) {
         event.getPresentation().setVisible(false);
 
-        Diagnostic<?> diagnostic = event.getData(CommonDataKeys.DIAGNOSTIC);
-        if (diagnostic == null) {
+        if (!ActionPlaces.EDITOR.equals(event.getPlace())) {
             return;
         }
 
-        if (!ActionPlaces.EDITOR.equals(event.getPlace())) {
+        Diagnostic<?> diagnostic = event.getData(CommonDataKeys.DIAGNOSTIC);
+        if (diagnostic == null) {
             return;
         }
 

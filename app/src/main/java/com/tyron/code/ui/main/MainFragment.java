@@ -7,6 +7,7 @@ import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -54,6 +55,8 @@ import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import org.openjdk.javax.tools.Diagnostic;
 
 import java.io.File;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -414,10 +417,12 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         DataContext context = DataContextUtils.getDataContext(mToolbar);
         injectData(context);
 
+        Instant now = Instant.now();
         ActionManager.getInstance().fillMenu(context,
                 mToolbar.getMenu(),
                 ActionPlaces.MAIN_TOOLBAR,
                 false,
                 true);
+        Log.d("ActionManager", "fillMenu() took " + Duration.between(now, Instant.now()).toMillis());
     }
 }

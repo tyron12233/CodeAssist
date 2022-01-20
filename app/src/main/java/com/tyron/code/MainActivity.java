@@ -6,6 +6,8 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.tyron.actions.ActionManager;
+import com.tyron.actions.AnAction;
+import com.tyron.actions.AnActionEvent;
 import com.tyron.code.ui.editor.action.CloseAllEditorAction;
 import com.tyron.code.ui.editor.action.CloseFileEditorAction;
 import com.tyron.code.ui.editor.action.CloseOtherEditorAction;

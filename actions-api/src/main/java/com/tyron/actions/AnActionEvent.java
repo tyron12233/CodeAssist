@@ -9,7 +9,7 @@ public class AnActionEvent implements PlaceProvider {
 
     private final DataContext mDataContext;
     private final String mPlace;
-    private final Presentation mPresentation;
+    private Presentation mPresentation;
     private final boolean mIsContextMenuAction;
     private final boolean mIsActionToolbar;
 
@@ -23,6 +23,10 @@ public class AnActionEvent implements PlaceProvider {
         mPresentation = presentation;
         mIsContextMenuAction = isContextMenuAction;
         mIsActionToolbar = isActionToolbar;
+    }
+
+    public void setPresentation(Presentation presentation) {
+
     }
 
     @Override

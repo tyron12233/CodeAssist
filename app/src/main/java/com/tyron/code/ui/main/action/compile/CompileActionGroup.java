@@ -50,10 +50,7 @@ public class CompileActionGroup extends ActionGroup {
 
     @Override
     public AnAction[] getChildren(@Nullable AnActionEvent e) {
-        List<AnAction> actions = new ArrayList<>();
-        actions.add(new CompileReleaseAction());
-        actions.add(new CompileDebugAction());
-        actions.add(new CompileAabAction());
-        return actions.toArray(new AnAction[0]);
+       return new AnAction[]{new CompileReleaseAction(),
+               new CompileDebugAction(), new CompileAabAction()};
     }
 }
