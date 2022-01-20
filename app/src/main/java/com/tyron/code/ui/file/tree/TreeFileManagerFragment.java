@@ -20,6 +20,7 @@ import com.tyron.actions.DataContext;
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.component.tree.TreeView;
 import com.tyron.code.ui.editor.api.FileEditorManager;
+import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewBinder.TreeFileNodeListener;
 import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewFactory;
@@ -136,6 +137,7 @@ public class TreeFileManagerFragment extends Fragment {
         dataContext.putData(CommonDataKeys.PROJECT, ProjectManager.getInstance().getCurrentProject());
         dataContext.putData(CommonDataKeys.FRAGMENT, TreeFileManagerFragment.this);
         dataContext.putData(CommonDataKeys.ACTIVITY, requireActivity());
+        dataContext.putData(CommonFileKeys.TREE_NODE, node);
 
         ActionManager.getInstance().fillMenu(dataContext,
                 popupMenu.getMenu(), ActionPlaces.FILE_MANAGER,
