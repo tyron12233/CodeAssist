@@ -33,7 +33,7 @@ public class FormatAction extends AnAction {
         }
 
         event.getPresentation().setVisible(true);
-        event.getPresentation().setText(event.getDataContext().getString(R.string.menu_settings));
+        event.getPresentation().setText(event.getDataContext().getString(R.string.menu_format));
     }
 
     @Override
