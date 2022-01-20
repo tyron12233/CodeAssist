@@ -2,10 +2,18 @@ package com.tyron.code.ui.file.action.file;
 
 import static com.tyron.code.ui.file.tree.TreeUtil.updateNode;
 
+import android.content.Context;
+
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 
+import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.ui.component.tree.TreeNode;
+import com.tyron.code.ui.component.tree.TreeView;
 import com.tyron.code.ui.component.tree.helper.TreeHelper;
+import com.tyron.code.ui.file.CommonFileKeys;
+import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.file.tree.TreeUtil;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.code.ui.project.ProjectManager;
@@ -25,39 +33,45 @@ import kotlin.io.FileWalkDirection;
 import kotlin.io.FilesKt;
 
 public class DeleteFileAction extends FileAction {
+
+    @Override
+    public String getTitle(Context context) {
+        return context.getString(R.string.dialog_delete);
+    }
+
     @Override
     public boolean isApplicable(File file) {
         return true;
     }
 
     @Override
-    public void addMenu(ActionContext context) {
-        context.getMenu().add("Delete")
-                .setOnMenuItemClickListener(menuItem -> {
-                    new AlertDialog.Builder(context.getFragment().requireContext())
-                            .setMessage(String.format(context.getFragment().getString(R.string.dialog_confirm_delete),
-                                    context.getCurrentNode().getValue().getFile().getName()))
-                            .setPositiveButton(context.getFragment().getString(R.string.dialog_delete), (d, which) -> {
-                                if (deleteFiles(context)) {
-                                    context.getTreeView().deleteNode(context.getCurrentNode());
-                                } else {
-                                    new AlertDialog.Builder(context.getFragment().requireContext())
-                                            .setTitle(R.string.error)
-                                            .setMessage("Failed to delete file.")
-                                            .setPositiveButton(android.R.string.ok, null)
-                                            .show();
-                                }
-                            })
-                            .show();
-                    return true;
-                });
+    public void actionPerformed(@NonNull AnActionEvent e) {
+        TreeFileManagerFragment fragment = (TreeFileManagerFragment) e.getData(CommonDataKeys.FRAGMENT);
+        TreeView<TreeFile> treeView = fragment.getTreeView();
+        TreeNode<TreeFile> currentNode = e.getData(CommonFileKeys.TREE_NODE);
+
+        new AlertDialog.Builder(fragment.requireContext())
+                .setMessage(String.format(fragment.getString(R.string.dialog_confirm_delete),
+                        currentNode.getValue().getFile().getName()))
+                .setPositiveButton(fragment.getString(R.string.dialog_delete), (d, which) -> {
+                    if (deleteFiles(currentNode, fragment)) {
+                        treeView.deleteNode(currentNode);
+                    } else {
+                        new AlertDialog.Builder(fragment.requireContext())
+                                .setTitle(R.string.error)
+                                .setMessage("Failed to delete file.")
+                                .setPositiveButton(android.R.string.ok, null)
+                                .show();
+                    }
+                })
+                .show();
     }
 
-    private boolean deleteFiles(ActionContext context) {
-        File currentFile = context.getCurrentNode().getContent().getFile();
+    private boolean deleteFiles(TreeNode<TreeFile> currentNode, TreeFileManagerFragment fragment) {
+        File currentFile = currentNode.getContent().getFile();
         FilesKt.walk(currentFile, FileWalkDirection.TOP_DOWN).iterator().forEachRemaining(file -> {
             if (file.getName().endsWith(".java")) { // todo: add .kt and .xml checks
-                context.getFragment().getMainViewModel().removeFile(file);
+                fragment.getMainViewModel().removeFile(file);
 
                 Module module = ProjectManager.getInstance()
                         .getCurrentProject()

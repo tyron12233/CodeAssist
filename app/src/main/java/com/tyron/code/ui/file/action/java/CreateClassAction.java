@@ -1,9 +1,18 @@
 package com.tyron.code.ui.file.action.java;
 
+import android.content.Context;
 import android.view.SubMenu;
 
+import androidx.annotation.NonNull;
+import androidx.fragment.app.Fragment;
+
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
+import com.tyron.code.ui.component.tree.TreeView;
 import com.tyron.code.ui.editor.api.FileEditorManager;
+import com.tyron.code.ui.file.CommonFileKeys;
+import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
@@ -24,8 +33,10 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 public class CreateClassAction extends FileAction {
+
     @Override
     public boolean isApplicable(File file) {
         if (file.isDirectory()) {
@@ -35,49 +46,8 @@ public class CreateClassAction extends FileAction {
     }
 
     @Override
-    public void addMenu(ActionContext context) {
-        SubMenu subMenu = context.addSubMenu("new",
-                context.getFragment().getString(R.string.menu_new));
-        subMenu.add(R.string.menu_action_new_java_class)
-                .setOnMenuItemClickListener(item -> {
-                    CreateClassDialogFragment dialogFragment =
-                            CreateClassDialogFragment.newInstance(getTemplates(),
-                                    Collections.emptyList());
-                    dialogFragment.show(context.getFragment().getChildFragmentManager(), null);
-                    dialogFragment.setOnClassCreatedListener((className, template) -> {
-                        try {
-                            File createdFile = ProjectManager.createClass(
-                                    context.getCurrentNode().getContent().getFile(),
-                                    className, template
-                            );
-                            TreeNode<TreeFile> newNode = new TreeNode<>(
-                                    TreeFile.fromFile(createdFile),
-                                    context.getCurrentNode().getLevel() + 1
-                            );
-
-                            context.getTreeView().addNode(context.getCurrentNode(), newNode);
-                            context.getTreeView().refreshTreeView();
-                            FileEditorManager.getInstance().openFile(context.getFragment().requireContext(),
-                                    createdFile,
-                                    fileEditor -> context.getFragment().getMainViewModel().openFile(fileEditor));
-
-                            Module currentModule = ProjectManager.getInstance()
-                                    .getCurrentProject()
-                                    .getModule(context.getCurrentNode().getContent().getFile());
-                            if (currentModule instanceof JavaModule) {
-                                ((JavaModule) currentModule).addJavaFile(createdFile);
-                            }
-                        } catch (IOException e) {
-                            new MaterialAlertDialogBuilder(context.getFragment().requireContext())
-                                    .setMessage(e.getMessage())
-                                    .setPositiveButton(android.R.string.ok, null)
-                                    .setTitle(R.string.error)
-                                    .show();
-                        }
-                    });
-
-                    return true;
-                });
+    public String getTitle(Context context) {
+        return context.getString(R.string.menu_action_new_java_class);
     }
 
     private List<CodeTemplate> getTemplates() {
@@ -85,5 +55,53 @@ public class CreateClassAction extends FileAction {
                 new JavaClassTemplate(),
                 new AbstractTemplate(),
                 new InterfaceTemplate());
+    }
+
+    @Override
+    public void actionPerformed(@NonNull AnActionEvent e) {
+
+        TreeFileManagerFragment fragment = (TreeFileManagerFragment) e.getData(CommonDataKeys.FRAGMENT);
+        TreeView<TreeFile> treeView = fragment.getTreeView();
+        File file = e.getData(CommonDataKeys.FILE);
+        TreeNode<TreeFile> treeNode = e.getData(CommonFileKeys.TREE_NODE);
+
+        CreateClassDialogFragment dialogFragment =
+                CreateClassDialogFragment.newInstance(getTemplates(),
+                        Collections.emptyList());
+        dialogFragment.show(fragment.getChildFragmentManager(), null);
+        dialogFragment.setOnClassCreatedListener((className, template) -> {
+            try {
+                File createdFile = ProjectManager.createClass(
+                        file,
+                        className, template);
+                TreeNode<TreeFile> newNode = new TreeNode<>(
+                        TreeFile.fromFile(createdFile),
+                        treeNode.getLevel() + 1
+                );
+
+                if (createdFile == null) {
+                    throw new IOException("Unable to create file");
+                }
+
+                treeView.addNode(treeNode, newNode);
+                treeView.refreshTreeView();
+                FileEditorManager.getInstance().openFile(fragment.requireContext(),
+                        createdFile,
+                        fileEditor -> fragment.getMainViewModel().openFile(fileEditor));
+
+                Module currentModule = ProjectManager.getInstance()
+                        .getCurrentProject()
+                        .getModule(treeNode.getContent().getFile());
+                if (currentModule instanceof JavaModule) {
+                    ((JavaModule) currentModule).addJavaFile(createdFile);
+                }
+            } catch (IOException exception) {
+                new MaterialAlertDialogBuilder(fragment.requireContext())
+                        .setMessage(exception.getMessage())
+                        .setPositiveButton(android.R.string.ok, null)
+                        .setTitle(R.string.error)
+                        .show();
+            }
+        });
     }
 }

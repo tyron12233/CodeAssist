@@ -1,7 +1,16 @@
 package com.tyron.code.ui.file.action.xml;
 
+import android.content.Context;
+
+import androidx.annotation.NonNull;
+
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
+import com.tyron.code.ui.component.tree.TreeView;
 import com.tyron.code.ui.editor.api.FileEditorManager;
+import com.tyron.code.ui.file.CommonFileKeys;
+import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.R;
 import com.tyron.code.template.CodeTemplate;
@@ -22,6 +31,11 @@ import java.util.List;
 public class CreateLayoutAction extends FileAction {
 
     @Override
+    public String getTitle(Context context) {
+        return context.getString(R.string.menu_new);
+    }
+
+    @Override
     public boolean isApplicable(File file) {
         if (file.isDirectory()) {
             return ProjectUtils.isResourceXMLDir(file) && file.getName().startsWith("layout");
@@ -30,44 +44,42 @@ public class CreateLayoutAction extends FileAction {
     }
 
     @Override
-    public void addMenu(ActionContext context) {
-        context.addSubMenu("new", context.getFragment().getString(R.string.menu_new))
-                .add("Create layout")
-                .setOnMenuItemClickListener(item -> {
-                    CreateClassDialogFragment dialogFragment =
-                            CreateClassDialogFragment.newInstance(getTemplates(),
-                                    Collections.singletonList(new RegexReason("^[a-z0-9_]+$",
-                                            context.getFragment().getString(R.string.error_resource_name_restriction))));
-                    dialogFragment.show(context.getFragment().getChildFragmentManager(), null);
-                    dialogFragment.setOnClassCreatedListener((className, template) -> {
-                        try {
-                            File createdFile = ProjectManager.createFile(
-                                    context.getCurrentNode().getContent().getFile(),
-                                    className,
-                                    template
-                            );
+    public void actionPerformed(@NonNull AnActionEvent e) {
+        TreeFileManagerFragment fragment = (TreeFileManagerFragment) e.getData(CommonDataKeys.FRAGMENT);
+        TreeView<TreeFile> treeView = fragment.getTreeView();
+        TreeNode<TreeFile> currentNode = e.getData(CommonFileKeys.TREE_NODE);
 
-                            TreeNode<TreeFile> newNode = new TreeNode<>(
-                                    TreeFile.fromFile(createdFile),
-                                    context.getCurrentNode().getLevel() + 1
-                            );
+        CreateClassDialogFragment dialogFragment =
+                CreateClassDialogFragment.newInstance(getTemplates(),
+                        Collections.singletonList(new RegexReason("^[a-z0-9_]+$",
+                                fragment.getString(R.string.error_resource_name_restriction))));
+        dialogFragment.show(fragment.getChildFragmentManager(), null);
+        dialogFragment.setOnClassCreatedListener((className, template) -> {
+            try {
+                File createdFile = ProjectManager.createFile(
+                        currentNode.getContent().getFile(),
+                        className,
+                        template
+                );
 
-                            context.getTreeView().addNode(context.getCurrentNode(), newNode);
-                            context.getTreeView().refreshTreeView();
-                            FileEditorManager.getInstance().openFile(context.getFragment().requireContext(),
-                                    createdFile,
-                                    fileEditor -> context.getFragment().getMainViewModel().openFile(fileEditor));
-                        } catch (IOException e) {
-                            new MaterialAlertDialogBuilder(context.getFragment().requireContext())
-                                    .setMessage(e.getMessage())
-                                    .setPositiveButton(android.R.string.ok, null)
-                                    .setTitle(R.string.error)
-                                    .show();
-                        }
-                    });
+                TreeNode<TreeFile> newNode = new TreeNode<>(
+                        TreeFile.fromFile(createdFile),
+                        currentNode.getLevel() + 1
+                );
 
-                    return true;
-                });
+                treeView.addNode(currentNode, newNode);
+                treeView.refreshTreeView();
+                FileEditorManager.getInstance().openFile(fragment.requireContext(),
+                        createdFile,
+                        fileEditor -> fragment.getMainViewModel().openFile(fileEditor));
+            } catch (IOException exception) {
+                new MaterialAlertDialogBuilder(fragment.requireContext())
+                        .setMessage(exception.getMessage())
+                        .setPositiveButton(android.R.string.ok, null)
+                        .setTitle(R.string.error)
+                        .show();
+            }
+        });
     }
 
     private List<CodeTemplate> getTemplates() {

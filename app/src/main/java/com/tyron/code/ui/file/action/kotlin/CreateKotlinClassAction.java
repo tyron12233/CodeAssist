@@ -1,9 +1,17 @@
 package com.tyron.code.ui.file.action.kotlin;
 
+import android.content.Context;
 import android.view.SubMenu;
 
+import androidx.annotation.NonNull;
+
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
+import com.tyron.code.ui.component.tree.TreeView;
 import com.tyron.code.ui.editor.api.FileEditorManager;
+import com.tyron.code.ui.file.CommonFileKeys;
+import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.api.KotlinModule;
 import com.tyron.builder.project.api.Module;
@@ -26,6 +34,12 @@ import java.util.Collections;
 import java.util.List;
 
 public class CreateKotlinClassAction extends FileAction {
+
+    @Override
+    public String getTitle(Context context) {
+        return context.getString(R.string.menu_action_new_kotlin_class);
+    }
+
     @Override
     public boolean isApplicable(File file) {
         if (file.isDirectory()) {
@@ -35,49 +49,45 @@ public class CreateKotlinClassAction extends FileAction {
     }
 
     @Override
-    public void addMenu(ActionContext context) {
-        SubMenu subMenu = context.addSubMenu("new",
-                context.getFragment().getString(R.string.menu_new));
-        subMenu.add(R.string.menu_action_new_kotlin_class)
-                .setOnMenuItemClickListener(item -> {
-                    CreateClassDialogFragment dialogFragment =
-                            CreateClassDialogFragment.newInstance(getTemplates(),
-                                    Collections.emptyList());
-                    dialogFragment.show(context.getFragment().getChildFragmentManager(), null);
-                    dialogFragment.setOnClassCreatedListener((className, template) -> {
-                        try {
-                            File createdFile = ProjectManager.createClass(
-                                    context.getCurrentNode().getContent().getFile(),
-                                    className, template
-                            );
-                            TreeNode<TreeFile> newNode = new TreeNode<>(
-                                    TreeFile.fromFile(createdFile),
-                                    context.getCurrentNode().getLevel() + 1
-                            );
+    public void actionPerformed(@NonNull AnActionEvent e) {
+        TreeFileManagerFragment fragment = (TreeFileManagerFragment) e.getData(CommonDataKeys.FRAGMENT);
+        TreeView<TreeFile> treeView = fragment.getTreeView();
+        TreeNode<TreeFile> currentNode = e.getData(CommonFileKeys.TREE_NODE);
+        CreateClassDialogFragment dialogFragment =
+                CreateClassDialogFragment.newInstance(getTemplates(),
+                        Collections.emptyList());
+        dialogFragment.show(fragment.getChildFragmentManager(), null);
+        dialogFragment.setOnClassCreatedListener((className, template) -> {
+            try {
+                File createdFile = ProjectManager.createClass(
+                        currentNode.getContent().getFile(),
+                        className, template
+                );
+                TreeNode<TreeFile> newNode = new TreeNode<>(
+                        TreeFile.fromFile(createdFile),
+                        currentNode.getLevel() + 1
+                );
 
-                            context.getTreeView().addNode(context.getCurrentNode(), newNode);
-                            context.getTreeView().refreshTreeView();
-                            FileEditorManager.getInstance().openFile(context.getFragment().requireContext(),
-                                    createdFile,
-                                    fileEditor -> context.getFragment().getMainViewModel().openFile(fileEditor));
+                treeView.addNode(currentNode, newNode);
+                treeView.refreshTreeView();
+                FileEditorManager.getInstance().openFile(fragment.requireContext(),
+                        createdFile,
+                        fileEditor -> fragment.getMainViewModel().openFile(fileEditor));
 
-                            Module currentModule = ProjectManager.getInstance()
-                                    .getCurrentProject()
-                                    .getModule(context.getCurrentNode().getContent().getFile());
-                            if (currentModule instanceof KotlinModule) {
-                                ((KotlinModule) currentModule).addKotlinFile(createdFile);
-                            }
-                        } catch (IOException e) {
-                            new MaterialAlertDialogBuilder(context.getFragment().requireContext())
-                                    .setMessage(e.getMessage())
-                                    .setPositiveButton(android.R.string.ok, null)
-                                    .setTitle(R.string.error)
-                                    .show();
-                        }
-                    });
-
-                    return true;
-                });
+                Module currentModule = ProjectManager.getInstance()
+                        .getCurrentProject()
+                        .getModule(currentNode.getContent().getFile());
+                if (currentModule instanceof KotlinModule) {
+                    ((KotlinModule) currentModule).addKotlinFile(createdFile);
+                }
+            } catch (IOException exception) {
+                new MaterialAlertDialogBuilder(fragment.requireContext())
+                        .setMessage(exception.getMessage())
+                        .setPositiveButton(android.R.string.ok, null)
+                        .setTitle(R.string.error)
+                        .show();
+            }
+        });
     }
 
     private List<CodeTemplate> getTemplates() {

@@ -1,19 +1,24 @@
 package com.tyron.code.ui.file.action.file;
 
+import android.content.Context;
 import android.content.DialogInterface;
 import android.text.Editable;
-import android.view.SubMenu;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 
 import com.google.android.material.textfield.TextInputLayout;
+import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
 import com.tyron.code.ui.component.tree.TreeNode;
-import com.tyron.code.ui.file.action.ActionContext;
+import com.tyron.code.ui.component.tree.TreeView;
+import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.action.FileAction;
+import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.file.tree.TreeUtil;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.common.util.SingleTextWatcher;
@@ -21,23 +26,30 @@ import com.tyron.common.util.SingleTextWatcher;
 import java.io.File;
 
 public class CreateDirectoryAction extends FileAction {
+
+    @Override
+    public String getTitle(Context context) {
+        return context.getString(R.string.menu_action_new_directory);
+    }
+
     @Override
     public boolean isApplicable(File file) {
         return file.isDirectory();
     }
 
-    @Override
-    public void addMenu(ActionContext context) {
-        SubMenu subMenu = context.addSubMenu("new",
-                context.getFragment().getString(R.string.menu_new));
-        subMenu.add(R.string.menu_action_new_directory)
-                .setOnMenuItemClickListener(i -> onMenuItemClick(context));
+    private void refreshTreeView(TreeNode<TreeFile> currentNode, TreeView<?> treeView) {
+        TreeUtil.updateNode(currentNode);
+        treeView.refreshTreeView();
     }
 
     @SuppressWarnings("ConstantConditions")
-    public boolean onMenuItemClick(ActionContext context) {
-        File currentDir = context.getCurrentNode().getValue().getFile();
-        AlertDialog dialog = new AlertDialog.Builder(context.getFragment().requireContext())
+    @Override
+    public void actionPerformed(@NonNull AnActionEvent e) {
+        TreeFileManagerFragment fragment = (TreeFileManagerFragment) e.getData(CommonDataKeys.FRAGMENT);
+        File currentDir = e.getData(CommonDataKeys.FILE);
+        TreeNode<TreeFile> currentNode = e.getData(CommonFileKeys.TREE_NODE);
+
+        AlertDialog dialog = new AlertDialog.Builder(fragment.requireContext())
                 .setView(R.layout.create_class_dialog)
                 .setTitle(R.string.menu_action_new_directory)
                 .setPositiveButton(R.string.create_class_dialog_positive, null)
@@ -53,13 +65,13 @@ public class CreateDirectoryAction extends FileAction {
             positive.setOnClickListener(v -> {
                 File fileToCreate = new File(currentDir, editText.getText().toString());
                 if (!fileToCreate.mkdirs()) {
-                    new AlertDialog.Builder(context.getFragment().requireContext())
+                    new AlertDialog.Builder(fragment.requireContext())
                             .setTitle(R.string.error)
                             .setMessage(R.string.error_dir_access)
                             .setPositiveButton(android.R.string.ok, null)
                             .show();
                 } else {
-                    refreshTreeView(context);
+                    refreshTreeView(currentNode, fragment.getTreeView());
                     dialog.dismiss();
                 }
             });
@@ -72,12 +84,6 @@ public class CreateDirectoryAction extends FileAction {
             });
         });
         dialog.show();
-        return true;
     }
 
-    private void refreshTreeView(ActionContext context) {
-        TreeNode<TreeFile> currentNode = context.getCurrentNode();
-        TreeUtil.updateNode(currentNode);
-        context.getTreeView().refreshTreeView();
-    }
 }

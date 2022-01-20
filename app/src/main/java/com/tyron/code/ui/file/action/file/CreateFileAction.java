@@ -1,44 +1,54 @@
 package com.tyron.code.ui.file.action.file;
 
+import android.content.Context;
 import android.content.DialogInterface;
 import android.text.Editable;
-import android.view.SubMenu;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 
 import com.google.android.material.textfield.TextInputLayout;
+import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
 import com.tyron.code.ui.component.tree.TreeNode;
+import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.action.ActionContext;
 import com.tyron.code.ui.file.action.FileAction;
+import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.file.tree.TreeUtil;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.common.util.SingleTextWatcher;
-
-import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
 
 public class CreateFileAction extends FileAction {
+
+    @Override
+    public String getTitle(Context context) {
+        return context.getString(R.string.menu_new);
+    }
+
     @Override
     public boolean isApplicable(File file) {
         return file.isDirectory();
     }
 
     @Override
-    public void addMenu(ActionContext context) {
-        SubMenu subMenu = context.addSubMenu("new",
-                context.getFragment().getString(R.string.menu_new));
-        subMenu.add(R.string.menu_action_new_file)
-                .setOnMenuItemClickListener(i -> onMenuItemClick(context));
+    public void actionPerformed(@NonNull AnActionEvent e) {
+        TreeFileManagerFragment fragment = (TreeFileManagerFragment) e.getData(CommonDataKeys.FRAGMENT);
+        TreeNode<TreeFile> currentNode = e.getData(CommonFileKeys.TREE_NODE);
+        ActionContext actionContext = new ActionContext(fragment, fragment.getTreeView(),
+                currentNode);
+        onMenuItemClick(actionContext);
     }
 
     @SuppressWarnings("ConstantConditions")
-    private boolean onMenuItemClick(ActionContext context) {
+    private void onMenuItemClick(ActionContext context) {
         File currentDir = context.getCurrentNode().getValue().getFile();
         AlertDialog dialog = new AlertDialog.Builder(context.getFragment().requireContext())
                 .setView(R.layout.create_class_dialog)
@@ -75,7 +85,6 @@ public class CreateFileAction extends FileAction {
             });
         });
         dialog.show();
-        return true;
     }
 
     private boolean createFileSilently(File file) {

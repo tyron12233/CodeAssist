@@ -20,16 +20,10 @@ public class ActionContext {
 
     private final TreeNode<TreeFile> mCurrentNode;
 
-    private final Menu mMenu;
-
-    private final Map<String, Integer> mIds = new HashMap<>();
-    private int mIdCount = 40;
-
-    public ActionContext(TreeFileManagerFragment mFragment, TreeView<TreeFile> mTreeView, TreeNode<TreeFile> mCurrentNode, Menu mMenu) {
+    public ActionContext(TreeFileManagerFragment mFragment, TreeView<TreeFile> mTreeView, TreeNode<TreeFile> mCurrentNode) {
         this.mFragment = mFragment;
         this.mTreeView = mTreeView;
         this.mCurrentNode = mCurrentNode;
-        this.mMenu = mMenu;
     }
 
     public TreeFileManagerFragment getFragment() {
@@ -42,41 +36,5 @@ public class ActionContext {
 
     public TreeNode<TreeFile> getCurrentNode() {
         return mCurrentNode;
-    }
-
-    public Menu getMenu() {
-        return mMenu;
-    }
-
-    /**
-     * Get the an id for a specified key, useful for adding the same menu on
-     * an existing submenu
-     *
-     * @param name Key name for the id
-     * @return the id of the menu
-     */
-    public Integer getMenuId(String name) {
-        if (!mIds.containsKey(name)) {
-            mIds.put(name, mIdCount++);
-        }
-        return mIds.get(name);
-    }
-
-    /**
-     * Add a sub menu, if the sub menu already exists then it will add
-     * it to the current one, if not it will create a new sub menu
-     *
-     * @param name The key to get the id from
-     * @param title The title of the menu to be displayed
-     * @return The created SubMenu, non-null
-     */
-    public SubMenu addSubMenu(String name, String title) {
-        int id = getMenuId(name);
-        MenuItem item = getMenu().findItem(id);
-        if (item == null || item.getSubMenu() == null) {
-            return getMenu().addSubMenu(Menu.NONE, id, Menu.NONE, title);
-        } else {
-            return item.getSubMenu();
-        }
     }
 }
