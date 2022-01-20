@@ -406,6 +406,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     }
     private void injectData(DataContext context) {
         context.putData(CommonDataKeys.PROJECT, ProjectManager.getInstance().getCurrentProject());
+        context.putData(CommonDataKeys.ACTIVITY, getActivity());
         context.putData(MAIN_VIEW_MODEL_KEY, mMainViewModel);
         context.putData(COMPILE_CALLBACK_KEY, mCompileCallback);
         context.putData(INDEX_CALLBACK_KEY, mIndexCallback);

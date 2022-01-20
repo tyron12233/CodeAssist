@@ -1,5 +1,6 @@
 package com.tyron.actions;
 
+import android.app.Activity;
 import android.content.Context;
 
 import androidx.fragment.app.Fragment;
@@ -19,6 +20,7 @@ public class CommonDataKeys {
      */
     public static final Key<File> FILE = Key.create("file");
 
+    public static final Key<Activity> ACTIVITY = Key.create("activity");
     /**
      * The current accessible context
      */
