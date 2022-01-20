@@ -188,46 +188,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             mToolbar.setNavigationIcon(null);
         }
 
-        mToolbar.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == R.id.debug_refresh) {
-                saveAll();
-                if (!mServiceConnection.isCompiling()) {
-                    Project project = ProjectManager.getInstance().getCurrentProject();
-                    if (project != null) {
-                        openProject(project);
-                    }
-                }
-            } else if (item.getItemId() == R.id.action_build_debug) {
-                compile(BuildType.DEBUG);
-            } else if (item.getItemId() == R.id.action_build_release) {
-                compile(BuildType.RELEASE);
-            } else if (item.getItemId() == R.id.action_build_aab) {
-                compile(BuildType.AAB);
-            } else if (item.getItemId() == R.id.action_format) {
-                getChildFragmentManager().setFragmentResult(EditorContainerFragment.FORMAT_KEY,
-                        Bundle.EMPTY);
-            } else if (item.getItemId() == R.id.menu_settings) {
-                Intent intent = new Intent();
-                intent.setClass(requireActivity(), SettingsActivity.class);
-                startActivity(intent);
-                return true;
-            } else if (item.getItemId() == R.id.menu_preview_layout) {
-                getChildFragmentManager().setFragmentResult(EditorContainerFragment.PREVIEW_KEY,
-                        Bundle.EMPTY);
-            } else if (item.getItemId() == R.id.library_manager) {
-                FragmentManager fm = getParentFragmentManager();
-                if (fm.findFragmentByTag(LibraryManagerFragment.TAG) == null) {
-                    String path = mProject.getMainModule().getRootFile().getAbsolutePath();
-                    Fragment fragment = LibraryManagerFragment.newInstance(path);
-                    getParentFragmentManager().beginTransaction()
-                            .add(R.id.fragment_container, fragment, LibraryManagerFragment.TAG)
-                            .addToBackStack(LibraryManagerFragment.TAG).commit();
-                }
-            }
-
-            return false;
-        });
-
         File root;
         if (mProject != null) {
             root = mProject.getRootFile();
