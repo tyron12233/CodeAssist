@@ -18,10 +18,11 @@ import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 public class ActionManagerImpl extends ActionManager {
 
-    private final Map<String, AnAction> mIdToAction = new HashMap<>();
+    private final Map<String, AnAction> mIdToAction = new TreeMap<>();
     private final Map<Object, String> mActionToId = new HashMap<>();
 
     @Override
