@@ -8,7 +8,9 @@ public interface Editor {
 
     void replace(int line, int column, int endLine, int endColumn, String string);
 
-    void formatCodeAsync(int startIndex, int endIndex);
+    boolean formatCodeAsync();
+
+    boolean formatCodeAsync(int startIndex, int endIndex);
 
     void beginBatchEdit();
 
