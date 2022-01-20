@@ -102,6 +102,19 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     @Override
+    public TreePath visitVariable(VariableTree t, Long find) {
+        TreePath smaller = super.visitVariable(t, find);
+        if (smaller != null) {
+            return smaller;
+        }
+
+        if (isInside(t, find)) {
+            return getCurrentPath();
+        }
+        return null;
+    }
+
+    @Override
     public TreePath visitBlock(BlockTree t, Long find) {
         TreePath smaller = super.visitBlock(t, find);
         if (smaller != null) {
