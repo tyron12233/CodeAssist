@@ -5,6 +5,7 @@ import android.util.AttributeSet;
 
 import com.tyron.actions.DataContext;
 import com.tyron.editor.Caret;
+import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
 
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -24,6 +25,13 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     public CodeEditorView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(DataContext.wrap(context), attrs, defStyleAttr, defStyleRes);
+    }
+
+    @Override
+    public CharPosition getCharPosition(int index) {
+        io.github.rosemoe.sora.text.CharPosition charPosition =
+                getText().getIndexer().getCharPosition(index);
+        return new CharPosition(charPosition.line, charPosition.column);
     }
 
     @Override

@@ -2,6 +2,8 @@ package com.tyron.editor;
 
 public interface Editor {
 
+    CharPosition getCharPosition(int index);
+
     int getCharIndex(int line, int column);
 
     void insert(int line, int column, String string);
