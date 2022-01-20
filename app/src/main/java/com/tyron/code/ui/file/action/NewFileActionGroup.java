@@ -35,6 +35,7 @@ public class NewFileActionGroup extends ActionGroup {
     @Override
     public AnAction[] getChildren(@Nullable AnActionEvent e) {
         return new AnAction[]{new CreateFileAction(), new CreateClassAction(),
-                new CreateKotlinClassAction(), new CreateLayoutAction()};
+                new CreateKotlinClassAction(), new CreateLayoutAction(),
+                new CreateDirectoryAction()};
     }
 }

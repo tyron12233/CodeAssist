@@ -67,7 +67,6 @@ public class MainActivity extends AppCompatActivity {
 
             // file manager actions
             manager.registerAction(NewFileActionGroup.ID, new NewFileActionGroup());
-            manager.registerAction(CreateDirectoryAction.ID, new CreateDirectoryAction());
             manager.registerAction(DeleteFileAction.ID, new DeleteFileAction());
 
             // java actions
