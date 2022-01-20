@@ -503,9 +503,6 @@ public class JavaParserUtil {
                 }
             }
         }
-        if (type.isArrayType()) {
-            return getFirstArrayType(type.asArrayType().getComponentType());
-        }
         return type;
     }
 
