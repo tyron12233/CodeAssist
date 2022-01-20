@@ -7,12 +7,15 @@ import com.tyron.actions.ActionGroup;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.code.R;
+import com.tyron.code.ui.component.tree.TreeNode;
+import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.action.file.CreateDirectoryAction;
 import com.tyron.code.ui.file.action.file.CreateFileAction;
 import com.tyron.code.ui.file.action.file.DeleteFileAction;
 import com.tyron.code.ui.file.action.java.CreateClassAction;
 import com.tyron.code.ui.file.action.kotlin.CreateKotlinClassAction;
 import com.tyron.code.ui.file.action.xml.CreateLayoutAction;
+import com.tyron.code.ui.file.tree.model.TreeFile;
 
 public class NewFileActionGroup extends ActionGroup {
 
@@ -20,13 +23,18 @@ public class NewFileActionGroup extends ActionGroup {
 
     @Override
     public void update(@NonNull AnActionEvent event) {
+        TreeNode<TreeFile> data = event.getData(CommonFileKeys.TREE_NODE);
+        if (data == null) {
+            return;
+        }
+
+        event.getPresentation().setVisible(true);
         event.getPresentation().setText(event.getDataContext().getString(R.string.menu_new));
     }
 
     @Override
     public AnAction[] getChildren(@Nullable AnActionEvent e) {
         return new AnAction[]{new CreateFileAction(), new CreateClassAction(),
-                new CreateKotlinClassAction(), new CreateLayoutAction(),
-                new CreateDirectoryAction(), new DeleteFileAction()};
+                new CreateKotlinClassAction(), new CreateLayoutAction()};
     }
 }

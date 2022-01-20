@@ -34,6 +34,8 @@ import kotlin.io.FilesKt;
 
 public class DeleteFileAction extends FileAction {
 
+    public static final String ID = "fileManagerDeleteFileAction";
+
     @Override
     public String getTitle(Context context) {
         return context.getString(R.string.dialog_delete);

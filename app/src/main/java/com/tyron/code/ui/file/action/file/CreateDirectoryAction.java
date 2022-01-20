@@ -27,6 +27,8 @@ import java.io.File;
 
 public class CreateDirectoryAction extends FileAction {
 
+    public static final String ID = "fileManagerCreateDirectoryAction";
+
     @Override
     public String getTitle(Context context) {
         return context.getString(R.string.menu_action_new_directory);
