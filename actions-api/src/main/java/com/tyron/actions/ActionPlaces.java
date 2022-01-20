@@ -2,5 +2,13 @@ package com.tyron.actions;
 
 public class ActionPlaces {
 
+    /**
+     * The toolbar located in MainFragment
+     */
     public static final String MAIN_TOOLBAR = "main_toolbar";
+
+    /**
+     * Inside a CodeEditorFragment
+     */
+    public static final String EDITOR = "editor";
 }
