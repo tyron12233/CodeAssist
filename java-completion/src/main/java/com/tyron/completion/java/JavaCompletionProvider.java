@@ -104,6 +104,9 @@ public class JavaCompletionProvider extends CompletionProvider {
 
     private int getRatio(CompletionItem item, String partialIdentifier) {
         String label = getLabel(item);
+        if (label.length() > partialIdentifier.length()) {
+            return 0;
+        }
         return FuzzySearch.partialRatio(label, partialIdentifier);
     }
 

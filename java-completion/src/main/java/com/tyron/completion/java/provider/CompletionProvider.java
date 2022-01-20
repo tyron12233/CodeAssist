@@ -386,6 +386,9 @@ public class CompletionProvider {
             if (label.contains("(")) {
                 label = label.substring(0, label.indexOf('('));
             }
+            if (label.length() > partial.length()) {
+                return false;
+            }
             return FuzzySearch.partialRatio(label, partial) >= 70;
         };
 
