@@ -56,6 +56,8 @@ public class DiagnosticWrapper implements Diagnostic<File> {
             this.columnNumber = obj.getColumnNumber();
 
             this.message = obj.getMessage(Locale.getDefault());
+
+            this.mExtra = obj;
         } catch (Throwable e) {
             // ignored
         }
