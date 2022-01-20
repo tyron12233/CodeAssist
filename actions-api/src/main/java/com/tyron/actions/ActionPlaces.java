@@ -16,4 +16,6 @@ public class ActionPlaces {
      * The tab layout in an EditorContainerFragment
      */
     public static final String EDITOR_TAB = "editorTab";
+
+    public static final String FILE_MANAGER = "fileManager";
 }
