@@ -13,6 +13,7 @@ import com.tyron.code.ui.main.action.compile.CompileActionGroup;
 import com.tyron.code.ui.main.action.project.ProjectActionGroup;
 import com.tyron.code.ui.project.ProjectManagerFragment;
 import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.main.CompletionEngine;
@@ -48,6 +49,9 @@ public class MainActivity extends AppCompatActivity {
             manager.registerAction(CloseFileEditorAction.ID, new CloseFileEditorAction());
             manager.registerAction(CloseOtherEditorAction.ID, new CloseOtherEditorAction());
             manager.registerAction(CloseAllEditorAction.ID, new CloseAllEditorAction());
+
+            // java actions
+            CompletionModule.registerActions(manager);
         });
         startupManager.startup();
 

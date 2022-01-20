@@ -6,8 +6,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
+import com.tyron.actions.AnAction;
+import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.R;
+import com.tyron.completion.java.action.CommonJavaContextKeys;
 import com.tyron.completion.java.action.api.Action;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
@@ -19,6 +23,7 @@ import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.DiagnosticUtil.MethodPtr;
 import com.tyron.completion.java.util.ElementUtil;
+import com.tyron.editor.Editor;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
@@ -38,17 +43,42 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-public class ExceptionsQuickFix extends ActionProvider {
+public abstract class ExceptionsQuickFix extends AnAction {
 
     public static final String ERROR_CODE = "compiler.err.unreported.exception.need.to.catch.or" +
             ".throw";
 
     @Override
-    public boolean isApplicable(ActionContext context, @Nullable String errorCode) {
-        return ERROR_CODE.equals(errorCode);
+    public void update(@NonNull AnActionEvent event) {
+        Diagnostic<?> diagnostic = event.getData(CommonJavaContextKeys.DIAGNOSTIC);
+
+        event.getPresentation().setVisible(false);
+        if (diagnostic == null) {
+            return;
+        }
+
+        if (!ERROR_CODE.equals(diagnostic.getCode())) {
+            return;
+        }
+
+        TreePath currentPath = event.getData(CommonJavaContextKeys.CURRENT_PATH);
+        if (currentPath == null) {
+            return;
+        }
+
+        TreePath surroundingPath = ActionUtil.findSurroundingPath(currentPath);
+        if (surroundingPath == null) {
+            return;
+        }
+
+        Editor editor = event.getData(CommonDataKeys.EDITOR);
+        if (editor == null) {
+            return;
+        }
+
+        event.getPresentation().setVisible(true);
     }
 
-    @Override
     public void addMenus(@NonNull ActionContext context) {
         if (context.getDiagnostic() == null) {
             return;
@@ -101,5 +131,10 @@ public class ExceptionsQuickFix extends ActionProvider {
             context.performAction(action);
             return true;
         });
+    }
+
+    @Override
+    public void actionPerformed(@NonNull AnActionEvent e) {
+
     }
 }

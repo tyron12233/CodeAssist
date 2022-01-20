@@ -24,11 +24,14 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.tooltip.TooltipDrawable;
 import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
+import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.util.DataContextUtils;
 import com.tyron.builder.log.LogViewModel;
+import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.editor.Savable;
+import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
@@ -51,12 +54,14 @@ import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.Parser;
+import com.tyron.completion.java.action.CommonJavaContextKeys;
 import com.tyron.completion.java.action.FindCurrentPath;
 import com.tyron.completion.java.action.api.JavaActionManager;
 import com.tyron.completion.java.action.api.EditorInterface;
 import com.tyron.completion.java.provider.FindHelper;
 import com.tyron.completion.java.rewrite.EditHelper;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.java.rewrite.AddImport;
@@ -99,7 +104,7 @@ import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 public class CodeEditorFragment extends Fragment implements Savable,
         SharedPreferences.OnSharedPreferenceChangeListener {
 
-    private CodeEditor mEditor;
+    private CodeEditorView mEditor;
     private CodeEditorEventListener mEditorEventListener;
 
     private EditorLanguage mLanguage;
@@ -324,12 +329,11 @@ public class CodeEditorFragment extends Fragment implements Savable,
             menu.clear();
 
             DataContext dataContext = DataContextUtils.getDataContext(view1);
+            dataContext.putData(CommonDataKeys.PROJECT, currentProject);
+            dataContext.putData(MainFragment.FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
+            dataContext.putData(CommonDataKeys.FILE, mCurrentFile);
+            dataContext.putData(CommonDataKeys.EDITOR, mEditor);
 
-            ActionManager.getInstance().fillMenu(dataContext,
-                    menu,
-                    ActionPlaces.EDITOR,
-                    true,
-                    false);
             if (currentProject != null) {
                 Module currentModule = currentProject.getModule(mCurrentFile);
                 if ((mLanguage instanceof JavaLanguage) && (currentModule instanceof JavaModule)) {
@@ -338,10 +342,27 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     JavaCompilerService compiler = service.getCompiler(currentProject,
                             (JavaModule) currentModule);
                     if (compiler.isReady()) {
-                        addCodeActions(menu, compiler);
+                        ParseTask parse = compiler.parse(mCurrentFile.toPath());
+                        FindCurrentPath findCurrentPath = new FindCurrentPath(parse.task);
+                        TreePath currentPath = findCurrentPath.scan(parse.root,
+                                (long) mEditor.getCursor().getLeft());
+                        dataContext.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
+                        dataContext.putData(CommonJavaContextKeys.COMPILER, compiler);
+
+                        DiagnosticWrapper diagnosticWrapper =
+                                DiagnosticUtil.getDiagnosticWrapper(mEditor.getDiagnostics(),
+                                        mEditor.getCursor().getLeft());
+                        dataContext.putData(CommonJavaContextKeys.DIAGNOSTIC, diagnosticWrapper);
                     }
                 }
             }
+
+
+            ActionManager.getInstance().fillMenu(dataContext,
+                    menu,
+                    ActionPlaces.EDITOR,
+                    true,
+                    false);
         });
 
         mEditor.setOnLongPressListener((start, end, event) -> {

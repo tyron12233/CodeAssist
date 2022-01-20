@@ -1,5 +1,6 @@
 package com.tyron.completion.java.util;
 
+import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.action.FindMethodDeclarationAt;
 
@@ -14,7 +15,9 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.api.ClientCodeWrapper;
 
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -52,10 +55,35 @@ public class DiagnosticUtil {
      * @return null if no diagnostic is found
      */
     public static Diagnostic<? extends JavaFileObject> getDiagnostic(CompileTask task, long cursor) {
-        for (Diagnostic<? extends JavaFileObject> diagnostic : task.diagnostics) {
+       return getDiagnostic(task.diagnostics, cursor);
+    }
+
+    public static Diagnostic<? extends JavaFileObject> getDiagnostic(List<Diagnostic<? extends JavaFileObject>> diagnostics, long cursor) {
+        for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics) {
             if (diagnostic.getStartPosition() <= cursor && cursor < diagnostic.getEndPosition()) {
                 return diagnostic;
             }
+        }
+        return null;
+    }
+
+    public static DiagnosticWrapper getDiagnosticWrapper(List<DiagnosticWrapper> diagnostics, long cursor) {
+        for (DiagnosticWrapper diagnostic : diagnostics) {
+            if (diagnostic.getStartPosition() <= cursor && cursor < diagnostic.getEndPosition()) {
+                return diagnostic;
+            }
+        }
+        return null;
+    }
+
+    public static ClientCodeWrapper.DiagnosticSourceUnwrapper getDiagnosticSourceUnwrapper(Diagnostic<?> diagnostic) {
+        if (diagnostic instanceof DiagnosticWrapper) {
+            if (((DiagnosticWrapper) diagnostic).getExtra() instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
+                return (ClientCodeWrapper.DiagnosticSourceUnwrapper) ((DiagnosticWrapper) diagnostic).getExtra();
+            }
+        }
+        if (diagnostic instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
+            return (ClientCodeWrapper.DiagnosticSourceUnwrapper) diagnostic;
         }
         return null;
     }

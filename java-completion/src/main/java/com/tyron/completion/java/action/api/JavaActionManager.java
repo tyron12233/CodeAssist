@@ -10,10 +10,8 @@ import com.tyron.completion.java.action.context.DiagnosticInfoAction;
 import com.tyron.completion.java.action.context.IntroduceLocalVariableAction;
 import com.tyron.completion.java.action.context.OverrideInheritedMethodsAction;
 import com.tyron.completion.java.action.context.ViewJavaDocAction;
-import com.tyron.completion.java.action.quickfix.ExceptionsQuickFix;
 import com.tyron.completion.java.action.quickfix.ImplementAbstractMethodsFix;
 import com.tyron.completion.java.action.quickfix.ImportClassFieldFix;
-import com.tyron.completion.java.action.quickfix.ImportClassFix;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.TreeUtil;
 
@@ -47,11 +45,11 @@ public class JavaActionManager {
     private void registerBuiltinProviders() {
         registerActionProvider(new ViewJavaDocAction());
         registerActionProvider(new DiagnosticInfoAction());
-        registerActionProvider(new ExceptionsQuickFix());
+       // registerActionProvider(new ExceptionsQuickFix());
         registerActionProvider(new ImplementAbstractMethodsFix());
         registerActionProvider(new OverrideInheritedMethodsAction());
         registerActionProvider(new IntroduceLocalVariableAction());
-        registerActionProvider(new ImportClassFix());
+        //registerActionProvider(new ImportClassFix());
         registerActionProvider(new ImportClassFieldFix());
     }
 

@@ -8,8 +8,13 @@ import android.preference.PreferenceManager;
 
 import androidx.annotation.VisibleForTesting;
 
+import com.tyron.actions.ActionManager;
 import com.tyron.builder.BuildModule;
 import com.tyron.common.util.Decompress;
+import com.tyron.completion.java.action.quickfix.AddCatchClauseAction;
+import com.tyron.completion.java.action.quickfix.AddThrowsAction;
+import com.tyron.completion.java.action.quickfix.ImportClassAction;
+import com.tyron.completion.java.action.quickfix.SurroundWithTryCatchAction;
 
 import java.io.File;
 
@@ -19,6 +24,14 @@ public class CompletionModule {
     private static final Handler sApplicationHandler = new Handler(Looper.getMainLooper());
     private static File sAndroidJar;
     private static File sLambdaStubs;
+
+    public static void registerActions(ActionManager actionManager) {
+        actionManager.registerAction(AddThrowsAction.ID, new AddThrowsAction());
+        actionManager.registerAction(AddCatchClauseAction.ID, new AddCatchClauseAction());
+        actionManager.registerAction(SurroundWithTryCatchAction.ID, new SurroundWithTryCatchAction());
+        actionManager.registerAction(ImportClassAction.ID, new ImportClassAction());
+    }
+
 
     public static void initialize(Context context) {
         sApplicationContext = context.getApplicationContext();

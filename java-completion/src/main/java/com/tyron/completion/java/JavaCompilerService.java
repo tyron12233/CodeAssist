@@ -454,4 +454,9 @@ public class JavaCompilerService implements CompilerProvider {
     public void destroy() {
         cachedCompile = null;
     }
+
+    @NonNull
+    public CompilerContainer getCachedContainer() {
+        return mContainer;
+    }
 }
