@@ -132,9 +132,18 @@ public class CodeEditorFragment extends Fragment implements Savable,
             if (fileContent.isPresent()) {
                 int line = mEditor.getCursor().getLeftLine();
                 int column = mEditor.getCursor().getLeftColumn();
+
+                int targetX = mEditor.getOffsetX();
+                int targetY = mEditor.getOffsetY();
+
                 mEditor.setText(fileContent.get());
-                mEditor.getCursor().set(line, column);
-                mEditor.notifyExternalCursorChange();
+
+                mEditor.setSelection(line, column, false);
+
+                mEditor.getScroller().startScroll(mEditor.getOffsetX(), mEditor.getOffsetY(),
+                        targetX - mEditor.getOffsetX(),
+                        targetY - mEditor.getOffsetY(),
+                        0);
             }
         }
     }
