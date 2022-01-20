@@ -14,6 +14,7 @@ import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.doctree.ThrowsTree;
 import org.openjdk.source.tree.BlockTree;
+import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.EnhancedForLoopTree;
 import org.openjdk.source.tree.ExpressionStatementTree;
@@ -77,6 +78,11 @@ public class ActionUtil {
             }
         }
 
+        // class Class { }
+        if (path.getLeaf() instanceof ClassTree) {
+            return false;
+        }
+
         if (path.getLeaf() instanceof NewClassTree) {
             // run(new Runnable() { });
             if (parent.getLeaf() instanceof MethodInvocationTree) {
@@ -84,9 +90,12 @@ public class ActionUtil {
             }
         }
 
+        // throw ...
         if (parent.getLeaf() instanceof JCTree.JCThrow) {
             return false;
         }
+
+        // return ...
         if (parent.getLeaf() instanceof ReturnTree) {
             return false;
         }
