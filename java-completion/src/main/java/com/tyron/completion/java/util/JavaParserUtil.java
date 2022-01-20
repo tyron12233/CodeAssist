@@ -536,6 +536,7 @@ public class JavaParserUtil {
         parameter.setType(EditHelper.printType(type));
         if (parameter.getType().isArrayType()) {
             if (((org.openjdk.tools.javac.code.Type.ArrayType) type).isVarargs()) {
+                parameter.setType(parameter.getType().asArrayType().getComponentType());
                 parameter.setVarArgs(true);
             }
         }
