@@ -325,7 +325,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                         DiagnosticWrapper diagnosticWrapper =
                                 DiagnosticUtil.getDiagnosticWrapper(mEditor.getDiagnostics(),
                                         mEditor.getCursor().getLeft());
-                        dataContext.putData(CommonJavaContextKeys.DIAGNOSTIC, diagnosticWrapper);
+                        dataContext.putData(CommonDataKeys.DIAGNOSTIC, diagnosticWrapper);
                     }
                 }
             }

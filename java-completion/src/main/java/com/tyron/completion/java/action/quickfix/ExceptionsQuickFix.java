@@ -19,7 +19,7 @@ public abstract class ExceptionsQuickFix extends AnAction {
 
     @Override
     public void update(@NonNull AnActionEvent event) {
-        Diagnostic<?> diagnostic = event.getData(CommonJavaContextKeys.DIAGNOSTIC);
+        Diagnostic<?> diagnostic = event.getData(CommonDataKeys.DIAGNOSTIC);
 
         event.getPresentation().setVisible(false);
         if (diagnostic == null) {

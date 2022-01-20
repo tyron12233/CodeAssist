@@ -8,6 +8,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.editor.Editor;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
+import org.openjdk.javax.tools.Diagnostic;
 
 import java.io.File;
 
@@ -27,6 +28,8 @@ public class CommonDataKeys {
      * The current fragment this action is invoked on
      */
     public static final Key<Fragment> FRAGMENT = Key.create("fragment");
+
+    public static final Key<Diagnostic<?>> DIAGNOSTIC = Key.create("diagnostic");
 
     /**
      * The current opened project

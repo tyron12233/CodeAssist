@@ -40,7 +40,7 @@ public class ImportClassAction extends AnAction {
         Presentation presentation = event.getPresentation();
         presentation.setVisible(false);
 
-        Diagnostic<?> diagnostic = event.getData(CommonJavaContextKeys.DIAGNOSTIC);
+        Diagnostic<?> diagnostic = event.getData(CommonDataKeys.DIAGNOSTIC);
         if (diagnostic == null) {
             return;
         }
@@ -83,7 +83,7 @@ public class ImportClassAction extends AnAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        Diagnostic<?> diagnostic = e.getData(CommonJavaContextKeys.DIAGNOSTIC);
+        Diagnostic<?> diagnostic = e.getData(CommonDataKeys.DIAGNOSTIC);
         diagnostic = DiagnosticUtil.getDiagnosticSourceUnwrapper(diagnostic);
         if (diagnostic == null) {
             return;

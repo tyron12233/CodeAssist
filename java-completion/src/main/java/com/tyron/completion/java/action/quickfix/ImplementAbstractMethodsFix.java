@@ -32,7 +32,7 @@ public class ImplementAbstractMethodsFix extends AnAction {
         Presentation presentation = event.getPresentation();
         presentation.setVisible(false);
 
-        Diagnostic<?> diagnostic = event.getData(CommonJavaContextKeys.DIAGNOSTIC);
+        Diagnostic<?> diagnostic = event.getData(CommonDataKeys.DIAGNOSTIC);
         if (diagnostic == null) {
             return;
         }
@@ -60,7 +60,7 @@ public class ImplementAbstractMethodsFix extends AnAction {
         Editor editor = e.getData(CommonDataKeys.EDITOR);
         File file = e.getData(CommonDataKeys.FILE);
         JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
-        Diagnostic<?> diagnostic = e.getData(CommonJavaContextKeys.DIAGNOSTIC);
+        Diagnostic<?> diagnostic = e.getData(CommonDataKeys.DIAGNOSTIC);
         ClientCodeWrapper.DiagnosticSourceUnwrapper diagnosticSourceUnwrapper =
                 DiagnosticUtil.getDiagnosticSourceUnwrapper(diagnostic);
         if (diagnosticSourceUnwrapper == null) {

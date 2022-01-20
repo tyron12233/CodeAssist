@@ -51,7 +51,7 @@ public class AddThrowsAction extends ExceptionsQuickFix {
         }
 
         presentation.setVisible(false);
-        Diagnostic<?> diagnostic = event.getData(CommonJavaContextKeys.DIAGNOSTIC);
+        Diagnostic<?> diagnostic = event.getData(CommonDataKeys.DIAGNOSTIC);
         if (diagnostic == null) {
             return;
         }
@@ -79,7 +79,7 @@ public class AddThrowsAction extends ExceptionsQuickFix {
         Editor editor = e.getData(CommonDataKeys.EDITOR);
         File file = e.getData(CommonDataKeys.FILE);
         JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
-        Diagnostic<?> diagnostic = e.getData(CommonJavaContextKeys.DIAGNOSTIC);
+        Diagnostic<?> diagnostic = e.getData(CommonDataKeys.DIAGNOSTIC);
         TreePath currentPath = e.getData(CommonJavaContextKeys.CURRENT_PATH);
         String exceptionName = DiagnosticUtil.extractExceptionName(diagnostic.getMessage(Locale.ENGLISH));
 
