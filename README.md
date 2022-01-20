@@ -61,12 +61,6 @@ Russian-language (русскоязычный) chat in Telegram: https://t.me/cod
 
 
 
-## Issues
-
-Issues are disabled until the next release as most issues has been fixed and there have been many changes so the issues on the previous apk may not be valid with the current apk.
-
-
-
 ## Building - Android Studio
 
 Clone this repository to your local device and then open it on Android Studio.
