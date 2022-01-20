@@ -8,9 +8,9 @@ import androidx.annotation.NonNull;
 
 import com.tyron.actions.ActionGroup;
 import com.tyron.actions.ActionManager;
-import com.tyron.actions.ActionPopupMenu;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.DataContext;
 import com.tyron.actions.Presentation;
 
 import java.util.HashMap;
@@ -22,9 +22,10 @@ public class ActionManagerImpl extends ActionManager {
     private final Map<Object, String> mActionToId = new HashMap<>();
 
     @Override
-    public void fillMenu(Menu menu, String place, boolean isContext, boolean isToolbar) {
+    public void fillMenu(DataContext context, Menu menu, String place, boolean isContext, boolean isToolbar) {
         for (AnAction value : mIdToAction.values()) {
-            AnActionEvent event = new AnActionEvent(place,
+            AnActionEvent event = new AnActionEvent(context,
+                    place,
                     value.getTemplatePresentation(),
                     isContext,
                     isToolbar);
@@ -48,7 +49,8 @@ public class ActionManagerImpl extends ActionManager {
             AnAction[] children = actionGroup.getChildren(event);
             if (children != null) {
                 for (AnAction child : children) {
-                    AnActionEvent childEvent = new AnActionEvent(event.getPlace(),
+                    AnActionEvent childEvent = new AnActionEvent(event.getDataContext(),
+                            event.getPlace(),
                             child.getTemplatePresentation(),
                             event.isContextMenuAction(),
                             event.isActionToolbar());
@@ -82,7 +84,9 @@ public class ActionManagerImpl extends ActionManager {
             AnAction[] children = group.getChildren(event);
             if (children != null) {
                 for (AnAction child : children) {
-                    AnActionEvent childEvent = new AnActionEvent(event.getPlace(),
+                    AnActionEvent childEvent = new AnActionEvent(
+                            event.getDataContext(),
+                            event.getPlace(),
                             child.getTemplatePresentation(),
                             event.isContextMenuAction(),
                             event.isActionToolbar());
