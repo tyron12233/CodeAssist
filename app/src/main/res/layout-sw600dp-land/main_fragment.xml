@@ -37,7 +37,7 @@
             android:theme="@style/CodeEditorActionBar"
             app:elevation="0dp">
 
-            <androidx.appcompat.widget.Toolbar
+            <com.tyron.actions.impl.ActionToolbar
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
