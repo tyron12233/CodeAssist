@@ -2,6 +2,8 @@ package com.tyron.actions;
 
 import android.content.Context;
 
+import androidx.fragment.app.Fragment;
+
 import com.tyron.builder.project.Project;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
@@ -19,6 +21,11 @@ public class CommonDataKeys {
      * The current accessible context
      */
     public static final Key<Context> CONTEXT = Key.create("context");
+
+    /**
+     * The current fragment this action is invoked on
+     */
+    public static final Key<Fragment> FRAGMENT = Key.create("fragment");
 
     /**
      * The current opened project
