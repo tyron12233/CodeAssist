@@ -22,6 +22,10 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.tooltip.TooltipDrawable;
+import com.tyron.actions.ActionManager;
+import com.tyron.actions.ActionPlaces;
+import com.tyron.actions.DataContext;
+import com.tyron.actions.util.DataContextUtils;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.editor.Savable;
@@ -318,7 +322,14 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
             menu.clear();
-            menu.setHeaderTitle("Loading...");
+
+            DataContext dataContext = DataContextUtils.getDataContext(view1);
+
+            ActionManager.getInstance().fillMenu(dataContext,
+                    menu,
+                    ActionPlaces.EDITOR,
+                    true,
+                    false);
             if (currentProject != null) {
                 Module currentModule = currentProject.getModule(mCurrentFile);
                 if ((mLanguage instanceof JavaLanguage) && (currentModule instanceof JavaModule)) {
@@ -331,7 +342,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     }
                 }
             }
-            menu.clearHeader();
         });
 
         mEditor.setOnLongPressListener((start, end, event) -> {

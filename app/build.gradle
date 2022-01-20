@@ -52,6 +52,7 @@ dependencies {
     implementation project(path: ':dependency-resolver')
     implementation project(path: ':xml-completion')
     implementation project(path: ':actions-api')
+    implementation project(path: ':editor-api')
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:1.1.5")
 
     implementation 'androidx.appcompat:appcompat:1.4.0'
