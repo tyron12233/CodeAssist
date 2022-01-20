@@ -4,45 +4,81 @@ import android.app.AlertDialog;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.actions.AnAction;
+import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
+import com.tyron.actions.Presentation;
+import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
+import com.tyron.completion.java.action.CommonJavaContextKeys;
 import com.tyron.completion.java.action.api.ActionContext;
 import com.tyron.completion.java.action.api.ActionProvider;
 import com.tyron.completion.java.hover.HoverProvider;
+import com.tyron.editor.Editor;
 
 import org.openjdk.javax.lang.model.element.Element;
+import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
+import java.io.File;
 import java.util.List;
 
-public class ViewJavaDocAction extends ActionProvider {
+public class ViewJavaDocAction extends AnAction {
 
     @Override
-    public boolean isApplicable(ActionContext context, @NonNull TreePath currentPath) {
-        return true;
+    public void update(@NonNull AnActionEvent event) {
+        Presentation presentation = event.getPresentation();
+        presentation.setVisible(false);
+
+        File file = event.getData(CommonDataKeys.FILE);
+        if (file == null) {
+            return;
+        }
+
+        Editor editor = event.getData(CommonDataKeys.EDITOR);
+        if (editor == null) {
+            return;
+        }
+
+        TreePath currentPath = event.getData(CommonJavaContextKeys.CURRENT_PATH);
+        if (currentPath == null) {
+            return;
+        }
+
+        JavaCompilerService compiler = event.getData(CommonJavaContextKeys.COMPILER);
+        if (compiler == null) {
+            return;
+        }
+
+        HoverProvider hoverProvider = new HoverProvider(compiler);
+        List<String> strings = hoverProvider.hover(file.toPath().getFileName(),
+                editor.getCaret().getStart());
+
+        if (strings.isEmpty()) {
+            return;
+        }
+
+
+        presentation.setVisible(true);
+        presentation.setText(event.getDataContext().getString(R.string.menu_action_view_javadoc_title));
     }
 
     @Override
-    public void addMenus(@NonNull ActionContext context) {
-        String title = context.getContext().getString(R.string.menu_action_view_javadoc_title);
-        context.addMenu("context", title).setOnMenuItemClickListener(item -> {
-            HoverProvider provider = new HoverProvider(context.getCompiler());
-            List<String> hover = provider.hover(context.getCurrentFile(), context.getCursor());
+    public void actionPerformed(@NonNull AnActionEvent e) {
+        Editor editor = e.getData(CommonDataKeys.EDITOR);
+        File file = e.getData(CommonDataKeys.FILE);
+        JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
 
-            if (!hover.isEmpty()) {
-                new AlertDialog.Builder(context.getContext())
-                        .setTitle(title)
-                        .setMessage(hover.get(0))
-                        .setPositiveButton(R.string.menu_close, null)
-                        .show();
-            } else {
-                new AlertDialog.Builder(context.getContext())
-                        .setTitle(title)
-                        .setMessage(R.string.menu_action_no_javadoc_message)
-                        .setPositiveButton(R.string.menu_close, null)
-                        .show();
-            }
-            return true;
-        });
+        HoverProvider hoverProvider = new HoverProvider(compiler);
+        List<String> strings = hoverProvider.hover(file.toPath(), editor.getCaret().getStart());
+
+        String title = e.getDataContext().getString(R.string.menu_action_view_javadoc_title);
+
+        new AlertDialog.Builder(e.getDataContext())
+                .setTitle(title)
+                .setMessage(strings.get(0))
+                .setPositiveButton(R.string.menu_close, null)
+                .show();
     }
 }
