@@ -14,6 +14,7 @@ import com.tyron.code.ui.editor.action.CloseOtherEditorAction;
 import com.tyron.code.ui.editor.action.DiagnosticInfoAction;
 import com.tyron.code.ui.editor.action.PreviewLayoutAction;
 import com.tyron.code.ui.main.action.compile.CompileActionGroup;
+import com.tyron.code.ui.main.action.other.OpenSettingsAction;
 import com.tyron.code.ui.main.action.project.ProjectActionGroup;
 import com.tyron.code.ui.project.ProjectManagerFragment;
 import com.tyron.completion.index.CompilerService;
@@ -49,6 +50,8 @@ public class MainActivity extends AppCompatActivity {
             manager.registerAction(CompileActionGroup.ID, new CompileActionGroup());
             manager.registerAction(ProjectActionGroup.ID, new ProjectActionGroup());
             manager.registerAction(PreviewLayoutAction.ID, new PreviewLayoutAction());
+            manager.registerAction(OpenSettingsAction.ID, new OpenSettingsAction());
+
             // editor tab actions
             manager.registerAction(CloseFileEditorAction.ID, new CloseFileEditorAction());
             manager.registerAction(CloseOtherEditorAction.ID, new CloseOtherEditorAction());
