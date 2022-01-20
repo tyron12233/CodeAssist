@@ -22,13 +22,15 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.transition.MaterialSharedAxis;
-import com.google.common.base.Strings;
 import com.google.gson.Gson;
+import com.tyron.actions.ActionManager;
+import com.tyron.actions.ActionPlaces;
+import com.tyron.actions.CommonDataKeys;
+import com.tyron.actions.DataContext;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
-import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.editor.api.FileEditor;
 import com.tyron.code.ui.editor.impl.FileEditorSavedState;
 import com.tyron.code.ui.library.LibraryManagerFragment;
@@ -47,15 +49,22 @@ import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.settings.SettingsActivity;
 import com.tyron.completion.java.provider.CompletionEngine;
 
+import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import org.openjdk.javax.tools.Diagnostic;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class MainFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
+
+    public static final String REFRESH_TOOLBAR_KEY = "refreshToolbar";
+
+    public static final Key<CompileCallback> COMPILE_CALLBACK_KEY = Key.create("compileCallback");
+    public static final Key<IndexCallback> INDEX_CALLBACK_KEY = Key.create("indexCallbackKey");
+    public static final Key<MainViewModel> MAIN_VIEW_MODEL_KEY = Key.create("mainViewModel");
+    public static final Key<FileEditor> FILE_EDITOR_KEY = Key.create("fileEditor");
 
     public static MainFragment newInstance(@NonNull String projectPath) {
         Bundle bundle = new Bundle();
@@ -92,6 +101,10 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     private CompilerServiceConnection mServiceConnection;
     private IndexServiceConnection mIndexServiceConnection;
 
+    private final CompileCallback mCompileCallback = this::compile;
+    private final IndexCallback mIndexCallback = this::openProject;
+
+
     public MainFragment() {
 
     }
@@ -127,7 +140,10 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 
         mToolbar = mRoot.findViewById(R.id.toolbar);
         mToolbar.setNavigationIcon(R.drawable.ic_baseline_menu_24);
-        mToolbar.inflateMenu(R.menu.code_editor_menu);
+
+        getChildFragmentManager().setFragmentResultListener(REFRESH_TOOLBAR_KEY, getViewLifecycleOwner(),
+                (key, __) -> refreshToolbar());
+        refreshToolbar();
 
         if (savedInstanceState != null) {
             restoreViewState(savedInstanceState);
@@ -383,5 +399,33 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             requireActivity().registerReceiver(mLogReceiver,
                     new IntentFilter(((AndroidModule) module).getPackageName() + ".LOG"));
         }
+    }
+
+    private DataContext getDataContext(View view) {
+        Context context = view.getContext();
+        if (context instanceof DataContext) {
+            return (DataContext) context;
+        }
+        return new DataContext(context);
+    }
+
+    private void injectData(DataContext context) {
+        context.putData(CommonDataKeys.PROJECT, ProjectManager.getInstance().getCurrentProject());
+        context.putData(MAIN_VIEW_MODEL_KEY, mMainViewModel);
+        context.putData(COMPILE_CALLBACK_KEY, mCompileCallback);
+        context.putData(INDEX_CALLBACK_KEY, mIndexCallback);
+        context.putData(FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
+    }
+    public void refreshToolbar() {
+        mToolbar.getMenu().clear();
+
+        DataContext context = getDataContext(mToolbar);
+        injectData(context);
+
+        ActionManager.getInstance().fillMenu(context,
+                mToolbar.getMenu(),
+                ActionPlaces.MAIN_TOOLBAR,
+                false,
+                true);
     }
 }
