@@ -33,6 +33,7 @@ import com.tyron.code.R;
 import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
+import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.layoutEditor.LayoutEditorFragment;
@@ -321,15 +322,18 @@ public class CodeEditorFragment extends Fragment implements Savable,
                             }
                         });
                         dataContext.putData(CommonJavaContextKeys.COMPILER, compiler);
-
-                        DiagnosticWrapper diagnosticWrapper =
-                                DiagnosticUtil.getDiagnosticWrapper(mEditor.getDiagnostics(),
-                                        mEditor.getCursor().getLeft());
-                        dataContext.putData(CommonDataKeys.DIAGNOSTIC, diagnosticWrapper);
                     }
                 }
             }
 
+            DiagnosticWrapper diagnosticWrapper =
+                    DiagnosticUtil.getDiagnosticWrapper(mEditor.getDiagnostics(),
+                            mEditor.getCursor().getLeft());
+            if (diagnosticWrapper == null && mLanguage instanceof LanguageXML) {
+                diagnosticWrapper = DiagnosticUtil.getXmlDiagnosticWrapper(mEditor.getDiagnostics(),
+                        mEditor.getCursor().getLeftLine());
+            }
+            dataContext.putData(CommonDataKeys.DIAGNOSTIC, diagnosticWrapper);
 
             ActionManager.getInstance().fillMenu(dataContext,
                     menu,

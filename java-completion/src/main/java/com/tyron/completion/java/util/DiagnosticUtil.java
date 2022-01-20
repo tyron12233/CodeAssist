@@ -76,6 +76,15 @@ public class DiagnosticUtil {
         return null;
     }
 
+    public static DiagnosticWrapper getXmlDiagnosticWrapper(List<DiagnosticWrapper> diagnostics, int line) {
+        for (DiagnosticWrapper diagnostic : diagnostics) {
+            if (diagnostic.getLineNumber() == line) {
+                return diagnostic;
+            }
+        }
+        return null;
+    }
+
     public static ClientCodeWrapper.DiagnosticSourceUnwrapper getDiagnosticSourceUnwrapper(Diagnostic<?> diagnostic) {
         if (diagnostic instanceof DiagnosticWrapper) {
             if (((DiagnosticWrapper) diagnostic).getExtra() instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
