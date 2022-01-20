@@ -26,7 +26,7 @@ public class AnActionEvent implements PlaceProvider {
     }
 
     public void setPresentation(Presentation presentation) {
-
+        mPresentation = presentation;
     }
 
     @Override

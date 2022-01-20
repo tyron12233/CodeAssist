@@ -58,9 +58,11 @@ public class ActionManagerImpl extends ActionManager {
                     isContext,
                     isToolbar);
 
+            event.setPresentation(value.getTemplatePresentation());
+
             value.update(event);
 
-            if (value.getTemplatePresentation().isVisible()) {
+            if (event.getPresentation().isVisible()) {
                 fillMenu(menu, value, event);
             }
         }
@@ -93,6 +95,7 @@ public class ActionManagerImpl extends ActionManager {
         }
 
         menuItem.setEnabled(presentation.isEnabled());
+        menuItem.setTitle(presentation.getText());
         if (presentation.getIcon() != null) {
             menuItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         } else {
@@ -106,7 +109,7 @@ public class ActionManagerImpl extends ActionManager {
     }
 
     private void fillSubMenu(SubMenu subMenu, AnAction action, AnActionEvent event) {
-        Presentation presentation = action.getTemplatePresentation();
+        Presentation presentation = event.getPresentation();
 
         MenuItem menuItem;
 
