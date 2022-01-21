@@ -75,18 +75,27 @@ public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
     
     @Override
     public TreePath visitCase(CaseTree t, Long find) {
+	    TreePath smaller = super.visitCase(t, find);
+	    if (smaller != null) {
+	        return smaller;
+        }
         if (isInside(t, find)) {
             return getCurrentPath();
         }
-        return super.visitCase(t, find);
+        return null;
     }
 
     @Override
     public TreePath visitSwitch(SwitchTree t, Long find) {
+	    TreePath smaller = super.visitSwitch(t, find);
+	    if (smaller != null) {
+	        return smaller;
+        }
         if (isInside(t, find)) {
             return getCurrentPath();
         }
-        return super.visitSwitch(t, find);
+
+        return null;
     }
 
     @Override

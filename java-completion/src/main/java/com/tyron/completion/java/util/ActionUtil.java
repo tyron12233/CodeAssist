@@ -14,6 +14,7 @@ import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.doctree.ThrowsTree;
 import org.openjdk.source.tree.AnnotationTree;
+import org.openjdk.source.tree.ArrayTypeTree;
 import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
@@ -31,8 +32,10 @@ import org.openjdk.source.tree.ParameterizedTypeTree;
 import org.openjdk.source.tree.ParenthesizedTree;
 import org.openjdk.source.tree.PrimitiveTypeTree;
 import org.openjdk.source.tree.ReturnTree;
+import org.openjdk.source.tree.SwitchTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.TryTree;
+import org.openjdk.source.tree.UnaryTree;
 import org.openjdk.source.tree.WhileLoopTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
@@ -52,6 +55,10 @@ public class ActionUtil {
             return false;
         }
 
+        if (path.getLeaf() instanceof SwitchTree) {
+            return false;
+        }
+
         if (path.getLeaf() instanceof ParameterizedTypeTree) {
             return false;
         }
@@ -64,12 +71,20 @@ public class ActionUtil {
             return false;
         }
 
+        if (path.getLeaf() instanceof ArrayTypeTree) {
+            return ActionUtil.canIntroduceLocalVariable(parent);
+        }
+
+        if (path.getLeaf() instanceof ParenthesizedTree) {
+            return ActionUtil.canIntroduceLocalVariable(parent);
+        }
+
         if (path.getLeaf() instanceof MemberSelectTree) {
-            return ActionUtil.canIntroduceLocalVariable(path.getParentPath());
+            return ActionUtil.canIntroduceLocalVariable(parent);
         }
 
         if (path.getLeaf() instanceof PrimitiveTypeTree) {
-            return ActionUtil.canIntroduceLocalVariable(path.getParentPath());
+            return ActionUtil.canIntroduceLocalVariable(parent);
         }
 
         if (path.getLeaf() instanceof IdentifierTree) {
@@ -92,6 +107,12 @@ public class ActionUtil {
         if (path.getLeaf() instanceof BlockTree) {
             // method() { cursor }
             if (parent.getLeaf() instanceof MethodTree) {
+                return false;
+            }
+        }
+
+        if (path.getLeaf() instanceof UnaryTree) {
+            if (parent.getParentPath().getLeaf() instanceof ForLoopTree) {
                 return false;
             }
         }
