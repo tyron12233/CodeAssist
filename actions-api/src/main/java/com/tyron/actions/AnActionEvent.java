@@ -1,10 +1,17 @@
 package com.tyron.actions;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.RestrictTo;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 
+/**
+ * Container for information necessary to execute or update an {@link AnAction}
+ *
+ * @see AnAction#update(AnActionEvent)
+ * @see AnAction#actionPerformed(AnActionEvent)
+ */
 public class AnActionEvent implements PlaceProvider {
 
     private final DataContext mDataContext;
@@ -46,10 +53,46 @@ public class AnActionEvent implements PlaceProvider {
         return mIsActionToolbar;
     }
 
+    @Nullable
     public <T> T getData(Key<T> key) {
         return mDataContext.getData(key);
     }
 
+    /**
+     * Returns a non null data by a data key. This method assumes that data has been checked
+     * for {@code null} in {@code AnAction#update} method.
+     *
+     * <br/><br/>
+     * Example of proper usage:
+     *
+     * <pre>
+     *     public class MyAction extends AnAction {
+     *         public void update(AnActionEvent e) {
+     *             // perform action if and only if EDITOR != null
+     *             boolean visible = e.getData(CommonDataKeys.EDITOR) != null;
+     *             e.getPresentation().setVisible(visible);
+     *         }
+     *
+     *         public void actionPerformed(AnActionEvent e) {
+     *             // if we're here then EDITOR != null
+     *             Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
+     *         }
+     *     }
+     * </pre>
+     */
+    @NonNull
+    public <T> T getRequiredData(Key<T> key) {
+        T data = getData(key);
+        assert data != null;
+        return data;
+    }
+
+    /**
+     * Returns the data context which allows to retrieve information about the state of the IDE
+     * related to the action invocation. (Active editor, fragment and so on)
+     *
+     * @return the data context instance
+     */
     public DataContext getDataContext() {
         return mDataContext;
     }
