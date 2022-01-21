@@ -1,4 +1,4 @@
-package com.tyron.completion.java.util;
+package com.tyron.common.util;
 
 import android.os.Handler;
 import android.os.Looper;
