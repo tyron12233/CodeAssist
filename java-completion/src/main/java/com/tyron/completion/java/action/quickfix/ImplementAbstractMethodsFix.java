@@ -10,9 +10,9 @@ import com.tyron.actions.Presentation;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.action.util.RewriteUtil;
+import com.tyron.completion.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.ImplementAbstractMethods;
-import com.tyron.completion.java.rewrite.Rewrite;
+import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.editor.Editor;
 
@@ -72,7 +72,7 @@ public class ImplementAbstractMethodsFix extends AnAction {
             return;
         }
         JCDiagnostic jcDiagnostic = diagnosticSourceUnwrapper.d;
-        Rewrite rewrite = new ImplementAbstractMethods(jcDiagnostic);
+        JavaRewrite rewrite = new ImplementAbstractMethods(jcDiagnostic);
         RewriteUtil.performRewrite(editor, file, compiler, rewrite);
     }
 }

@@ -12,9 +12,9 @@ import com.tyron.actions.Presentation;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.action.util.RewriteUtil;
+import com.tyron.completion.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.AddImport;
-import com.tyron.completion.java.rewrite.Rewrite;
+import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.editor.Editor;
@@ -104,11 +104,11 @@ public class ImportClassAction extends AnAction {
         JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
         Path file = e.getData(CommonDataKeys.FILE).toPath();
 
-        Map<String, Rewrite> map = new TreeMap<>();
+        Map<String, JavaRewrite> map = new TreeMap<>();
         for (String qualifiedName : compiler.publicTopLevelTypes()) {
             if (qualifiedName.endsWith("." + simpleName)) {
                 String title = e.getDataContext().getString(R.string.import_class_name, qualifiedName);
-                Rewrite addImport = new AddImport(file.toFile(), qualifiedName);
+                JavaRewrite addImport = new AddImport(file.toFile(), qualifiedName);
                 map.put(title, addImport);
             }
         }
@@ -121,7 +121,7 @@ public class ImportClassAction extends AnAction {
             new AlertDialog.Builder(e.getDataContext())
                     .setTitle(R.string.import_class_title)
                     .setItems(titles, (di, w) -> {
-                        Rewrite rewrite = map.get(titles[w]);
+                        JavaRewrite rewrite = map.get(titles[w]);
                         RewriteUtil.performRewrite(editor, file.toFile(),
                                 compiler, rewrite);
                     })

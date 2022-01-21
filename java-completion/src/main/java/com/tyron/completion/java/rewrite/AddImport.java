@@ -20,7 +20,7 @@ import org.openjdk.source.tree.ImportTree;
 
 import java.io.File;
 
-public class AddImport implements Rewrite {
+public class AddImport implements JavaRewrite {
     
     private final String className;
     private final File currentFile;

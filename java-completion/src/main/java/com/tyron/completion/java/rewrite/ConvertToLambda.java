@@ -9,7 +9,7 @@ import java.util.Map;
 /**
  * Converts an anonymous class into a lambda expression
  */
-public class ConvertToLambda implements Rewrite {
+public class ConvertToLambda implements JavaRewrite {
 
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {

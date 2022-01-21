@@ -12,9 +12,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
-public class AddTryCatch implements Rewrite {
+public class AddTryCatch implements JavaRewrite {
 
     private final Path file;
     private final String contents;

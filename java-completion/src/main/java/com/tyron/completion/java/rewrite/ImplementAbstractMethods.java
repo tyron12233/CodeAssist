@@ -23,10 +23,8 @@ import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.element.VariableElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
 import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.JavaFileObject;
@@ -47,9 +45,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 
-import javaslang.collection.Tree;
-
-public class ImplementAbstractMethods implements Rewrite {
+public class ImplementAbstractMethods implements JavaRewrite {
 
     private static final String TAG = ImplementAbstractMethods.class.getSimpleName();
 
@@ -163,7 +159,7 @@ public class ImplementAbstractMethods implements Rewrite {
             for (String type : typesToImport) {
                 String fqn = ActionUtil.removeDiamond(type);
                 if (!ActionUtil.hasImport(task.root(), fqn)) {
-                    Rewrite addImport = new AddImport(file.toFile(), fqn);
+                    JavaRewrite addImport = new AddImport(file.toFile(), fqn);
                     Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
                     TextEdit[] textEdits = rewrite.get(file);
                     if (textEdits != null) {

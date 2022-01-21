@@ -10,8 +10,8 @@ import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.Presentation;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.util.Decompress;
-import com.tyron.completion.java.action.util.RewriteUtil;
-import com.tyron.completion.java.rewrite.Rewrite;
+import com.tyron.completion.util.RewriteUtil;
+import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.xml.R;
 import com.tyron.completion.xml.XmlCompletionModule;
 import com.tyron.completion.xml.rewrite.AddPermissions;
@@ -98,7 +98,7 @@ public class AndroidManifestAddPermissionsAction extends AnAction {
                         }
                     }
 
-                    Rewrite rewrite = new AddPermissions(file.toPath(), editor.getContents(), selected);
+                    JavaRewrite rewrite = new AddPermissions(file.toPath(), editor.getContents(), selected);
                     RewriteUtil.performRewrite(editor, file, null, rewrite);
         }).show();
     }
