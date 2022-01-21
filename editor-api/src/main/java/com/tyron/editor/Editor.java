@@ -19,4 +19,6 @@ public interface Editor {
     void endBatchEdit();
 
     Caret getCaret();
+
+    String getContents();
 }

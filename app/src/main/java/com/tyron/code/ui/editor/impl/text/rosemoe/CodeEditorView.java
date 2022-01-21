@@ -73,4 +73,9 @@ public class CodeEditorView extends CodeEditor implements Editor {
     public Caret getCaret() {
         return new CursorWrapper(getCursor());
     }
+
+    @Override
+    public String getContents() {
+        return getText().toString();
+    }
 }
