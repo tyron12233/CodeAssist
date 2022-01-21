@@ -22,6 +22,7 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
 
+import org.jetbrains.kotlin.com.intellij.patterns.PsiJavaPatterns;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
@@ -36,6 +37,7 @@ import org.openjdk.javax.lang.model.type.PrimitiveType;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.type.TypeVariable;
 import org.openjdk.javax.lang.model.util.Types;
+import org.openjdk.source.tree.CaseTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ExpressionTree;
@@ -252,7 +254,12 @@ public class CompletionProvider {
         checkCanceled();
 
         CompletionList list = new CompletionList();
-        list.items = completeUsingScope(task, path, partial, endsWithParen);
+        list.items = new ArrayList<>();
+        if (path.getParentPath().getLeaf() instanceof CaseTree) {
+            CompletionList completionList = completeSwitchConstant(task, path, partial);
+            list.items.addAll(completionList.items);
+        }
+        list.items.addAll(completeUsingScope(task, path, partial, endsWithParen));
         if (partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
             addClassNames(path.getCompilationUnit(), partial, list);
         }
