@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import com.tyron.actions.ActionGroup;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.Presentation;
 import com.tyron.code.R;
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.file.CommonFileKeys;
@@ -23,13 +24,16 @@ public class NewFileActionGroup extends ActionGroup {
 
     @Override
     public void update(@NonNull AnActionEvent event) {
+        Presentation presentation = event.getPresentation();
+        presentation.setVisible(false);
+
         TreeNode<TreeFile> data = event.getData(CommonFileKeys.TREE_NODE);
         if (data == null) {
             return;
         }
 
-        event.getPresentation().setVisible(true);
-        event.getPresentation().setText(event.getDataContext().getString(R.string.menu_new));
+        presentation.setVisible(true);
+        presentation.setText(event.getDataContext().getString(R.string.menu_new));
     }
 
     @Override
