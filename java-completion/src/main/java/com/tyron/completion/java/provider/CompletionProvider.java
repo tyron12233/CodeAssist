@@ -253,12 +253,12 @@ public class CompletionProvider {
                                               final String partial, boolean endsWithParen) {
         checkCanceled();
 
+        if (path.getParentPath().getLeaf() instanceof CaseTree) {
+            return completeSwitchConstant(task, path.getParentPath(), partial);
+        }
+
         CompletionList list = new CompletionList();
         list.items = new ArrayList<>();
-        if (path.getParentPath().getLeaf() instanceof CaseTree) {
-            CompletionList completionList = completeSwitchConstant(task, path, partial);
-            list.items.addAll(completionList.items);
-        }
         list.items.addAll(completeUsingScope(task, path, partial, endsWithParen));
         if (partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
             addClassNames(path.getCompilationUnit(), partial, list);
