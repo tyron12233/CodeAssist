@@ -26,6 +26,7 @@ import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.main.CompletionEngine;
+import com.tyron.completion.xml.XmlCompletionModule;
 import com.tyron.completion.xml.providers.AndroidManifestCompletionProvider;
 import com.tyron.completion.xml.providers.XmlCompletionProvider;
 import com.tyron.completion.xml.XmlIndexProvider;
@@ -71,6 +72,9 @@ public class MainActivity extends AppCompatActivity {
 
             // java actions
             CompletionModule.registerActions(manager);
+
+            // xml actions
+            XmlCompletionModule.registerActions(manager);
         });
         startupManager.startup();
 

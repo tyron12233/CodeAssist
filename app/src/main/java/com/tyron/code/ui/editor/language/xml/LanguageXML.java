@@ -6,15 +6,12 @@ import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.code.util.ProjectUtils;
-import com.tyron.completion.xml.XmlCharacter;
 import com.tyron.completion.xml.lexer.XMLLexer;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
 
 import java.io.File;
-import java.util.HashSet;
-import java.util.Set;
 
 import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
