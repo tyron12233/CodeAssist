@@ -16,8 +16,10 @@ import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.rewrite.EditHelper;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.ElementUtil;
 import com.tyron.completion.java.util.JavaParserUtil;
+import com.tyron.completion.java.util.TreeUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
@@ -714,8 +716,20 @@ public class CompletionProvider {
     private CompletionList completeSwitchConstant(CompileTask task, TreePath path, String partial) {
         checkCanceled();
 
-        SwitchTree switchTree = (SwitchTree) path.getLeaf();
-        path = new TreePath(path, switchTree.getExpression());
+        if (path.getLeaf() instanceof SwitchTree) {
+            SwitchTree switchTree = (SwitchTree) path.getLeaf();
+            path = new TreePath(path, switchTree.getExpression());
+        } else {
+            TreePath parent = TreeUtil.findParentOfType(path, SwitchTree.class);
+            if (parent == null) {
+                return CompletionList.EMPTY;
+            }
+
+            if (parent.getLeaf() instanceof SwitchTree) {
+                path = new TreePath(parent, ((SwitchTree) parent.getLeaf()).getExpression());
+            }
+        }
+
         TypeMirror type = Trees.instance(task.task).getTypeMirror(path);
 
         if (!(type instanceof DeclaredType)) {
