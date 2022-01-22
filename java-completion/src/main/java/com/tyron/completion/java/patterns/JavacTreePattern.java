@@ -8,16 +8,25 @@ import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
 import org.jetbrains.kotlin.com.intellij.patterns.InitialPatternCondition;
 import org.jetbrains.kotlin.com.intellij.patterns.PatternCondition;
 import org.jetbrains.kotlin.com.intellij.patterns.PatternConditionPlus;
+import org.jetbrains.kotlin.com.intellij.patterns.PsiNamePatternCondition;
 import org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns;
 import org.jetbrains.kotlin.com.intellij.patterns.TreeElementPattern;
 import org.jetbrains.kotlin.com.intellij.util.PairProcessor;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
+import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
+import org.openjdk.javax.lang.model.element.Element;
+import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.ExpressionTree;
+import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.tree.JCTree;
+
+import java.io.PrintStream;
+import java.util.List;
 
 public class JavacTreePattern<T extends Tree, Self extends JavacTreePattern<T, Self>> extends JavacTreeElementPattern<Tree, T, Self> {
 
@@ -31,7 +40,13 @@ public class JavacTreePattern<T extends Tree, Self extends JavacTreePattern<T, S
 
     protected TreePath getPath(ProcessingContext context, Tree tree) {
         Trees trees = (Trees) context.get("trees");
+        if (trees == null) {
+            return null;
+        }
         CompilationUnitTree root = (CompilationUnitTree) context.get("root");
+        if (root == null) {
+            return null;
+        }
         return trees.getPath(root, tree);
     }
 
@@ -43,7 +58,56 @@ public class JavacTreePattern<T extends Tree, Self extends JavacTreePattern<T, S
 
     @Override
     protected Tree[] getChildren(@NonNull Tree tree) {
+        if (tree instanceof MethodInvocationTree) {
+
+        }
         return new Tree[0];
+    }
+
+    public Self methodCallParameter(final int index, final ElementPattern<?> methodPattern) {
+        final JavacTreeNamePatternCondition nameCondition = ContainerUtil.findInstance(methodPattern.getCondition().getConditions(), JavacTreeNamePatternCondition.class);
+
+        return with(new PatternCondition<T>("methodCallParameter") {
+            @Override
+            public boolean accepts(@NotNull T t, ProcessingContext context) {
+                Tree parent = getParent(context, t);
+                if (parent instanceof MethodInvocationTree) {
+                    MethodInvocationTree method = (MethodInvocationTree) parent;
+                    List<? extends ExpressionTree> arguments = method.getArguments();
+                    if (index >= arguments.size()) {
+                        return false;
+                    }
+                    return checkCall(context, method, methodPattern, nameCondition);
+                }
+                return false;
+            }
+        });
+    }
+
+    private static boolean checkCall(ProcessingContext context, MethodInvocationTree tree, ElementPattern<?> methodPattern, JavacTreeNamePatternCondition nameCondition) {
+        Trees trees = (Trees) context.get("trees");
+        CompilationUnitTree root = (CompilationUnitTree) context.get("root");
+        TreePath path = trees.getPath(root, tree);
+        ExecutableElement element = (ExecutableElement) trees.getElement(path);
+        if (nameCondition != null && !nameCondition.getNamePattern().accepts(element.getSimpleName().toString())) {
+            return false;
+        }
+        return methodPattern.accepts(element, context);
+    }
+
+    @NonNull
+    public Self withName(@NonNull String name) {
+        return withName(StandardPatterns.string().equalTo(name));
+    }
+
+    @NonNull
+    public Self withName(@NonNull final String... names) {
+        return withName(StandardPatterns.string().oneOf(names));
+    }
+
+    @NonNull
+    public Self withName(@NonNull ElementPattern<String> name) {
+        return with(new JavacTreeNamePatternCondition<>("withName", name));
     }
 
     public static class Capture<T extends Tree> extends JavacTreePattern<T, Capture<T>> {

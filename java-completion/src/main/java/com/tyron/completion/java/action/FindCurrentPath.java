@@ -10,6 +10,7 @@ import org.openjdk.source.tree.ExpressionStatementTree;
 import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.LambdaExpressionTree;
+import org.openjdk.source.tree.LiteralTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
@@ -139,6 +140,14 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
         }
 
         return null;
+    }
+
+    @Override
+    public TreePath visitLiteral(LiteralTree literalTree, Long aLong) {
+        if (isInside(literalTree, aLong)) {
+            return getCurrentPath();
+        }
+        return super.visitLiteral(literalTree, aLong);
     }
 
     private boolean isInside(Tree tree, long find) {

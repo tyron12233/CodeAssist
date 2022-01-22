@@ -1,5 +1,7 @@
 package com.tyron.completion.java.patterns;
 
+import androidx.annotation.NonNull;
+
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
@@ -11,6 +13,7 @@ import org.jetbrains.kotlin.com.intellij.patterns.PsiElementPattern;
 import org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns;
 import org.jetbrains.kotlin.com.intellij.util.PairProcessor;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
+import org.openjdk.source.tree.Tree;
 
 import java.util.Arrays;
 import java.util.Collection;
