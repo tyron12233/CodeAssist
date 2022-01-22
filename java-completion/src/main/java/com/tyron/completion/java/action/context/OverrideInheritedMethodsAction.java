@@ -13,9 +13,9 @@ import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.action.util.RewriteUtil;
+import com.tyron.completion.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.OverrideInheritedMethod;
-import com.tyron.completion.java.rewrite.Rewrite;
+import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.editor.Editor;
 
@@ -28,7 +28,6 @@ import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.model.FilteredMemberList;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -74,7 +73,7 @@ public class OverrideInheritedMethodsAction extends AnAction {
         JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
         TreePath currentPath = e.getData(CommonJavaContextKeys.CURRENT_PATH);
 
-        Map<String, Rewrite> rewriteMap = performInternal(compiler, file.toPath(),
+        Map<String, JavaRewrite> rewriteMap = performInternal(compiler, file.toPath(),
                 currentPath, editor.getCaret().getStart());
 
         String[] titles = rewriteMap.keySet().toArray(new String[0]);
@@ -82,23 +81,23 @@ public class OverrideInheritedMethodsAction extends AnAction {
         new AlertDialog.Builder(e.getDataContext())
                 .setTitle(R.string.menu_quickfix_implement_abstract_methods_title)
                 .setItems(titles, (d, which) -> {
-                    Rewrite rewrite = rewriteMap.get(titles[which]);
+                    JavaRewrite rewrite = rewriteMap.get(titles[which]);
                     RewriteUtil.performRewrite(editor, file, compiler, rewrite);
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
 
-    private Map<String, Rewrite> performInternal(JavaCompilerService compiler,
-                                                 Path file,
-                                                 TreePath currentPath,
-                                                 int index) {
+    private Map<String, JavaRewrite> performInternal(JavaCompilerService compiler,
+                                                     Path file,
+                                                     TreePath currentPath,
+                                                     int index) {
         CompilerContainer container = compiler.compile(file);
         return container.get(task -> {
             Trees trees = Trees.instance(task.task);
             Element classElement = trees.getElement(currentPath);
             Elements elements = task.task.getElements();
-            Map<String, Rewrite> rewriteMap = new TreeMap<>();
+            Map<String, JavaRewrite> rewriteMap = new TreeMap<>();
             for (Element member : elements.getAllMembers((TypeElement) classElement)) {
                 if (member.getModifiers().contains(Modifier.FINAL)) {
                     continue;
@@ -118,7 +117,7 @@ public class OverrideInheritedMethodsAction extends AnAction {
                     continue;
                 }
                 DiagnosticUtil.MethodPtr ptr = new DiagnosticUtil.MethodPtr(task.task, method);
-                Rewrite rewrite = new OverrideInheritedMethod(ptr.className, ptr.methodName,
+                JavaRewrite rewrite = new OverrideInheritedMethod(ptr.className, ptr.methodName,
                         ptr.erasedParameterTypes, file, index);
                 String title = "Override " + method.getSimpleName() + " from " + ptr.className;
                 rewriteMap.put(title, rewrite);

@@ -1,11 +1,9 @@
 package com.tyron.completion.java.rewrite;
 
 import com.google.common.collect.ImmutableMap;
-import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.provider.FindHelper;
-import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
@@ -18,7 +16,7 @@ import org.openjdk.source.util.Trees;
 import java.nio.file.Path;
 import java.util.Map;
 
-public class AddException implements Rewrite {
+public class AddException implements JavaRewrite {
 
     private final String className;
     private final String methodName;

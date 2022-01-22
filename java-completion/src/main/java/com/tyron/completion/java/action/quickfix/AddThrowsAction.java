@@ -12,26 +12,21 @@ import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.action.util.RewriteUtil;
-import com.tyron.completion.java.rewrite.AddCatchClause;
+import com.tyron.completion.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.AddException;
-import com.tyron.completion.java.rewrite.Rewrite;
+import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.ElementUtil;
-import com.tyron.completion.java.util.ThreadUtil;
+import com.tyron.common.util.ThreadUtil;
 import com.tyron.editor.Editor;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.TypeElement;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.source.tree.CatchTree;
 import org.openjdk.source.tree.LambdaExpressionTree;
-import org.openjdk.source.tree.TryTree;
-import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
 
 import java.io.File;
 import java.util.Locale;
@@ -85,19 +80,19 @@ public class AddThrowsAction extends ExceptionsQuickFix {
 
         ThreadUtil.runOnBackgroundThread(() -> {
             CompilerContainer container = compiler.getCachedContainer();
-            AtomicReference<Rewrite> rewrite = new AtomicReference<>();
+            AtomicReference<JavaRewrite> rewrite = new AtomicReference<>();
             container.run(task ->
                     rewrite.set(performInternal(task, exceptionName, diagnostic)));
-            Rewrite r = rewrite.get();
+            JavaRewrite r = rewrite.get();
             if (r != null) {
                 RewriteUtil.performRewrite(editor, file, compiler, r);
             }
         });
     }
 
-    private Rewrite performInternal(CompileTask task,
-                                    String exceptionName,
-                                    Diagnostic<?> diagnostic) {
+    private JavaRewrite performInternal(CompileTask task,
+                                        String exceptionName,
+                                        Diagnostic<?> diagnostic) {
         if (task == null) {
             return null;
         }

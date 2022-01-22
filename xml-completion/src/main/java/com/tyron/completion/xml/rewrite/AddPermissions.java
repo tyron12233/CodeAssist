@@ -3,7 +3,7 @@ package com.tyron.completion.xml.rewrite;
 import static com.tyron.completion.xml.util.XmlUtils.newPullParser;
 
 import com.tyron.completion.java.CompilerProvider;
-import com.tyron.completion.java.rewrite.Rewrite;
+import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class AddPermissions implements Rewrite {
+public class AddPermissions implements JavaRewrite {
     private static final String PERMISSION_TEMPLATE = "<uses-permission android:name=\"%s\" />";
 
     private final Path androidManifest;

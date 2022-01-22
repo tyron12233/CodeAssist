@@ -8,12 +8,12 @@ import com.tyron.actions.Presentation;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.action.util.RewriteUtil;
+import com.tyron.completion.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.AddTryCatch;
-import com.tyron.completion.java.rewrite.Rewrite;
+import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
-import com.tyron.completion.java.util.ThreadUtil;
+import com.tyron.common.util.ThreadUtil;
 import com.tyron.editor.Editor;
 
 import org.openjdk.javax.tools.Diagnostic;
@@ -80,12 +80,12 @@ public class SurroundWithTryCatchAction extends ExceptionsQuickFix {
         }
 
         ThreadUtil.runOnBackgroundThread(() -> {
-            Rewrite r = performInternal(file, exceptionName, surroundingPath);
+            JavaRewrite r = performInternal(file, exceptionName, surroundingPath);
             RewriteUtil.performRewrite(editor, file, compiler, r);
         });
     }
 
-    private Rewrite performInternal(File file, String exceptionName, TreePath surroundingPath) {
+    private JavaRewrite performInternal(File file, String exceptionName, TreePath surroundingPath) {
         Tree leaf = surroundingPath.getLeaf();
         JCTree tree = (JCTree) leaf;
 

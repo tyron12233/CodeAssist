@@ -7,7 +7,7 @@ import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Map;
 
-public class RewriteNotSupported implements Rewrite {
+public class RewriteNotSupported implements JavaRewrite {
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
         return Collections.emptyMap();

@@ -1,23 +1,16 @@
 package com.tyron.completion.java.rewrite;
 
-import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.google.common.collect.ImmutableMap;
 
-import org.openjdk.javax.lang.model.element.TypeParameterElement;
-import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.source.tree.Scope;
-import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
 import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
-import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.action.FindCurrentPath;
-import com.tyron.completion.java.provider.ScopeHelper;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.JavaParserTypesUtil;
 import com.tyron.completion.java.util.JavaParserUtil;
@@ -26,19 +19,16 @@ import com.tyron.completion.model.TextEdit;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 
-public class IntroduceLocalVariable implements Rewrite {
+public class IntroduceLocalVariable implements JavaRewrite {
 
     private static final Pattern DIGITS_PATTERN = Pattern.compile("^(.+?)(\\d+)$");
 

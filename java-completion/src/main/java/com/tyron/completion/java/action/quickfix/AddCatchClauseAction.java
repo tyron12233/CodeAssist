@@ -1,44 +1,31 @@
 package com.tyron.completion.java.action.quickfix;
 
-import static com.tyron.completion.java.util.DiagnosticUtil.findMethod;
-
 import androidx.annotation.NonNull;
 
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.Presentation;
-import com.tyron.completion.java.CompileTask;
-import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.action.util.RewriteUtil;
+import com.tyron.completion.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.AddCatchClause;
-import com.tyron.completion.java.rewrite.AddException;
-import com.tyron.completion.java.rewrite.Rewrite;
+import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
-import com.tyron.completion.java.util.ElementUtil;
-import com.tyron.completion.java.util.ThreadUtil;
+import com.tyron.common.util.ThreadUtil;
 import com.tyron.editor.Editor;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.source.tree.CatchTree;
 import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.LambdaExpressionTree;
 import org.openjdk.source.tree.TryTree;
-import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.tree.EndPosTable;
 import org.openjdk.tools.javac.tree.JCTree;
 
 import java.io.File;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicReference;
 
 public class AddCatchClauseAction extends ExceptionsQuickFix {
 
@@ -88,12 +75,12 @@ public class AddCatchClauseAction extends ExceptionsQuickFix {
         }
 
         ThreadUtil.runOnBackgroundThread(() -> {
-            Rewrite r = performInternal(file, exceptionName, surroundingPath);
+            JavaRewrite r = performInternal(file, exceptionName, surroundingPath);
             RewriteUtil.performRewrite(editor, file, compiler, r);
         });
     }
 
-    private Rewrite performInternal(File file, String exceptionName, TreePath surroundingPath) {
+    private JavaRewrite performInternal(File file, String exceptionName, TreePath surroundingPath) {
         CompilationUnitTree root = surroundingPath.getCompilationUnit();
         JCTree.JCCompilationUnit compilationUnit = (JCTree.JCCompilationUnit) root;
         EndPosTable endPositions = compilationUnit.endPositions;

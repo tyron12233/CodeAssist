@@ -12,9 +12,9 @@ import com.tyron.actions.Presentation;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.action.util.RewriteUtil;
+import com.tyron.completion.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.AddImport;
-import com.tyron.completion.java.rewrite.Rewrite;
+import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.editor.Editor;
@@ -104,7 +104,7 @@ public class ImportClassFieldFix extends AnAction {
             searchName = searchName.substring(0, searchName.indexOf('.'));
         }
 
-        Map<String, Rewrite> map = new TreeMap<>();
+        Map<String, JavaRewrite> map = new TreeMap<>();
         for (String qualifiedName : compiler.publicTopLevelTypes()) {
             if (qualifiedName.endsWith("." + simpleName)) {
                 if (qualifiedName.endsWith("." + searchName)) {
@@ -115,7 +115,7 @@ public class ImportClassFieldFix extends AnAction {
                     }
                     String name = e.getDataContext()
                             .getString(R.string.import_class_name, qualifiedName);
-                    Rewrite addImport = new AddImport(file.toFile(), qualifiedName);
+                    JavaRewrite addImport = new AddImport(file.toFile(), qualifiedName);
                     map.put(name, addImport);
                 }
             }
@@ -129,7 +129,7 @@ public class ImportClassFieldFix extends AnAction {
             new AlertDialog.Builder(e.getDataContext())
                     .setTitle(R.string.import_class_title)
                     .setItems(titles, (di, w) -> {
-                        Rewrite rewrite = map.get(titles[w]);
+                        JavaRewrite rewrite = map.get(titles[w]);
                         RewriteUtil.performRewrite(editor, file.toFile(),
                                 compiler, rewrite);
                     })

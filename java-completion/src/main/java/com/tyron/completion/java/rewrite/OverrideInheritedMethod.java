@@ -1,10 +1,7 @@
 package com.tyron.completion.java.rewrite;
 
-import android.util.Log;
-
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.google.common.base.Strings;
-import com.tyron.completion.java.CompileTask;
 import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.FindTypeDeclarationAt;
@@ -31,8 +28,6 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
 import java.nio.file.Path;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -41,7 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-public class OverrideInheritedMethod implements Rewrite {
+public class OverrideInheritedMethod implements JavaRewrite {
 
     final String superClassName, methodName;
     final String[] erasedParameterTypes;
@@ -117,7 +112,7 @@ public class OverrideInheritedMethod implements Rewrite {
 
             for (String s : typesToImport) {
                 if (!ActionUtil.hasImport(task.root(), s)) {
-                    Rewrite addImport = new AddImport(file.toFile(), s);
+                    JavaRewrite addImport = new AddImport(file.toFile(), s);
                     Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
                     TextEdit[] textEdits = rewrite.get(file);
                     if (textEdits != null) {

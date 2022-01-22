@@ -16,12 +16,15 @@ import com.tyron.completion.java.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.java.ParseTask;
 import com.tyron.completion.java.rewrite.EditHelper;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.ElementUtil;
 import com.tyron.completion.java.util.JavaParserUtil;
+import com.tyron.completion.java.util.TreeUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
 
+import org.jetbrains.kotlin.com.intellij.patterns.PsiJavaPatterns;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
@@ -36,6 +39,7 @@ import org.openjdk.javax.lang.model.type.PrimitiveType;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.type.TypeVariable;
 import org.openjdk.javax.lang.model.util.Types;
+import org.openjdk.source.tree.CaseTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ExpressionTree;
@@ -251,8 +255,13 @@ public class CompletionProvider {
                                               final String partial, boolean endsWithParen) {
         checkCanceled();
 
+        if (path.getParentPath().getLeaf() instanceof CaseTree) {
+            return completeSwitchConstant(task, path.getParentPath(), partial);
+        }
+
         CompletionList list = new CompletionList();
-        list.items = completeUsingScope(task, path, partial, endsWithParen);
+        list.items = new ArrayList<>();
+        list.items.addAll(completeUsingScope(task, path, partial, endsWithParen));
         if (partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
             addClassNames(path.getCompilationUnit(), partial, list);
         }
@@ -707,8 +716,20 @@ public class CompletionProvider {
     private CompletionList completeSwitchConstant(CompileTask task, TreePath path, String partial) {
         checkCanceled();
 
-        SwitchTree switchTree = (SwitchTree) path.getLeaf();
-        path = new TreePath(path, switchTree.getExpression());
+        if (path.getLeaf() instanceof SwitchTree) {
+            SwitchTree switchTree = (SwitchTree) path.getLeaf();
+            path = new TreePath(path, switchTree.getExpression());
+        } else {
+            TreePath parent = TreeUtil.findParentOfType(path, SwitchTree.class);
+            if (parent == null) {
+                return CompletionList.EMPTY;
+            }
+
+            if (parent.getLeaf() instanceof SwitchTree) {
+                path = new TreePath(parent, ((SwitchTree) parent.getLeaf()).getExpression());
+            }
+        }
+
         TypeMirror type = Trees.instance(task.task).getTypeMirror(path);
 
         if (!(type instanceof DeclaredType)) {
