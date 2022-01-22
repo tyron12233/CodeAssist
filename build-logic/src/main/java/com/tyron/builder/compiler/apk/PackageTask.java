@@ -133,7 +133,11 @@ public class PackageTask extends Task<AndroidModule> {
                 for (File file : files) {
                     String path = file.getAbsolutePath();
                     String zipPath = path.substring(resourcesPath.length() + 1);
-                    builder.addFile(file, zipPath);
+                    if (file.isDirectory()) {
+                        builder.addSourceFolder(file);
+                    } else {
+                        builder.addFile(file, zipPath);
+                    }
                 }
             }
 
