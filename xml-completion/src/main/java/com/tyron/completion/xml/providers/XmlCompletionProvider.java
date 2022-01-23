@@ -10,28 +10,23 @@ import static com.tyron.completion.xml.util.XmlUtils.partialIdentifier;
 
 import android.annotation.SuppressLint;
 import android.os.Build;
-import android.text.TextUtils;
 import android.util.Pair;
 
 import androidx.annotation.RequiresApi;
 
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.builder.project.api.Module;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
-import com.tyron.completion.xml.XmlCharacter;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
-import com.tyron.completion.xml.model.Format;
 import com.tyron.completion.xml.model.XmlCachedCompletion;
 import com.tyron.completion.xml.util.AndroidResourcesUtils;
 import com.tyron.completion.xml.util.StyleUtils;
@@ -42,7 +37,6 @@ import org.antlr.v4.runtime.Token;
 import org.apache.bcel.classfile.JavaClass;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -52,7 +46,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import me.xdrop.fuzzywuzzy.FuzzySearch;
 
@@ -146,19 +139,9 @@ public class XmlCompletionProvider extends CompletionProvider {
         String tag = tagPair.second;
 
         // first get the attributes based on the current tag
-        Set<DeclareStyleable> styles = StyleUtils.getStyles(declareStyleables, tag);
+        Set<DeclareStyleable> styles = StyleUtils.getStyles(declareStyleables, tag, parentTag);
 
-        // get the layout params attributes from parent
-        // in android convention, layout attributes will end with _Layout
-        styles.addAll(StyleUtils.getLayoutParam(declareStyleables, parentTag));
-
-
-        // parent is unknown, display all attributes
-        if (styles.isEmpty()) {
-            styles.addAll(declareStyleables.values());
-        }
-
-        if (prefix.startsWith("<")) {
+        if (prefix.startsWith("<") || prefix.startsWith("</")) {
             addTagItems(repository, prefix, list, xmlCachedCompletion);
         } else {
             if (isInAttributeValue(contents, (int) index)) {

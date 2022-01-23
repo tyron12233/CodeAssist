@@ -149,6 +149,20 @@ public class StyleUtils {
         sViewStyleMap.put(view.getSimpleName(), builder.build());
     }
 
+    /**
+     * returns all the attributes available fro the current tag and its parent.
+     */
+    public static Set<DeclareStyleable> getStyles(Map<String, DeclareStyleable> map, String tag, String parentTag) {
+        Set<DeclareStyleable> styles = getStyles(map, tag);
+        Set<DeclareStyleable> layoutParams = getLayoutParams(map, parentTag);
+        if (layoutParams.isEmpty()) {
+            // the layout params of the parent tag is unknown, just use a ViewGroup
+            layoutParams.addAll(getLayoutParams(map, ViewGroup.class.getName()));
+        }
+        styles.addAll(layoutParams);
+        return styles;
+    }
+
     public static Set<DeclareStyleable> getStyles(Map<String, DeclareStyleable> map, String name) {
         Set<DeclareStyleable> styles = new TreeSet<>();
         String simpleName = getSimpleName(name);
@@ -169,7 +183,7 @@ public class StyleUtils {
         return styles;
     }
 
-    public static Set<DeclareStyleable> getLayoutParam(Map<String, DeclareStyleable> map, String name) {
+    public static Set<DeclareStyleable> getLayoutParams(Map<String, DeclareStyleable> map, String name) {
         Set<DeclareStyleable> params = new HashSet<>();
         String simpleName = getSimpleName(name);
         if (!simpleName.endsWith("_Layout")) {
@@ -187,7 +201,7 @@ public class StyleUtils {
                     continue;
                 }
 
-                params.addAll(getLayoutParam(map, string));
+                params.addAll(getLayoutParams(map, string));
             }
         }
         return params;

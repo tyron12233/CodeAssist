@@ -165,8 +165,7 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
             Set<DeclareStyleable> styles = new HashSet<>();
             Map<String, DeclareStyleable> declareStyleables =
                     xmlRepository.getDeclareStyleables();
-            styles.addAll(StyleUtils.getStyles(declareStyleables, mTag));
-            styles.addAll(StyleUtils.getLayoutParam(declareStyleables, mParentTag));
+            styles.addAll(StyleUtils.getStyles(declareStyleables, mTag, mParentTag));
 
             for (DeclareStyleable style : styles) {
                 for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
@@ -187,10 +186,15 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
                     values.addAll(attributeInfo.getValues());
                 }
             }
-            editText.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_list_item_1, values));
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
+                    android.R.layout.simple_list_item_1, values);
+            editText.setThreshold(1);
+            editText.showDropDown();
+            editText.setAdapter(adapter);
+
         }
 
-        editText.setText(attribute.getSecond());
+        editText.setText(attribute.getSecond(), false);
         new MaterialAlertDialogBuilder(requireContext()).setTitle(attribute.getFirst()).setView(v).setPositiveButton("apply", (d, w) -> {
             mAttributes.set(pos, new Pair<>(attribute.getFirst(), editText.getText().toString()));
             mAdapter.submitList(mAttributes);
