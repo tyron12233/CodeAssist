@@ -140,7 +140,8 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                         if (!cancel.invoke()) {
                             List<DiagnosticWrapper> collect =
                                     task.diagnostics.stream()
-                                            .map(d -> modifyDiagnostic(task, d))
+                                            .map(DiagnosticWrapper::new)
+                                           // .map(d -> modifyDiagnostic(task, d))
                                             .collect(Collectors.toList());
                             editor.setDiagnostics(collect);
                         }
