@@ -60,8 +60,20 @@ public class Project {
         return getMainModule();
     }
 
+    @SuppressWarnings("UnstableApiUsage")
     public List<Module> getDependencies(Module module) {
-        return Collections.emptyList();
+        MutableGraph<Module> graph = GraphBuilder
+                .directed()
+                .allowsSelfLoops(false).build();
+        graph.addNode(mMainModule);
+        try {
+            addEdges(graph, mMainModule);
+            ArrayList<Module> modules = new ArrayList<>(Graphs.reachableNodes(graph, mMainModule));
+            Collections.reverse(modules);
+            return modules;
+        } catch (IOException exception) {
+            return Collections.emptyList();
+        }
     }
 
     @Override
