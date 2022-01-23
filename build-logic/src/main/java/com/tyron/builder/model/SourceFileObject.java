@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 
 import androidx.annotation.NonNull;
 
+import com.google.common.base.Strings;
 import com.tyron.builder.project.api.JavaModule;
 
 import org.apache.commons.io.FileUtils;
@@ -51,18 +52,28 @@ public class SourceFileObject extends SimpleJavaFileObject {
 		if (mProject != null) {
 			Optional<CharSequence> fileContent = mProject.getFileManager().getFileContent(mFile.toFile());
 			if (fileContent.isPresent()) {
-				return fileContent.get();
+				return replaceContents(String.valueOf(fileContent.get()));
 			}
 		}
 
 		if (mContents != null) {
-			return mContents;
+			return replaceContents(mContents);
 		}
 		try {
-			return FileUtils.readFileToString(mFile.toFile(), Charset.defaultCharset());
+			String s = FileUtils.readFileToString(mFile.toFile(), Charset.defaultCharset());
+			return replaceContents(s);
 		} catch (IOException e) {
 			return null;
 		}
+	}
+
+	/**
+	 * By default, the java compiler treats tabs as 8 spaces.
+	 * A work around for this is to replace the tabs with the number of space
+	 * of tabs from the editor
+	 */
+	private String replaceContents(String contents) {
+		return contents;
 	}
 	
 	@Override
