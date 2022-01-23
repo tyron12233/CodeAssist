@@ -1,5 +1,7 @@
 package com.tyron.completion.xml.action.context;
 
+import static com.tyron.completion.xml.util.XmlUtils.newPullParser;
+
 import androidx.annotation.NonNull;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -15,12 +17,16 @@ import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.xml.R;
 import com.tyron.completion.xml.XmlCompletionModule;
 import com.tyron.completion.xml.rewrite.AddPermissions;
+import com.tyron.completion.xml.util.XmlUtils;
 import com.tyron.editor.Editor;
 
 import org.apache.commons.io.FileUtils;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -62,6 +68,18 @@ public class AndroidManifestAddPermissionsAction extends AnAction {
             return;
         }
 
+        XmlPullParser parser;
+        try {
+            parser = newPullParser();
+            parser.setInput(new StringReader(editor.getContents()));
+        } catch (XmlPullParserException e) {
+            return;
+        }
+        int depth = XmlUtils.getDepthAtPosition(parser, editor.getCaret().getStartLine() - 1);
+        if (depth != 1) { // depth = 1 means we're right under the <manifest> tag
+            return;
+        }
+
         presentation.setVisible(true);
         presentation.setText(event.getDataContext().getString(R.string.menu_quickfix_add_permissions));
     }
@@ -88,7 +106,9 @@ public class AndroidManifestAddPermissionsAction extends AnAction {
                 .setTitle(event.getDataContext().getString(R.string.menu_quickfix_add_permissions))
                 .setMultiChoiceItems(permissions.toArray(new String[0]), selectedPermissions, (dialog, which, isChecked) -> {
                     selectedPermissions[which] = isChecked;
-                }).setNegativeButton(android.R.string.cancel, null).setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
 
                     List<String> selected = new ArrayList<>();
 
@@ -100,6 +120,7 @@ public class AndroidManifestAddPermissionsAction extends AnAction {
 
                     JavaRewrite rewrite = new AddPermissions(file.toPath(), editor.getContents(), selected);
                     RewriteUtil.performRewrite(editor, file, null, rewrite);
-        }).show();
+                })
+                .show();
     }
 }

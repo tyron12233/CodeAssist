@@ -21,6 +21,7 @@ import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.stream.Collectors;
 
 public class XmlUtils {
@@ -82,6 +83,20 @@ public class XmlUtils {
             attributeName = attributeName.substring(attributeName.indexOf(':') + 1);
         }
         return attributeName;
+    }
+
+    /**
+     * @return depth at the current position
+     */
+    public static int getDepthAtPosition(XmlPullParser parser, int line) {
+        while (parser.getLineNumber() < line) {
+            try {
+                parser.nextToken();
+            } catch (IOException | XmlPullParserException e) {
+                // keep parsing
+            }
+        }
+        return parser.getDepth();
     }
 
     /**
