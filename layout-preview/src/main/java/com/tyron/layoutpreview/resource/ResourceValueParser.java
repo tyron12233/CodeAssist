@@ -182,7 +182,7 @@ public class ResourceValueParser {
         if (!namePrefix.isEmpty() && !namePrefix.endsWith(":")) {
             namePrefix = namePrefix + ":";
         }
-        XmlPullParser parser = null;
+        XmlPullParser parser;
 
         parser = XmlPullParserFactory.newInstance().newPullParser();
         parser.setInput(reader);

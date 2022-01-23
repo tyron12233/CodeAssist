@@ -43,13 +43,12 @@ public class ResourceStringParser {
     }
 
     private Map<String, Value> getDefaultStrings() {
+        HashMap<String, Value> strings = new HashMap<>();
         File defaultValues = new File(mResourceDir, "values");
         File[] xmlFiles = defaultValues.listFiles(c -> c.getName().endsWith(".xml"));
         if (xmlFiles == null) {
-            return Collections.emptyMap();
+            return strings;
         }
-
-        HashMap<String, Value> strings = new HashMap<>();
         for (File file : xmlFiles) {
             Optional<CharSequence> contents = mFileManager.getFileContent(file);
             contents.ifPresent(charSequence ->
