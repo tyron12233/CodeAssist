@@ -3,6 +3,7 @@ package com.tyron.builder.project;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.eventbus.EventBus;
 import com.google.common.graph.ElementOrder;
 import com.google.common.graph.Graph;
@@ -23,14 +24,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 
+@SuppressWarnings("UnstableApiUsage")
 public class Project {
 
-    private final List<Module> mModules;
+    private final Map<String, Module> mModules;
     private final Module mMainModule;
     private final File mRoot;
 
@@ -38,9 +42,24 @@ public class Project {
     
     public Project(File root) {
         mRoot = root;
-        mModules = new ArrayList<>();
+        mModules = new LinkedHashMap<>();
         mMainModule = new AndroidModuleImpl(new File(mRoot, "app"));
         mSettings = new ProjectSettings(new File(root, "settings.json"));
+    }
+
+    public void open() throws IOException {
+        MutableGraph<Module> graph = GraphBuilder
+                .directed()
+                .allowsSelfLoops(false).build();
+        graph.addNode(mMainModule);
+        addEdges(graph, mMainModule);
+        Set<Module> modules = Graphs.reachableNodes(graph, mMainModule);
+        for (Module module : modules) {
+            module.clear();
+            module.index();
+            File rootFile = module.getRootFile();
+            mModules.put(rootFile.getName(), module);
+        }
     }
 
     @NonNull
@@ -60,20 +79,9 @@ public class Project {
         return getMainModule();
     }
 
-    @SuppressWarnings("UnstableApiUsage")
     public List<Module> getDependencies(Module module) {
-        MutableGraph<Module> graph = GraphBuilder
-                .directed()
-                .allowsSelfLoops(false).build();
-        graph.addNode(mMainModule);
-        try {
-            addEdges(graph, mMainModule);
-            ArrayList<Module> modules = new ArrayList<>(Graphs.reachableNodes(graph, mMainModule));
-            Collections.reverse(modules);
-            return modules;
-        } catch (IOException exception) {
-            return Collections.emptyList();
-        }
+        return ImmutableList.copyOf(mModules.values())
+                .reverse();
     }
 
     @Override
@@ -89,20 +97,10 @@ public class Project {
         return Objects.hash(mRoot);
     }
 
-    @SuppressWarnings("UnstableApiUsage")
     public List<Module> getBuildOrder() throws IOException  {
-        MutableGraph<Module> graph = GraphBuilder
-                .directed()
-                .allowsSelfLoops(false).build();
-        graph.addNode(mMainModule);
-        addEdges(graph, mMainModule);
-        Set<Module> modules = Graphs.reachableNodes(graph, mMainModule);
-        ArrayList<Module> list = new ArrayList<>(modules);
-        Collections.reverse(list);
-        return list;
+        return getDependencies(mMainModule);
     }
 
-    @SuppressWarnings("UnstableApiUsage")
     private void addEdges(MutableGraph<Module> graph, Module module) throws IOException {
         Set<String> modules = module.getSettings().getStringSet("modules",
                 Collections.emptySet());

@@ -104,7 +104,12 @@ public class ProjectManager {
         }
 
         // Index the project after downloading dependencies so it will get added to classpath
-        module.index();
+        try {
+            mCurrentProject.open();
+        } catch (IOException exception) {
+            logger.warning("Failed to open project: " + exception.getMessage());
+            return;
+        }
         mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
 
         if (module instanceof AndroidModule) {
