@@ -50,13 +50,13 @@ import java.util.Set;
 import me.xdrop.fuzzywuzzy.FuzzySearch;
 
 @SuppressLint("NewApi")
-public class XmlCompletionProvider extends CompletionProvider {
+public class LayoutXmlCompletionProvider extends CompletionProvider {
 
     private static final String EXTENSION = ".xml";
 
     private XmlCachedCompletion mCachedCompletion;
 
-    public XmlCompletionProvider() {
+    public LayoutXmlCompletionProvider() {
 
     }
 
