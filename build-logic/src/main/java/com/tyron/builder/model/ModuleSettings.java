@@ -1,6 +1,7 @@
 package com.tyron.builder.model;
 
 import android.content.SharedPreferences;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -52,11 +53,13 @@ public class ModuleSettings implements SharedPreferences {
     private Map<String, Object> parseFile() {
         HashMap<String, Object> config = null;
         try {
-            Gson gson = new GsonBuilder().create();
+            Gson gson = new GsonBuilder()
+                    .setLenient()
+                    .create();
             config = gson.fromJson(new FileReader(mConfigFile),
                     new TypeToken<HashMap<String, Object>>(){}.getType());
-        } catch (FileNotFoundException | JsonSyntaxException ignored) {
-
+        } catch (FileNotFoundException | JsonSyntaxException e) {
+            Log.e("ModuleSettings", "Failed to parse module settings", e);
         }
         return config == null ? getDefaults() : config;
     }
