@@ -48,7 +48,10 @@ import java.util.stream.Collectors;
 
 public class ActionUtil {
 
-    public static boolean canIntroduceLocalVariable(@NonNull TreePath path) {
+    public static boolean canIntroduceLocalVariable(TreePath path) {
+        if (path == null) {
+            return false;
+        }
         TreePath parent = path.getParentPath();
 
         if (path.getLeaf() instanceof MethodTree) {
@@ -172,6 +175,10 @@ public class ActionUtil {
     }
 
     private static boolean isVoid(JCTree.JCMethodInvocation methodInvocation) {
+        if (methodInvocation.type == null) {
+            // FIXME: get the type from elements using the tree
+            return false;
+        }
         if (!methodInvocation.type.isPrimitive()) {
             return methodInvocation.type.isPrimitiveOrVoid();
         }
