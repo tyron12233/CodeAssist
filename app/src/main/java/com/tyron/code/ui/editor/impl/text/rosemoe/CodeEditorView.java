@@ -11,6 +11,9 @@ import com.tyron.editor.Editor;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class CodeEditorView extends CodeEditor implements Editor {
+
+    private boolean mIsBackgroundAnalysisEnabled;
+
     public CodeEditorView(Context context) {
         super(DataContext.wrap(context));
     }
@@ -77,5 +80,21 @@ public class CodeEditorView extends CodeEditor implements Editor {
     @Override
     public String getContents() {
         return getText().toString();
+    }
+
+    @Override
+    public void analyze(boolean runBgAnalyzer) {
+        if (!mIsBackgroundAnalysisEnabled && runBgAnalyzer) {
+            return;
+        }
+        super.analyze(runBgAnalyzer);
+    }
+
+    /**
+     * Background analysis can sometimes be expensive.
+     * Set whether background analysis should be enabled for this editor.
+     */
+    public void setBackgroundAnalysisEnabled(boolean enabled) {
+        mIsBackgroundAnalysisEnabled = enabled;
     }
 }

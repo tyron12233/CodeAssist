@@ -43,6 +43,7 @@ import com.flipkart.android.proteus.value.Value;
 import com.flipkart.android.proteus.view.UnknownViewGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.collect.ImmutableMap;
+import com.tyron.code.ui.layoutEditor.model.EditorDragState;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
@@ -97,8 +98,10 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
     private boolean isDumb;
 
     private final View.OnLongClickListener mOnLongClickListener = v -> {
+        ClipData clipData = ClipData.newPlainText("", "");
         View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v);
-        ViewCompat.startDragAndDrop(v, ClipData.newPlainText("", ""), shadowBuilder, v, 0);
+        EditorDragState state = EditorDragState.fromView(v);
+        ViewCompat.startDragAndDrop(v, clipData, shadowBuilder, state, 0);
         return true;
     };
 

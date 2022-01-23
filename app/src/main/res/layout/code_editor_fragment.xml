@@ -4,6 +4,10 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+   <FrameLayout
+       android:layout_width="match_parent"
+       android:layout_height="wrap_content"/>
+
    <com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView
        android:id="@+id/code_editor"
        android:layout_width="match_parent"

@@ -53,7 +53,7 @@ public class EditorDragState {
      * Returns null if {@link #isExistingView()} returned false.
      */
     public ViewGroup getParent() {
-        if (isExistingView()) {
+        if (!isExistingView()) {
             return null;
         }
         return mParent;

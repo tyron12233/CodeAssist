@@ -1,5 +1,6 @@
 package com.tyron.code.ui.layoutEditor;
 
+import android.content.ClipData;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -13,6 +14,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.tyron.code.R;
+import com.tyron.code.ui.layoutEditor.model.EditorDragState;
 import com.tyron.code.ui.layoutEditor.model.ViewPalette;
 
 import java.util.ArrayList;
@@ -91,8 +93,10 @@ public class ViewPaletteAdapter extends RecyclerView.Adapter<ViewPaletteAdapter.
             mName.setText(item.getName());
 
             mInflatedView.setOnLongClickListener(v -> {
+                ClipData clipData = ClipData.newPlainText("", "");
                 View.DragShadowBuilder dragShadowBuilder = new View.DragShadowBuilder(v);
-                ViewCompat.startDragAndDrop(v, null, dragShadowBuilder, item, 0);
+                EditorDragState state = EditorDragState.fromPalette(item);
+                ViewCompat.startDragAndDrop(v, clipData, dragShadowBuilder, state, 0);
                 return true;
             });
         }
