@@ -351,11 +351,12 @@ public class ProjectManagerFragment extends Fragment {
         if (getActivity() == null || isDetached()) {
             return;
         }
-        if (getView() == null) {
+        View view = getView();
+        if (view == null) {
             return;
         }
-        View recycler = requireView().findViewById(R.id.projects_recycler);
-        View empty = requireView().findViewById(R.id.empty_container);
+        View recycler = view.findViewById(R.id.projects_recycler);
+        View empty = view.findViewById(R.id.empty_container);
 
         TransitionManager.beginDelayedTransition((ViewGroup) recycler.getParent(),
                 new MaterialFade());
