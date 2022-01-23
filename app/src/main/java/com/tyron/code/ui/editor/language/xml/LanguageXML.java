@@ -38,6 +38,7 @@ public class LanguageXML implements EditorLanguage {
 	public boolean isAutoCompleteChar(char ch) {
 		return MyCharacter.isJavaIdentifierPart(ch)
 				|| ch == '<'
+				|| ch == '/'
 				|| ch == ':'
 				|| ch == '.';
 	}

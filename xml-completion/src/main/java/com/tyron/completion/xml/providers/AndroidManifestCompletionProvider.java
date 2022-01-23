@@ -125,7 +125,7 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
             }
             CompletionList completionList = mCachedCompletion.getCompletionList();
             if (!completionList.items.isEmpty()) {
-                Collections.sort(completionList.items, (item1, item2) -> {
+                completionList.items.sort((item1, item2) -> {
                     String filterPrefix = mCachedCompletion.getFilterPrefix();
                     int first = FuzzySearch.partialRatio(item1.label, filterPrefix);
                     int second = FuzzySearch.partialRatio(item2.label, filterPrefix);
@@ -179,41 +179,8 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
 
         Set<DeclareStyleable> styles = StyleUtils.getStyles(manifestAttrs, currentTag);
 
-        if (prefix.startsWith("<")) {
-            xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_TAG);
-            xmlCachedCompletion.setFilterPrefix(prefix);
-
-
-            xmlCachedCompletion.setFilter((item, pre) -> {
-                String prefixSet = pre;
-                if (pre.startsWith("<")) {
-                    prefixSet = pre.substring(1);
-                }
-
-                if (prefixSet.contains(".")) {
-                    if (FuzzySearch.partialRatio(prefixSet, item.detail) >= 80) {
-                        return true;
-                    }
-                } else {
-                    if (FuzzySearch.partialRatio(prefixSet, item.label) >= 80) {
-                        return true;
-                    }
-                }
-
-                String className = item.detail + "." + item.label;
-                return FuzzySearch.partialRatio(prefixSet, className) >= 30;
-
-            });
-            for (String s : sManifestTagMappings.keySet()) {
-                CompletionItem item = new CompletionItem();
-                item.label = s;
-                item.commitText = "<" + s;
-                item.cursorOffset = item.commitText.length();
-                item.iconKind = DrawableKind.Package;
-                item.detail = "Tag";
-                list.items.add(item);
-            }
-
+        if (prefix.startsWith("<") || prefix.startsWith("</")) {
+            addTagItems(prefix, list, xmlCachedCompletion);
         } else {
             if (isInAttributeValue(contents, (int) index)) {
                 addAttributeValueItems(styles, repository, prefix, fixedPrefix, list,
@@ -224,6 +191,42 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
             }
         }
         return xmlCachedCompletion;
+    }
+
+    private void addTagItems(String prefix, CompletionList list, XmlCachedCompletion xmlCachedCompletion) {
+        xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_TAG);
+        xmlCachedCompletion.setFilterPrefix(prefix);
+
+
+        xmlCachedCompletion.setFilter((item, pre) -> {
+            String prefixSet = pre;
+            if (pre.startsWith("<")) {
+                prefixSet = pre.substring(1);
+            }
+
+            if (prefixSet.contains(".")) {
+                if (FuzzySearch.partialRatio(prefixSet, item.detail) >= 80) {
+                    return true;
+                }
+            } else {
+                if (FuzzySearch.partialRatio(prefixSet, item.label) >= 80) {
+                    return true;
+                }
+            }
+
+            String className = item.detail + "." + item.label;
+            return FuzzySearch.partialRatio(prefixSet, className) >= 30;
+
+        });
+        for (String s : sManifestTagMappings.keySet()) {
+            CompletionItem item = new CompletionItem();
+            item.label = s;
+            item.commitText = "<" + s;
+            item.cursorOffset = item.commitText.length();
+            item.iconKind = DrawableKind.Package;
+            item.detail = "Tag";
+            list.items.add(item);
+        }
     }
 
     private void addAttributeItems(Set<DeclareStyleable> styles, String fullPrefix,
