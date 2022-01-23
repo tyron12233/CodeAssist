@@ -39,13 +39,13 @@ public class ResourceDrawableParser {
     }
 
     public Map<String, DrawableValue> getDefaultDrawables() {
+        Map<String, DrawableValue> map = new HashMap<>();
         File defaultValues = new File(mResourceDirectory, "drawable");
         File[] xmlFiles = defaultValues.listFiles();
         if (xmlFiles == null) {
-            return Collections.emptyMap();
+            return map;
         }
 
-        Map<String, DrawableValue> map = new HashMap<>();
         for (File file : xmlFiles) {
             DrawableValue value = null;
 

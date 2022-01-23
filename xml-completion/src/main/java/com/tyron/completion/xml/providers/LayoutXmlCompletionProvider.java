@@ -183,10 +183,14 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
             if (prefix.startsWith("</")) {
                 commitPrefix = "</";
             }
+            boolean useFqn = prefix.contains(".");
             item.label = StyleUtils.getSimpleName(entry.getKey());
             item.detail = entry.getValue().getPackageName();
             item.iconKind = DrawableKind.Class;
-            item.commitText = commitPrefix + entry.getValue().getClassName();
+            item.commitText = commitPrefix +
+                    (useFqn
+                            ? entry.getValue().getClassName()
+                            : StyleUtils.getSimpleName(entry.getValue().getClassName()));
             item.cursorOffset = item.commitText.length();
             list.items.add(item);
         }
