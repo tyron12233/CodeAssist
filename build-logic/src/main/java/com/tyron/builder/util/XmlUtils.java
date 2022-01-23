@@ -9,7 +9,6 @@ import com.google.common.base.CharMatcher;
 import com.google.common.base.Charsets;
 import com.google.common.collect.Sets;
 import com.google.common.io.Files;
-import com.tyron.build.BuildConfig;
 import com.tyron.builder.compiler.manifest.SdkConstants;
 import com.tyron.builder.compiler.manifest.blame.SourceFile;
 import com.tyron.builder.compiler.manifest.blame.SourceFilePosition;
@@ -576,9 +575,7 @@ public class XmlUtils {
         try {
             return parseDocument(xml, namespaceAware);
         } catch (Exception e) {
-            if (BuildConfig.DEBUG) {
-                Log.d("XmlUtils", "Unable to parse document", e);
-            }
+            Log.d("XmlUtils", "Unable to parse document", e);
             // pass
             // This method is deliberately silent; will return null
         }

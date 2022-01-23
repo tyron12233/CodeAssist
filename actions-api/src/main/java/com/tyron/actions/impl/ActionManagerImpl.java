@@ -5,7 +5,6 @@ import android.view.MenuItem;
 import android.view.SubMenu;
 
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
 
 import com.tyron.actions.ActionGroup;
 import com.tyron.actions.ActionManager;
@@ -29,16 +28,6 @@ public class ActionManagerImpl extends ActionManager {
     private final Map<Object, String> mActionToId = new HashMap<>();
 
     private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
-
-    @Override
-    public void asyncFillMenu(DataContext context, Menu menu, String place, boolean isContext,
-                              boolean isToolbar, Runnable callback) {
-        mExecutor.submit(() -> {
-            fillMenu(context, menu, place, isContext, isToolbar);
-
-            ContextCompat.getMainExecutor(context).execute(callback);
-        });
-    }
 
     @Override
     public void fillMenu(DataContext context, Menu menu, String place, boolean isContext, boolean isToolbar) {

@@ -5,13 +5,13 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
-import com.tyron.code.ui.editor.language.HighlightUtil;
-import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
-import com.tyron.common.BuildConfig;
+import com.tyron.code.BuildConfig;
+import com.tyron.code.ui.editor.language.HighlightUtil;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.kotlin_completion.CompletionEngine;
 
@@ -20,7 +20,6 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenSource;
-import org.openjdk.javax.tools.Diagnostic;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -30,8 +29,6 @@ import java.util.Stack;
 import io.github.rosemoe.sora.data.BlockLine;
 import io.github.rosemoe.sora.data.Span;
 import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
-import io.github.rosemoe.sora.text.CharPosition;
-import io.github.rosemoe.sora.text.Indexer;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.text.TextAnalyzer;
 import io.github.rosemoe.sora.widget.CodeEditor;

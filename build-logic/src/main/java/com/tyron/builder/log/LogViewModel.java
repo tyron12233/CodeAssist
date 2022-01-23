@@ -10,12 +10,9 @@ import androidx.lifecycle.ViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 
 import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
 public class LogViewModel extends ViewModel {
 

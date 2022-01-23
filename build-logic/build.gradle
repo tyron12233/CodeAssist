@@ -3,7 +3,7 @@ plugins {
 }
 
 dependencies {
-    implementation 'androidx.annotation:annotation:1.2.0'
+    implementation 'androidx.annotation:annotation:1.3.0'
     implementation 'com.android.tools:sdklib:25.3.0'
     implementation project(path: ':common')
     implementation 'androidx.test:core:1.4.0'
@@ -27,6 +27,8 @@ dependencies {
             'libs/apksigner.jar',
             'libs/ecj.jar'
     )
+
+    compileOnly project(path: ':android-stubs')
 }
 
 java {

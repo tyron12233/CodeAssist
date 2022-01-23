@@ -1,11 +1,8 @@
 package com.tyron.common.util;
 
-import android.util.Log;
-
-import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.Scanner;
 import java.util.List;
+import java.util.Scanner;
 
 public class BinaryExecutor {
     private static final String TAG = BinaryExecutor.class.getSimpleName();

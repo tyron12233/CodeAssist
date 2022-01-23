@@ -2,7 +2,6 @@ package com.tyron.builder.project.impl;
 
 import android.util.Log;
 
-import com.tyron.build.BuildConfig;
 import com.tyron.builder.project.api.FileManager;
 
 import org.apache.commons.io.FileUtils;
@@ -49,9 +48,7 @@ public class FileManagerImpl implements FileManager {
             try {
                 FileUtils.writeStringToFile(file, mSnapshots.get(file), StandardCharsets.UTF_8);
             } catch (IOException e) {
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "Failed to save file " + file.getName(), e);
-                }
+                Log.d(TAG, "Failed to save file " + file.getName(), e);
             }
             mSnapshots.remove(file);
         }

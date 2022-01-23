@@ -16,8 +16,6 @@ public abstract class ActionManager {
         return sInstance;
     }
 
-    public abstract void asyncFillMenu(DataContext context, Menu menu, String place, boolean isContext, boolean isToolbar, Runnable callback);
-
     public abstract void fillMenu(DataContext context, Menu menu, String place, boolean isContext, boolean isToolbar);
 
     public abstract String getId(@NonNull AnAction action);
