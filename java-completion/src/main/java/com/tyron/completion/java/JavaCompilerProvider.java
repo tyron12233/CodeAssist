@@ -44,10 +44,10 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
         }
 
         Set<File> paths = new HashSet<>();
-        paths.addAll(module.getJavaFiles().values());
-        paths.addAll(module.getLibraries());
 
         for (Module dependency : dependencies) {
+            dependency.clear();
+            dependency.index();
             if (dependency instanceof JavaModule) {
                 paths.addAll(((JavaModule) dependency).getJavaFiles().values());
                 paths.addAll(((JavaModule) dependency).getLibraries());
