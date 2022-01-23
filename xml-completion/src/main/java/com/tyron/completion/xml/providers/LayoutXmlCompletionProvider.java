@@ -84,7 +84,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
             }
             CompletionList completionList = mCachedCompletion.getCompletionList();
             if (!completionList.items.isEmpty()) {
-                Collections.sort(completionList.items, (item1, item2) -> {
+                completionList.items.sort((item1, item2) -> {
                     String filterPrefix = mCachedCompletion.getFilterPrefix();
                     int first = FuzzySearch.partialRatio(item1.label, filterPrefix);
                     int second = FuzzySearch.partialRatio(item2.label, filterPrefix);

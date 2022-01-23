@@ -154,6 +154,9 @@ public class StyleUtils {
      */
     public static Set<DeclareStyleable> getStyles(Map<String, DeclareStyleable> map, String tag, String parentTag) {
         Set<DeclareStyleable> styles = getStyles(map, tag);
+        if (styles.isEmpty()) {
+            styles.addAll(getStyles(map, View.class.getName()));
+        }
         Set<DeclareStyleable> layoutParams = getLayoutParams(map, parentTag);
         if (layoutParams.isEmpty()) {
             // the layout params of the parent tag is unknown, just use a ViewGroup
