@@ -58,7 +58,15 @@ public class JavacTreePattern<T extends Tree, Self extends JavacTreePattern<T, S
     @Nullable
     @Override
     protected Tree getParent(ProcessingContext context, @NonNull Tree tree) {
-        return getPath(context, tree).getParentPath().getLeaf();
+        TreePath path = getPath(context, tree);
+        if (path == null) {
+            return null;
+        }
+        TreePath parent = path.getParentPath();
+        if (parent == null) {
+            return null;
+        }
+        return parent.getLeaf();
     }
 
     @Override
