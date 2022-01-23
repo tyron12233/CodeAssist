@@ -1,10 +1,12 @@
 package com.tyron.code.ui.layoutEditor;
 
 import android.animation.LayoutTransition;
+import android.graphics.Rect;
 import android.util.Log;
 import android.view.DragEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
@@ -14,6 +16,9 @@ import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.layoutEditor.model.EditorDragState;
 import com.tyron.code.ui.layoutEditor.model.EditorShadowView;
 import com.tyron.code.ui.layoutEditor.model.ViewPalette;
+import com.tyron.layoutpreview.BoundaryDrawingFrameLayout;
+
+import java.util.Objects;
 
 public class EditorDragListener implements View.OnDragListener {
 
@@ -82,6 +87,12 @@ public class EditorDragListener implements View.OnDragListener {
                 ensureNoParent(mEditorShadow);
 
                 if (dragState.isExistingView()) {
+
+                    if (getParentOfType(hostView, BoundaryDrawingFrameLayout.class) == null) {
+                        ensureNoParent(Objects.requireNonNull(dragState.getView()));
+                        return true;
+                    }
+
                     if (dragState.getView() instanceof ProteusView) {
                         boolean added = addProteusView(hostView, (ProteusView) dragState.getView(), event);
 
@@ -201,5 +212,18 @@ public class EditorDragListener implements View.OnDragListener {
         int length = higher - lower;
         int middle = length / 2;
         return lower + middle;
+    }
+
+    private View getParentOfType(View view, Class<? extends View> type) {
+        ViewParent current = view.getParent();
+        while (current != null) {
+            if (current.getClass().isAssignableFrom(type)) {
+                return (View) current;
+            }
+
+            current = current.getParent();
+        }
+
+        return null;
     }
 }

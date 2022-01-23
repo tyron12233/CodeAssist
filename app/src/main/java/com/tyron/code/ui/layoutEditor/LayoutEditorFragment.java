@@ -10,6 +10,7 @@ import android.graphics.Point;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Display;
+import android.view.DragEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -230,7 +231,7 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                     setDragListeners(((ViewGroup) view));
                 }
                 setClickListeners(view);
-                mEditorRoot.postDelayed(() -> mEditorRoot.requestLayout(), 100);
+                mEditorRoot.postDelayed(() -> mEditorRoot.invalidate(), 300);
 
                 if (parent instanceof ProteusView && view instanceof ProteusView) {
                     ProteusView proteusParent = (ProteusView) parent;
@@ -260,6 +261,32 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
         } else {
             createInflater();
         }
+
+        view.setOnDragListener((v, event) -> {
+            if (!(event.getLocalState() instanceof EditorDragState)) {
+                return false;
+            }
+
+            if (event.getAction() != DragEvent.ACTION_DROP) {
+                return true;
+            }
+
+            EditorDragState state = (EditorDragState) event.getLocalState();
+            if (state.isExistingView()) {
+                View dragged = state.getView();
+                ViewGroup parent = (ViewGroup) dragged.getParent();
+                if (parent != null) {
+                    parent.removeView(dragged);
+
+                    if (parent instanceof ProteusView && dragged instanceof ProteusView) {
+                        ProteusHelper.removeChildFromLayout(((ProteusView) parent),
+                                ((ProteusView) dragged));
+                    }
+                    return true;
+                }
+            }
+            return false;
+        });
     }
 
     @Override
