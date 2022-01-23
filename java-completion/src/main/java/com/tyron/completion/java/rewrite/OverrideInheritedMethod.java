@@ -75,11 +75,7 @@ public class OverrideInheritedMethod implements JavaRewrite {
             ExecutableType parameterizedType =
                     (ExecutableType) types.asMemberOf((DeclaredType) thisClass.asType(),
                             superMethod);
-            int indent = EditHelper.indent(task.task, task.root(), thisTree);
-            if (indent == 1) {
-                indent = 4;
-            }
-            indent += 4;
+            int indent = EditHelper.indent(task.task, task.root(), thisTree) + 1;
 
             Set<String> importedClasses = new HashSet<>();
             Set<String> typesToImport = ActionUtil.getTypesToImport(parameterizedType);
@@ -102,9 +98,8 @@ public class OverrideInheritedMethod implements JavaRewrite {
                 methodDeclaration = EditHelper.printMethod(superMethod, parameterizedType,
                         superMethod);
             }
-            int tabCount = indent / 4;
 
-            String tabs = Strings.repeat("\t", tabCount);
+            String tabs = Strings.repeat("\t", indent);
             String text = JavaParserUtil.prettyPrint(methodDeclaration, className -> false);
             text = tabs + text.replace("\n", "\n" + tabs) + "\n\n";
 
