@@ -11,13 +11,16 @@ import org.jetbrains.kotlin.com.intellij.patterns.PatternConditionPlus;
 import org.jetbrains.kotlin.com.intellij.patterns.PsiNamePatternCondition;
 import org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns;
 import org.jetbrains.kotlin.com.intellij.patterns.TreeElementPattern;
+import org.jetbrains.kotlin.com.intellij.psi.impl.source.tree.java.PsiMethodCallExpressionImpl;
 import org.jetbrains.kotlin.com.intellij.util.PairProcessor;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.ExpressionStatementTree;
 import org.openjdk.source.tree.ExpressionTree;
+import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
@@ -26,6 +29,8 @@ import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.tree.JCTree;
 
 import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class JavacTreePattern<T extends Tree, Self extends JavacTreePattern<T, Self>> extends JavacTreeElementPattern<Tree, T, Self> {
@@ -58,8 +63,22 @@ public class JavacTreePattern<T extends Tree, Self extends JavacTreePattern<T, S
 
     @Override
     protected Tree[] getChildren(@NonNull Tree tree) {
+        if (tree instanceof ExpressionStatementTree) {
+            return new Tree[]{((ExpressionStatementTree) tree).getExpression()};
+        }
         if (tree instanceof MethodInvocationTree) {
-
+            List<Tree> children = new ArrayList<>();
+            ExpressionTree methodSelect = ((MethodInvocationTree) tree).getMethodSelect();
+            while (methodSelect != null) {
+                children.add(methodSelect);
+                if (methodSelect instanceof MemberSelectTree) {
+                    methodSelect = ((MemberSelectTree) methodSelect).getExpression();
+                } else {
+                    methodSelect = null;
+                }
+            }
+            Collections.reverse(children);
+            return children.toArray(new Tree[0]);
         }
         return new Tree[0];
     }
@@ -92,7 +111,7 @@ public class JavacTreePattern<T extends Tree, Self extends JavacTreePattern<T, S
         if (nameCondition != null && !nameCondition.getNamePattern().accepts(element.getSimpleName().toString())) {
             return false;
         }
-        return methodPattern.accepts(element, context);
+        return methodPattern.accepts(tree, context);
     }
 
     @NonNull
@@ -107,7 +126,7 @@ public class JavacTreePattern<T extends Tree, Self extends JavacTreePattern<T, S
 
     @NonNull
     public Self withName(@NonNull ElementPattern<String> name) {
-        return with(new JavacTreeNamePatternCondition<>("withName", name));
+        return with(new JavacTreeNamePatternCondition("withName", name));
     }
 
     public static class Capture<T extends Tree> extends JavacTreePattern<T, Capture<T>> {

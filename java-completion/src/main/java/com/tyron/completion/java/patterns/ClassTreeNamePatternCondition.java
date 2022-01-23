@@ -53,6 +53,9 @@ public class ClassTreeNamePatternCondition extends PatternCondition<ClassTree> i
         if (element instanceof Symbol.ClassSymbol) {
             String name = ((Symbol.ClassSymbol) element).fullname.toString();
             return namePattern.accepts(name, context);
+        } else if (element instanceof Symbol.MethodSymbol) {
+            String s = ((Symbol.MethodSymbol) element).name.toString();
+            return namePattern.accepts(s, context);
         }
         return false;
     }

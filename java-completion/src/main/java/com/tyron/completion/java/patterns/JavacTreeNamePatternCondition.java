@@ -11,18 +11,31 @@ import org.jetbrains.kotlin.com.intellij.util.PairProcessor;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
+import org.openjdk.source.tree.ExpressionTree;
+import org.openjdk.source.tree.MemberSelectTree;
+import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.Tree;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
-public class JavacTreeNamePatternCondition<T extends Tree> extends PatternConditionPlus<Tree, String> implements JavacElementPattern {
+public class JavacTreeNamePatternCondition extends PatternConditionPlus<Tree, String> implements JavacElementPattern {
 
     public JavacTreeNamePatternCondition(@NonNls String methodName, ElementPattern valuePattern) {
         super(methodName, valuePattern);
     }
 
     public @Nullable String getPropertyValue(@NotNull Object o) {
+        if (o instanceof MethodInvocationTree) {
+            MethodInvocationTree invocationTree = (MethodInvocationTree) o;
+            ExpressionTree methodSelect = invocationTree.getMethodSelect();
+            if (methodSelect.getKind() == Tree.Kind.IDENTIFIER) {
+                return methodSelect.toString();
+            } else {
+                MemberSelectTree memberSelectTree = (MemberSelectTree) methodSelect;
+                return memberSelectTree.getIdentifier().toString();
+            }
+        }
         if (o instanceof Tree) {
             try {
                 Method method = o.getClass().getMethod("getName");
@@ -31,7 +44,7 @@ public class JavacTreeNamePatternCondition<T extends Tree> extends PatternCondit
                     return invoke.toString();
                 }
             } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
-                return null;
+
             }
 
             try {
@@ -49,7 +62,7 @@ public class JavacTreeNamePatternCondition<T extends Tree> extends PatternCondit
 
     @Override
     public boolean processValues(Tree tree, ProcessingContext context, PairProcessor<String, ProcessingContext> processor) {
-        return false;
+        return processor.process(getPropertyValue(tree), context);
     }
 
     @Override
@@ -57,7 +70,7 @@ public class JavacTreeNamePatternCondition<T extends Tree> extends PatternCondit
         return getNamePattern().accepts(element.getSimpleName().toString(), context);
     }
 
-    public ElementPattern<T> getNamePattern() {
+    public ElementPattern<Tree> getNamePattern() {
         return getValuePattern();
     }
 }

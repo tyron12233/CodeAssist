@@ -139,9 +139,10 @@ public class TreeUtil {
         List<MethodTree> methods = new ArrayList<>();
         List<? extends Tree> members = t.getMembers();
         for (Tree member : members) {
-            if (member.getKind() == Tree.Kind.METHOD) {
-                methods.add((MethodTree) member);
+            if (member.getKind() != Tree.Kind.METHOD) {
+                continue;
             }
+            methods.add((MethodTree) member);
         }
         return methods;
     }

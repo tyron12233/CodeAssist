@@ -12,6 +12,7 @@ import org.openjdk.source.tree.LiteralTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.ModifiersTree;
 import org.openjdk.source.tree.Tree;
+import org.openjdk.source.tree.VariableTree;
 
 public class JavacTreePatterns {
 
@@ -33,6 +34,10 @@ public class JavacTreePatterns {
 
     public static ExpressionTreePattern.Capture<ExpressionTree> expression() {
         return new ExpressionTreePattern.Capture<>(ExpressionTree.class);
+    }
+
+    public static JavacFieldPattern<VariableTree> variable() {
+        return new JavacFieldPattern<>(VariableTree.class);
     }
 
     public static JavacTreePattern.Capture<LiteralTree> literal() {
@@ -58,8 +63,8 @@ public class JavacTreePatterns {
         });
     }
 
-    public static MethodTreePattern method() {
-        return new MethodTreePattern(MethodTree.class);
+    public static MethodTreePattern.Capture<Tree>method() {
+        return new MethodTreePattern.Capture<>(Tree.class);
     }
 
     public static MethodInvocationTreePattern methodInvocation() {

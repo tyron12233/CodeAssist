@@ -6,6 +6,7 @@ import static org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns.string
 import androidx.annotation.NonNull;
 
 import com.tyron.completion.java.patterns.elements.JavacElementPattern;
+import com.tyron.completion.java.patterns.elements.JavacElementPatternCondition;
 import com.tyron.completion.java.util.TreeUtil;
 
 import org.jetbrains.annotations.NotNull;
@@ -26,7 +27,7 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
-public class ClassTreePattern extends JavacTreePattern<ClassTree, ClassTreePattern> implements JavacElementPattern {
+public class ClassTreePattern extends JavacTreeMemberPattern<ClassTree, ClassTreePattern>  {
 
     protected ClassTreePattern(@NonNull InitialPatternCondition<ClassTree> condition) {
         super(condition);
@@ -61,7 +62,32 @@ public class ClassTreePattern extends JavacTreePattern<ClassTree, ClassTreePatte
         });
     }
 
-    public ClassTreePattern withMethod(final boolean checkDeep, final ElementPattern<? extends MethodTree> memberPattern) {
+    public ClassTreePattern withField(final boolean checkDeep, final ElementPattern memberPattern) {
+        return with(new JavacElementPatternCondition<ClassTree>("withField") {
+
+            @Override
+            public boolean accepts(@NotNull ClassTree classTree,
+                                   ProcessingContext context) {
+                for (Tree member : classTree.getMembers()) {
+                    if (member.getKind() != Tree.Kind.VARIABLE) {
+                        continue;
+                    }
+
+                    if (memberPattern.accepts(member, context)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            @Override
+            public boolean accepts(@NonNull Element element, ProcessingContext processingContext) {
+                return false;
+            }
+        });
+    }
+
+    public ClassTreePattern withMethod(final boolean checkDeep, final ElementPattern<? extends Tree> memberPattern) {
         return with(new PatternCondition<ClassTree>("withMethod") {
             @Override
             public boolean accepts(@NotNull ClassTree classTree,
@@ -103,30 +129,4 @@ public class ClassTreePattern extends JavacTreePattern<ClassTree, ClassTreePatte
         return with(new ClassTreeNamePatternCondition(string().equalTo(qname)));
     }
 
-
-    @Override
-    public boolean accepts(@Nullable Object o, ProcessingContext context) {
-        if (o instanceof Tree) {
-            return super.accepts(o, context);
-        }
-
-        if (o instanceof Element) {
-            Element element = (Element) o;
-            for (PatternCondition<? super ClassTree> condition : getCondition().getConditions()) {
-                if (condition instanceof JavacElementPattern) {
-                    if (!((JavacElementPattern) condition).accepts(element, context)) {
-                        return false;
-                    }
-                }
-            }
-
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    public boolean accepts(Element element, ProcessingContext context) {
-        return accepts((Object) element, context);
-    }
 }

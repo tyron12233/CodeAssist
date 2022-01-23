@@ -25,22 +25,29 @@ import com.tyron.completion.java.util.TreeUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.patterns.PatternCondition;
 import org.jetbrains.kotlin.com.intellij.patterns.PlatformPatterns;
+import org.jetbrains.kotlin.com.intellij.patterns.PsiJavaPatterns;
+import org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethodCallExpression;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.NestingKind;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.ExpressionTree;
+import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.LiteralTree;
+import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.code.Symbol;
 import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
@@ -59,7 +66,7 @@ import edu.emory.mathcs.backport.java.util.Collections;
 @RunWith(RobolectricTestRunner.class)
 public class PatternTest {
 
-    private static final String TEXT = "package com.test; public class Test {" + "public static " + "void main() " + "{ System.out.println(\"test\"); " + "}\n" + "}";
+    private static final String TEXT = "package com.test; public class Test {" + "static String test; " + "public static " + "void main(String[] args) " + "{ System.out.println(\"test\"); " + "}\n" + "}";
 
     private Project mProject;
     private FileManager mFileManager;
@@ -97,7 +104,7 @@ public class PatternTest {
             Trees trees = Trees.instance(task.task);
 
             FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
-            TreePath scan = findCurrentPath.scan(root, 86L);
+            TreePath scan = findCurrentPath.scan(root, 120L);
 
             ProcessingContext context = new ProcessingContext();
             context.put("trees", trees);
@@ -110,11 +117,24 @@ public class PatternTest {
                     literal().methodCallParameter(
                             0,
                             method()
-                            .withName("println")
-                            .definedInClass("java.io.PrintStream")
+                                    .withName("println")
+                                    .definedInClass("java.io.PrintStream")
+
+
                     );
             // "test" -> println() -> java.io.PrintStream
             assert capture.accepts(scan.getLeaf(), context);
+
+            // a class with field of name test and type String
+            ClassTreePattern test = classTree().withField(false,
+                    variable()
+                            .withName("test")
+                            .withType("java.lang.String"));
+            assert test.accepts(root.getTypeDecls().get(0), context);
+
+            ClassTreePattern main = classTree().withMethod(false,
+                    method().withName("main"));
+            assert  main.accepts(root.getTypeDecls().get(0), context);
         });
     }
 }
