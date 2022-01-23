@@ -510,6 +510,13 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+
+        mEditor.setBackgroundAnalysisEnabled(false);
+    }
+
     private static final class CodeEditorEventListener implements EditorEventListener {
 
         private final Module mModule;
