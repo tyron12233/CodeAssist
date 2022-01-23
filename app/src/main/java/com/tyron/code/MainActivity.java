@@ -14,6 +14,7 @@ import com.tyron.code.ui.editor.action.PreviewLayoutAction;
 import com.tyron.code.ui.file.action.NewFileActionGroup;
 import com.tyron.code.ui.file.action.file.DeleteFileAction;
 import com.tyron.code.ui.main.action.compile.CompileActionGroup;
+import com.tyron.code.ui.main.action.debug.DebugActionGroup;
 import com.tyron.code.ui.main.action.other.FormatAction;
 import com.tyron.code.ui.main.action.other.OpenSettingsAction;
 import com.tyron.code.ui.main.action.project.ProjectActionGroup;
@@ -54,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
             manager.registerAction(PreviewLayoutAction.ID, new PreviewLayoutAction());
             manager.registerAction(OpenSettingsAction.ID, new OpenSettingsAction());
             manager.registerAction(FormatAction.ID, new FormatAction());
+            manager.registerAction(DebugActionGroup.ID, new DebugActionGroup());
 
             // editor tab actions
             manager.registerAction(CloseFileEditorAction.ID, new CloseFileEditorAction());
