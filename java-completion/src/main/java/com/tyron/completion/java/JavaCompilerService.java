@@ -290,9 +290,22 @@ public class JavaCompilerService implements CompilerProvider {
             return fastFind;
         }
 
+        List<Module> dependencies = mProject.getDependencies(mCurrentModule);
         String packageName = packageName(className);
         String simpleName = simpleName(className);
-        for (File file : SourceFileManager.list(mCurrentModule, packageName)) {
+
+        for (Module dependency : dependencies) {
+            Path path = findPublicTypeDeclarationInModule(dependency, packageName, simpleName, className);
+            if (path != NOT_FOUND) {
+                return path;
+            }
+        }
+
+        return NOT_FOUND;
+    }
+
+    private Path findPublicTypeDeclarationInModule(Module module, String packageName, String simpleName, String className) {
+        for (File file : SourceFileManager.list(module, packageName)) {
             if (containsWord(file.toPath(), simpleName) && containsType(file.toPath(), className)) {
                 if (file.getName().endsWith(".java")) {
                     return file.toPath();
