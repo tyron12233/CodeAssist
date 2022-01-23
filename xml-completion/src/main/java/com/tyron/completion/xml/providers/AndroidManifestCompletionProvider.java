@@ -220,8 +220,12 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
         });
         for (String s : sManifestTagMappings.keySet()) {
             CompletionItem item = new CompletionItem();
+            String commitPrefix = "<";
+            if (prefix.startsWith("</")) {
+                commitPrefix = "</";
+            }
             item.label = s;
-            item.commitText = "<" + s;
+            item.commitText = commitPrefix + s;
             item.cursorOffset = item.commitText.length();
             item.iconKind = DrawableKind.Package;
             item.detail = "Tag";

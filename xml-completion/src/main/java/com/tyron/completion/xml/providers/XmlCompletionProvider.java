@@ -179,10 +179,14 @@ public class XmlCompletionProvider extends CompletionProvider {
         for (Map.Entry<String, JavaClass> entry :
                 repository.getJavaViewClasses().entrySet()) {
             CompletionItem item = new CompletionItem();
+            String commitPrefix = "<";
+            if (prefix.startsWith("</")) {
+                commitPrefix = "</";
+            }
             item.label = StyleUtils.getSimpleName(entry.getKey());
             item.detail = entry.getValue().getPackageName();
             item.iconKind = DrawableKind.Class;
-            item.commitText = "<" + entry.getValue().getClassName();
+            item.commitText = commitPrefix + entry.getValue().getClassName();
             item.cursorOffset = item.commitText.length();
             list.items.add(item);
         }
