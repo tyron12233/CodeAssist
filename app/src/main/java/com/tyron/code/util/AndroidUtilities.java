@@ -70,18 +70,6 @@ public class AndroidUtilities {
 		return calculateMD5(is);
 	}
 
-	public static void showSimpleAlert(Context context, @StringRes int title, @StringRes int message) {
-		showSimpleAlert(context, context.getString(title), context.getString(message));
-	}
-
-	public static void showSimpleAlert(Context context, String title, String message) {
-		new MaterialAlertDialogBuilder(context)
-				.setTitle(title)
-				.setMessage(message)
-				.setPositiveButton(android.R.string.ok, null)
-				.show();
-	}
-
 	public static String calculateMD5(InputStream is) {
 		MessageDigest digest;
 		try {
@@ -112,6 +100,18 @@ public class AndroidUtilities {
 				Log.e("calculateMD5", "Exception on closing MD5 input stream", e);
 			}
 		}
+	}
+
+	public static void showSimpleAlert(Context context, @StringRes int title, @StringRes int message) {
+		showSimpleAlert(context, context.getString(title), context.getString(message));
+	}
+
+	public static void showSimpleAlert(Context context, String title, String message) {
+		new MaterialAlertDialogBuilder(context)
+				.setTitle(title)
+				.setMessage(message)
+				.setPositiveButton(android.R.string.ok, null)
+				.show();
 	}
 
 	public static void copyToClipboard(String text) {
