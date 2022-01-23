@@ -35,6 +35,10 @@ public class SourceFileObject extends SimpleJavaFileObject {
 		this(file, null, null, project);
 	}
 
+	public SourceFileObject(Path file, JavaModule project, Instant modified) {
+		this(file, null, modified, project);
+	}
+
 	public SourceFileObject(Path file, String contents, Instant modified) {
 		this(file, contents, modified, null);
 	}
