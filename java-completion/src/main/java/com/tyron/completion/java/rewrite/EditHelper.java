@@ -1,5 +1,8 @@
 package com.tyron.completion.java.rewrite;
 
+import static com.tyron.completion.java.patterns.JavacTreePatterns.classTree;
+import static com.tyron.completion.java.patterns.JavacTreePatterns.method;
+
 import androidx.annotation.NonNull;
 
 import com.github.javaparser.ast.Modifier.Keyword;
@@ -24,6 +27,8 @@ import com.github.javaparser.printer.configuration.ConfigurationOption;
 import com.github.javaparser.printer.configuration.DefaultConfigurationOption;
 import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
 import com.github.javaparser.printer.configuration.PrinterConfiguration;
+import com.tyron.completion.java.patterns.ClassTreePattern;
+import com.tyron.completion.java.patterns.JavacTreePatterns;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.JavaParserTypesUtil;
 import com.tyron.completion.java.util.JavaParserUtil;
@@ -31,6 +36,7 @@ import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
+import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.Name;
@@ -46,6 +52,7 @@ import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.LineMap;
 import org.openjdk.source.tree.MethodTree;
+import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.VariableTree;
 import org.openjdk.source.util.JavacTask;
@@ -53,6 +60,7 @@ import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.code.Symbol;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.StringJoiner;
@@ -324,7 +332,27 @@ public class EditHelper {
         return s;
     }
 
-    public static int indent(JavacTask task, CompilationUnitTree root, ClassTree leaf) {
+
+    private static final ClassTreePattern INSIDE_METHOD =  classTree()
+            .inside(NewClassTree.class)
+            .withParent(method());
+
+    public static int indent(JavacTask task, CompilationUnitTree root, Tree leaf) {
+        Trees trees = Trees.instance(task);
+        ProcessingContext context = new ProcessingContext();
+        context.put("trees", trees);
+        context.put("root", root);
+        context.put("elements", task.getElements());
+        if (INSIDE_METHOD.accepts(leaf, context)) {
+            leaf = trees.getPath(root, leaf)
+                    .getParentPath()
+                    .getParentPath()
+                    .getLeaf();
+        }
+        return indentOld(task, root, leaf);
+    }
+
+    private static int indentOld(JavacTask task, CompilationUnitTree root, Tree leaf) {
         SourcePositions pos = Trees.instance(task).getSourcePositions();
         LineMap lines = root.getLineMap();
         long startClass = pos.getStartPosition(root, leaf);

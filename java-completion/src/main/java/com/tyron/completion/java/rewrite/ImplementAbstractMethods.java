@@ -114,21 +114,19 @@ public class ImplementAbstractMethods implements JavaRewrite {
             DeclaredType thisType = (DeclaredType) element.asType();
 
             Set<String> importedClasses = new HashSet<>();
-            task.root().getImports().stream().map(ImportTree::getQualifiedIdentifier).map(Object::toString).forEach(importedClasses::add);
+            task.root().getImports().stream()
+                    .map(ImportTree::getQualifiedIdentifier)
+                    .map(Object::toString)
+                    .forEach(importedClasses::add);
             Set<String> typesToImport = new HashSet<>();
 
-            int indent = EditHelper.indent(task.task, task.root(), thisTree);
-            if (indent == 1) {
-                indent = 4;
-            }
-            indent += 4;
+            int indent = EditHelper.indent(task.task, task.root(), thisTree) + 1;
+            String tabs = Strings.repeat("\t", indent);
 
             for (Element member : elements.getAllMembers(thisClass)) {
                 if (member.getKind() == ElementKind.METHOD && member.getModifiers().contains(Modifier.ABSTRACT)) {
                     ExecutableElement method = (ExecutableElement) member;
                     MethodTree source = findSource(compiler, task, method);
-                    int tabCount = indent / 4;
-                    String tabs = Strings.repeat("\t", tabCount);
                     ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType
                             , method);
 
@@ -145,14 +143,17 @@ public class ImplementAbstractMethods implements JavaRewrite {
                     }
 
                     String text = JavaParserUtil.prettyPrint(methodDeclaration, className -> false);
-
                     text = tabs + text.replace("\n", "\n" + tabs);
-                    text += "\n";
+                    if (insertText.length() != 0) {
+                        text = "\n" + text;
+                    }
+
                     insertText.add(text);
                 }
             }
 
             Position insert = EditHelper.insertAtEndOfClass(task.task, task.root(), thisTree);
+            insert.line -= 1;
             edits.add(new TextEdit(new Range(insert, insert), insertText + "\n"));
             edits.addAll(importEdits);
 
