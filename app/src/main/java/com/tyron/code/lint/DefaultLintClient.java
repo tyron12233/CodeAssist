@@ -36,10 +36,6 @@ public class DefaultLintClient extends LintClient {
     }
 
     public void scan(File file) {
-        if (!mCompiler.isReady()) {
-            return;
-        }
-
         mIssues.clear();
         mLint.scanFile(file);
     }

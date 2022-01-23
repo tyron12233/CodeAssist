@@ -77,6 +77,7 @@ public class JavaCompilerService implements CompilerProvider {
         mSourceFileManager.setCurrentModule(module);
         mCurrentModule = module;
     }
+
     /**
      * Checks whether this list has been compiled before
      *
@@ -140,18 +141,16 @@ public class JavaCompilerService implements CompilerProvider {
      * @return CompileBatch for this compilation
      */
     private CompilerContainer compileBatch(Collection<? extends JavaFileObject> sources) {
-        synchronized (mContainer) {
-            mContainer.initialize(() -> {
-                if (needsCompile(sources)) {
-                    loadCompile(sources);
-                } else {
-                    Log.d("JavaCompilerService", "Using cached compile");
-                }
-                CompileTask task = new CompileTask(cachedCompile);
-                mContainer.setCompileTask(task);
-            });
-            return mContainer;
-        }
+        mContainer.initialize(() -> {
+            if (needsCompile(sources)) {
+                loadCompile(sources);
+            } else {
+                Log.d("JavaCompilerService", "Using cached compile");
+            }
+            CompileTask task = new CompileTask(cachedCompile);
+            mContainer.setCompileTask(task);
+        });
+        return mContainer;
     }
     
     public void clearDiagnostics() {
@@ -435,16 +434,6 @@ public class JavaCompilerService implements CompilerProvider {
         if (mLock.isHeldByCurrentThread() && mLock.isLocked()) {
             mLock.unlock();
         }
-    }
-
-    public synchronized boolean isReady() {
-        if (CompletionEngine.isIndexing()) {
-            return false;
-        }
-        if (cachedCompile == null) {
-            return true;
-        }
-        return cachedCompile.closed;
     }
 
     public JavaModule getCurrentModule() {

@@ -24,27 +24,22 @@ import com.tyron.completion.java.JavaCompilerService;
 import com.tyron.completion.xml.lexer.XMLLexer;
 
 import org.antlr.v4.runtime.CharStream;
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.Token;
 import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.StringReader;
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 import java.util.concurrent.Executors;
-import java.util.regex.Pattern;
 
 import io.github.rosemoe.sora.data.BlockLine;
 import io.github.rosemoe.sora.data.Span;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.text.TextAnalyzer;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.EditorColorScheme;
 
@@ -111,7 +106,7 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer {
                 }
             }
         }, () -> {
-           editor.setDiagnostics(diagnosticWrappers);
+            editor.setDiagnostics(diagnosticWrappers);
         });
     }
 
@@ -169,10 +164,8 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer {
                 if (text.startsWith("\"#")) {
                     try {
                         int color = Color.parseColor(text.substring(1, text.length() - 1));
-                        colors.addIfNeeded(line, Span.obtain(column,
-                                EditorColorScheme.LITERAL));
-                        colors.add(line, Span.obtain(column + 1,
-                                EditorColorScheme.LITERAL)).setUnderlineColor(color);
+                        colors.addIfNeeded(line, Span.obtain(column, EditorColorScheme.LITERAL));
+                        colors.add(line, Span.obtain(column + 1, EditorColorScheme.LITERAL)).setUnderlineColor(color);
                         colors.add(line, Span.obtain(column + text.length() - 1,
                                 EditorColorScheme.LITERAL)).setUnderlineColor(Color.TRANSPARENT);
                         colors.addIfNeeded(line, column + text.length(),
@@ -353,12 +346,10 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer {
                         CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
                 JavaCompilerService service = provider.getCompiler(project, module);
 
-                if (service.isReady()) {
-                    CompilerContainer container = service.compile(resourceClass.toPath());
-                    container.run(__ -> {
+                CompilerContainer container = service.compile(resourceClass.toPath());
+                container.run(__ -> {
 
-                    });
-                }
+                });
             }
         }
     }

@@ -81,11 +81,6 @@ public class ImplementAbstractMethods implements JavaRewrite {
 
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
-        if (!compiler.isReady()) {
-            Log.w(TAG, "Compiler is in use, returning empty map");
-            return Collections.emptyMap();
-        }
-
         List<TextEdit> edits = new ArrayList<>();
         List<TextEdit> importEdits = new ArrayList<>();
 

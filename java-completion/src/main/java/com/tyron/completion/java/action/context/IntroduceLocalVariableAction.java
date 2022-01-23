@@ -50,9 +50,6 @@ public class IntroduceLocalVariableAction extends AnAction {
         if (compiler == null) {
             return;
         }
-        if (!compiler.isReady()) {
-            return;
-        }
 
         File file = event.getData(CommonDataKeys.FILE);
         if (file == null) {

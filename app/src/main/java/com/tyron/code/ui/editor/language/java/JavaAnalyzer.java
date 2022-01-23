@@ -129,7 +129,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         // compiling multiple files at the same time
         if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
             JavaCompilerService service = getCompiler(editor);
-            if (service != null && service.isReady()) {
+            if (service != null) {
                 try {
                     SourceFileObject sourceFileObject =
                             new SourceFileObject(editor.getCurrentFile().toPath(),

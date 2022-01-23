@@ -141,9 +141,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 mEditor.setSelection(line, column, false);
 
                 mEditor.getScroller().startScroll(mEditor.getOffsetX(), mEditor.getOffsetY(),
-                        targetX - mEditor.getOffsetX(),
-                        targetY - mEditor.getOffsetY(),
-                        0);
+                        targetX - mEditor.getOffsetX(), targetY - mEditor.getOffsetY(), 0);
             }
         }
     }
@@ -310,7 +308,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
             DataContext dataContext = DataContextUtils.getDataContext(view1);
             dataContext.putData(CommonDataKeys.PROJECT, currentProject);
-            dataContext.putData(MainFragment.FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
+            dataContext.putData(MainFragment.FILE_EDITOR_KEY,
+                    mMainViewModel.getCurrentFileEditor());
             dataContext.putData(CommonDataKeys.FILE, mCurrentFile);
             dataContext.putData(CommonDataKeys.EDITOR, mEditor);
 
@@ -321,17 +320,16 @@ public class CodeEditorFragment extends Fragment implements Savable,
                             CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
                     JavaCompilerService compiler = service.getCompiler(currentProject,
                             (JavaModule) currentModule);
-                    if (compiler.isReady()) {
-                        compiler.compile(mCurrentFile.toPath()).run(task -> {
-                            if (task != null) {
-                                FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
-                                TreePath currentPath = findCurrentPath.scan(task.root(),
-                                        (long) mEditor.getCursor().getLeft());
-                                dataContext.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
-                            }
-                        });
-                        dataContext.putData(CommonJavaContextKeys.COMPILER, compiler);
-                    }
+
+                    compiler.compile(mCurrentFile.toPath()).run(task -> {
+                        if (task != null) {
+                            FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
+                            TreePath currentPath = findCurrentPath.scan(task.root(),
+                                    (long) mEditor.getCursor().getLeft());
+                            dataContext.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
+                        }
+                    });
+                    dataContext.putData(CommonJavaContextKeys.COMPILER, compiler);
                 }
             }
 
@@ -339,15 +337,13 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     DiagnosticUtil.getDiagnosticWrapper(mEditor.getDiagnostics(),
                             mEditor.getCursor().getLeft());
             if (diagnosticWrapper == null && mLanguage instanceof LanguageXML) {
-                diagnosticWrapper = DiagnosticUtil.getXmlDiagnosticWrapper(mEditor.getDiagnostics(),
-                        mEditor.getCursor().getLeftLine());
+                diagnosticWrapper =
+                        DiagnosticUtil.getXmlDiagnosticWrapper(mEditor.getDiagnostics(),
+                                mEditor.getCursor().getLeftLine());
             }
             dataContext.putData(CommonDataKeys.DIAGNOSTIC, diagnosticWrapper);
 
-            ActionManager.getInstance().fillMenu(dataContext,
-                    menu,
-                    ActionPlaces.EDITOR,
-                    true,
+            ActionManager.getInstance().fillMenu(dataContext, menu, ActionPlaces.EDITOR, true,
                     false);
         });
 
@@ -356,7 +352,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
             mEditor.showContextMenu(event.getX(), event.getY());
         });
 
-        LogViewModel logViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
+        LogViewModel logViewModel =
+                new ViewModelProvider(requireActivity()).get(LogViewModel.class);
 
         mEditor.setDiagnosticsListener(diagnostics -> {
             logViewModel.updateLogs(LogViewModel.DEBUG, diagnostics);
@@ -403,7 +400,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().setSnapshotContent(mCurrentFile, mEditor.getText().toString());
             } else {
                 try {
-                    FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(), StandardCharsets.UTF_8);
+                    FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(),
+                            StandardCharsets.UTF_8);
                 } catch (IOException e) {
                     // ignored
                 }
@@ -465,7 +463,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     /**
      * Sets the position of the cursor in the editor
-     * @param line zero-based line.
+     *
+     * @param line   zero-based line.
      * @param column zero-based column.
      */
     public void setCursorPosition(int line, int column) {
@@ -476,6 +475,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     /**
      * Perform a shortcut item to the editor
+     *
      * @param item the item to be performed
      */
     public void performShortcut(ShortcutItem item) {
