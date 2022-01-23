@@ -31,6 +31,7 @@ import com.tyron.code.R;
 import com.tyron.code.util.ApkInstaller;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.Executors;
 
@@ -169,64 +170,96 @@ public class CompilerService extends Service {
         }
 
         Executors.newSingleThreadExecutor().execute(() -> {
-            Module module = project.getMainModule();
-            Builder<? extends Module> projectBuilder = getBuilderForProject(module, type);
-
-            module.clear();
-            module.index();
-
-            boolean success = true;
-
-            projectBuilder.setTaskListener(this::updateNotification);
-
-            try {
-                projectBuilder.build(type);
-            } catch (Exception e) {
-                String message;
-                if (BuildConfig.DEBUG) {
-                    message = Log.getStackTraceString(e);
-                } else {
-                    message = e.getMessage();
-                }
-                mMainHandler.post(() -> onResultListener.onComplete(false, message));
-                success = false;
+           if (true) {
+               buildProject(project, type);
+           } else {
+               buildMainModule(project, type);
             }
-
-            if (success) {
-                mMainHandler.post(() -> onResultListener.onComplete(true, "Success"));
-            }
-
-
-            String projectName = "Project";
-            if (!success) {
-                updateNotification(projectName, getString(R.string.compilation_result_failed), -1
-                        , NotificationCompat.PRIORITY_HIGH);
-            } else {
-                if (shouldShowNotification) {
-                    mMainHandler.post(() -> {
-                        NotificationCompat.Builder builder = new NotificationCompat.Builder(this,
-                                "Compiler").setSmallIcon(R.drawable.ic_launcher).setContentTitle(projectName).setContentText(getString(R.string.compilation_result_success));
-
-                        if (type != BuildType.AAB) {
-                            Intent intent = new Intent(Intent.ACTION_VIEW);
-                            intent.setDataAndType(ApkInstaller.uriFromFile(this,
-                                    new File(module.getBuildDirectory(), "bin/signed.apk")),
-                                    "application/vnd.android.package-archive");
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                            PendingIntent pending = PendingIntent.getActivity(this, 0, intent,
-                                    PendingIntent.FLAG_IMMUTABLE);
-                            builder.addAction(new NotificationCompat.Action(0,
-                                    getString(R.string.compilation_button_install), pending));
-                        }
-                        NotificationManagerCompat.from(this).notify(201, builder.build());
-                    });
-                }
-            }
-
-            stopSelf();
-            stopForeground(true);
         });
+    }
+
+    private void buildProject(Project project, BuildType type) {
+        boolean success = true;
+
+        try {
+            ProjectBuilder projectBuilder = new ProjectBuilder(project, logger);
+            projectBuilder.build(type);
+        } catch (Throwable e) {
+            String message;
+            if (BuildConfig.DEBUG) {
+                message = Log.getStackTraceString(e);
+            } else {
+                message = e.getMessage();
+            }
+            mMainHandler.post(() -> onResultListener.onComplete(false, message));
+            success = false;
+        }
+
+        report(success, type, project.getMainModule());
+    }
+
+    private void buildMainModule(Project project, BuildType type) {
+        Module module = project.getMainModule();
+        Builder<? extends Module> projectBuilder = getBuilderForProject(module, type);
+
+        module.clear();
+        module.index();
+
+        boolean success = true;
+
+        projectBuilder.setTaskListener(this::updateNotification);
+
+        try {
+            projectBuilder.build(type);
+        } catch (Exception e) {
+            String message;
+            if (BuildConfig.DEBUG) {
+                message = Log.getStackTraceString(e);
+            } else {
+                message = e.getMessage();
+            }
+            mMainHandler.post(() -> onResultListener.onComplete(false, message));
+            success = false;
+        }
+
+        report(success, type, module);
+    }
+
+    private void report(boolean success, BuildType type, Module module) {
+        if (success) {
+            mMainHandler.post(() -> onResultListener.onComplete(true, "Success"));
+        }
+
+
+        String projectName = "Project";
+        if (!success) {
+            updateNotification(projectName, getString(R.string.compilation_result_failed), -1
+                    , NotificationCompat.PRIORITY_HIGH);
+        } else {
+            if (shouldShowNotification) {
+                mMainHandler.post(() -> {
+                    NotificationCompat.Builder builder = new NotificationCompat.Builder(this,
+                            "Compiler").setSmallIcon(R.drawable.ic_launcher).setContentTitle(projectName).setContentText(getString(R.string.compilation_result_success));
+
+                    if (type != BuildType.AAB) {
+                        Intent intent = new Intent(Intent.ACTION_VIEW);
+                        intent.setDataAndType(ApkInstaller.uriFromFile(this,
+                                new File(module.getBuildDirectory(), "bin/signed.apk")),
+                                "application/vnd.android.package-archive");
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        PendingIntent pending = PendingIntent.getActivity(this, 0, intent,
+                                PendingIntent.FLAG_IMMUTABLE);
+                        builder.addAction(new NotificationCompat.Action(0,
+                                getString(R.string.compilation_button_install), pending));
+                    }
+                    NotificationManagerCompat.from(this).notify(201, builder.build());
+                });
+            }
+        }
+
+        stopSelf();
+        stopForeground(true);
     }
 
     private Builder<? extends Module> getBuilderForProject(Module module, BuildType type) {
