@@ -1,11 +1,14 @@
 package com.tyron.code.ui.editor.language;
 
+import android.util.Log;
+
 import com.tyron.builder.model.DiagnosticWrapper;
 
 import org.openjdk.javax.tools.Diagnostic;
 
 import java.util.List;
 
+import io.github.rosemoe.sora.BuildConfig;
 import io.github.rosemoe.sora.data.Span;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Indexer;
@@ -62,7 +65,9 @@ public class HighlightUtil {
                         Span.FLAG_WARNING;
                 colors.markProblemRegion(flag, startLine, startColumn, endLine, endColumn);
             } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
-                // ignored
+                if (BuildConfig.DEBUG) {
+                    Log.d("HighlightUtil", "Failed to mark diagnostics", e);
+                }
             }
         });
         editor.getText().endStreamCharGetting();
