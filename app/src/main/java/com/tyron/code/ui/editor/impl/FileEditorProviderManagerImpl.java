@@ -55,7 +55,7 @@ public class FileEditorProviderManagerImpl implements FileEditorProviderManager 
         return null;
     }
 
-    private void registerProvider(FileEditorProvider provider) {
+    public void registerProvider(FileEditorProvider provider) {
         String editorTypeId = provider.getEditorTypeId();
         for (int i = mProviders.size() - 1; i >= 0; i--) {
             FileEditorProvider _provider = mProviders.get(i);

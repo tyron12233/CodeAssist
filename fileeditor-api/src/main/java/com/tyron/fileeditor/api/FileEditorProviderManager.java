@@ -9,4 +9,6 @@ public interface FileEditorProviderManager {
     FileEditorProvider[] getProviders(@NonNull File file);
 
     FileEditorProvider getProvider(@NonNull String typeId);
+
+    void registerProvider(FileEditorProvider provider);
 }
