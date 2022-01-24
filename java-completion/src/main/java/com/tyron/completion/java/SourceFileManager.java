@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -40,7 +41,7 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
 	
 	private static StandardJavaFileManager createDelegateFileManager() {
         JavacTool compiler = JavacTool.create();
-        return (StandardJavaFileManager) compiler.getStandardFileManager(SourceFileManager::logError, Locale.getDefault(), Charset.defaultCharset());
+        return compiler.getStandardFileManager(SourceFileManager::logError, Locale.getDefault(), Charset.defaultCharset());
     }
 	
 	private static void logError(Diagnostic<?> error) {
@@ -54,7 +55,11 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
 	@Override
 	public Iterable<JavaFileObject> list(JavaFileManager.Location location, String packageName, Set<JavaFileObject.Kind> kinds, boolean recurse) throws IOException {
 		if (location == StandardLocation.SOURCE_PATH) {
-			Stream<JavaFileObject> stream = list(mCurrentModule, packageName)
+		    List<File> found = new ArrayList<>();
+            for (Module module : mProject.getModules()) {
+                found.addAll(list(module, packageName));
+            }
+			Stream<JavaFileObject> stream = found
                     .stream()
 					.map(this::asJavaFileObject);
 			return stream.collect(Collectors.toList());
@@ -140,6 +145,9 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
             String name = file;
             if (file.endsWith(".")) {
                 name = file.substring(0, file.length() - 1);
+            }
+            if (!name.startsWith(packageName)) {
+                continue;
             }
             if (name.substring(0, name.lastIndexOf(".")).equals(packageName) || name.equals(packageName)) {
                 list.add(javaModule.getJavaFiles().get(file));
