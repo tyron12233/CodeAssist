@@ -28,6 +28,6 @@ public class DebugActionGroup extends ActionGroup {
 
     @Override
     public AnAction[] getChildren(@Nullable AnActionEvent e) {
-        return new AnAction[]{new LoadActionJarAction()};
+        return new AnAction[]{new LoadActionJarAction(), new LoadFileEditorProviderAction()};
     }
 }
