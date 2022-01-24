@@ -98,12 +98,14 @@ public class LoadFileEditorProviderAction extends BaseLoadAction {
     private boolean isFileEditorProvider(JavaClass javaClass) {
         JavaClass current = javaClass;
         while (current != null) {
-            String superClass = current.getSuperclassName();
-            if (superClass == null) {
+            String[] interfaces = current.getInterfaceNames();
+            if (interfaces == null) {
                 return false;
             }
-            if (superClass.equals(FileEditorProvider.class.getName())) {
-                return true;
+            for (String anInterface : interfaces) {
+                if (anInterface.equals(FileEditorProvider.class.getName())) {
+                    return true;
+                }
             }
             current = javaClass.getSuperClass();
         }
