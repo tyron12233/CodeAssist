@@ -90,18 +90,30 @@ public class IntroduceLocalVariableAction extends AnAction {
     }
 
     private JavaRewrite performInternal(CompileTask task, TreePath path, File file) {
-        Element element = Trees.instance(task.task).getElement(path);
+        Trees trees = Trees.instance(task.task);
+        Element element = trees.getElement(path);
+        TypeMirror typeMirror = trees.getTypeMirror(path);
+        if (typeMirror != null) {
+            return rewrite(typeMirror, trees, path, file, element.getSimpleName().toString());
+        }
+
         if (element instanceof ExecutableElement) {
             TypeMirror returnType = ActionUtil.getReturnType(task.task, path,
                     (ExecutableElement) element);
-            if (returnType.getKind() != TypeKind.VOID) {
-                SourcePositions pos = Trees.instance(task.task).getSourcePositions();
-                long startPosition = pos.getStartPosition(path.getCompilationUnit(),
-                        path.getLeaf());
-                return new IntroduceLocalVariable(file.toPath(),
-                        element.getSimpleName().toString(), returnType, startPosition);
-            }
+            return rewrite(returnType, trees, path, file, element.getSimpleName().toString());
         }
         return null;
+    }
+
+    private JavaRewrite rewrite(TypeMirror type,
+                                Trees trees,
+                                TreePath path,
+                                File file,
+                                String methodName) {
+        SourcePositions pos = trees.getSourcePositions();
+        long startPosition = pos.getStartPosition(path.getCompilationUnit(),
+                path.getLeaf());
+        return new IntroduceLocalVariable(file.toPath(),
+                methodName, type, startPosition);
     }
 }
