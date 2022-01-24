@@ -22,6 +22,7 @@ import org.jetbrains.kotlin.com.intellij.util.messages.impl.MessageBusFactoryImp
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -60,6 +61,13 @@ public class Project {
             File rootFile = module.getRootFile();
             mModules.put(rootFile.getName(), module);
         }
+    }
+
+    /**
+     * @return All the modules from the main module, order is not guaranteed
+     */
+    public Collection<Module> getModules() {
+        return mModules.values();
     }
 
     @NonNull
