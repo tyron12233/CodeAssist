@@ -34,6 +34,7 @@ public class LoadFileEditorProviderAction extends BaseLoadAction {
     public void update(@NonNull AnActionEvent event) {
         super.update(event);
 
+        event.getPresentation().setVisible(true);
         event.getPresentation().setText("Load FileEditorProvider");
     }
 
