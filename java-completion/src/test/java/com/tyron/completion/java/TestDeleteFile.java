@@ -8,6 +8,8 @@ import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.mock.MockAndroidModule;
 import com.tyron.builder.project.mock.MockFileManager;
+import com.tyron.completion.java.compiler.CompilerContainer;
+import com.tyron.completion.java.compiler.JavaCompilerService;
 
 import org.junit.Before;
 import org.junit.Test;

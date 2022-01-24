@@ -1,15 +1,12 @@
 package com.tyron.completion.java.util;
 
-import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.action.FindCurrentPath;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.Name;
 import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.util.Elements;
-import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ExpressionTree;
@@ -18,15 +15,9 @@ import org.openjdk.source.tree.LineMap;
 import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.ModifiersTree;
 import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.TreeVisitor;
-import org.openjdk.source.tree.TypeParameterTree;
-import org.openjdk.source.tree.VariableTree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.code.Symbol;
-import org.openjdk.tools.javac.tree.JCTree;
 
 import java.io.IOException;
 import java.util.ArrayList;

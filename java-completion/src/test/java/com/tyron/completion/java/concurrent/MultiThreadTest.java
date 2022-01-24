@@ -10,11 +10,10 @@ import com.tyron.builder.project.mock.MockAndroidModule;
 import com.tyron.builder.project.mock.MockFileManager;
 import com.tyron.completion.TestUtil;
 import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.java.CompilerContainer;
+import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.JavaCompilerProvider;
-import com.tyron.completion.java.JavaCompilerService;
-import com.tyron.completion.java.JavaCompletionProvider;
+import com.tyron.completion.java.compiler.JavaCompilerService;
 
 import org.junit.Before;
 import org.junit.Test;

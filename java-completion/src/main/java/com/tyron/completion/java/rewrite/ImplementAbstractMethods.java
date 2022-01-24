@@ -1,16 +1,14 @@
 package com.tyron.completion.java.rewrite;
 
-import android.util.Log;
-
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.google.common.base.Strings;
-import com.tyron.completion.java.CompileTask;
-import com.tyron.completion.java.CompilerContainer;
+import com.tyron.completion.java.compiler.CompileTask;
+import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.FindNewTypeDeclarationAt;
 import com.tyron.completion.java.FindTypeDeclarationAt;
-import com.tyron.completion.java.JavaCompilerService;
-import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.compiler.JavaCompilerService;
+import com.tyron.completion.java.compiler.ParseTask;
 import com.tyron.completion.java.provider.FindHelper;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.JavaParserUtil;

@@ -1,17 +1,11 @@
-package com.tyron.completion.java;
+package com.tyron.completion.java.compiler;
 
 import androidx.annotation.GuardedBy;
-
-import org.jetbrains.kotlin.com.intellij.util.ReadMostlyRWLock;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 import kotlin.jvm.functions.Function1;
 

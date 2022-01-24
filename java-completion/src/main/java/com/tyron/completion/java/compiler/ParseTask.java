@@ -1,4 +1,4 @@
-package com.tyron.completion.java;
+package com.tyron.completion.java.compiler;
 
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.util.JavacTask;

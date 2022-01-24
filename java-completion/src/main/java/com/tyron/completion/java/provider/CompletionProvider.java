@@ -8,15 +8,13 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.type.ReferenceType;
-import com.github.javaparser.ast.type.Type;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.common.util.StringSearch;
-import com.tyron.completion.java.CompileTask;
-import com.tyron.completion.java.CompilerContainer;
-import com.tyron.completion.java.JavaCompilerService;
-import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.compiler.CompileTask;
+import com.tyron.completion.java.compiler.CompilerContainer;
+import com.tyron.completion.java.compiler.JavaCompilerService;
+import com.tyron.completion.java.compiler.ParseTask;
 import com.tyron.completion.java.rewrite.EditHelper;
-import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.ElementUtil;
 import com.tyron.completion.java.util.JavaParserUtil;
 import com.tyron.completion.java.util.TreeUtil;
@@ -24,7 +22,6 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
 
-import org.jetbrains.kotlin.com.intellij.patterns.PsiJavaPatterns;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
@@ -58,7 +55,6 @@ import org.openjdk.source.util.Trees;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -884,20 +880,18 @@ public class CompletionProvider {
 
     private CompletionItem method(ExecutableElement first, boolean endsWithParen,
                                   boolean methodRef, ExecutableType type) {
-
-        MethodDeclaration methodDeclaration = JavaParserUtil.toMethodDeclaration(first, type);
-
         CompletionItem item = new CompletionItem();
-        item.label = getMethodLabel(methodDeclaration);
-        item.commitText = methodDeclaration.getName() + ((methodRef || endsWithParen) ? "" :
+        item.label = getMethodLabel(first, type);
+        item.commitText = first.getSimpleName() + ((methodRef || endsWithParen) ? "" :
                 "()");
-        Type returnType = methodDeclaration.getType();
-        returnType = JavaParserUtil.getFirstType(returnType);
-        item.detail = JavaParserUtil.prettyPrint(returnType, className -> false);
+        item.detail = type != null
+                ? type.getReturnType().toString()
+                : first.getReturnType().toString();
         item.iconKind = DrawableKind.Method;
         item.cursorOffset = item.commitText.length();
-        if (methodDeclaration.getParameters() != null && !methodDeclaration.getParameters().isEmpty()) {
-            item.cursorOffset = item.commitText.length() - ((methodRef || endsWithParen) ? 0 : 1);
+        if (first.getParameters() != null && !first.getParameters().isEmpty()) {
+            item.cursorOffset = item.commitText.length() -
+                    ((methodRef || endsWithParen) ? 0 : 1);
         }
         return item;
     }

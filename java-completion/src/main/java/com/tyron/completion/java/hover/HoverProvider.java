@@ -6,11 +6,11 @@ import org.openjdk.source.util.DocTrees;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
-import com.tyron.completion.java.CompileTask;
-import com.tyron.completion.java.CompilerContainer;
+import com.tyron.completion.java.compiler.CompileTask;
+import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.provider.FindHelper;
-import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.compiler.ParseTask;
 
 import java.nio.file.Path;
 import java.util.ArrayList;

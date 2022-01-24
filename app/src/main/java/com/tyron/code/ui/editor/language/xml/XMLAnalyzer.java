@@ -18,9 +18,9 @@ import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.java.CompilerContainer;
+import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerProvider;
-import com.tyron.completion.java.JavaCompilerService;
+import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.xml.lexer.XMLLexer;
 
 import org.antlr.v4.runtime.CharStream;

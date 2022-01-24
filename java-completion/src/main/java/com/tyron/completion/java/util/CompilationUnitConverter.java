@@ -23,7 +23,7 @@ import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.ast.type.VoidType;
 import com.github.javaparser.ast.type.WildcardType;
-import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.compiler.ParseTask;
 
 import org.openjdk.source.tree.AnnotationTree;
 import org.openjdk.source.tree.ClassTree;

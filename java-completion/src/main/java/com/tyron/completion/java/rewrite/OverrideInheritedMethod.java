@@ -2,10 +2,10 @@ package com.tyron.completion.java.rewrite;
 
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.google.common.base.Strings;
-import com.tyron.completion.java.CompilerContainer;
+import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.FindTypeDeclarationAt;
-import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.compiler.ParseTask;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.JavaParserUtil;
 import com.tyron.completion.model.Position;

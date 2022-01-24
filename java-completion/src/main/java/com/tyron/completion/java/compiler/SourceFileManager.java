@@ -1,4 +1,4 @@
-package com.tyron.completion.java;
+package com.tyron.completion.java.compiler;
 
 import android.text.TextUtils;
 
@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 

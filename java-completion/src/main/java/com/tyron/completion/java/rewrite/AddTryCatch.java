@@ -2,7 +2,7 @@ package com.tyron.completion.java.rewrite;
 
 import com.google.common.collect.ImmutableMap;
 import com.tyron.completion.java.CompilerProvider;
-import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.compiler.ParseTask;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;

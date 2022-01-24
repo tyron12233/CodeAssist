@@ -6,7 +6,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.builder.project.api.JavaModule;
-import com.tyron.completion.java.JavaCompilerService;
+import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.lint.JavaVisitor;
 import com.tyron.lint.checks.CallSuperDetector;
 import com.tyron.lint.checks.JavaPerformanceDetector;

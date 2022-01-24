@@ -4,25 +4,21 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.completion.java.CompileTask;
-import com.tyron.completion.java.CompilerContainer;
+import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
-import com.tyron.completion.java.JavaCompilerService;
+import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.lint.api.Detector;
 import com.tyron.lint.api.Detector.JavaScanner;
 import com.tyron.lint.api.JavaContext;
 import com.tyron.lint.api.JavaVoidVisitor;
 
 import org.openjdk.source.tree.AnnotationTree;
-import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.TreeVisitor;
 import org.openjdk.source.tree.VariableTree;
-import org.openjdk.tools.javac.tree.JCTree;
 
 import java.util.ArrayList;
 import java.util.HashMap;

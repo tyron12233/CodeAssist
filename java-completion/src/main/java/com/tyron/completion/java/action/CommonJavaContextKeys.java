@@ -1,6 +1,6 @@
 package com.tyron.completion.java.action;
 
-import com.tyron.completion.java.JavaCompilerService;
+import com.tyron.completion.java.compiler.JavaCompilerService;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import org.openjdk.source.util.TreePath;

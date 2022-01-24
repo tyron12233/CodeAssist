@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.builder.project.api.JavaModule;
-import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.lint.client.Configuration;
 import com.tyron.lint.client.LintDriver;
 

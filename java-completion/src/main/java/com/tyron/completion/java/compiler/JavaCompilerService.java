@@ -1,4 +1,4 @@
-package com.tyron.completion.java;
+package com.tyron.completion.java.compiler;
 
 import android.annotation.SuppressLint;
 import android.util.Log;
@@ -12,7 +12,9 @@ import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.common.util.Cache;
 import com.tyron.common.util.StringSearch;
-import com.tyron.completion.java.provider.CompletionEngine;
+import com.tyron.completion.java.CompilerProvider;
+import com.tyron.completion.java.Docs;
+import com.tyron.completion.java.FindTypeDeclarations;
 
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.DiagnosticListener;

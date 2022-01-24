@@ -1,7 +1,7 @@
 package com.tyron.completion.java.util;
 
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.action.FindMethodDeclarationAt;
 
 import org.openjdk.javax.lang.model.element.ExecutableElement;

@@ -1,7 +1,7 @@
 package com.tyron.completion.java.rewrite;
 
 import com.google.common.collect.ImmutableMap;
-import com.tyron.completion.java.CompilerContainer;
+import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.provider.FindHelper;
 import com.tyron.completion.model.Range;

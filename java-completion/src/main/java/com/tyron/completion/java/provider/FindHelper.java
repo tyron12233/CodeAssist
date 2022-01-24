@@ -1,7 +1,7 @@
 package com.tyron.completion.java.provider;
 
-import com.tyron.completion.java.CompileTask;
-import com.tyron.completion.java.ParseTask;
+import com.tyron.completion.java.compiler.CompileTask;
+import com.tyron.completion.java.compiler.ParseTask;
 
 import org.openjdk.source.tree.ArrayTypeTree;
 import org.openjdk.source.tree.ClassTree;

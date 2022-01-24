@@ -1,12 +1,12 @@
-package com.tyron.completion.java;
+package com.tyron.completion.java.compiler;
 
 import android.util.Log;
 
 import org.openjdk.source.tree.CompilationUnitTree;
 
 import com.tyron.builder.project.api.JavaModule;
-import com.tyron.common.TestUtil;
 import com.tyron.common.util.StringSearch;
+import com.tyron.completion.java.CompletionModule;
 
 import org.apache.commons.io.FileUtils;
 import org.openjdk.javax.lang.model.util.Elements;
@@ -16,7 +16,6 @@ import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
-import org.openjdk.tools.javac.api.JavacTaskImpl;
 import org.openjdk.tools.javac.code.Kinds;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 

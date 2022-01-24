@@ -7,8 +7,8 @@ import org.openjdk.source.tree.Scope;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
-import com.tyron.completion.java.CompileTask;
-import com.tyron.completion.java.CompilerContainer;
+import com.tyron.completion.java.compiler.CompileTask;
+import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.action.FindCurrentPath;
 import com.tyron.completion.java.util.ActionUtil;

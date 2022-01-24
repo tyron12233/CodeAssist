@@ -9,7 +9,7 @@ import androidx.annotation.NonNull;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
-import com.tyron.completion.java.JavaCompilerService;
+import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionList;
 

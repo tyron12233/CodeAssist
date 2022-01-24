@@ -7,6 +7,7 @@ import com.tyron.builder.project.api.JavaModule;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;

@@ -1,5 +1,6 @@
 package com.tyron.completion.java;
 
+import com.tyron.completion.java.compiler.ParseTask;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 

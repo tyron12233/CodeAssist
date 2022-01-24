@@ -1,4 +1,4 @@
-package com.tyron.completion.java;
+package com.tyron.completion.java.compiler;
 
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.DiagnosticListener;

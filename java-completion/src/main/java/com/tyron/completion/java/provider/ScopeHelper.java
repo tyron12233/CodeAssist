@@ -1,6 +1,6 @@
 package com.tyron.completion.java.provider;
 
-import com.tyron.completion.java.CompileTask;
+import com.tyron.completion.java.compiler.CompileTask;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.Modifier;
