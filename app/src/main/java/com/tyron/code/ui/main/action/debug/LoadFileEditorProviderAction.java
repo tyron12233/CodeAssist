@@ -1,11 +1,14 @@
 package com.tyron.code.ui.main.action.debug;
 
+import androidx.annotation.NonNull;
+
 import com.android.tools.r8.CompilationFailedException;
 import com.android.tools.r8.D8;
 import com.android.tools.r8.D8Command;
 import com.android.tools.r8.OutputMode;
 import com.tyron.actions.ActionManager;
 import com.tyron.actions.AnAction;
+import com.tyron.actions.AnActionEvent;
 import com.tyron.builder.BuildModule;
 import com.tyron.code.ui.editor.impl.FileEditorProviderManagerImpl;
 import com.tyron.fileeditor.api.FileEditorProvider;
@@ -26,6 +29,13 @@ import java.util.jar.JarFile;
 import dalvik.system.PathClassLoader;
 
 public class LoadFileEditorProviderAction extends BaseLoadAction {
+
+    @Override
+    public void update(@NonNull AnActionEvent event) {
+        super.update(event);
+
+        event.getPresentation().setText("Load FileEditorProvider");
+    }
 
     @Override
     public List<JavaClass> getApplicableClasses(String file) throws IOException {
