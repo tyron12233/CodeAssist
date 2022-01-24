@@ -8,6 +8,7 @@ dependencies {
     implementation project(path: ':editor-api')
     // needed for UserDataHolder class
     implementation project(path: ':kotlinc')
+    implementation project(path: ':fileeditor-api')
 
     compileOnly project(path: ':android-stubs')
 

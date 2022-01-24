@@ -6,10 +6,10 @@ import androidx.fragment.app.Fragment;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
+import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
-import com.tyron.code.ui.main.MainFragment;
 
 public class FormatAction extends AnAction {
 
@@ -22,7 +22,7 @@ public class FormatAction extends AnAction {
             return;
         }
 
-        FileEditor fileEditor = event.getData(MainFragment.FILE_EDITOR_KEY);
+        FileEditor fileEditor = event.getData(CommonDataKeys.FILE_EDITOR_KEY);
         if (fileEditor == null) {
             return;
         }
@@ -33,7 +33,7 @@ public class FormatAction extends AnAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        FileEditor fileEditor = e.getData(MainFragment.FILE_EDITOR_KEY);
+        FileEditor fileEditor = e.getData(CommonDataKeys.FILE_EDITOR_KEY);
         Fragment fragment = fileEditor.getFragment();
         if (fragment instanceof CodeEditorFragment) {
             ((CodeEditorFragment) fragment).format();

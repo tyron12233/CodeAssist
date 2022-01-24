@@ -65,7 +65,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     public static final Key<CompileCallback> COMPILE_CALLBACK_KEY = Key.create("compileCallback");
     public static final Key<IndexCallback> INDEX_CALLBACK_KEY = Key.create("indexCallbackKey");
     public static final Key<MainViewModel> MAIN_VIEW_MODEL_KEY = Key.create("mainViewModel");
-    public static final Key<FileEditor> FILE_EDITOR_KEY = Key.create("fileEditor");
 
     public static MainFragment newInstance(@NonNull String projectPath) {
         Bundle bundle = new Bundle();
@@ -367,7 +366,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         context.putData(MAIN_VIEW_MODEL_KEY, mMainViewModel);
         context.putData(COMPILE_CALLBACK_KEY, mCompileCallback);
         context.putData(INDEX_CALLBACK_KEY, mIndexCallback);
-        context.putData(FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
+        context.putData(CommonDataKeys.FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
     }
     public void refreshToolbar() {
         mToolbar.getMenu().clear();

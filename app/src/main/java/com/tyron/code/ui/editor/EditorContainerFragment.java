@@ -108,7 +108,7 @@ public class EditorContainerFragment extends Fragment {
                 dataContext.putData(CommonDataKeys.PROJECT, ProjectManager.getInstance().getCurrentProject());
                 dataContext.putData(CommonDataKeys.FRAGMENT, EditorContainerFragment.this);
                 dataContext.putData(MainFragment.MAIN_VIEW_MODEL_KEY, mMainViewModel);
-                dataContext.putData(MainFragment.FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
+                dataContext.putData(CommonDataKeys.FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
 
                 ActionManager.getInstance().fillMenu(dataContext,
                         popup.getMenu(), ActionPlaces.EDITOR_TAB,

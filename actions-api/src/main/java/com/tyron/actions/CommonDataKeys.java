@@ -7,6 +7,7 @@ import androidx.fragment.app.Fragment;
 
 import com.tyron.builder.project.Project;
 import com.tyron.editor.Editor;
+import com.tyron.fileeditor.api.FileEditor;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import org.openjdk.javax.tools.Diagnostic;
@@ -39,4 +40,5 @@ public class CommonDataKeys {
     public static final Key<Project> PROJECT = Key.create("project");
 
     public static final Key<Editor> EDITOR = Key.create("editor");
+    public static final Key<FileEditor> FILE_EDITOR_KEY = Key.create("fileEditor");
 }
