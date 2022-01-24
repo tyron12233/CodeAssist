@@ -8,6 +8,7 @@ import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.compiler.JavaCompilerService;
+import com.tyron.completion.java.provider.Completions;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
@@ -80,7 +81,7 @@ public class JavaCompletionProvider extends CompletionProvider {
         JavaCompilerService service = compilerProvider.getCompiler(project, module);
 
         try {
-            return new com.tyron.completion.java.provider.CompletionProvider(service).complete(file, contents, cursor);
+            return new Completions(service).complete(file, contents, cursor);
         } catch (Throwable e) {
             if (e instanceof ProcessCanceledException) {
                 throw e;

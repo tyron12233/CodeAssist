@@ -1,6 +1,9 @@
 package com.tyron.completion.java.util;
 
+import static com.tyron.completion.progress.ProgressManager.checkCanceled;
+
 import com.tyron.completion.java.compiler.CompileTask;
+import com.tyron.completion.java.provider.ScopeHelper;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
@@ -8,11 +11,45 @@ import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.TypeElement;
 import org.openjdk.javax.lang.model.element.VariableElement;
+import org.openjdk.javax.lang.model.type.DeclaredType;
+import org.openjdk.javax.lang.model.type.TypeMirror;
+import org.openjdk.source.tree.Scope;
 
 import java.util.List;
 import java.util.Set;
 
 public class ElementUtil {
+
+    public static String simpleType(TypeMirror mirror) {
+        return simpleClassName(mirror.toString());
+    }
+
+    public static String simpleClassName(String name) {
+        return name.replaceAll("[a-zA-Z\\.0-9_\\$]+\\.", "");
+    }
+
+
+    public static boolean isEnclosingClass(DeclaredType type, Scope start) {
+        checkCanceled();
+
+        for (Scope s : ScopeHelper.fastScopes(start)) {
+            // If we reach a static method, stop looking
+            ExecutableElement method = s.getEnclosingMethod();
+            if (method != null && method.getModifiers().contains(Modifier.STATIC)) {
+                return false;
+            }
+            // If we find the enclosing class
+            TypeElement thisElement = s.getEnclosingClass();
+            if (thisElement != null && thisElement.asType().equals(type)) {
+                return true;
+            }
+            // If the enclosing class is static, stop looking
+            if (thisElement != null && thisElement.getModifiers().contains(Modifier.STATIC)) {
+                return false;
+            }
+        }
+        return false;
+    }
 
     public static boolean isFinal(ExecutableElement element) {
         Set<Modifier> modifiers = element.getModifiers();

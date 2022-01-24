@@ -320,6 +320,36 @@ public class StringSearch {
         }
     }
 
+    public static boolean endsWithParen(String contents, int cursor) {
+        for (int i = cursor; i < contents.length(); i++) {
+            if (!Character.isJavaIdentifierPart(contents.charAt(i))) {
+                return contents.charAt(i) == '(';
+            }
+        }
+        return false;
+    }
+
+
+    public static String partialIdentifier(String contents, int end) {
+        int start = end;
+        while (start > 0 && Character.isJavaIdentifierPart(contents.charAt(start - 1))) {
+            start--;
+        }
+        return contents.substring(start, end);
+    }
+
+    public static boolean isQualifiedIdentifierChar(char c) {
+        return c == '.' || Character.isJavaIdentifierPart(c);
+    }
+
+    public static String qualifiedPartialIdentifier(String contents, int end) {
+        int start = end;
+        while (start > 0 && isQualifiedIdentifierChar(contents.charAt(start - 1))) {
+            start--;
+        }
+        return contents.substring(start, end);
+    }
+
     private static class Slice {
         private final byte[] target;
         private int from, until;
