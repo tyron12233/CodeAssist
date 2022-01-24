@@ -278,8 +278,7 @@ public class EditHelper {
     }
 
     public static com.github.javaparser.ast.type.Type printType(TypeMirror type, boolean fqn) {
-        Type type1 = JavaParserTypesUtil.toType(type);
-        return type1;
+        return JavaParserTypesUtil.toType(type);
     }
 
     public static String printTypeParameters(List<? extends TypeMirror> arguments) {

@@ -4,12 +4,7 @@ import static com.tyron.completion.java.util.ElementUtil.simpleClassName;
 import static com.tyron.completion.java.util.ElementUtil.simpleType;
 import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
-import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.type.ReferenceType;
 import com.tyron.completion.java.compiler.CompileTask;
-import com.tyron.completion.java.rewrite.EditHelper;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;
 
@@ -111,7 +106,7 @@ public class CompletionItemFactory {
 
     public static String getMethodLabel(ExecutableElement element, ExecutableType type) {
         String name = element.getSimpleName().toString();
-        String params = EditHelper.printParameters(type, element);
+        String params = PrintHelper.printParameters(type, element);
         return name + "(" + params + ")";
     }
 
@@ -182,7 +177,7 @@ public class CompletionItemFactory {
 
             CompletionItem item = new CompletionItem();
             item.label = getMethodLabel(element, executableType);
-            item.detail = EditHelper.printType(element.getReturnType()).toString();
+            item.detail = PrintHelper.printType(element.getReturnType()).toString();
             item.commitText = text;
             item.cursorOffset = item.commitText.length();
             item.iconKind = DrawableKind.Method;

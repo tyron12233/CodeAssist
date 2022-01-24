@@ -8,9 +8,22 @@ import com.tyron.completion.java.rewrite.EditHelper;
 
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.Modifier;
+import org.openjdk.javax.lang.model.element.Name;
+import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.type.ArrayType;
+import org.openjdk.javax.lang.model.type.DeclaredType;
 import org.openjdk.javax.lang.model.type.ExecutableType;
+import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.tree.MethodTree;
+import org.openjdk.tools.javac.code.Type;
+import org.openjdk.tools.javac.tree.TreeInfo;
 
+import java.util.List;
+import java.util.StringJoiner;
+
+/**
+ * Converts the given Element directly into String without converting first through {@link com.github.javaparser.JavaParser}
+ */
 public class PrintHelper {
 
     /**
@@ -77,4 +90,75 @@ public class PrintHelper {
         buf.append("\n}");
         return buf.toString();
     }
+
+    /**
+     * Prints parameters given the source method that contains parameter names
+     *
+     * @param method element from the .class file
+     * @param source element from the .java file
+     * @return Formatted string that represents the methods parameters with proper names
+     */
+    public static String printParameters(ExecutableType method, MethodTree source) {
+        StringJoiner join = new StringJoiner(", ");
+        for (int i = 0; i < method.getParameterTypes().size(); i++) {
+            String type = method.getParameterTypes().get(i).toString();
+            Name name = source.getParameters().get(i).getName();
+            join.add(type + " " + name);
+        }
+        return join.toString();
+    }
+
+    public static String printParameters(ExecutableType method, ExecutableElement source) {
+        StringJoiner join = new StringJoiner(", ");
+        for (int i = 0; i < method.getParameterTypes().size(); i++) {
+            String type = printType(method.getParameterTypes().get(i));
+            Name name = source.getParameters().get(i).getSimpleName();
+            join.add(type + " " + name);
+        }
+        return join.toString();
+    }
+
+    public static String printType(TypeMirror type) {
+        return printType(type, false);
+    }
+
+    public static String printType(TypeMirror type, boolean fqn) {
+        if (type instanceof DeclaredType) {
+            DeclaredType declared = (DeclaredType) type;
+            if (declared instanceof Type.ClassType) {
+                Type.ClassType classType = (Type.ClassType) declared;
+                if (classType.all_interfaces_field != null) {
+                    Type next = classType.all_interfaces_field.get(0);
+                    declared = (DeclaredType) next;
+                }
+            }
+            String string = EditHelper.printTypeName((TypeElement) declared.asElement(), fqn);
+            if (!declared.getTypeArguments().isEmpty()) {
+                string = string + "<" + printTypeParameters(declared.getTypeArguments()) + ">";
+            }
+            return string;
+        } else if (type instanceof ArrayType) {
+            ArrayType arrayType = (ArrayType) type;
+            if (!fqn) {
+                return printType(arrayType.getComponentType()) + "[]";
+            } else {
+                return arrayType.toString();
+            }
+        } else {
+            if (fqn) {
+                return type.toString();
+            } else {
+                return ActionUtil.getSimpleName(type.toString());
+            }
+        }
+    }
+
+    public static String printTypeParameters(List<? extends TypeMirror> arguments) {
+        StringJoiner join = new StringJoiner(", ");
+        for (TypeMirror a : arguments) {
+            join.add(printType(a));
+        }
+        return join.toString();
+    }
+
 }
