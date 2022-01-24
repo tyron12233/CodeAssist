@@ -2,7 +2,27 @@ plugins {
     id 'java-library'
 }
 
+def defTask = tasks.register("default test") {
+    it.doFirst {
+        println("Hello world")
+    }
+    it.dependsOn("task test")
+}
+
+def defTaskTest = tasks.register("task test") {
+    it.doFirst {
+        println("Task")
+    }
+
+    it.dependsOn(defTask)
+}
+
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_7
-    targetCompatibility = JavaVersion.VERSION_1_7
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+dependencies {
+    implementation project(path: ':common')
+    testImplementation 'junit:junit:4.13.2'
 }
