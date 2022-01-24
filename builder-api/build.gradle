@@ -2,21 +2,6 @@ plugins {
     id 'java-library'
 }
 
-def defTask = tasks.register("default test") {
-    it.doFirst {
-        println("Hello world")
-    }
-    it.dependsOn("task test")
-}
-
-def defTaskTest = tasks.register("task test") {
-    it.doFirst {
-        println("Task")
-    }
-
-    it.dependsOn(defTask)
-}
-
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8
     targetCompatibility = JavaVersion.VERSION_1_8

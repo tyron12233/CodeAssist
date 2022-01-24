@@ -1,49 +1,72 @@
 package com.tyron.builder.api.internal.tasks;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.graph.ElementOrder;
+import com.google.common.graph.EndpointPair;
+import com.google.common.graph.Graph;
+import com.google.common.graph.GraphBuilder;
+import com.google.common.graph.Graphs;
+import com.google.common.graph.ImmutableGraph;
+import com.google.common.graph.MutableGraph;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
+import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.TaskDependency;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.Stack;
 
+@SuppressWarnings("UnstableApiUsage")
 public class TaskExecutor {
 
-    public void runTask(Task task) {
-        runActions(task);
+    private MutableGraph<Task> mTaskGraph;
 
-        Set<? extends Task> dependencies = task.getTaskDependencies().getDependencies(task);
+    public TaskExecutor() {
+        mTaskGraph = GraphBuilder.directed()
+                .allowsSelfLoops(false)
+                .nodeOrder(ElementOrder.insertion())
+                .build();
+    }
+
+    public void run(Task root) {
+        mTaskGraph.addNode(root);
+        buildDependencyGraph(root);
+        execute(mTaskGraph, root);
+    }
+
+    public void run(TaskContainer taskContainer, Task root) {
+        Set<? extends Task> dependencies = root.getTaskDependencies().getDependencies(root);
         for (Task dependency : dependencies) {
-            if (checkCircularDependency(task, dependency)) {
-                throw new CircularDependencyException();
-            }
-
-            runActions(dependency);
+            run(taskContainer, dependency);
         }
 
+        root.getActions().forEach(action -> action.execute(root));
+
+        Set<? extends Task> mustRunAfterSet = root.getMustRunAfter().getDependencies(root);
+        for (Task mustRunAfter : mustRunAfterSet) {
+            run(taskContainer, mustRunAfter);
+        }
+    }
+
+    private void execute(Graph<Task> graph, Task root) {
+        ImmutableList<Task> reverse =
+                ImmutableList.copyOf(Graphs.reachableNodes(graph, root))
+                .reverse();
+        reverse.forEach(task -> {
+            task.getActions().forEach(action -> action.execute(task));
+        });
+    }
+
+    private void buildDependencyGraph(Task root) {
+        TaskDependency taskDependencies = root.getTaskDependencies();
+        Set<? extends Task> dependencies = taskDependencies.getDependencies(root);
         for (Task dependency : dependencies) {
-
-        }
-    }
-
-    private void runTaskInternal() {
-
-    }
-
-    private boolean checkCircularDependency(Task task, Task otherTask) {
-        if (task.equals(otherTask)) {
-            return true;
-        }
-        if (otherTask.getTaskDependencies().getDependencies(otherTask).contains(task)) {
-            return true;
-        }
-        return false;
-    }
-
-    private void runActions(Task task) {
-        List<Action<? super Task>> actions = task.getActions();
-        for (Action<? super Task> action : actions) {
-            action.execute(task);
+            mTaskGraph.putEdge(root, dependency);
+            mTaskGraph.addNode(root);
+            buildDependencyGraph(dependency);
         }
     }
 }

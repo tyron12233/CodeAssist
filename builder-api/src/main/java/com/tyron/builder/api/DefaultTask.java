@@ -10,10 +10,28 @@ import com.tyron.builder.api.tasks.TaskState;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 
-public class DefaultTask implements Task{
+public class DefaultTask implements Task {
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        DefaultTask that = (DefaultTask) o;
+        return Objects.equals(description, that.description);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(description);
+    }
+
+    public String toString() {
+        return description;
+    }
 
     private List<Action<? super Task>> actions;
 
