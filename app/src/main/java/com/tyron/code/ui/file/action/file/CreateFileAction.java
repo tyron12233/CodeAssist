@@ -30,7 +30,7 @@ public class CreateFileAction extends FileAction {
 
     @Override
     public String getTitle(Context context) {
-        return context.getString(R.string.menu_new);
+        return context.getString(R.string.menu_action_new_file);
     }
 
     @Override
