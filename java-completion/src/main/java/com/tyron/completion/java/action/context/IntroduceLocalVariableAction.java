@@ -20,6 +20,7 @@ import com.tyron.editor.Editor;
 
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
+import org.openjdk.javax.lang.model.type.ErrorType;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.util.SourcePositions;
@@ -74,7 +75,7 @@ public class IntroduceLocalVariableAction extends AnAction {
         Editor editor = e.getData(CommonDataKeys.EDITOR);
         TreePath currentPath = e.getData(CommonJavaContextKeys.CURRENT_PATH);
         File file = e.getData(CommonDataKeys.FILE);
-        JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
+        JavaCompilerService compiler = e.getRequiredData(CommonJavaContextKeys.COMPILER);
         CompilerContainer cachedContainer = compiler.getCachedContainer();
 
         JavaRewrite rewrite = cachedContainer.get(task -> {
@@ -93,6 +94,13 @@ public class IntroduceLocalVariableAction extends AnAction {
         Trees trees = Trees.instance(task.task);
         Element element = trees.getElement(path);
         TypeMirror typeMirror = trees.getTypeMirror(path);
+
+        if (typeMirror instanceof ErrorType) {
+            // information is incomplete and type cannot be determined, default to Object
+            typeMirror = task.task.getElements()
+                    .getTypeElement("java.lang.Object")
+                    .asType();
+        }
         if (typeMirror != null) {
             return rewrite(typeMirror, trees, path, file, element.getSimpleName().toString());
         }
