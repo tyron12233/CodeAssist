@@ -10,6 +10,7 @@ import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.Presentation;
+import com.tyron.builder.util.CharSequenceReader;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.util.Decompress;
 import com.tyron.completion.util.RewriteUtil;
@@ -26,7 +27,6 @@ import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -71,7 +71,7 @@ public class AndroidManifestAddPermissionsAction extends AnAction {
         XmlPullParser parser;
         try {
             parser = newPullParser();
-            parser.setInput(new StringReader(editor.getContents()));
+            parser.setInput(new CharSequenceReader(editor.getContent()));
         } catch (XmlPullParserException e) {
             return;
         }
@@ -86,8 +86,8 @@ public class AndroidManifestAddPermissionsAction extends AnAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent event) {
-        Editor editor = event.getData(CommonDataKeys.EDITOR);
-        File file = event.getData(CommonDataKeys.FILE);
+        Editor editor = event.getRequiredData(CommonDataKeys.EDITOR);
+        File file = event.getRequiredData(CommonDataKeys.FILE);
 
         List<String> permissions;
         try {
@@ -96,7 +96,7 @@ public class AndroidManifestAddPermissionsAction extends AnAction {
             return;
         }
 
-        for (String usedPerm : AddPermissions.getUsedPermissions(editor.getContents())) {
+        for (String usedPerm : AddPermissions.getUsedPermissions(editor.getContent())) {
             permissions.remove(usedPerm);
         }
 
@@ -118,7 +118,7 @@ public class AndroidManifestAddPermissionsAction extends AnAction {
                         }
                     }
 
-                    JavaRewrite rewrite = new AddPermissions(file.toPath(), editor.getContents(), selected);
+                    JavaRewrite rewrite = new AddPermissions(file.toPath(), editor.getContent(), selected);
                     RewriteUtil.performRewrite(editor, file, null, rewrite);
                 })
                 .show();

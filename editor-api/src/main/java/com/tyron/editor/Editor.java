@@ -20,5 +20,5 @@ public interface Editor {
 
     Caret getCaret();
 
-    String getContents();
+    Content getContent();
 }

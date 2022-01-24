@@ -2,6 +2,7 @@ package com.tyron.completion.xml.rewrite;
 
 import static com.tyron.completion.xml.util.XmlUtils.newPullParser;
 
+import com.tyron.builder.util.CharSequenceReader;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.model.Position;
@@ -25,10 +26,10 @@ public class AddPermissions implements JavaRewrite {
     private static final String PERMISSION_TEMPLATE = "<uses-permission android:name=\"%s\" />";
 
     private final Path androidManifest;
-    private final String androidManifestContents;
+    private final CharSequence androidManifestContents;
     private final List<String> permissions;
 
-    public AddPermissions(Path androidManifest, String androidManifestContents,
+    public AddPermissions(Path androidManifest, CharSequence androidManifestContents,
                           List<String> permissions) {
         this.androidManifest = androidManifest;
         this.androidManifestContents = androidManifestContents;
@@ -51,7 +52,7 @@ public class AddPermissions implements JavaRewrite {
     private Range findManifestClosingTag() {
         try {
             XmlPullParser xpp = newPullParser();
-            xpp.setInput(new StringReader(androidManifestContents));
+            xpp.setInput(new CharSequenceReader(androidManifestContents));
 
             int event = xpp.getEventType();
             while (event != XmlPullParser.END_DOCUMENT) {
@@ -69,12 +70,12 @@ public class AddPermissions implements JavaRewrite {
         return Range.NONE;
     }
 
-    public static Set<String> getUsedPermissions(String androidManifestContents) {
+    public static Set<String> getUsedPermissions(CharSequence androidManifestContents) {
         Set<String> usedPerms = new HashSet<>();
 
         try {
             XmlPullParser xpp = newPullParser();
-            xpp.setInput(new StringReader(androidManifestContents));
+            xpp.setInput(new CharSequenceReader(androidManifestContents));
 
             int event = xpp.getEventType();
             while (event != XmlPullParser.END_DOCUMENT) {

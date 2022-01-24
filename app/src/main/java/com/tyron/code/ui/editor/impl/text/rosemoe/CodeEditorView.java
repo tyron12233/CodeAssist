@@ -6,6 +6,7 @@ import android.util.AttributeSet;
 import com.tyron.actions.DataContext;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
+import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -78,8 +79,8 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
-    public String getContents() {
-        return getText().toString();
+    public Content getContent() {
+        return new ContentWrapper(CodeEditorView.this.getText());
     }
 
     @Override
