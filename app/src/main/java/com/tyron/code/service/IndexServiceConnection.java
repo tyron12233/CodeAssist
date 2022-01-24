@@ -8,17 +8,15 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.model.ProjectSettings;
-import com.tyron.code.ui.editor.api.FileEditor;
-import com.tyron.code.ui.editor.api.FileEditorManager;
-import com.tyron.code.ui.editor.impl.FileEditorSavedState;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.fileeditor.api.FileEditor;
+import com.tyron.fileeditor.api.FileEditorSavedState;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogViewModel;
-import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.Project;
 import com.tyron.code.ui.main.MainViewModel;
 
-import java.io.File;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
@@ -62,7 +60,7 @@ public class IndexServiceConnection implements ServiceConnection {
             try {
                 Type type = new TypeToken<List<FileEditorSavedState>>(){}.getType();
                 List<FileEditorSavedState> savedStates = new Gson().fromJson(openedFilesString, type);
-                return savedStates.stream().filter(it -> it.getFile().exists()).map(FileEditorManager.getInstance()::openFile).collect(Collectors.toList());
+                return savedStates.stream().filter(it -> it.getFile().exists()).map(FileEditorManagerImpl.getInstance()::openFile).collect(Collectors.toList());
             } catch (Throwable e) {
                 // ignored, users may have edited the file manually and is corrupt
                 // just return an empty editor list

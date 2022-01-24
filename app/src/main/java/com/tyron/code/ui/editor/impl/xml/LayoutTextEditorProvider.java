@@ -2,7 +2,7 @@ package com.tyron.code.ui.editor.impl.xml;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.code.ui.editor.api.FileEditor;
+import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorProvider;
 import com.tyron.code.util.ProjectUtils;
 

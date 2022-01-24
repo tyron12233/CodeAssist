@@ -1,4 +1,4 @@
-package com.tyron.code.ui.editor.api;
+package com.tyron.fileeditor.api;
 
 public interface TextEditor extends FileEditor {
 }

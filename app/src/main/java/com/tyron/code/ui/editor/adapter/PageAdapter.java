@@ -7,10 +7,8 @@ import androidx.lifecycle.Lifecycle;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 
-import com.tyron.code.ui.editor.api.FileEditor;
-import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.fileeditor.api.FileEditor;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;

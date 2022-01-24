@@ -2,11 +2,11 @@ package com.tyron.code.ui.editor.impl;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.code.ui.editor.api.FileEditorProvider;
-import com.tyron.code.ui.editor.api.FileEditorProviderManager;
 import com.tyron.code.ui.editor.impl.image.ImageEditorProvider;
 import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorProvider;
 import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorProvider;
+import com.tyron.fileeditor.api.FileEditorProvider;
+import com.tyron.fileeditor.api.FileEditorProviderManager;
 
 import java.io.File;
 import java.util.ArrayList;

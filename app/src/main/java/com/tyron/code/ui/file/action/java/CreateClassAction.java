@@ -1,19 +1,12 @@
 package com.tyron.code.ui.file.action.java;
 
 import android.content.Context;
-import android.view.SubMenu;
 
 import androidx.annotation.NonNull;
-import androidx.fragment.app.Fragment;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
-import com.tyron.code.ui.component.tree.TreeView;
-import com.tyron.code.ui.editor.api.FileEditorManager;
-import com.tyron.code.ui.file.CommonFileKeys;
-import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
-import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
@@ -22,10 +15,14 @@ import com.tyron.code.template.java.AbstractTemplate;
 import com.tyron.code.template.java.InterfaceTemplate;
 import com.tyron.code.template.java.JavaClassTemplate;
 import com.tyron.code.ui.component.tree.TreeNode;
-import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;
-import com.tyron.code.ui.file.action.ActionContext;
+import com.tyron.code.ui.component.tree.TreeView;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.action.FileAction;
+import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;
+import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.file.tree.model.TreeFile;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.ProjectUtils;
 
 import java.io.File;
@@ -33,7 +30,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 public class CreateClassAction extends FileAction {
 
@@ -85,7 +81,7 @@ public class CreateClassAction extends FileAction {
 
                 treeView.addNode(treeNode, newNode);
                 treeView.refreshTreeView();
-                FileEditorManager.getInstance().openFile(fragment.requireContext(),
+                FileEditorManagerImpl.getInstance().openFile(fragment.requireContext(),
                         createdFile,
                         fileEditor -> fragment.getMainViewModel().openFile(fileEditor));
 

@@ -22,15 +22,13 @@ import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.util.DataContextUtils;
 import com.tyron.code.R;
-import com.tyron.code.ui.editor.api.FileEditorManager;
+import com.tyron.code.ui.editor.adapter.PageAdapter;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
-import com.tyron.code.ui.editor.adapter.PageAdapter;
 import com.tyron.code.ui.project.ProjectManager;
-
-import org.jetbrains.kotlin.ir.interpreter.state.Common;
+import com.tyron.fileeditor.api.FileEditorManager;
 
 import java.io.File;
 import java.util.Objects;

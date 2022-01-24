@@ -1,20 +1,15 @@
 package com.tyron.code.ui.main.action.other;
 
-import android.app.Activity;
-import android.content.Intent;
-
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
-import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
-import com.tyron.code.ui.editor.api.FileEditor;
+import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.main.MainFragment;
-import com.tyron.code.ui.settings.SettingsActivity;
 
 public class FormatAction extends AnAction {
 

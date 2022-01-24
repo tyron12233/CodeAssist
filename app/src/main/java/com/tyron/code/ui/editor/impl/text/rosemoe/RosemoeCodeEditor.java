@@ -5,7 +5,7 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
-import com.tyron.code.ui.editor.api.TextEditor;
+import com.tyron.fileeditor.api.TextEditor;
 
 import java.io.File;
 import java.util.Objects;

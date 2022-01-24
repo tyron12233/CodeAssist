@@ -1,23 +1,13 @@
-package com.tyron.code.ui.editor.api;
+package com.tyron.fileeditor.api;
 
 import android.content.Context;
 
 import androidx.annotation.NonNull;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.tyron.code.R;
-import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
-import com.tyron.code.ui.editor.impl.FileEditorSavedState;
-
 import java.io.File;
-import java.util.Arrays;
 import java.util.function.Consumer;
 
 public abstract class FileEditorManager {
-
-    public static FileEditorManager getInstance() {
-        return FileEditorManagerImpl.getInstance();
-    }
 
     /**
      * Open an editor from a saved state
@@ -45,25 +35,7 @@ public abstract class FileEditorManager {
      * @param file the file to be opened
      * @param callback the callback after the user has selected an editor
      */
-    public void openFile(@NonNull Context context, File file, Consumer<FileEditor> callback) {
-        FileEditor[] fileEditors = openFile(file, true);
-        if (fileEditors.length == 0) {
-            return;
-        }
-        if (fileEditors.length > 1) {
-            CharSequence[] items = Arrays.stream(fileEditors)
-                    .map(FileEditor::getName)
-                    .toArray(String[]::new);
-            new MaterialAlertDialogBuilder(context)
-                    .setTitle(R.string.file_editor_selection_title)
-                    .setItems(items, (__, which) ->
-                            callback.accept(fileEditors[which]))
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show();
-        } else {
-            callback.accept(fileEditors[0]);
-        }
-    }
+    public abstract void openFile(@NonNull Context context, File file, Consumer<FileEditor> callback);
     /**
      *
      * @param file file to open. Parameter cannot be null. File should be valid.

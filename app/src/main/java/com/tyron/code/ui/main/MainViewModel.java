@@ -8,10 +8,7 @@ import androidx.lifecycle.ViewModel;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.builder.project.api.Module;
-import com.tyron.code.ui.editor.api.FileEditor;
-import com.tyron.code.ui.editor.api.FileEditorManager;
-import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
-import com.tyron.code.ui.editor.language.LanguageManager;
+import com.tyron.fileeditor.api.FileEditor;
 
 import java.io.File;
 import java.util.ArrayList;

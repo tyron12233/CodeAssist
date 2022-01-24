@@ -1,7 +1,7 @@
-package com.tyron.code.ui.editor.impl;
+package com.tyron.fileeditor.api;
 
 import com.google.gson.annotations.SerializedName;
-import com.tyron.code.ui.editor.api.FileEditor;
+import com.tyron.fileeditor.api.FileEditor;
 
 import java.io.File;
 

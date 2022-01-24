@@ -2,8 +2,8 @@ package com.tyron.code.ui.editor.impl.image;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.code.ui.editor.api.FileEditor;
-import com.tyron.code.ui.editor.api.FileEditorProvider;
+import com.tyron.fileeditor.api.FileEditor;
+import com.tyron.fileeditor.api.FileEditorProvider;
 
 import java.io.File;
 

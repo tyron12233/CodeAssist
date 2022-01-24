@@ -7,20 +7,19 @@ import androidx.annotation.NonNull;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
-import com.tyron.code.ui.component.tree.TreeView;
-import com.tyron.code.ui.editor.api.FileEditorManager;
-import com.tyron.code.ui.file.CommonFileKeys;
-import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
-import com.tyron.code.ui.file.tree.TreeUtil;
-import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.template.android.ActivityTemplate;
 import com.tyron.code.ui.component.tree.TreeNode;
-import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;
-import com.tyron.code.ui.file.action.ActionContext;
+import com.tyron.code.ui.component.tree.TreeView;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.action.java.CreateClassAction;
+import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;
+import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
+import com.tyron.code.ui.file.tree.TreeUtil;
 import com.tyron.code.ui.file.tree.model.TreeFile;
+import com.tyron.code.ui.project.ProjectManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -54,7 +53,7 @@ public class CreateAndroidClassAction extends CreateClassAction {
                 TreeUtil.updateNode(treeNode.getParent());
                 treeView.refreshTreeView();
 
-                FileEditorManager.getInstance().openFile(treeFragment.requireContext(),
+                FileEditorManagerImpl.getInstance().openFile(treeFragment.requireContext(),
                         createdFile,
                         fileEditor -> treeFragment.getMainViewModel().openFile(fileEditor));
 

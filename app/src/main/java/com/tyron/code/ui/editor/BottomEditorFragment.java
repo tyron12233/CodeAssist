@@ -18,7 +18,6 @@ import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.R;
-import com.tyron.code.ui.editor.api.FileEditor;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
@@ -30,8 +29,8 @@ import com.tyron.code.ui.editor.shortcuts.action.TextInsertAction;
 import com.tyron.code.ui.editor.shortcuts.action.UndoAction;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.AndroidUtilities;
+import com.tyron.fileeditor.api.FileEditor;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;

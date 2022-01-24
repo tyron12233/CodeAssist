@@ -18,7 +18,6 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentManager;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.progressindicator.LinearProgressIndicator;
@@ -33,9 +32,8 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
-import com.tyron.code.ui.editor.api.FileEditor;
-import com.tyron.code.ui.editor.impl.FileEditorSavedState;
-import com.tyron.code.ui.library.LibraryManagerFragment;
+import com.tyron.fileeditor.api.FileEditor;
+import com.tyron.fileeditor.api.FileEditorSavedState;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.LogViewModel;
@@ -48,7 +46,6 @@ import com.tyron.code.service.IndexService;
 import com.tyron.code.service.IndexServiceConnection;
 import com.tyron.code.ui.editor.EditorContainerFragment;
 import com.tyron.code.ui.file.FileViewModel;
-import com.tyron.code.ui.settings.SettingsActivity;
 import com.tyron.completion.java.provider.CompletionEngine;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;

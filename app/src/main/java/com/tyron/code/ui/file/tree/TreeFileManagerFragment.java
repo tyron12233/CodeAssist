@@ -19,7 +19,7 @@ import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.code.ui.component.tree.TreeNode;
 import com.tyron.code.ui.component.tree.TreeView;
-import com.tyron.code.ui.editor.api.FileEditorManager;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewBinder.TreeFileNodeListener;
@@ -100,7 +100,7 @@ public class TreeFileManagerFragment extends Fragment {
             public void onNodeToggled(TreeNode<TreeFile> treeNode, boolean expanded) {
                 if (treeNode.isLeaf()) {
                     if (treeNode.getValue().getFile().isFile()) {
-                        FileEditorManager.getInstance().openFile(requireContext(), treeNode.getValue().getFile(), fileEditor -> {
+                        FileEditorManagerImpl.getInstance().openFile(requireContext(), treeNode.getValue().getFile(), fileEditor -> {
                             mMainViewModel.openFile(fileEditor);
                         });
                     }

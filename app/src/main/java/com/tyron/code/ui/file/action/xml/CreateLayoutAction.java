@@ -7,20 +7,19 @@ import androidx.annotation.NonNull;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
-import com.tyron.code.ui.component.tree.TreeView;
-import com.tyron.code.ui.editor.api.FileEditorManager;
-import com.tyron.code.ui.file.CommonFileKeys;
-import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
-import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.R;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.template.xml.LayoutTemplate;
 import com.tyron.code.ui.component.tree.TreeNode;
-import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;
+import com.tyron.code.ui.component.tree.TreeView;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.RegexReason;
-import com.tyron.code.ui.file.action.ActionContext;
 import com.tyron.code.ui.file.action.FileAction;
+import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;
+import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.file.tree.model.TreeFile;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.ProjectUtils;
 
 import java.io.File;
@@ -69,7 +68,7 @@ public class CreateLayoutAction extends FileAction {
 
                 treeView.addNode(currentNode, newNode);
                 treeView.refreshTreeView();
-                FileEditorManager.getInstance().openFile(fragment.requireContext(),
+                FileEditorManagerImpl.getInstance().openFile(fragment.requireContext(),
                         createdFile,
                         fileEditor -> fragment.getMainViewModel().openFile(fileEditor));
             } catch (IOException exception) {
