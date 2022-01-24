@@ -14,6 +14,7 @@ import org.openjdk.javax.lang.model.type.DeclaredType;
 import org.openjdk.javax.lang.model.type.ExecutableType;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.util.Types;
+import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
@@ -110,6 +111,12 @@ public class CompletionItemFactory {
         return name + "(" + params + ")";
     }
 
+    public static String getMethodLabel(MethodTree element, ExecutableType type) {
+        String name = element.getName().toString();
+        String params = PrintHelper.printParameters(type, element);
+        return name + "(" + params + ")";
+    }
+
     public static List<CompletionItem> method(CompileTask task, List<ExecutableElement> overloads,
                                         boolean endsWithParen, boolean methodRef,
                                         DeclaredType type) {
@@ -123,6 +130,24 @@ public class CompletionItemFactory {
         return items;
     }
 
+    public static CompletionItem method(MethodTree first, boolean endsWithParen,
+                                        boolean methodRef, ExecutableType type) {
+        CompletionItem item = new CompletionItem();
+        item.label = getMethodLabel(first, type);
+        item.commitText = first.getName() + ((methodRef || endsWithParen) ? "" :
+                "()");
+        item.detail = type != null
+                ? PrintHelper.printType(type.getReturnType())
+                : ActionUtil.getSimpleName(first.getReturnType().toString());
+        item.iconKind = DrawableKind.Method;
+        item.cursorOffset = item.commitText.length();
+        if (first.getParameters() != null && !first.getParameters().isEmpty()) {
+            item.cursorOffset = item.commitText.length() -
+                    ((methodRef || endsWithParen) ? 0 : 1);
+        }
+        return item;
+    }
+
     public static CompletionItem method(ExecutableElement first, boolean endsWithParen,
                                   boolean methodRef, ExecutableType type) {
         CompletionItem item = new CompletionItem();
@@ -130,8 +155,8 @@ public class CompletionItemFactory {
         item.commitText = first.getSimpleName() + ((methodRef || endsWithParen) ? "" :
                 "()");
         item.detail = type != null
-                ? type.getReturnType().toString()
-                : first.getReturnType().toString();
+                ? PrintHelper.printType(type.getReturnType())
+                : PrintHelper.printType(first.getReturnType());
         item.iconKind = DrawableKind.Method;
         item.cursorOffset = item.commitText.length();
         if (first.getParameters() != null && !first.getParameters().isEmpty()) {
