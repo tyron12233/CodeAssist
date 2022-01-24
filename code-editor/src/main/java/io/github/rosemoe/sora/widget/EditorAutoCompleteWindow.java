@@ -307,9 +307,6 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
 
         mLastPrefix = prefix;
         mRequestTime = System.currentTimeMillis();
-        if (mPreviousThread != null) {
-            mPreviousThread.interrupt();
-        }
         mPreviousThread = new MatchThread(mRequestTime, prefix);
         mPreviousThread.start();
     }
