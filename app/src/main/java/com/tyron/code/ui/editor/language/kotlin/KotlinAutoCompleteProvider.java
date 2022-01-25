@@ -2,8 +2,10 @@ package com.tyron.code.ui.editor.language.kotlin;
 
 import android.content.SharedPreferences;
 
+import androidx.annotation.Nullable;
 import androidx.preference.PreferenceManager;
 
+import com.tyron.code.ui.editor.language.AbstractAutoCompleteProvider;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
@@ -23,7 +25,7 @@ import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
-public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
+public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
 
     private static final String TAG = KotlinAutoCompleteProvider.class.getSimpleName();
 
@@ -36,14 +38,10 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
         mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
     }
 
-    private CompletableFuture<CompletionList> mTask;
-
+    @Nullable
     @Override
-    public List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) {
-        if (mTask != null) {
-            mTask.cancel(true);
-        }
-
+    public CompletableFuture<CompletionList> getCompletionList(
+            String prefix, TextAnalyzeResult colors, int line, int column) {
         if (!mPreferences.getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
             return null;
         }
@@ -75,17 +73,6 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
         }
 
         // waiting for code editor to support async code completions
-        mTask = engine.complete(mEditor.getCurrentFile(), mEditor.getText().toString(), prefix, line, column, mEditor.getCursor().getLeft());
-
-        if (mTask.isCancelled()) {
-            return null;
-        }
-
-        try {
-            return mTask.get().items.stream().map(CompletionItem::new)
-                    .collect(Collectors.toList());
-        } catch (ExecutionException | InterruptedException e) {
-            return null;
-        }
+        return engine.complete(mEditor.getCurrentFile(), mEditor.getText().toString(), prefix, line, column, mEditor.getCursor().getLeft());
     }
 }

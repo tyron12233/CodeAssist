@@ -24,7 +24,11 @@ public abstract class AbstractAutoCompleteProvider implements AutoCompleteProvid
     @Override
     public final List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult colors, int line, int column) {
         if (mPreviousTask != null && !mPreviousTask.isDone()) {
-            mPreviousTask.cancel(true);
+            try {
+                mPreviousTask.cancel(true);
+            } catch (Throwable e) {
+                return null;
+            }
         }
 
         mPreviousTask = getCompletionList(prefix, colors, line, column);
