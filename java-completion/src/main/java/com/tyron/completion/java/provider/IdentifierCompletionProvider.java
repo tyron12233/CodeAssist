@@ -14,7 +14,6 @@ import org.openjdk.source.tree.CaseTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.util.TreePath;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;

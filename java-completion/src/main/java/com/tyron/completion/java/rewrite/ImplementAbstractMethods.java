@@ -79,94 +79,98 @@ public class ImplementAbstractMethods implements JavaRewrite {
 
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
-        List<TextEdit> edits = new ArrayList<>();
-        List<TextEdit> importEdits = new ArrayList<>();
-
         Path file = compiler.findTypeDeclaration(mClassFile);
         if (file == JavaCompilerService.NOT_FOUND) {
             return Collections.emptyMap();
         }
 
-        StringJoiner insertText = new StringJoiner("\n");
         CompilerContainer container = compiler.compile(file);
         return container.get(task -> {
-            Elements elements = task.task.getElements();
-            Types types = task.task.getTypes();
-            Trees trees = Trees.instance(task.task);
-            TypeElement thisClass = elements.getTypeElement(mClassName);
-            ClassTree thisTree = trees.getTree(thisClass);
-            if (mPosition != 0) {
-                thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), mPosition);
-            }
-            if (thisTree == null) {
-                thisTree = new FindNewTypeDeclarationAt(task.task, task.root()).scan(task.root(),
-                        mPosition);
-            }
-            TreePath path = trees.getPath(task.root(), thisTree);
-            Element element = trees.getElement(path);
-            DeclaredType thisType = (DeclaredType) element.asType();
-
-            Set<String> importedClasses = new HashSet<>();
-            task.root().getImports().stream()
-                    .map(ImportTree::getQualifiedIdentifier)
-                    .map(Object::toString)
-                    .forEach(importedClasses::add);
-            Set<String> typesToImport = new HashSet<>();
-
-            int indent = EditHelper.indent(task.task, task.root(), thisTree) + 1;
-            String tabs = Strings.repeat("\t", indent);
-
-            for (Element member : elements.getAllMembers(thisClass)) {
-                if (member.getKind() == ElementKind.METHOD && member.getModifiers().contains(Modifier.ABSTRACT)) {
-                    ExecutableElement method = (ExecutableElement) member;
-                    MethodTree source = findSource(compiler, task, method);
-                    ExecutableType parameterizedType = (ExecutableType) types.asMemberOf(thisType
-                            , method);
-
-                    typesToImport.addAll(ActionUtil.getTypesToImport(parameterizedType));
-
-
-                    MethodDeclaration methodDeclaration;
-                    if (source != null) {
-                        methodDeclaration = EditHelper.printMethod(method, parameterizedType,
-                                source);
-                    } else {
-                        methodDeclaration = EditHelper.printMethod(method, parameterizedType,
-                                method);
-                    }
-
-                    String text = JavaParserUtil.prettyPrint(methodDeclaration, className -> false);
-                    text = tabs + text.replace("\n", "\n" + tabs);
-                    if (insertText.length() != 0) {
-                        text = "\n" + text;
-                    }
-
-                    insertText.add(text);
-                }
-            }
-
-            Position insert = EditHelper.insertAtEndOfClass(task.task, task.root(), thisTree);
-            insert.line -= 1;
-            edits.add(new TextEdit(new Range(insert, insert), insertText + "\n"));
-            edits.addAll(importEdits);
-
-            for (String type : typesToImport) {
-                String fqn = ActionUtil.removeDiamond(type);
-                if (!ActionUtil.hasImport(task.root(), fqn)) {
-                    JavaRewrite addImport = new AddImport(file.toFile(), fqn);
-                    Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-                    TextEdit[] textEdits = rewrite.get(file);
-                    if (textEdits != null) {
-                        Collections.addAll(edits, textEdits);
-                    }
-                    importedClasses.add(fqn);
-                }
-            }
-
-            return Collections.singletonMap(file, edits.toArray(new TextEdit[0]));
+            return rewriteInternal(compiler, task, file);
         });
     }
 
+    private Map<Path, TextEdit[]> rewriteInternal(CompilerProvider compiler, CompileTask task, Path file) {
+        Elements elements = task.task.getElements();
+        Types types = task.task.getTypes();
+        Trees trees = Trees.instance(task.task);
+        List<TextEdit> edits = new ArrayList<>();
+        List<TextEdit> importEdits = new ArrayList<>();
+        Set<String> typesToImport = new HashSet<>();
+
+        TypeElement thisClass = elements.getTypeElement(mClassName);
+        ClassTree thisTree = getClassTree(task);
+        if (thisTree == null) {
+            thisTree = trees.getTree(thisClass);
+        }
+        TreePath path = trees.getPath(task.root(), thisTree);
+        Element element = trees.getElement(path);
+        DeclaredType thisType = (DeclaredType) element.asType();
+
+        StringJoiner insertText = new StringJoiner("\n");
+
+        int indent = EditHelper.indent(task.task, task.root(), thisTree) + 1;
+        String tabs = Strings.repeat("\t", indent);
+
+        for (Element member : elements.getAllMembers(thisClass)) {
+            if (member.getKind() == ElementKind.METHOD && member.getModifiers().contains(Modifier.ABSTRACT)) {
+                ExecutableElement method = (ExecutableElement) member;
+                ExecutableType parameterizedType =
+                        (ExecutableType) types.asMemberOf(thisType, method);
+                typesToImport.addAll(ActionUtil.getTypesToImport(parameterizedType));
+
+
+                MethodTree source = findSource(compiler, task, method);
+                MethodDeclaration methodDeclaration;
+                if (source != null) {
+                    methodDeclaration = EditHelper.printMethod(method, parameterizedType,
+                            source);
+                } else {
+                    methodDeclaration = EditHelper.printMethod(method, parameterizedType,
+                            method);
+                }
+
+                String text = JavaParserUtil.prettyPrint(methodDeclaration, className -> false);
+                text = tabs + text.replace("\n", "\n" + tabs);
+                if (insertText.length() != 0) {
+                    text = "\n" + text;
+                }
+
+                insertText.add(text);
+            }
+        }
+
+        Position insert = EditHelper.insertAtEndOfClass(task.task, task.root(), thisTree);
+        insert.line -= 1;
+        edits.add(new TextEdit(new Range(insert, insert), insertText + "\n"));
+        edits.addAll(importEdits);
+
+        for (String type : typesToImport) {
+            String fqn = ActionUtil.removeDiamond(type);
+            if (!ActionUtil.hasImport(task.root(), fqn)) {
+                JavaRewrite addImport = new AddImport(file.toFile(), fqn);
+                Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+                TextEdit[] textEdits = rewrite.get(file);
+                if (textEdits != null) {
+                    Collections.addAll(edits, textEdits);
+                }
+            }
+        }
+
+        return Collections.singletonMap(file, edits.toArray(new TextEdit[0]));
+    }
+
+    private ClassTree getClassTree(CompileTask task) {
+        ClassTree thisTree = null;
+        if (mPosition != 0) {
+            thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), mPosition);
+        }
+        if (thisTree == null) {
+            thisTree = new FindNewTypeDeclarationAt(task.task, task.root()).scan(task.root(),
+                    mPosition);
+        }
+        return thisTree;
+    }
 
     private MethodTree findSource(CompilerProvider compiler, CompileTask task,
                                   ExecutableElement method) {
