@@ -192,7 +192,8 @@ public class JavaLanguage implements EditorLanguage {
 
         @Override
         public boolean matchesRequirement(String beforeText, String afterText) {
-            return beforeText.trim().startsWith("*");
+            return beforeText.trim().startsWith("*")
+                    && !beforeText.trim().startsWith("*/");
         }
 
         @Override
