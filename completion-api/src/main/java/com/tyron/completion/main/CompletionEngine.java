@@ -1,5 +1,7 @@
 package com.tyron.completion.main;
 
+import android.util.Log;
+
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 import com.tyron.completion.CompletionParameters;
@@ -77,16 +79,8 @@ public class CompletionEngine {
 
         List<CompletionProvider> providers = getCompletionProviders(file);
         for (CompletionProvider provider : providers) {
-            try {
-                ProgressManager.getInstance().setRunning(true);
-                ProgressManager.getInstance().setCanceled(false);
-                CompletionList complete = provider.complete(parameters);
-                list.items.addAll(complete.items);
-            } catch(ProcessCanceledException e) {
-                return list;
-            } {
-                ProgressManager.getInstance().setRunning(false);
-            }
+            CompletionList complete = provider.complete(parameters);
+            list.items.addAll(complete.items);
         }
         return list;
     }

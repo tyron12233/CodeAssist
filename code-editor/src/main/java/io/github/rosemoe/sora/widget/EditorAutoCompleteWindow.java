@@ -17,7 +17,12 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.code.ui.editor.CompletionItemAdapter;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
+import com.tyron.completion.progress.ProgressManager;
 
+import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressIndicator;
+import org.jetbrains.kotlin.com.intellij.openapi.progress.util.StandardProgressIndicatorBase;
+
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -45,6 +50,9 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     private int mMaxHeight;
     private final CompletionItemAdapter mAdapter;
 
+    private MatchThread mPreviousThread;
+    private final Object mLock = new Object();
+
     /**
      * Create a panel instance for the given editor
      *
@@ -62,7 +70,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             try {
                 select(position);
             } catch (Exception e) {
-                Toast.makeText(mEditor.getContext(), Log.getStackTraceString(e), Toast.LENGTH_SHORT).show();
+                Toast.makeText(mEditor.getContext(), Log.getStackTraceString(e),
+                        Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -224,8 +233,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         Cursor cursor = mEditor.getCursor();
 
         if (mEditor.getOnCompletionItemSelectedListener() != null) {
-            mEditor.getOnCompletionItemSelectedListener()
-                    .onItemSelect(this, item);
+            mEditor.getOnCompletionItemSelectedListener().onItemSelect(this, item);
             return;
         }
         if (!cursor.isSelected()) {
@@ -236,7 +244,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             if (mLastPrefix.contains(".")) {
                 length -= mLastPrefix.lastIndexOf(".") + 1;
             }
-            mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - length, cursor.getLeftLine(), cursor.getLeftColumn());
+            mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - length,
+                    cursor.getLeftLine(), cursor.getLeftColumn());
 
             selectedItem = item.commit;
             // will be invoked automatically if item.commit isn't multiline
@@ -245,7 +254,8 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
             if (item.commit != null && item.cursorOffset != item.commit.length()) {
                 int delta = (item.commit.length() - item.cursorOffset);
                 int newSel = Math.max(mEditor.getCursor().getLeft() - delta, 0);
-                CharPosition charPosition = mEditor.getCursor().getIndexer().getCharPosition(newSel);
+                CharPosition charPosition =
+                        mEditor.getCursor().getIndexer().getCharPosition(newSel);
                 mEditor.setSelection(charPosition.line, charPosition.column);
             }
 
@@ -262,6 +272,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     public String getLastPrefix() {
         return mLastPrefix;
     }
+
     public void setSelectedItem(String item) {
         selectedItem = item;
     }
@@ -289,7 +300,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
      *
      * @param prefix The user's input code's prefix
      */
-    public void setPrefix(final String prefix) {
+    public synchronized void setPrefix(final String prefix) {
         if (mCancelShowUp) {
             return;
         }
@@ -307,8 +318,29 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
 
         mLastPrefix = prefix;
         mRequestTime = System.currentTimeMillis();
-        mPreviousThread = new MatchThread(mRequestTime, prefix);
-        mPreviousThread.start();
+
+        ProgressManager.getInstance().execute(() -> {
+            List<CompletionItem> autoCompleteItems = mProvider.getAutoCompleteItems(prefix,
+                    mEditor.getTextAnalyzeResult(), mEditor.getCursor().getLeftLine(),
+                    mEditor.getCursor().getLeftColumn());
+            displayResults(autoCompleteItems, mRequestTime);
+
+        });
+
+        MatchThread matchThread = mPreviousThread;
+        if (matchThread == null || !matchThread.isAlive()) {
+            Log.d("MatchThread", "Starting new thread");
+            matchThread = mPreviousThread = new MatchThread(mRequestTime, prefix, mEditor,
+                    mProvider, mLock, this::displayResults);
+            matchThread.setName("MatchThread");
+            matchThread.setDaemon(true);
+            matchThread.start();
+        } else {
+            matchThread.restartWith(mRequestTime, prefix, mEditor);
+            synchronized (mLock) {
+                mLock.notify();
+            }
+        }
     }
 
     public void setMaxWidth(int maxWidth) {
@@ -350,39 +382,80 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         });
     }
 
-    private volatile Thread mPreviousThread;
-
     /**
      * Analysis thread
      *
      * @author Rose
      */
-    private class MatchThread extends Thread {
+    private static class MatchThread extends Thread {
+        private volatile boolean waiting = false;
 
-        private final long mTime;
-        private final String mPrefix;
-        private final boolean mInner;
-        private final TextAnalyzeResult mColors;
-        private final int mLine;
-        private final int mColumn;
-        private final AutoCompleteProvider mLocalProvider = mProvider;
+        private long mTime;
+        private String mPrefix;
+        private boolean mInner;
+        private TextAnalyzeResult mColors;
+        private int mLine;
+        private int mColumn;
+        private AutoCompleteProvider mLocalProvider;
+        private final CompletionCallback mCallback;
 
-        public MatchThread(long requestTime, String prefix) {
+        private final Object mLock;
+
+        public MatchThread(long requestTime, String prefix, CodeEditor editor,
+                           AutoCompleteProvider provider, Object lock,
+                           CompletionCallback callback) {
+            restartWith(requestTime, prefix, editor);
+
+            waiting = false;
+            mLocalProvider = provider;
+            mLock = lock;
+            mCallback = callback;
+        }
+
+        public synchronized void restartWith(long requestTime, String prefix, CodeEditor editor) {
+            waiting = true;
             mTime = requestTime;
             mPrefix = prefix;
-            mColors = mEditor.getTextAnalyzeResult();
-            mLine = mEditor.getCursor().getLeftLine();
-            mColumn = mEditor.getCursor().getLeftColumn();
-            mInner = (!mEditor.isHighlightCurrentBlock()) || (mEditor.getBlockIndex() != -1);
+            mColors = editor.getTextAnalyzeResult();
+            mLine = editor.getCursor().getLeftLine();
+            mColumn = editor.getCursor().getLeftColumn();
+            mInner = (!editor.isHighlightCurrentBlock()) || (editor.getBlockIndex() != -1);
         }
 
         @Override
         public void run() {
             try {
-                displayResults(mLocalProvider.getAutoCompleteItems(mPrefix, mColors, mLine, mColumn), mTime);
-            } catch (InterruptedException e) {
-                Log.d("MatchThread", "Thread is interrupted, exiting");
+                do {
+                    List<CompletionItem> items = new ArrayList<>();
+                    do {
+                        waiting = false;
+
+                        List<CompletionItem> autoCompleteItems = mLocalProvider.getAutoCompleteItems(mPrefix, mColors, mLine, mColumn);
+                        items.addAll(autoCompleteItems);
+
+                        if (waiting) {
+                            items.clear();
+                        }
+                    } while (waiting);
+
+                    mCallback.onCompletions(items, mTime);
+
+                    try {
+                        synchronized (mLock) {
+                            mLock.wait();
+                        }
+                    } catch (InterruptedException e) {
+                        Log.d(getName(), "Thread is interrupted, exiting");
+                        break;
+                    }
+                } while (true);
+            } catch (Throwable e) {
+                Log.e("MatchThread", "Completion failed", e);
             }
+        }
+
+        public interface CompletionCallback {
+            void onCompletions(List<CompletionItem> items, long requestTime);
         }
     }
 

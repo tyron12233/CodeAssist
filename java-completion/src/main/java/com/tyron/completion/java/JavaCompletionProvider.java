@@ -1,5 +1,7 @@
 package com.tyron.completion.java;
 
+import static com.tyron.completion.progress.ProgressManager.checkCanceled;
+
 import android.util.Log;
 
 import com.tyron.builder.project.Project;
@@ -40,7 +42,7 @@ public class JavaCompletionProvider extends CompletionProvider {
         if (!(params.getModule() instanceof JavaModule)) {
             return CompletionList.EMPTY;
         }
-        ProgressManager.checkCanceled();
+        checkCanceled();
 
         if (isIncrementalCompletion(mCachedCompletion, params)) {
             String partial = partialIdentifier(params.getPrefix(),
@@ -59,12 +61,16 @@ public class JavaCompletionProvider extends CompletionProvider {
 
         try {
             CompletionList complete = complete(params.getProject(),
-                    (JavaModule) params.getModule(), params.getFile(), params.getContents(),
+                    (JavaModule) params.getModule(),
+                    params.getFile(),
+                    params.getContents(),
                     params.getIndex());
+
             String newPrefix = params.getPrefix();
             if (params.getPrefix().contains(".")) {
                 newPrefix = partialIdentifier(params.getPrefix(), params.getPrefix().length());
             }
+
             mCachedCompletion = new CachedCompletion(params.getFile(), params.getLine(),
                     params.getColumn(), newPrefix, complete);
             return complete;
@@ -74,8 +80,8 @@ public class JavaCompletionProvider extends CompletionProvider {
         }
     }
 
-    public CompletionList complete(Project project, JavaModule module, File file, String contents
-            , long cursor) {
+    public CompletionList complete(
+            Project project, JavaModule module, File file, String contents, long cursor) {
         JavaCompilerProvider compilerProvider =
                 CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
         JavaCompilerService service = compilerProvider.getCompiler(project, module);

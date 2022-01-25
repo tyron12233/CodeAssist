@@ -39,10 +39,9 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
     private CompletableFuture<CompletionList> mTask;
 
     @Override
-    public List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) throws InterruptedException {
+    public List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) {
         if (mTask != null) {
             mTask.cancel(true);
-            mTask = null;
         }
 
         if (!mPreferences.getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
@@ -75,15 +74,8 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
             return null;
         }
 
-        try {
-            // waiting for code editor to support async code completions
-            mTask = engine.complete(mEditor.getCurrentFile(), mEditor.getText().toString(), prefix, line, column, mEditor.getCursor().getLeft());
-        } catch (RuntimeException e) {
-            if (e.getCause() instanceof ClosedByInterruptException) {
-                throw new InterruptedException(e.getCause().getMessage());
-            }
-            throw e;
-        }
+        // waiting for code editor to support async code completions
+        mTask = engine.complete(mEditor.getCurrentFile(), mEditor.getText().toString(), prefix, line, column, mEditor.getCursor().getLeft());
 
         if (mTask.isCancelled()) {
             return null;
@@ -92,7 +84,7 @@ public class KotlinAutoCompleteProvider implements AutoCompleteProvider {
         try {
             return mTask.get().items.stream().map(CompletionItem::new)
                     .collect(Collectors.toList());
-        } catch (ExecutionException e) {
+        } catch (ExecutionException | InterruptedException e) {
             return null;
         }
     }

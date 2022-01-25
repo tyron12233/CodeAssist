@@ -44,6 +44,6 @@ public interface AutoCompleteProvider {
      * @param column The column of cursor
      * @return Analyzed items
      */
-    List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column) throws InterruptedException;
+    List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult analyzeResult, int line, int column);
 }
 
