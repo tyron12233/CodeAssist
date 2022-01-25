@@ -314,9 +314,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         mLastPrefix = prefix;
         mRequestTime = System.currentTimeMillis();
 
-        if (mPreviousThread == null || !mPreviousThread.isAlive()) {
-            mPreviousThread = new MatchThread(mRequestTime, prefix, mEditor, mProvider, this::displayResults);
-        }
+        mPreviousThread = new MatchThread(mRequestTime, prefix, mEditor, mProvider, this::displayResults);
         mPreviousThread.start();
     }
 
