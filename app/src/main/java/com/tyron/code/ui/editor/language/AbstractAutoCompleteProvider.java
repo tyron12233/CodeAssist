@@ -1,6 +1,7 @@
 package com.tyron.code.ui.editor.language;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.tyron.completion.model.CompletionList;
 
@@ -27,6 +28,10 @@ public abstract class AbstractAutoCompleteProvider implements AutoCompleteProvid
         }
 
         mPreviousTask = getCompletionList(prefix, colors, line, column);
+        if (mPreviousTask == null) {
+            return null;
+        }
+
         try {
             CompletionList completionList = mPreviousTask.get();
             return completionList.items.stream()
@@ -37,6 +42,6 @@ public abstract class AbstractAutoCompleteProvider implements AutoCompleteProvid
         }
     }
 
-    @NonNull
+    @Nullable
     public abstract CompletableFuture<CompletionList> getCompletionList(String prefix, TextAnalyzeResult colors, int line, int column);
 }
