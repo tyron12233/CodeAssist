@@ -33,6 +33,7 @@ import com.tyron.code.R;
 import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
+import com.tyron.code.ui.editor.language.kotlin.KotlinLanguage;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
@@ -246,7 +247,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 window.setCancelShowUp(true);
 
                 int length = window.getLastPrefix().length();
-                if (mLanguage instanceof JavaLanguage) {
+                if (mLanguage instanceof JavaLanguage || mLanguage instanceof KotlinLanguage) {
                     if (window.getLastPrefix().contains(".")) {
                         length -= window.getLastPrefix().lastIndexOf(".") + 1;
                     }

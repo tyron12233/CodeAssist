@@ -78,7 +78,8 @@ public class CompletionEngine {
         return sp;
     }
 
-    public synchronized Pair<CompiledFile, Integer> recover(File file, String contents, Recompile recompile, int offset) {
+    public synchronized Pair<CompiledFile, Integer> recover(File file, String contents,
+                                                            Recompile recompile, int offset) {
         boolean shouldRecompile = true;
         switch (recompile) {
             case NEVER:
@@ -102,9 +103,7 @@ public class CompletionEngine {
         return Pair.create(compiled, offset);
     }
 
-    public CompletableFuture<CompletionList> complete(File file,
-                                                      String contents,
-                                                      int cursor) {
+    public CompletableFuture<CompletionList> complete(File file, String contents, int cursor) {
         if (isIndexing()) {
             return CompletableFuture.completedFuture(CompletionList.EMPTY);
         }
@@ -115,12 +114,8 @@ public class CompletionEngine {
         });
     }
 
-    public CompletableFuture<CompletionList> complete(File file,
-                                                      String contents,
-                                                      String prefix,
-                                                      int line,
-                                                      int column,
-                                                      int cursor) {
+    public CompletableFuture<CompletionList> complete(File file, String contents, String prefix,
+                                                      int line, int column, int cursor) {
         if (isIndexing()) {
             return CompletableFuture.completedFuture(CompletionList.EMPTY);
         }
@@ -129,17 +124,16 @@ public class CompletionEngine {
             String partialIdentifier = partialIdentifier(prefix, prefix.length());
             CompletionList cachedList = cachedCompletion.getCompletionList();
             if (!cachedList.items.isEmpty()) {
-                List<CompletionItem> narrowedList =
-                        cachedList.items.stream().filter(item -> {
-                            String label = item.label;
-                            if (label.contains("(")) {
-                                label = label.substring(0, label.indexOf('('));
-                            }
-                            if (label.length() < partialIdentifier.length()) {
-                                return false;
-                            }
-                            return StringUtilsKt.containsCharactersInOrder(label, partialIdentifier, false);
-                        }).collect(Collectors.toList());
+                List<CompletionItem> narrowedList = cachedList.items.stream().filter(item -> {
+                    String label = item.label;
+                    if (label.contains("(")) {
+                        label = label.substring(0, label.indexOf('('));
+                    }
+                    if (label.length() < partialIdentifier.length()) {
+                        return false;
+                    }
+                    return StringUtilsKt.containsCharactersInOrder(label, partialIdentifier, false);
+                }).collect(Collectors.toList());
                 CompletionList completionList = new CompletionList();
                 completionList.items = narrowedList;
                 return CompletableFuture.completedFuture(completionList);
@@ -148,21 +142,17 @@ public class CompletionEngine {
 
         debounceLint.cancel();
 
-        try {
-            ProgressManager.getInstance().setCanceled(true);
-            return async.compute(() -> {
-                ProgressManager.getInstance().setCanceled(false);
-                ProgressManager.getInstance().setRunning(true);
-                Pair<CompiledFile, Integer> recover = recover(file, contents, Recompile.NEVER, cursor);
-                String partialIdentifier = partialIdentifier(contents, cursor);
-                CompletionList completions = CompletionUtilsKt.completions(recover.first, cursor,
-                        sp.getIndex(), partialIdentifier);
-                cachedCompletion = new CachedCompletion(file, line, column, partialIdentifier, completions);
-                return completions;
-            });
-        } finally {
-            ProgressManager.getInstance().setRunning(false);
-        }
+
+        return async.compute(() -> {
+            Pair<CompiledFile, Integer> recover = recover(file, contents, Recompile.NEVER, cursor);
+            CompletionList completions = new Completions().completions(recover.first, cursor,
+                    sp.getIndex());
+            String partialIdentifier = partialIdentifier(contents, cursor);
+            cachedCompletion = new CachedCompletion(file, line, column, partialIdentifier,
+                    completions);
+            return completions;
+        });
+
     }
 
     private String partialIdentifier(String contents, int end) {
@@ -173,10 +163,8 @@ public class CompletionEngine {
         return contents.substring(start, end);
     }
 
-    private boolean isIncrementalCompletion(CachedCompletion cachedCompletion,
-                                            File file,
-                                            String prefix,
-                                            int line, int column) {
+    private boolean isIncrementalCompletion(CachedCompletion cachedCompletion, File file,
+                                            String prefix, int line, int column) {
         prefix = partialIdentifier(prefix, prefix.length());
 
         if (cachedCompletion == null) {
@@ -203,8 +191,7 @@ public class CompletionEngine {
             return false;
         }
 
-        if (prefix.length() - cachedCompletion.getPrefix().length() !=
-                column - cachedCompletion.getColumn()) {
+        if (prefix.length() - cachedCompletion.getPrefix().length() != column - cachedCompletion.getColumn()) {
             return false;
         }
 
@@ -244,12 +231,12 @@ public class CompletionEngine {
         });
     }
 
-    public void doLint(File file, String contents, Function0<Boolean> cancelCallback, LintCallback callback) {
+    public void doLint(File file, String contents, Function0<Boolean> cancelCallback,
+                       LintCallback callback) {
         sp.put(file, contents, false);
         BindingContext context = sp.compileFiles(Collections.singletonList(file));
         if (!cancelCallback.invoke()) {
-            List<DiagnosticWrapper> diagnosticWrappers =
-                    new ArrayList<>();
+            List<DiagnosticWrapper> diagnosticWrappers = new ArrayList<>();
             Diagnostics diagnostics = context.getDiagnostics();
             for (Diagnostic it : diagnostics) {
                 diagnosticWrappers.addAll(ConvertDiagnosticKt.convertDiagnostic(it));
@@ -263,8 +250,7 @@ public class CompletionEngine {
         List<File> files = clearLint();
         BindingContext context = sp.compileFiles(files);
         if (!cancelCallback.invoke()) {
-            List<DiagnosticWrapper> diagnosticWrappers =
-                    new ArrayList<>();
+            List<DiagnosticWrapper> diagnosticWrappers = new ArrayList<>();
             Diagnostics diagnostics = context.getDiagnostics();
             for (Diagnostic it : diagnostics) {
                 diagnosticWrappers.addAll(ConvertDiagnosticKt.convertDiagnostic(it));
