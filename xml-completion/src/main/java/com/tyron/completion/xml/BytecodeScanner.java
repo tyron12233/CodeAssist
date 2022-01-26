@@ -28,11 +28,7 @@ import java.util.jar.JarFile;
  */
 public class BytecodeScanner {
 
-    private static boolean sBootScanned = false;
-
     public static List<JavaClass> scan(File file) throws IOException {
-        scanBootstrapIfNeeded();
-
         String path = file.getAbsolutePath();
         List<JavaClass> viewClasses = new ArrayList<>();
         try (JarFile jarFile = new JarFile(file)) {
@@ -67,10 +63,11 @@ public class BytecodeScanner {
         return false;
     }
 
-    private static void scanBootstrapIfNeeded() {
-        if (sBootScanned) {
+    public static void scanBootstrapIfNeeded() {
+        if (!needScanBootstrap()) {
             return;
         }
+
         File androidJar = BuildModule.getAndroidJar();
         if (androidJar != null && androidJar.exists()) {
             try (JarFile jarFile = new JarFile(androidJar)) {
@@ -88,8 +85,15 @@ public class BytecodeScanner {
             } catch (IOException e) {
                 // ignored
             }
+        }
+    }
 
-            sBootScanned = true;
+    private static boolean needScanBootstrap() {
+        try {
+            Repository.getRepository().loadClass(View.class);
+            return false;
+        } catch (ClassNotFoundException e) {
+            return true;
         }
     }
 

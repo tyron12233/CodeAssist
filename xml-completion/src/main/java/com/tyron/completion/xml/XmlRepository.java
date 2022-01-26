@@ -75,6 +75,8 @@ public class XmlRepository {
         if (mInitialized) {
             return;
         }
+        BytecodeScanner.scanBootstrapIfNeeded();
+
         mAttrsFile = getOrExtractFiles();
 
         for (File library : module.getLibraries()) {
