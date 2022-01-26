@@ -50,7 +50,7 @@ public class JavaCompletionProvider extends CompletionProvider {
             CompletionList cachedList = mCachedCompletion.getCompletionList();
             if (!cachedList.items.isEmpty()) {
                 List<CompletionItem> narrowedList =
-                        cachedList.items.stream().filter(item -> getRatio(item, partial) > 70)
+                        cachedList.items.stream()
                                 .sorted(Comparator.comparingInt((CompletionItem it) -> getRatio(it, partial)).reversed())
                                 .collect(Collectors.toList());
                 CompletionList completionList = new CompletionList();
@@ -112,7 +112,7 @@ public class JavaCompletionProvider extends CompletionProvider {
 
     private int getRatio(CompletionItem item, String partialIdentifier) {
         String label = getLabel(item);
-        return FuzzySearch.partialRatio(label, partialIdentifier);
+        return FuzzySearch.ratio(label, partialIdentifier);
     }
 
     private String getLabel(CompletionItem item) {

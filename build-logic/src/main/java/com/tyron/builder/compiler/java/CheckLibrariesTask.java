@@ -88,13 +88,7 @@ public class CheckLibrariesTask extends Task<JavaModule> {
             List<Library> parsedLibraries = new Gson().fromJson(librariesString, new TypeToken<List<Library>>() {
             }.getType());
             if (parsedLibraries != null) {
-                for (Library parsedLibrary : parsedLibraries) {
-                    if (!libraries.contains(parsedLibrary)) {
-                        Log.d("LibraryCheck", "Removed library" + parsedLibrary);
-                    } else {
-                        libraries.add(parsedLibrary);
-                    }
-                }
+                libraries.addAll(parsedLibraries);
             }
         } catch (Exception ignore) {
 

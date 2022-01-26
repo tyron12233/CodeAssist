@@ -73,11 +73,8 @@ public class Completions {
             if (label.contains("(")) {
                 label = label.substring(0, label.indexOf('('));
             }
-            if (label.length() != partial.length()) {
-                return FuzzySearch.ratio(label, partial);
-            } else {
-                return FuzzySearch.partialRatio(label, partial);
-            }
+
+            return FuzzySearch.ratio(label, partial);
         }));
         Collections.reverse(items);
     }
