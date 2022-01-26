@@ -13,8 +13,22 @@ public class Library {
     @SerializedName("sourceFile")
     private String sourceFile;
 
+    /**
+     * Non null if this library is a dependency from maven
+     */
+    @SerializedName("declaration")
+    private String declaration;
+
     public File getSourceFile() {
         return new File(sourceFile);
+    }
+
+    public String getDeclaration() {
+        return declaration;
+    }
+
+    public boolean isDependency() {
+        return declaration != null;
     }
 
     public void setSourceFile(File sourceFile) {
