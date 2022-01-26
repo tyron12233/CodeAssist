@@ -39,7 +39,13 @@ public class SourcePath {
 
     private final CompilerClassPath cp;
     private final Map<URI, SourceFile> files = new HashMap<>();
-    private final ReentrantLock parsedDataWriteLock = new ReentrantLock();
+    private final FakeLock parsedDataWriteLock = new FakeLock();
+
+    public static class FakeLock {
+        public void lock() {}
+        public void unlock() {}
+    }
+
     private final AsyncExecutor indexAsync = new AsyncExecutor();
     private final SymbolIndex index = new SymbolIndex();
     private boolean indexEnabled = false;

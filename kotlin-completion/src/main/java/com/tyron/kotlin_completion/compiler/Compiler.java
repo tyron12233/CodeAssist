@@ -43,8 +43,17 @@ public class Compiler implements Closeable {
 
     private final CompilationEnvironment mDefaultCompileEnvironment;
     private final VirtualFileSystem mLocalFileSystem;
-    private final ReentrantLock mCompileLock = new ReentrantLock();
+    private final FakeLock mCompileLock = new FakeLock();
 
+    public class FakeLock {
+        public void lock() {
+
+        }
+
+        public void unlock() {
+
+        }
+    }
     private boolean closed = false;
 
 
