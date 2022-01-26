@@ -69,8 +69,13 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
             if (doGenerate(contents, getModule().getPackageName(), secretsFile)) {
                 return;
             }
-            throw new CompilationFailedException("Unable to find " + getModule().getPackageName() +
-                    " in google-services.json");
+
+            String message = "" +
+                    "Unable to find " + getModule().getPackageName() +
+                    " in google-services.json. \n" +
+                    "Ensure that the package name defined in your firebase console " +
+                    "matches your app's package name.";
+            throw new CompilationFailedException(message);
         } catch (JSONException e) {
             throw new CompilationFailedException("Failed to parse google-services.json: " +
                     e.getMessage());
