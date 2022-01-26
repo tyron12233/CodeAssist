@@ -28,6 +28,7 @@ import com.tyron.completion.xml.XmlCompletionModule;
 import com.tyron.completion.xml.providers.AndroidManifestCompletionProvider;
 import com.tyron.completion.xml.providers.LayoutXmlCompletionProvider;
 import com.tyron.completion.xml.XmlIndexProvider;
+import com.tyron.kotlin_completion.KotlinCompletionModule;
 
 public class MainActivity extends AppCompatActivity {
     @Override
@@ -74,6 +75,9 @@ public class MainActivity extends AppCompatActivity {
 
             // xml actions
             XmlCompletionModule.registerActions(manager);
+
+            // kotlin actions
+            KotlinCompletionModule.registerActions(manager);
         });
         startupManager.startup();
 
