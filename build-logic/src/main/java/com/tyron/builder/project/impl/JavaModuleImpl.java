@@ -74,8 +74,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public void setLibraryHashes(Map<String, Library> hashes) {
-        mLibraryHashMap.clear();
+    public void putLibraryHashes(Map<String, Library> hashes) {
         mLibraryHashMap.putAll(hashes);
     }
 
@@ -224,5 +223,6 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     public void clear() {
         mJavaFiles.clear();
         mLibraries.clear();
+        mLibraryHashMap.clear();
     }
 }

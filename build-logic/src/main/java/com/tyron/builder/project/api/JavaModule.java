@@ -30,7 +30,7 @@ public interface JavaModule extends Module {
     /**
      * Sets the map of md5 hash to its library source
      */
-    void setLibraryHashes(Map<String, Library> hashes);
+    void putLibraryHashes(Map<String, Library> hashes);
 
     /**
      *

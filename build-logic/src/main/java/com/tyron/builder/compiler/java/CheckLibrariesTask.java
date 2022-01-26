@@ -117,7 +117,7 @@ public class CheckLibrariesTask extends Task<JavaModule> {
         combined.putAll(libraries);
         combined.putAll(fileLibraries);
 
-        getModule().setLibraryHashes(combined);
+        getModule().putLibraryHashes(combined);
 
         for (Map.Entry<String, Library> entry : combined.entrySet()) {
             String hash = entry.getKey();

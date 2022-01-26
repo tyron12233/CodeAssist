@@ -80,7 +80,7 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public void setLibraryHashes(Map<String, Library> hashes) {
+    public void putLibraryHashes(Map<String, Library> hashes) {
         // no op
     }
 

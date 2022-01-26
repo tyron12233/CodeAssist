@@ -148,6 +148,11 @@ public class DependencyManager {
         Map<String, Library> combined = new HashMap<>();
         combined.putAll(libraries);
         combined.putAll(fileLibraries);
+
+        if (module instanceof JavaModule) {
+            ((JavaModule) module).putLibraryHashes(combined);
+        }
+
         for (Map.Entry<String, Library> entry : combined.entrySet()) {
             String hash = entry.getKey();
             Library library = entry.getValue();
