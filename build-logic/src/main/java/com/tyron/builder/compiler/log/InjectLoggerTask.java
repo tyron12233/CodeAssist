@@ -171,6 +171,16 @@ public class InjectLoggerTask extends Task<AndroidModule> {
                 mApplicationFile = getModule()
                         .getKotlinFile(applicationClass);
             }
+
+            if (mApplicationFile == null) {
+                String message = "" +
+                        "Unable to find the application class defined in manifest.\n" +
+                        "fully qualified name: " + applicationClass + '\n' +
+                        "This build will not have logger injected.";
+                getLogger().warning(message);
+                return;
+            }
+
             if (!isNewApplicationClass) {
                 mOriginalApplication = FileUtils.readFileToString(mApplicationFile, Charset.defaultCharset());
             }
