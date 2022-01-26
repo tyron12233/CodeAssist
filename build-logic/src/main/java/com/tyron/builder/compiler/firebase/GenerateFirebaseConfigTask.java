@@ -108,8 +108,12 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
         keys.forEachRemaining(s -> {
             try {
                 map.put(s, projectInfo.getString(s));
-            } catch (JSONException ignore) {
-
+            } catch (JSONException e) {
+                String message = "" +
+                        "Failed to put value to secrets.xml.\n" +
+                        "Key: " + s + "\n" +
+                        "Error: " + e.getMessage();
+                getLogger().warning(message);
             }
         });
 
@@ -130,8 +134,8 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
                     .getString("current_key");
             map.put("google_api_key", apiKey);
             map.put("google_crash_reporting_api_key", apiKey);
-        } catch (JSONException ignore) {
-
+        } catch (JSONException e) {
+            getLogger().warning("Unable to put api keys, error: " + e.getMessage());
         }
 
 
