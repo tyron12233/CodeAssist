@@ -33,6 +33,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -125,13 +126,8 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
             }
             CompletionList completionList = mCachedCompletion.getCompletionList();
             if (!completionList.items.isEmpty()) {
-                completionList.items.sort((item1, item2) -> {
-                    String filterPrefix = mCachedCompletion.getFilterPrefix();
-                    int first = FuzzySearch.partialRatio(item1.label, filterPrefix);
-                    int second = FuzzySearch.partialRatio(item2.label, filterPrefix);
-                    return Integer.compare(first, second);
-                });
-                Collections.reverse(completionList.items);
+                String filterPrefix = mCachedCompletion.getFilterPrefix();
+                sort(completionList.items, filterPrefix);
                 return completionList;
             }
         }
@@ -145,7 +141,9 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
                     params.getColumn(),
                     params.getIndex());
             mCachedCompletion = list;
-            return list.getCompletionList();
+            CompletionList completionList = list.getCompletionList();
+            sort(completionList.items, list.getFilterPrefix());
+            return completionList;
         } catch (XmlPullParserException e) {
             e.printStackTrace();
         }
@@ -193,6 +191,16 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
         return xmlCachedCompletion;
     }
 
+    private void sort(List<CompletionItem> items, String filterPrefix) {
+        items.sort(Comparator.comparingInt(it -> {
+            if (it.label.equals(filterPrefix)) {
+                return 100;
+            }
+            return FuzzySearch.ratio(it.label, filterPrefix);
+        }));
+        Collections.reverse(items);
+    }
+
     private void addTagItems(String prefix, CompletionList list, XmlCachedCompletion xmlCachedCompletion) {
         xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_TAG);
         xmlCachedCompletion.setFilterPrefix(prefix);
@@ -200,7 +208,10 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
 
         xmlCachedCompletion.setFilter((item, pre) -> {
             String prefixSet = pre;
-            if (pre.startsWith("<")) {
+
+            if (pre.startsWith("</")) {
+                prefixSet = pre.substring(2);
+            } else if (pre.startsWith("<")) {
                 prefixSet = pre.substring(1);
             }
 
