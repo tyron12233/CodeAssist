@@ -22,9 +22,13 @@
  */
 package io.github.rosemoe.sora.text;
 
+import android.util.Log;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import io.github.rosemoe.sora.BuildConfig;
 
 /**
  * Indexer Impl for Content
@@ -413,6 +417,12 @@ public class CachedIndexer implements Indexer, ContentListener {
                             CharSequence insertedContent) {
         if (isHandleEvent()) {
             for (CharPosition pos : mCachePositions) {
+                if (pos == null) {
+                    if (BuildConfig.DEBUG) {
+                        Log.e("CachedIndexer", "CharPosition pos is null!");
+                    }
+                    continue;
+                }
                 if (pos.line == startLine) {
                     if (pos.column >= startColumn) {
                         pos.index += insertedContent.length();
