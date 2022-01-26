@@ -75,14 +75,14 @@ public class DependencyManager {
         List<Pom> resolvedPoms = mResolver.resolveDependencies(declaredDependencies);
 
         listener.onTaskStarted("Downloading dependencies");
-        List<File> files = getFiles(resolvedPoms, logger);
+        List<Library> files = getFiles(resolvedPoms, logger);
 
         listener.onTaskStarted("Checking dependencies");
         checkLibraries(project, logger, files);
     }
 
-    private void checkLibraries(JavaModule project, ILogger logger, List<File> newLibraries) throws IOException {
-        Set<Library> libraries = new HashSet<>();
+    private void checkLibraries(JavaModule project, ILogger logger, List<Library> newLibraries) throws IOException {
+        Set<Library> libraries = new HashSet<>(newLibraries);
 
         Map<String, Library> fileLibsHashes = new HashMap<>();
         File[] fileLibraries = project.getLibraryDirectory().listFiles(c ->
@@ -102,12 +102,6 @@ public class DependencyManager {
             }
         }
 
-
-        newLibraries.forEach(it -> {
-            Library library = new Library();
-            library.setSourceFile(it);
-            libraries.add(library);
-        });
 
         String librariesString = project.getSettings().getString("libraries", "[]");
         try {
@@ -181,13 +175,16 @@ public class DependencyManager {
                 .apply();
     }
 
-    public List<File> getFiles(List<Pom> resolvedPoms, ILogger logger) {
-        List<File> files = new ArrayList<>();
+    public List<Library> getFiles(List<Pom> resolvedPoms, ILogger logger) {
+        List<Library> files = new ArrayList<>();
         for (Pom resolvedPom : resolvedPoms) {
             try {
                 File file = mRepository.getLibrary(resolvedPom);
                 if (file != null) {
-                    files.add(file);
+                    Library library = new Library();
+                    library.setSourceFile(file);
+                    library.setDeclaration(resolvedPom.getDeclarationString());
+                    files.add(library);
                 }
             } catch (IOException e) {
                 logger.error("Unable to download " + resolvedPom + ": " + e.getMessage());

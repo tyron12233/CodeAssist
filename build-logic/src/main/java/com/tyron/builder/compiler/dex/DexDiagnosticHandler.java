@@ -131,6 +131,11 @@ public class DexDiagnosticHandler implements DiagnosticsHandler {
         if (library == null) {
             return part;
         }
+
+        if (library.isDependency()) {
+            return library.getDeclaration();
+        }
+
         return library.getSourceFile().getAbsolutePath();
     }
 
@@ -144,13 +149,14 @@ public class DexDiagnosticHandler implements DiagnosticsHandler {
         if (index == -1) {
             return part;
         }
-
-        index += CLASSES_DIR.length();
+        int endIndex = part.length();
         if (part.endsWith(".dex")) {
-            index -= ".dex".length();
+            endIndex -= ".dex".length();
         }
-        String fqn = part.substring(index)
+        index += CLASSES_DIR.length();
+        String fqn = part.substring(index, endIndex)
                 .replace('/', '.');
+
         File javaFile = mModule.getJavaFile(fqn);
         if (javaFile == null) {
             return part;

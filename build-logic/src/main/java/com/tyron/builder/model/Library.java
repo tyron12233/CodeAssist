@@ -54,4 +54,8 @@ public class Library {
     public String toString() {
         return "sourceFile = " + sourceFile;
     }
+
+    public void setDeclaration(String declarationString) {
+        declaration = declarationString;
+    }
 }

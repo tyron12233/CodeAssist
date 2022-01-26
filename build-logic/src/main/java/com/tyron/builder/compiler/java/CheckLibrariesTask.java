@@ -85,8 +85,7 @@ public class CheckLibrariesTask extends Task<JavaModule> {
 
         String librariesString = project.getSettings().getString("libraries", "[]");
         try {
-            List<Library> parsedLibraries = new Gson().fromJson(librariesString, new TypeToken<List<Library>>() {
-            }.getType());
+            List<Library> parsedLibraries = new Gson().fromJson(librariesString, new TypeToken<List<Library>>() {}.getType());
             if (parsedLibraries != null) {
                 libraries.addAll(parsedLibraries);
             }
