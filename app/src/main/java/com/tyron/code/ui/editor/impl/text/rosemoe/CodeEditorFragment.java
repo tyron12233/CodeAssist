@@ -26,7 +26,9 @@ import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.KotlinModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
@@ -54,6 +56,8 @@ import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.TextEdit;
+import com.tyron.kotlin_completion.CompiledFile;
+import com.tyron.kotlin_completion.action.CommonKotlinKeys;
 
 import org.apache.commons.io.FileUtils;
 import org.openjdk.source.util.TreePath;
@@ -315,7 +319,11 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
             if (currentProject != null) {
                 Module currentModule = currentProject.getModule(mCurrentFile);
-                if ((mLanguage instanceof JavaLanguage) && (currentModule instanceof JavaModule)) {
+                if (mLanguage instanceof KotlinLanguage) {
+                    com.tyron.kotlin_completion.CompletionEngine engine = com.tyron.kotlin_completion.CompletionEngine.getInstance(((AndroidModule) currentModule));
+                    CompiledFile compiledFile = engine.getSourcePath().currentVersion(mCurrentFile);
+                    dataContext.putData(CommonKotlinKeys.COMPILED_FILE, compiledFile);
+                } else if ((mLanguage instanceof JavaLanguage) && (currentModule instanceof JavaModule)) {
                     JavaCompilerProvider service =
                             CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
                     JavaCompilerService compiler = service.getCompiler(currentProject,
@@ -506,7 +514,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
      */
     public void analyze() {
         if (mEditor != null) {
-            mEditor.analyze();
+            mEditor.analyze(true);
         }
     }
 
