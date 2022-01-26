@@ -42,7 +42,7 @@ public class R8Task extends Task<AndroidModule> {
         getLogger().debug("Running R8");
         try {
             File output = new File(getModule().getBuildDirectory(), "bin");
-            R8Command.Builder command = R8Command.builder(new DexDiagnosticHandler(getLogger()))
+            R8Command.Builder command = R8Command.builder(new DexDiagnosticHandler(getLogger(), getModule()))
                     .addLibraryFiles(getLibraryFiles())
                     .addProgramFiles(getJarFiles())
                     .addProgramFiles(D8Task.getClassFiles(new File(getModule().getBuildDirectory(),

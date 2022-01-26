@@ -54,7 +54,7 @@ public class D8Task extends Task<JavaModule> {
 
 			List<Path> libraryDexes = getLibraryDexes();
 
-			D8Command command = D8Command.builder(new DexDiagnosticHandler(getLogger()))
+			D8Command command = D8Command.builder(new DexDiagnosticHandler(getLogger(), getModule()))
 					.addClasspathFiles(getModule().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
 					.setMinApiLevel(21)
 					.addLibraryFiles(getLibraryFiles())
@@ -93,7 +93,7 @@ public class D8Task extends Task<JavaModule> {
 				}
 				if (lib.exists()) {
 					getLogger().debug("Dexing jar " + parentFile.getName());
-					D8Command command = D8Command.builder(new DexDiagnosticHandler(getLogger()))
+					D8Command command = D8Command.builder(new DexDiagnosticHandler(getLogger(), getModule()))
 							.addLibraryFiles(getLibraryFiles())
 							.addClasspathFiles(libraries.stream().map(File::toPath).collect(Collectors.toList()))
 							.setMinApiLevel(21)

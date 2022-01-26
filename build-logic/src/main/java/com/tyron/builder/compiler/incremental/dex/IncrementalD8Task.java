@@ -55,7 +55,7 @@ public class IncrementalD8Task extends Task<AndroidModule> {
     @Override
     public void prepare(BuildType type) throws IOException {
         mBuildType = type;
-        diagnosticsHandler = new DexDiagnosticHandler(getLogger());
+        diagnosticsHandler = new DexDiagnosticHandler(getLogger(), getModule());
         mDexCache = getModule().getCache(CACHE_KEY, new Cache<>());
 
         File output = new File(getModule().getBuildDirectory(), "intermediate/classes");

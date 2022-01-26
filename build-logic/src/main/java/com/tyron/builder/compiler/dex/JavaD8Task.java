@@ -55,7 +55,7 @@ public class JavaD8Task extends Task<JavaModule> {
     @Override
     public void prepare(BuildType type) throws IOException {
         mBuildType = type;
-        diagnosticsHandler = new DexDiagnosticHandler(getLogger());
+        diagnosticsHandler = new DexDiagnosticHandler(getLogger(), getModule());
         mDexCache = getModule().getCache(IncrementalD8Task.CACHE_KEY, new Cache<>());
 
         File output = new File(getModule().getBuildDirectory(), "intermediate/classes");
