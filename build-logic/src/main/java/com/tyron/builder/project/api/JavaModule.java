@@ -1,6 +1,9 @@
 package com.tyron.builder.project.api;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.tyron.builder.model.Library;
 
 import java.io.File;
 import java.util.List;
@@ -23,6 +26,19 @@ public interface JavaModule extends Module {
     List<File> getLibraries();
 
     void addLibrary(@NonNull File jar);
+
+    /**
+     * Sets the map of md5 hash to its library source
+     */
+    void setLibraryHashes(Map<String, Library> hashes);
+
+    /**
+     *
+     * @param hash the hash of the jar file
+     * @return The library object for its hash
+     */
+    @Nullable
+    Library getLibrary(String hash);
 
     /**
      * @return The fully qualified name of all classes in this projects including its

@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.BuildModule;
+import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.util.StringSearch;
 
@@ -29,6 +30,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     // Map of fully qualified names and the jar they are contained in
     private final Map<String, File> mClassFiles;
     private final Map<String, File> mJavaFiles;
+    private final Map<String, Library> mLibraryHashMap;
     private final Set<File> mLibraries;
 
     public JavaModuleImpl(File root) {
@@ -36,6 +38,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
         mJavaFiles = new HashMap<>();
         mClassFiles = new HashMap<>();
         mLibraries = new HashSet<>();
+        mLibraryHashMap = new HashMap<>();
     }
 
     @NonNull
@@ -68,6 +71,18 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
             className = packageName + "." + javaFile.getName().replace(".java", "");
         }
         mJavaFiles.put(className, javaFile);
+    }
+
+    @Override
+    public void setLibraryHashes(Map<String, Library> hashes) {
+        mLibraryHashMap.clear();
+        mLibraryHashMap.putAll(hashes);
+    }
+
+    @Nullable
+    @Override
+    public Library getLibrary(String hash) {
+        return mLibraryHashMap.get(hash);
     }
 
     @Override
@@ -172,7 +187,6 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     public File getBootstrapJarFile() {
         return BuildModule.getAndroidJar();
     }
-
 
     @Override
     public void open() throws IOException {

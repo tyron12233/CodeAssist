@@ -2,6 +2,7 @@ package com.tyron.builder.project.mock;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.builder.model.Library;
 import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.JavaModule;
@@ -76,6 +77,17 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
     @Override
     public void addLibrary(@NonNull File jar) {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setLibraryHashes(Map<String, Library> hashes) {
+        // no op
+    }
+
+    @androidx.annotation.Nullable
+    @Override
+    public Library getLibrary(String hash) {
+        return null;
     }
 
     @Override
