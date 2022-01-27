@@ -44,17 +44,23 @@ public class HighlightUtil {
                     CharPosition start = indexer.getCharPosition((int) it.getStartPosition());
                     CharPosition end = indexer.getCharPosition((int) it.getEndPosition());
 
+                    int sLine = start.line;
+                    int sColumn = start.column;
+                    int eLine = end.line;
+                    int eColumn = end.column;
+
                     // the editor does not support marking underline spans for the same start and end
                     // index
                     // to work around this, we just subtract one to the start index
-                    if (start.line == end.line && end.column == start.column) {
-                        start.column--;
+                    if (sLine == eLine && eColumn == sColumn) {
+                        sColumn--;
+                        eColumn++;
                     }
 
-                    it.setStartLine(start.line);
-                    it.setEndLine(end.line);
-                    it.setStartColumn(start.column);
-                    it.setEndColumn(end.column);
+                    it.setStartLine(sLine);
+                    it.setEndLine(eLine);
+                    it.setStartColumn(sColumn);
+                    it.setEndColumn(eColumn);
                 }
                 startLine = it.getStartLine();
                 startColumn = it.getStartColumn();

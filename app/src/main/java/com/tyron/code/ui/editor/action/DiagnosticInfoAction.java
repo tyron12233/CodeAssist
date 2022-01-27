@@ -36,7 +36,7 @@ public class DiagnosticInfoAction extends AnAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        Diagnostic<?> diagnostic = e.getData(CommonDataKeys.DIAGNOSTIC);
+        Diagnostic<?> diagnostic = e.getRequiredData(CommonDataKeys.DIAGNOSTIC);
 
         new AlertDialog.Builder(e.getDataContext())
                 .setTitle(com.tyron.completion.java.R.string.menu_diagnostic_info_title)
