@@ -117,13 +117,17 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
                                                             DeclaredType type, boolean isStatic,
                                                             String partial, boolean endsWithParen) {
         checkCanceled();
-
+        CompletionList cl = new CompletionList();
         Trees trees = Trees.instance(task.task);
         TypeElement typeElement = (TypeElement) type.asElement();
 
         List<CompletionItem> list = new ArrayList<>();
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         for (Element member : task.task.getElements().getAllMembers(typeElement)) {
+            if (list.size() >= Completions.MAX_COMPLETION_ITEMS) {
+                cl.isIncomplete = true;
+                break;
+            }
             if (member.getKind() == ElementKind.CONSTRUCTOR) continue;
             if (FuzzySearch.partialRatio(String.valueOf(member.getSimpleName()), partial) < 70 && !partial.endsWith(".") && !partial.isEmpty()) continue;
             if (!trees.isAccessible(scope, member, type)) continue;
@@ -152,8 +156,6 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
                 list.add(keyword("super"));
             }
         }
-
-        CompletionList cl = new CompletionList();
         cl.items = list;
         return cl;
     }

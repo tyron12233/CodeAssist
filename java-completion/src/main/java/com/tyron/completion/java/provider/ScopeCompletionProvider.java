@@ -39,6 +39,7 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
                                    boolean endsWithParen) {
         checkCanceled();
 
+        CompletionList completionList = new CompletionList();
         Trees trees = Trees.instance(task.task);
         Set<CompletionItem> list = new HashSet<>();
         Scope scope = trees.getScope(path);
@@ -52,6 +53,10 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
         };
 
         for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
+            if (list.size() >= Completions.MAX_COMPLETION_ITEMS) {
+                completionList.isIncomplete = true;
+                break;
+            }
             if (element.getKind() == ElementKind.METHOD) {
                 ExecutableElement executableElement = (ExecutableElement) element;
                 TreePath parentPath = path.getParentPath().getParentPath();
@@ -67,7 +72,6 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
                 list.add(item(element));
             }
         }
-        CompletionList completionList = new CompletionList();
         completionList.items.addAll(list);
         return completionList;
     }

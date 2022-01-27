@@ -60,6 +60,10 @@ public class IdentifierCompletionProvider extends BaseCompletionProvider {
             uniques.add(className);
         }
         for (String className : getCompiler().publicTopLevelTypes()) {
+            if (uniques.size() >= Completions.MAX_COMPLETION_ITEMS) {
+                list.isIncomplete = true;
+                break;
+            }
             if (FuzzySearch.partialRatio(className, partial) < 90) continue;
             if (uniques.contains(className)) continue;
             list.items.add(classItem(className));
