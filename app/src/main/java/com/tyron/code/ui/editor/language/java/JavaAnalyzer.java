@@ -35,6 +35,7 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
 import org.openjdk.tools.javac.tree.JCTree;
+import org.openjdk.tools.javac.tree.TreeInfo;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.lang.ref.WeakReference;
@@ -135,8 +136,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                         if (!cancel.invoke()) {
                             List<DiagnosticWrapper> collect =
                                     task.diagnostics.stream()
-                                            .map(DiagnosticWrapper::new)
-                                           // .map(d -> modifyDiagnostic(task, d))
+                                            .map(d -> modifyDiagnostic(task, d))
                                             .collect(Collectors.toList());
                             editor.setDiagnostics(collect);
                         }
@@ -167,19 +167,22 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 TreePath treePath = trees.getPath(task.root(), tree);
                 String code = jcDiagnostic.getCode();
 
-                TreePath modifiedPath = null;
+                long start = diagnostic.getStartPosition();
+                long end = diagnostic.getEndPosition();
                 switch (code) {
                     case ErrorCodes.MISSING_RETURN_STATEMENT:
-                        modifiedPath = TreeUtil.findParentOfType(treePath, MethodTree.class);
-                        break;
-                    case ErrorCodes.DOES_NOT_OVERRIDE_ABSTRACT:
-                        modifiedPath = TreeUtil.findParentOfType(treePath, ClassTree.class);
+                        TreePath block = TreeUtil.findParentOfType(treePath,
+                                BlockTree.class);
+                        if (block != null) {
+                            // show error span only at the end parenthesis
+                            end = positions.getEndPosition(task.root(), block.getLeaf()) + 1;
+                            start = end - 2;
+                        }
                         break;
                 }
 
-                if (modifiedPath != null) {
-                    setDiagnosticPosition(wrapped, positions, modifiedPath.getCompilationUnit(), modifiedPath.getLeaf());
-                }
+                wrapped.setStartPosition(start);
+                wrapped.setEndPosition(end);
             }
         }
         return wrapped;
