@@ -1,5 +1,7 @@
 package com.tyron.completion.java.util;
 
+import static org.openjdk.source.tree.Tree.Kind.*;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -54,23 +56,23 @@ public class ActionUtil {
         }
         TreePath parent = path.getParentPath();
 
-        if (path.getLeaf() instanceof MethodTree) {
+        if (path.getLeaf().getKind() == METHOD) {
             return false;
         }
 
-        if (path.getLeaf().getKind() == Tree.Kind.IMPORT) {
+        if (path.getLeaf().getKind() == IMPORT) {
             return false;
         }
 
-        if (path.getLeaf() instanceof SwitchTree) {
+        if (path.getLeaf().getKind() == SWITCH) {
             return false;
         }
 
-        if (path.getLeaf() instanceof ParameterizedTypeTree) {
+        if (path.getLeaf().getKind() == PARAMETERIZED_TYPE) {
             return false;
         }
 
-        if (path.getLeaf() instanceof AnnotationTree) {
+        if (path.getLeaf().getKind() == ANNOTATION) {
             return false;
         }
 
@@ -78,27 +80,31 @@ public class ActionUtil {
             return false;
         }
 
-        if (path.getLeaf() instanceof ArrayTypeTree) {
+        if (path.getLeaf().getKind() == STRING_LITERAL) {
+            return canIntroduceLocalVariable(parent);
+        }
+
+        if (path.getLeaf().getKind() == ARRAY_TYPE) {
             return ActionUtil.canIntroduceLocalVariable(parent);
         }
 
-        if (path.getLeaf() instanceof ParenthesizedTree) {
+        if (path.getLeaf().getKind() == PARENTHESIZED) {
             return ActionUtil.canIntroduceLocalVariable(parent);
         }
 
-        if (path.getLeaf() instanceof MemberSelectTree) {
+        if (path.getLeaf().getKind() == MEMBER_SELECT) {
             return ActionUtil.canIntroduceLocalVariable(parent);
         }
 
-        if (path.getLeaf() instanceof PrimitiveTypeTree) {
+        if (path.getLeaf().getKind() == PRIMITIVE_TYPE) {
             return ActionUtil.canIntroduceLocalVariable(parent);
         }
 
-        if (path.getLeaf() instanceof IdentifierTree) {
+        if (path.getLeaf().getKind() == IDENTIFIER) {
             return ActionUtil.canIntroduceLocalVariable(path.getParentPath());
         }
 
-        if (path.getLeaf() instanceof MethodInvocationTree) {
+        if (path.getLeaf().getKind() == METHOD_INVOCATION) {
             JCTree.JCMethodInvocation methodInvocation = (JCTree.JCMethodInvocation) path.getLeaf();
             // void return type
             if (isVoid(methodInvocation)) {
@@ -113,11 +119,8 @@ public class ActionUtil {
             return canIntroduceLocalVariable(parent);
         }
 
-        if (path.getLeaf() instanceof BlockTree) {
-            // method() { cursor }
-            if (parent.getLeaf() instanceof MethodTree) {
-                return false;
-            }
+        if (path.getLeaf().getKind() == BLOCK) {
+           return canIntroduceLocalVariable(parent);
         }
 
         if (path.getLeaf() instanceof UnaryTree) {
