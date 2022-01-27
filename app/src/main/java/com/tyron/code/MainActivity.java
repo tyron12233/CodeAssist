@@ -52,7 +52,7 @@ public class MainActivity extends AppCompatActivity {
         startupManager.addStartupActivity(() -> {
             ActionManager manager = ActionManager.getInstance();
             // main toolbar actions
-            manager.registerAction("s", new SelectJavaParentAction());
+            manager.registerAction(SelectJavaParentAction.ID, new SelectJavaParentAction());
             manager.registerAction(CompileActionGroup.ID, new CompileActionGroup());
             manager.registerAction(ProjectActionGroup.ID, new ProjectActionGroup());
             manager.registerAction(PreviewLayoutAction.ID, new PreviewLayoutAction());
