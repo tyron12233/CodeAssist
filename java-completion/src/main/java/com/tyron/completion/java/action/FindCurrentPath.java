@@ -160,26 +160,29 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
         return super.visitLiteral(literalTree, aLong);
     }
 
-    private boolean isInside(Tree tree, Pair<Long, Long> find) {
-        long start = mPos.getStartPosition(mCompilationUnit, tree);
-        long end = mPos.getEndPosition(mCompilationUnit, tree);
-        return  start <= find.first && find.second < end;
-    }
-
-
     @Override
     public TreePath visitNewClass(NewClassTree t, Pair<Long, Long> find) {
+        TreePath smaller = super.visitNewClass(t, find);
+        if (smaller != null) {
+            return smaller;
+        }
 
         if (isInside(t, find) && !isInside(t.getClassBody(), find)) {
             return getCurrentPath();
         }
 
-        return super.visitNewClass(t, find);
+        return null;
     }
 
     @Override
     public TreePath reduce(TreePath r1, TreePath r2) {
         if (r1 != null) return r1;
         return r2;
+    }
+
+    private boolean isInside(Tree tree, Pair<Long, Long> find) {
+        long start = mPos.getStartPosition(mCompilationUnit, tree);
+        long end = mPos.getEndPosition(mCompilationUnit, tree);
+        return  start <= find.first && find.second < end;
     }
 }

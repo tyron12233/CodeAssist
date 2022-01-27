@@ -11,6 +11,7 @@ import com.tyron.code.ui.editor.action.CloseFileEditorAction;
 import com.tyron.code.ui.editor.action.CloseOtherEditorAction;
 import com.tyron.code.ui.editor.action.DiagnosticInfoAction;
 import com.tyron.code.ui.editor.action.PreviewLayoutAction;
+import com.tyron.code.ui.editor.action.SelectJavaParentAction;
 import com.tyron.code.ui.file.action.NewFileActionGroup;
 import com.tyron.code.ui.file.action.file.DeleteFileAction;
 import com.tyron.code.ui.main.action.compile.CompileActionGroup;
@@ -51,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
         startupManager.addStartupActivity(() -> {
             ActionManager manager = ActionManager.getInstance();
             // main toolbar actions
+            manager.registerAction("s", new SelectJavaParentAction());
             manager.registerAction(CompileActionGroup.ID, new CompileActionGroup());
             manager.registerAction(ProjectActionGroup.ID, new ProjectActionGroup());
             manager.registerAction(PreviewLayoutAction.ID, new PreviewLayoutAction());
