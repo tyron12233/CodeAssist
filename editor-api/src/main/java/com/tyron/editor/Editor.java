@@ -21,4 +21,6 @@ public interface Editor {
     Caret getCaret();
 
     Content getContent();
+
+    void setSelectionRegion(int line, int column, int endLine, int endColumn);
 }
