@@ -1,5 +1,7 @@
 package com.tyron.completion.java.action;
 
+import android.util.Pair;
+
 import com.android.tools.r8.graph.P;
 import com.tyron.completion.java.FindNewTypeDeclarationAt;
 
@@ -28,7 +30,7 @@ import org.openjdk.tools.javac.tree.JCTree;
  * Scanner to retrieve the current {@link TreePath} given the cursor position each visit methods
  * checks if the current tree is in between the cursor
  */
-public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
+public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>> {
 
     private final JavacTask task;
     private final SourcePositions mPos;
@@ -39,14 +41,22 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
         mPos = Trees.instance(task).getSourcePositions();
     }
 
-    @Override
-    public TreePath visitCompilationUnit(CompilationUnitTree compilationUnitTree, Long aLong) {
-        mCompilationUnit = compilationUnitTree;
-        return super.visitCompilationUnit(compilationUnitTree, aLong);
+    public TreePath scan(Tree tree, long start) {
+        return scan(tree, start, start);
+    }
+
+    public TreePath scan(Tree tree, long start, long end) {
+        return super.scan(tree, Pair.create(start, end));
     }
 
     @Override
-    public TreePath visitClass(ClassTree classTree, Long aLong) {
+    public TreePath visitCompilationUnit(CompilationUnitTree compilationUnitTree, Pair<Long, Long> find) {
+        mCompilationUnit = compilationUnitTree;
+        return super.visitCompilationUnit(compilationUnitTree, find);
+    }
+
+    @Override
+    public TreePath visitClass(ClassTree classTree, Pair<Long, Long> aLong) {
         TreePath smaller = super.visitClass(classTree, aLong);
         if (smaller != null) {
             return smaller;
@@ -59,13 +69,13 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     @Override
-    public TreePath visitMethod(MethodTree methodTree, Long aLong) {
+    public TreePath visitMethod(MethodTree methodTree, Pair<Long, Long> aLong) {
         TreePath smaller = super.visitMethod(methodTree, aLong);
         if (smaller != null) {
             return smaller;
         }
 
-        if (isInside(methodTree, aLong) && !isInside(methodTree.getBody(), aLong)) {
+        if (isInside(methodTree, aLong)) {
             return getCurrentPath();
         }
 
@@ -73,7 +83,7 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     @Override
-    public TreePath visitMethodInvocation(MethodInvocationTree tree, Long cursor) {
+    public TreePath visitMethodInvocation(MethodInvocationTree tree, Pair<Long, Long> cursor) {
         TreePath smaller = super.visitMethodInvocation(tree, cursor);
         if (smaller != null) {
             return smaller;
@@ -87,7 +97,7 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     @Override
-    public TreePath visitPrimitiveType(PrimitiveTypeTree t, Long find) {
+    public TreePath visitPrimitiveType(PrimitiveTypeTree t, Pair<Long, Long> find) {
         if (isInside(t, find)) {
             return getCurrentPath();
         }
@@ -95,7 +105,7 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     @Override
-    public TreePath visitIdentifier(IdentifierTree t, Long find) {
+    public TreePath visitIdentifier(IdentifierTree t, Pair<Long, Long> find) {
         if (isInside(t, find)) {
             return getCurrentPath();
         }
@@ -103,7 +113,7 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     @Override
-    public TreePath visitVariable(VariableTree t, Long find) {
+    public TreePath visitVariable(VariableTree t, Pair<Long, Long> find) {
         TreePath smaller = super.visitVariable(t, find);
         if (smaller != null) {
             return smaller;
@@ -116,7 +126,7 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     @Override
-    public TreePath visitBlock(BlockTree t, Long find) {
+    public TreePath visitBlock(BlockTree t, Pair<Long, Long> find) {
         TreePath smaller = super.visitBlock(t, find);
         if (smaller != null) {
             return smaller;
@@ -129,13 +139,13 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     @Override
-    public TreePath visitLambdaExpression(LambdaExpressionTree t, Long find) {
+    public TreePath visitLambdaExpression(LambdaExpressionTree t, Pair<Long, Long> find) {
         TreePath smaller = super.visitLambdaExpression(t, find);
         if (smaller != null) {
             return smaller;
         }
 
-        if (mPos.getStartPosition(mCompilationUnit, t) <= find && find < mPos.getEndPosition(mCompilationUnit, t)) {
+        if (isInside(t, find)) {
             return getCurrentPath();
         }
 
@@ -143,22 +153,22 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Long> {
     }
 
     @Override
-    public TreePath visitLiteral(LiteralTree literalTree, Long aLong) {
+    public TreePath visitLiteral(LiteralTree literalTree, Pair<Long, Long> aLong) {
         if (isInside(literalTree, aLong)) {
             return getCurrentPath();
         }
         return super.visitLiteral(literalTree, aLong);
     }
 
-    private boolean isInside(Tree tree, long find) {
+    private boolean isInside(Tree tree, Pair<Long, Long> find) {
         long start = mPos.getStartPosition(mCompilationUnit, tree);
         long end = mPos.getEndPosition(mCompilationUnit, tree);
-        return  start <= find && find < end;
+        return  start <= find.first && find.second < end;
     }
 
 
     @Override
-    public TreePath visitNewClass(NewClassTree t, Long find) {
+    public TreePath visitNewClass(NewClassTree t, Pair<Long, Long> find) {
 
         if (isInside(t, find) && !isInside(t.getClassBody(), find)) {
             return getCurrentPath();
