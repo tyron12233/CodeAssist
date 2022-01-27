@@ -53,9 +53,11 @@ public class JavaCompletionProvider extends CompletionProvider {
                         cachedList.items.stream()
                                 .sorted(Comparator.comparingInt((CompletionItem it) -> getRatio(it, partial)).reversed())
                                 .collect(Collectors.toList());
-                CompletionList completionList = new CompletionList();
-                completionList.items = narrowedList;
-                return completionList;
+                if (!narrowedList.isEmpty() && getRatio(narrowedList.get(0), partial) >= 90) {
+                    CompletionList completionList = new CompletionList();
+                    completionList.items = narrowedList;
+                    return completionList;
+                }
             }
         }
 
