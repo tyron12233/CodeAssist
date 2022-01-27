@@ -44,7 +44,7 @@ public class IdentifierCompletionProvider extends BaseCompletionProvider {
         }
         addStaticImports(task, path.getCompilationUnit(), partial, endsWithParen, list);
 
-        new KeywordCompletionProvider(getCompiler()).complete(task, path, partial, endsWithParen);
+        KeywordCompletionProvider.addKeywords(path, partial, list);
 
         return list;
     }

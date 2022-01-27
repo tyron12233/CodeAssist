@@ -34,7 +34,7 @@ public class KeywordCompletionProvider extends BaseCompletionProvider {
         super(service);
     }
 
-    private void addKeywords(TreePath path, String partial, CompletionList list) {
+    public static void addKeywords(TreePath path, String partial, CompletionList list) {
         checkCanceled();
 
         Tree level = findKeywordLevel(path);

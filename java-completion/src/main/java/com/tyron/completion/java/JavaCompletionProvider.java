@@ -87,7 +87,8 @@ public class JavaCompletionProvider extends CompletionProvider {
         JavaCompilerService service = compilerProvider.getCompiler(project, module);
 
         try {
-            return new Completions(service).complete(file, contents, cursor);
+            return new Completions(service)
+                    .complete(file, contents, cursor);
         } catch (Throwable e) {
             if (e instanceof ProcessCanceledException) {
                 throw e;
@@ -95,8 +96,6 @@ public class JavaCompletionProvider extends CompletionProvider {
             if (BuildConfig.DEBUG) {
                 Log.e("JavaCompletionProvider", "Unable to get completions", e);
             }
-            service.close();
-        } finally {
             service.close();
         }
         return CompletionList.EMPTY;

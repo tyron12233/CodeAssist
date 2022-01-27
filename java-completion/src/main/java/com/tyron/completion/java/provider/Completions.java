@@ -63,7 +63,7 @@ public class Completions {
 
         String partial = partialIdentifier(contents.toString(), (int) index);
         CompletionList list = compileAndComplete(file, contents.toString(), partial, index);
-        sort(list.items,partial);
+        sort(list.items, partial);
         return list;
     }
 
