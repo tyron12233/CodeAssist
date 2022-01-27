@@ -183,6 +183,6 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
     private boolean isInside(Tree tree, Pair<Long, Long> find) {
         long start = mPos.getStartPosition(mCompilationUnit, tree);
         long end = mPos.getEndPosition(mCompilationUnit, tree);
-        return  start <= find.first && find.second < end;
+        return  start <= find.first && find.second <= end;
     }
 }
