@@ -105,6 +105,8 @@ public class ActionUtil {
             if (decl != null) {
                 return false;
             }
+
+            return canIntroduceLocalVariable(parent);
         }
 
         if (path.getLeaf() instanceof BlockTree) {
