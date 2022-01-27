@@ -58,6 +58,10 @@ public class ActionUtil {
             return false;
         }
 
+        if (path.getLeaf().getKind() == Tree.Kind.IMPORT) {
+            return false;
+        }
+
         if (path.getLeaf() instanceof SwitchTree) {
             return false;
         }
