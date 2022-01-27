@@ -21,6 +21,7 @@ import com.tyron.completion.model.CompletionList;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
+import org.openjdk.tools.javac.parser.ScannerFactory;
 
 import java.io.File;
 import java.nio.file.Path;

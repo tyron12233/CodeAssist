@@ -117,6 +117,10 @@ public class ReusableCompiler {
         return new Borrow(task, currentContext);
     }
 
+    public ReusableContext getCurrentContext() {
+        return currentContext;
+    }
+
     public class Borrow implements AutoCloseable {
         final JavacTask task;
         boolean closed;
