@@ -543,6 +543,7 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
     }
 
     public void onLongPress(MotionEvent e, boolean doubleTap) {
+        Cursor cursor = mEditor.getCursor();
         if (mEditor.mTextActionPresenter instanceof TextActionPopupWindow) {
             handleLongPressForModifiedTextAction(e);
             return;
@@ -555,6 +556,30 @@ final class EditorTouchEventHandler implements GestureDetector.OnGestureListener
         long res = mEditor.getPointPositionOnScreen(e.getX(), e.getY());
         int line = IntPair.getFirst(res);
         int column = IntPair.getSecond(res);
+
+        if (cursor.isSelected()) {
+            if (line >= cursor.getLeftLine() && line <= cursor.getRightLine()) {
+                if (cursor.getLeftLine() == cursor.getRightLine()) {
+                    if (cursor.getLeftColumn() < column && column < cursor.getRightColumn()) {
+                        if (mEditor.mTextActionPresenter instanceof EditorTextActionWindow) {
+                            EditorTextActionWindow window = ((EditorTextActionWindow) mEditor.mTextActionPresenter);
+                            if (!doubleTap) {
+                                window.onSelectedTextLongClicked(e);
+                            }
+                        }
+                        return;
+                    }
+                } else {
+                    if (mEditor.mTextActionPresenter instanceof EditorTextActionWindow) {
+                        EditorTextActionWindow window = ((EditorTextActionWindow) mEditor.mTextActionPresenter);
+                        if (!doubleTap) {
+                            window.onSelectedTextLongClicked(e);
+                        }
+                    }
+                    return;
+                }
+            }
+        }
         //Find word edges
         int startColumn = column;
         while (startColumn > 0 && isIdentifierPart(mEditor.getText().charAt(line, startColumn - 1))) {
