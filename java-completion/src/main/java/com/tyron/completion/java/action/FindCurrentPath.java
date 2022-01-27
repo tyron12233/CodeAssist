@@ -11,6 +11,7 @@ import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ExpressionStatementTree;
 import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.IdentifierTree;
+import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.LambdaExpressionTree;
 import org.openjdk.source.tree.LiteralTree;
 import org.openjdk.source.tree.MethodInvocationTree;
@@ -53,6 +54,14 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
     public TreePath visitCompilationUnit(CompilationUnitTree compilationUnitTree, Pair<Long, Long> find) {
         mCompilationUnit = compilationUnitTree;
         return super.visitCompilationUnit(compilationUnitTree, find);
+    }
+
+    @Override
+    public TreePath visitImport(ImportTree importTree, Pair<Long, Long> longLongPair) {
+        if (isInside(importTree, longLongPair)) {
+            return getCurrentPath();
+        }
+        return super.visitImport(importTree, longLongPair);
     }
 
     @Override
