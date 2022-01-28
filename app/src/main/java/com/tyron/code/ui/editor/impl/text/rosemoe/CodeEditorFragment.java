@@ -121,7 +121,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         super.onResume();
 
         if (!CompletionEngine.isIndexing()) {
-            mEditor.analyze();
+            analyze();
         }
 
         if (BottomSheetBehavior.STATE_HIDDEN == mMainViewModel.getBottomSheetState().getValue()) {
