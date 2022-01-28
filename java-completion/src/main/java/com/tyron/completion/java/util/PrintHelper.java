@@ -127,7 +127,7 @@ public class PrintHelper {
             DeclaredType declared = (DeclaredType) type;
             if (declared instanceof Type.ClassType) {
                 Type.ClassType classType = (Type.ClassType) declared;
-                if (classType.all_interfaces_field != null) {
+                if (classType.all_interfaces_field != null && !classType.all_interfaces_field.isEmpty()) {
                     Type next = classType.all_interfaces_field.get(0);
                     declared = (DeclaredType) next;
                 }
