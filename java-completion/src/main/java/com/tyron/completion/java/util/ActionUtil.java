@@ -1,10 +1,37 @@
 package com.tyron.completion.java.util;
 
-import static org.openjdk.source.tree.Tree.Kind.*;
+import static org.openjdk.source.tree.Tree.Kind.ANNOTATION;
+import static org.openjdk.source.tree.Tree.Kind.ARRAY_TYPE;
+import static org.openjdk.source.tree.Tree.Kind.BLOCK;
+import static org.openjdk.source.tree.Tree.Kind.CATCH;
+import static org.openjdk.source.tree.Tree.Kind.CLASS;
+import static org.openjdk.source.tree.Tree.Kind.DO_WHILE_LOOP;
+import static org.openjdk.source.tree.Tree.Kind.EXPRESSION_STATEMENT;
+import static org.openjdk.source.tree.Tree.Kind.FOR_LOOP;
+import static org.openjdk.source.tree.Tree.Kind.IDENTIFIER;
+import static org.openjdk.source.tree.Tree.Kind.IF;
+import static org.openjdk.source.tree.Tree.Kind.IMPORT;
+import static org.openjdk.source.tree.Tree.Kind.INTERFACE;
+import static org.openjdk.source.tree.Tree.Kind.LAMBDA_EXPRESSION;
+import static org.openjdk.source.tree.Tree.Kind.MEMBER_SELECT;
+import static org.openjdk.source.tree.Tree.Kind.METHOD;
+import static org.openjdk.source.tree.Tree.Kind.METHOD_INVOCATION;
+import static org.openjdk.source.tree.Tree.Kind.PACKAGE;
+import static org.openjdk.source.tree.Tree.Kind.PARAMETERIZED_TYPE;
+import static org.openjdk.source.tree.Tree.Kind.PARENTHESIZED;
+import static org.openjdk.source.tree.Tree.Kind.PRIMITIVE_TYPE;
+import static org.openjdk.source.tree.Tree.Kind.RETURN;
+import static org.openjdk.source.tree.Tree.Kind.STRING_LITERAL;
+import static org.openjdk.source.tree.Tree.Kind.SWITCH;
+import static org.openjdk.source.tree.Tree.Kind.THROW;
+import static org.openjdk.source.tree.Tree.Kind.TRY;
+import static org.openjdk.source.tree.Tree.Kind.UNARY_MINUS;
+import static org.openjdk.source.tree.Tree.Kind.UNARY_PLUS;
+import static org.openjdk.source.tree.Tree.Kind.WHILE_LOOP;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.common.collect.ImmutableSet;
 import com.tyron.completion.java.rewrite.EditHelper;
 
 import org.openjdk.javax.lang.model.element.Element;
@@ -15,26 +42,18 @@ import org.openjdk.javax.lang.model.type.ExecutableType;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.doctree.ThrowsTree;
-import org.openjdk.source.tree.AnnotationTree;
-import org.openjdk.source.tree.ArrayTypeTree;
 import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.EnhancedForLoopTree;
 import org.openjdk.source.tree.ExpressionStatementTree;
 import org.openjdk.source.tree.ForLoopTree;
-import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.IfTree;
 import org.openjdk.source.tree.ImportTree;
-import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
-import org.openjdk.source.tree.ParameterizedTypeTree;
 import org.openjdk.source.tree.ParenthesizedTree;
-import org.openjdk.source.tree.PrimitiveTypeTree;
 import org.openjdk.source.tree.ReturnTree;
-import org.openjdk.source.tree.SwitchTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.TryTree;
 import org.openjdk.source.tree.UnaryTree;
@@ -50,29 +69,24 @@ import java.util.stream.Collectors;
 
 public class ActionUtil {
 
+    private static final Set<Tree.Kind> DISALLOWED_KINDS_INTRODUCE_LOCAL_VARIABLE =
+            ImmutableSet.of(IMPORT, PACKAGE, CLASS, INTERFACE, METHOD, ANNOTATION, THROW,
+                    WHILE_LOOP, DO_WHILE_LOOP, FOR_LOOP, IF, TRY, CATCH, PARAMETERIZED_TYPE,
+                    UNARY_PLUS, UNARY_MINUS, RETURN
+            );
+    private static final Set<Tree.Kind> CHECK_PARENT_KINDS_INTRODUCE_LOCAL_VARIABLE =
+            ImmutableSet.of(
+                    STRING_LITERAL, ARRAY_TYPE, PARENTHESIZED, MEMBER_SELECT, PRIMITIVE_TYPE,
+                    IDENTIFIER, BLOCK);
+
     public static boolean canIntroduceLocalVariable(TreePath path) {
         if (path == null) {
             return false;
         }
+        Tree.Kind kind = path.getLeaf().getKind();
         TreePath parent = path.getParentPath();
 
-        if (path.getLeaf().getKind() == METHOD) {
-            return false;
-        }
-
-        if (path.getLeaf().getKind() == IMPORT) {
-            return false;
-        }
-
-        if (path.getLeaf().getKind() == SWITCH) {
-            return false;
-        }
-
-        if (path.getLeaf().getKind() == PARAMETERIZED_TYPE) {
-            return false;
-        }
-
-        if (path.getLeaf().getKind() == ANNOTATION) {
+        if (DISALLOWED_KINDS_INTRODUCE_LOCAL_VARIABLE.contains(kind)) {
             return false;
         }
 
@@ -80,31 +94,11 @@ public class ActionUtil {
             return false;
         }
 
-        if (path.getLeaf().getKind() == STRING_LITERAL) {
+        if (CHECK_PARENT_KINDS_INTRODUCE_LOCAL_VARIABLE.contains(kind)) {
             return canIntroduceLocalVariable(parent);
         }
 
-        if (path.getLeaf().getKind() == ARRAY_TYPE) {
-            return ActionUtil.canIntroduceLocalVariable(parent);
-        }
-
-        if (path.getLeaf().getKind() == PARENTHESIZED) {
-            return ActionUtil.canIntroduceLocalVariable(parent);
-        }
-
-        if (path.getLeaf().getKind() == MEMBER_SELECT) {
-            return ActionUtil.canIntroduceLocalVariable(parent);
-        }
-
-        if (path.getLeaf().getKind() == PRIMITIVE_TYPE) {
-            return ActionUtil.canIntroduceLocalVariable(parent);
-        }
-
-        if (path.getLeaf().getKind() == IDENTIFIER) {
-            return ActionUtil.canIntroduceLocalVariable(path.getParentPath());
-        }
-
-        if (path.getLeaf().getKind() == METHOD_INVOCATION) {
+        if (kind == METHOD_INVOCATION) {
             JCTree.JCMethodInvocation methodInvocation = (JCTree.JCMethodInvocation) path.getLeaf();
             // void return type
             if (isVoid(methodInvocation)) {
@@ -116,17 +110,11 @@ public class ActionUtil {
                 return false;
             }
 
-            return canIntroduceLocalVariable(parent);
-        }
-
-        if (path.getLeaf().getKind() == BLOCK) {
-           return canIntroduceLocalVariable(parent);
-        }
-
-        if (path.getLeaf() instanceof UnaryTree) {
-            if (parent.getParentPath().getLeaf() instanceof ForLoopTree) {
-                return false;
+            if (parent.getLeaf().getKind() == EXPRESSION_STATEMENT) {
+                return true;
             }
+
+            return canIntroduceLocalVariable(parent);
         }
 
         if (parent == null) {
@@ -159,11 +147,6 @@ public class ActionUtil {
             }
         }
 
-        // class Class { }
-        if (path.getLeaf() instanceof ClassTree) {
-            return false;
-        }
-
         if (path.getLeaf() instanceof NewClassTree) {
             // run(new Runnable() { });
             if (parent.getLeaf() instanceof MethodInvocationTree) {
@@ -171,16 +154,7 @@ public class ActionUtil {
             }
         }
 
-        // throw ...
-        if (parent.getLeaf() instanceof JCTree.JCThrow) {
-            return false;
-        }
-
-        // return ...
-        if (parent.getLeaf() instanceof ReturnTree) {
-            return false;
-        }
-        return !(parent.getLeaf() instanceof ThrowsTree);
+        return true;
     }
 
     private static boolean isVoid(JCTree.JCMethodInvocation methodInvocation) {
@@ -203,7 +177,7 @@ public class ActionUtil {
         }
         // inside if parenthesis
         if (parent.getLeaf() instanceof ParenthesizedTree) {
-            if (grandParent.getLeaf() instanceof IfTree)  {
+            if (grandParent.getLeaf() instanceof IfTree) {
                 return grandParent;
             }
             if (grandParent.getLeaf() instanceof WhileLoopTree) {
@@ -237,7 +211,8 @@ public class ActionUtil {
         return null;
     }
 
-    public static TypeMirror getReturnType(JavacTask task, TreePath path, ExecutableElement element) {
+    public static TypeMirror getReturnType(JavacTask task, TreePath path,
+                                           ExecutableElement element) {
         if (path.getLeaf() instanceof JCTree.JCNewClass) {
             JCTree.JCNewClass newClass = (JCTree.JCNewClass) path.getLeaf();
             return newClass.type;
@@ -249,10 +224,7 @@ public class ActionUtil {
      * Used to check whether we need to add fully qualified names instead of importing it
      */
     public static boolean needsFqn(CompilationUnitTree root, String className) {
-        return needsFqn(root.getImports().stream()
-                .map(ImportTree::getQualifiedIdentifier)
-                .map(Tree::toString)
-                .collect(Collectors.toSet()), className);
+        return needsFqn(root.getImports().stream().map(ImportTree::getQualifiedIdentifier).map(Tree::toString).collect(Collectors.toSet()), className);
     }
 
     public static boolean needsFqn(Set<String> imports, String className) {
@@ -277,10 +249,7 @@ public class ActionUtil {
             className = className.substring(0, className.indexOf('<'));
         }
 
-        return hasImport(root.getImports().stream()
-                .map(ImportTree::getQualifiedIdentifier)
-                .map(Tree::toString)
-                .collect(Collectors.toSet()), className);
+        return hasImport(root.getImports().stream().map(ImportTree::getQualifiedIdentifier).map(Tree::toString).collect(Collectors.toSet()), className);
     }
 
     public static boolean hasImport(Set<String> importDeclarations, String className) {
@@ -379,11 +348,12 @@ public class ActionUtil {
         if ("<clinit>".equals(methodName)) {
             return null;
         }
-        return  Character.toLowerCase(methodName.charAt(0)) + methodName.substring(1);
+        return Character.toLowerCase(methodName.charAt(0)) + methodName.substring(1);
     }
 
     /**
      * Get all the possible fully qualified names that may be imported
+     *
      * @param type method to scan
      * @return Set of fully qualified names not including the diamond operator
      */
@@ -434,7 +404,9 @@ public class ActionUtil {
         return removeDiamond(fqn);
     }
 
-    public static List<? extends TypeParameterElement> getTypeParameters(JavacTask task, TreePath path, ExecutableElement element) {
+    public static List<? extends TypeParameterElement> getTypeParameters(JavacTask task,
+                                                                         TreePath path,
+                                                                         ExecutableElement element) {
         if (path.getLeaf() instanceof JCTree.JCNewClass) {
             JCTree.JCNewClass newClass = (JCTree.JCNewClass) path.getLeaf();
             //return newClass.getTypeArguments();

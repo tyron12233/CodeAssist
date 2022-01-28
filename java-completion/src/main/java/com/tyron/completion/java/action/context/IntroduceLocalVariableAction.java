@@ -12,6 +12,7 @@ import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
+import com.tyron.completion.java.util.TreeUtil;
 import com.tyron.completion.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.IntroduceLocalVariable;
 import com.tyron.completion.java.rewrite.JavaRewrite;
@@ -22,6 +23,8 @@ import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.type.ErrorType;
 import org.openjdk.javax.lang.model.type.TypeMirror;
+import org.openjdk.source.tree.MethodInvocationTree;
+import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
@@ -71,15 +74,19 @@ public class IntroduceLocalVariableAction extends AnAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        Editor editor = e.getData(CommonDataKeys.EDITOR);
-        TreePath currentPath = e.getData(CommonJavaContextKeys.CURRENT_PATH);
-        File file = e.getData(CommonDataKeys.FILE);
+        Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
+        TreePath currentPath = e.getRequiredData(CommonJavaContextKeys.CURRENT_PATH);
+        File file = e.getRequiredData(CommonDataKeys.FILE);
         JavaCompilerService compiler = e.getRequiredData(CommonJavaContextKeys.COMPILER);
         CompilerContainer cachedContainer = compiler.getCachedContainer();
 
         JavaRewrite rewrite = cachedContainer.get(task -> {
             if (task != null) {
-                return performInternal(task, currentPath, file);
+                TreePath path = currentPath;
+                if (path.getLeaf().getKind() == Tree.Kind.IDENTIFIER && path.getParentPath().getLeaf().getKind() == Tree.Kind.MEMBER_SELECT) {
+                    path = TreeUtil.findParentOfType(path, MethodInvocationTree.class);
+                }
+                return performInternal(task, path, file);
             }
             return null;
         });
