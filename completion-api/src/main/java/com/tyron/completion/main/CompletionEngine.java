@@ -60,9 +60,6 @@ public class CompletionEngine {
                                    int line,
                                    int column,
                                    long index) {
-        if (ProgressManager.getInstance().isRunning()) {
-            ProgressManager.getInstance().setCanceled(true);
-        }
         CompletionList list = new CompletionList();
         list.items = new ArrayList<>();
 

@@ -9,8 +9,6 @@ import com.tyron.common.util.Debouncer;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.completion.progress.ProgressManager;
-import com.tyron.kotlin_completion.completion.CompletionUtilsKt;
 import com.tyron.kotlin_completion.completion.Completions;
 import com.tyron.kotlin_completion.diagnostic.ConvertDiagnosticKt;
 import com.tyron.kotlin_completion.util.AsyncExecutor;
@@ -114,10 +112,10 @@ public class CompletionEngine {
         });
     }
 
-    public CompletableFuture<CompletionList> complete(File file, String contents, String prefix,
-                                                      int line, int column, int cursor) {
+    public CompletionList complete(File file, String contents, String prefix, int line,
+                                   int column, int cursor) {
         if (isIndexing()) {
-            return CompletableFuture.completedFuture(CompletionList.EMPTY);
+            return CompletionList.EMPTY;
         }
 
         if (isIncrementalCompletion(cachedCompletion, file, prefix, line, column)) {
@@ -136,23 +134,18 @@ public class CompletionEngine {
                 }).collect(Collectors.toList());
                 CompletionList completionList = new CompletionList();
                 completionList.items = narrowedList;
-                return CompletableFuture.completedFuture(completionList);
+                return completionList;
             }
         }
 
         debounceLint.cancel();
 
-
-        return async.compute(() -> {
-            Pair<CompiledFile, Integer> recover = recover(file, contents, Recompile.NEVER, cursor);
-            CompletionList completions = new Completions().completions(recover.first, cursor,
-                    sp.getIndex());
-            String partialIdentifier = partialIdentifier(contents, cursor);
-            cachedCompletion = new CachedCompletion(file, line, column, partialIdentifier,
-                    completions);
-            return completions;
-        });
-
+        Pair<CompiledFile, Integer> recover = recover(file, contents, Recompile.NEVER, cursor);
+        CompletionList completions = new Completions().completions(recover.first, cursor,
+                sp.getIndex());
+        String partialIdentifier = partialIdentifier(contents, cursor);
+        cachedCompletion = new CachedCompletion(file, line, column, partialIdentifier, completions);
+        return completions;
     }
 
     private String partialIdentifier(String contents, int end) {

@@ -95,10 +95,7 @@ public class Parser {
 
     public static Parser parseJavaFileObject(Project project, JavaFileObject file) {
         if (needsParse(file)) {
-            Log.d("Parser", "Parsing file " + file.getName());
             loadParse(project, file);
-        } else {
-            Log.d("Parser", "Using cached parse for " + file.getName());
         }
         return cachedParse;
     }

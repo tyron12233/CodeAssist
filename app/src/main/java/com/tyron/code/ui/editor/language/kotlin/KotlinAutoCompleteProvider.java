@@ -14,14 +14,6 @@ import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.CompletionEngine;
 
-import java.nio.channels.ClosedByInterruptException;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
-
-import io.github.rosemoe.sora.data.CompletionItem;
-import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
@@ -40,7 +32,7 @@ public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
 
     @Nullable
     @Override
-    public CompletableFuture<CompletionList> getCompletionList(
+    public CompletionList getCompletionList(
             String prefix, TextAnalyzeResult colors, int line, int column) {
         if (!mPreferences.getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
             return null;

@@ -17,13 +17,8 @@ import kotlin.text.StringsKt;
 public class Completions {
 
     public CompletionList completions(CompiledFile file, int cursor, SymbolIndex index) {
-
         String partial = findPartialIdentifier(file, cursor);
-        Instant start = Instant.now();
-        CompletionList completions = CompletionUtilsKt.completions(file, cursor, index, partial);
-
-        Log.d("Completions", "Completions took " + Duration.between(start, Instant.now()).toMillis() + " ms");
-        return completions;
+        return CompletionUtilsKt.completions(file, cursor, index, partial);
     }
 
     private String findPartialIdentifier(CompiledFile file, int cursor) {

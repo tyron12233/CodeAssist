@@ -198,11 +198,13 @@ fun functionInsertText(desc: FunctionDescriptor, snippetsEnabled: Boolean, name:
 }
 
 
-private fun valueParametersSnippet(parameters: List<ValueParameterDescriptor>) = parameters
-    .asSequence()
-    .filterNot { it.declaresDefaultValue() }
-    .mapIndexed { index, vpd -> "\${${index + 1}:${vpd.name}}" }
-    .joinToString()
+private fun valueParametersSnippet(parameters: List<ValueParameterDescriptor>) = ProgressManager.checkCanceled().apply {
+    parameters
+        .asSequence()
+        .filterNot { it.declaresDefaultValue() }
+        .mapIndexed { index, vpd -> "\${${index + 1}:${vpd.name}}" }
+        .joinToString()
+}
 
 private fun elementCompletionItems(
     file: CompiledFile,
@@ -253,6 +255,7 @@ private fun completionItem(
     surroundingElement: KtElement,
     file: CompiledFile
 ): CompletionItem {
+    ProgressManager.checkCanceled();
     val renderWithSnippets = false
     //surroundingElement !is KtCallableReferenceExpression
     //            && surroundingElement !is KtImportDirective

@@ -17,8 +17,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.code.ui.editor.CompletionItemAdapter;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
+import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -47,6 +49,7 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
     private final CompletionItemAdapter mAdapter;
 
     private MatchThread mPreviousThread;
+    private final List<ProgressIndicator> mIndicators = Collections.synchronizedList(new ArrayList<>());
 
     /**
      * Create a panel instance for the given editor
@@ -314,8 +317,22 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         mLastPrefix = prefix;
         mRequestTime = System.currentTimeMillis();
 
-        mPreviousThread = new MatchThread(mRequestTime, prefix, mEditor, mProvider, this::displayResults);
-        mPreviousThread.start();
+        // cancel previous tasks
+        mIndicators.stream().filter(ProgressIndicator::isRunning)
+                .forEach(ProgressIndicator::cancel);
+
+        ProgressIndicator indicator = new ProgressIndicator();
+        ProgressManager.getInstance().runAsync(() -> {
+            List<CompletionItem> items = mProvider.getAutoCompleteItems(prefix,
+                    mEditor.getTextAnalyzeResult(), mEditor.getCursor().getLeftLine(),
+                    mEditor.getCursor().getLeftColumn());
+            displayResults(items, mRequestTime);
+        }, o -> {
+            mIndicators.remove(o);
+            Log.d("CompletionThread", "Process has been canceled");
+        }, indicator);
+
+        mIndicators.add(indicator);
     }
 
     public void setMaxWidth(int maxWidth) {

@@ -61,25 +61,20 @@ public class JavaCompletionProvider extends CompletionProvider {
             }
         }
 
-        try {
-            CompletionList complete = complete(params.getProject(),
-                    (JavaModule) params.getModule(),
-                    params.getFile(),
-                    params.getContents(),
-                    params.getIndex());
+        CompletionList complete = complete(params.getProject(),
+                (JavaModule) params.getModule(),
+                params.getFile(),
+                params.getContents(),
+                params.getIndex());
 
-            String newPrefix = params.getPrefix();
-            if (params.getPrefix().contains(".")) {
-                newPrefix = partialIdentifier(params.getPrefix(), params.getPrefix().length());
-            }
-
-            mCachedCompletion = new CachedCompletion(params.getFile(), params.getLine(),
-                    params.getColumn(), newPrefix, complete);
-            return complete;
-        } catch (ProcessCanceledException e) {
-            mCachedCompletion = null;
-            return CompletionList.EMPTY;
+        String newPrefix = params.getPrefix();
+        if (params.getPrefix().contains(".")) {
+            newPrefix = partialIdentifier(params.getPrefix(), params.getPrefix().length());
         }
+
+        mCachedCompletion = new CachedCompletion(params.getFile(), params.getLine(),
+                params.getColumn(), newPrefix, complete);
+        return complete;
     }
 
     public CompletionList complete(

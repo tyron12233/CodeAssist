@@ -2,7 +2,6 @@ package com.tyron.code.ui.editor.language.java;
 
 import android.content.SharedPreferences;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.preference.PreferenceManager;
 
@@ -14,15 +13,8 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.completion.main.CompletionEngine;
 import com.tyron.completion.model.CompletionList;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
-import io.github.rosemoe.sora.data.CompletionItem;
-import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
 import io.github.rosemoe.sora.text.TextAnalyzeResult;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
@@ -39,7 +31,7 @@ public class JavaAutoCompleteProvider extends AbstractAutoCompleteProvider {
 
     @Nullable
     @Override
-    public CompletableFuture<CompletionList> getCompletionList(
+    public CompletionList getCompletionList(
             String prefix, TextAnalyzeResult colors, int line, int column) {
         if (!mPreferences.getBoolean("code_editor_completion", true)) {
             return null;
@@ -57,7 +49,7 @@ public class JavaAutoCompleteProvider extends AbstractAutoCompleteProvider {
             Optional<CharSequence> content = currentModule.getFileManager()
                     .getFileContent(mEditor.getCurrentFile());
             if (content.isPresent()) {
-                return CompletableFuture.supplyAsync(() -> CompletionEngine.getInstance()
+                 return CompletionEngine.getInstance()
                         .complete(project,
                                 currentModule,
                                 mEditor.getCurrentFile(),
@@ -65,7 +57,7 @@ public class JavaAutoCompleteProvider extends AbstractAutoCompleteProvider {
                                 prefix,
                                 line,
                                 column,
-                                mEditor.getCursor().getLeft()));
+                                mEditor.getCursor().getLeft());
             }
         }
         return null;
