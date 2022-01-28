@@ -202,7 +202,7 @@ public class CompletionItemFactory {
 
             CompletionItem item = new CompletionItem();
             item.label = getMethodLabel(element, executableType);
-            item.detail = PrintHelper.printType(element.getReturnType()).toString();
+            item.detail = PrintHelper.printType(element.getReturnType());
             item.commitText = text;
             item.cursorOffset = item.commitText.length();
             item.iconKind = DrawableKind.Method;

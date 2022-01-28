@@ -48,7 +48,7 @@ public class PrintHelper {
             buf.append("protected ");
         }
 
-        buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(" ");
+        buf.append(PrintHelper.printType(parameterizedType.getReturnType())).append(" ");
 
         buf.append(method.getSimpleName()).append("(");
         if (source == null) {
@@ -72,7 +72,7 @@ public class PrintHelper {
             buf.append("protected ");
         }
 
-        buf.append(EditHelper.printType(parameterizedType.getReturnType())).append(" ");
+        buf.append(PrintHelper.printType(parameterizedType.getReturnType())).append(" ");
 
         buf.append(method.getSimpleName()).append("(");
         if (source == null) {
