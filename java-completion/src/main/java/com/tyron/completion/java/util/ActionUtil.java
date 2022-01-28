@@ -70,7 +70,7 @@ import java.util.stream.Collectors;
 public class ActionUtil {
 
     private static final Set<Tree.Kind> DISALLOWED_KINDS_INTRODUCE_LOCAL_VARIABLE =
-            ImmutableSet.of(IMPORT, PACKAGE, CLASS, INTERFACE, METHOD, ANNOTATION, THROW,
+            ImmutableSet.of(IMPORT, PACKAGE, INTERFACE, METHOD, ANNOTATION, THROW,
                     WHILE_LOOP, DO_WHILE_LOOP, FOR_LOOP, IF, TRY, CATCH, PARAMETERIZED_TYPE,
                     UNARY_PLUS, UNARY_MINUS, RETURN, LAMBDA_EXPRESSION
             );

@@ -12,8 +12,10 @@ import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.action.FindCurrentPath;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.java.util.ElementUtil;
 import com.tyron.completion.java.util.JavaParserTypesUtil;
 import com.tyron.completion.java.util.JavaParserUtil;
+import com.tyron.completion.java.util.PrintHelper;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
@@ -50,8 +52,7 @@ public class IntroduceLocalVariable implements JavaRewrite {
         return container.get(task -> {
             List<TextEdit> edits = new ArrayList<>();
             Range range = new Range(position, position);
-            Type variableType = EditHelper.printType(type, true);
-            variableType = JavaParserUtil.getFirstType(variableType);
+            String variableType = PrintHelper.printType(type, false);
             String variableName = ActionUtil.guessNameFromMethodName(methodName);
             if (variableName == null) {
                 variableName = ActionUtil.guessNameFromType(type);
@@ -62,12 +63,12 @@ public class IntroduceLocalVariable implements JavaRewrite {
             while (containsVariableAtScope(variableName, task)) {
                 variableName = getVariableName(variableName);
             }
-            String typeName = JavaParserTypesUtil.getName(variableType, name -> false);
-            TextEdit edit = new TextEdit(range, typeName + " " + variableName + " = ");
+
+            TextEdit edit = new TextEdit(range, variableType + " " + variableName + " = ");
             edits.add(edit);
 
             if (!type.getKind().isPrimitive()) {
-                List<String> classes = JavaParserUtil.getClassNames(variableType);
+                List<String> classes = ElementUtil.getAllClasses(type);
                 for (String aClass : classes) {
                     if (!ActionUtil.hasImport(task.root(), aClass)) {
                         AddImport addImport = new AddImport(file.toFile(), aClass);

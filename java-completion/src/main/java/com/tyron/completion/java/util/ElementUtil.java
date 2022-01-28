@@ -12,13 +12,37 @@ import org.openjdk.javax.lang.model.element.Modifier;
 import org.openjdk.javax.lang.model.element.TypeElement;
 import org.openjdk.javax.lang.model.element.VariableElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
+import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.source.tree.Scope;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
 public class ElementUtil {
+
+    /**
+     * Gets all the fully qualified name of classes that can be found on this type
+     * @param typeMirror The type to search
+     * @return list of fully qualified class names
+     */
+    public static List<String> getAllClasses(TypeMirror typeMirror) {
+        TypeKind kind = typeMirror.getKind();
+        if (kind == TypeKind.DECLARED) {
+            List<String> classes = new ArrayList<>();
+            DeclaredType declaredType = (DeclaredType) typeMirror;
+            classes.add(declaredType.asElement().toString());
+
+            for (TypeMirror argument : declaredType.getTypeArguments()) {
+                classes.addAll(getAllClasses(argument));
+            }
+
+            return classes;
+        }
+        return Collections.emptyList();
+    }
 
     public static String simpleType(TypeMirror mirror) {
         return simpleClassName(mirror.toString());

@@ -22,6 +22,7 @@ import org.openjdk.javax.lang.model.type.ArrayType;
 import org.openjdk.javax.lang.model.type.DeclaredType;
 import org.openjdk.javax.lang.model.type.ExecutableType;
 import org.openjdk.javax.lang.model.type.PrimitiveType;
+import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
 import org.openjdk.javax.lang.model.type.TypeVariable;
 import org.openjdk.javax.tools.JavaFileObject;
@@ -53,7 +54,8 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
         MemberSelectTree select = (MemberSelectTree) path.getLeaf();
         path = new TreePath(path, select.getExpression());
         Trees trees = Trees.instance(task.task);
-        boolean isStatic = trees.getElement(path) instanceof TypeElement;
+        Element element = trees.getElement(path);
+        boolean isStatic = element instanceof TypeElement;
         Scope scope = trees.getScope(path);
         TypeMirror type = trees.getTypeMirror(path);
 
