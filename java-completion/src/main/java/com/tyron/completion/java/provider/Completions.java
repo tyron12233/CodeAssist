@@ -39,7 +39,7 @@ import me.xdrop.fuzzywuzzy.FuzzySearch;
  */
 public class Completions {
 
-    public static final int MAX_COMPLETION_ITEMS = 70;
+    public static final int MAX_COMPLETION_ITEMS = 300;
 
     private static final String TAG = Completions.class.getSimpleName();
 
