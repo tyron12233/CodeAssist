@@ -2,6 +2,8 @@ package com.tyron.resolver.model;
 
 import androidx.annotation.NonNull;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 public class Dependency {
@@ -13,6 +15,14 @@ public class Dependency {
         }
         return new Dependency(names[0], names[1], names[2]);
     }
+
+    private String artifactId;
+    private String groupId;
+    private String versionName;
+    private String scope;
+    private String type;
+
+    private final List<Dependency> excludes = new ArrayList<>(1);
 
     public Dependency() {
 
@@ -64,12 +74,6 @@ public class Dependency {
         this.versionName = versionName;
     }
 
-    private String artifactId;
-    private String groupId;
-    private String versionName;
-    private String scope;
-    private String type;
-
     @NonNull
     @Override
     public String toString() {
@@ -79,6 +83,7 @@ public class Dependency {
     public String getType() {
         return type;
     }
+
     public void setType(String type) {
         this.type = type;
     }
@@ -89,6 +94,14 @@ public class Dependency {
 
     public void setScope(String scope) {
         this.scope = scope;
+    }
+
+    public List<Dependency> getExcludes() {
+        return excludes;
+    }
+
+    public void addExclude(Dependency dependency) {
+        excludes.add(dependency);
     }
 
     @Override

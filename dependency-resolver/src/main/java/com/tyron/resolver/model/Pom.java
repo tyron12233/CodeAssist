@@ -17,6 +17,7 @@ public class Pom {
     private String packaging;
 
     private List<Dependency> dependencies;
+    private List<Dependency> excludes;
 
     public Pom() {
 
@@ -69,8 +70,19 @@ public class Pom {
         return dependencies;
     }
 
+    public List<Dependency> getExcludes() {
+        if (excludes == null) {
+            return Collections.emptyList();
+        }
+        return excludes;
+    }
+
     public void setDependencies(List<Dependency> dependencies) {
         this.dependencies = dependencies;
+    }
+
+    public void setExcludes(List<Dependency> excludes) {
+        this.excludes = excludes;
     }
 
     @Override
@@ -100,6 +112,7 @@ public class Pom {
         return path + "/" + artifact + "/" + versionName;
     }
 
+    @NonNull
     @Override
     public String toString() {
         return getDeclarationString();
@@ -111,5 +124,12 @@ public class Pom {
 
     public void setPackaging(String packaging) {
         this.packaging = packaging;
+    }
+
+    public void addExcludes(List<Dependency> excludes) {
+        if (this.excludes == null) {
+            this.excludes = new ArrayList<>();
+        }
+        this.excludes.addAll(excludes);
     }
 }

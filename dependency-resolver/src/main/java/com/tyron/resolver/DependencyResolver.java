@@ -1,5 +1,7 @@
 package com.tyron.resolver;
 
+import android.text.TextUtils;
+
 import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
 import com.tyron.resolver.repository.PomRepository;
@@ -10,6 +12,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class DependencyResolver {
@@ -42,6 +45,7 @@ public class DependencyResolver {
             }
             Pom pom = repository.getPom(dependency.toString());
             if (pom != null) {
+                pom.setExcludes(dependency.getExcludes());
                 poms.add(pom);
             } else {
                 if (mListener != null) {
@@ -82,8 +86,27 @@ public class DependencyResolver {
             mListener.onResolve("Resolving " + pom);
         }
 
+        List<Dependency> excludes = pom.getExcludes();
+
         for (Dependency dependency : pom.getDependencies()) {
             if ("test".equals(dependency.getScope())) {
+                continue;
+            }
+
+            boolean excluded = excludes.stream().filter(Objects::nonNull).anyMatch(ex -> {
+                if (!ex.getGroupId().equals(dependency.getGroupId())) {
+                    return false;
+                }
+                if (!ex.getArtifactId().equals(dependency.getArtifactId())) {
+                    return false;
+                }
+                if (TextUtils.isEmpty(ex.getVersionName())) {
+                    return true;
+                }
+                return ex.getVersionName().equals(dependency.getVersionName());
+            });
+
+            if (excluded) {
                 continue;
             }
 
@@ -95,6 +118,7 @@ public class DependencyResolver {
                 continue;
             }
             if (!resolvedPom.equals(pom)) {
+                resolvedPom.addExcludes(excludes);
                 resolve(resolvedPom);
             }
         }
