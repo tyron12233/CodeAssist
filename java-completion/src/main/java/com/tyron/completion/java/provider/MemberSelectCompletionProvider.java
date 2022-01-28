@@ -69,7 +69,7 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
             return completePrimitiveMemberSelect(task, scope, (PrimitiveType) type, isStatic,
                     partial, endsWithParen);
         } else {
-            return new CompletionList();
+            return CompletionList.EMPTY;
         }
     }
 
@@ -89,7 +89,7 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
         checkCanceled();
 
         if (isStatic) {
-            return new CompletionList();
+            return CompletionList.EMPTY;
         } else {
             CompletionList list = new CompletionList();
             list.items.add(keyword("length"));
@@ -124,6 +124,8 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
         List<CompletionItem> list = new ArrayList<>();
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         for (Element member : task.task.getElements().getAllMembers(typeElement)) {
+            checkCanceled();
+
             if (list.size() >= Completions.MAX_COMPLETION_ITEMS) {
                 cl.isIncomplete = true;
                 break;

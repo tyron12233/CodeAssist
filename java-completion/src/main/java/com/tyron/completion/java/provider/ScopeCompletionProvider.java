@@ -53,6 +53,8 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
         };
 
         for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
+            checkCanceled();
+
             if (list.size() >= Completions.MAX_COMPLETION_ITEMS) {
                 completionList.isIncomplete = true;
                 break;

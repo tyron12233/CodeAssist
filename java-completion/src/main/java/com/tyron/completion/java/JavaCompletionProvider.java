@@ -15,7 +15,6 @@ import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.progress.ProcessCanceledException;
-import com.tyron.completion.progress.ProgressManager;
 
 import java.io.File;
 import java.util.Comparator;
@@ -45,27 +44,21 @@ public class JavaCompletionProvider extends CompletionProvider {
         checkCanceled();
 
         if (isIncrementalCompletion(mCachedCompletion, params)) {
-            String partial = partialIdentifier(params.getPrefix(),
-                    params.getPrefix().length());
+            String partial = partialIdentifier(params.getPrefix(), params.getPrefix().length());
             CompletionList cachedList = mCachedCompletion.getCompletionList();
             if (!cachedList.items.isEmpty()) {
                 List<CompletionItem> narrowedList =
                         cachedList.items.stream()
                                 .sorted(Comparator.comparingInt((CompletionItem it) -> getRatio(it, partial)).reversed())
                                 .collect(Collectors.toList());
-                if (!narrowedList.isEmpty() && getRatio(narrowedList.get(0), partial) >= 80) {
-                    CompletionList completionList = new CompletionList();
-                    completionList.items = narrowedList;
-                    return completionList;
-                }
+                CompletionList completionList = new CompletionList();
+                completionList.items = narrowedList;
+                return completionList;
             }
         }
 
-        CompletionList complete = complete(params.getProject(),
-                (JavaModule) params.getModule(),
-                params.getFile(),
-                params.getContents(),
-                params.getIndex());
+        CompletionList complete = complete(params.getProject(), (JavaModule) params.getModule(),
+                params.getFile(), params.getContents(), params.getIndex());
 
         String newPrefix = params.getPrefix();
         if (params.getPrefix().contains(".")) {
@@ -77,15 +70,14 @@ public class JavaCompletionProvider extends CompletionProvider {
         return complete;
     }
 
-    public CompletionList complete(
-            Project project, JavaModule module, File file, String contents, long cursor) {
+    public CompletionList complete(Project project, JavaModule module, File file, String contents
+            , long cursor) {
         JavaCompilerProvider compilerProvider =
                 CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
         JavaCompilerService service = compilerProvider.getCompiler(project, module);
 
         try {
-            return new Completions(service)
-                    .complete(file, contents, cursor);
+            return new Completions(service).complete(file, contents, cursor);
         } catch (Throwable e) {
             if (e instanceof ProcessCanceledException) {
                 throw e;
