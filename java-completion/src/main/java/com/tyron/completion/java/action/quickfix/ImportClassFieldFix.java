@@ -64,7 +64,7 @@ public class ImportClassFieldFix extends AnAction {
             return;
         }
 
-        String simpleName = String.valueOf(diagnosticSourceUnwrapper.d.getArgs()[1]);
+        String simpleName = String.valueOf(diagnosticSourceUnwrapper.d.getArgs()[0]);
         List<String> classNames = new ArrayList<>();
         for (String qualifiedName : compiler.publicTopLevelTypes()) {
             if (qualifiedName.endsWith("." + simpleName)) {
