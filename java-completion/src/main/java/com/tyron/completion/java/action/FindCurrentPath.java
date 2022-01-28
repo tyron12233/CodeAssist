@@ -8,6 +8,7 @@ import com.tyron.completion.java.FindNewTypeDeclarationAt;
 import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.ErroneousTree;
 import org.openjdk.source.tree.ExpressionStatementTree;
 import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.IdentifierTree;
@@ -26,6 +27,8 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.TreePathScanner;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.tree.JCTree;
+
+import java.util.List;
 
 /**
  * Scanner to retrieve the current {@link TreePath} given the cursor position each visit methods
@@ -181,6 +184,18 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
         }
 
         return null;
+    }
+
+    @Override
+    public TreePath visitErroneous(ErroneousTree t, Pair<Long, Long> find) {
+        List<? extends Tree> errorTrees = t.getErrorTrees();
+        for (Tree error : errorTrees) {
+            TreePath scan = super.scan(error, find);
+            if (scan != null) {
+                return scan;
+            }
+        }
+        return super.visitErroneous(t, find);
     }
 
     @Override
