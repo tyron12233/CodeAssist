@@ -107,6 +107,11 @@ public class IntroduceLocalVariableAction extends AnAction {
                     .getTypeElement("java.lang.Object")
                     .asType();
         }
+
+        if (element == null) {
+            return null;
+        }
+
         if (typeMirror != null) {
             return rewrite(typeMirror, trees, path, file, element.getSimpleName().toString());
         }
