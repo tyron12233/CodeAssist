@@ -2,6 +2,7 @@ package com.tyron.completion.java.rewrite;
 
 import static com.tyron.completion.java.patterns.JavacTreePatterns.classTree;
 import static com.tyron.completion.java.patterns.JavacTreePatterns.method;
+import static com.tyron.completion.java.patterns.JavacTreePatterns.tree;
 
 import androidx.annotation.NonNull;
 
@@ -24,6 +25,7 @@ import com.tyron.completion.java.patterns.ClassTreePattern;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.JavaParserTypesUtil;
 import com.tyron.completion.java.util.JavaParserUtil;
+import com.tyron.completion.java.util.TreeUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -46,6 +48,7 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.VariableTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
+import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.code.Symbol;
 import org.openjdk.tools.javac.tree.JCTree;
@@ -332,11 +335,12 @@ public class EditHelper {
         context.put("trees", trees);
         context.put("root", root);
         context.put("elements", task.getElements());
-        if (INSIDE_METHOD.accepts(leaf, context)) {
-            leaf = trees.getPath(root, leaf)
-                    .getParentPath()
-                    .getParentPath()
-                    .getLeaf();
+        if (tree().inside(NewClassTree.class).accepts(leaf, context)) {
+            TreePath parent = TreeUtil.findParentOfType(trees.getPath(root, leaf),
+                    NewClassTree.class);
+            if (parent != null) {
+                leaf = parent.getLeaf();
+            }
         }
         return indentInternal(task, root, leaf);
     }
@@ -354,11 +358,10 @@ public class EditHelper {
             String contents = root.getSourceFile().getCharContent(true).toString();
             String[] split = contents.split("\n");
             String lineString = split[(int) line - 1];
-            String indentString = lineString.substring(0, (int) column);
 
             int newIndent = 0;
             int spaceCount = 0;
-            char[] chars = indentString.toCharArray();
+            char[] chars = lineString.toCharArray();
             for (char c : chars) {
                 if (c == '\t') {
                     newIndent++;
@@ -374,8 +377,8 @@ public class EditHelper {
                 }
             }
             return newIndent;
-        } catch (IOException e) {
-            // ignored
+        } catch (Throwable e) {
+            // ignored, use the old indent
         } return indent;
     }
 
