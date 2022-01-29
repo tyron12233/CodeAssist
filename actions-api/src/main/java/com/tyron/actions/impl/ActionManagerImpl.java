@@ -27,8 +27,6 @@ public class ActionManagerImpl extends ActionManager {
     private final Map<String, AnAction> mIdToAction = new TreeMap<>();
     private final Map<Object, String> mActionToId = new HashMap<>();
 
-    private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
-
     @Override
     public void fillMenu(DataContext context, Menu menu, String place, boolean isContext, boolean isToolbar) {
         // Inject values

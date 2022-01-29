@@ -56,6 +56,7 @@ import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.TextEdit;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.kotlin_completion.CompiledFile;
 import com.tyron.kotlin_completion.action.CommonKotlinKeys;
 
@@ -423,21 +424,23 @@ public class CodeEditorFragment extends Fragment implements Savable,
             return;
         }
         if (mCurrentFile.exists()) {
-            String oldContents = "";
-            try {
-                oldContents = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            if (oldContents.equals(mEditor.getText().toString())) {
-                return;
-            }
+            ProgressManager.getInstance().runNonCancelableAsync(() -> {
+                String oldContents = "";
+                try {
+                    oldContents = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                if (oldContents.equals(mEditor.getText().toString())) {
+                    return;
+                }
 
-            try {
-                FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString());
-            } catch (IOException e) {
-                // ignored
-            }
+                try {
+                    FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(), StandardCharsets.UTF_8);
+                } catch (IOException e) {
+                    // ignored
+                }
+            });
         }
     }
 

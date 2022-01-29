@@ -57,6 +57,14 @@ public class ProgressManager {
         });
     }
 
+    /**
+     * Run an asynchronous operation that is not cancelable.
+     * @param runnable The code to run
+     */
+    public void runNonCancelableAsync(Runnable runnable) {
+        mPool.execute(runnable);
+    }
+
     private void doCheckCanceled() {
         ProgressIndicator indicator = mThreadToIndicator.get(Thread.currentThread());
         if (indicator != null) {
