@@ -9,8 +9,8 @@ android {
         applicationId "com.tyron.code"
         minSdkVersion 26
         targetSdkVersion 31
-        versionCode 7
-        versionName "0.2.3 ALPHA"
+        versionCode 8
+        versionName "0.2.4 ALPHA"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
