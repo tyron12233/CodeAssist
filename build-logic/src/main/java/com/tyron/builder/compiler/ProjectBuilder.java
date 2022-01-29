@@ -30,19 +30,25 @@ public class ProjectBuilder {
             module.open();
             module.index();
 
+            Builder<? extends Module> builder;
+
             String moduleType = module.getSettings().getString(ModuleSettings.MODULE_TYPE,
                     "android_app");
             switch (Objects.requireNonNull(moduleType)) {
                 case "library":
-                    JarBuilder jarBuilder = new JarBuilder((JavaModule) module, mLogger);
-                    jarBuilder.build(type);
+                    builder = new JarBuilder((JavaModule) module, mLogger);
                     break;
+                default:
                 case "android_app":
-                    AndroidAppBuilder androidAppBuilder =
-                            new AndroidAppBuilder((AndroidModule) module, mLogger);
-                    androidAppBuilder.build(type);
+                    if (type == BuildType.AAB) {
+                        builder = new AndroidAppBundleBuilder((AndroidModule) module, mLogger);
+                    } else {
+                        builder = new AndroidAppBuilder((AndroidModule) module, mLogger);
+                    }
                     break;
             }
+
+            builder.build(type);
         }
     }
 
