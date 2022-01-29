@@ -16,6 +16,8 @@ public class Pom {
     private String versionName;
     private String packaging;
 
+    private boolean userDefined;
+
     private List<Dependency> dependencies;
     private List<Dependency> excludes;
 
@@ -120,6 +122,14 @@ public class Pom {
 
     public String getPackaging() {
         return packaging;
+    }
+
+    public void setUserDefined(boolean val) {
+        userDefined = val;
+    }
+
+    public boolean isUserDefined() {
+        return userDefined;
     }
 
     public void setPackaging(String packaging) {

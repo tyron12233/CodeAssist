@@ -8,6 +8,7 @@ import com.tyron.builder.model.Library;
 import java.io.File;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public interface JavaModule extends Module {
 
@@ -44,7 +45,7 @@ public interface JavaModule extends Module {
      * @return The fully qualified name of all classes in this projects including its
      * libraries
      */
-    List<String> getAllClasses();
+    Set<String> getAllClasses();
 
     /**
      * @return The resources directory of the project. Note that

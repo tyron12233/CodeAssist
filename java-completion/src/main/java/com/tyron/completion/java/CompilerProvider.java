@@ -17,7 +17,7 @@ public interface CompilerProvider {
 
     Set<String> imports();
     
-    List<String> publicTopLevelTypes();
+    Set<String> publicTopLevelTypes();
 
     List<String> packagePrivateTopLevelTypes(String packageName);
 

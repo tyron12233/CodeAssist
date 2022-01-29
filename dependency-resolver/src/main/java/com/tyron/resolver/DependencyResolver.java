@@ -46,6 +46,7 @@ public class DependencyResolver {
             Pom pom = repository.getPom(dependency.toString());
             if (pom != null) {
                 pom.setExcludes(dependency.getExcludes());
+                pom.setUserDefined(true);
                 poms.add(pom);
             } else {
                 if (mListener != null) {
@@ -69,16 +70,20 @@ public class DependencyResolver {
 
     private void resolve(Pom pom) {
         if (resolvedPoms.containsKey(pom)) {
-            String resolvedVersion = resolvedPoms.get(pom);
-            String thisVersion = pom.getVersionName();
-            int result = getHigherVersion(resolvedVersion, thisVersion);
-            if (result == 0) {
-                return;
-            }
-            if (result > 0) {
-                return;
-            } else {
+            if (pom.isUserDefined()) {
                 resolvedPoms.remove(pom);
+            } else {
+                String resolvedVersion = resolvedPoms.get(pom);
+                String thisVersion = pom.getVersionName();
+                int result = getHigherVersion(resolvedVersion, thisVersion);
+                if (result == 0) {
+                    return;
+                }
+                if (result > 0) {
+                    return;
+                } else {
+                    resolvedPoms.remove(pom);
+                }
             }
         }
 

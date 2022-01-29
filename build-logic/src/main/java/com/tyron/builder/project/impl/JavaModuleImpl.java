@@ -85,8 +85,8 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public List<String> getAllClasses() {
-        List<String> classes = new ArrayList<>();
+    public Set<String> getAllClasses() {
+        Set<String> classes = new HashSet<>();
         classes.addAll(mJavaFiles.keySet());
         classes.addAll(mClassFiles.keySet());
         return classes;

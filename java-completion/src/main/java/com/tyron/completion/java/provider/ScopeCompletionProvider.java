@@ -41,7 +41,6 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
 
         CompletionList completionList = new CompletionList();
         Trees trees = Trees.instance(task.task);
-        Set<CompletionItem> list = new HashSet<>();
         Scope scope = trees.getScope(path);
 
         Predicate<CharSequence> filter = p1 -> {
@@ -52,29 +51,30 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
             return FuzzySearch.partialRatio(label, partial) >= 70;
         };
 
+        TreePath parentPath = path.getParentPath().getParentPath();
+        Tree parentLeaf = parentPath.getLeaf();
+
         for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
             checkCanceled();
 
-            if (list.size() >= Completions.MAX_COMPLETION_ITEMS) {
+            if (completionList.items.size() >= Completions.MAX_COMPLETION_ITEMS) {
                 completionList.isIncomplete = true;
                 break;
             }
+
             if (element.getKind() == ElementKind.METHOD) {
                 ExecutableElement executableElement = (ExecutableElement) element;
-                TreePath parentPath = path.getParentPath().getParentPath();
-                Tree parentLeaf = parentPath.getLeaf();
                 if (parentLeaf.getKind() == Tree.Kind.CLASS && !ElementUtil.isFinal(executableElement)) {
-                    list.addAll(overridableMethod(task, parentPath,
+                    completionList.items.addAll(overridableMethod(task, parentPath,
                             Collections.singletonList(executableElement), endsWithParen));
                 } else {
-                    list.addAll(method(task, Collections.singletonList(executableElement),
+                    completionList.items.addAll(method(task, Collections.singletonList(executableElement),
                             endsWithParen, false, (ExecutableType) executableElement.asType()));
                 }
             } else {
-                list.add(item(element));
+                completionList.items.add(item(element));
             }
         }
-        completionList.items.addAll(list);
         return completionList;
     }
 }

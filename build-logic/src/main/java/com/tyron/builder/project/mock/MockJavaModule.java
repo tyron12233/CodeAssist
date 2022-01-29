@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Used for testing, java files can be added manually and
@@ -91,8 +92,8 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public List<String> getAllClasses() {
-        return Collections.emptyList();
+    public Set<String> getAllClasses() {
+        return Collections.emptySet();
     }
 
     @NonNull

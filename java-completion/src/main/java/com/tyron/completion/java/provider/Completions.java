@@ -11,6 +11,7 @@ import android.util.Log;
 
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.common.util.StringSearch;
+import com.tyron.completion.java.action.FindCurrentPath;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
@@ -89,7 +90,7 @@ public class Completions {
         checkCanceled();
         CompilerContainer container = compiler.compile(Collections.singletonList(source));
         return container.get(task -> {
-            TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
+            TreePath path = new FindCurrentPath(task.task).scan(task.root(), cursor);
             return getCompletionList(task, path, partial, endsWithParen);
         });
     }

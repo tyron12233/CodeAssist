@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
@@ -79,8 +80,8 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     }
 
     @Override
-    public List<String> getAllClasses() {
-        List<String> classes = super.getAllClasses();
+    public Set<String> getAllClasses() {
+        Set<String> classes = super.getAllClasses();
         classes.addAll(mKotlinFiles.keySet());
         return classes;
     }
