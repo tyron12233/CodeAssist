@@ -127,18 +127,8 @@ public class PackageTask extends Task<AndroidModule> {
             }
 
             File resourcesDir = getModule().getResourcesDir();
-            String resourcesPath = resourcesDir.getAbsolutePath();
-            File[] files = resourcesDir.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    String path = file.getAbsolutePath();
-                    String zipPath = path.substring(resourcesPath.length() + 1);
-                    if (file.isDirectory()) {
-                        builder.addSourceFolder(file);
-                    } else {
-                        builder.addFile(file, zipPath);
-                    }
-                }
+            if (resourcesDir.exists()) {
+                builder.addSourceFolder(resourcesDir);
             }
 
             builder.sealApk();
