@@ -2,19 +2,15 @@ package com.tyron.completion.java.action;
 
 import android.util.Pair;
 
-import com.android.tools.r8.graph.P;
-import com.tyron.completion.java.FindNewTypeDeclarationAt;
-
 import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ErroneousTree;
-import org.openjdk.source.tree.ExpressionStatementTree;
-import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.LambdaExpressionTree;
 import org.openjdk.source.tree.LiteralTree;
+import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
@@ -54,7 +50,8 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
     }
 
     @Override
-    public TreePath visitCompilationUnit(CompilationUnitTree compilationUnitTree, Pair<Long, Long> find) {
+    public TreePath visitCompilationUnit(CompilationUnitTree compilationUnitTree, Pair<Long,
+            Long> find) {
         mCompilationUnit = compilationUnitTree;
         return super.visitCompilationUnit(compilationUnitTree, find);
     }
@@ -106,6 +103,14 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
             }
         }
         return null;
+    }
+
+    @Override
+    public TreePath visitMemberSelect(MemberSelectTree t, Pair<Long, Long> find) {
+        if (isInside(t, find)) {
+            return getCurrentPath();
+        }
+        return super.visitMemberSelect(t, find);
     }
 
     @Override
@@ -195,7 +200,7 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
                 return scan;
             }
         }
-        return super.visitErroneous(t, find);
+        return null;
     }
 
     @Override
@@ -207,6 +212,6 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
     private boolean isInside(Tree tree, Pair<Long, Long> find) {
         long start = mPos.getStartPosition(mCompilationUnit, tree);
         long end = mPos.getEndPosition(mCompilationUnit, tree);
-        return  start <= find.first && find.second <= end;
+        return start <= find.first && find.second <= end;
     }
 }

@@ -16,6 +16,7 @@ import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.compiler.ParseTask;
+import com.tyron.completion.java.util.FileContentFixer;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
@@ -54,13 +55,13 @@ public class Completions {
         checkCanceled();
 
         ParseTask task = compiler.parse(file.toPath(), fileContents);
-        StringBuilder contents;
+        CharSequence contents;
         try {
             contents = new PruneMethodBodies(task.task).scan(task.root, index);
-            int end = StringSearch.endOfLine(contents, (int) index);
-            contents.insert(end, ';');
+            contents = new FileContentFixer(compiler.compiler.getCurrentContext())
+                    .fixFileContent(contents);
         } catch (IndexOutOfBoundsException e) {
-            Log.w(TAG, "Unable to insert semicolon at the end of line, skipping completion", e);
+            Log.w(TAG, "Unable to fix file content", e);
             return new CompletionList();
         }
 
