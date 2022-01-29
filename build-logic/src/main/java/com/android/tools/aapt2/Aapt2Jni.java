@@ -1,5 +1,7 @@
 package com.android.tools.aapt2;
 
+import android.text.TextUtils;
+
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.common.util.BinaryExecutor;
@@ -87,9 +89,11 @@ public class Aapt2Jni {
         if (path != null) {
             wrapper.setSource(new File(path));
         }
-        wrapper.setLineNumber(line);
-        wrapper.setEndLine((int) line);
-        wrapper.setStartLine((int) line);
+        if (line != -1) {
+            wrapper.setLineNumber(line);
+            wrapper.setEndLine((int) line);
+            wrapper.setStartLine((int) line);
+        }
         wrapper.setMessage(message);
         mDiagnostics.add(wrapper);
     }
@@ -145,6 +149,10 @@ public class Aapt2Jni {
         String execute = binaryExecutor.execute();
         String[] lines = execute.split("\n");
         for (String line : lines) {
+            if (TextUtils.isEmpty(line)) {
+                continue;
+            }
+
             Matcher matcher = DIAGNOSTIC_PATTERN.matcher(line);
             Matcher m = DIAGNOSTIC_PATTERN_NO_LINE.matcher(line);
 
