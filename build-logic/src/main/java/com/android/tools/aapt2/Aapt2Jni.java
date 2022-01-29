@@ -13,10 +13,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Aapt2Jni {
-    
+
     private static final Pattern DIAGNOSTIC_PATTERN = Pattern.compile("(.*?):(\\d+): (.*?): (.+)");
-    private static final Pattern DIAGNOSTIC_PATTERN_NO_LINE = Pattern.compile("(.*?): (.*?)" +
-            ": (.+)");
+    private static final Pattern DIAGNOSTIC_PATTERN_NO_LINE = Pattern.compile("(.*?): (.*?)" + ":" +
+            " (.+)");
 
     private static final int LOG_LEVEL_ERROR = 3;
     private static final int LOG_LEVEL_WARNING = 2;
@@ -49,19 +49,22 @@ public class Aapt2Jni {
             return 1;
         }
         switch (level) {
-            case "error": return 3;
-            case "warning": return 2;
+            case "error":
+                return 3;
+            case "warning":
+                return 2;
             default:
-            case "info": return 1;
+            case "info":
+                return 1;
         }
     }
 
     /**
      * Called by AAPT2 through JNI.
      *
-     * @param level log level (3 = error, 2 = warning, 1 = info)
-     * @param path path to the file with the issue
-     * @param line line number of the issue
+     * @param level   log level (3 = error, 2 = warning, 1 = info)
+     * @param path    path to the file with the issue
+     * @param line    line number of the issue
      * @param message issue message
      */
     @SuppressWarnings({"unused", "SameParameterValue"})
@@ -97,6 +100,7 @@ public class Aapt2Jni {
 
     /**
      * Compile resources with Aapt2
+     *
      * @param args the arguments to pass to aapt2
      * @return exit code, non zero if theres an error
      */
@@ -142,25 +146,33 @@ public class Aapt2Jni {
         String[] lines = execute.split("\n");
         for (String line : lines) {
             Matcher matcher = DIAGNOSTIC_PATTERN.matcher(line);
+            Matcher m = DIAGNOSTIC_PATTERN_NO_LINE.matcher(line);
+
+            String path;
+            String lineNumber;
+            String level;
+            String message;
             if (matcher.find()) {
-                String path = matcher.group(1);
-                String lineNumber = matcher.group(2);
-                String level = matcher.group(3);
-                String message = matcher.group(4);
-                logger.log(getLogLevel(level), path, getLineNumber(lineNumber), message);
+                path = matcher.group(1);
+                lineNumber = matcher.group(2);
+                level = matcher.group(3);
+                message = matcher.group(4);
+
+            } else if (m.find()) {
+                path = m.group(1);
+                lineNumber = "-1";
+                level = m.group(2);
+                message = m.group(3);
             } else {
-                Matcher m = DIAGNOSTIC_PATTERN_NO_LINE.matcher(line);
-                if (m.find()) {
-                    String path = m.group(1);
-                    String level = m.group(2);
-                    String message = m.group(3);
-                    logger.log(getLogLevel(level), path, -1, message);
-                }
+                path = "";
+                lineNumber = "-1";
+                level = "info";
+                message = line;
             }
+
+            logger.log(getLogLevel(level), path, getLineNumber(lineNumber), message);
         }
-        return logger.mDiagnostics.stream()
-                .anyMatch(it -> it.getKind() == Diagnostic.Kind.ERROR)
-                ? 1 : 0;
+        return logger.mDiagnostics.stream().anyMatch(it -> it.getKind() == Diagnostic.Kind.ERROR) ? 1 : 0;
     }
 
     public static List<DiagnosticWrapper> getLogs() {
