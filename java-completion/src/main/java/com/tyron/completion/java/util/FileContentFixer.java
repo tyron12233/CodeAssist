@@ -15,6 +15,13 @@ import java.util.List;
 import java.util.Set;
 
 public class FileContentFixer {
+
+    /**
+     * The injected identifier before completion, this is done so it so there will always be a
+     * text at the current position of the caret.
+     */
+    public static final String INJECTED_IDENT = "CodeAssistRulezzzz";
+
     private static final Set<TokenKind> VALID_MEMBER_SELECTION_TOKENS =
             ImmutableSet.of(
                     TokenKind.IDENTIFIER,
@@ -63,15 +70,15 @@ public class FileContentFixer {
 
         if (nextLine > tokenLine) {
             // The line ends with a dot. It's likely the user is entering a dot and waiting for member
-            // completion. The current line is incomplete and syntextually invalid.
-            insertions.add(Insertion.create(token.endPos, "dumbIdent;"));
+            // completion. The current line is incomplete and contextually invalid.
+            insertions.add(Insertion.create(token.endPos, INJECTED_IDENT + ";"));
         } else if (!VALID_MEMBER_SELECTION_TOKENS.contains(nextToken.kind)) {
-            String toInsert = "dumbIdent";
+            String toInsert = INJECTED_IDENT;
             if (INVALID_MEMBER_SELECTION_SUFFIXES.contains(nextToken.kind)) {
-                toInsert = "dumbIdent;";
+                toInsert = INJECTED_IDENT + ";";
             }
 
-            // The member selection is syntextually invalid. Fix it.
+            // The member selection is contextually invalid. Fix it.
             insertions.add(Insertion.create(token.endPos, toInsert));
         }
     }
@@ -88,14 +95,14 @@ public class FileContentFixer {
             if (errPos < content.length() - 1
                     && Character.isJavaIdentifierStart(content.charAt(errPos + 1))) {
                 // Insert a dumbIdent between two dots so the Javac parser can parse it.
-                insertions.add(Insertion.create(errPos, "dumbIdent"));
+                insertions.add(Insertion.create(errPos, INJECTED_IDENT));
             }
         }
     }
 
     public static class Insertion {
         private static final Ordering<Insertion> REVERSE_INSERTION =
-                Ordering.natural().onResultOf((Insertion insertion) -> insertion.getPos()).reverse();
+                Ordering.natural().onResultOf(Insertion::getPos).reverse();
 
         private final int pos;
         private final String text;

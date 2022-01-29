@@ -69,9 +69,12 @@ public class Completions {
         ParseTask task = compiler.parse(file.toPath(), fileContents);
         CharSequence contents;
         try {
-            contents = new PruneMethodBodies(task.task).scan(task.root, index);
+            StringBuilder pruned = new PruneMethodBodies(task.task).scan(task.root, index);
+            int end = StringSearch.endOfLine(pruned, (int) index);
+            pruned.insert(end, ';');
+            contents = pruned;
             contents = new FileContentFixer(compiler.compiler.getCurrentContext())
-                    .fixFileContent(contents);
+                    .fixFileContent(pruned);
         } catch (IndexOutOfBoundsException e) {
             Log.w(TAG, "Unable to fix file content", e);
             return new CompletionList();
@@ -95,16 +98,24 @@ public class Completions {
         Collections.reverse(items);
     }
 
-    private CompletionList compileAndComplete(File file, String contents, String partial,
-                                             long cursor) {
+    private CompletionList compileAndComplete(File file, String contents,
+                                              final String partial,
+                                              long cursor) {
         SourceFileObject source = new SourceFileObject(file.toPath(), contents, Instant.now());
         boolean endsWithParen = endsWithParen(contents, (int) cursor);
 
         checkCanceled();
         CompilerContainer container = compiler.compile(Collections.singletonList(source));
         return container.get(task -> {
-            TreePath path = new FindCurrentPath(task.task).scan(task.root(), cursor);
-            return getCompletionList(task, path, partial, endsWithParen);
+            TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
+            String modifiedPartial = partial;
+            if (path.getLeaf().getKind() == Tree.Kind.IMPORT) {
+                modifiedPartial = StringSearch.qualifiedPartialIdentifier(contents, (int) cursor);
+                if (modifiedPartial.endsWith(FileContentFixer.INJECTED_IDENT)) {
+                    modifiedPartial = modifiedPartial.substring(0, modifiedPartial.length() - FileContentFixer.INJECTED_IDENT.length());
+                }
+            }
+            return getCompletionList(task, path, modifiedPartial, endsWithParen);
         });
     }
 

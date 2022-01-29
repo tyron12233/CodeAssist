@@ -68,6 +68,12 @@ public class CompletionItemFactory {
         return item;
     }
 
+    public static CompletionItem importClassItem(String className) {
+        CompletionItem item = classItem(className);
+        item.action = CompletionItem.Kind.NORMAL;;
+        return item;
+    }
+
     public static CompletionItem snippetItem(String label, String snippet) {
         CompletionItem item = new CompletionItem();
         item.label = label;

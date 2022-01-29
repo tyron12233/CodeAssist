@@ -2,6 +2,7 @@ package com.tyron.completion.java.provider;
 
 import static com.tyron.completion.java.provider.MemberSelectCompletionProvider.putMethod;
 import static com.tyron.completion.java.util.CompletionItemFactory.classItem;
+import static com.tyron.completion.java.util.CompletionItemFactory.importClassItem;
 import static com.tyron.completion.java.util.CompletionItemFactory.item;
 import static com.tyron.completion.java.util.CompletionItemFactory.method;
 import static com.tyron.completion.java.util.CompletionItemFactory.packageItem;
@@ -63,9 +64,9 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
                 String segment = className.substring(start + 1, end);
                 if (names.contains(segment)) continue;
                 names.add(segment);
-                boolean isClass = end == path.length();
+                boolean isClass = className.endsWith(segment);
                 if (isClass) {
-                    list.items.add(classItem(className));
+                    list.items.add(importClassItem(className));
                 } else {
                     list.items.add(packageItem(segment));
                 }
