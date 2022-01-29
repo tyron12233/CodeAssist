@@ -158,6 +158,10 @@ public class ModuleImpl implements Module {
         return (Cache<K, V>) o;
     }
 
+    public <K, V> void removeCache(CacheKey<K, V> key) {
+        mCacheMap.remove(key);
+    }
+
     @Override
     public <K, V> void put(CacheKey<K, V> key, Cache<K, V> value) {
         mCacheMap.put(key, value);

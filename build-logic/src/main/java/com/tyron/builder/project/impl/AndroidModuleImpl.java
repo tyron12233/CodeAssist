@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
+import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
 import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.StringSearch;
@@ -158,5 +159,12 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         }
         String fqn = packageName + "." + file.getName().replace(".kt", "");
         mKotlinFiles.put(fqn, file);
+    }
+
+    @Override
+    public void clear() {
+        super.clear();
+
+        removeCache(MergeSymbolsTask.CACHE_KEY);
     }
 }
