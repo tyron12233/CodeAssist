@@ -39,7 +39,6 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
     }
 
     public synchronized JavaCompilerService getCompiler(Project project, JavaModule module) {
-
         List<Module> dependencies = new ArrayList<>();
         if (project != null) {
             dependencies.addAll(project.getDependencies(module));
@@ -48,8 +47,6 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
         Set<File> paths = new HashSet<>();
 
         for (Module dependency : dependencies) {
-            dependency.clear();
-            dependency.index();
             if (dependency instanceof JavaModule) {
                 paths.addAll(((JavaModule) dependency).getJavaFiles().values());
                 paths.addAll(((JavaModule) dependency).getLibraries());
@@ -86,5 +83,9 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
         }
 
         return false;
+    }
+
+    public void clear() {
+        mProvider = null;
     }
 }
