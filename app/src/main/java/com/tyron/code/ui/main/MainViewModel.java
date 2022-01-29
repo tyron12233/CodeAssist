@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.util.CustomMutableLiveData;
 import com.tyron.fileeditor.api.FileEditor;
 
 import java.io.File;
@@ -36,7 +37,7 @@ public class MainViewModel extends ViewModel {
     /**
      * The current position of the CodeEditor
      */
-    private final MutableLiveData<Integer> currentPosition = new MutableLiveData<>(0);
+    private final CustomMutableLiveData<Integer> currentPosition = new CustomMutableLiveData<>(0);
 
     private final MutableLiveData<Integer> mBottomSheetState =
             new MutableLiveData<>(BottomSheetBehavior.STATE_COLLAPSED);
@@ -109,12 +110,16 @@ public class MainViewModel extends ViewModel {
         return currentPosition;
     }
 
-    public void updateCurrentPosition(int pos) {
+    public void setCurrentPosition(int pos) {
+        setCurrentPosition(pos, true);
+    }
+
+    public void setCurrentPosition(int pos, boolean update) {
         Integer value = currentPosition.getValue();
         if (value != null && value.equals(pos)) {
             return;
         }
-        currentPosition.setValue(pos);
+        currentPosition.setValue(pos, update);
     }
 
     public FileEditor getCurrentFileEditor() {
@@ -159,7 +164,7 @@ public class MainViewModel extends ViewModel {
             }
         }
         if (index != -1) {
-            updateCurrentPosition(index);
+            setCurrentPosition(index);
             return true;
         }
         addFile(file);
@@ -173,7 +178,7 @@ public class MainViewModel extends ViewModel {
         }
         files.add(file);
         mFiles.setValue(files);
-        updateCurrentPosition(files.indexOf(file));
+        setCurrentPosition(files.indexOf(file));
     }
 
     public void removeFile(@NonNull File file) {
