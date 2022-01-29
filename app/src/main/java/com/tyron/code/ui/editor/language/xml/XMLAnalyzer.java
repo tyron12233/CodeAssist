@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 import io.github.rosemoe.sora.data.BlockLine;
 import io.github.rosemoe.sora.data.Span;
@@ -106,7 +107,8 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer {
                 }
             }
         }, () -> {
-            editor.setDiagnostics(diagnosticWrappers);
+            editor.setDiagnostics(diagnosticWrappers.stream()
+                    .filter(it -> it.getLineNumber() > 0).collect(Collectors.toList()));
         });
     }
 

@@ -4,6 +4,7 @@ import static com.tyron.completion.xml.util.XmlUtils.fullIdentifier;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeItem;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeNameFromPrefix;
 import static com.tyron.completion.xml.util.XmlUtils.getTagAtPosition;
+import static com.tyron.completion.xml.util.XmlUtils.isInAttribute;
 import static com.tyron.completion.xml.util.XmlUtils.isInAttributeValue;
 import static com.tyron.completion.xml.util.XmlUtils.isIncrementalCompletion;
 import static com.tyron.completion.xml.util.XmlUtils.partialIdentifier;
@@ -286,23 +287,5 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE);
         xmlCachedCompletion.setFilterPrefix(prefix);
         xmlCachedCompletion.setFilter((item, pre) -> item.label.startsWith(pre));
-    }
-
-    private boolean isInAttributeTag(String contents, int index) {
-        XMLLexer lexer = new XMLLexer(CharStreams.fromString(contents));
-        Token token;
-        while ((token = lexer.nextToken()) != null) {
-            int start = token.getStartIndex();
-            int end = token.getStopIndex();
-
-            if (start <= index && index <= end) {
-                return token.getType() == XMLLexer.ATTRIBUTE;
-            }
-
-            if (end > index) {
-                break;
-            }
-        }
-        return false;
     }
 }

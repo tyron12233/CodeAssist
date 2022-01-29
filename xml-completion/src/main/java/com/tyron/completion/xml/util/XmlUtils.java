@@ -22,6 +22,7 @@ import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.StringReader;
 import java.util.stream.Collectors;
 
 public class XmlUtils {
@@ -97,6 +98,44 @@ public class XmlUtils {
             }
         }
         return parser.getDepth();
+    }
+
+    public static boolean isInAttribute(String contents, int line, int column) throws XmlPullParserException, IOException {
+        XmlPullParser parser = newPullParser();
+        parser.setInput(new StringReader(contents));
+        return isInAttribute(parser, line, column);
+    }
+
+    public static boolean isInAttribute(XmlPullParser parser, int line, int column) throws IOException, XmlPullParserException {
+        int tag = parser.next();
+        boolean isInStart = false;
+        while (tag != XmlPullParser.END_DOCUMENT) {
+            try {
+                if (tag == XmlPullParser.START_TAG) {
+                    if (parser.getLineNumber() == line) {
+                        if (column >= parser.getColumnNumber()) {
+                            isInStart = true;
+                        }
+                    } else {
+                        isInStart = parser.getLineNumber() < line;
+                    }
+                } else if (tag == XmlPullParser.END_TAG) {
+                    if (isInStart) {
+                        if (line < parser.getLineNumber()) {
+                            return true;
+                        } else if (line == parser.getLineNumber()) {
+                            return column <= parser.getColumnNumber();
+                        }
+                    }
+                    isInStart = false;
+                }
+                tag = parser.next();
+            } catch (XmlPullParserException e) {
+                // ignored, continue parsing
+            }
+        }
+
+        return false;
     }
 
     /**
