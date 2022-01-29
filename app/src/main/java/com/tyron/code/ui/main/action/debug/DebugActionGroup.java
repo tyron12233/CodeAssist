@@ -8,6 +8,7 @@ import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.Presentation;
+import com.tyron.code.BuildConfig;
 
 public class DebugActionGroup extends ActionGroup {
 
@@ -17,6 +18,10 @@ public class DebugActionGroup extends ActionGroup {
     public void update(@NonNull AnActionEvent event) {
         Presentation presentation = event.getPresentation();
         presentation.setVisible(false);
+
+        if (!BuildConfig.DEBUG) {
+            return;
+        }
 
         if (!ActionPlaces.MAIN_TOOLBAR.equals(event.getPlace())) {
             return;

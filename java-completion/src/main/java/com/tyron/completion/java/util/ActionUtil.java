@@ -102,6 +102,10 @@ public class ActionUtil {
             return false;
         }
 
+        if (path.getLeaf() instanceof ClassTree) {
+            return false;
+        }
+
         if (kind == METHOD_INVOCATION) {
             JCTree.JCMethodInvocation methodInvocation = (JCTree.JCMethodInvocation) path.getLeaf();
             // void return type
