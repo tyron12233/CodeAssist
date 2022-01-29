@@ -46,7 +46,7 @@ Currently this action does not do anything useful and does not have a text that 
 
 ### Extending the update() method
 
-In the `AnActionEvent` object which is passed in the method, contains context information about
+T he `AnActionEvent` object which is passed in the method, contains context information about
 where the current event has taken place. See [AnActionEvent.getData()](https://github.com/tyron12233/CodeAssist/blob/91f91294c07570fb888c24e592c5b1f847cecc74/actions-api/src/main/java/com/tyron/actions/AnActionEvent.java#L57) 
 and [CommonDataKeys](https://github.com/tyron12233/CodeAssist/blob/91f91294c07570fb888c24e592c5b1f847cecc74/actions-api/src/main/java/com/tyron/actions/CommonDataKeys.java)
 for a list of objects that can be retrieved.
@@ -87,7 +87,8 @@ CodeAssist has a [Savable](https://github.com/tyron12233/CodeAssist/blob/main/ap
 which its editors implement to indicate that its content can be saved. This action leverages that feature.
 
 ```java
-@Override public void actionPerformed(@NonNull AnActionEvent e) {
+@Override 
+public void actionPerformed(@NonNull AnActionEvent e) {
     Fragment fragment = e.getRequiredData(CommonDataKeys.FRAGMENT);
     if (fragment instanceof Savable) {
         ((Savable) fragment).save();
@@ -100,5 +101,5 @@ which its editors implement to indicate that its content can be saved. This acti
 Currently, actions need to be registered dynamically through the [ActionManager](https://github.com/tyron12233/CodeAssist/blob/main/app/src/main/java/com/tyron/code/ui/editor/Savable.java)
 Actions need to have a unique String identifier that the Actions API will use to identify it from others.
 ```java
-ActionManager.getInstance(UNIQUE_ID, new SaveAction());
+ActionManager.getInstance().registerAction(UNIQUE_ID, new SaveAction());
 ```
