@@ -33,7 +33,7 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
     private static final String CLIENT_INFO = "client_info";
     private static final String CURRENT_KEY = "current_key";
     private static final String OAUTH_CLIENT = "oauth_client";
-    private static final String PROJECT_INFO = "project-info";
+    private static final String PROJECT_INFO = "project_info";
     private static final String PACKAGE_NAME = "package_name";
     private static final String STORAGE_BUCKET = "storage_bucket";
     private static final String ANDROID_CLIENT_INFO = "android_client_info";
