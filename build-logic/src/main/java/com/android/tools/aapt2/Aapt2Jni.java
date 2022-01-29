@@ -1,14 +1,22 @@
 package com.android.tools.aapt2;
 
+import com.tyron.builder.BuildModule;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.common.util.BinaryExecutor;
 
 import org.openjdk.javax.tools.Diagnostic;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Aapt2Jni {
+    
+    private static final Pattern DIAGNOSTIC_PATTERN = Pattern.compile("(.*?):(\\d+): (.*?): (.+)");
+    private static final Pattern DIAGNOSTIC_PATTERN_NO_LINE = Pattern.compile("(.*?): (.*?)" +
+            ": (.+)");
 
     private static final int LOG_LEVEL_ERROR = 3;
     private static final int LOG_LEVEL_WARNING = 2;
@@ -25,10 +33,26 @@ public class Aapt2Jni {
     private final List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
 
     private Aapt2Jni() {
+
+    }
+
+    private static int getLineNumber(String number) {
         try {
-            System.loadLibrary("aapt2_jni");
-        } catch (Throwable e) {
-            mFailureString = e.getMessage();
+            return Integer.parseInt(number);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static int getLogLevel(String level) {
+        if (level == null) {
+            return 1;
+        }
+        switch (level) {
+            case "error": return 3;
+            case "warning": return 2;
+            default:
+            case "info": return 1;
         }
     }
 
@@ -86,7 +110,9 @@ public class Aapt2Jni {
             return -1;
         }
 
-        return nativeCompile(args, instance);
+        args.add(0, "compile");
+        args.add(0, getBinary());
+        return executeBinary(args, instance);
     }
 
     public static int link(List<String> args) {
@@ -99,14 +125,45 @@ public class Aapt2Jni {
             return -1;
         }
 
-        return nativeLink(args, instance);
+        args.add(0, "link");
+        args.add(0, getBinary());
+
+        return executeBinary(args, instance);
+    }
+
+    private static String getBinary() {
+        return BuildModule.getContext().getApplicationInfo().nativeLibraryDir + "/libaapt2.so";
+    }
+
+    private static int executeBinary(List<String> args, Aapt2Jni logger) {
+        BinaryExecutor binaryExecutor = new BinaryExecutor();
+        binaryExecutor.setCommands(args);
+        String execute = binaryExecutor.execute();
+        String[] lines = execute.split("\n");
+        for (String line : lines) {
+            Matcher matcher = DIAGNOSTIC_PATTERN.matcher(line);
+            if (matcher.find()) {
+                String path = matcher.group(1);
+                String lineNumber = matcher.group(2);
+                String level = matcher.group(3);
+                String message = matcher.group(4);
+                logger.log(getLogLevel(level), path, getLineNumber(lineNumber), message);
+            } else {
+                Matcher m = DIAGNOSTIC_PATTERN_NO_LINE.matcher(line);
+                if (m.find()) {
+                    String path = matcher.group(1);
+                    String level = matcher.group(2);
+                    String message = matcher.group(3);
+                    logger.log(getLogLevel(level), path, -1, message);
+                }
+            }
+        }
+        return logger.mDiagnostics.stream()
+                .anyMatch(it -> it.getKind() == Diagnostic.Kind.ERROR)
+                ? 1 : 0;
     }
 
     public static List<DiagnosticWrapper> getLogs() {
         return getInstance().mDiagnostics;
     }
-
-    private static native int nativeCompile(List<String> args, Aapt2Jni clazz);
-
-    private static native int nativeLink(List<String> args, Aapt2Jni clazz);
 }
