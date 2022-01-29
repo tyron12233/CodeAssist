@@ -104,6 +104,8 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         recyclerView.setAdapter(mAdapter);
 
         Toolbar toolbar = view.findViewById(R.id.toolbar);
+        toolbar.setNavigationOnClickListener(v ->
+                getParentFragmentManager().popBackStack());
         toolbar.addMenuProvider(new MenuProvider() {
             @Override
             public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
