@@ -35,8 +35,9 @@ public class CompletionModule {
         actionManager.registerAction(SurroundWithTryCatchAction.ID, new SurroundWithTryCatchAction());
         actionManager.registerAction(ImportClassAction.ID, new ImportClassAction());
         actionManager.registerAction(ImportClassFieldFix.ID, new ImportClassFieldFix());
-        actionManager.registerAction(IntroduceLocalVariableAction.ID, new IntroduceLocalVariableAction());
         actionManager.registerAction(ImplementAbstractMethodsFix.ID, new ImplementAbstractMethodsFix());
+
+        actionManager.registerAction(IntroduceLocalVariableAction.ID, new IntroduceLocalVariableAction());
         actionManager.registerAction(OverrideInheritedMethodsAction.ID, new OverrideInheritedMethodsAction());
     }
 

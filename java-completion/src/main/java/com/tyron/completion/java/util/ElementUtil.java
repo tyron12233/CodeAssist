@@ -33,7 +33,14 @@ public class ElementUtil {
         if (kind == TypeKind.DECLARED) {
             List<String> classes = new ArrayList<>();
             DeclaredType declaredType = (DeclaredType) typeMirror;
-            classes.add(declaredType.asElement().toString());
+
+            if (isAnonymous(declaredType)) {
+                TypeElement element = (TypeElement) declaredType.asElement();
+                // the type of an anonymous class
+                classes.add(element.getSuperclass().toString());
+            } else {
+                classes.add(declaredType.toString());
+            }
 
             for (TypeMirror argument : declaredType.getTypeArguments()) {
                 classes.addAll(getAllClasses(argument));
@@ -42,6 +49,10 @@ public class ElementUtil {
             return classes;
         }
         return Collections.emptyList();
+    }
+
+    private static boolean isAnonymous(TypeMirror typeMirror) {
+        return typeMirror.toString().startsWith("<anonymous");
     }
 
     public static String simpleType(TypeMirror mirror) {

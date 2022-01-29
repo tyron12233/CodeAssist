@@ -98,6 +98,10 @@ public class ActionUtil {
             return canIntroduceLocalVariable(parent);
         }
 
+        if (path.getLeaf() instanceof ClassTree && parent.getLeaf() instanceof NewClassTree) {
+            return false;
+        }
+
         if (kind == METHOD_INVOCATION) {
             JCTree.JCMethodInvocation methodInvocation = (JCTree.JCMethodInvocation) path.getLeaf();
             // void return type
