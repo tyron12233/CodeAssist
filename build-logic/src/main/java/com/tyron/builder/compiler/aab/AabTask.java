@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -94,13 +95,18 @@ public class AabTask extends Task<AndroidModule> {
     }
 
     public void run() throws IOException, CompilationFailedException {
-        unZip();
-        copyManifest();
-        copyJni();
-        copyDexFiles();
-        baseZip();
         try {
+            unZip();
+            copyResources();
+            copyManifest();
+            copyJni();
+            copyDexFiles();
+            baseZip();
             copyLibraries();
+            budletool();
+            aab();
+            buildApks();
+            extractApks();
         } catch (SignedJarBuilder.IZipEntryFilter.ZipAbortException e) {
             String message = e.getMessage();
             if (e instanceof DuplicateFileException) {
@@ -112,10 +118,6 @@ public class AabTask extends Task<AndroidModule> {
             }
             throw new CompilationFailedException(message);
         }
-        budletool();
-        aab();
-        buildApks();
-        extractApks();
     }
 
     @Override
@@ -297,6 +299,34 @@ public class AabTask extends Task<AndroidModule> {
                 fromDirectory = jniDir.getAbsolutePath();
                 copyDirectoryFileVisitor(fromDirectory, toToDirectory);
             }
+        }
+    }
+
+    private void copyResources() throws IOException, SignedJarBuilder.IZipEntryFilter.ZipAbortException {
+        File resourcesDir = getModule().getResourcesDir();
+        File[] files = resourcesDir.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                copyResources(file, "root");
+            }
+        }
+    }
+
+    private void copyResources(File file, String path) throws IOException {
+        if (file.isDirectory()) {
+            File[] files = file.listFiles();
+            if (files != null) {
+                for (File child : files) {
+                    copyResources(child, path + "/" + file.getName());
+                }
+            }
+        } else {
+            File directory = new File(base, path);
+            if (!directory.exists() && !directory.mkdirs()) {
+                throw new IOException("Failed to create directory " + directory);
+            }
+
+            FileUtils.copyFileToDirectory(file, directory);
         }
     }
 
