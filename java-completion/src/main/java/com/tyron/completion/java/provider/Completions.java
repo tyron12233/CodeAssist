@@ -3,6 +3,7 @@ package com.tyron.completion.java.provider;
 import static com.tyron.common.util.StringSearch.endsWithParen;
 import static com.tyron.common.util.StringSearch.isQualifiedIdentifierChar;
 import static com.tyron.common.util.StringSearch.partialIdentifier;
+import static com.tyron.completion.java.patterns.JavacTreePatterns.tree;
 import static com.tyron.completion.java.util.CompletionItemFactory.classSnippet;
 import static com.tyron.completion.java.util.CompletionItemFactory.packageSnippet;
 import static com.tyron.completion.progress.ProgressManager.checkCanceled;
@@ -16,13 +17,20 @@ import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.compiler.ParseTask;
+import com.tyron.completion.java.patterns.JavacTreePattern;
+import com.tyron.completion.java.patterns.JavacTreePatterns;
 import com.tyron.completion.java.util.FileContentFixer;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
+import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.IdentifierTree;
+import org.openjdk.source.tree.ParameterizedTypeTree;
 import org.openjdk.source.tree.Tree;
+import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
+import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.parser.ScannerFactory;
 
 import java.io.File;
@@ -42,8 +50,12 @@ import me.xdrop.fuzzywuzzy.FuzzySearch;
 public class Completions {
 
     public static final int MAX_COMPLETION_ITEMS = 300;
-
     private static final String TAG = Completions.class.getSimpleName();
+
+    // patterns
+    private static final JavacTreePattern.Capture<IdentifierTree> INSIDE_PARAMETERIZED =
+            tree(IdentifierTree.class)
+                    .withParent(ParameterizedTypeTree.class);
 
     private final JavaCompilerService compiler;
 
@@ -98,8 +110,14 @@ public class Completions {
 
     private CompletionList getCompletionList(CompileTask task, TreePath path, String partial,
                                              boolean endsWithParen) {
+        ProcessingContext context = createProcessingContext(task.task, task.root());
         switch (path.getLeaf().getKind()) {
             case IDENTIFIER:
+                // suggest only classes on a parameterized tree
+                if (INSIDE_PARAMETERIZED.accepts(path.getLeaf(), context)) {
+                    return new ClassNameCompletionProvider(compiler)
+                            .complete(task, path, partial, endsWithParen);
+                }
                 return new IdentifierCompletionProvider(compiler)
                         .complete(task, path, partial, endsWithParen);
             case MEMBER_SELECT:
@@ -139,5 +157,12 @@ public class Completions {
             }
         }
         return false;
+    }
+
+    private ProcessingContext createProcessingContext(JavacTask task, CompilationUnitTree root) {
+        ProcessingContext context = new ProcessingContext();
+        context.put("trees", Trees.instance(task));
+        context.put("root", root);
+        return context;
     }
 }

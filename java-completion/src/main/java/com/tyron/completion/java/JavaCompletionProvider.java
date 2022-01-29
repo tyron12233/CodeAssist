@@ -70,8 +70,8 @@ public class JavaCompletionProvider extends CompletionProvider {
         return complete;
     }
 
-    public CompletionList complete(Project project, JavaModule module, File file, String contents
-            , long cursor) {
+    public CompletionList complete(
+            Project project, JavaModule module, File file, String contents, long cursor) {
         JavaCompilerProvider compilerProvider =
                 CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
         JavaCompilerService service = compilerProvider.getCompiler(project, module);

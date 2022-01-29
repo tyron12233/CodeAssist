@@ -194,6 +194,12 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
 
     @Override
     public void index() {
+        try {
+            putJar(BuildModule.getAndroidJar());
+        } catch (IOException e) {
+            // ignored
+        }
+
         if (getJavaDirectory().exists()) {
             FileUtils.iterateFiles(getJavaDirectory(),
                     FileFilterUtils.suffixFileFilter(".java"),
@@ -210,12 +216,6 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
                     addLibrary(check);
                 }
             }
-        }
-
-        try {
-            putJar(BuildModule.getAndroidJar());
-        } catch (IOException e) {
-            // ignored
         }
     }
 

@@ -1,5 +1,6 @@
 package com.tyron.completion.java.provider;
 
+import static com.tyron.completion.java.provider.ClassNameCompletionProvider.addClassNames;
 import static com.tyron.completion.java.provider.ImportCompletionProvider.addStaticImports;
 import static com.tyron.completion.java.provider.SwitchConstantCompletionProvider.completeSwitchConstant;
 import static com.tyron.completion.java.util.CompletionItemFactory.classItem;
@@ -39,7 +40,7 @@ public class IdentifierCompletionProvider extends BaseCompletionProvider {
                 .complete(task, path, partial, endsWithParen);
 
         if (partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
-            addClassNames(path.getCompilationUnit(), partial, list);
+            addClassNames(path.getCompilationUnit(), partial, list, getCompiler());
         }
         addStaticImports(task, path.getCompilationUnit(), partial, endsWithParen, list);
 
@@ -47,27 +48,4 @@ public class IdentifierCompletionProvider extends BaseCompletionProvider {
 
         return list;
     }
-
-    private void addClassNames(CompilationUnitTree root, String partial, CompletionList list) {
-        checkCanceled();
-
-        String packageName = Objects.toString(root.getPackageName(), "");
-        Set<String> uniques = new HashSet<>();
-        for (String className : getCompiler().packagePrivateTopLevelTypes(packageName)) {
-            if (!StringSearch.matchesPartialName(className, partial)) continue;
-            list.items.add(classItem(className));
-            uniques.add(className);
-        }
-        for (String className : getCompiler().publicTopLevelTypes()) {
-            if (uniques.size() >= Completions.MAX_COMPLETION_ITEMS) {
-                list.isIncomplete = true;
-                break;
-            }
-            if (FuzzySearch.partialRatio(className, partial) < 70) continue;
-            if (uniques.contains(className)) continue;
-            list.items.add(classItem(className));
-            uniques.add(className);
-        }
-    }
-
 }
