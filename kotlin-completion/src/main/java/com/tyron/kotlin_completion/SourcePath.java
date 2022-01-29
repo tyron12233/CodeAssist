@@ -174,7 +174,7 @@ public class SourcePath {
             parseIfChanged();
             if (isTemporary) {
                 Set<KtFile> all = all(false);
-                Sequence<KtFile> plus = SequencesKt.plus(SequencesKt.asSequence(all.iterator()), (KtFile) SequencesKt.sequenceOf(parsed));
+                Sequence<KtFile> plus = SequencesKt.plus(SequencesKt.asSequence(all.iterator()), SequencesKt.sequenceOf(parsed));
                 return SequencesKt.toList(plus);
             } else {
                 return all(false);
