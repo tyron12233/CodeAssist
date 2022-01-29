@@ -15,6 +15,7 @@ import com.tyron.actions.DataContext;
 import com.tyron.actions.Presentation;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
@@ -22,9 +23,7 @@ import java.util.concurrent.Executors;
 
 public class ActionManagerImpl extends ActionManager {
 
-
-
-    private final Map<String, AnAction> mIdToAction = new TreeMap<>();
+    private final Map<String, AnAction> mIdToAction = new LinkedHashMap<>();
     private final Map<Object, String> mActionToId = new HashMap<>();
 
     @Override
