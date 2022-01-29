@@ -51,7 +51,12 @@ public class DependencyUtils {
         while (matcher.find()) {
             String declaration = matcher.group(3);
             if (declaration != null) {
-                deps.add(Dependency.valueOf(declaration));
+                try {
+                    Dependency dependency = Dependency.valueOf(declaration);
+                    deps.add(dependency);
+                } catch (IllegalArgumentException e) {
+                    logger.warning("Failed to add dependency " + e.getMessage());
+                }
             }
         }
         return deps;
