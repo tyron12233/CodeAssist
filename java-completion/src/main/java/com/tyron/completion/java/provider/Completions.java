@@ -27,6 +27,7 @@ import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.ParameterizedTypeTree;
+import org.openjdk.source.tree.ReturnTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
@@ -56,6 +57,9 @@ public class Completions {
     private static final JavacTreePattern.Capture<IdentifierTree> INSIDE_PARAMETERIZED =
             tree(IdentifierTree.class)
                     .withParent(ParameterizedTypeTree.class);
+    private static final JavacTreePattern.Capture<IdentifierTree> INSIDE_RETURN =
+            tree(IdentifierTree.class)
+                    .withParent(ReturnTree.class);
 
     private final JavaCompilerService compiler;
 

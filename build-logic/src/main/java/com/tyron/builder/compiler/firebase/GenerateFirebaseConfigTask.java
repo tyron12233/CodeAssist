@@ -26,6 +26,25 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
 
     private static final String TAG = GenerateFirebaseConfigTask.class.getSimpleName();
 
+    private static final String VALUES = "values";
+    private static final String CLIENT = "client";
+    private static final String API_KEY = "api_key";
+    private static final String CLIENT_ID = "client_id";
+    private static final String CLIENT_INFO = "client_info";
+    private static final String CURRENT_KEY = "current_key";
+    private static final String OAUTH_CLIENT = "oauth_client";
+    private static final String PROJECT_INFO = "project-info";
+    private static final String PACKAGE_NAME = "package_name";
+    private static final String STORAGE_BUCKET = "storage_bucket";
+    private static final String ANDROID_CLIENT_INFO = "android_client_info";
+    private static final String MOBILESDK_SDK_APP_ID = "mobilesdk_app_id";
+    private static final String DEFAULT_WEB_CLIENT_ID = "default_web_client_id";
+    private static final String GOOGLE_SERVICES_JSON = "google-services.json";
+    private static final String GOOGLE_STORAGE_BUCKET = "google_storage_bucket";
+    private static final String GOOGLE_API_KEY = "google_api_key";
+    private static final String GOOGLE_APP_ID = "google_app_id";
+    private static final String GOOGLE_CRASH_REPORTING_API_KEY = "google_crash_reporting_api_key";
+
     public GenerateFirebaseConfigTask(AndroidModule project, ILogger logger) {
         super(project, logger);
     }
@@ -39,7 +58,7 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
 
     @Override
     public void prepare(BuildType type) throws IOException {
-        mConfigFile = new File(getModule().getRootFile(), "google-services.json");
+        mConfigFile = new File(getModule().getRootFile(), GOOGLE_SERVICES_JSON);
     }
 
     /**
@@ -56,7 +75,7 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
 
         String contents = FileUtils.readFileToString(mConfigFile, Charset.defaultCharset());
         try {
-            File xmlDirectory = new File(getModule().getAndroidResourcesDirectory(), "values");
+            File xmlDirectory = new File(getModule().getAndroidResourcesDirectory(), VALUES);
             if (!xmlDirectory.exists() && !xmlDirectory.mkdirs()) {
                 throw new IOException("Unable to create xml folder");
             }
@@ -86,15 +105,15 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
     public boolean doGenerate(String contents, String packageName, File secretsFile)
             throws JSONException, IOException {
         JSONObject jsonObject = new JSONObject(contents);
-        JSONObject projectInfo = jsonObject.getJSONObject("project_info");
+        JSONObject projectInfo = jsonObject.getJSONObject(PROJECT_INFO);
 
-        JSONArray clientArray = jsonObject.getJSONArray("client");
+        JSONArray clientArray = jsonObject.getJSONArray(CLIENT);
         for (int i = 0; i < clientArray.length(); i++) {
             JSONObject object = clientArray.getJSONObject(i);
-            JSONObject clientInfo = object.getJSONObject("client_info");
-            JSONObject androidClientInfo = clientInfo.getJSONObject("android_client_info");
+            JSONObject clientInfo = object.getJSONObject(CLIENT_INFO);
+            JSONObject androidClientInfo = clientInfo.getJSONObject(ANDROID_CLIENT_INFO);
 
-            String clientPackageName = androidClientInfo.getString("package_name");
+            String clientPackageName = androidClientInfo.getString(PACKAGE_NAME);
             if (packageName.equals(clientPackageName)) {
                 parseConfig(projectInfo, object, clientInfo, secretsFile);
                 return true;
@@ -111,6 +130,7 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
         Iterator<String> keys = projectInfo.keys();
         Map<String, String> map = new HashMap<>();
         keys.forEachRemaining(s -> {
+            s = replaceKey(s);
             try {
                 map.put(s, projectInfo.getString(s));
             } catch (JSONException e) {
@@ -122,23 +142,23 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
             }
         });
 
-        String mobileSdkAppId = clientInfo.getString("mobilesdk_app_id");
-        map.put("google_app_id", mobileSdkAppId);
+        String mobileSdkAppId = clientInfo.getString(MOBILESDK_SDK_APP_ID);
+        map.put(GOOGLE_APP_ID, mobileSdkAppId);
 
         try {
-            String oathClientId = client.getJSONObject("oauth_client")
-                    .getString("client_id");
-            map.put("default_web_client_id", oathClientId);
+            String oathClientId = client.getJSONObject(OAUTH_CLIENT)
+                    .getString(CLIENT_ID);
+            map.put(DEFAULT_WEB_CLIENT_ID, oathClientId);
         } catch (JSONException ignore) {
 
         }
 
         try {
-            String apiKey = client.getJSONArray("api_key")
+            String apiKey = client.getJSONArray(API_KEY)
                     .getJSONObject(0)
-                    .getString("current_key");
-            map.put("google_api_key", apiKey);
-            map.put("google_crash_reporting_api_key", apiKey);
+                    .getString(CURRENT_KEY);
+            map.put(GOOGLE_API_KEY, apiKey);
+            map.put(GOOGLE_CRASH_REPORTING_API_KEY, apiKey);
         } catch (JSONException e) {
             getLogger().warning("Unable to put api keys, error: " + e.getMessage());
         }
@@ -161,6 +181,13 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
             }
             writer.write("</resources>");
         }
+    }
+
+    private String replaceKey(String key) {
+        if (STORAGE_BUCKET.equals(key)) {
+            return GOOGLE_STORAGE_BUCKET;
+        }
+        return key;
     }
 
 }
