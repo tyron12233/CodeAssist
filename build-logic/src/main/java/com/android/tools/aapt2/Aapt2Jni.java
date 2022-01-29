@@ -151,9 +151,9 @@ public class Aapt2Jni {
             } else {
                 Matcher m = DIAGNOSTIC_PATTERN_NO_LINE.matcher(line);
                 if (m.find()) {
-                    String path = matcher.group(1);
-                    String level = matcher.group(2);
-                    String message = matcher.group(3);
+                    String path = m.group(1);
+                    String level = m.group(2);
+                    String message = m.group(3);
                     logger.log(getLogLevel(level), path, -1, message);
                 }
             }
