@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -65,14 +66,12 @@ public class ModuleSettings implements SharedPreferences {
     }
 
     protected Map<String, Object> getDefaults() {
-        Map<String, Object> map = new TreeMap<>();
+        Map<String, Object> map = new LinkedHashMap<>();
         map.put(USE_R8, false);
         map.put(MIN_SDK_VERSION, 21);
         map.put(TARGET_SDK_VERSION, 30);
         map.put(VERSION_NAME, "1.0");
         map.put(VERSION_CODE, 1);
-        map.put(JAVA_SOURCE_VERSION, "8");
-        map.put(JAVA_TARGET_VERSION, "8");
         return map;
     }
 
