@@ -100,14 +100,9 @@ public class XmlRepository {
             File classesFile = new File(parent, "classes.jar");
             if (classesFile.exists()) {
                 try {
-                    List<JavaClass> scan =
-                            BytecodeScanner.scan(classesFile);
-                    for (JavaClass javaClass : scan) {
-                        StyleUtils.putStyles(javaClass);
-                        mJavaViewClasses.put(javaClass.getClassName(), javaClass);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
+                    BytecodeScanner.loadJar(classesFile);
+                } catch (IOException ignored) {
+
                 }
             }
         }
@@ -124,6 +119,19 @@ public class XmlRepository {
 
         } catch (XmlPullParserException | IOException e) {
             e.printStackTrace();
+        }
+
+        for (File library : module.getLibraries()) {
+            try {
+                List<JavaClass> scan =
+                        BytecodeScanner.scan(library);
+                for (JavaClass javaClass : scan) {
+                    StyleUtils.putStyles(javaClass);
+                    mJavaViewClasses.put(javaClass.getClassName(), javaClass);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         addFrameworkViews();

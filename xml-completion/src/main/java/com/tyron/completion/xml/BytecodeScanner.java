@@ -28,6 +28,21 @@ import java.util.jar.JarFile;
  */
 public class BytecodeScanner {
 
+    public static void loadJar(File jar) throws IOException {
+        try (JarFile jarFile = new JarFile(jar)) {
+            Enumeration<JarEntry> entries = jarFile.entries();
+            while (entries.hasMoreElements()) {
+                JarEntry element = entries.nextElement();
+                if (!element.getName().endsWith(".class")) {
+                    continue;
+                }
+                ClassParser classParser = new ClassParser(jar.getAbsolutePath(), element.getName());
+                JavaClass parse = classParser.parse();
+                Repository.addClass(parse);
+            }
+        }
+    }
+
     public static List<JavaClass> scan(File file) throws IOException {
         String path = file.getAbsolutePath();
         List<JavaClass> viewClasses = new ArrayList<>();

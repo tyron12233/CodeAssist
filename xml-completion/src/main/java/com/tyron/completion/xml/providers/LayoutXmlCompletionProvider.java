@@ -197,6 +197,9 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
                 commitPrefix = "</";
             }
             boolean useFqn = prefix.contains(".");
+            if (!entry.getKey().startsWith("android.widget")) {
+                useFqn = true;
+            }
             item.label = StyleUtils.getSimpleName(entry.getKey());
             item.detail = entry.getValue().getPackageName();
             item.iconKind = DrawableKind.Class;
