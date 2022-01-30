@@ -175,6 +175,7 @@ public class OverrideInheritedMethodsAction extends AnAction {
             if (methods != null && !methods.isEmpty()) {
                 OverrideNode classNode = new OverrideNode(methods.iterator().next(), false);
                 TreeNode<OverrideNode> classTreeNode = new TreeNode<>(classNode, 1);
+                classTreeNode.setExpanded(true);
                 for (MethodPtr method : methods) {
                     classTreeNode.addChild(new TreeNode<>(new OverrideNode(method, true), 2));
                 }
