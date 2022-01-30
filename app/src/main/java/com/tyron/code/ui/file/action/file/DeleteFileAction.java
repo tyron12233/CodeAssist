@@ -7,8 +7,8 @@ import androidx.appcompat.app.AlertDialog;
 
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
-import com.tyron.common.tree.TreeNode;
-import com.tyron.common.tree.TreeView;
+import com.tyron.ui.treeview.TreeNode;
+import com.tyron.ui.treeview.TreeView;
 import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.file.tree.model.TreeFile;

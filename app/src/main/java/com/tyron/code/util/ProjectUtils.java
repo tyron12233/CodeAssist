@@ -3,7 +3,7 @@ package com.tyron.code.util;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.common.tree.TreeNode;
+import com.tyron.ui.treeview.TreeNode;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 
 import java.io.File;

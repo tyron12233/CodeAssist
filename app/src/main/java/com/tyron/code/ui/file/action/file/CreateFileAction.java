@@ -14,7 +14,7 @@ import com.google.android.material.textfield.TextInputLayout;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
-import com.tyron.common.tree.TreeNode;
+import com.tyron.ui.treeview.TreeNode;
 import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.action.ActionContext;
 import com.tyron.code.ui.file.action.FileAction;

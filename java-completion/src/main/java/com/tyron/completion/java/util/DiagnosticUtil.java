@@ -17,6 +17,7 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,6 +45,17 @@ public class DiagnosticUtil {
                 TypeMirror erased = types.erasure(type);
                 erasedParameterTypes[i] = erased.toString();
             }
+        }
+
+        @Override
+        public String toString() {
+            return "MethodPtr{" +
+                    "className='" + className +
+                    '\'' + ", methodName='" + methodName +
+                    '\'' + ", erasedParameterTypes=" +
+                    Arrays.toString(erasedParameterTypes) +
+                    ", method=" + method +
+                    '}';
         }
     }
 
