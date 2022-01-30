@@ -80,6 +80,11 @@ import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 public class CodeEditorFragment extends Fragment implements Savable,
         SharedPreferences.OnSharedPreferenceChangeListener {
 
+    private static final String EDITOR_LEFT_LINE_KEY = "line";
+    private static final String EDITOR_LEFT_COLUMN_KEY = "column";
+    private static final String EDITOR_RIGHT_LINE_KEY = "rightLine";
+    private static final String EDITOR_RIGHT_COLUMN_KEY = "rightColumn";
+
     private CodeEditorView mEditor;
     private CodeEditorEventListener mEditorEventListener;
 
@@ -112,9 +117,18 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         if (mCanSave) {
             if (ProjectManager.getInstance().getCurrentProject() != null) {
-                ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().setSnapshotContent(mCurrentFile, mEditor.getText().toString());
+                ProjectManager.getInstance().getCurrentProject()
+                        .getModule(mCurrentFile)
+                        .getFileManager()
+                        .setSnapshotContent(mCurrentFile, mEditor.getText().toString());
             }
         }
+
+        Cursor cursor = mEditor.getCursor();
+        outState.putInt(EDITOR_LEFT_LINE_KEY, cursor.getLeftLine());
+        outState.putInt(EDITOR_LEFT_COLUMN_KEY, cursor.getLeftColumn());
+        outState.putInt(EDITOR_RIGHT_LINE_KEY, cursor.getRightLine());
+        outState.putInt(EDITOR_RIGHT_COLUMN_KEY, cursor.getRightColumn());
     }
 
     @Override
@@ -135,18 +149,21 @@ public class CodeEditorFragment extends Fragment implements Savable,
             Optional<CharSequence> fileContent =
                     module.getFileManager().getFileContent(mCurrentFile);
             if (fileContent.isPresent()) {
-                int line = mEditor.getCursor().getLeftLine();
-                int column = mEditor.getCursor().getLeftColumn();
+                CharSequence content = fileContent.get();
+                if (!content.equals(mEditor.getText())) {
+                    int line = mEditor.getCursor().getLeftLine();
+                    int column = mEditor.getCursor().getLeftColumn();
 
-                int targetX = mEditor.getOffsetX();
-                int targetY = mEditor.getOffsetY();
+                    int targetX = mEditor.getOffsetX();
+                    int targetY = mEditor.getOffsetY();
 
-                mEditor.setText(fileContent.get());
+                    mEditor.setText(content);
 
-                mEditor.setSelection(line, column, false);
+                    mEditor.setSelection(line, column, false);
 
-                mEditor.getScroller().startScroll(mEditor.getOffsetX(), mEditor.getOffsetY(),
-                        targetX - mEditor.getOffsetX(), targetY - mEditor.getOffsetY(), 0);
+                    mEditor.getScroller().startScroll(mEditor.getOffsetX(), mEditor.getOffsetY(),
+                            targetX - mEditor.getOffsetX(), targetY - mEditor.getOffsetY(), 0);
+                }
             }
         }
     }
@@ -320,11 +337,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
             if (currentProject != null) {
                 Module currentModule = currentProject.getModule(mCurrentFile);
-                if (mLanguage instanceof KotlinLanguage) {
-                    com.tyron.kotlin_completion.CompletionEngine engine = com.tyron.kotlin_completion.CompletionEngine.getInstance(((AndroidModule) currentModule));
-                    CompiledFile compiledFile = engine.getSourcePath().currentVersion(mCurrentFile);
-                    dataContext.putData(CommonKotlinKeys.COMPILED_FILE, compiledFile);
-                } else if ((mLanguage instanceof JavaLanguage) && (currentModule instanceof JavaModule)) {
+                if ((mLanguage instanceof JavaLanguage) && (currentModule instanceof JavaModule)) {
                     JavaCompilerProvider service =
                             CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
                     JavaCompilerService compiler = service.getCompiler(currentProject,
@@ -375,6 +388,23 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     XmlFormatStyle.LAYOUT, "\n");
             mEditor.setText(xml);
         }));
+
+        if (savedInstanceState != null) {
+            restoreState(savedInstanceState);
+        }
+    }
+
+    private void restoreState(@NonNull Bundle savedInstanceState) {
+        int leftLine = savedInstanceState.getInt(EDITOR_LEFT_LINE_KEY, 0);
+        int leftColumn = savedInstanceState.getInt(EDITOR_LEFT_COLUMN_KEY, 0);
+        int rightLine = savedInstanceState.getInt(EDITOR_RIGHT_LINE_KEY, 0);
+        int rightColumn = savedInstanceState.getInt(EDITOR_RIGHT_COLUMN_KEY, 0);
+
+        if (leftLine != rightLine && leftColumn != rightColumn) {
+            mEditor.setSelectionRegion(leftLine, leftColumn, rightLine, rightColumn, true);
+        } else {
+            mEditor.setSelection(leftLine, leftColumn);
+        }
     }
 
     @Override
@@ -490,6 +520,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
      * @param item the item to be performed
      */
     public void performShortcut(ShortcutItem item) {
+        if (mEditor == null) {
+            return;
+        }
         for (ShortcutAction action : item.actions) {
             if (action.isApplicable(item.kind)) {
                 action.apply(mEditor, item);
