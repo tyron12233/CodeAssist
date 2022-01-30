@@ -8,6 +8,7 @@ import com.tyron.completion.java.FindTypeDeclarationAt;
 import com.tyron.completion.java.compiler.ParseTask;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.JavaParserUtil;
+import com.tyron.completion.java.util.PrintHelper;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
@@ -77,30 +78,24 @@ public class OverrideInheritedMethod implements JavaRewrite {
                             superMethod);
             int indent = EditHelper.indent(task.task, task.root(), thisTree) + 1;
 
-            Set<String> importedClasses = new HashSet<>();
             Set<String> typesToImport = ActionUtil.getTypesToImport(parameterizedType);
-            task.root().getImports().stream().map(ImportTree::getQualifiedIdentifier).map(Object::toString).forEach(importedClasses::add);
 
             Optional<JavaFileObject> sourceFile = compiler.findAnywhere(superClassName);
-            MethodDeclaration methodDeclaration;
+            String text;
             if (sourceFile.isPresent()) {
                 ParseTask parse = compiler.parse(sourceFile.get());
                 MethodTree source = FindHelper.findMethod(parse, superClassName, methodName,
                         erasedParameterTypes);
                 if (source == null) {
-                    methodDeclaration = EditHelper.printMethod(superMethod, parameterizedType,
-                            superMethod);
+                    text = PrintHelper.printMethod(superMethod, parameterizedType, superMethod);
                 } else {
-                    methodDeclaration = EditHelper.printMethod(superMethod, parameterizedType,
-                            source);
+                    text = PrintHelper.printMethod(superMethod, parameterizedType, source);
                 }
             } else {
-                methodDeclaration = EditHelper.printMethod(superMethod, parameterizedType,
-                        superMethod);
+                text = PrintHelper.printMethod(superMethod, parameterizedType, superMethod);
             }
 
             String tabs = Strings.repeat("\t", indent);
-            String text = JavaParserUtil.prettyPrint(methodDeclaration, className -> false);
             text = tabs + text.replace("\n", "\n" + tabs) + "\n\n";
 
             edits.add(new TextEdit(new Range(insertPoint, insertPoint), text));
