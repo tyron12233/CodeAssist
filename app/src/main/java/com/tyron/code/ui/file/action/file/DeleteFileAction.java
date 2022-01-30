@@ -7,6 +7,8 @@ import androidx.appcompat.app.AlertDialog;
 
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
+import com.tyron.code.ui.file.tree.TreeUtil;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
 import com.tyron.ui.treeview.TreeView;
 import com.tyron.code.ui.file.CommonFileKeys;
@@ -43,32 +45,50 @@ public class DeleteFileAction extends FileAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        TreeFileManagerFragment fragment = (TreeFileManagerFragment) e.getData(CommonDataKeys.FRAGMENT);
+        TreeFileManagerFragment fragment =
+                (TreeFileManagerFragment) e.getRequiredData(CommonDataKeys.FRAGMENT);
         TreeView<TreeFile> treeView = fragment.getTreeView();
-        TreeNode<TreeFile> currentNode = e.getData(CommonFileKeys.TREE_NODE);
+        TreeNode<TreeFile> currentNode = e.getRequiredData(CommonFileKeys.TREE_NODE);
 
         new AlertDialog.Builder(fragment.requireContext())
                 .setMessage(String.format(fragment.getString(R.string.dialog_confirm_delete),
                         currentNode.getValue().getFile().getName()))
                 .setPositiveButton(fragment.getString(R.string.dialog_delete), (d, which) -> {
-                    if (deleteFiles(currentNode, fragment)) {
-                        treeView.deleteNode(currentNode);
-                    } else {
-                        new AlertDialog.Builder(fragment.requireContext())
-                                .setTitle(R.string.error)
-                                .setMessage("Failed to delete file.")
-                                .setPositiveButton(android.R.string.ok, null)
-                                .show();
-                    }
+                    ProgressManager progress = ProgressManager.getInstance();
+                    progress.runNonCancelableAsync(() -> {
+                        boolean success = deleteFiles(currentNode, fragment);
+                        progress.runLater(() -> {
+                            if (fragment.isDetached()) {
+                                return;
+                            }
+                            if (success) {
+                                treeView.deleteNode(currentNode);
+                                TreeUtil.updateNode(currentNode.getParent());
+                                treeView.refreshTreeView();
+                            } else {
+                                new AlertDialog.Builder(fragment.requireContext())
+                                        .setTitle(R.string.error)
+                                        .setMessage("Failed to delete file.")
+                                        .setPositiveButton(android.R.string.ok, null)
+                                        .show();
+                            }
+                        });
+                    });
+
                 })
                 .show();
     }
 
+
+
     private boolean deleteFiles(TreeNode<TreeFile> currentNode, TreeFileManagerFragment fragment) {
         File currentFile = currentNode.getContent().getFile();
         FilesKt.walk(currentFile, FileWalkDirection.TOP_DOWN).iterator().forEachRemaining(file -> {
-            if (file.getName().endsWith(".java")) { // todo: add .kt and .xml checks
-                fragment.getMainViewModel().removeFile(file);
+            if (file.getName().endsWith(".java")) {
+                // todo: add .kt and .xml checks
+
+                ProgressManager.getInstance().runLater(() ->
+                        fragment.getMainViewModel().removeFile(file));
 
                 Module module = ProjectManager.getInstance()
                         .getCurrentProject()

@@ -14,6 +14,7 @@ import com.google.android.material.textfield.TextInputLayout;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
 import com.tyron.ui.treeview.TreeView;
 import com.tyron.code.ui.file.CommonFileKeys;
@@ -65,17 +66,29 @@ public class CreateDirectoryAction extends FileAction {
 
             til.setHint(R.string.directory_name);
             positive.setOnClickListener(v -> {
-                File fileToCreate = new File(currentDir, editText.getText().toString());
-                if (!fileToCreate.mkdirs()) {
-                    new AlertDialog.Builder(fragment.requireContext())
-                            .setTitle(R.string.error)
-                            .setMessage(R.string.error_dir_access)
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show();
-                } else {
-                    refreshTreeView(currentNode, fragment.getTreeView());
-                    dialog.dismiss();
-                }
+                ProgressManager progress = ProgressManager.getInstance();
+                progress.runNonCancelableAsync(() -> {
+                    File fileToCreate = new File(currentDir, editText.getText().toString());
+                    if (!fileToCreate.mkdirs()) {
+                        progress.runLater(() -> {
+                            new AlertDialog.Builder(fragment.requireContext())
+                                    .setTitle(R.string.error)
+                                    .setMessage(R.string.error_dir_access)
+                                    .setPositiveButton(android.R.string.ok, null)
+                                    .show();
+                        });
+                    } else {
+                        progress.runLater(() -> {
+                            if (fragment == null || fragment.isDetached()) {
+                                return;
+                            }
+                            refreshTreeView(currentNode, fragment.getTreeView());
+                            dialog.dismiss();
+                        });
+                    }
+                });
+
+
             });
             editText.addTextChangedListener(new SingleTextWatcher() {
                 @Override
