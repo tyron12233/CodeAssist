@@ -29,6 +29,8 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.R;
 import com.tyron.code.util.ApkInstaller;
+import com.tyron.completion.progress.ProgressIndicator;
+import com.tyron.completion.progress.ProgressManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -169,13 +171,16 @@ public class CompilerService extends Service {
             return;
         }
 
-        Executors.newSingleThreadExecutor().execute(() -> {
+        ProgressIndicator indicator = new ProgressIndicator();
+        ProgressManager.getInstance().runAsync(() -> {
            if (true) {
                buildProject(project, type);
            } else {
                buildMainModule(project, type);
             }
-        });
+        }, i -> {
+
+        }, indicator);
     }
 
     private void buildProject(Project project, BuildType type) {

@@ -1,6 +1,7 @@
 package com.tyron.code.ui.wizard;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
@@ -24,6 +25,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.WorkerThread;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.preference.PreferenceManager;
@@ -47,6 +49,7 @@ import com.tyron.common.util.AndroidUtilities;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.Decompress;
 import com.tyron.common.util.SingleTextWatcher;
+import com.tyron.completion.progress.ProgressManager;
 
 import org.apache.commons.io.FileUtils;
 
@@ -316,6 +319,7 @@ public class WizardFragment extends Fragment {
 //        });
     }
 
+    @SuppressLint("SetTextI18n")
     private void showDirectoryPickerDialog() {
         DialogProperties properties = new DialogProperties();
         properties.selection_mode = DialogConfigs.SINGLE_MODE;
@@ -464,7 +468,7 @@ public class WizardFragment extends Fragment {
         mWizardDetailsView.setVisibility(View.GONE);
         mLoadingLayout.setVisibility(View.VISIBLE);
 
-        Executors.newSingleThreadExecutor().execute(() -> {
+        ProgressManager.getInstance().runNonCancelableAsync(() -> {
             String savePath = mSaveLocationLayout.getEditText().getText().toString();
 
             try {
@@ -478,7 +482,7 @@ public class WizardFragment extends Fragment {
                 Project project = new Project(new File(savePath));
                 replacePlaceholders(project.getRootFile());
 
-                if (mListener != null) {
+                if (getActivity() != null && mListener != null) {
                     requireActivity().runOnUiThread(() -> {
                         getParentFragmentManager().popBackStack();
                         mListener.onProjectCreated(project);
@@ -499,6 +503,7 @@ public class WizardFragment extends Fragment {
      *
      * @param file Root directory to start
      */
+    @WorkerThread
     private void replacePlaceholders(File file) throws IOException {
         File[] files = file.listFiles();
         if (files != null) {
@@ -523,6 +528,7 @@ public class WizardFragment extends Fragment {
      *
      * @param file Input file
      */
+    @WorkerThread
     private void replacePlaceholder(File file) throws IOException {
         String string;
         try {
@@ -545,6 +551,7 @@ public class WizardFragment extends Fragment {
         );
     }
 
+    @WorkerThread
     private void createProject() throws IOException {
 
         File projectRoot = new File(mSaveLocationLayout.getEditText().getText().toString());

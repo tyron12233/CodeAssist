@@ -6,6 +6,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
 import com.tyron.code.ui.file.tree.TreeUtil;
 import com.tyron.code.ui.file.tree.model.TreeFile;
@@ -37,7 +38,7 @@ public class FileViewModel extends ViewModel {
     }
 
     public void refreshNode(File root) {
-        Executors.newSingleThreadExecutor().execute(() -> {
+        ProgressManager.getInstance().runNonCancelableAsync(() -> {
             TreeNode<TreeFile> node = TreeNode.root(TreeUtil.getNodes(root));
             mNode.postValue(node);
         });

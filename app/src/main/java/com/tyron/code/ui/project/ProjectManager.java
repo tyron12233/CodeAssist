@@ -22,6 +22,7 @@ import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.provider.CompletionEngine;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.completion.xml.XmlRepository;
 
@@ -76,7 +77,7 @@ public class ProjectManager {
                             boolean downloadLibs,
                             TaskListener listener,
                             ILogger logger) {
-        Executors.newSingleThreadExecutor().execute(() ->
+        ProgressManager.getInstance().runNonCancelableAsync(() ->
                 doOpenProject(project, downloadLibs, listener, logger));
     }
 

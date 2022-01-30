@@ -17,6 +17,7 @@ import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
 import com.tyron.ui.treeview.TreeView;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
@@ -76,7 +77,7 @@ public class TreeFileManagerFragment extends Fragment {
         SwipeRefreshLayout refreshLayout = new SwipeRefreshLayout(requireContext());
         refreshLayout.addView(root);
         refreshLayout.setOnRefreshListener(() -> {
-            Executors.newSingleThreadExecutor().execute(() -> {
+            ProgressManager.getInstance().runNonCancelableAsync(() -> {
                 if (!treeView.getAllNodes().isEmpty()) {
                     TreeNode<TreeFile> node = treeView.getAllNodes().get(0);
                     TreeUtil.updateNode(node);
