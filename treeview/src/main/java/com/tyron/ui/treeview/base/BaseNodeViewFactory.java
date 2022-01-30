@@ -12,11 +12,11 @@
  * permissions and limitations under.
  */
 
-package com.tyron.common.tree.base;
+package com.tyron.ui.treeview.base;
 
 import android.view.View;
 
-import com.tyron.common.tree.TreeNode;
+import com.tyron.ui.treeview.TreeNode;
 
 /**
  * Created by zxy on 17/4/23.

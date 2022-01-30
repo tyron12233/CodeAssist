@@ -4,8 +4,8 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
 import com.tyron.code.R
-import com.tyron.common.tree.TreeNode
-import com.tyron.common.tree.base.BaseNodeViewBinder
+import com.tyron.ui.treeview.TreeNode
+import com.tyron.ui.treeview.base.BaseNodeViewBinder
 import com.tyron.code.ui.file.tree.model.TreeFile
 import com.tyron.code.util.dp
 import com.tyron.code.util.setMargins
@@ -18,7 +18,7 @@ class TreeFileNodeViewBinder(
 
     private lateinit var viewHolder: ViewHolder
 
-    override fun bindView(treeNode: TreeNode<TreeFile>) {
+    override fun bindView(treeNode: com.tyron.ui.treeview.TreeNode<TreeFile>) {
         viewHolder = ViewHolder(itemView)
 
         viewHolder.rootView.setMargins(
@@ -40,7 +40,7 @@ class TreeFileNodeViewBinder(
         }
     }
 
-    override fun onNodeToggled(treeNode: TreeNode<TreeFile>, expand: Boolean) {
+    override fun onNodeToggled(treeNode: com.tyron.ui.treeview.TreeNode<TreeFile>, expand: Boolean) {
         viewHolder.arrow.animate()
             .rotation(if (expand) 90F else 0F)
             .setDuration(150)
@@ -49,7 +49,7 @@ class TreeFileNodeViewBinder(
         nodeListener.onNodeToggled(treeNode, expand)
     }
 
-    override fun onNodeLongClicked(view: View, treeNode: TreeNode<TreeFile>, expanded: Boolean): Boolean {
+    override fun onNodeLongClicked(view: View, treeNode: com.tyron.ui.treeview.TreeNode<TreeFile>, expanded: Boolean): Boolean {
         return nodeListener.onNodeLongClicked(view, treeNode, expanded)
     }
 
@@ -60,8 +60,8 @@ class TreeFileNodeViewBinder(
     }
 
     interface TreeFileNodeListener {
-        fun onNodeToggled(treeNode: TreeNode<TreeFile>?, expanded: Boolean)
-        fun onNodeLongClicked(view: View?, treeNode: TreeNode<TreeFile>?, expanded: Boolean): Boolean
+        fun onNodeToggled(treeNode: com.tyron.ui.treeview.TreeNode<TreeFile>?, expanded: Boolean)
+        fun onNodeLongClicked(view: View?, treeNode: com.tyron.ui.treeview.TreeNode<TreeFile>?, expanded: Boolean): Boolean
     }
 
 }

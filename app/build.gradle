@@ -48,6 +48,8 @@ dependencies {
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     implementation project(path: ':dependency-resolver')
 
+    implementation project(path: ':treeview')
+
     // completions
     implementation project(path: ':code-editor')
     implementation project(path: ':xml-completion')

@@ -12,7 +12,7 @@
  * permissions and limitations under.
  */
 
-package com.tyron.common.tree;
+package com.tyron.ui.treeview;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -23,9 +23,9 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.SimpleItemAnimator;
 
-import com.tyron.common.tree.base.BaseNodeViewFactory;
-import com.tyron.common.tree.base.SelectableTreeAction;
-import com.tyron.common.tree.helper.TreeHelper;
+import com.tyron.ui.treeview.base.BaseNodeViewFactory;
+import com.tyron.ui.treeview.base.SelectableTreeAction;
+import com.tyron.ui.treeview.helper.TreeHelper;
 
 import java.util.List;
 
