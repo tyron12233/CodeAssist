@@ -90,17 +90,17 @@ public class ImportClassFieldFix extends AnAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        Diagnostic<?> diagnostic = e.getData(CommonDataKeys.DIAGNOSTIC);
+        Diagnostic<?> diagnostic = e.getRequiredData(CommonDataKeys.DIAGNOSTIC);
         diagnostic = DiagnosticUtil.getDiagnosticSourceUnwrapper(diagnostic);
         if (diagnostic == null) {
             return;
         }
 
-        Editor editor = e.getData(CommonDataKeys.EDITOR);
+        Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
         JCDiagnostic d = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) diagnostic).d;
-        String simpleName= String.valueOf(d.getArgs()[1]);
-        JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
-        Path file = e.getData(CommonDataKeys.FILE).toPath();
+        String simpleName= String.valueOf(d.getArgs()[0]);
+        JavaCompilerService compiler = e.getRequiredData(CommonJavaContextKeys.COMPILER);
+        Path file = e.getRequiredData(CommonDataKeys.FILE).toPath();
 
         boolean isField = simpleName.contains(".");
         String searchName = simpleName;
