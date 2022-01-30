@@ -9,7 +9,7 @@ import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
-import com.tyron.code.util.AndroidUtilities;
+import com.tyron.common.util.AndroidUtilities;
 import com.tyron.code.util.DependencyUtils;
 import com.tyron.common.util.Decompress;
 import com.tyron.resolver.DependencyResolver;

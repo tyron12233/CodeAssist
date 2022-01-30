@@ -28,7 +28,7 @@ import com.tyron.code.ui.editor.shortcuts.action.RedoAction;
 import com.tyron.code.ui.editor.shortcuts.action.TextInsertAction;
 import com.tyron.code.ui.editor.shortcuts.action.UndoAction;
 import com.tyron.code.ui.main.MainViewModel;
-import com.tyron.code.util.AndroidUtilities;
+import com.tyron.common.util.AndroidUtilities;
 import com.tyron.fileeditor.api.FileEditor;
 
 import java.util.ArrayList;

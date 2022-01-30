@@ -1,6 +1,7 @@
-package com.tyron.code.util;
+package com.tyron.common.util;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -10,11 +11,11 @@ import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.Toast;
 
 import androidx.annotation.StringRes;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.tyron.code.ApplicationLoader;
+import com.tyron.common.ApplicationProvider;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -27,9 +28,13 @@ import java.security.NoSuchAlgorithmException;
 
 @SuppressWarnings("unused")
 public class AndroidUtilities {
+
+	public static void showToast(String message) {
+		Toast.makeText(ApplicationProvider.getApplicationContext(), message, Toast.LENGTH_LONG).show();
+	}
     
     public static int dp(float px) {
-        return Math.round(ApplicationLoader.applicationContext
+        return Math.round(ApplicationProvider.getApplicationContext()
 				.getResources().getDisplayMetrics().density * px);
     }
 
@@ -40,7 +45,7 @@ public class AndroidUtilities {
 	 */
 	public static int dpToPx(float dp) {
 		return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
-				dp, ApplicationLoader.applicationContext.getResources().getDisplayMetrics()));
+				dp, ApplicationProvider.getApplicationContext().getResources().getDisplayMetrics()));
 	}
 
 	public static void hideKeyboard(View view) {
@@ -107,7 +112,7 @@ public class AndroidUtilities {
 	}
 
 	public static void showSimpleAlert(Context context, String title, String message) {
-		new MaterialAlertDialogBuilder(context)
+		new AlertDialog.Builder(context)
 				.setTitle(title)
 				.setMessage(message)
 				.setPositiveButton(android.R.string.ok, null)
@@ -115,7 +120,7 @@ public class AndroidUtilities {
 	}
 
 	public static void copyToClipboard(String text) {
-		ClipboardManager clipboard = (ClipboardManager) ApplicationLoader.applicationContext
+		ClipboardManager clipboard = (ClipboardManager) ApplicationProvider.getApplicationContext()
 				.getSystemService(Context.CLIPBOARD_SERVICE);
 
 		ClipData clip = ClipData.newPlainText("", text); // is label important?
@@ -125,7 +130,7 @@ public class AndroidUtilities {
 	public static void copyToClipboard(String text, boolean showToast) {
 		copyToClipboard(text);
 
-		if (showToast) ApplicationLoader.showToast("Copied \"" + text + "\" to clipboard");
+		if (showToast) showToast("Copied \"" + text + "\" to clipboard");
 	}
 	
 	public static int getHeight(ViewGroup viewGroup) {
@@ -141,7 +146,7 @@ public class AndroidUtilities {
 	}
 
 	public static int getRowCount(int itemWidth) {
-		DisplayMetrics displayMetrics = ApplicationLoader.applicationContext
+		DisplayMetrics displayMetrics = ApplicationProvider.getApplicationContext()
 				.getResources().getDisplayMetrics();
 
 		return (displayMetrics.widthPixels / itemWidth);
