@@ -206,16 +206,16 @@ public class StringSearch {
 		if (partialName.length() == 1 && partialName.equals(".")) {
 			return true;
 		}
-      /*  if (candidate.length() < partialName.length()) return false;
+        if (candidate.length() < partialName.length()) return false;
         for (int i = 0; i < partialName.length(); i++) {
             if (candidate.charAt(i) != partialName.charAt(i)) return false;
         }
-        return true;*/
-        if (candidate.length() > partialName.length()) {
-            candidate = candidate.subSequence(0, partialName.length());
-        }
-        double similarity = similarity(candidate.toString(), partialName.toString());
-        return similarity > 0.5;
+        return true;
+//        if (candidate.length() > partialName.length()) {
+//            candidate = candidate.subSequence(0, partialName.length());
+//        }
+//        double similarity = similarity(candidate.toString(), partialName.toString());
+//        return similarity > 0.5;
     }
     
     public static String packageName(File file) {

@@ -132,9 +132,13 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
                 cl.isIncomplete = true;
                 break;
             }
-            if (member.getKind() == ElementKind.CONSTRUCTOR) continue;
+            if (member.getKind() == ElementKind.CONSTRUCTOR) {
+                continue;
+            }
             if (FuzzySearch.partialRatio(String.valueOf(member.getSimpleName()), partial) < 70 && !partial.endsWith(".") && !partial.isEmpty()) continue;
-            if (!trees.isAccessible(scope, member, type)) continue;
+            if (!trees.isAccessible(scope, member, type)) {
+                continue;
+            }
             if (isStatic != member.getModifiers().contains(Modifier.STATIC)) continue;
             if (member.getKind() == ElementKind.METHOD) {
                 putMethod((ExecutableElement) member, methods);

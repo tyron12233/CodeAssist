@@ -7,6 +7,7 @@ import com.tyron.common.util.StringSearch;
 import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.JavaCompilerService;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.CompletionList;
 
 import org.openjdk.source.tree.CompilationUnitTree;
@@ -38,17 +39,26 @@ public class ClassNameCompletionProvider extends BaseCompletionProvider {
         String packageName = Objects.toString(root.getPackageName(), "");
         Set<String> uniques = new HashSet<>();
         for (String className : compiler.packagePrivateTopLevelTypes(packageName)) {
-            if (!StringSearch.matchesPartialName(className, partial)) continue;
+            if (!StringSearch.matchesPartialName(className, partial)) {
+                continue;
+            }
             list.items.add(classItem(className));
             uniques.add(className);
         }
+
         for (String className : compiler.publicTopLevelTypes()) {
-            if (uniques.size() >= Completions.MAX_COMPLETION_ITEMS) {
-                list.isIncomplete = true;
+            // more strict on matching class names
+            String simpleName = ActionUtil.getSimpleName(className);
+            if (!StringSearch.matchesPartialName(simpleName, partial)) {
+                continue;
+            }
+            if (uniques.contains(className)) {
+                continue;
+            }
+            if (list.items.size() >= Completions.MAX_COMPLETION_ITEMS) {
+                list.setIncomplete(true);
                 break;
             }
-            if (FuzzySearch.partialRatio(className, partial) < 70) continue;
-            if (uniques.contains(className)) continue;
             list.items.add(classItem(className));
             uniques.add(className);
         }

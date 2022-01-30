@@ -46,7 +46,7 @@ public class JavaCompletionProvider extends CompletionProvider {
         if (isIncrementalCompletion(mCachedCompletion, params)) {
             String partial = partialIdentifier(params.getPrefix(), params.getPrefix().length());
             CompletionList cachedList = mCachedCompletion.getCompletionList();
-            if (!cachedList.items.isEmpty()) {
+            if (!cachedList.items.isEmpty() && !cachedList.isIncomplete) {
                 List<CompletionItem> narrowedList =
                         cachedList.items.stream()
                                 .sorted(Comparator.comparingInt((CompletionItem it) -> getRatio(it, partial)).reversed())

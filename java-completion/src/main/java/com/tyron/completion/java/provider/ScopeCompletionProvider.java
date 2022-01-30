@@ -38,8 +38,13 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
     public CompletionList complete(CompileTask task, TreePath path, String partial,
                                    boolean endsWithParen) {
         checkCanceled();
-
         CompletionList completionList = new CompletionList();
+        addCompletionItems(task, path, partial, endsWithParen, completionList);
+        return completionList;
+    }
+
+    public static void addCompletionItems(
+            CompileTask task, TreePath path, String partial, boolean endsWithParen, CompletionList completionList) {
         Trees trees = Trees.instance(task.task);
         Scope scope = trees.getScope(path);
 
@@ -57,11 +62,6 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
         for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
             checkCanceled();
 
-            if (completionList.items.size() >= Completions.MAX_COMPLETION_ITEMS) {
-                completionList.isIncomplete = true;
-                break;
-            }
-
             if (element.getKind() == ElementKind.METHOD) {
                 ExecutableElement executableElement = (ExecutableElement) element;
                 if (parentLeaf.getKind() == Tree.Kind.CLASS && !ElementUtil.isFinal(executableElement)) {
@@ -75,6 +75,5 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
                 completionList.items.add(item(element));
             }
         }
-        return completionList;
     }
 }
