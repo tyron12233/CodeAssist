@@ -34,12 +34,12 @@ public class ElementUtil {
             List<String> classes = new ArrayList<>();
             DeclaredType declaredType = (DeclaredType) typeMirror;
 
+            TypeElement element = (TypeElement) declaredType.asElement();
             if (isAnonymous(declaredType)) {
-                TypeElement element = (TypeElement) declaredType.asElement();
                 // the type of an anonymous class
                 classes.add(element.getSuperclass().toString());
             } else {
-                classes.add(declaredType.toString());
+                classes.add(element.toString());
             }
 
             for (TypeMirror argument : declaredType.getTypeArguments()) {

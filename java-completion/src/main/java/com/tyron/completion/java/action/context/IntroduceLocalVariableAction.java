@@ -88,6 +88,9 @@ public class IntroduceLocalVariableAction extends AnAction {
                 TreePath path = currentPath;
                 if (path.getLeaf().getKind() == Tree.Kind.IDENTIFIER && path.getParentPath().getLeaf().getKind() == Tree.Kind.MEMBER_SELECT) {
                     path = TreeUtil.findParentOfType(path, MethodInvocationTree.class);
+                } else if (path.getLeaf().getKind() == Tree.Kind.MEMBER_SELECT
+                        && path.getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
+                    path = TreeUtil.findParentOfType(path, MethodInvocationTree.class);
                 }
                 return performInternal(task, path, file);
             }
