@@ -1,5 +1,7 @@
 package com.tyron.completion.progress;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import java.util.Collections;
@@ -25,6 +27,7 @@ public class ProgressManager {
     }
 
     private final ExecutorService mPool = Executors.newFixedThreadPool(8);
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
 
     private final Map<Thread, ProgressIndicator> mThreadToIndicator;
 
@@ -63,6 +66,14 @@ public class ProgressManager {
      */
     public void runNonCancelableAsync(Runnable runnable) {
         mPool.execute(runnable);
+    }
+
+    /**
+     * Posts the runnable into the UI thread to be run later.
+     * @param runnable The code to run
+     */
+    public void runLater(Runnable runnable) {
+        mMainHandler.post(runnable);
     }
 
     private void doCheckCanceled() {
