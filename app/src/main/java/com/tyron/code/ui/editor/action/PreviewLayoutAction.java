@@ -15,7 +15,7 @@ import com.tyron.code.R;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.code.ui.editor.impl.xml.LayoutEditor;
 import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
-import com.tyron.code.util.AndroidUtilities;
+import com.tyron.common.util.AndroidUtilities;
 
 public class PreviewLayoutAction extends AnAction {
 

@@ -15,14 +15,20 @@ public class CircleDrawable extends Drawable {
     private final Paint mTextPaint;
     
     private final DrawableKind mKind;
-    
+    private final boolean mCircle;
+
     public CircleDrawable(DrawableKind kind) {
+        this(kind, false);
+    }
+
+    public CircleDrawable(DrawableKind kind, boolean circle) {
         mKind = kind;
-        
+        mCircle = circle;
+
         mPaint = new Paint();
         mPaint.setAntiAlias(true);
         mPaint.setColor(kind.getColor());
-        
+
         mTextPaint = new Paint();
         mTextPaint.setColor(0xffffffff);
         mTextPaint.setAntiAlias(true);
@@ -35,7 +41,11 @@ public class CircleDrawable extends Drawable {
         float width = getBounds().right;
         float height = getBounds().bottom;
 
-        canvas.drawRect(0, 0, width, height, mPaint);
+        if (mCircle) {
+            canvas.drawCircle(width / 2, height / 2, width / 2, mPaint);
+        } else {
+            canvas.drawRect(0, 0, width, height, mPaint);
+        }
 
         canvas.save();
         canvas.translate(width / 2f, height / 2f);
