@@ -25,13 +25,17 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class IncrementalD8Task extends Task<AndroidModule> {
 
     private static final String TAG = IncrementalD8Task.class.getSimpleName();
+
     public static final CacheHolder.CacheKey<String, List<File>> CACHE_KEY =
             new CacheHolder.CacheKey<>("dexCache");
+    private final ExecutorService mService = Executors.newCachedThreadPool();
 
     private DiagnosticsHandler diagnosticsHandler;
     private List<Path> mClassFiles;
@@ -108,7 +112,7 @@ public class IncrementalD8Task extends Task<AndroidModule> {
                     .setIntermediate(true)
                     .setOutput(mOutputPath, OutputMode.DexFilePerClassFile)
                     .build();
-            D8.run(command);
+            D8.run(command, mService);
             for (Path file : mFilesToCompile) {
                 mDexCache.load(file, "dex", Collections.singletonList(getDexFile(file.toFile())));
             }
@@ -132,7 +136,7 @@ public class IncrementalD8Task extends Task<AndroidModule> {
                     .setIntermediate(true)
                     .setOutput(mOutputPath, OutputMode.DexFilePerClassFile)
                     .build();
-            D8.run(command);
+            D8.run(command, mService);
 
             for (Path file : mFilesToCompile) {
                 mDexCache.load(file, "dex", Collections.singletonList(getDexFile(file.toFile())));
@@ -147,7 +151,7 @@ public class IncrementalD8Task extends Task<AndroidModule> {
             File output = new File(getModule().getBuildDirectory(), "bin");
             builder.setMode(CompilationMode.DEBUG);
             builder.setOutput(output.toPath(), OutputMode.DexIndexed);
-            D8.run(builder.build());
+            D8.run(builder.build(), mService);
 
         } catch (com.android.tools.r8.CompilationFailedException e) {
             throw new CompilationFailedException(e);
@@ -166,7 +170,7 @@ public class IncrementalD8Task extends Task<AndroidModule> {
                 .setMode(CompilationMode.RELEASE)
                 .setOutput(output.toPath(), OutputMode.DexIndexed)
                 .build();
-        D8.run(command);
+        D8.run(command, mService);
     }
 
     private List<Path> getLibraryDexes() {
@@ -231,7 +235,7 @@ public class IncrementalD8Task extends Task<AndroidModule> {
                             .setMode(CompilationMode.RELEASE)
                             .setOutput(lib.getParentFile().toPath(), OutputMode.DexIndexed)
                             .build();
-                    D8.run(command);
+                    D8.run(command, mService);
                 }
             }
         }
