@@ -203,6 +203,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         // If the user has changed projects, clear the current opened files
         if (!mProject.equals(mProjectManager.getCurrentProject())) {
             mMainViewModel.setFiles(new ArrayList<>());
+            mLogViewModel.clear(LogViewModel.BUILD_LOG);
         }
         mMainViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> {
             mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
