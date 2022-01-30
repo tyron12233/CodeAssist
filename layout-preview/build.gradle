@@ -27,7 +27,7 @@ android {
 
 dependencies {
 
-    implementation project(path: ':jaxp:xml')
+
     implementation project(path: ':common')
     implementation project(path: ':layout-preview:vector-parser')
     testImplementation 'junit:junit:4.13.2'
@@ -37,8 +37,9 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
 
-    implementation project(path: ':build-logic')
-    implementation project(path: ':kotlinc')
+    implementation project(path: ':build-tools:build-logic')
+    implementation project(path: ':build-tools:kotlinc')
+    implementation project(path: ':build-tools:jaxp:xml')
     implementation project(path: ':layout-preview:appcompat-widgets')
     implementation project(path: ':layout-preview:constraintlayout')
     implementation project(path: ':layout-preview:cardview')

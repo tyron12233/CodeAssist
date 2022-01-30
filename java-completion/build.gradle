@@ -45,5 +45,5 @@ dependencies {
 
     implementation project(path: ':common')
     implementation project(path: ':completion-api')
-    api project(path: ':build-logic')
+    api project(path: ':build-tools:build-logic')
 }

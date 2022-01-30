@@ -3,7 +3,7 @@ plugins {
 }
 
 dependencies {
-    implementation project(path: ':jaxp:xml')
+    implementation project(path: ':build-tools:jaxp:xml')
 }
 
 java {

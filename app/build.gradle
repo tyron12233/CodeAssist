@@ -35,14 +35,13 @@ configurations.implementation {
 }
 
 dependencies {
-    implementation project(path: ':build-logic')
+    implementation project(path: ':build-tools:build-logic')
+    implementation project(path: ':build-tools:jaxp:jaxp-internal')
+    implementation project(path: ':build-tools:jaxp:xml')
     implementation project(path: ':common')
-    implementation project(path: ':lint')
+    implementation project(path: ':build-tools:lint')
     implementation project(path: ':layout-preview')
     implementation project(path: ':kotlin-completion')
-    implementation project(path: ':jaxp:jaxp-internal')
-    implementation project(path: ':jaxp:xml')
-
     implementation 'io.github.medyo:android-about-page:2.0.0'
     
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'

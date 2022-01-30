@@ -31,6 +31,8 @@ import org.openjdk.source.util.Trees;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -68,14 +70,15 @@ public class OverrideInheritedMethodsAction extends AnAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        Editor editor = e.getData(CommonDataKeys.EDITOR);
-        File file = e.getData(CommonDataKeys.FILE);
-        JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
-        TreePath currentPath = e.getData(CommonJavaContextKeys.CURRENT_PATH);
+        Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
+        File file = e.getRequiredData(CommonDataKeys.FILE);
+        JavaCompilerService compiler = e.getRequiredData(CommonJavaContextKeys.COMPILER);
+        TreePath currentPath = e.getRequiredData(CommonJavaContextKeys.CURRENT_PATH);
 
-        Map<String, JavaRewrite> rewriteMap = performInternal(compiler, file.toPath(),
+        List<DiagnosticUtil.MethodPtr> pointers = performInternal(compiler, file.toPath(),
                 currentPath, editor.getCaret().getStart());
 
+        TreeView
         String[] titles = rewriteMap.keySet().toArray(new String[0]);
 
         new AlertDialog.Builder(e.getDataContext())
@@ -88,16 +91,16 @@ public class OverrideInheritedMethodsAction extends AnAction {
                 .show();
     }
 
-    private Map<String, JavaRewrite> performInternal(JavaCompilerService compiler,
-                                                     Path file,
-                                                     TreePath currentPath,
-                                                     int index) {
+    private List<DiagnosticUtil.MethodPtr> performInternal(JavaCompilerService compiler,
+                                                           Path file,
+                                                           TreePath currentPath,
+                                                           int index) {
         CompilerContainer container = compiler.compile(file);
         return container.get(task -> {
             Trees trees = Trees.instance(task.task);
             Element classElement = trees.getElement(currentPath);
             Elements elements = task.task.getElements();
-            Map<String, JavaRewrite> rewriteMap = new TreeMap<>();
+            List<DiagnosticUtil.MethodPtr> methodPtrs = new ArrayList<>();
             for (Element member : elements.getAllMembers((TypeElement) classElement)) {
                 if (member.getModifiers().contains(Modifier.FINAL)) {
                     continue;
@@ -117,13 +120,13 @@ public class OverrideInheritedMethodsAction extends AnAction {
                     continue;
                 }
                 DiagnosticUtil.MethodPtr ptr = new DiagnosticUtil.MethodPtr(task.task, method);
-                JavaRewrite rewrite = new OverrideInheritedMethod(ptr.className, ptr.methodName,
-                        ptr.erasedParameterTypes, file, index);
-                String title = "Override " + method.getSimpleName() + " from " + ptr.className;
-                rewriteMap.put(title, rewrite);
+//                JavaRewrite rewrite = new OverrideInheritedMethod(ptr.className, ptr.methodName,
+//                        ptr.erasedParameterTypes, file, index);
+//                String title = "Override " + method.getSimpleName() + " from " + ptr.className;
+                methodPtrs.add(ptr);
             }
 
-            return rewriteMap;
+            return methodPtrs;
         });
     }
 }
