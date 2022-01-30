@@ -34,6 +34,11 @@ import java.util.List;
  */
 
 public class TreeView<D> implements SelectableTreeAction<D> {
+
+    public interface OnTreeNodeClickListener<D> {
+        void onTreeNodeClicked(TreeNode<D> treeNode, boolean expand);
+    }
+
     private final Context context;
 
     private TreeNode<D> root;
