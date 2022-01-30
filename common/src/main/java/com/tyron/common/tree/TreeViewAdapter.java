@@ -12,7 +12,7 @@
  * permissions and limitations under.
  */
 
-package com.tyron.code.ui.component.tree;
+package com.tyron.common.tree;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -27,10 +27,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.tyron.code.ui.component.tree.base.BaseNodeViewBinder;
-import com.tyron.code.ui.component.tree.base.BaseNodeViewFactory;
-import com.tyron.code.ui.component.tree.base.CheckableNodeViewBinder;
-import com.tyron.code.ui.component.tree.helper.TreeHelper;
+import com.tyron.common.tree.base.BaseNodeViewBinder;
+import com.tyron.common.tree.base.BaseNodeViewFactory;
+import com.tyron.common.tree.base.CheckableNodeViewBinder;
+import com.tyron.common.tree.helper.TreeHelper;
 
 /**
  * Created by xinyuanzhong on 2017/4/21.

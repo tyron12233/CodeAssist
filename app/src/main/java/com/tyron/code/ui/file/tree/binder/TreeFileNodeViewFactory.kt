@@ -2,7 +2,7 @@ package com.tyron.code.ui.file.tree.binder
 
 import android.view.View
 import com.tyron.code.R
-import com.tyron.code.ui.component.tree.base.BaseNodeViewFactory
+import com.tyron.common.tree.base.BaseNodeViewFactory
 import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewBinder.TreeFileNodeListener
 import com.tyron.code.ui.file.tree.model.TreeFile
 

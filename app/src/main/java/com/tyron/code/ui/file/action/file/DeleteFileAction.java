@@ -1,7 +1,5 @@
 package com.tyron.code.ui.file.action.file;
 
-import static com.tyron.code.ui.file.tree.TreeUtil.updateNode;
-
 import android.content.Context;
 
 import androidx.annotation.NonNull;
@@ -9,18 +7,15 @@ import androidx.appcompat.app.AlertDialog;
 
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
-import com.tyron.code.ui.component.tree.TreeNode;
-import com.tyron.code.ui.component.tree.TreeView;
-import com.tyron.code.ui.component.tree.helper.TreeHelper;
+import com.tyron.common.tree.TreeNode;
+import com.tyron.common.tree.TreeView;
 import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
-import com.tyron.code.ui.file.tree.TreeUtil;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
-import com.tyron.code.ui.file.action.ActionContext;
 import com.tyron.code.ui.file.action.FileAction;
 import com.tyron.common.util.StringSearch;
 

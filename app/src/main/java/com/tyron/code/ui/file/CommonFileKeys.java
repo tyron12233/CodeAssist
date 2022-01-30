@@ -1,6 +1,6 @@
 package com.tyron.code.ui.file;
 
-import com.tyron.code.ui.component.tree.TreeNode;
+import com.tyron.common.tree.TreeNode;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;

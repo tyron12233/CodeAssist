@@ -4,8 +4,8 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
 import com.tyron.code.R
-import com.tyron.code.ui.component.tree.TreeNode
-import com.tyron.code.ui.component.tree.base.BaseNodeViewBinder
+import com.tyron.common.tree.TreeNode
+import com.tyron.common.tree.base.BaseNodeViewBinder
 import com.tyron.code.ui.file.tree.model.TreeFile
 import com.tyron.code.util.dp
 import com.tyron.code.util.setMargins

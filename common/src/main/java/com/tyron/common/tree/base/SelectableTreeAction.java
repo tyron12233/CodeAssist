@@ -12,11 +12,11 @@
  * permissions and limitations under.
  */
 
-package com.tyron.code.ui.component.tree.base;
+package com.tyron.common.tree.base;
 
 import java.util.List;
 
-import com.tyron.code.ui.component.tree.TreeNode;
+import com.tyron.common.tree.TreeNode;
 
 /**
  * Created by xinyuanzhong on 2017/4/27.

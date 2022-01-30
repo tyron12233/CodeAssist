@@ -1,6 +1,6 @@
 package com.tyron.code.ui.file.tree;
 
-import com.tyron.code.ui.component.tree.TreeNode;
+import com.tyron.common.tree.TreeNode;
 import com.tyron.code.ui.file.tree.model.TreeFile;
 
 import java.io.File;

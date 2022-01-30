@@ -12,14 +12,14 @@
  * permissions and limitations under.
  */
 
-package com.tyron.code.ui.component.tree.base;
+package com.tyron.common.tree.base;
 
 import android.view.View;
 
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.tyron.code.ui.component.tree.TreeNode;
-import com.tyron.code.ui.component.tree.TreeView;
+import com.tyron.common.tree.TreeNode;
+import com.tyron.common.tree.TreeView;
 
 /**
  * Created by zxy on 17/4/23.
