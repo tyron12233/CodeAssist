@@ -14,6 +14,8 @@ import com.tyron.completion.java.compiler.Parser;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
 
+import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
@@ -67,6 +69,8 @@ public class SelectJavaParentAction extends AnAction {
         SourcePositions positions = Trees.instance(parser.task).getSourcePositions();
         TreePath path = findCurrentPath.scan(parser.root, cursorStart, cursorEnd);
         if (path != null) {
+            path = modifyTreePath(path);
+
             long afterStart;
             long afterEnd;
 
@@ -85,5 +89,43 @@ public class SelectJavaParentAction extends AnAction {
             editor.setSelectionRegion(start.getLine(), start.getColumn(),
                     end.getLine(), end.getColumn());
         }
+    }
+
+    @NonNull
+    private TreePath modifyTreePath(TreePath treePath) {
+        TreePath parent = treePath.getParentPath();
+
+        if (treePath.getLeaf().getKind() == Tree.Kind.BLOCK) {
+            // select the parent of { }
+            return parent;
+        }
+
+        if (treePath.getLeaf().getKind() == Tree.Kind.MEMBER_SELECT) {
+            return modifyTreePath(parent);
+        }
+
+        if (treePath.getLeaf() instanceof ClassTree
+                && parent.getLeaf().getKind() == Tree.Kind.NEW_CLASS) {
+            if (parent.getParentPath().getLeaf().getKind() == Tree.Kind.EXPRESSION_STATEMENT) {
+                return parent.getParentPath();
+            }
+
+            return parent;
+        }
+
+        if (treePath.getLeaf().getKind() == Tree.Kind.IDENTIFIER) {
+            if (parent.getLeaf().getKind() == Tree.Kind.MEMBER_SELECT) {
+                return modifyTreePath(parent);
+            }
+            if (parent.getLeaf() .getKind() == Tree.Kind.METHOD_INVOCATION) {
+                // identifier -> method call -> expression
+                return parent.getParentPath();
+            }
+        }
+
+        if (treePath.getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
+            return parent;
+        }
+        return treePath;
     }
 }
