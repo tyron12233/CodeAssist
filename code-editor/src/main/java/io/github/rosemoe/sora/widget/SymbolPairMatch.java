@@ -104,6 +104,7 @@ public class SymbolPairMatch {
     public final static class DefaultSymbolPairs extends SymbolPairMatch {
 
         public DefaultSymbolPairs() {
+            putPair('<', new Replacement("<>", 1));
             super.putPair('{', new Replacement("{}", 1));
             super.putPair('(', new Replacement("()", 1));
             super.putPair('[', new Replacement("[]", 1));
