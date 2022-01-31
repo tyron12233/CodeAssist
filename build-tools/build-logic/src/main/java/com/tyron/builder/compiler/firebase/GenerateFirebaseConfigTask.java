@@ -36,6 +36,8 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
     private static final String PROJECT_INFO = "project_info";
     private static final String PACKAGE_NAME = "package_name";
     private static final String STORAGE_BUCKET = "storage_bucket";
+    private static final String FIREBASE_URL = "firebase_url";
+    private static final String FIREBASE_DATABASE_URL = "firebase_database_url";
     private static final String ANDROID_CLIENT_INFO = "android_client_info";
     private static final String MOBILESDK_SDK_APP_ID = "mobilesdk_app_id";
     private static final String DEFAULT_WEB_CLIENT_ID = "default_web_client_id";
@@ -186,6 +188,9 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
     private String replaceKey(String key) {
         if (STORAGE_BUCKET.equals(key)) {
             return GOOGLE_STORAGE_BUCKET;
+        }
+        if (FIREBASE_URL.equals(key)) {
+            return FIREBASE_DATABASE_URL;
         }
         return key;
     }
