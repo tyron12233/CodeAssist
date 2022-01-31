@@ -3,6 +3,7 @@ package com.tyron.completion.java.util;
 import static org.openjdk.source.tree.Tree.Kind.ANNOTATION;
 import static org.openjdk.source.tree.Tree.Kind.ARRAY_TYPE;
 import static org.openjdk.source.tree.Tree.Kind.BLOCK;
+import static org.openjdk.source.tree.Tree.Kind.BOOLEAN_LITERAL;
 import static org.openjdk.source.tree.Tree.Kind.CATCH;
 import static org.openjdk.source.tree.Tree.Kind.CLASS;
 import static org.openjdk.source.tree.Tree.Kind.DO_WHILE_LOOP;
@@ -12,10 +13,13 @@ import static org.openjdk.source.tree.Tree.Kind.IDENTIFIER;
 import static org.openjdk.source.tree.Tree.Kind.IF;
 import static org.openjdk.source.tree.Tree.Kind.IMPORT;
 import static org.openjdk.source.tree.Tree.Kind.INTERFACE;
+import static org.openjdk.source.tree.Tree.Kind.INT_LITERAL;
 import static org.openjdk.source.tree.Tree.Kind.LAMBDA_EXPRESSION;
+import static org.openjdk.source.tree.Tree.Kind.LONG_LITERAL;
 import static org.openjdk.source.tree.Tree.Kind.MEMBER_SELECT;
 import static org.openjdk.source.tree.Tree.Kind.METHOD;
 import static org.openjdk.source.tree.Tree.Kind.METHOD_INVOCATION;
+import static org.openjdk.source.tree.Tree.Kind.NEW_CLASS;
 import static org.openjdk.source.tree.Tree.Kind.PACKAGE;
 import static org.openjdk.source.tree.Tree.Kind.PARAMETERIZED_TYPE;
 import static org.openjdk.source.tree.Tree.Kind.PARENTHESIZED;
@@ -25,8 +29,10 @@ import static org.openjdk.source.tree.Tree.Kind.STRING_LITERAL;
 import static org.openjdk.source.tree.Tree.Kind.SWITCH;
 import static org.openjdk.source.tree.Tree.Kind.THROW;
 import static org.openjdk.source.tree.Tree.Kind.TRY;
+import static org.openjdk.source.tree.Tree.Kind.TYPE_CAST;
 import static org.openjdk.source.tree.Tree.Kind.UNARY_MINUS;
 import static org.openjdk.source.tree.Tree.Kind.UNARY_PLUS;
+import static org.openjdk.source.tree.Tree.Kind.VARIABLE;
 import static org.openjdk.source.tree.Tree.Kind.WHILE_LOOP;
 
 import androidx.annotation.Nullable;
@@ -71,27 +77,32 @@ public class ActionUtil {
 
     private static final Set<Tree.Kind> DISALLOWED_KINDS_INTRODUCE_LOCAL_VARIABLE =
             ImmutableSet.of(IMPORT, PACKAGE, INTERFACE, METHOD, ANNOTATION, THROW,
-                    WHILE_LOOP, DO_WHILE_LOOP, FOR_LOOP, IF, TRY, CATCH, PARAMETERIZED_TYPE,
+                    WHILE_LOOP, DO_WHILE_LOOP, FOR_LOOP, IF, TRY, CATCH,
                     UNARY_PLUS, UNARY_MINUS, RETURN, LAMBDA_EXPRESSION
             );
     private static final Set<Tree.Kind> CHECK_PARENT_KINDS_INTRODUCE_LOCAL_VARIABLE =
             ImmutableSet.of(
                     STRING_LITERAL, ARRAY_TYPE, PARENTHESIZED, MEMBER_SELECT, PRIMITIVE_TYPE,
-                    IDENTIFIER, BLOCK);
+                    IDENTIFIER, BLOCK, TYPE_CAST, PARAMETERIZED_TYPE,
+                    INT_LITERAL, LONG_LITERAL, BOOLEAN_LITERAL);
 
-    public static boolean canIntroduceLocalVariable(TreePath path) {
+    public static TreePath canIntroduceLocalVariable(TreePath path) {
         if (path == null) {
-            return false;
+            return null;
         }
         Tree.Kind kind = path.getLeaf().getKind();
         TreePath parent = path.getParentPath();
 
+        // = new ..
+        if (kind == NEW_CLASS && parent.getLeaf().getKind() == VARIABLE) {
+            return null;
+        }
         if (DISALLOWED_KINDS_INTRODUCE_LOCAL_VARIABLE.contains(kind)) {
-            return false;
+            return null;
         }
 
         if (path.getLeaf() instanceof JCTree.JCVariableDecl) {
-            return false;
+            return null;
         }
 
         if (CHECK_PARENT_KINDS_INTRODUCE_LOCAL_VARIABLE.contains(kind)) {
@@ -99,70 +110,70 @@ public class ActionUtil {
         }
 
         if (path.getLeaf() instanceof ClassTree && parent.getLeaf() instanceof NewClassTree) {
-            return false;
+            return null;
         }
 
         if (path.getLeaf() instanceof ClassTree) {
-            return false;
+            return null;
         }
 
         if (kind == METHOD_INVOCATION) {
             JCTree.JCMethodInvocation methodInvocation = (JCTree.JCMethodInvocation) path.getLeaf();
             // void return type
             if (isVoid(methodInvocation)) {
-                return false;
+                return null;
             }
 
             TreePath decl = TreeUtil.findParentOfType(path, JCTree.JCVariableDecl.class);
             if (decl != null) {
-                return false;
+                return null;
             }
 
             if (parent.getLeaf().getKind() == EXPRESSION_STATEMENT) {
-                return true;
+                return null;
             }
 
             return canIntroduceLocalVariable(parent);
         }
 
         if (parent == null) {
-            return false;
+            return null;
         }
 
         TreePath grandParent = parent.getParentPath();
         if (parent.getLeaf() instanceof ParenthesizedTree) {
             if (grandParent.getLeaf() instanceof IfTree) {
-                return false;
+                return null;
             }
             if (grandParent.getLeaf() instanceof WhileLoopTree) {
-                return false;
+                return null;
             }
             if (grandParent.getLeaf() instanceof ForLoopTree) {
-                return false;
+                return null;
             }
         }
 
         // can't introduce a local variable on a lambda expression
         // eg. run(() -> something());
         if (parent.getLeaf() instanceof JCTree.JCLambda) {
-            return false;
+            return null;
         }
 
         if (parent.getLeaf() instanceof JCTree.JCBlock) {
             // run(() -> { something(); });
             if (grandParent.getLeaf() instanceof JCTree.JCLambda) {
-                return true;
+                return null;
             }
         }
 
         if (path.getLeaf() instanceof NewClassTree) {
             // run(new Runnable() { });
             if (parent.getLeaf() instanceof MethodInvocationTree) {
-                return false;
+                return null;
             }
         }
 
-        return true;
+        return path;
     }
 
     private static boolean isVoid(JCTree.JCMethodInvocation methodInvocation) {

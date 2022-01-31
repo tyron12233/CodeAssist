@@ -67,7 +67,7 @@ public class IntroduceLocalVariableAction extends AnAction {
             return;
         }
 
-        if (!ActionUtil.canIntroduceLocalVariable(currentPath)) {
+        if (ActionUtil.canIntroduceLocalVariable(currentPath) == null) {
             return;
         }
 
@@ -85,13 +85,7 @@ public class IntroduceLocalVariableAction extends AnAction {
 
         JavaRewrite rewrite = cachedContainer.get(task -> {
             if (task != null) {
-                TreePath path = currentPath;
-                if (path.getLeaf().getKind() == Tree.Kind.IDENTIFIER && path.getParentPath().getLeaf().getKind() == Tree.Kind.MEMBER_SELECT) {
-                    path = TreeUtil.findParentOfType(path, MethodInvocationTree.class);
-                } else if (path.getLeaf().getKind() == Tree.Kind.MEMBER_SELECT
-                        && path.getParentPath().getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
-                    path = TreeUtil.findParentOfType(path, MethodInvocationTree.class);
-                }
+                TreePath path = ActionUtil.canIntroduceLocalVariable(currentPath);
                 return performInternal(task, path, file);
             }
             return null;
