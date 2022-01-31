@@ -318,7 +318,9 @@ public class EditorAutoCompleteWindow extends EditorBasePopupWindow {
         mRequestTime = System.currentTimeMillis();
 
         // cancel previous tasks
-        mIndicators.stream().filter(ProgressIndicator::isRunning)
+        mIndicators.stream()
+                .filter(Objects::nonNull)
+                .filter(ProgressIndicator::isRunning)
                 .forEach(ProgressIndicator::cancel);
 
         ProgressIndicator indicator = new ProgressIndicator();
