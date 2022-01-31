@@ -142,34 +142,37 @@ public class XmlUtils {
      * @return pair of the parent tag and the current tag at the current position
      */
     public static Pair<String, String> getTagAtPosition(XmlPullParser parser, int line,
-                                                        int column) {
-        int lineNumber = parser.getLineNumber();
-        int previousDepth = parser.getDepth();
-        String previousTag = "";
-        String parentTag = "";
-        String tag = parser.getName();
-        while (lineNumber < line) {
-            previousTag = parser.getName();
+                                                        int column) throws XmlPullParserException {
+
+        String parentTag = null;
+        int previousDepth = 0;
+        String tag = null;
+        do {
             try {
-                parser.nextTag();
-            } catch (Throwable e) {
-                // ignored, keep parsing
-            }
-            lineNumber = parser.getLineNumber();
+                parser.next();
 
-            if (parser.getName() != null) {
+            } catch (IOException | XmlPullParserException e) {
+                System.out.println(e);
+                // continue
+            }
+
+            int type = parser.getEventType();
+
+            if (type == XmlPullParser.END_DOCUMENT) {
+                break;
+            }
+
+            if (parser.getLineNumber() >= line && type != XmlPullParser.TEXT) {
                 tag = parser.getName();
+                break;
             }
 
-            if (parser.getDepth() > previousDepth) {
-                previousDepth = parser.getDepth();
-                parentTag = previousTag;
+            if (type == XmlPullParser.START_TAG && parser.getDepth() > previousDepth) {
+                parentTag = parser.getName();
             }
-        }
 
-        if (parentTag == null && previousTag != null) {
-            parentTag = previousTag;
-        }
+            previousDepth = parser.getDepth();
+        } while (true);
 
         return Pair.create(parentTag, tag);
     }
