@@ -2,6 +2,7 @@ package com.tyron.code.ui.project;
 
 import android.util.Log;
 
+import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
@@ -13,15 +14,21 @@ import com.tyron.common.util.AndroidUtilities;
 import com.tyron.code.util.DependencyUtils;
 import com.tyron.common.util.Decompress;
 import com.tyron.resolver.DependencyResolver;
+import com.tyron.resolver.RepositoryModel;
 import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
-import com.tyron.resolver.repository.PomRepository;
-import com.tyron.resolver.repository.PomRepositoryImpl;
+import com.tyron.resolver.repository.LocalRepository;
+import com.tyron.resolver.repository.RemoteRepository;
+import com.tyron.resolver.repository.Repository;
+import com.tyron.resolver.repository.RepositoryManager;
+import com.tyron.resolver.repository.RepositoryManagerImpl;
 
 import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,28 +39,71 @@ import java.util.zip.ZipFile;
 
 public class DependencyManager {
 
-    private final PomRepository mRepository;
+    private static final String REPOSITORIES_JSON = "repositories.json";
+
+    private final RepositoryManager mRepository;
     private final DependencyResolver mResolver;
 
-    public DependencyManager(File cacheDir) {
+    public DependencyManager(JavaModule module, File cacheDir) throws IOException {
         extractCommonPomsIfNeeded();
 
-        mRepository = new PomRepositoryImpl();
+        mRepository = new RepositoryManagerImpl();
         mRepository.setCacheDirectory(cacheDir);
-        mRepository.addRepositoryUrl("https://repo1.maven.org/maven2");
-        mRepository.addRepositoryUrl("https://maven.google.com");
-        mRepository.addRepositoryUrl("https://jitpack.io");
-        mRepository.addRepositoryUrl("https://jcenter.bintray.com");
+        for (Repository repository : getFromModule(module)) {
+            mRepository.addRepository(repository);
+        }
         mRepository.initialize();
         mResolver = new DependencyResolver(mRepository);
     }
 
+    public static List<Repository> getFromModule(JavaModule module) throws IOException {
+        File rootFile = module.getRootFile();
+        File repositoriesFile = new File(rootFile, REPOSITORIES_JSON);
+        List<RepositoryModel> repositoryModels = parseFile(repositoriesFile);
+        List<Repository> repositories = new ArrayList<>();
+        for (RepositoryModel model : repositoryModels) {
+            if (model.getUrl() == null) {
+                repositories.add(new LocalRepository(model.getName()));
+            } else {
+                repositories.add(new RemoteRepository(model.getName(), model.getUrl()));
+            }
+        }
+        return repositories;
+    }
+
+    public static List<RepositoryModel> parseFile(File file) throws IOException {
+        try {
+            String contents = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
+            Type type = new TypeToken<List<RepositoryModel>>() {}.getType();
+            List<RepositoryModel> models = new Gson().fromJson(contents, type);
+            if (models != null) {
+                return models;
+            }
+        } catch (IOException ignored) {
+            // add default ones
+        }
+
+        List<RepositoryModel> defaultRepositories = getDefaultRepositories();
+        String jsonContents = new Gson().toJson(defaultRepositories);
+        FileUtils.writeStringToFile(file, jsonContents, StandardCharsets.UTF_8);
+        return defaultRepositories;
+    }
+
+    public static List<RepositoryModel> getDefaultRepositories() {
+        return ImmutableList.<RepositoryModel>builder()
+                .add(new RepositoryModel("maven", "https://repo1.maven.org/maven2"))
+                .add(new RepositoryModel("google-maven", "https://maven.google.com"))
+                .add(new RepositoryModel("jitpack", "https://jitpack.io"))
+                .add(new RepositoryModel("jcenter", "https://jcenter.bintray.com"))
+                .build();
+    }
+
     private void extractCommonPomsIfNeeded() {
         File cacheDir = ApplicationLoader.applicationContext.getExternalFilesDir("cache");
-        File pomsDir = new File(cacheDir, "pom");
+        File pomsDir = new File(cacheDir, "google-maven");
         File[] children = pomsDir.listFiles();
         if (!pomsDir.exists() || children == null || children.length == 0) {
-            Decompress.unzipFromAssets(ApplicationLoader.applicationContext, "common_poms.zip", pomsDir.getAbsolutePath());
+            Decompress.unzipFromAssets(ApplicationLoader.applicationContext, "google-maven.zip", pomsDir.getParent());
         }
     }
 

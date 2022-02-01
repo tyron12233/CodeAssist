@@ -28,19 +28,21 @@ import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.library.adapter.LibraryManagerAdapter;
+import com.tyron.code.ui.project.DependencyManager;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.DependencyUtils;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
-import com.tyron.resolver.repository.PomRepository;
-import com.tyron.resolver.repository.PomRepositoryImpl;
+import com.tyron.resolver.repository.Repository;
+import com.tyron.resolver.repository.RepositoryManager;
+import com.tyron.resolver.repository.RepositoryManagerImpl;
 
 import org.apache.commons.io.FileUtils;
 
@@ -71,7 +73,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         return fragment;
     }
 
-    private PomRepository mPomRepository;
+    private RepositoryManager mRepositoryManager;
     private String mModulePath;
     private boolean isDumb = false;
     private LibraryManagerAdapter mAdapter;
@@ -81,13 +83,13 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         super.onCreate(savedInstanceState);
 
         File cacheDir = ApplicationLoader.applicationContext.getExternalFilesDir("cache");
-        mPomRepository = new PomRepositoryImpl();
-        mPomRepository.setCacheDirectory(cacheDir);
-        mPomRepository.addRepositoryUrl("https://repo1.maven.org/maven2");
-        mPomRepository.addRepositoryUrl("https://maven.google.com");
-        mPomRepository.addRepositoryUrl("https://jitpack.io");
-        mPomRepository.addRepositoryUrl("https://jcenter.bintray.com");
-        mPomRepository.initialize();
+        mRepositoryManager = new RepositoryManagerImpl();
+        mRepositoryManager.setCacheDirectory(cacheDir);
+        mRepositoryManager.addRepository("maven", "https://repo1.maven.org/maven2");
+        mRepositoryManager.addRepository("maven-google", "https://maven.google.com");
+        mRepositoryManager.addRepository("jitpack", "https://jitpack.io");
+        mRepositoryManager.addRepository("jcenter", "https://jcenter.bintray.com");
+        mRepositoryManager.initialize();
         mModulePath = requireArguments().getString(ARG_PATH);
     }
 
@@ -119,7 +121,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                                 File gradleFile = new File(rootFile, "build.gradle");
                                 if (gradleFile.exists()) {
                                     try {
-                                        List<Dependency> poms = DependencyUtils.parseGradle(mPomRepository,
+                                        List<Dependency> poms = DependencyUtils.parseGradle(mRepositoryManager,
                                                 gradleFile, ILogger.EMPTY);
                                         List<Dependency> data = new ArrayList<>(mAdapter.getData());
                                         poms.forEach(dependency -> {
@@ -160,7 +162,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
             isDumb = true;
             ProjectManager.getInstance().addOnProjectOpenListener(this);
         } else {
-            loadDependencies(project);
+            ProgressManager.getInstance().runNonCancelableAsync(() -> loadDependencies(project));
         }
         Toolbar toolbar = view.findViewById(R.id.toolbar);
         toolbar.setOnMenuItemClickListener(menu -> getParentFragmentManager().popBackStackImmediate());
@@ -169,7 +171,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
     @Override
     public void onProjectOpen(Project project) {
         if (isDumb) {
-            requireActivity().runOnUiThread(() -> loadDependencies(project));
+            ProgressManager.getInstance().runNonCancelableAsync(() -> loadDependencies(project));
         }
     }
 
@@ -181,11 +183,25 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
     }
 
     private void loadDependencies(Project project) {
-        toggleEmptyView(true, true, "Parsing dependencies");
+        ProgressManager.getInstance().runLater(() -> {
+            toggleEmptyView(true, true, "Parsing dependencies");
+        });
 
         List<Dependency> dependencies = new ArrayList<>();
         Module projectModule = project.getModule(new File(mModulePath));
         if (projectModule instanceof JavaModule) {
+
+            try {
+                List<Repository> repositories =
+                        DependencyManager.getFromModule((JavaModule) projectModule);
+                for (Repository repository : repositories) {
+                    mRepositoryManager.addRepository(repository);
+                }
+                mRepositoryManager.initialize();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
             File file = ((JavaModule) projectModule).getLibraryFile();
             try {
                 if (!file.exists()) {
@@ -198,14 +214,15 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
             dependencies.addAll(parse(file));
         }
 
-        mAdapter.submitList(dependencies);
-        if (dependencies.isEmpty()) {
-            toggleEmptyView(true, false, "No dependencies");
-        } else {
-            toggleEmptyView(false, false, "");
-        }
-
-        onPostLoad(projectModule);
+        ProgressManager.getInstance().runLater(() -> {
+            mAdapter.submitList(dependencies);
+            if (dependencies.isEmpty()) {
+                toggleEmptyView(true, false, "No dependencies");
+            } else {
+                toggleEmptyView(false, false, "");
+            }
+            onPostLoad(projectModule);
+        });
     }
 
     private void onPostLoad(Module module) {
@@ -248,13 +265,13 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                 });
 
                 menu.add(R.string.menu_display_dependencies).setOnMenuItemClickListener(item -> {
-                    DependencyResolver resolver = new DependencyResolver(mPomRepository);
+                    DependencyResolver resolver = new DependencyResolver(mRepositoryManager);
 
                     ProgressDialog dialog = new ProgressDialog(requireContext());
                     dialog.show();
 
                     Executors.newSingleThreadExecutor().execute(() -> {
-                        Pom pom = mPomRepository.getPom(dependency.toString());
+                        Pom pom = mRepositoryManager.getPom(dependency.toString());
                         if (pom != null) {
                             List<Pom> resolve = resolver.resolve(Collections.singletonList(pom));
 

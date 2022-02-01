@@ -2,6 +2,7 @@ package com.tyron.completion.java.util;
 
 import static org.openjdk.source.tree.Tree.Kind.ANNOTATION;
 import static org.openjdk.source.tree.Tree.Kind.ARRAY_TYPE;
+import static org.openjdk.source.tree.Tree.Kind.ASSIGNMENT;
 import static org.openjdk.source.tree.Tree.Kind.BLOCK;
 import static org.openjdk.source.tree.Tree.Kind.BOOLEAN_LITERAL;
 import static org.openjdk.source.tree.Tree.Kind.CATCH;
@@ -78,7 +79,7 @@ public class ActionUtil {
     private static final Set<Tree.Kind> DISALLOWED_KINDS_INTRODUCE_LOCAL_VARIABLE =
             ImmutableSet.of(IMPORT, PACKAGE, INTERFACE, METHOD, ANNOTATION, THROW,
                     WHILE_LOOP, DO_WHILE_LOOP, FOR_LOOP, IF, TRY, CATCH,
-                    UNARY_PLUS, UNARY_MINUS, RETURN, LAMBDA_EXPRESSION
+                    UNARY_PLUS, UNARY_MINUS, RETURN, LAMBDA_EXPRESSION, ASSIGNMENT
             );
     private static final Set<Tree.Kind> CHECK_PARENT_KINDS_INTRODUCE_LOCAL_VARIABLE =
             ImmutableSet.of(
@@ -130,7 +131,7 @@ public class ActionUtil {
             }
 
             if (parent.getLeaf().getKind() == EXPRESSION_STATEMENT) {
-                return null;
+                return path;
             }
 
             return canIntroduceLocalVariable(parent);
@@ -157,13 +158,6 @@ public class ActionUtil {
         // eg. run(() -> something());
         if (parent.getLeaf() instanceof JCTree.JCLambda) {
             return null;
-        }
-
-        if (parent.getLeaf() instanceof JCTree.JCBlock) {
-            // run(() -> { something(); });
-            if (grandParent.getLeaf() instanceof JCTree.JCLambda) {
-                return null;
-            }
         }
 
         if (path.getLeaf() instanceof NewClassTree) {

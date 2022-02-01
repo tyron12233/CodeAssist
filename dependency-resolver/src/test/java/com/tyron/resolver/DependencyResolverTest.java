@@ -3,8 +3,8 @@ package com.tyron.resolver;
 import com.google.common.collect.ImmutableList;
 import com.tyron.common.TestUtil;
 import com.tyron.resolver.model.Pom;
-import com.tyron.resolver.repository.PomRepository;
-import com.tyron.resolver.repository.PomRepositoryImpl;
+import com.tyron.resolver.repository.RepositoryManager;
+import com.tyron.resolver.repository.RepositoryManagerImpl;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Test;
@@ -15,7 +15,7 @@ import java.util.List;
 
 public class DependencyResolverTest {
 
-    private final PomRepository repository = new PomRepositoryImpl();
+    private final RepositoryManager repository = new RepositoryManagerImpl();
 
     @Test
     public void testDependencyResolution() throws IOException {
@@ -24,8 +24,8 @@ public class DependencyResolverTest {
             //noinspection ResultOfMethodCallIgnored
             cacheDir.mkdirs();
         }
-        repository.addRepositoryUrl("https://repo1.maven.org/maven2");
-        repository.addRepositoryUrl("https://maven.google.com");
+        repository.addRepository("maven", "https://repo1.maven.org/maven2");
+        repository.addRepository("maven-google", "https://maven.google.com");
         repository.setCacheDirectory(cacheDir);
         repository.initialize();
 

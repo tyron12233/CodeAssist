@@ -161,7 +161,8 @@ public class ProjectManager {
     }
 
     private void downloadLibraries(JavaModule project, TaskListener listener, ILogger logger) throws IOException {
-        DependencyManager manager = new DependencyManager(ApplicationLoader.applicationContext.getExternalFilesDir("cache"));
+        DependencyManager manager = new DependencyManager(project,
+                ApplicationLoader.applicationContext.getExternalFilesDir("cache"));
         manager.resolve(project, listener, logger);
     }
 
