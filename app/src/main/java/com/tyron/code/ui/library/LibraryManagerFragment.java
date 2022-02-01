@@ -82,10 +82,10 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         File cacheDir = ApplicationLoader.applicationContext.getExternalFilesDir("cache");
         mRepositoryManager = new RepositoryManagerImpl();
         mRepositoryManager.setCacheDirectory(cacheDir);
-        mRepositoryManager.addRepositoryUrl("https://repo1.maven.org/maven2");
-        mRepositoryManager.addRepositoryUrl("https://maven.google.com");
-        mRepositoryManager.addRepositoryUrl("https://jitpack.io");
-        mRepositoryManager.addRepositoryUrl("https://jcenter.bintray.com");
+        mRepositoryManager.addRepository("maven", "https://repo1.maven.org/maven2");
+        mRepositoryManager.addRepository("maven-google", "https://maven.google.com");
+        mRepositoryManager.addRepository("jitpack", "https://jitpack.io");
+        mRepositoryManager.addRepository("jcenter", "https://jcenter.bintray.com");
         mRepositoryManager.initialize();
         mModulePath = requireArguments().getString(ARG_PATH);
     }

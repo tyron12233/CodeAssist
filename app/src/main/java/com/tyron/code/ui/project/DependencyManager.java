@@ -40,10 +40,10 @@ public class DependencyManager {
 
         mRepository = new RepositoryManagerImpl();
         mRepository.setCacheDirectory(cacheDir);
-        mRepository.addRepositoryUrl("https://repo1.maven.org/maven2");
-        mRepository.addRepositoryUrl("https://maven.google.com");
-        mRepository.addRepositoryUrl("https://jitpack.io");
-        mRepository.addRepositoryUrl("https://jcenter.bintray.com");
+        mRepository.addRepository("maven", "https://repo1.maven.org/maven2");
+        mRepository.addRepository("google-maven", "https://maven.google.com");
+        mRepository.addRepository("jitpack", "https://jitpack.io");
+        mRepository.addRepository("jcenter", "https://jcenter.bintray.com");
         mRepository.initialize();
         mResolver = new DependencyResolver(mRepository);
     }
