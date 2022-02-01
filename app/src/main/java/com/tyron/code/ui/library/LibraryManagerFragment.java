@@ -33,11 +33,14 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.library.adapter.LibraryManagerAdapter;
+import com.tyron.code.ui.project.DependencyManager;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.DependencyUtils;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
+import com.tyron.resolver.repository.Repository;
 import com.tyron.resolver.repository.RepositoryManager;
 import com.tyron.resolver.repository.RepositoryManagerImpl;
 
@@ -159,7 +162,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
             isDumb = true;
             ProjectManager.getInstance().addOnProjectOpenListener(this);
         } else {
-            loadDependencies(project);
+            ProgressManager.getInstance().runNonCancelableAsync(() -> loadDependencies(project));
         }
         Toolbar toolbar = view.findViewById(R.id.toolbar);
         toolbar.setOnMenuItemClickListener(menu -> getParentFragmentManager().popBackStackImmediate());
@@ -168,7 +171,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
     @Override
     public void onProjectOpen(Project project) {
         if (isDumb) {
-            requireActivity().runOnUiThread(() -> loadDependencies(project));
+            ProgressManager.getInstance().runNonCancelableAsync(() -> loadDependencies(project));
         }
     }
 
@@ -185,6 +188,18 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         List<Dependency> dependencies = new ArrayList<>();
         Module projectModule = project.getModule(new File(mModulePath));
         if (projectModule instanceof JavaModule) {
+
+            try {
+                List<Repository> repositories =
+                        DependencyManager.getFromModule((JavaModule) projectModule);
+                for (Repository repository : repositories) {
+                    mRepositoryManager.addRepository(repository);
+                }
+                mRepositoryManager.initialize();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
             File file = ((JavaModule) projectModule).getLibraryFile();
             try {
                 if (!file.exists()) {
@@ -197,14 +212,15 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
             dependencies.addAll(parse(file));
         }
 
-        mAdapter.submitList(dependencies);
-        if (dependencies.isEmpty()) {
-            toggleEmptyView(true, false, "No dependencies");
-        } else {
-            toggleEmptyView(false, false, "");
-        }
-
-        onPostLoad(projectModule);
+        ProgressManager.getInstance().runLater(() -> {
+            mAdapter.submitList(dependencies);
+            if (dependencies.isEmpty()) {
+                toggleEmptyView(true, false, "No dependencies");
+            } else {
+                toggleEmptyView(false, false, "");
+            }
+            onPostLoad(projectModule);
+        });
     }
 
     private void onPostLoad(Module module) {
