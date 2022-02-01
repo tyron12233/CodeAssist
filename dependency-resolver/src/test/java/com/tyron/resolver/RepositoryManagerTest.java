@@ -22,13 +22,14 @@ public class RepositoryManagerTest {
             //noinspection ResultOfMethodCallIgnored
             cacheDir.mkdirs();
         }
-        repository.addRepositoryUrl("https://repo1.maven.org/maven2");
-        repository.addRepositoryUrl("https://maven.google.com");
+        repository.addRepository("maven", "https://repo1.maven.org/maven2");
+        repository.addRepository("maven-google", "https://maven.google.com");
+
         repository.setCacheDirectory(cacheDir);
         repository.initialize();
 
         Pom pom = repository.getPom("com.google.android.material:material:1.4.0");
-
+        assert pom != null;
         // get all the dependencies of this pom
         recurse(pom);
 
@@ -47,7 +48,16 @@ public class RepositoryManagerTest {
         File annotationsFile = repository.getLibrary(annotations);
         assert annotationsFile != null;
 
-        FileUtils.forceDelete(cacheDir);
+        try {
+            FileUtils.forceDelete(cacheDir);
+        } catch (IOException e) {
+            if (TestUtil.isWindows()) {
+                // cannot delete file on windows cause intellij is still using it, ignore
+                return;
+            }
+            // should not happen on other OSes
+            throw e;
+        }
     }
 
     private void recurse(Pom pom) {
