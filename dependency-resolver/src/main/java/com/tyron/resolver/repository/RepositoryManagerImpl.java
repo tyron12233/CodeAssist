@@ -1,5 +1,6 @@
 package com.tyron.resolver.repository;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.common.io.CharStreams;
@@ -8,6 +9,8 @@ import com.tyron.resolver.model.Pom;
 import com.tyron.resolver.parser.PomParser;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.filefilter.SuffixFileFilter;
+import org.apache.commons.io.filefilter.TrueFileFilter;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.File;
@@ -16,6 +19,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.jar.JarFile;
 import java.util.zip.ZipFile;
@@ -25,11 +29,11 @@ import kotlin.text.Charsets;
 public class RepositoryManagerImpl implements RepositoryManager {
 
     private File cacheDir;
-    private final List<String> repositoryUrls;
+    private final List<Repository> repositories;
     private final List<Pom> pomFiles;
 
     public RepositoryManagerImpl() {
-        this.repositoryUrls = new ArrayList<>();
+        this.repositories = new ArrayList<>();
         this.pomFiles = new ArrayList<>();
     }
 
@@ -58,7 +62,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
     private Pom getPomFromUrls(String[] names) {
         InputStream is = getFromUrls(getPathFromDeclaration(names) + ".pom");
         if (is != null) {
-            String contents = null;
+            String contents;
             try {
                 contents = CharStreams.toString(new InputStreamReader(is));
                 Pom parsed = new PomParser().parse(contents);
@@ -66,7 +70,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
                 parsed.setArtifactId(names[1]);
                 parsed.setVersionName(names[2]);
                 pomFiles.add(parsed);
-                savePomToCache(parsed, contents);
                 return parsed;
             } catch (IOException | XmlPullParserException e) {
                 // ignored
@@ -76,16 +79,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
     }
 
     private InputStream getFromUrls(String appendUrl) {
-        for (int i = 0; i < repositoryUrls.size(); i++) {
-            String url = repositoryUrls.get(i);
+        for (int i = 0; i < repositories.size(); i++) {
+            Repository repository = repositories.get(i);
             try {
-                URL downloadUrl = new URL(url + "/" + appendUrl);
-                InputStream is = downloadUrl.openStream();
+                InputStream is = repository.getInputStream(appendUrl);
                 if (is != null) {
                     return is;
                 }
             } catch (IOException e) {
-                if (i == repositoryUrls.size() - 1) {
+                if (i == repositories.size() - 1) {
                     // The dependency is not found on all urls, log
                     System.out.println("Dependency not found! " + appendUrl);
                 }
@@ -123,37 +125,27 @@ public class RepositoryManagerImpl implements RepositoryManager {
     @Override
     @Nullable
     public File getLibrary(Pom pom) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        sb.append(pom.getGroupId().replace('.', '/'));
+        sb.append('/');
+        sb.append(pom.getArtifactId().replace('.', '/'));
+        sb.append('/');
+        sb.append(pom.getVersionName());
+        sb.append('/');
+        sb.append(pom.getArtifactId());
+        sb.append('-');
+        sb.append(pom.getVersionName());
         if ("aar".equals(pom.getPackaging())) {
-            return getFile(pom, ".aar");
+            sb.append(".aar");
         } else {
-            return getFile(pom, ".jar");
+            sb.append(".jar");
         }
-    }
 
-    private File getFile(Pom pom, String extension) throws IOException {
-        File[] files = getLibraryCacheDirectory().listFiles(c -> c.getName().equals(pom.getDeclarationString() + extension));
-        if (files != null && files.length > 0) {
-            File file = files[0];
-            if (".aar".equals(extension)) {
-                if (isValidZipFile(file)) {
-                    return file;
-                } else {
-                    FileUtils.deleteQuietly(file);
-                }
-            } else {
-                if (isValidJarFile(file)) {
-                    return file;
-                } else {
-                    FileUtils.deleteQuietly(file);
-                }
+        for (Repository repository : repositories) {
+            File file = repository.getFile(sb.toString());
+            if (file != null && file.exists()) {
+                return file;
             }
-        }
-        InputStream is = getFromUrls(pom.getPath() + "/" + pom.getFileName() + extension);
-        if (is != null) {
-            File aarFile = new File(getLibraryCacheDirectory(), pom.getDeclarationString() + extension);
-            FileUtilsEx.createFile(aarFile);
-            FileUtils.copyInputStreamToFile(is, aarFile);
-            return aarFile;
         }
         return null;
     }
@@ -206,8 +198,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
     }
 
     @Override
-    public void addRepositoryUrl(String url) {
-        repositoryUrls.add(url);
+    public void addRepository(@NonNull Repository repository) {
+        repositories.add(repository);
+    }
+
+    @Override
+    public void addRepository(@NonNull String name, @NonNull String url) {
+        addRepository(new RemoteRepository(name, url));
     }
 
     @Override
@@ -216,9 +213,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
             throw new IllegalStateException("Cache directory is not set.");
         }
 
-        File[] pomFiles = getPomCacheDirectory().listFiles(c -> c.getName().endsWith(".pom"));
-        if (pomFiles != null) {
-            for (File pom : pomFiles) {
+        for (Repository repository : repositories) {
+            repository.setCacheDirectory(cacheDir);
+
+            Iterator<File> pomFiles = FileUtils.iterateFiles(repository.getRootDirectory(),
+                    new SuffixFileFilter(".pom"), TrueFileFilter.INSTANCE);
+            // save pom files for later
+
+            while (pomFiles.hasNext()) {
+                File pom = pomFiles.next();
                 String[] pomNames = parsePomDeclaration(pom.getName());
                 if (pomNames == null) {
                     continue;

@@ -1,5 +1,6 @@
 package com.tyron.resolver.repository;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.resolver.model.Pom;
@@ -25,7 +26,18 @@ public interface RepositoryManager {
 
     void setCacheDirectory(File directory);
 
-    void addRepositoryUrl(String url);
+    /**
+     * Adds a repository to search for
+     * @param name the name of the cache directory
+     * @param url The url of the repository
+     */
+    void addRepository(@NonNull String name, @NonNull String url);
+
+    /**
+     * Adds a repository to search for
+     * @param repository the repository to add
+     */
+    void addRepository(@NonNull Repository repository);
 
     void initialize();
 }
