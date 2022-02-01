@@ -216,10 +216,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
         for (Repository repository : repositories) {
             repository.setCacheDirectory(cacheDir);
 
-            Iterator<File> pomFiles = FileUtils.iterateFiles(repository.getRootDirectory(),
+            File rootDirectory = repository.getRootDirectory();
+            if (!rootDirectory.exists()) {
+                continue;
+            }
+            Iterator<File> pomFiles = FileUtils.iterateFiles(rootDirectory,
                     new SuffixFileFilter(".pom"), TrueFileFilter.INSTANCE);
-            // save pom files for later
 
+            // save pom files for later
             while (pomFiles.hasNext()) {
                 File pom = pomFiles.next();
                 String[] pomNames = parsePomDeclaration(pom.getName());
