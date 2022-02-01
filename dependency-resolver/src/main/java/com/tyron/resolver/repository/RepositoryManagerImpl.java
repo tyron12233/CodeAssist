@@ -16,21 +16,19 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.jar.JarFile;
-import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 import kotlin.text.Charsets;
 
-public class PomRepositoryImpl implements PomRepository {
+public class RepositoryManagerImpl implements RepositoryManager {
 
     private File cacheDir;
     private final List<String> repositoryUrls;
     private final List<Pom> pomFiles;
 
-    public PomRepositoryImpl() {
+    public RepositoryManagerImpl() {
         this.repositoryUrls = new ArrayList<>();
         this.pomFiles = new ArrayList<>();
     }

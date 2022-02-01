@@ -5,8 +5,7 @@ import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
 import com.tyron.resolver.model.Dependency;
-import com.tyron.resolver.model.Pom;
-import com.tyron.resolver.repository.PomRepository;
+import com.tyron.resolver.repository.RepositoryManager;
 
 import org.apache.commons.io.FileUtils;
 
@@ -16,9 +15,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -33,7 +30,7 @@ public class DependencyUtils {
      * @param file input build.gradle file
      * @return Library dependencies
      */
-    public static List<Dependency> parseGradle(PomRepository repository, File file, ILogger logger) throws IOException {
+    public static List<Dependency> parseGradle(RepositoryManager repository, File file, ILogger logger) throws IOException {
         String readString = FileUtils.readFileToString(file, Charset.defaultCharset());
         // remove all comments
         readString = readString.replaceAll("\\s*//.*", "");

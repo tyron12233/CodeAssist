@@ -28,7 +28,6 @@ import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
@@ -39,8 +38,8 @@ import com.tyron.code.util.DependencyUtils;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
-import com.tyron.resolver.repository.PomRepository;
-import com.tyron.resolver.repository.PomRepositoryImpl;
+import com.tyron.resolver.repository.RepositoryManager;
+import com.tyron.resolver.repository.RepositoryManagerImpl;
 
 import org.apache.commons.io.FileUtils;
 
@@ -71,7 +70,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         return fragment;
     }
 
-    private PomRepository mPomRepository;
+    private RepositoryManager mRepositoryManager;
     private String mModulePath;
     private boolean isDumb = false;
     private LibraryManagerAdapter mAdapter;
@@ -81,13 +80,13 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         super.onCreate(savedInstanceState);
 
         File cacheDir = ApplicationLoader.applicationContext.getExternalFilesDir("cache");
-        mPomRepository = new PomRepositoryImpl();
-        mPomRepository.setCacheDirectory(cacheDir);
-        mPomRepository.addRepositoryUrl("https://repo1.maven.org/maven2");
-        mPomRepository.addRepositoryUrl("https://maven.google.com");
-        mPomRepository.addRepositoryUrl("https://jitpack.io");
-        mPomRepository.addRepositoryUrl("https://jcenter.bintray.com");
-        mPomRepository.initialize();
+        mRepositoryManager = new RepositoryManagerImpl();
+        mRepositoryManager.setCacheDirectory(cacheDir);
+        mRepositoryManager.addRepositoryUrl("https://repo1.maven.org/maven2");
+        mRepositoryManager.addRepositoryUrl("https://maven.google.com");
+        mRepositoryManager.addRepositoryUrl("https://jitpack.io");
+        mRepositoryManager.addRepositoryUrl("https://jcenter.bintray.com");
+        mRepositoryManager.initialize();
         mModulePath = requireArguments().getString(ARG_PATH);
     }
 
@@ -119,7 +118,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                                 File gradleFile = new File(rootFile, "build.gradle");
                                 if (gradleFile.exists()) {
                                     try {
-                                        List<Dependency> poms = DependencyUtils.parseGradle(mPomRepository,
+                                        List<Dependency> poms = DependencyUtils.parseGradle(mRepositoryManager,
                                                 gradleFile, ILogger.EMPTY);
                                         List<Dependency> data = new ArrayList<>(mAdapter.getData());
                                         poms.forEach(dependency -> {
@@ -248,13 +247,13 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                 });
 
                 menu.add(R.string.menu_display_dependencies).setOnMenuItemClickListener(item -> {
-                    DependencyResolver resolver = new DependencyResolver(mPomRepository);
+                    DependencyResolver resolver = new DependencyResolver(mRepositoryManager);
 
                     ProgressDialog dialog = new ProgressDialog(requireContext());
                     dialog.show();
 
                     Executors.newSingleThreadExecutor().execute(() -> {
-                        Pom pom = mPomRepository.getPom(dependency.toString());
+                        Pom pom = mRepositoryManager.getPom(dependency.toString());
                         if (pom != null) {
                             List<Pom> resolve = resolver.resolve(Collections.singletonList(pom));
 

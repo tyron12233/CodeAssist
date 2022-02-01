@@ -4,25 +4,22 @@ import android.text.TextUtils;
 
 import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
-import com.tyron.resolver.repository.PomRepository;
+import com.tyron.resolver.repository.RepositoryManager;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 public class DependencyResolver {
 
-    private final PomRepository repository;
+    private final RepositoryManager repository;
     private final Map<Pom, String> resolvedPoms;
 
     private ResolveListener mListener;
 
-    public DependencyResolver(PomRepository repository) {
+    public DependencyResolver(RepositoryManager repository) {
         this.repository = repository;
         this.resolvedPoms = new HashMap<>();
     }

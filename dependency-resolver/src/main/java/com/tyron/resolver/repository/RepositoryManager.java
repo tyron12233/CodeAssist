@@ -7,7 +7,7 @@ import com.tyron.resolver.model.Pom;
 import java.io.File;
 import java.io.IOException;
 
-public interface PomRepository {
+public interface RepositoryManager {
 
     /**
      * Retrieve the pom file either from cache or from the network

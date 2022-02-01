@@ -3,22 +3,17 @@ package com.tyron.resolver;
 import com.tyron.common.TestUtil;
 import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
-import com.tyron.resolver.repository.PomRepositoryImpl;
+import com.tyron.resolver.repository.RepositoryManagerImpl;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 
-import edu.emory.mathcs.backport.java.util.Collections;
+public class RepositoryManagerTest {
 
-public class PomRepositoryTest {
-
-    private final PomRepositoryImpl repository = new PomRepositoryImpl();
+    private final RepositoryManagerImpl repository = new RepositoryManagerImpl();
 
     @Test
     public void test() throws IOException {

@@ -15,8 +15,8 @@ import com.tyron.common.util.Decompress;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.model.Dependency;
 import com.tyron.resolver.model.Pom;
-import com.tyron.resolver.repository.PomRepository;
-import com.tyron.resolver.repository.PomRepositoryImpl;
+import com.tyron.resolver.repository.RepositoryManager;
+import com.tyron.resolver.repository.RepositoryManagerImpl;
 
 import org.apache.commons.io.FileUtils;
 
@@ -32,13 +32,13 @@ import java.util.zip.ZipFile;
 
 public class DependencyManager {
 
-    private final PomRepository mRepository;
+    private final RepositoryManager mRepository;
     private final DependencyResolver mResolver;
 
     public DependencyManager(File cacheDir) {
         extractCommonPomsIfNeeded();
 
-        mRepository = new PomRepositoryImpl();
+        mRepository = new RepositoryManagerImpl();
         mRepository.setCacheDirectory(cacheDir);
         mRepository.addRepositoryUrl("https://repo1.maven.org/maven2");
         mRepository.addRepositoryUrl("https://maven.google.com");
