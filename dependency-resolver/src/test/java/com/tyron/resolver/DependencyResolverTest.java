@@ -24,8 +24,8 @@ public class DependencyResolverTest {
             //noinspection ResultOfMethodCallIgnored
             cacheDir.mkdirs();
         }
-        repository.addRepositoryUrl("https://repo1.maven.org/maven2");
-        repository.addRepositoryUrl("https://maven.google.com");
+        repository.addRepository("maven", "https://repo1.maven.org/maven2");
+        repository.addRepository("maven-google", "https://maven.google.com");
         repository.setCacheDirectory(cacheDir);
         repository.initialize();
 
