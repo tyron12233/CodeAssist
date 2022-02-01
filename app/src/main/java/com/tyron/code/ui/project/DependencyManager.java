@@ -100,10 +100,10 @@ public class DependencyManager {
 
     private void extractCommonPomsIfNeeded() {
         File cacheDir = ApplicationLoader.applicationContext.getExternalFilesDir("cache");
-        File pomsDir = new File(cacheDir, "pom");
+        File pomsDir = new File(cacheDir, "google-maven");
         File[] children = pomsDir.listFiles();
         if (!pomsDir.exists() || children == null || children.length == 0) {
-            Decompress.unzipFromAssets(ApplicationLoader.applicationContext, "common_poms.zip", pomsDir.getAbsolutePath());
+            Decompress.unzipFromAssets(ApplicationLoader.applicationContext, "google-maven.zip", pomsDir.getParent());
         }
     }
 
