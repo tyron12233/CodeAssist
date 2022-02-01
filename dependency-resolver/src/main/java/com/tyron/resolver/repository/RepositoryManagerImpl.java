@@ -226,16 +226,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
             // save pom files for later
             while (pomFiles.hasNext()) {
                 File pom = pomFiles.next();
-                String[] pomNames = parsePomDeclaration(pom.getName());
-                if (pomNames == null) {
-                    continue;
-                }
                 PomParser parser = new PomParser();
                 try {
                     Pom parsed = parser.parse(pom);
-                    parsed.setGroupId(pomNames[0]);
-                    parsed.setArtifactId(pomNames[1]);
-                    parsed.setVersionName(pomNames[2]);
                     this.pomFiles.add(parsed);
                 } catch (XmlPullParserException | IOException e) {
                     // ignored
