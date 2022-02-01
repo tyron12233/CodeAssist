@@ -80,6 +80,9 @@ public class DiagnosticUtil {
     }
 
     public static DiagnosticWrapper getDiagnosticWrapper(List<DiagnosticWrapper> diagnostics, long cursor) {
+        if (diagnostics == null) {
+            return null;
+        }
         for (DiagnosticWrapper diagnostic : diagnostics) {
             if (diagnostic.getStartPosition() <= cursor && cursor < diagnostic.getEndPosition()) {
                 return diagnostic;

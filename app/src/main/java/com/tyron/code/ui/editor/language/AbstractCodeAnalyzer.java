@@ -16,13 +16,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.github.rosemoe.sora2.data.Span;
-import io.github.rosemoe.sora2.interfaces.CodeAnalyzer;
-import io.github.rosemoe.sora2.text.TextAnalyzeResult;
-import io.github.rosemoe.sora2.text.TextAnalyzer;
-import io.github.rosemoe.sora2.widget.EditorColorScheme;
+import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager;
+import io.github.rosemoe.sora.lang.styling.MappedSpans;
+import io.github.rosemoe.sora.lang.styling.Styles;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
-public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
+public abstract class AbstractCodeAnalyzer<T> extends SimpleAnalyzeManager<T> {
 
     private final Map<Integer, Integer> mColorMap = new HashMap<>();
 
@@ -34,7 +33,6 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
         setup();
     }
 
-    @Override
     public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
         mDiagnostics = diagnostics;
     }
@@ -68,7 +66,6 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
      */
     public abstract Lexer getLexer(CharStream input);
 
-    @Override
     public abstract void analyzeInBackground(CharSequence contents);
 
     public Integer getColor(int tokenType) {
@@ -76,7 +73,7 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
     }
 
     /**
-     * Called before {@link this#analyze(CharSequence, TextAnalyzeResult, TextAnalyzer.AnalyzeThread.Delegate)}
+     * Called before {@link #analyze(StringBuilder, Delegate)}
      * is called, commonly used to clear object caches before starting the analysis
      */
     protected void beforeAnalyze() {
@@ -84,13 +81,15 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
     }
 
     @Override
-    public void analyze(CharSequence content, TextAnalyzeResult result,
-                        TextAnalyzer.AnalyzeThread.Delegate delegate) {
+    protected Styles analyze(StringBuilder text, Delegate<T> delegate) {
         beforeAnalyze();
 
+        Styles styles = new Styles();
+        MappedSpans.Builder result = new MappedSpans.Builder(1024);
+
         try {
-            Lexer lexer = getLexer(CharStreams.fromReader(new CharSequenceReader(content)));
-            while (delegate.shouldAnalyze()) {
+            Lexer lexer = getLexer(CharStreams.fromReader(new CharSequenceReader(text)));
+            while (!delegate.isCancelled()) {
                 Token token = lexer.nextToken();
                 if (token == null) {
                     break;
@@ -99,7 +98,7 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
                     break;
                 }
 
-                boolean skip = onNextToken(token, result);
+                boolean skip = onNextToken(token, styles, result);
                 if (skip) {
                     mPreviousToken = token;
                     continue;
@@ -109,8 +108,7 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
                 if (id == null) {
                     id = EditorColorScheme.TEXT_NORMAL;
                 }
-                Span obtain = Span.obtain(token.getCharPositionInLine(), id);
-                result.addIfNeeded(token.getLine() - 1, obtain);
+                result.addIfNeeded(token.getLine() - 1, token.getCharPositionInLine(), id);
 
                 mPreviousToken = token;
             }
@@ -119,16 +117,19 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
                 result.determine(mPreviousToken.getLine() - 1);
             }
 
-            afterAnalyze(content, result);
+            styles.spans = result.build();
+
+            afterAnalyze(text, styles, result);
         } catch (IOException e) {
             // ignored
         }
+        return styles;
     }
 
     /**
-     * Called after the analysis has been done, used to finalize the {@link TextAnalyzeResult}
+     * Called after the analysis has been done, used to finalize the {@link MappedSpans.Builder}
      */
-    protected void afterAnalyze(CharSequence content, TextAnalyzeResult colors) {
+    protected void afterAnalyze(CharSequence content, Styles styles, MappedSpans.Builder colors) {
 
     }
 
@@ -140,10 +141,11 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
     /**
      * Called when the lexer has moved to the next token
      * @param currentToken the current token
+     * @param styles
      * @param colors the current colors object, can be modified
      * @return true if the analyzer should skip on the next token
      */
-    public boolean onNextToken(Token currentToken, TextAnalyzeResult colors) {
+    public boolean onNextToken(Token currentToken, Styles styles, MappedSpans.Builder colors) {
         return false;
     }
 }

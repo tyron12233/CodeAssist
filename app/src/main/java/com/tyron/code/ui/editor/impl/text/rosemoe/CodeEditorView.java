@@ -1,19 +1,29 @@
 package com.tyron.code.ui.editor.impl.text.rosemoe;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.util.AttributeSet;
 
 import com.tyron.actions.DataContext;
+import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 
-import io.github.rosemoe.sora2.widget.CodeEditor;
+import java.io.File;
+import java.util.List;
+import java.util.function.Consumer;
+
+import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class CodeEditorView extends CodeEditor implements Editor {
 
     private boolean mIsBackgroundAnalysisEnabled;
+
+    private List<DiagnosticWrapper> mDiagnostics;
+    private Consumer<List<DiagnosticWrapper>> mDiagnosticsListener;
+    private File mCurrentFile;
 
     public CodeEditorView(Context context) {
         super(DataContext.wrap(context));
@@ -32,8 +42,42 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
+    public void draw(Canvas canvas) {
+        drawView(canvas);
+        super.draw(canvas);
+    }
+
+    @Override
+    public List<DiagnosticWrapper> getDiagnostics() {
+        return mDiagnostics;
+    }
+
+    @Override
+    public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
+        mDiagnostics = diagnostics;
+
+        if (mDiagnosticsListener != null) {
+            mDiagnosticsListener.accept(mDiagnostics);
+        }
+    }
+
+    public void setDiagnosticsListener(Consumer<List<DiagnosticWrapper>> listener) {
+        mDiagnosticsListener = listener;
+    }
+
+    @Override
+    public File getCurrentFile() {
+        return mCurrentFile;
+    }
+
+    @Override
+    public void openFile(File file) {
+        mCurrentFile = file;
+    }
+
+    @Override
     public CharPosition getCharPosition(int index) {
-        io.github.rosemoe.sora2.text.CharPosition charPosition =
+        io.github.rosemoe.sora.text.CharPosition charPosition =
                 getText().getIndexer().getCharPosition(index);
         return new CharPosition(charPosition.line, charPosition.column);
     }
@@ -75,7 +119,9 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     public synchronized boolean formatCodeAsync(int start, int end) {
-        return CodeEditorView.super.formatCodeAsync(start, end);
+//        CodeEditorView.super.formatCodeAsync();
+//        return CodeEditorView.super.formatCodeAsync(start, end);
+        return false;
     }
 
     @Override
@@ -86,14 +132,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
     @Override
     public Content getContent() {
         return new ContentWrapper(CodeEditorView.this.getText());
-    }
-
-    @Override
-    public void analyze(boolean runBgAnalyzer) {
-        if (!mIsBackgroundAnalysisEnabled && runBgAnalyzer) {
-            return;
-        }
-        super.analyze(runBgAnalyzer);
     }
 
     /**

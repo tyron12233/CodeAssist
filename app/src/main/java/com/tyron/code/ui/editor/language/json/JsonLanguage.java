@@ -1,47 +1,70 @@
 package com.tyron.code.ui.editor.language.json;
 
+import android.os.Bundle;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.tyron.completion.java.rewrite.EditHelper;
+import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
+import org.apache.commons.io.input.CharSequenceReader;
 
-import io.github.rosemoe.sora2.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.sora2.interfaces.CodeAnalyzer;
-import io.github.rosemoe.sora2.interfaces.EditorLanguage;
-import io.github.rosemoe.sora2.interfaces.NewlineHandler;
-import io.github.rosemoe.sora2.langs.EmptyLanguage;
-import io.github.rosemoe.sora2.text.TextUtils;
-import io.github.rosemoe.sora2.widget.CodeEditor;
-import io.github.rosemoe.sora2.widget.SymbolPairMatch;
+import io.github.rosemoe.sora.lang.Language;
+import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
+import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager;
+import io.github.rosemoe.sora.lang.analysis.StyleReceiver;
+import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
+import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
+import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
+import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
+import io.github.rosemoe.sora.lang.styling.Styles;
+import io.github.rosemoe.sora.text.CharPosition;
+import io.github.rosemoe.sora.text.ContentReference;
+import io.github.rosemoe.sora.text.TextUtils;
+import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.SymbolPairMatch;
 
-public class JsonLanguage implements EditorLanguage {
+public class JsonLanguage implements Language {
 
-    private final CodeEditor mEditor;
+    private final Editor mEditor;
 
-    public JsonLanguage(CodeEditor editor) {
+    private final JsonAnalyzer mAnalyzer;
+
+    public JsonLanguage(Editor editor) {
         mEditor = editor;
+
+        mAnalyzer = new JsonAnalyzer();
+    }
+
+    @NonNull
+    @Override
+    public AnalyzeManager getAnalyzeManager() {
+        return mAnalyzer;
     }
 
     @Override
-    public CodeAnalyzer getAnalyzer() {
-        return new JsonAnalyzer();
+    public int getInterruptionLevel() {
+        return INTERRUPTION_LEVEL_STRONG;
     }
 
     @Override
-    public AutoCompleteProvider getAutoCompleteProvider() {
-        return new EmptyLanguage.EmptyAutoCompleteProvider();
+    public void requireAutoComplete(@NonNull ContentReference content, @NonNull CharPosition position, @NonNull CompletionPublisher publisher, @NonNull Bundle extraArguments) throws CompletionCancelledException {
+
     }
 
     @Override
-    public boolean isAutoCompleteChar(char ch) {
-        return false;
+    public int getIndentAdvance(@NonNull ContentReference content, int line, int column) {
+        return getIndentAdvance(String.valueOf(content.getReference()), line, column);
     }
 
-    @Override
-    public int getIndentAdvance(String content) {
+    private int getIndentAdvance(String content, int line, int column) {
         JSONLexer lexer = new JSONLexer(CharStreams.fromString(content));
         Token token;
         int advance = 0;
@@ -84,6 +107,11 @@ public class JsonLanguage implements EditorLanguage {
         };
     }
 
+    @Override
+    public void destroy() {
+
+    }
+
     class IndentHandler implements NewlineHandler {
 
         private final String start;
@@ -100,17 +128,17 @@ public class JsonLanguage implements EditorLanguage {
         }
 
         @Override
-        public HandleResult handleNewline(String beforeText, String afterText, int tabSize) {
+        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
             int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            int advanceBefore = getIndentAdvance(beforeText);
-            int advanceAfter = getIndentAdvance(afterText);
+            int advanceBefore = getIndentAdvance(beforeText, -1, -1);
+            int advanceAfter = getIndentAdvance(afterText, -1, -1);
             String text;
             StringBuilder sb = new StringBuilder("\n")
                     .append(TextUtils.createIndent(count + advanceBefore, tabSize, useTab()))
                     .append('\n')
                     .append(text = TextUtils.createIndent(count + advanceAfter, tabSize, useTab()));
             int shiftLeft = text.length() + 1;
-            return new HandleResult(sb, shiftLeft);
+            return new NewlineHandleResult(sb, shiftLeft);
         }
     }
 }

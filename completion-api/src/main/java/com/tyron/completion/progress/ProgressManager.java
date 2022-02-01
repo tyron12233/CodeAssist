@@ -77,6 +77,14 @@ public class ProgressManager {
         mMainHandler.post(runnable);
     }
 
+    /**
+     * Posts the runnable into the UI thread to be run later.
+     * @param runnable The code to run
+     */
+    public void runLater(Runnable runnable, long delay) {
+        mMainHandler.postDelayed(runnable, delay);
+    }
+
     private void doCheckCanceled() {
         ProgressIndicator indicator = mThreadToIndicator.get(Thread.currentThread());
         if (indicator != null) {

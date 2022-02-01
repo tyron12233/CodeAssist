@@ -7,6 +7,7 @@ import com.tyron.builder.util.CharSequenceReader;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.main.CompletionEngine;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.editor.Editor;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -28,9 +29,9 @@ import java.util.stream.Collectors;
 
 public class XMLAutoCompleteProvider implements AutoCompleteProvider {
 
-    private final CodeEditor mEditor;
+    private final Editor mEditor;
 
-    public XMLAutoCompleteProvider(CodeEditor editor) {
+    public XMLAutoCompleteProvider(Editor editor) {
         mEditor = editor;
     }
 
@@ -52,8 +53,8 @@ public class XMLAutoCompleteProvider implements AutoCompleteProvider {
             return null;
         }
         CompletionList complete = CompletionEngine.getInstance().complete(currentProject, module,
-                currentFile, mEditor.getText().toString(), prefix, line, column,
-                mEditor.getCursor().getLeft());
+                currentFile, mEditor.getContent().toString(), prefix, line, column,
+                mEditor.getCaret().getStart());
         return complete.items.stream().map(CompletionItem::new).collect(Collectors.toList());
     }
 
@@ -62,7 +63,7 @@ public class XMLAutoCompleteProvider implements AutoCompleteProvider {
             XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
             factory.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
             XmlPullParser parser = factory.newPullParser();
-            parser.setInput(new CharSequenceReader(mEditor.getText()));
+            parser.setInput(new CharSequenceReader(mEditor.getContent()));
 
             Stack<String> stack = new Stack<>();
 

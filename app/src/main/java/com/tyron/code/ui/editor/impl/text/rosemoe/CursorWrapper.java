@@ -2,7 +2,7 @@ package com.tyron.code.ui.editor.impl.text.rosemoe;
 
 import com.tyron.editor.Caret;
 
-import io.github.rosemoe.sora2.text.Cursor;
+import io.github.rosemoe.sora.text.Cursor;
 
 public class CursorWrapper implements Caret {
 

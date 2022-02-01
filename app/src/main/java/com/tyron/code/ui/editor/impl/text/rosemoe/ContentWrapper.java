@@ -9,9 +9,9 @@ import java.util.stream.IntStream;
 
 public class ContentWrapper implements Content {
 
-    private final io.github.rosemoe.sora2.text.Content mContent;
+    private final io.github.rosemoe.sora.text.Content mContent;
 
-    public ContentWrapper(io.github.rosemoe.sora2.text.Content content) {
+    public ContentWrapper(io.github.rosemoe.sora.text.Content content) {
         mContent = content;
     }
 

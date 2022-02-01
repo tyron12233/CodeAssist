@@ -8,6 +8,9 @@ import org.openjdk.javax.tools.Diagnostic;
 
 import java.util.List;
 
+import io.github.rosemoe.sora.lang.styling.MappedSpans;
+import io.github.rosemoe.sora.lang.styling.Spans;
+import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora2.BuildConfig;
 import io.github.rosemoe.sora2.data.Span;
 import io.github.rosemoe.sora2.text.CharPosition;
@@ -127,4 +130,19 @@ public class HighlightUtil {
             span.problemFlags = Span.FLAG_ERROR;
         }
     }
+
+    /**
+     * Used in xml diagnostics where line is only given
+     */
+    public static void setErrorSpan(Styles colors, int line) {
+        Spans.Reader reader = colors.getSpans().read();
+        int lineCount = reader.getSpanCount();
+        int realLine = line - 1;
+        List<io.github.rosemoe.sora.lang.styling.Span> spans = reader.getSpansOnLine(Math.min(realLine, lineCount - 1));
+
+        for (io.github.rosemoe.sora.lang.styling.Span span : spans) {
+            span.problemFlags = Span.FLAG_ERROR;
+        }
+    }
+
 }
