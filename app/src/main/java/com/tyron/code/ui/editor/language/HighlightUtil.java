@@ -8,13 +8,13 @@ import org.openjdk.javax.tools.Diagnostic;
 
 import java.util.List;
 
-import io.github.rosemoe.sora.BuildConfig;
-import io.github.rosemoe.sora.data.Span;
-import io.github.rosemoe.sora.text.CharPosition;
-import io.github.rosemoe.sora.text.Indexer;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.widget.CodeEditor;
-import io.github.rosemoe.sora.widget.EditorColorScheme;
+import io.github.rosemoe.sora2.BuildConfig;
+import io.github.rosemoe.sora2.data.Span;
+import io.github.rosemoe.sora2.text.CharPosition;
+import io.github.rosemoe.sora2.text.Indexer;
+import io.github.rosemoe.sora2.text.TextAnalyzeResult;
+import io.github.rosemoe.sora2.widget.CodeEditor;
+import io.github.rosemoe.sora2.widget.EditorColorScheme;
 
 public class HighlightUtil {
 

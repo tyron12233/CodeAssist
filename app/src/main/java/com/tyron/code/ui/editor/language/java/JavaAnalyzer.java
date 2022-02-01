@@ -35,7 +35,6 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.api.ClientCodeWrapper;
 import org.openjdk.tools.javac.tree.JCTree;
-import org.openjdk.tools.javac.tree.TreeInfo;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.lang.ref.WeakReference;
@@ -47,16 +46,16 @@ import java.util.List;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
-import io.github.rosemoe.sora.data.BlockLine;
-import io.github.rosemoe.sora.data.NavigationItem;
-import io.github.rosemoe.sora.langs.java.JavaCodeAnalyzer;
-import io.github.rosemoe.sora.langs.java.JavaTextTokenizer;
-import io.github.rosemoe.sora.langs.java.Tokens;
-import io.github.rosemoe.sora.text.LineNumberCalculator;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.text.TextAnalyzer;
-import io.github.rosemoe.sora.widget.CodeEditor;
-import io.github.rosemoe.sora.widget.EditorColorScheme;
+import io.github.rosemoe.sora2.data.BlockLine;
+import io.github.rosemoe.sora2.data.NavigationItem;
+import io.github.rosemoe.sora2.langs.java.JavaCodeAnalyzer;
+import io.github.rosemoe.sora2.langs.java.JavaTextTokenizer;
+import io.github.rosemoe.sora2.langs.java.Tokens;
+import io.github.rosemoe.sora2.text.LineNumberCalculator;
+import io.github.rosemoe.sora2.text.TextAnalyzeResult;
+import io.github.rosemoe.sora2.text.TextAnalyzer;
+import io.github.rosemoe.sora2.widget.CodeEditor;
+import io.github.rosemoe.sora2.widget.EditorColorScheme;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
 

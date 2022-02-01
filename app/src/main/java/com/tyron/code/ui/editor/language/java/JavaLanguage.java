@@ -1,15 +1,15 @@
 package com.tyron.code.ui.editor.language.java;
 
-import io.github.rosemoe.sora.interfaces.EditorLanguage;
-import io.github.rosemoe.sora.util.MyCharacter;
-import io.github.rosemoe.sora.widget.SymbolPairMatch;
-import io.github.rosemoe.sora.interfaces.NewlineHandler;
-import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
-import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.sora.text.TextUtils;
-import io.github.rosemoe.sora.widget.CodeEditor;
-import io.github.rosemoe.sora.langs.java.JavaTextTokenizer;
-import io.github.rosemoe.sora.langs.java.Tokens;
+import io.github.rosemoe.sora2.interfaces.EditorLanguage;
+import io.github.rosemoe.sora2.util.MyCharacter;
+import io.github.rosemoe.sora2.widget.SymbolPairMatch;
+import io.github.rosemoe.sora2.interfaces.NewlineHandler;
+import io.github.rosemoe.sora2.interfaces.CodeAnalyzer;
+import io.github.rosemoe.sora2.interfaces.AutoCompleteProvider;
+import io.github.rosemoe.sora2.text.TextUtils;
+import io.github.rosemoe.sora2.widget.CodeEditor;
+import io.github.rosemoe.sora2.langs.java.JavaTextTokenizer;
+import io.github.rosemoe.sora2.langs.java.Tokens;
 
 import android.util.Log;
 

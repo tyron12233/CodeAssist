@@ -15,8 +15,8 @@ import com.tyron.completion.model.CompletionList;
 
 import java.util.Optional;
 
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora2.text.TextAnalyzeResult;
+import io.github.rosemoe.sora2.widget.CodeEditor;
 
 public class JavaAutoCompleteProvider extends AbstractAutoCompleteProvider {
 

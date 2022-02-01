@@ -9,7 +9,7 @@ import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 
-import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora2.widget.CodeEditor;
 
 public class CodeEditorView extends CodeEditor implements Editor {
 
@@ -33,7 +33,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     public CharPosition getCharPosition(int index) {
-        io.github.rosemoe.sora.text.CharPosition charPosition =
+        io.github.rosemoe.sora2.text.CharPosition charPosition =
                 getText().getIndexer().getCharPosition(index);
         return new CharPosition(charPosition.line, charPosition.column);
     }

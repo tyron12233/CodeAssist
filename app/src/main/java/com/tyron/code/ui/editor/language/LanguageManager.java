@@ -11,8 +11,8 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-import io.github.rosemoe.sora.interfaces.EditorLanguage;
-import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora2.interfaces.EditorLanguage;
+import io.github.rosemoe.sora2.widget.CodeEditor;
 
 public class LanguageManager {
 

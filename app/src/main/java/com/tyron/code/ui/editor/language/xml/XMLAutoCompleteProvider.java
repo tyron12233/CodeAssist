@@ -12,18 +12,17 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
-import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
+import io.github.rosemoe.sora2.interfaces.AutoCompleteProvider;
+import io.github.rosemoe.sora2.text.TextAnalyzeResult;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import io.github.rosemoe.sora.data.CompletionItem;
-import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora2.data.CompletionItem;
+import io.github.rosemoe.sora2.widget.CodeEditor;
 
-import java.util.Collections;
 import java.util.Stack;
 import java.util.stream.Collectors;
 

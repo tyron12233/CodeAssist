@@ -1,15 +1,11 @@
 package com.tyron.code.ui.editor.language.groovy;
 
-import java.util.List;
-
-import io.github.rosemoe.sora.data.CompletionItem;
-import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
-import io.github.rosemoe.sora.interfaces.EditorLanguage;
-import io.github.rosemoe.sora.interfaces.NewlineHandler;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.widget.CodeEditor;
-import io.github.rosemoe.sora.widget.SymbolPairMatch;
+import io.github.rosemoe.sora2.interfaces.AutoCompleteProvider;
+import io.github.rosemoe.sora2.interfaces.CodeAnalyzer;
+import io.github.rosemoe.sora2.interfaces.EditorLanguage;
+import io.github.rosemoe.sora2.interfaces.NewlineHandler;
+import io.github.rosemoe.sora2.widget.CodeEditor;
+import io.github.rosemoe.sora2.widget.SymbolPairMatch;
 
 public class GroovyLanguage implements EditorLanguage {
 

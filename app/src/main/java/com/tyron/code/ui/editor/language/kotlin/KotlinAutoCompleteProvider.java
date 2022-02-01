@@ -14,8 +14,8 @@ import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.kotlin_completion.CompletionEngine;
 
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora2.text.TextAnalyzeResult;
+import io.github.rosemoe.sora2.widget.CodeEditor;
 
 public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
 

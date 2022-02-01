@@ -7,10 +7,10 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
-import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
-import io.github.rosemoe.sora.text.LineNumberCalculator;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.text.TextAnalyzer;
+import io.github.rosemoe.sora2.interfaces.CodeAnalyzer;
+import io.github.rosemoe.sora2.text.LineNumberCalculator;
+import io.github.rosemoe.sora2.text.TextAnalyzeResult;
+import io.github.rosemoe.sora2.text.TextAnalyzer;
 
 public class BasicXmlPullAnalyzer implements CodeAnalyzer {
 

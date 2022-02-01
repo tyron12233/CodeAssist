@@ -16,11 +16,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.github.rosemoe.sora.data.Span;
-import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.text.TextAnalyzer;
-import io.github.rosemoe.sora.widget.EditorColorScheme;
+import io.github.rosemoe.sora2.data.Span;
+import io.github.rosemoe.sora2.interfaces.CodeAnalyzer;
+import io.github.rosemoe.sora2.text.TextAnalyzeResult;
+import io.github.rosemoe.sora2.text.TextAnalyzer;
+import io.github.rosemoe.sora2.widget.EditorColorScheme;
 
 public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
 

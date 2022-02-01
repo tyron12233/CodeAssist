@@ -38,11 +38,11 @@ import java.util.Stack;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
-import io.github.rosemoe.sora.data.BlockLine;
-import io.github.rosemoe.sora.data.Span;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.widget.CodeEditor;
-import io.github.rosemoe.sora.widget.EditorColorScheme;
+import io.github.rosemoe.sora2.data.BlockLine;
+import io.github.rosemoe.sora2.data.Span;
+import io.github.rosemoe.sora2.text.TextAnalyzeResult;
+import io.github.rosemoe.sora2.widget.CodeEditor;
+import io.github.rosemoe.sora2.widget.EditorColorScheme;
 
 public class XMLAnalyzer extends AbstractCodeAnalyzer {
 

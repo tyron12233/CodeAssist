@@ -26,9 +26,7 @@ import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
-import com.tyron.builder.project.api.KotlinModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
@@ -57,8 +55,6 @@ import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.progress.ProgressManager;
-import com.tyron.kotlin_completion.CompiledFile;
-import com.tyron.kotlin_completion.action.CommonKotlinKeys;
 
 import org.apache.commons.io.FileUtils;
 import org.openjdk.source.util.TreePath;
@@ -69,12 +65,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 
-import io.github.rosemoe.sora.interfaces.EditorEventListener;
-import io.github.rosemoe.sora.interfaces.EditorLanguage;
-import io.github.rosemoe.sora.text.CharPosition;
-import io.github.rosemoe.sora.text.Cursor;
-import io.github.rosemoe.sora.widget.CodeEditor;
-import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
+import io.github.rosemoe.sora2.interfaces.EditorEventListener;
+import io.github.rosemoe.sora2.interfaces.EditorLanguage;
+import io.github.rosemoe.sora2.text.CharPosition;
+import io.github.rosemoe.sora2.text.Cursor;
+import io.github.rosemoe.sora2.widget.CodeEditor;
+import io.github.rosemoe.sora2.widget.schemes.SchemeDarcula;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class CodeEditorFragment extends Fragment implements Savable,

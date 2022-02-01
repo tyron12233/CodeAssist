@@ -3,7 +3,7 @@ package com.tyron.code.ui.editor.shortcuts.action;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 
-import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora2.widget.CodeEditor;
 
 public class CursorMoveAction implements ShortcutAction {
 

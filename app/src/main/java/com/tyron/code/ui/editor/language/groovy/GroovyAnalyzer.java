@@ -8,10 +8,10 @@ import org.antlr.v4.runtime.Token;
 
 import java.util.Stack;
 
-import io.github.rosemoe.sora.data.BlockLine;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.widget.CodeEditor;
-import io.github.rosemoe.sora.widget.EditorColorScheme;
+import io.github.rosemoe.sora2.data.BlockLine;
+import io.github.rosemoe.sora2.text.TextAnalyzeResult;
+import io.github.rosemoe.sora2.widget.CodeEditor;
+import io.github.rosemoe.sora2.widget.EditorColorScheme;
 
 public class GroovyAnalyzer extends AbstractCodeAnalyzer {
 
