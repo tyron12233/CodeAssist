@@ -183,7 +183,9 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
     }
 
     private void loadDependencies(Project project) {
-        toggleEmptyView(true, true, "Parsing dependencies");
+        ProgressManager.getInstance().runLater(() -> {
+            toggleEmptyView(true, true, "Parsing dependencies");
+        });
 
         List<Dependency> dependencies = new ArrayList<>();
         Module projectModule = project.getModule(new File(mModulePath));
