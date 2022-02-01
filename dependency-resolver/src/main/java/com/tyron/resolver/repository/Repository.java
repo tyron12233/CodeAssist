@@ -20,6 +20,9 @@ public interface Repository {
 
     @Nullable File getFile(String path) throws IOException;
 
+    @Nullable
+    File getCachedFile(String path) throws IOException;
+
     String getName();
 
     /**

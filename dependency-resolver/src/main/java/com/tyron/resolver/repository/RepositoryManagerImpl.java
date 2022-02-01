@@ -96,14 +96,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
         return null;
     }
 
-    private void savePomToCache(Pom pom, String contents) throws IOException {
-        File pomFile = new File(getPomCacheDirectory(), pom.getDeclarationString() + ".pom");
-        if (!pomFile.exists() && !pomFile.createNewFile()) {
-            throw new IOException("Unable to save pom file");
-        }
-        FileUtils.writeStringToFile(pomFile, contents, Charsets.UTF_8);
-    }
-
     private String getPathFromDeclaration(String[] pomNames) {
         String groupId = pomNames[0].replace('.', '/');
         String artifactId = pomNames[1].replace('.','/');
@@ -142,22 +134,20 @@ public class RepositoryManagerImpl implements RepositoryManager {
         }
 
         for (Repository repository : repositories) {
+            File file = repository.getCachedFile(sb.toString());
+            if (file != null && file.exists()) {
+                return file;
+            }
+        }
+
+        // cannot find file from disk, try from network
+        for (Repository repository : repositories) {
             File file = repository.getFile(sb.toString());
             if (file != null && file.exists()) {
                 return file;
             }
         }
         return null;
-    }
-
-    private boolean isValidJarFile(File file) {
-        try {
-            // noinspection unused
-            JarFile jarFile = new JarFile(file);
-            return true;
-        } catch (IOException e) {
-            return false;
-        }
     }
 
     private boolean isValidZipFile(File file) {
@@ -176,14 +166,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
             // TODO: handle
         }
         return pomCache;
-    }
-
-    private File getLibraryCacheDirectory() {
-        File libraryCache = new File(cacheDir, "library");
-        if (!libraryCache.exists() && !libraryCache.mkdirs()) {
-            // TODO: handle
-        }
-        return libraryCache;
     }
 
     @Override

@@ -23,6 +23,12 @@ public class DefaultRepository implements Repository {
         return null;
     }
 
+    @Nullable
+    @Override
+    public File getCachedFile(String path) throws IOException {
+        return null;
+    }
+
     @Override
     public String getName() {
         return null;

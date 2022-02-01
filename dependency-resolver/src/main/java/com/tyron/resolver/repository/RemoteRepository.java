@@ -62,6 +62,12 @@ public class RemoteRepository extends DefaultRepository {
         return getFileInternal(path);
     }
 
+    @Nullable
+    @Override
+    public File getCachedFile(String path) throws IOException {
+        return mLocalRepository.getCachedFile(path);
+    }
+
     private File getFileInternal(String path) throws IOException {
         String downloadUrl = mUrl + path;
         URL url = new URL(downloadUrl);

@@ -52,6 +52,22 @@ public class LocalRepository extends DefaultRepository {
         return file;
     }
 
+    @Nullable
+    @Override
+    public File getCachedFile(String path) throws IOException {
+        File rootDirectory = getRootFile();
+        if (!rootDirectory.exists()) {
+            FileUtils.forceMkdirParent(rootDirectory);
+        }
+
+        File file = new File(rootDirectory, path);
+        // the file is not found on the disk, return null
+        if (!file.exists()) {
+            return null;
+        }
+        return file;
+    }
+
     /**
      * Saves the file to this repository
      * @param path The path of the file relative to the URL
