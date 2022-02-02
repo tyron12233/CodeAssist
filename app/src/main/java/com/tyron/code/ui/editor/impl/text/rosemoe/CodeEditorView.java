@@ -113,6 +113,11 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
+    public void delete(int startLine, int startColumn, int endLine, int endColumn) {
+        getText().delete(startLine, startColumn, endLine, endColumn);
+    }
+
+    @Override
     public void replace(int line, int column, int endLine, int endColumn, String string) {
         getText().replace(line, column, endLine, endColumn, string);
     }

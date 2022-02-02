@@ -33,6 +33,8 @@ public interface Editor {
 
     void insert(int line, int column, String string);
 
+    void delete(int startLine, int startColumn, int endLine, int endColumn);
+
     void replace(int line, int column, int endLine, int endColumn, String string);
 
     boolean formatCodeAsync();
