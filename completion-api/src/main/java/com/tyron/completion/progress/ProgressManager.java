@@ -98,6 +98,7 @@ public class ProgressManager {
         ProgressIndicator indicator = mThreadToIndicator.get(Thread.currentThread());
         if (indicator != null) {
             if (indicator.isCanceled()) {
+                mThreadToIndicator.remove(Thread.currentThread());
                 throw new ProcessCanceledException();
             }
         }
