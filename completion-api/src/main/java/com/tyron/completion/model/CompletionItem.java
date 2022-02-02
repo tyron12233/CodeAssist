@@ -41,7 +41,7 @@ public class CompletionItem {
         this.commitText = commitText;
         this.cursorOffset = commitText.length();
         this.iconKind = kind;
-        this.insertHandler = new DefaultInsertHandler(CompletionUtils.JAVA_PREDICATE, commitText);
+        this.insertHandler = new DefaultInsertHandler(CompletionUtils.JAVA_PREDICATE, this);
     }
 
     public CompletionItem(String label) {

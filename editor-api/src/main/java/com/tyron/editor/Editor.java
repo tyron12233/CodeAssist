@@ -49,5 +49,7 @@ public interface Editor {
 
     Content getContent();
 
+    void setSelection(int line, int column);
+
     void setSelectionRegion(int line, int column, int endLine, int endColumn);
 }

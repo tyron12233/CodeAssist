@@ -1,5 +1,6 @@
 package com.tyron.completion;
 
+import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.util.CompletionUtils;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
@@ -10,29 +11,42 @@ import java.util.function.Predicate;
 public class DefaultInsertHandler implements InsertHandler {
 
     private final Predicate<Character> predicate;
-    private final String commitText;
+    protected final CompletionItem item;
 
-    public DefaultInsertHandler(String commitText) {
-        this(CompletionUtils.JAVA_PREDICATE, commitText);
+    public DefaultInsertHandler(CompletionItem item) {
+        this(CompletionUtils.JAVA_PREDICATE, item);
     }
 
-    public DefaultInsertHandler(Predicate<Character> predicate, String commitText) {
+    public DefaultInsertHandler(Predicate<Character> predicate, CompletionItem item) {
         this.predicate = predicate;
-        this.commitText = commitText;
+        this.item = item;
     }
 
-    @Override
-    public void handleInsert(Editor editor) {
+    protected String getPrefix(String line, CharPosition position) {
+        return CompletionUtils.computePrefix(line, position, predicate);
+    }
+
+    protected void deletePrefix(Editor editor) {
         Caret caret = editor.getCaret();
         String lineString = editor.getContent().getLineString(caret.getStartLine());
-        String prefix = CompletionUtils.computePrefix(lineString, getCharPosition(caret), predicate);
+        String prefix = getPrefix(lineString, getCharPosition(caret));
         int length = prefix.length();
         if (prefix.contains(".")) {
             length -= prefix.lastIndexOf('.') + 1;
         }
         editor.delete(caret.getStartLine(), caret.getStartColumn() - length,
                 caret.getStartLine(), caret.getStartColumn());
-        editor.insert(caret.getStartLine(), caret.getStartColumn(), commitText);
+    }
+
+    @Override
+    public void handleInsert(Editor editor) {
+        deletePrefix(editor);
+        insert(item.commitText, editor);
+    }
+
+    protected void insert(String string, Editor editor) {
+            Caret caret = editor.getCaret();
+            editor.insert(caret.getStartLine(), caret.getStartColumn(), string);
     }
 
     private CharPosition getCharPosition(Caret caret) {

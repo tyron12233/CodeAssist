@@ -6,6 +6,7 @@ import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
 import com.tyron.completion.DefaultInsertHandler;
 import com.tyron.completion.java.compiler.CompileTask;
+import com.tyron.completion.java.insert.MethodInsertHandler;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;
 
@@ -77,7 +78,7 @@ public class CompletionItemFactory {
         item.commitText = element.getSimpleName().toString();
         item.cursorOffset = item.commitText.length();
         item.iconKind = getKind(element);
-        item.setInsertHandler(new DefaultInsertHandler(item.commitText));
+        item.setInsertHandler(new DefaultInsertHandler(item));
         return item;
     }
 
@@ -138,7 +139,7 @@ public class CompletionItemFactory {
             item.cursorOffset = item.commitText.length() -
                     ((methodRef || endsWithParen) ? 0 : 1);
         }
-        item.setInsertHandler(new DefaultInsertHandler(item.commitText));
+        item.setInsertHandler(new DefaultInsertHandler(item));
         return item;
     }
 
@@ -157,7 +158,7 @@ public class CompletionItemFactory {
             item.cursorOffset = item.commitText.length() -
                     ((methodRef || endsWithParen) ? 0 : 1);
         }
-        item.setInsertHandler(new DefaultInsertHandler(item.commitText));
+        item.setInsertHandler(new MethodInsertHandler(first, item));
         return item;
     }
 
@@ -201,7 +202,7 @@ public class CompletionItemFactory {
             item.commitText = text;
             item.cursorOffset = item.commitText.length();
             item.iconKind = DrawableKind.Method;
-            item.setInsertHandler(new DefaultInsertHandler(item.commitText));
+            item.setInsertHandler(new DefaultInsertHandler(item));
             items.add(item);
         }
         return items;

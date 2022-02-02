@@ -122,6 +122,11 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
+    public void setSelection(int line, int column) {
+        super.setSelection(line, column);
+    }
+
+    @Override
     public void setSelectionRegion(int lineLeft, int columnLeft, int lineRight, int columnRight) {
         CodeEditorView.super.setSelectionRegion(lineLeft, columnLeft, lineRight, columnRight);
     }
