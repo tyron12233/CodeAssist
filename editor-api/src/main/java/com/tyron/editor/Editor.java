@@ -35,6 +35,8 @@ public interface Editor {
 
     void delete(int startLine, int startColumn, int endLine, int endColumn);
 
+    void delete(int startIndex, int endIndex);
+
     void replace(int line, int column, int endLine, int endColumn, String string);
 
     boolean formatCodeAsync();
