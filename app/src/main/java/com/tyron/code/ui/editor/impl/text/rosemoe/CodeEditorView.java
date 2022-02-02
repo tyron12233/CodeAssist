@@ -6,6 +6,8 @@ import android.util.AttributeSet;
 
 import com.tyron.actions.DataContext;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
+import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
@@ -15,6 +17,7 @@ import java.io.File;
 import java.util.List;
 import java.util.function.Consumer;
 
+import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class CodeEditorView extends CodeEditor implements Editor {
@@ -56,6 +59,11 @@ public class CodeEditorView extends CodeEditor implements Editor {
     public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
         mDiagnostics = diagnostics;
 
+        AnalyzeManager manager = getEditorLanguage().getAnalyzeManager();
+        if (manager instanceof DiagnosticAnalyzeManager) {
+            ((DiagnosticAnalyzeManager<?>) manager).setDiagnostics(this, mDiagnostics);
+            ((DiagnosticAnalyzeManager<?>) manager).rerunWithoutBg();
+        }
         if (mDiagnosticsListener != null) {
             mDiagnosticsListener.accept(mDiagnostics);
         }

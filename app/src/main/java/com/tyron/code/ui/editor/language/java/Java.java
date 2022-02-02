@@ -3,7 +3,6 @@ package com.tyron.code.ui.editor.language.java;
 import com.tyron.code.ui.editor.language.Language;
 import com.tyron.editor.Editor;
 
-import io.github.rosemoe.editor.langs.java.JavaLanguage;
 import io.github.rosemoe.sora.lang.EmptyLanguage;
 import io.github.rosemoe.sora2.interfaces.EditorLanguage;
 import io.github.rosemoe.sora2.widget.CodeEditor;
@@ -18,6 +17,6 @@ public class Java implements Language {
 	
 	@Override
 	public io.github.rosemoe.sora.lang.Language get(Editor editor) {
-		return new EmptyLanguage();
+		return new JavaLanguage(editor);
 	}
 }

@@ -119,7 +119,7 @@ public class LanguageXML implements Language {
 						position.getLine(), position.getColumn());
 		for (CompletionItem item : items) {
 			SimpleCompletionItem simpleCompletionItem =
-					new SimpleCompletionItem(item.label, item.desc, item.commit.length(), item.commit);
+					new SimpleCompletionItem(item.label, item.desc, prefix.length(), item.commit);
 			publisher.addItem(simpleCompletionItem);
 		}
 	}

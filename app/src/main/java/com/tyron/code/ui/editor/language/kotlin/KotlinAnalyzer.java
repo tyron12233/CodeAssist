@@ -60,7 +60,7 @@ public class KotlinAnalyzer extends AbstractCodeAnalyzer<Object> {
     }
 
     @Override
-    public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
+    public void setDiagnostics(Editor editor, List<DiagnosticWrapper> diagnostics) {
         mDiagnostics.clear();
         mDiagnostics.addAll(diagnostics);
     }

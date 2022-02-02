@@ -3,26 +3,30 @@ package com.tyron.code.ui.editor.language.java;
 import android.content.SharedPreferences;
 import android.util.Log;
 
-import androidx.preference.PreferenceManager;
-
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.BuildConfig;
+import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
 import com.tyron.code.ui.editor.language.HighlightUtil;
+import com.tyron.code.ui.editor.language.kotlin.KotlinLexer;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.util.Debouncer;
 import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
-import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.java.util.ErrorCodes;
 import com.tyron.completion.java.util.TreeUtil;
+import com.tyron.editor.Editor;
 
+import org.antlr.v4.runtime.CharStream;
+import org.antlr.v4.runtime.Lexer;
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.BlockTree;
@@ -46,20 +50,22 @@ import java.util.List;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
+import io.github.rosemoe.sora.lang.styling.CodeBlock;
+import io.github.rosemoe.sora.lang.styling.MappedSpans;
+import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora2.data.BlockLine;
 import io.github.rosemoe.sora2.data.NavigationItem;
-import io.github.rosemoe.sora2.langs.java.JavaCodeAnalyzer;
 import io.github.rosemoe.sora2.langs.java.JavaTextTokenizer;
 import io.github.rosemoe.sora2.langs.java.Tokens;
 import io.github.rosemoe.sora2.text.LineNumberCalculator;
 import io.github.rosemoe.sora2.text.TextAnalyzeResult;
 import io.github.rosemoe.sora2.text.TextAnalyzer;
-import io.github.rosemoe.sora2.widget.CodeEditor;
 import io.github.rosemoe.sora2.widget.EditorColorScheme;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
 
-public class JavaAnalyzer extends JavaCodeAnalyzer {
+public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
+
     private static final Debouncer sDebouncer = new Debouncer(Duration.ofMillis(700));
     private static final String TAG = JavaAnalyzer.class.getSimpleName();
     /**
@@ -72,20 +78,25 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             Tokens.COMMA, Tokens.PLUS, Tokens.PLUSEQ, Tokens.MINUS, Tokens.MINUSEQ, Tokens.MULT,
             Tokens.MULTEQ, Tokens.DIV, Tokens.DIVEQ};
 
-    private final WeakReference<CodeEditor> mEditorReference;
+    private final WeakReference<Editor> mEditorReference;
     private List<DiagnosticWrapper> mDiagnostics;
     private final List<DiagnosticWrapper> mPreviousDiagnostics = new ArrayList<>();
     private final SharedPreferences mPreferences;
 
-    public JavaAnalyzer(CodeEditor editor) {
+    public JavaAnalyzer(Editor editor) {
         mEditorReference = new WeakReference<>(editor);
-        mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
+        mPreferences = ApplicationLoader.getDefaultPreferences();
         mDiagnostics = new ArrayList<>();
     }
 
     @Override
-    public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
+    public void setDiagnostics(Editor editor, List<DiagnosticWrapper> diagnostics) {
         mDiagnostics = diagnostics;
+    }
+
+    @Override
+    public Lexer getLexer(CharStream input) {
+        return new KotlinLexer(input);
     }
 
     @Override
@@ -96,7 +107,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         });
     }
 
-    private JavaCompilerService getCompiler(CodeEditor editor) {
+    private JavaCompilerService getCompiler(Editor editor) {
         Project project = ProjectManager.getInstance().getCurrentProject();
         if (project == null) {
             return null;
@@ -113,7 +124,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
     }
 
     private void doAnalyzeInBackground(Function0<Boolean> cancel, CharSequence contents) {
-        CodeEditor editor = mEditorReference.get();
+        Editor editor = mEditorReference.get();
         if (editor == null) {
             return;
         }
@@ -187,60 +198,28 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
         return wrapped;
     }
 
-    private void setDiagnosticPosition(DiagnosticWrapper wrapped,
-                                       SourcePositions positions,
-                                       CompilationUnitTree root, Tree tree) {
-        long startPosition = positions.getStartPosition(root, tree);
-        long endPosition = getEndPosition(positions, root, tree);
-        wrapped.setStartPosition(startPosition);
-        wrapped.setEndPosition(endPosition);
-    }
+    @Override
+    protected Styles analyze(StringBuilder text, Delegate<Object> delegate) {
+        Styles styles = new Styles();
+        MappedSpans.Builder colors = new MappedSpans.Builder();
 
-    private long getStartPosition(SourcePositions positions, CompilationUnitTree root, Tree tree) {
-        return positions.getStartPosition(root, tree);
-    }
-
-    private long getEndPosition(SourcePositions positions, CompilationUnitTree root, Tree tree) {
-        if (tree instanceof MethodTree) {
-            BlockTree body = ((MethodTree) tree).getBody();
-            if (body != null) {
-                return positions.getStartPosition(root, body);
-            }
-        } else if (tree instanceof ClassTree) {
-            List<? extends Tree> implementsClause = ((ClassTree) tree).getImplementsClause();
-            if (implementsClause != null) {
-                Tree last = implementsClause.get(implementsClause.size() - 1);
-                return positions.getEndPosition(root, last);
-            }
-            Tree extendsClause = ((ClassTree) tree).getExtendsClause();
-            if (extendsClause != null) {
-                return positions.getEndPosition(root, extendsClause);
-            }
-        }
-        return positions.getEndPosition(root, tree);
-    }
-
-    public void analyze(CharSequence content, TextAnalyzeResult colors,
-                        TextAnalyzer.AnalyzeThread.Delegate delegate) {
-        CodeEditor editor = mEditorReference.get();
+        Editor editor = mEditorReference.get();
         if (editor == null) {
-            return;
+            return styles;
         }
-        StringBuilder text = content instanceof StringBuilder ? (StringBuilder) content :
-                new StringBuilder(content);
         JavaTextTokenizer tokenizer = new JavaTextTokenizer(text);
         tokenizer.setCalculateLineColumn(false);
         Tokens token, previous = Tokens.UNKNOWN;
         int line = 0, column = 0;
         LineNumberCalculator helper = new LineNumberCalculator(text);
 
-        Stack<BlockLine> stack = new Stack<>();
+        Stack<CodeBlock> stack = new Stack<>();
         List<NavigationItem> labels = new ArrayList<>();
         int maxSwitch = 1, currSwitch = 0;
 
         boolean first = true;
 
-        while (delegate.shouldAnalyze()) {
+        while (!delegate.isCancelled()) {
             try {
                 // directNextToken() does not skip any token
                 token = tokenizer.directNextToken();
@@ -366,7 +345,7 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                         currSwitch = 0;
                     }
                     currSwitch++;
-                    BlockLine block = colors.obtainNewBlock();
+                    CodeBlock block = styles.obtainNewBlock();
                     block.startLine = line;
                     block.startColumn = column;
                     stack.push(block);
@@ -375,11 +354,11 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
                 case RBRACE: {
                     colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
                     if (!stack.isEmpty()) {
-                        BlockLine block = stack.pop();
+                        CodeBlock block = stack.pop();
                         block.endLine = line;
                         block.endColumn = column;
                         if (block.startLine != block.endLine) {
-                            colors.addBlockLine(block);
+                            styles.addCodeBlock(block);
                         }
                     }
                     break;
@@ -411,9 +390,13 @@ public class JavaAnalyzer extends JavaCodeAnalyzer {
             }
         }
         colors.determine(line);
-        colors.setSuppressSwitch(maxSwitch + 10);
-        colors.setNavigation(labels);
+        styles.setSuppressSwitch(maxSwitch + 10);
+        styles.spans = colors.build();
 
-        HighlightUtil.markDiagnostics(editor, mDiagnostics, colors);
+        if (mShouldAnalyzeInBg) {
+            analyzeInBackground(text);
+        }
+        HighlightUtil.markDiagnostics(editor, mDiagnostics, styles);
+        return styles;
     }
 }

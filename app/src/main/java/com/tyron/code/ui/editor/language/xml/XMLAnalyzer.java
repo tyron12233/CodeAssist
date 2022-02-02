@@ -44,7 +44,9 @@ import io.github.rosemoe.sora.lang.styling.Span;
 import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.lang.styling.CodeBlock;
 import io.github.rosemoe.sora.lang.styling.TextStyle;
+import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
+import io.github.rosemoe.sora2.text.DiagnosticSpanMapUpdater;
 
 public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
 
@@ -52,15 +54,9 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
     private final Stack<CodeBlock> mBlockLine = new Stack<>();
     private int mMaxSwitch = 1;
     private int mCurrSwitch = 0;
-    private List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
 
     public XMLAnalyzer(Editor codeEditor) {
         mEditorReference = new WeakReference<>(codeEditor);
-    }
-
-    @Override
-    public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
-        mDiagnostics = diagnostics;
     }
 
     @Override
@@ -136,14 +132,14 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
 
         switch (token.getType()) {
             case XMLLexer.COMMENT:
-                colors.addIfNeeded(line, column, EditorColorScheme.COMMENT);
+                colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.COMMENT));
                 return true;
             case XMLLexer.Name:
                 if (previous != null && previous.getType() == XMLLexer.SLASH) {
-                    colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
+                    colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
                     return true;
                 } else if (previous != null && previous.getType() == XMLLexer.OPEN) {
-                    colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
+                    colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
                     CodeBlock block = new CodeBlock();
                     block.startLine = previous.getLine() - 1;
                     block.startColumn = previous.getCharPositionInLine();
@@ -194,7 +190,7 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
                     block.endLine = line;
                     block.endColumn = column;
                     if (block.startLine != block.endLine) {
-                        if (previous.getLine() == token.getLine()) {
+                        if (previous != null && previous.getLine() == token.getLine()) {
                             block.toBottomOfEndLine = true;
                         }
                         styles.addCodeBlock(block);
@@ -202,7 +198,7 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
                 }
                 return true;
             case XMLLexer.SLASH:
-                colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
+                colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
                 if (previous != null && previous.getType() == XMLLexer.OPEN) {
                     if (!mBlockLine.isEmpty()) {
                         CodeBlock block = mBlockLine.pop();
@@ -219,14 +215,14 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
                 return true;
             case XMLLexer.OPEN:
             case XMLLexer.CLOSE:
-                colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
+                colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
                 return true;
             case XMLLexer.SEA_WS:
             case XMLLexer.S:
                 // skip white spaces
                 return true;
             default:
-                colors.addIfNeeded(line, column, EditorColorScheme.TEXT_NORMAL);
+                colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.TEXT_NORMAL));
                 return true;
         }
 
@@ -242,11 +238,8 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
         }
         styles.setSuppressSwitch(mMaxSwitch + 10);
 
-        Editor editor = mEditorReference.get();
-        if (editor != null) {
-            for (DiagnosticWrapper diagnostic : mDiagnostics) {
-                HighlightUtil.setErrorSpan(styles, diagnostic.getStartLine());
-            }
+        for (DiagnosticWrapper d : mDiagnostics) {
+            HighlightUtil.setErrorSpan(styles, d.getStartLine());
         }
     }
 

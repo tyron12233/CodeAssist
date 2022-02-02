@@ -67,6 +67,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 
+import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.EventReceiver;
 import io.github.rosemoe.sora.event.LongPressEvent;
 import io.github.rosemoe.sora.event.Unsubscribe;
@@ -75,6 +76,7 @@ import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.DirectAccessProps;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 
 @SuppressWarnings("FieldCanBeLocal")
@@ -189,7 +191,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         mEditor = root.findViewById(R.id.code_editor);
         mEditor.setEditorLanguage(mLanguage = LanguageManager.getInstance().get(mEditor, mCurrentFile));
-        mEditor.setColorScheme(new SchemeDarcula());
+        SchemeDarcula scheme = new SchemeDarcula();
+        scheme.setColor(EditorColorScheme.HTML_TAG, 0xFFF0C56C);
+        scheme.setColor(EditorColorScheme.ATTRIBUTE_NAME, 0xff9876AA);
+        mEditor.setColorScheme(scheme);
         configure(mEditor.getProps());
         mEditor.setTextSize(Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
         mEditor.openFile(mCurrentFile);
@@ -377,6 +382,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
             MotionEvent e = event.getCausingEvent();
             event.getEditor().showContextMenu(e.getX(), e.getY());
         });
+        mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscibe) -> {
+            updateFile(event.getEditor().getText());
+        });
 
         LogViewModel logViewModel =
                 new ViewModelProvider(requireActivity()).get(LogViewModel.class);
@@ -445,6 +453,17 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     // ignored
                 }
             }
+        }
+    }
+
+    private void updateFile(CharSequence contents) {
+        Project project = ProjectManager.getInstance().getCurrentProject();
+        if (project == null) {
+            return;
+        }
+        Module module = project.getModule(mCurrentFile);
+        if (module != null) {
+            module.getFileManager().setSnapshotContent(mCurrentFile, contents.toString());
         }
     }
 
@@ -614,12 +633,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
 //        @Override
 //        public void onSelectionChanged(@NonNull CodeEditor editor, @NonNull Cursor cursor) {
 //
-//        }
-//
-//        private void updateFile(CharSequence contents) {
-//            if (mModule != null) {
-//                mModule.getFileManager().setSnapshotContent(mCurrentFile, contents.toString());
-//            }
 //        }
 //    }
 }
