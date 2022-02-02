@@ -12,6 +12,7 @@ import com.tyron.code.ui.editor.action.CloseOtherEditorAction;
 import com.tyron.code.ui.editor.action.DiagnosticInfoAction;
 import com.tyron.code.ui.editor.action.PreviewLayoutAction;
 import com.tyron.code.ui.editor.action.SelectJavaParentAction;
+import com.tyron.code.ui.editor.action.text.TextActionGroup;
 import com.tyron.code.ui.file.action.NewFileActionGroup;
 import com.tyron.code.ui.file.action.file.DeleteFileAction;
 import com.tyron.code.ui.main.action.compile.CompileActionGroup;
@@ -66,6 +67,7 @@ public class MainActivity extends AppCompatActivity {
             manager.registerAction(CloseAllEditorAction.ID, new CloseAllEditorAction());
 
             // editor actions
+            manager.registerAction(TextActionGroup.ID, new TextActionGroup());
             manager.registerAction(DiagnosticInfoAction.ID, new DiagnosticInfoAction());
 
             // file manager actions
