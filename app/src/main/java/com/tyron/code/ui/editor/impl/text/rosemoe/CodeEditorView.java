@@ -63,12 +63,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
-    public void draw(Canvas canvas) {
-        drawView(canvas);
-        super.draw(canvas);
-    }
-
-    @Override
     public List<DiagnosticWrapper> getDiagnostics() {
         return mDiagnostics;
     }
