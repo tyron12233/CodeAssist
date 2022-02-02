@@ -226,6 +226,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
     private void configure(DirectAccessProps props) {
         props.overScrollEnabled = false;
         props.allowFullscreen = false;
+        props.deleteEmptyLineFast = false;
     }
 
 

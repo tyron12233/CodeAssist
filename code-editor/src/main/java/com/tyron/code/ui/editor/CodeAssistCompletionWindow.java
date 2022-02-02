@@ -1,28 +1,21 @@
 package com.tyron.code.ui.editor;
 
-import android.graphics.drawable.GradientDrawable;
-import android.util.Log;
-import android.util.TypedValue;
-import android.view.ViewGroup;
-import android.widget.RelativeLayout;
-import android.widget.TextView;
-import android.widget.Toast;
-
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+import android.widget.AdapterView;
 
 import com.tyron.completion.progress.ProgressManager;
 
 import java.lang.reflect.Field;
 
-import io.github.rosemoe.sora.lang.completion.CompletionItem;
-import io.github.rosemoe.sora.text.Cursor;
+import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
+import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.component.CompletionLayout;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorCompletionAdapter;
-import io.github.rosemoe.sora2.interfaces.AutoCompleteProvider;
 
 public class CodeAssistCompletionWindow extends EditorAutoCompletion {
+
+    private final CodeEditor mEditor;
 
     /**
      * Create a panel instance for the given editor
@@ -31,21 +24,30 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
      */
     public CodeAssistCompletionWindow(CodeEditor editor) {
         super(editor);
+
+        mEditor = editor;
     }
 
     @Override
     public void cancelCompletion() {
-        try {
-            Field field = EditorAutoCompletion.class.getDeclaredField("mThread");
-            field.setAccessible(true);
-            Thread thread = (Thread) field.get(this);
-            if (thread != null) {
-                ProgressManager.getInstance().cancelThread(thread);
-            }
-        } catch (Throwable e) {
-            // should not happen
-            throw new Error(e);
+        Thread thread = getField("mThread");
+        if (thread != null) {
+            ProgressManager.getInstance().cancelThread(thread);
         }
         super.cancelCompletion();
+    }
+
+    private <T> T getField(String fieldName) {
+        try {
+            Field field = EditorAutoCompletion.class.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            Object o = field.get(this);
+            if (o != null) {
+                return (T) o;
+            }
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
+        return null;
     }
 }
