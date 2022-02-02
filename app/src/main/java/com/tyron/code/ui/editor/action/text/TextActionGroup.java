@@ -28,13 +28,14 @@ public class TextActionGroup extends ActionGroup {
 
     @Override
     public boolean isPopup() {
-        return true;
+        return false;
     }
 
     @Override
     public AnAction[] getChildren(@Nullable AnActionEvent e) {
         return new AnAction[] {
-                new CopyAction()
+                new CopyAction(),
+                new CutAction()
         };
     }
 }
