@@ -3,6 +3,7 @@ package com.tyron.completion.model;
 import com.tyron.completion.DefaultInsertHandler;
 import com.tyron.completion.InsertHandler;
 import com.tyron.completion.util.CompletionUtils;
+import com.tyron.editor.Editor;
 
 import java.util.List;
 import java.util.Objects;
@@ -74,5 +75,9 @@ public class CompletionItem {
     @Override
     public int hashCode() {
         return Objects.hash(label, detail, commitText, action, iconKind, cursorOffset, additionalTextEdits, data);
+    }
+
+    public void handleInsert(Editor editor) {
+        insertHandler.handleInsert(editor);
     }
 }
