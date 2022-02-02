@@ -31,6 +31,7 @@ import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
@@ -190,14 +191,17 @@ public class CodeEditorFragment extends Fragment implements Savable,
         View root = inflater.inflate(R.layout.code_editor_fragment, container, false);
 
         mEditor = root.findViewById(R.id.code_editor);
+        configure(mEditor.getProps());
         mEditor.setEditorLanguage(mLanguage = LanguageManager.getInstance().get(mEditor, mCurrentFile));
         SchemeDarcula scheme = new SchemeDarcula();
         scheme.setColor(EditorColorScheme.HTML_TAG, 0xFFF0C56C);
         scheme.setColor(EditorColorScheme.ATTRIBUTE_NAME, 0xff9876AA);
+        scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_BG, 0xff2b2b2b);
+        scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_CORNER, 0xff575757);
         mEditor.setColorScheme(scheme);
-        configure(mEditor.getProps());
         mEditor.setTextSize(Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
         mEditor.openFile(mCurrentFile);
+        mEditor.setAutoCompletionItemAdapter(new CodeAssistCompletionAdapter());
 //        mEditor.setText(CodeEditor.TextActionMode.POPUP_WINDOW);
         mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(),
                 R.font.jetbrains_mono_regular));

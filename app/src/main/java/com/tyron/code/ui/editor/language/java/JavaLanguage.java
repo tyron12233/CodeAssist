@@ -56,9 +56,9 @@ public class JavaLanguage implements Language {
                 case LBRACE:
                     advance++;
                     break;
-                case RBRACE:
-                    advance--;
-                    break;
+//                case RBRACE:
+//                    advance--;
+//                    break;
             }
         }
         advance = Math.max(0, advance);
@@ -97,7 +97,8 @@ public class JavaLanguage implements Language {
 
     @Override
     public int getIndentAdvance(@NonNull ContentReference content, int line, int column) {
-        return getIndentAdvance(content.getReference().toString());
+        String text = content.getLine(line).substring(0, column);
+        return getIndentAdvance(text);
     }
 
     @Override
