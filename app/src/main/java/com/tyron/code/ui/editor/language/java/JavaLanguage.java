@@ -9,6 +9,7 @@ import com.google.common.collect.Range;
 import com.google.googlejavaformat.java.Formatter;
 import com.google.googlejavaformat.java.FormatterException;
 import com.google.googlejavaformat.java.JavaFormatterOptions;
+import com.tyron.code.ui.editor.JavaCompletionItem;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
@@ -89,8 +90,8 @@ public class JavaLanguage implements Language {
             return;
         }
         for (CompletionItem item : list.getItems()) {
-            SimpleCompletionItem i = new SimpleCompletionItem(item.label, item.detail,
-                    prefix.length(), item.commitText);
+            JavaCompletionItem i = new JavaCompletionItem(item.label, item.detail,
+                    prefix, item.commitText);
             publisher.addItem(i);
         }
     }

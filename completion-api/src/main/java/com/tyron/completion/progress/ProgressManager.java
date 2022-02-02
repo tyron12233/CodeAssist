@@ -85,6 +85,15 @@ public class ProgressManager {
         mMainHandler.postDelayed(runnable, delay);
     }
 
+    public void cancelThread(Thread thread) {
+        ProgressIndicator indicator = mThreadToIndicator.get(thread);
+        if (indicator == null) {
+            indicator = new ProgressIndicator();
+        }
+        indicator.cancel();
+        mThreadToIndicator.put(thread, indicator);
+    }
+
     private void doCheckCanceled() {
         ProgressIndicator indicator = mThreadToIndicator.get(Thread.currentThread());
         if (indicator != null) {

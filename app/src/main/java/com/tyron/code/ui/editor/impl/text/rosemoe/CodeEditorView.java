@@ -6,6 +6,7 @@ import android.util.AttributeSet;
 
 import com.tyron.actions.DataContext;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
 import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
 import com.tyron.editor.Caret;
@@ -14,6 +15,7 @@ import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -34,14 +36,30 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     public CodeEditorView(Context context, AttributeSet attrs) {
         super(DataContext.wrap(context), attrs);
+
+        init();
     }
 
     public CodeEditorView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(DataContext.wrap(context), attrs, defStyleAttr);
+
+        init();
     }
 
     public CodeEditorView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(DataContext.wrap(context), attrs, defStyleAttr, defStyleRes);
+
+        init();
+    }
+
+    private void init() {
+        try {
+            Field field = CodeEditor.class.getDeclaredField("mCompletionWindow");
+            field.setAccessible(true);
+            field.set(this, new CodeAssistCompletionWindow(this));
+        } catch (Throwable e) {
+            throw new Error(e);
+        }
     }
 
     @Override

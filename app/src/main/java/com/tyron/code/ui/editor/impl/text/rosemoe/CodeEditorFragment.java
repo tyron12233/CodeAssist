@@ -288,9 +288,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 //                        length -= window.getLastPrefix().lastIndexOf(".") + 1;
 //                    }
 //                }
-//                mEditor.getText().delete(cursor.getLeftLine(), cursor.getLeftColumn() - length,
-//                        cursor.getLeftLine(), cursor.getLeftColumn());
-//
+
 //                window.setSelectedItem(item.commit);
 //                cursor.onCommitMultilineText(item.commit);
 //
@@ -394,7 +392,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 new ViewModelProvider(requireActivity()).get(LogViewModel.class);
 
         mEditor.setDiagnosticsListener(diagnostics -> {
-            logViewModel.updateLogs(LogViewModel.DEBUG, diagnostics);
+            ProgressManager.getInstance().runLater(() -> {
+                logViewModel.updateLogs(LogViewModel.DEBUG, diagnostics);
+            });
         });
 
         getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
