@@ -59,4 +59,9 @@ public class ContentWrapper implements Content {
     public String toString() {
         return mContent.toString();
     }
+
+    @Override
+    public String getLineString(int line) {
+        return mContent.getLineString(line);
+    }
 }
