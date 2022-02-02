@@ -21,6 +21,7 @@ import java.util.function.Consumer;
 
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 
 public class CodeEditorView extends CodeEditor implements Editor {
 
@@ -53,13 +54,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     private void init() {
-        try {
-            Field field = CodeEditor.class.getDeclaredField("mCompletionWindow");
-            field.setAccessible(true);
-            field.set(this, new CodeAssistCompletionWindow(this));
-        } catch (Throwable e) {
-            throw new Error(e);
-        }
+        replaceComponent(EditorAutoCompletion.class, new CodeAssistCompletionWindow(this));
     }
 
     @Override
