@@ -4,10 +4,12 @@ import static com.tyron.completion.java.util.ElementUtil.simpleClassName;
 import static com.tyron.completion.java.util.ElementUtil.simpleType;
 import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
+import com.tyron.completion.DefaultInsertHandler;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;
 
+import org.openjdk.javax.annotation.processing.Completion;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
@@ -37,34 +39,18 @@ public class CompletionItemFactory {
     }
 
     public static CompletionItem keyword(String keyword) {
-        CompletionItem item = new CompletionItem();
-        item.label = keyword;
-        item.commitText = keyword;
-        item.cursorOffset = keyword.length();
-        item.detail = "keyword";
-        item.iconKind = DrawableKind.Keyword;
-        return item;
+        return CompletionItem.create(keyword, keyword, keyword, DrawableKind.Keyword);
     }
 
     public static CompletionItem packageItem(String name) {
-        CompletionItem item = new CompletionItem();
-        item.label = name;
-        item.detail = "";
-        item.commitText = name;
-        item.cursorOffset = name.length();
-        item.iconKind = DrawableKind.Package;
-        return item;
+        return CompletionItem.create(name, "", name, DrawableKind.Package);
     }
 
     public static CompletionItem classItem(String className) {
-        CompletionItem item = new CompletionItem();
-        item.label = simpleClassName(className);
-        item.detail = className;
-        item.commitText = item.label;
+        CompletionItem item = CompletionItem.create(simpleClassName(className),
+                className, simpleClassName(className), DrawableKind.Class);
         item.data = className;
-        item.cursorOffset = item.label.length();
         item.action = CompletionItem.Kind.IMPORT;
-        item.iconKind = DrawableKind.Class;
         return item;
     }
 
@@ -91,6 +77,7 @@ public class CompletionItemFactory {
         item.commitText = element.getSimpleName().toString();
         item.cursorOffset = item.commitText.length();
         item.iconKind = getKind(element);
+        item.setInsertHandler(new DefaultInsertHandler(item.commitText));
         return item;
     }
 
@@ -151,6 +138,7 @@ public class CompletionItemFactory {
             item.cursorOffset = item.commitText.length() -
                     ((methodRef || endsWithParen) ? 0 : 1);
         }
+        item.setInsertHandler(new DefaultInsertHandler(item.commitText));
         return item;
     }
 
@@ -169,6 +157,7 @@ public class CompletionItemFactory {
             item.cursorOffset = item.commitText.length() -
                     ((methodRef || endsWithParen) ? 0 : 1);
         }
+        item.setInsertHandler(new DefaultInsertHandler(item.commitText));
         return item;
     }
 
@@ -212,6 +201,7 @@ public class CompletionItemFactory {
             item.commitText = text;
             item.cursorOffset = item.commitText.length();
             item.iconKind = DrawableKind.Method;
+            item.setInsertHandler(new DefaultInsertHandler(item.commitText));
             items.add(item);
         }
         return items;

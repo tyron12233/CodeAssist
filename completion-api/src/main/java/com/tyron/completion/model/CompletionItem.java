@@ -14,7 +14,11 @@ import java.util.Objects;
 public class CompletionItem {
 
     public static CompletionItem create(String label, String detail, String commitText) {
-        return new CompletionItem(label, detail, commitText);
+        return create(label, detail, commitText, null);
+    }
+
+    public static CompletionItem create(String label, String detail, String commitText, DrawableKind kind) {
+        return new CompletionItem(label, detail, commitText, kind);
     }
 
     private InsertHandler insertHandler;
@@ -31,11 +35,12 @@ public class CompletionItem {
 
     }
 
-    public CompletionItem(String label, String details, String commitText) {
+    public CompletionItem(String label, String details, String commitText, DrawableKind kind) {
         this.label = label;
         this.detail = details;
         this.commitText = commitText;
         this.cursorOffset = commitText.length();
+        this.iconKind = kind;
         this.insertHandler = new DefaultInsertHandler(CompletionUtils.JAVA_PREDICATE, commitText);
     }
 
@@ -48,6 +53,10 @@ public class CompletionItem {
         OVERRIDE,
         IMPORT,
         NORMAL
+    }
+
+    public void setInsertHandler(InsertHandler handler) {
+        this.insertHandler = handler;
     }
 
     @Override
