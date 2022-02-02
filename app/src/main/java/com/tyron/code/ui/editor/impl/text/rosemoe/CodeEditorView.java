@@ -8,6 +8,7 @@ import com.tyron.actions.DataContext;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
+import com.tyron.code.ui.editor.NoOpTextActionWindow;
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
 import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
 import com.tyron.editor.Caret;
@@ -23,6 +24,7 @@ import java.util.function.Consumer;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
+import io.github.rosemoe.sora.widget.component.EditorTextActionWindow;
 
 public class CodeEditorView extends CodeEditor implements Editor {
 
@@ -59,6 +61,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
                 new CodeAssistCompletionWindow(this);
         window.setAdapter(new CodeAssistCompletionAdapter());
         replaceComponent(EditorAutoCompletion.class, window);
+        replaceComponent(EditorTextActionWindow.class, new NoOpTextActionWindow(this));
     }
 
     @Override
