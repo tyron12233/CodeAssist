@@ -32,7 +32,7 @@ public class CodeAssistCompletionAdapter extends EditorCompletionAdapter{
         if (isCurrentCursorPosition) {
             view.setBackgroundColor(0xffdddddd);
         } else {
-            view.setBackgroundColor(0xffffffff);
+            view.setBackgroundColor(0x00ffffff);
         }
         ImageView iv = view.findViewById(R.id.result_item_image);
         iv.setImageDrawable(item.icon);

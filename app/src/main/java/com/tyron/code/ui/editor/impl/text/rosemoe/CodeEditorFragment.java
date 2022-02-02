@@ -32,6 +32,7 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
+import com.tyron.code.ui.editor.CodeAssistCompletionLayout;
 import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
@@ -77,6 +78,8 @@ import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.DirectAccessProps;
+import io.github.rosemoe.sora.widget.component.DefaultCompletionLayout;
+import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 
@@ -201,6 +204,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         mEditor.setColorScheme(scheme);
         mEditor.setTextSize(Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
         mEditor.openFile(mCurrentFile);
+        mEditor.getComponent(EditorAutoCompletion.class).setLayout(new CodeAssistCompletionLayout());
         mEditor.setAutoCompletionItemAdapter(new CodeAssistCompletionAdapter());
 //        mEditor.setText(CodeEditor.TextActionMode.POPUP_WINDOW);
         mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(),
