@@ -12,6 +12,10 @@ public class DefaultInsertHandler implements InsertHandler {
     private final Predicate<Character> predicate;
     private final String commitText;
 
+    public DefaultInsertHandler(String commitText) {
+        this(CompletionUtils.JAVA_PREDICATE, commitText);
+    }
+
     public DefaultInsertHandler(Predicate<Character> predicate, String commitText) {
         this.predicate = predicate;
         this.commitText = commitText;

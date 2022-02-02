@@ -13,11 +13,10 @@ import java.util.Objects;
  */
 public class CompletionItem {
 
-    public static CompletionItem create(String prefix, String label, String detail, String commitText) {
-        return new CompletionItem(prefix, label, detail, commitText);
+    public static CompletionItem create(String label, String detail, String commitText) {
+        return new CompletionItem(label, detail, commitText);
     }
 
-    private String prefix;
     private InsertHandler insertHandler;
     public String label;
     public String detail;
@@ -32,8 +31,7 @@ public class CompletionItem {
 
     }
 
-    public CompletionItem(String prefix, String label, String details, String commitText) {
-        this.prefix = prefix;
+    public CompletionItem(String label, String details, String commitText) {
         this.label = label;
         this.detail = details;
         this.commitText = commitText;
