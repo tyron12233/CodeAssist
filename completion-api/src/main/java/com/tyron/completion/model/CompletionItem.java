@@ -1,9 +1,60 @@
 package com.tyron.completion.model;
 
+import com.tyron.completion.DefaultInsertHandler;
+import com.tyron.completion.InsertHandler;
+import com.tyron.completion.util.CompletionUtils;
+
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * A class representing the completion item shown in the user list
+ */
 public class CompletionItem {
+
+    public static CompletionItem create(String prefix, String label, String detail, String commitText) {
+        return new CompletionItem(prefix, label, detail, commitText);
+    }
+
+    private String prefix;
+    private InsertHandler insertHandler;
+    public String label;
+    public String detail;
+    public String commitText;
+    public Kind action = Kind.NORMAL;
+    public DrawableKind iconKind = DrawableKind.Method;
+    public int cursorOffset = -1;
+    public List<TextEdit> additionalTextEdits;
+    public String data = "";
+
+    public CompletionItem() {
+
+    }
+
+    public CompletionItem(String prefix, String label, String details, String commitText) {
+        this.prefix = prefix;
+        this.label = label;
+        this.detail = details;
+        this.commitText = commitText;
+        this.cursorOffset = commitText.length();
+        this.insertHandler = new DefaultInsertHandler(CompletionUtils.JAVA_PREDICATE, commitText);
+    }
+
+    public CompletionItem(String label) {
+        this.label = label;
+    }
+
+
+    public enum Kind {
+        OVERRIDE,
+        IMPORT,
+        NORMAL
+    }
+
+    @Override
+    public String toString() {
+        return label;
+    }
 
     @Override
     public boolean equals(Object o) {
@@ -23,41 +74,5 @@ public class CompletionItem {
     @Override
     public int hashCode() {
         return Objects.hash(label, detail, commitText, action, iconKind, cursorOffset, additionalTextEdits, data);
-    }
-
-    public enum Kind {
-        OVERRIDE,
-        IMPORT,
-        NORMAL
-    }
-
-    // The string that would be shown to the user
-    public String label;
-
-    public String detail;
-
-    public String commitText;
-
-    public Kind action = Kind.NORMAL;
-
-    public DrawableKind iconKind = DrawableKind.Method;
-
-    public int cursorOffset = -1;
-
-    public List<TextEdit> additionalTextEdits;
-
-    public String data = "";
-
-    public CompletionItem() {
-
-    }
-
-    public CompletionItem(String label) {
-        this.label = label;
-    }
-
-    @Override
-    public String toString() {
-        return label;
     }
 }
