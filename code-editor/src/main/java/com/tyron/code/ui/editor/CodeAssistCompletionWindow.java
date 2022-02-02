@@ -35,8 +35,6 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
 
     @Override
     public void cancelCompletion() {
-        super.cancelCompletion();
-
         try {
             Field field = EditorAutoCompletion.class.getDeclaredField("mThread");
             field.setAccessible(true);
@@ -48,6 +46,6 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
             // should not happen
             throw new Error(e);
         }
-
+        super.cancelCompletion();
     }
 }
