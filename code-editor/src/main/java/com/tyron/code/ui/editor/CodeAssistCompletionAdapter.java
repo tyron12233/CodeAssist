@@ -35,7 +35,13 @@ public class CodeAssistCompletionAdapter extends EditorCompletionAdapter{
             view.setBackgroundColor(0x00ffffff);
         }
         ImageView iv = view.findViewById(R.id.result_item_image);
-        iv.setImageDrawable(item.icon);
+        if (item.icon == null) {
+            iv.setVisibility(View.GONE);
+        } else {
+            iv.setVisibility(View.VISIBLE);
+            iv.setImageDrawable(item.icon);
+        }
+
         return view;
     }
 }
