@@ -7,14 +7,38 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import com.tyron.common.util.AndroidUtilities;
+
+import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
+
+import java.lang.reflect.Field;
+import java.util.List;
+
 import io.github.rosemoe.sora.lang.completion.CompletionItem;
+import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorCompletionAdapter;
 import io.github.rosemoe.sora2.R;
 
-public class CodeAssistCompletionAdapter extends EditorCompletionAdapter{
+public class CodeAssistCompletionAdapter extends EditorCompletionAdapter {
+
+    public void setItems(EditorAutoCompletion window, List<CompletionItem> items) {
+        try {
+            Field itemsField = EditorCompletionAdapter.class.getDeclaredField("mItems");
+            itemsField.setAccessible(true);
+            itemsField.set(this, items);
+
+            Field windowField = ReflectionUtil.getDeclaredField(EditorCompletionAdapter.class, "mWindow");
+            if (windowField != null) {
+                windowField.setAccessible(true);
+                windowField.set(this, window);
+            }
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
+    }
     @Override
     public int getItemHeight() {
-        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 50, getContext().getResources().getDisplayMetrics());
+        return AndroidUtilities.dp(50);
     }
 
     @Override

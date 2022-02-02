@@ -6,6 +6,7 @@ import android.util.AttributeSet;
 
 import com.tyron.actions.DataContext;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
 import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
@@ -54,7 +55,10 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     private void init() {
-        replaceComponent(EditorAutoCompletion.class, new CodeAssistCompletionWindow(this));
+        CodeAssistCompletionWindow window =
+                new CodeAssistCompletionWindow(this);
+        window.setAdapter(new CodeAssistCompletionAdapter());
+        replaceComponent(EditorAutoCompletion.class, window);
     }
 
     @Override
