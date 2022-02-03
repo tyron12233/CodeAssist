@@ -136,6 +136,8 @@ public class XmlRepository {
 
         addFrameworkViews();
 
+        Repository.clearCache();
+
         mInitialized = true;
     }
 

@@ -1,7 +1,6 @@
 package com.tyron.code.ui.editor.impl.text.rosemoe;
 
 import android.content.Context;
-import android.graphics.Canvas;
 import android.util.AttributeSet;
 
 import com.tyron.actions.DataContext;
@@ -10,7 +9,6 @@ import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
-import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
 import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
@@ -18,7 +16,6 @@ import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 
 import java.io.File;
-import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
