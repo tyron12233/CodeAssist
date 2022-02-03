@@ -5,6 +5,7 @@ import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.Trees;
 
 import com.tyron.completion.java.CompilerProvider;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.java.compiler.ParseTask;
 
@@ -39,6 +40,9 @@ public class AddImport implements JavaRewrite {
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
         ParseTask task = compiler.parse(currentFile.toPath());
+        if (ActionUtil.hasImport(task.root, className)) {
+            return CANCELLED;
+        }
         Position point = insertPosition(task);
         String text = "import " + className + ";\n";
         TextEdit[] edits = { new TextEdit(new Range(point, point), text)};

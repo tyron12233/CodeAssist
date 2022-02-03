@@ -30,7 +30,7 @@ public class RewriteUtil {
         });
     }
 
-    private static void applyTextEdit(Editor editor, TextEdit edit) {
+    public static void applyTextEdit(Editor editor, TextEdit edit) {
         int startFormat;
         int endFormat;
         Range range = edit.range;

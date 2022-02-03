@@ -7,12 +7,15 @@ import com.tyron.common.util.StringSearch;
 import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.JavaCompilerService;
+import com.tyron.completion.java.insert.ClassImportInsertHandler;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.util.TreePath;
 
+import java.io.File;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -59,7 +62,10 @@ public class ClassNameCompletionProvider extends BaseCompletionProvider {
                 list.setIncomplete(true);
                 break;
             }
-            list.items.add(classItem(className));
+            CompletionItem item = classItem(className);
+            item.setInsertHandler(new ClassImportInsertHandler(compiler,
+                    new File(root.getSourceFile().toUri()), item));
+            list.items.add(item);
             uniques.add(className);
         }
     }
