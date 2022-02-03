@@ -50,6 +50,8 @@ public interface Editor {
      */
     void insert(int line, int column, String string);
 
+    void insertMultilineString(int line, int column, String string);
+
     /**
      * Deletes the text from the start to end
      * @param startLine 0-based start line

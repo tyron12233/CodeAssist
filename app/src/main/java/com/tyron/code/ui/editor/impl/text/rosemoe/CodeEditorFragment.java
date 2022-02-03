@@ -398,6 +398,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         mEditor.subscribeEvent(LongPressEvent.class, (event, unsubscribe) -> {
             MotionEvent e = event.getCausingEvent();
             // wait for the cursor to move
+            save();
             ProgressManager.getInstance().runLater(() ->
                     event.getEditor().showContextMenu(e.getX(), e.getY()));
         });

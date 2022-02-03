@@ -34,8 +34,8 @@ public class DefaultInsertHandler implements InsertHandler {
         if (prefix.contains(".")) {
             length -= prefix.lastIndexOf('.') + 1;
         }
-        editor.delete(caret.getStartLine(), caret.getStartColumn() - length,
-                caret.getStartLine(), caret.getStartColumn());
+        editor.delete(caret.getStartLine(), caret.getStartColumn() - length, caret.getStartLine()
+                , caret.getStartColumn());
     }
 
     @Override
@@ -45,8 +45,12 @@ public class DefaultInsertHandler implements InsertHandler {
     }
 
     protected void insert(String string, Editor editor) {
-            Caret caret = editor.getCaret();
+        Caret caret = editor.getCaret();
+        if (string.contains("\n")) {
+            editor.insertMultilineString(caret.getStartLine(), caret.getStartColumn(), string);
+        } else {
             editor.insert(caret.getStartLine(), caret.getStartColumn(), string);
+        }
     }
 
     private CharPosition getCharPosition(Caret caret) {

@@ -19,8 +19,10 @@ import com.tyron.editor.Editor;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -114,6 +116,40 @@ public class CodeEditorView extends CodeEditor implements Editor {
     @Override
     public void insert(int line, int column, String string) {
         getText().insert(line, column, string);
+    }
+
+    @Override
+    public void insertMultilineString(int line, int column, String string) {
+        String currentLine = getText().getLineString(line);
+        String currentIndent = currentLine.trim().isEmpty()
+                ? currentLine
+                : currentLine.substring(0, currentLine.indexOf(currentLine.trim()));
+
+        String textToInsert = Arrays.stream(string.split("\\n"))
+                .map(s -> currentIndent + s)
+                .collect(Collectors.joining("\n"))
+                .substring(currentIndent.length());
+
+        getText().insert(line, column, textToInsert);
+    }
+
+    private String createIndent(int p) {
+        int tab = 0;
+        int space;
+        if (getEditorLanguage().useTab()) {
+            tab = p / getTabWidth();
+            space = p % getTabWidth();
+        } else {
+            space = p;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < tab; i++) {
+            sb.append('\t');
+        }
+        for (int i = 0; i < space; i++) {
+            sb.append(' ');
+        }
+        return sb.toString();
     }
 
     @Override
