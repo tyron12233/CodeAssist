@@ -5,13 +5,11 @@ import androidx.annotation.Nullable;
 import com.tyron.completion.model.CompletionList;
 
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
-import io.github.rosemoe.sora.data.CompletionItem;
-import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
+import io.github.rosemoe.sora2.data.CompletionItem;
+import io.github.rosemoe.sora2.interfaces.AutoCompleteProvider;
+import io.github.rosemoe.sora2.text.TextAnalyzeResult;
 
 /**
  * An auto complete provider that supports cancellation as the user types

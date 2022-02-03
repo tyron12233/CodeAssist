@@ -1,9 +1,10 @@
 package com.tyron.code.ui.editor.language.xml;
 
 import com.tyron.code.ui.editor.language.Language;
-import io.github.rosemoe.sora.interfaces.EditorLanguage;
-import io.github.rosemoe.sora.widget.CodeEditor;
+import com.tyron.editor.Editor;
+
 import java.io.File;
+
 
 public class Xml implements Language {
 	
@@ -13,7 +14,7 @@ public class Xml implements Language {
 	}
 	
 	@Override
-	public EditorLanguage get(CodeEditor editor) {
+	public io.github.rosemoe.sora.lang.Language get(Editor editor) {
 		return new LanguageXML(editor);
 	}
 }

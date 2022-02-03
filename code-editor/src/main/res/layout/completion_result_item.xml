@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="50dp"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingStart="4dp"
@@ -32,7 +32,7 @@
             android:singleLine="true"
             android:textColor="#FFFEFEFE"
             android:textSize="12sp"
-            tools:text="listOf(element: T)"/>
+            tools:text="listOf(element: T)" />
 
         <TextView
             android:id="@+id/result_item_desc"
@@ -46,7 +46,7 @@
             android:singleLine="true"
             android:textColor="#808080"
             android:textSize="11sp"
-            tools:text="inline fun &lt;T&gt; listOf(element: T)"/>
+            tools:text="inline fun &lt;T&gt; listOf(element: T)" />
 
     </LinearLayout>
 

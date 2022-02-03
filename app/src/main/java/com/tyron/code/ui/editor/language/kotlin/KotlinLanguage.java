@@ -1,43 +1,56 @@
 package com.tyron.code.ui.editor.language.kotlin;
 
+import android.os.Bundle;
+
+import androidx.annotation.NonNull;
+
+import com.tyron.editor.Editor;
+
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
 
-import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
-import io.github.rosemoe.sora.interfaces.EditorLanguage;
-import io.github.rosemoe.sora.interfaces.NewlineHandler;
+import io.github.rosemoe.sora.lang.Language;
+import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
+import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
+import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
+import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
+import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
+import io.github.rosemoe.sora.text.CharPosition;
+import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.TextUtils;
-import io.github.rosemoe.sora.util.MyCharacter;
-import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 
-public class KotlinLanguage implements EditorLanguage {
+public class KotlinLanguage implements Language {
 
-    private final CodeEditor mEditor;
+    private final Editor mEditor;
     private final KotlinAnalyzer mAnalyzer;
 
-    public KotlinLanguage(CodeEditor editor) {
+    public KotlinLanguage(Editor editor) {
         mEditor = editor;
         mAnalyzer = new KotlinAnalyzer(mEditor);
     }
 
+    @NonNull
     @Override
-    public CodeAnalyzer getAnalyzer() {
+    public AnalyzeManager getAnalyzeManager() {
         return mAnalyzer;
     }
 
     @Override
-    public AutoCompleteProvider getAutoCompleteProvider() {
-        return new KotlinAutoCompleteProvider(mEditor);
+    public int getInterruptionLevel() {
+        return INTERRUPTION_LEVEL_SLIGHT;
     }
 
     @Override
-    public boolean isAutoCompleteChar(char ch) {
-        return ch == '.' || MyCharacter.isJavaIdentifierPart(ch);
+    public void requireAutoComplete(@NonNull ContentReference content, @NonNull CharPosition position, @NonNull CompletionPublisher publisher, @NonNull Bundle extraArguments) throws CompletionCancelledException {
+
     }
 
     @Override
+    public int getIndentAdvance(@NonNull ContentReference content, int line, int column) {
+        return getIndentAdvance(String.valueOf(content.getReference()));
+    }
+
     public int getIndentAdvance(String p1) {
         KotlinLexer lexer = new KotlinLexer(CharStreams.fromString(p1));
         Token token;
@@ -77,6 +90,11 @@ public class KotlinLanguage implements EditorLanguage {
         return handlers;
     }
 
+    @Override
+    public void destroy() {
+
+    }
+
     private final NewlineHandler[] handlers = new NewlineHandler[]{new BraceHandler()};
 
     class BraceHandler implements NewlineHandler {
@@ -87,7 +105,7 @@ public class KotlinLanguage implements EditorLanguage {
         }
 
         @Override
-        public HandleResult handleNewline(String beforeText, String afterText, int tabSize) {
+        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
             int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
             int advanceBefore = getIndentAdvance(beforeText);
             int advanceAfter = getIndentAdvance(afterText);
@@ -97,7 +115,7 @@ public class KotlinLanguage implements EditorLanguage {
                     .append('\n')
                     .append(text = TextUtils.createIndent(count + advanceAfter, tabSize, useTab()));
             int shiftLeft = text.length() + 1;
-            return new HandleResult(sb, shiftLeft);
+            return new NewlineHandleResult(sb, shiftLeft);
         }
     }
 }

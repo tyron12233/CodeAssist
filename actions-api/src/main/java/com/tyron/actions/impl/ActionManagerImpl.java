@@ -1,8 +1,10 @@
 package com.tyron.actions.impl;
 
+import android.os.Build;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.SubMenu;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 
@@ -30,6 +32,9 @@ public class ActionManagerImpl extends ActionManager {
     public void fillMenu(DataContext context, Menu menu, String place, boolean isContext, boolean isToolbar) {
         // Inject values
         context.putData(CommonDataKeys.CONTEXT, context);
+        if (Build.VERSION_CODES.P <= Build.VERSION.SDK_INT) {
+            menu.setGroupDividerEnabled(true);
+        }
 
         for (AnAction value : mIdToAction.values()) {
 
@@ -55,10 +60,14 @@ public class ActionManagerImpl extends ActionManager {
 
         MenuItem menuItem;
         if (isGroup(action)) {
+            ActionGroup actionGroup = (ActionGroup) action;
+            if (!actionGroup.isPopup()) {
+                fillMenu(View.generateViewId(), menu, actionGroup, event);
+                return;
+            }
             SubMenu subMenu = menu.addSubMenu(presentation.getText());
             menuItem = subMenu.getItem();
 
-            ActionGroup actionGroup = (ActionGroup) action;
             AnAction[] children = actionGroup.getChildren(event);
             if (children != null) {
                 for (AnAction child : children) {
@@ -67,7 +76,9 @@ public class ActionManagerImpl extends ActionManager {
                     child.update(event);
 
                     if (event.getPresentation().isVisible()) {
-                        fillSubMenu(subMenu, child, event);
+                        if (actionGroup.isPopup()) {
+                            fillSubMenu(subMenu, child, event);
+                        }
                     }
                 }
             }
@@ -89,6 +100,28 @@ public class ActionManagerImpl extends ActionManager {
         });
     }
 
+    private void fillMenu(int id, Menu menu, ActionGroup group, AnActionEvent event) {
+        AnAction[] children = group.getChildren(event);
+        if (children == null) {
+            return;
+        }
+
+        for (AnAction child : children) {
+            event.setPresentation(child.getTemplatePresentation());
+            child.update(event);
+            if (event.getPresentation().isVisible()) {
+                MenuItem add = menu.add(id, Menu.NONE, Menu.NONE,
+                        event.getPresentation().getText());
+                add.setEnabled(event.getPresentation().isEnabled());
+                add.setIcon(event.getPresentation().getIcon());
+                add.setOnMenuItemClickListener(item -> {
+                    child.actionPerformed(event);
+                    return true;
+                });
+            }
+        }
+    }
+    
     private void fillSubMenu(SubMenu subMenu, AnAction action, AnActionEvent event) {
         Presentation presentation = event.getPresentation();
 
@@ -96,6 +129,10 @@ public class ActionManagerImpl extends ActionManager {
 
         if (isGroup(action)) {
             ActionGroup group = (ActionGroup) action;
+            if (!group.isPopup()) {
+                fillMenu(View.generateViewId(), subMenu, group, event);
+            }
+
             SubMenu subSubMenu = subMenu.addSubMenu(presentation.getText());
             menuItem = subSubMenu.getItem();
 

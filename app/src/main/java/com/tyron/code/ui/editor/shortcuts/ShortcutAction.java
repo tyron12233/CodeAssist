@@ -1,6 +1,6 @@
 package com.tyron.code.ui.editor.shortcuts;
 
-import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora2.widget.CodeEditor;
 
 public interface ShortcutAction {
 

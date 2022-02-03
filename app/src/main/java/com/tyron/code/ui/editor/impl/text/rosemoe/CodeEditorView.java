@@ -1,19 +1,38 @@
 package com.tyron.code.ui.editor.impl.text.rosemoe;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.util.AttributeSet;
 
 import com.tyron.actions.DataContext;
+import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
+import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
+import com.tyron.code.ui.editor.NoOpTextActionWindow;
+import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
+import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 
+import java.io.File;
+import java.lang.reflect.Field;
+import java.util.List;
+import java.util.function.Consumer;
+
+import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
+import io.github.rosemoe.sora.widget.component.EditorTextActionWindow;
 
 public class CodeEditorView extends CodeEditor implements Editor {
 
     private boolean mIsBackgroundAnalysisEnabled;
+
+    private List<DiagnosticWrapper> mDiagnostics;
+    private Consumer<List<DiagnosticWrapper>> mDiagnosticsListener;
+    private File mCurrentFile;
 
     public CodeEditorView(Context context) {
         super(DataContext.wrap(context));
@@ -21,14 +40,61 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     public CodeEditorView(Context context, AttributeSet attrs) {
         super(DataContext.wrap(context), attrs);
+
+        init();
     }
 
     public CodeEditorView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(DataContext.wrap(context), attrs, defStyleAttr);
+
+        init();
     }
 
     public CodeEditorView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(DataContext.wrap(context), attrs, defStyleAttr, defStyleRes);
+
+        init();
+    }
+
+    private void init() {
+        CodeAssistCompletionWindow window =
+                new CodeAssistCompletionWindow(this);
+        window.setAdapter(new CodeAssistCompletionAdapter());
+        replaceComponent(EditorAutoCompletion.class, window);
+        replaceComponent(EditorTextActionWindow.class, new NoOpTextActionWindow(this));
+    }
+
+    @Override
+    public List<DiagnosticWrapper> getDiagnostics() {
+        return mDiagnostics;
+    }
+
+    @Override
+    public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
+        mDiagnostics = diagnostics;
+
+        AnalyzeManager manager = getEditorLanguage().getAnalyzeManager();
+        if (manager instanceof DiagnosticAnalyzeManager) {
+            ((DiagnosticAnalyzeManager<?>) manager).setDiagnostics(this, mDiagnostics);
+            ((DiagnosticAnalyzeManager<?>) manager).rerunWithoutBg();
+        }
+        if (mDiagnosticsListener != null) {
+            mDiagnosticsListener.accept(mDiagnostics);
+        }
+    }
+
+    public void setDiagnosticsListener(Consumer<List<DiagnosticWrapper>> listener) {
+        mDiagnosticsListener = listener;
+    }
+
+    @Override
+    public File getCurrentFile() {
+        return mCurrentFile;
+    }
+
+    @Override
+    public void openFile(File file) {
+        mCurrentFile = file;
     }
 
     @Override
@@ -49,8 +115,23 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
+    public void delete(int startLine, int startColumn, int endLine, int endColumn) {
+        getText().delete(startLine, startColumn, endLine, endColumn);
+    }
+
+    @Override
+    public void delete(int startIndex, int endIndex) {
+        getText().delete(startIndex, endIndex);
+    }
+
+    @Override
     public void replace(int line, int column, int endLine, int endColumn, String string) {
         getText().replace(line, column, endLine, endColumn, string);
+    }
+
+    @Override
+    public void setSelection(int line, int column) {
+        super.setSelection(line, column);
     }
 
     @Override
@@ -75,7 +156,9 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     public synchronized boolean formatCodeAsync(int start, int end) {
-        return CodeEditorView.super.formatCodeAsync(start, end);
+//        CodeEditorView.super.formatCodeAsync();
+//        return CodeEditorView.super.formatCodeAsync(start, end);
+        return false;
     }
 
     @Override
@@ -86,14 +169,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
     @Override
     public Content getContent() {
         return new ContentWrapper(CodeEditorView.this.getText());
-    }
-
-    @Override
-    public void analyze(boolean runBgAnalyzer) {
-        if (!mIsBackgroundAnalysisEnabled && runBgAnalyzer) {
-            return;
-        }
-        super.analyze(runBgAnalyzer);
     }
 
     /**

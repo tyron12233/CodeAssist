@@ -1,8 +1,13 @@
 package com.tyron.code.ui.editor.language;
 
+import android.os.Bundle;
+
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.code.ui.main.MainViewModel;
+import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
@@ -16,27 +21,88 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.github.rosemoe.sora.data.Span;
-import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.text.TextAnalyzer;
-import io.github.rosemoe.sora.widget.EditorColorScheme;
+import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager;
+import io.github.rosemoe.sora.lang.analysis.StyleReceiver;
+import io.github.rosemoe.sora.lang.styling.MappedSpans;
+import io.github.rosemoe.sora.lang.styling.Styles;
+import io.github.rosemoe.sora.text.CharPosition;
+import io.github.rosemoe.sora.text.ContentReference;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
+import io.github.rosemoe.sora2.text.DiagnosticSpanMapUpdater;
 
-public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
+public abstract class AbstractCodeAnalyzer<T> extends DiagnosticAnalyzeManager<T> {
 
     private final Map<Integer, Integer> mColorMap = new HashMap<>();
 
-    private List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
-
+    private StyleReceiver mReceiver;
     private Token mPreviousToken;
+    private Styles mLastStyles;
+    protected final List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
 
     public AbstractCodeAnalyzer() {
         setup();
     }
 
     @Override
-    public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
-        mDiagnostics = diagnostics;
+    public void setReceiver(@NonNull StyleReceiver receiver) {
+        super.setReceiver(receiver);
+
+        mReceiver = receiver;
+    }
+
+    @Override
+    public void insert(CharPosition start, CharPosition end, CharSequence insertedContent) {
+        super.insert(start, end, insertedContent);
+
+        if (start.getLine() != end.getLine()) {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineInsert(
+                    mDiagnostics,
+                    start.getLine(),
+                    start.getColumn(),
+                    end.getLine(),
+                    end.getColumn()
+            );
+        } else {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineInsert(
+                    mDiagnostics,
+                    start.getLine(),
+                    start.getColumn(),
+                    end.getColumn()
+            );
+        }
+    }
+
+    @Override
+    public void delete(CharPosition start, CharPosition end, CharSequence deletedContent) {
+        super.delete(start, end, deletedContent);
+
+        if (start.getLine() != end.getLine()) {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineInsert(
+                    mDiagnostics,
+                    start.getLine(),
+                    start.getColumn(),
+                    end.getLine(),
+                    end.getColumn()
+            );
+        } else {
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineInsert(
+                    mDiagnostics,
+                    start.getLine(),
+                    start.getColumn(),
+                    end.getColumn()
+            );
+        }
+    }
+
+    @Override
+    public void reset(@NonNull ContentReference content, @NonNull Bundle extraArguments) {
+        super.reset(content, extraArguments);
+    }
+
+    @Override
+    public void setDiagnostics(Editor editor, List<DiagnosticWrapper> diagnostics) {
+        mDiagnostics.clear();
+        mDiagnostics.addAll(diagnostics);
     }
 
     public void setup() {
@@ -68,7 +134,6 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
      */
     public abstract Lexer getLexer(CharStream input);
 
-    @Override
     public abstract void analyzeInBackground(CharSequence contents);
 
     public Integer getColor(int tokenType) {
@@ -76,7 +141,7 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
     }
 
     /**
-     * Called before {@link this#analyze(CharSequence, TextAnalyzeResult, TextAnalyzer.AnalyzeThread.Delegate)}
+     * Called before {@link #analyze(StringBuilder, Delegate)}
      * is called, commonly used to clear object caches before starting the analysis
      */
     protected void beforeAnalyze() {
@@ -84,13 +149,15 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
     }
 
     @Override
-    public void analyze(CharSequence content, TextAnalyzeResult result,
-                        TextAnalyzer.AnalyzeThread.Delegate delegate) {
+    protected Styles analyze(StringBuilder text, Delegate<T> delegate) {
         beforeAnalyze();
 
+        Styles styles = new Styles();
+        MappedSpans.Builder result = new MappedSpans.Builder(1024);
+
         try {
-            Lexer lexer = getLexer(CharStreams.fromReader(new CharSequenceReader(content)));
-            while (delegate.shouldAnalyze()) {
+            Lexer lexer = getLexer(CharStreams.fromReader(new CharSequenceReader(text)));
+            while (!delegate.isCancelled()) {
                 Token token = lexer.nextToken();
                 if (token == null) {
                     break;
@@ -99,7 +166,7 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
                     break;
                 }
 
-                boolean skip = onNextToken(token, result);
+                boolean skip = onNextToken(token, styles, result);
                 if (skip) {
                     mPreviousToken = token;
                     continue;
@@ -109,8 +176,7 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
                 if (id == null) {
                     id = EditorColorScheme.TEXT_NORMAL;
                 }
-                Span obtain = Span.obtain(token.getCharPositionInLine(), id);
-                result.addIfNeeded(token.getLine() - 1, obtain);
+                result.addIfNeeded(token.getLine() - 1, token.getCharPositionInLine(), id);
 
                 mPreviousToken = token;
             }
@@ -119,16 +185,30 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
                 result.determine(mPreviousToken.getLine() - 1);
             }
 
-            afterAnalyze(content, result);
+            styles.spans = result.build();
+            styles.finishBuilding();
+            afterAnalyze(text, styles, result);
+
+            if (mShouldAnalyzeInBg) {
+                analyzeInBackground(text);
+            }
         } catch (IOException e) {
             // ignored
         }
+
+        mLastStyles = styles;
+        return styles;
+    }
+
+    @Nullable
+    protected Styles getLastStyles() {
+        return mLastStyles;
     }
 
     /**
-     * Called after the analysis has been done, used to finalize the {@link TextAnalyzeResult}
+     * Called after the analysis has been done, used to finalize the {@link MappedSpans.Builder}
      */
-    protected void afterAnalyze(CharSequence content, TextAnalyzeResult colors) {
+    protected void afterAnalyze(CharSequence content, Styles styles, MappedSpans.Builder colors) {
 
     }
 
@@ -140,10 +220,15 @@ public abstract class AbstractCodeAnalyzer implements CodeAnalyzer {
     /**
      * Called when the lexer has moved to the next token
      * @param currentToken the current token
+     * @param styles
      * @param colors the current colors object, can be modified
      * @return true if the analyzer should skip on the next token
      */
-    public boolean onNextToken(Token currentToken, TextAnalyzeResult colors) {
+    public boolean onNextToken(Token currentToken, Styles styles, MappedSpans.Builder colors) {
         return false;
+    }
+
+    public void update(Styles styles) {
+        mReceiver.setStyles(this, styles);
     }
 }

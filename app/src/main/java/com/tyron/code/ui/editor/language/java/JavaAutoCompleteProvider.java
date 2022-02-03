@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import androidx.annotation.Nullable;
 import androidx.preference.PreferenceManager;
 
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.editor.language.AbstractAutoCompleteProvider;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.Project;
@@ -12,20 +13,21 @@ import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.completion.main.CompletionEngine;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.editor.Editor;
 
 import java.util.Optional;
 
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
-import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora2.text.TextAnalyzeResult;
+import io.github.rosemoe.sora2.widget.CodeEditor;
 
 public class JavaAutoCompleteProvider extends AbstractAutoCompleteProvider {
 
-    private final CodeEditor mEditor;
+    private final Editor mEditor;
     private final SharedPreferences mPreferences;
 
-    public JavaAutoCompleteProvider(CodeEditor editor) {
+    public JavaAutoCompleteProvider(Editor editor) {
         mEditor = editor;
-        mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
+        mPreferences = ApplicationLoader.getDefaultPreferences();
     }
 
 
@@ -57,7 +59,7 @@ public class JavaAutoCompleteProvider extends AbstractAutoCompleteProvider {
                                 prefix,
                                 line,
                                 column,
-                                mEditor.getCursor().getLeft());
+                                mEditor.getCaret().getStart());
             }
         }
         return null;

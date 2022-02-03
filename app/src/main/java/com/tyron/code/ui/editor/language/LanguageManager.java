@@ -5,14 +5,12 @@ import com.tyron.code.ui.editor.language.java.Java;
 import com.tyron.code.ui.editor.language.json.Json;
 import com.tyron.code.ui.editor.language.kotlin.Kotlin;
 import com.tyron.code.ui.editor.language.xml.Xml;
+import com.tyron.editor.Editor;
 
 import java.io.File;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
-
-import io.github.rosemoe.sora.interfaces.EditorLanguage;
-import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class LanguageManager {
 
@@ -50,7 +48,7 @@ public class LanguageManager {
         return false;
     }
 
-    public EditorLanguage get(CodeEditor editor, File file) {
+    public io.github.rosemoe.sora.lang.Language get(Editor editor, File file) {
         for (Language lang : mLanguages) {
             if (lang.isApplicable(file)) {
                 return lang.get(editor);

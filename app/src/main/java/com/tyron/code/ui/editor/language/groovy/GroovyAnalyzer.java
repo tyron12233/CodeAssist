@@ -1,6 +1,7 @@
 package com.tyron.code.ui.editor.language.groovy;
 
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
+import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.Lexer;
@@ -8,20 +9,21 @@ import org.antlr.v4.runtime.Token;
 
 import java.util.Stack;
 
-import io.github.rosemoe.sora.data.BlockLine;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
+import io.github.rosemoe.sora.lang.styling.CodeBlock;
+import io.github.rosemoe.sora.lang.styling.MappedSpans;
+import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.widget.CodeEditor;
-import io.github.rosemoe.sora.widget.EditorColorScheme;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
-public class GroovyAnalyzer extends AbstractCodeAnalyzer {
+public class GroovyAnalyzer extends AbstractCodeAnalyzer<Object> {
 
-    private final CodeEditor mEditor;
+    private final Editor mEditor;
 
     int maxSwitch = 1;
     int currSwitch;
-    private final Stack<BlockLine> mBlockLines = new Stack<>();
+    private final Stack<CodeBlock> mBlockLines = new Stack<>();
 
-    public GroovyAnalyzer(CodeEditor editor) {
+    public GroovyAnalyzer(Editor editor) {
         mEditor = editor;
     }
 
@@ -70,18 +72,18 @@ public class GroovyAnalyzer extends AbstractCodeAnalyzer {
     }
 
     @Override
-    public boolean onNextToken(Token currentToken, TextAnalyzeResult colors) {
+    public boolean onNextToken(Token currentToken, Styles styles, MappedSpans.Builder colors) {
         int line = currentToken.getLine() - 1;
         int column = currentToken.getCharPositionInLine();
 
         switch (currentToken.getType()) {
             case GroovyLexer.RCURVE:
                 if (!mBlockLines.isEmpty()) {
-                    BlockLine b = mBlockLines.pop();
+                    CodeBlock b = mBlockLines.pop();
                     b.endLine = line;
                     b.endColumn = column;
                     if (b.startLine != b.endLine) {
-                        colors.addBlockLine(b);
+                        styles.addCodeBlock(b);
                     }
                 }
                 return true;
@@ -93,7 +95,7 @@ public class GroovyAnalyzer extends AbstractCodeAnalyzer {
                     currSwitch = 0;
                 }
                 currSwitch++;
-                BlockLine block = colors.obtainNewBlock();
+                CodeBlock block = styles.obtainNewBlock();
                 block.startLine = line;
                 block.startColumn = column;
                 mBlockLines.push(block);
@@ -103,12 +105,12 @@ public class GroovyAnalyzer extends AbstractCodeAnalyzer {
     }
 
     @Override
-    protected void afterAnalyze(CharSequence content, TextAnalyzeResult colors) {
+    protected void afterAnalyze(CharSequence content, Styles styles, MappedSpans.Builder colors) {
         if (mBlockLines.isEmpty()) {
             if (currSwitch > maxSwitch) {
                 maxSwitch = currSwitch;
             }
         }
-        colors.setSuppressSwitch(maxSwitch + 10);
+        styles.setSuppressSwitch(maxSwitch + 10);
     }
 }

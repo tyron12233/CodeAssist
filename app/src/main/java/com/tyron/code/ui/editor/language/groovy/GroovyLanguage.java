@@ -1,41 +1,49 @@
 package com.tyron.code.ui.editor.language.groovy;
 
-import java.util.List;
+import android.os.Bundle;
 
-import io.github.rosemoe.sora.data.CompletionItem;
-import io.github.rosemoe.sora.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.sora.interfaces.CodeAnalyzer;
-import io.github.rosemoe.sora.interfaces.EditorLanguage;
-import io.github.rosemoe.sora.interfaces.NewlineHandler;
-import io.github.rosemoe.sora.text.TextAnalyzeResult;
+import androidx.annotation.NonNull;
+
+import com.tyron.editor.Editor;
+
+import io.github.rosemoe.sora.lang.Language;
+import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
+import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
+import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
+import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
+import io.github.rosemoe.sora.text.CharPosition;
+import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 
-public class GroovyLanguage implements EditorLanguage {
+public class GroovyLanguage implements Language {
 
-    private final CodeEditor mEditor;
+    private final Editor mEditor;
+    private final GroovyAnalyzer mAnalyzer;
 
-    public GroovyLanguage(CodeEditor editor) {
+    public GroovyLanguage(Editor editor) {
         mEditor = editor;
+        mAnalyzer = new GroovyAnalyzer(editor);
+    }
+
+    @NonNull
+    @Override
+    public AnalyzeManager getAnalyzeManager() {
+        return mAnalyzer;
     }
 
     @Override
-    public CodeAnalyzer getAnalyzer() {
-        return new GroovyAnalyzer(mEditor);
+    public int getInterruptionLevel() {
+        return INTERRUPTION_LEVEL_STRONG;
     }
 
     @Override
-    public AutoCompleteProvider getAutoCompleteProvider() {
-        return (prefix, analyzeResult, line, column) -> null;
+    public void requireAutoComplete(@NonNull ContentReference content, @NonNull CharPosition position, @NonNull CompletionPublisher publisher, @NonNull Bundle extraArguments) throws CompletionCancelledException {
+
     }
 
     @Override
-    public boolean isAutoCompleteChar(char ch) {
-        return false;
-    }
-
-    @Override
-    public int getIndentAdvance(String content) {
+    public int getIndentAdvance(@NonNull ContentReference content, int line, int column) {
         return 0;
     }
 
@@ -57,5 +65,10 @@ public class GroovyLanguage implements EditorLanguage {
     @Override
     public NewlineHandler[] getNewlineHandlers() {
         return new NewlineHandler[0];
+    }
+
+    @Override
+    public void destroy() {
+
     }
 }
