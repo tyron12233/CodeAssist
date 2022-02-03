@@ -35,7 +35,7 @@ dependencies {
     implementation project(path: ':java-completion')
     implementation project(path: ':common')
 
-    api 'io.github.Rosemoe.sora-editor:editor:0.9.1'
+    api 'io.github.Rosemoe.sora-editor:editor:0.9.2'
 
     testImplementation 'junit:junit:4.+'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'

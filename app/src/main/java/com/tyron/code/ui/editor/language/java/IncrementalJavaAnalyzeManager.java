@@ -33,6 +33,11 @@ public class IncrementalJavaAnalyzeManager
     }
 
     @Override
+    public LineTokenizeResult<LexerPosition, Object> getState(int line) {
+        return null;
+    }
+
+    @Override
     public boolean stateEquals(LexerPosition state, LexerPosition another) {
         return state.equals(another);
     }
