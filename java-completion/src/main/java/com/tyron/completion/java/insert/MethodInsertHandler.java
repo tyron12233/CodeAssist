@@ -26,6 +26,9 @@ public class MethodInsertHandler extends DefaultInsertHandler {
 
         String commitText = item.commitText;
         boolean insertSemi = shouldInsertSemiColon();
+        if (insertSemi) {
+            commitText = commitText + ";";
+        }
         int diff = 0;
         if (hasParameters()) {
             diff++;

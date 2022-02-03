@@ -50,6 +50,9 @@ public class AddImport implements JavaRewrite {
     }
 
     public Map<File, TextEdit> getText(ParseTask task) {
+        if (ActionUtil.hasImport(task.root, className)) {
+            return Collections.emptyMap();
+        }
         Position point = insertPosition(task);
 
         String text = "import " + className + ";\n";
