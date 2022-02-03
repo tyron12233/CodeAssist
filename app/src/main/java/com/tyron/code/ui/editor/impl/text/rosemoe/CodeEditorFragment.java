@@ -83,6 +83,7 @@ import io.github.rosemoe.sora.widget.component.DefaultCompletionLayout;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
+import io.github.rosemoe.sora2.text.EditorUtil;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class CodeEditorFragment extends Fragment implements Savable,
@@ -399,6 +400,13 @@ public class CodeEditorFragment extends Fragment implements Savable,
             MotionEvent e = event.getCausingEvent();
             // wait for the cursor to move
             save();
+            Cursor cursor = mEditor.getCursor();
+            if (cursor.isSelected()) {
+                int index = mEditor.getCharIndex(event.getLine(), event.getColumn());
+                if (cursor.getLeft() > index && index < cursor.getRight()) {
+                    EditorUtil.selectWord(mEditor, event.getLine(), event.getColumn());
+                }
+            }
             ProgressManager.getInstance().runLater(() ->
                     event.getEditor().showContextMenu(e.getX(), e.getY()));
         });
