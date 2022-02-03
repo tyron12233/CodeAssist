@@ -29,6 +29,8 @@ import com.tyron.code.ui.editor.shortcuts.action.TextInsertAction;
 import com.tyron.code.ui.editor.shortcuts.action.UndoAction;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.common.util.AndroidUtilities;
+import com.tyron.editor.Caret;
+import com.tyron.editor.Editor;
 import com.tyron.fileeditor.api.FileEditor;
 
 import java.util.ArrayList;
@@ -151,9 +153,9 @@ public class BottomEditorFragment extends Fragment {
             }
 
             @Override
-            public void apply(CodeEditor editor, ShortcutItem item) {
-                Cursor cursor = editor.getCursor();
-                editor.getText().insert(cursor.getLeftLine(), cursor.getLeftColumn(), "\t");
+            public void apply(Editor editor, ShortcutItem item) {
+                Caret cursor = editor.getCaret();
+                editor.insert(cursor.getStartLine(), cursor.getStartColumn(), "\t");
             }
         }), "->", "tab"));
         items.addAll(strings.stream()

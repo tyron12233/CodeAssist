@@ -555,9 +555,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
             return;
         }
         for (ShortcutAction action : item.actions) {
-            if (action.isApplicable(item.kind)) {
-               // action.apply(mEditor, item);
-            }
+            action.apply(mEditor, item);
         }
     }
 
