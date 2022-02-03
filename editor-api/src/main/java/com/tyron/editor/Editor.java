@@ -118,6 +118,8 @@ public interface Editor {
      */
     void setSelectionRegion(int line, int column, int endLine, int endColumn);
 
+    void setSelectionRegion(int startIndex, int endIndex);
+
     void moveSelectionUp();
 
     void moveSelectionDown();

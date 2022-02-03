@@ -1,11 +1,13 @@
 package com.tyron.code.ui.editor.action;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.res.ResourcesCompat;
 
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
+import com.tyron.actions.DataContext;
 import com.tyron.actions.Presentation;
 import com.tyron.builder.project.Project;
 import com.tyron.code.R;
@@ -49,9 +51,11 @@ public class SelectJavaParentAction extends AnAction {
             return;
         }
 
+        DataContext context = event.getDataContext();
         presentation.setVisible(true);
-        presentation.setText("Select all");
-        presentation.setIcon(event.getDataContext().getDrawable(R.drawable.round_select_all_20));
+        presentation.setText(context.getString(R.string.expand_selection));
+        presentation.setIcon(ResourcesCompat.getDrawable(context.getResources(),
+                R.drawable.ic_baseline_code_24, context.getTheme()));
     }
 
     @Override

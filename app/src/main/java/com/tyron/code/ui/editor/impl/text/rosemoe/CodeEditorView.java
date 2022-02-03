@@ -140,6 +140,14 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
+    public void setSelectionRegion(int startIndex, int endIndex) {
+        CharPosition start = getCharPosition(startIndex);
+        CharPosition end = getCharPosition(endIndex);
+        CodeEditorView.super.setSelectionRegion(start.getLine(), start.getColumn(),
+                end.getLine(), end.getColumn());
+    }
+
+    @Override
     public void beginBatchEdit() {
         getText().beginBatchEdit();
     }

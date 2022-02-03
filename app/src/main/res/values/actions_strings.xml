@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Text Actions -->
+    <string name="text_actions">Text Actions</string>
+    <string name="expand_selection">Expand Selection</string>
+</resources>

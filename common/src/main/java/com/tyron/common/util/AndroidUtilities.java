@@ -13,6 +13,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
 import com.tyron.common.ApplicationProvider;
@@ -125,6 +126,19 @@ public class AndroidUtilities {
 
 		ClipData clip = ClipData.newPlainText("", text); // is label important?
 		clipboard.setPrimaryClip(clip);
+	}
+
+	@Nullable
+	public static CharSequence getPrimaryClip() {
+		ClipboardManager clipboard = (ClipboardManager) ApplicationProvider.getApplicationContext()
+				.getSystemService(Context.CLIPBOARD_SERVICE);
+		ClipData primaryClip = clipboard.getPrimaryClip();
+		if (primaryClip != null) {
+			if (primaryClip.getItemCount() >= 1) {
+				return primaryClip.getItemAt(0).getText();
+			}
+		}
+		return null;
 	}
 
 	public static void copyToClipboard(String text, boolean showToast) {

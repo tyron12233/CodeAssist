@@ -8,6 +8,8 @@ import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.Presentation;
+import com.tyron.code.R;
+import com.tyron.code.ui.editor.action.SelectJavaParentAction;
 
 public class TextActionGroup extends ActionGroup {
 
@@ -23,19 +25,22 @@ public class TextActionGroup extends ActionGroup {
         }
 
         presentation.setVisible(true);
-        presentation.setText("Text Actions");
+        presentation.setText(event.getDataContext().getString(R.string.text_actions));
     }
 
     @Override
     public boolean isPopup() {
-        return false;
+        return true;
     }
 
     @Override
     public AnAction[] getChildren(@Nullable AnActionEvent e) {
         return new AnAction[] {
+                new SelectJavaParentAction(),
+                new SelectAllAction(),
+                new CutAction(),
                 new CopyAction(),
-                new CutAction()
+                new PasteAction()
         };
     }
 }
