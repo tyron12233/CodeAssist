@@ -8,6 +8,7 @@ import com.tyron.actions.DataContext;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
+import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
 import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
@@ -33,6 +34,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
     private List<DiagnosticWrapper> mDiagnostics;
     private Consumer<List<DiagnosticWrapper>> mDiagnosticsListener;
     private File mCurrentFile;
+    private EditorViewModel mViewModel;
 
     public CodeEditorView(Context context) {
         super(DataContext.wrap(context));
@@ -185,5 +187,15 @@ public class CodeEditorView extends CodeEditor implements Editor {
      */
     public void setBackgroundAnalysisEnabled(boolean enabled) {
         mIsBackgroundAnalysisEnabled = enabled;
+    }
+
+    public void setAnalyzing(boolean analyzing) {
+        if (mViewModel != null) {
+            mViewModel.setAnalyzeState(analyzing);
+        }
+    }
+
+    public void setViewModel(EditorViewModel editorViewModel) {
+        mViewModel = editorViewModel;
     }
 }

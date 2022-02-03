@@ -33,6 +33,7 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionLayout;
+import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
@@ -93,7 +94,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     private static final String EDITOR_RIGHT_COLUMN_KEY = "rightColumn";
 
     private CodeEditorView mEditor;
-//    private CodeEditorEventListener mEditorEventListener;
 
     private Language mLanguage;
     private File mCurrentFile = new File("");
@@ -177,7 +177,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
 
     public void hideEditorWindows() {
-//        mEditor.getTextActionPresenter().onExit();
         mEditor.hideAutoCompleteWindow();
     }
 
@@ -206,7 +205,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
         mEditor.openFile(mCurrentFile);
         mEditor.getComponent(EditorAutoCompletion.class).setLayout(new CodeAssistCompletionLayout());
         mEditor.setAutoCompletionItemAdapter(new CodeAssistCompletionAdapter());
-//        mEditor.setText(CodeEditor.TextActionMode.POPUP_WINDOW);
         mEditor.setTypefaceText(ResourcesCompat.getFont(requireContext(),
                 R.font.jetbrains_mono_regular));
         mEditor.setLigatureEnabled(true);
@@ -214,6 +212,18 @@ public class CodeEditorFragment extends Fragment implements Savable,
         mEditor.setEdgeEffectColor(Color.TRANSPARENT);
         mEditor.setWordwrap(mPreferences.getBoolean(SharedPreferenceKeys.EDITOR_WORDWRAP, false));
         mEditor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+
+        View topView = root.findViewById(R.id.top_view);
+        EditorViewModel viewModel = new ViewModelProvider(this).get(EditorViewModel.class);
+        viewModel.getAnalyzeState().observe(getViewLifecycleOwner(), analyzing -> {
+            if (analyzing) {
+                topView.setVisibility(View.VISIBLE);
+            } else {
+                topView.setVisibility(View.GONE);
+            }
+        });
+        mEditor.setViewModel(viewModel);
+
         if (mPreferences.getBoolean(SharedPreferenceKeys.KEYBOARD_ENABLE_SUGGESTIONS, false)) {
             mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
         } else {
@@ -364,7 +374,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                         if (task != null) {
                             FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
                             TreePath currentPath = findCurrentPath.scan(task.root(),
-                                    (long) mEditor.getCursor().getLeft());
+                                    mEditor.getCursor().getLeft());
                             dataContext.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
                         }
                     });
@@ -388,22 +398,17 @@ public class CodeEditorFragment extends Fragment implements Savable,
         mEditor.subscribeEvent(LongPressEvent.class, (event, unsubscribe) -> {
             MotionEvent e = event.getCausingEvent();
             // wait for the cursor to move
-            ProgressManager.getInstance().runLater(() -> {
-                event.getEditor().showContextMenu(e.getX(), e.getY());
-            });
+            ProgressManager.getInstance().runLater(() ->
+                    event.getEditor().showContextMenu(e.getX(), e.getY()));
         });
-        mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscibe) -> {
-            updateFile(event.getEditor().getText());
-        });
+        mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) ->
+                updateFile(event.getEditor().getText()));
 
         LogViewModel logViewModel =
                 new ViewModelProvider(requireActivity()).get(LogViewModel.class);
-
-        mEditor.setDiagnosticsListener(diagnostics -> {
-            ProgressManager.getInstance().runLater(() -> {
-                logViewModel.updateLogs(LogViewModel.DEBUG, diagnostics);
-            });
-        });
+        mEditor.setDiagnosticsListener(diagnostics ->
+                ProgressManager.getInstance().runLater(() ->
+                        logViewModel.updateLogs(LogViewModel.DEBUG, diagnostics)));
 
         getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
                 getViewLifecycleOwner(), ((requestKey, result) -> {
@@ -434,8 +439,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-
-//        mEditorEventListener = null;
         mEditor.setEditorLanguage(null);
     }
 
@@ -589,60 +592,4 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         mEditor.setBackgroundAnalysisEnabled(false);
     }
-
-//    private static final class CodeEditorEventListener implements EditorEventListener {
-//
-//        private final Module mModule;
-//        private final File mCurrentFile;
-//
-//        public CodeEditorEventListener(Module module, File currentFile) {
-//            mModule = module;
-//            mCurrentFile = currentFile;
-//        }
-//
-//        @Override
-//        public boolean onRequestFormat(@NonNull CodeEditor editor) {
-//            return false;
-//        }
-//
-//        @Override
-//        public boolean onFormatFail(@NonNull CodeEditor editor, Throwable cause) {
-//            ApplicationLoader.showToast("Unable to format: " + cause.getMessage());
-//            return false;
-//        }
-//
-//        @Override
-//        public void onFormatSucceed(@NonNull CodeEditor editor) {
-//
-//        }
-//
-//        @Override
-//        public void onNewTextSet(@NonNull CodeEditor editor) {
-//            updateFile(editor.getText().toString());
-//        }
-//
-//        @Override
-//        public void afterDelete(@NonNull CodeEditor editor, @NonNull CharSequence content,
-//                                int startLine, int startColumn, int endLine, int endColumn,
-//                                CharSequence deletedContent) {
-//            updateFile(content);
-//        }
-//
-//        @Override
-//        public void afterInsert(@NonNull CodeEditor editor, @NonNull CharSequence content,
-//                                int startLine, int startColumn, int endLine, int endColumn,
-//                                CharSequence insertedContent) {
-//            updateFile(content);
-//        }
-//
-//        @Override
-//        public void beforeReplace(@NonNull CodeEditor editor, @NonNull CharSequence content) {
-//            updateFile(content);
-//        }
-//
-//        @Override
-//        public void onSelectionChanged(@NonNull CodeEditor editor, @NonNull Cursor cursor) {
-//
-//        }
-//    }
 }
