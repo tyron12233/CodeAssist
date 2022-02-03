@@ -1,5 +1,6 @@
 package com.tyron.actions.impl;
 
+import android.os.Build;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.SubMenu;
@@ -31,6 +32,9 @@ public class ActionManagerImpl extends ActionManager {
     public void fillMenu(DataContext context, Menu menu, String place, boolean isContext, boolean isToolbar) {
         // Inject values
         context.putData(CommonDataKeys.CONTEXT, context);
+        if (Build.VERSION_CODES.P <= Build.VERSION.SDK_INT) {
+            menu.setGroupDividerEnabled(true);
+        }
 
         for (AnAction value : mIdToAction.values()) {
 
@@ -110,6 +114,10 @@ public class ActionManagerImpl extends ActionManager {
                         event.getPresentation().getText());
                 add.setEnabled(event.getPresentation().isEnabled());
                 add.setIcon(event.getPresentation().getIcon());
+                add.setOnMenuItemClickListener(item -> {
+                    child.actionPerformed(event);
+                    return true;
+                });
             }
         }
     }
