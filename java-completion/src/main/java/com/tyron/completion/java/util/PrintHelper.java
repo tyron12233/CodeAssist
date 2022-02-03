@@ -101,7 +101,7 @@ public class PrintHelper {
     public static String printParameters(ExecutableType method, MethodTree source) {
         StringJoiner join = new StringJoiner(", ");
         for (int i = 0; i < method.getParameterTypes().size(); i++) {
-            String type = method.getParameterTypes().get(i).toString();
+            String type = printType(method.getParameterTypes().get(i));
             Name name = source.getParameters().get(i).getName();
             join.add(type + " " + name);
         }
