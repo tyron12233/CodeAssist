@@ -22,6 +22,7 @@ import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
 import io.github.rosemoe.sora.lang.completion.CompletionHelper;
+import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.completion.SimpleCompletionItem;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
@@ -30,9 +31,7 @@ import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.util.MyCharacter;
-import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
-import io.github.rosemoe.sora2.data.CompletionItem;
 
 public class LanguageXML implements Language {
 
@@ -115,12 +114,13 @@ public class LanguageXML implements Language {
 									@NonNull Bundle extraArguments) throws CompletionCancelledException {
 		String prefix = CompletionHelper.computePrefix(content, position, this::isAutoCompleteChar);
 		List<CompletionItem> items =
-				new XMLAutoCompleteProvider(mEditor).getAutoCompleteItems(prefix, null,
+				new XMLAutoCompleteProvider(mEditor).getAutoCompleteItems(prefix,
 						position.getLine(), position.getColumn());
+		if (items == null) {
+			return;
+		}
 		for (CompletionItem item : items) {
-			SimpleCompletionItem simpleCompletionItem =
-					new SimpleCompletionItem(item.label, item.desc, prefix.length(), item.commit);
-			publisher.addItem(simpleCompletionItem);
+			publisher.addItem(item);
 		}
 	}
 

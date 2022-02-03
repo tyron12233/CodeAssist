@@ -57,8 +57,7 @@ public class KotlinLanguage implements Language {
         }
         String prefix = CompletionHelper.computePrefix(content, position, this::isAutoCompleteChar);
         KotlinAutoCompleteProvider provider = new KotlinAutoCompleteProvider(mEditor);
-        CompletionList list = provider.getCompletionList(prefix, null,
-                position.getLine(), position.getColumn());
+        CompletionList list = provider.getCompletionList(prefix, position.getLine(), position.getColumn());
         if (list != null) {
             for (CompletionItem item : list.items) {
                 CompletionItemWrapper wrapper = new CompletionItemWrapper(item);

@@ -3,9 +3,6 @@ package com.tyron.code.ui.editor.language.java;
 import com.tyron.code.ui.editor.language.Language;
 import com.tyron.editor.Editor;
 
-import io.github.rosemoe.sora.lang.EmptyLanguage;
-import io.github.rosemoe.sora2.interfaces.EditorLanguage;
-import io.github.rosemoe.sora2.widget.CodeEditor;
 import java.io.File;
 
 public class Java implements Language {

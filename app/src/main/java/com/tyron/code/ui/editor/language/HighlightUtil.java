@@ -2,7 +2,6 @@ package com.tyron.code.ui.editor.language;
 
 import android.util.Log;
 
-import com.android.tools.r8.naming.T;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
@@ -11,17 +10,11 @@ import org.openjdk.javax.tools.Diagnostic;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 
-import io.github.rosemoe.sora.lang.styling.MappedSpans;
+import io.github.rosemoe.sora.lang.styling.Span;
 import io.github.rosemoe.sora.lang.styling.Spans;
 import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora2.BuildConfig;
-import io.github.rosemoe.sora2.data.Span;
-import io.github.rosemoe.sora2.text.Indexer;
-import io.github.rosemoe.sora2.text.TextAnalyzeResult;
-import io.github.rosemoe.sora2.widget.CodeEditor;
-import io.github.rosemoe.sora2.widget.EditorColorScheme;
 
 public class HighlightUtil {
 
@@ -133,55 +126,6 @@ public class HighlightUtil {
                 }
             }
         });
-    }
-
-    public static int[] setErrorSpan(TextAnalyzeResult colors, int line, int column) {
-        int lineCount = colors.getSpanMap().size();
-        int realLine = line - 1;
-        List<Span> spans = colors.getSpanMap().get(Math.min(realLine, lineCount - 1));
-
-        int[] end = new int[2];
-        end[0] = Math.min(realLine, lineCount - 1);
-
-        if (realLine >= lineCount) {
-            Span span = Span.obtain(0, EditorColorScheme.PROBLEM_ERROR);
-            span.problemFlags = Span.FLAG_ERROR;
-            colors.add(realLine, span);
-            end[0]++;
-        } else {
-            Span last = null;
-            for (int i = 0; i < spans.size(); i++) {
-                Span span = spans.get(i);
-                if (last != null) {
-                    if (last.column <= column - 1 && span.column >= column - 1) {
-                        span.problemFlags = Span.FLAG_ERROR;
-                        last.problemFlags = Span.FLAG_ERROR;
-                        end[1] = last.column;
-                        break;
-                    }
-                }
-                if (i == spans.size() - 1 && span.column <= column - 1) {
-                    span.problemFlags = Span.FLAG_ERROR;
-                    end[1] = span.column;
-                    break;
-                }
-                last = span;
-            }
-        }
-        return end;
-    }
-
-    /**
-     * Used in xml diagnostics where line is only given
-     */
-    public static void setErrorSpan(TextAnalyzeResult colors, int line) {
-        int lineCount = colors.getSpanMap().size();
-        int realLine = line - 1;
-        List<Span> spans = colors.getSpanMap().get(Math.min(realLine, lineCount - 1));
-
-        for (Span span : spans) {
-            span.problemFlags = Span.FLAG_ERROR;
-        }
     }
 
     /**

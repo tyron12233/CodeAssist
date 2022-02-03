@@ -5,9 +5,6 @@ import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
 
-import io.github.rosemoe.sora2.text.Cursor;
-import io.github.rosemoe.sora2.widget.CodeEditor;
-
 public class TextInsertAction implements ShortcutAction {
 
     public static final String KIND = "textInsert";

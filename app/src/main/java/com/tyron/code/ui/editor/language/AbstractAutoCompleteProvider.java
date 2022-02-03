@@ -7,28 +7,23 @@ import com.tyron.completion.model.CompletionList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import io.github.rosemoe.sora2.data.CompletionItem;
-import io.github.rosemoe.sora2.interfaces.AutoCompleteProvider;
-import io.github.rosemoe.sora2.text.TextAnalyzeResult;
+import io.github.rosemoe.sora.lang.completion.CompletionItem;
 
 /**
  * An auto complete provider that supports cancellation as the user types
  */
-public abstract class AbstractAutoCompleteProvider implements AutoCompleteProvider {
+public abstract class AbstractAutoCompleteProvider {
 
-    @Override
-    public final List<CompletionItem> getAutoCompleteItems(String prefix, TextAnalyzeResult colors, int line, int column) {
-        CompletionList list = getCompletionList(prefix, colors,
-                line, column);
+    public final List<CompletionItem> getAutoCompleteItems(String prefix, int line, int column) {
+        CompletionList list = getCompletionList(prefix, line, column);
         if (list == null) {
             return null;
         }
 
         return list.items.stream()
-               .map(CompletionItem::new)
+               .map(CompletionItemWrapper::new)
                .collect(Collectors.toList());
     }
 
-    @Nullable
-    public abstract CompletionList getCompletionList(String prefix, TextAnalyzeResult colors, int line, int column);
+    public abstract CompletionList getCompletionList(String prefix, int line, int column);
 }

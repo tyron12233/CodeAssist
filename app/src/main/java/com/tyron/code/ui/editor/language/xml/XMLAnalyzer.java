@@ -18,8 +18,8 @@ import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerProvider;
+import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.editor.Editor;
@@ -39,14 +39,12 @@ import java.util.Stack;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
+import io.github.rosemoe.sora.lang.styling.CodeBlock;
 import io.github.rosemoe.sora.lang.styling.MappedSpans;
 import io.github.rosemoe.sora.lang.styling.Span;
 import io.github.rosemoe.sora.lang.styling.Styles;
-import io.github.rosemoe.sora.lang.styling.CodeBlock;
 import io.github.rosemoe.sora.lang.styling.TextStyle;
-import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
-import io.github.rosemoe.sora2.text.DiagnosticSpanMapUpdater;
 
 public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
 

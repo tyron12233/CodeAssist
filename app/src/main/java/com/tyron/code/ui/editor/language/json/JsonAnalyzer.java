@@ -11,9 +11,7 @@ import java.util.Stack;
 import io.github.rosemoe.sora.lang.styling.CodeBlock;
 import io.github.rosemoe.sora.lang.styling.MappedSpans;
 import io.github.rosemoe.sora.lang.styling.Styles;
-import io.github.rosemoe.sora2.data.BlockLine;
-import io.github.rosemoe.sora2.text.TextAnalyzeResult;
-import io.github.rosemoe.sora2.widget.EditorColorScheme;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class JsonAnalyzer extends AbstractCodeAnalyzer<Object> {
 

@@ -4,8 +4,6 @@ import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.editor.Editor;
 
-import io.github.rosemoe.sora2.widget.CodeEditor;
-
 public class CursorMoveAction implements ShortcutAction {
 
     public static final String KIND = "cursorMove";

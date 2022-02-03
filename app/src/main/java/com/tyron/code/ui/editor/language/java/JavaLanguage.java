@@ -89,8 +89,7 @@ public class JavaLanguage implements Language {
         }
         String prefix = CompletionHelper.computePrefix(content, position, this::isAutoCompleteChar);
         JavaAutoCompleteProvider provider = new JavaAutoCompleteProvider(mEditor);
-        CompletionList list = provider.getCompletionList(prefix, null, position.getLine(),
-                position.getColumn());
+        CompletionList list = provider.getCompletionList(prefix, position.getLine(), position.getColumn());
         if (list == null) {
             return;
         }

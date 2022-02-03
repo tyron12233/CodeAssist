@@ -39,9 +39,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import io.github.rosemoe.sora2.text.Cursor;
-import io.github.rosemoe.sora2.widget.CodeEditor;
-
 @SuppressWarnings("FieldCanBeLocal")
 public class BottomEditorFragment extends Fragment {
 

@@ -1,6 +1,6 @@
 package com.tyron.code.ui.editor.language.xml;
 
-import io.github.rosemoe.sora2.widget.EditorColorScheme;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class XMLColorScheme extends EditorColorScheme {
 

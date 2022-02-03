@@ -3,23 +3,17 @@ package com.tyron.code.ui.editor.language.kotlin;
 import android.content.SharedPreferences;
 
 import androidx.annotation.Nullable;
-import androidx.preference.PreferenceManager;
 
-import com.tyron.code.ApplicationLoader;
-import com.tyron.code.ui.editor.language.AbstractAutoCompleteProvider;
-import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.ui.editor.language.AbstractAutoCompleteProvider;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
 import com.tyron.kotlin_completion.CompletionEngine;
-
-import java.util.Optional;
-
-import io.github.rosemoe.sora2.text.TextAnalyzeResult;
-import io.github.rosemoe.sora2.widget.CodeEditor;
 
 public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
 
@@ -36,8 +30,7 @@ public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
 
     @Nullable
     @Override
-    public CompletionList getCompletionList(
-            String prefix, TextAnalyzeResult colors, int line, int column) {
+    public CompletionList getCompletionList(String prefix, int line, int column) {
         if (!mPreferences.getBoolean(SharedPreferenceKeys.KOTLIN_COMPLETIONS, false)) {
             return null;
         }
