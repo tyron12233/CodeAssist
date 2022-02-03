@@ -32,7 +32,7 @@ public class CompletionItem {
     public String data = "";
 
     public CompletionItem() {
-
+        this.insertHandler = new DefaultInsertHandler(CompletionUtils.JAVA_PREDICATE, this);
     }
 
     public CompletionItem(String label, String details, String commitText, DrawableKind kind) {

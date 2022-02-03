@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import androidx.annotation.Nullable;
 import androidx.preference.PreferenceManager;
 
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.editor.language.AbstractAutoCompleteProvider;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.builder.project.Project;
@@ -12,7 +13,10 @@ import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.editor.Editor;
 import com.tyron.kotlin_completion.CompletionEngine;
+
+import java.util.Optional;
 
 import io.github.rosemoe.sora2.text.TextAnalyzeResult;
 import io.github.rosemoe.sora2.widget.CodeEditor;
@@ -21,13 +25,13 @@ public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
 
     private static final String TAG = KotlinAutoCompleteProvider.class.getSimpleName();
 
-    private final CodeEditor mEditor;
+    private final Editor mEditor;
     private final SharedPreferences mPreferences;
 
 
-    public KotlinAutoCompleteProvider(CodeEditor editor) {
+    public KotlinAutoCompleteProvider(Editor editor) {
         mEditor = editor;
-        mPreferences = PreferenceManager.getDefaultSharedPreferences(editor.getContext());
+        mPreferences = ApplicationLoader.getDefaultPreferences();
     }
 
     @Nullable
@@ -58,6 +62,10 @@ public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
             return null;
         }
 
+        if (mEditor.getCurrentFile() == null) {
+            return null;
+        }
+
         CompletionEngine engine = CompletionEngine.getInstance((AndroidModule) currentModule);
 
         if (engine.isIndexing()) {
@@ -65,6 +73,11 @@ public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
         }
 
         // waiting for code editor to support async code completions
-        return engine.complete(mEditor.getCurrentFile(), mEditor.getText().toString(), prefix, line, column, mEditor.getCursor().getLeft());
+        return engine.complete(mEditor.getCurrentFile(),
+                String.valueOf(mEditor.getContent()),
+                prefix,
+                line,
+                column,
+                mEditor.getCaret().getStart());
     }
 }

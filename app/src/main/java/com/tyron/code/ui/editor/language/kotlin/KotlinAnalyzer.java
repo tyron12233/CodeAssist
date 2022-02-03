@@ -1,18 +1,10 @@
 package com.tyron.code.ui.editor.language.kotlin;
 
-import android.graphics.Color;
-import android.util.Log;
-
-import androidx.preference.PreferenceManager;
-
-import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
-import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
-import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.progress.ProgressManager;
@@ -20,49 +12,48 @@ import com.tyron.editor.Editor;
 import com.tyron.kotlin_completion.CompletionEngine;
 
 import org.antlr.v4.runtime.CharStream;
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.CodePointCharStream;
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenSource;
 
 import java.lang.ref.WeakReference;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Stack;
 
-import io.github.rosemoe.sora.lang.styling.Styles;
-import io.github.rosemoe.sora2.data.BlockLine;
-import io.github.rosemoe.sora2.data.Span;
-import io.github.rosemoe.sora2.interfaces.CodeAnalyzer;
-import io.github.rosemoe.sora2.text.TextAnalyzeResult;
-import io.github.rosemoe.sora2.text.TextAnalyzer;
-import io.github.rosemoe.sora2.widget.CodeEditor;
-import io.github.rosemoe.sora2.widget.EditorColorScheme;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class KotlinAnalyzer extends AbstractCodeAnalyzer<Object> {
 
     private final WeakReference<Editor> mEditorReference;
-    private final List<DiagnosticWrapper> mDiagnostics;
 
     public KotlinAnalyzer(Editor editor) {
         mEditorReference = new WeakReference<>(editor);
-        mDiagnostics = new ArrayList<>();
     }
 
     @Override
     public void setup() {
         putColor(EditorColorScheme.KEYWORD, KotlinLexer.OVERRIDE,
+                KotlinLexer.PUBLIC, KotlinLexer.PRIVATE, KotlinLexer.PROTECTED,
                 KotlinLexer.FUN, KotlinLexer.PACKAGE, KotlinLexer.IMPORT,
-                KotlinLexer.CLASS, KotlinLexer.INTERFACE);
+                KotlinLexer.CLASS, KotlinLexer.INTERFACE, KotlinLexer.VAL,
+                KotlinLexer.VAR, KotlinLexer.ABSTRACT, KotlinLexer.BREAK,
+                KotlinLexer.TRY, KotlinLexer.THROW, KotlinLexer.FOR,
+                KotlinLexer.WHILE, KotlinLexer.IN, KotlinLexer.INTERNAL,
+                KotlinLexer.AS, KotlinLexer.CONTINUE, KotlinLexer.RETURN,
+                KotlinLexer.GET, KotlinLexer.SET, KotlinLexer.SETTER,
+                KotlinLexer.VARARG, KotlinLexer.FINALLY);
+        putColor(EditorColorScheme.LITERAL, KotlinLexer.BinLiteral,
+                KotlinLexer.BooleanLiteral, KotlinLexer.LongLiteral,
+                KotlinLexer.IntegerLiteral, KotlinLexer.FloatLiteral,
+                KotlinLexer.CharacterLiteral, KotlinLexer.DoubleLiteral,
+                KotlinLexer.NullLiteral, KotlinLexer.RealLiteral,
+                KotlinLexer.LineString, KotlinLexer.MultiLineString,
+                KotlinLexer.StringExpression, KotlinLexer.MultiLineStringQuote);
+        putColor(EditorColorScheme.COMMENT, KotlinLexer.DelimitedComment,
+                KotlinLexer.StrExpr_Comment, KotlinLexer.LineComment,
+                KotlinLexer.Inside_Comment);
+
+        putColor(EditorColorScheme.OPERATOR, KotlinLexer.OPERATOR);
 
         // todo add block lines
-    }
-
-    @Override
-    public void setDiagnostics(Editor editor, List<DiagnosticWrapper> diagnostics) {
-        mDiagnostics.clear();
-        mDiagnostics.addAll(diagnostics);
     }
 
     @Override

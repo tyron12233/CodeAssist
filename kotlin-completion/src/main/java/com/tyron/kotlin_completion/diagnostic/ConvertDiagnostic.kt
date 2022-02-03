@@ -18,6 +18,7 @@ fun convertDiagnostic(diagnostic: KotlinDiagnostic): List<DiagnosticWrapper> {
         wrapper.kind = severity(diagnostic.severity)
         wrapper.source = File(diagnostic.psiFile.viewProvider.virtualFile
             .path)
+        wrapper.position = it.startOffset.toLong()
         wrapper.startPosition = it.startOffset.toLong()
         wrapper.endPosition = it.endOffset.toLong()
         wrapper

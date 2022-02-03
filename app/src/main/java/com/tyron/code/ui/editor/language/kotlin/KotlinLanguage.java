@@ -4,6 +4,9 @@ import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.code.ui.editor.language.CompletionItemWrapper;
+import com.tyron.completion.model.CompletionItem;
+import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStreams;
@@ -12,12 +15,14 @@ import org.antlr.v4.runtime.Token;
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
+import io.github.rosemoe.sora.lang.completion.CompletionHelper;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.TextUtils;
+import io.github.rosemoe.sora.util.MyCharacter;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 
 public class KotlinLanguage implements Language {
@@ -42,13 +47,34 @@ public class KotlinLanguage implements Language {
     }
 
     @Override
-    public void requireAutoComplete(@NonNull ContentReference content, @NonNull CharPosition position, @NonNull CompletionPublisher publisher, @NonNull Bundle extraArguments) throws CompletionCancelledException {
+    public void requireAutoComplete(@NonNull ContentReference content,
+                                    @NonNull CharPosition position,
+                                    @NonNull CompletionPublisher publisher,
+                                    @NonNull Bundle extraArguments) throws CompletionCancelledException {
+        char c = content.charAt(position.getIndex() - 1);
+        if (!isAutoCompleteChar(c)) {
+            return;
+        }
+        String prefix = CompletionHelper.computePrefix(content, position, this::isAutoCompleteChar);
+        KotlinAutoCompleteProvider provider = new KotlinAutoCompleteProvider(mEditor);
+        CompletionList list = provider.getCompletionList(prefix, null,
+                position.getLine(), position.getColumn());
+        if (list != null) {
+            for (CompletionItem item : list.items) {
+                CompletionItemWrapper wrapper = new CompletionItemWrapper(item);
+                publisher.addItem(wrapper);
+            }
+        }
+    }
 
+    public boolean isAutoCompleteChar(char p1) {
+        return p1 == '.' || MyCharacter.isJavaIdentifierPart(p1);
     }
 
     @Override
     public int getIndentAdvance(@NonNull ContentReference content, int line, int column) {
-        return getIndentAdvance(String.valueOf(content.getReference()));
+        String text = content.getLine(line).substring(0, column);
+        return getIndentAdvance(text);
     }
 
     public int getIndentAdvance(String p1) {

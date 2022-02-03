@@ -237,7 +237,8 @@ public class SourcePath {
             return sourceFile.parsed;
         });
         Set<KtFile> all = all(false);
-        Pair<BindingContext, ComponentProvider> pair = cp.getCompiler().compileKtFiles(parse.values(), all, CompletionKind.DEFAULT);
+        Pair<BindingContext, ComponentProvider> pair = cp.getCompiler()
+                .compileKtFiles(parse.values(), all, CompletionKind.DEFAULT);
 
         parse.forEach((f, parsed) -> {
             parsedDataWriteLock.lock();
