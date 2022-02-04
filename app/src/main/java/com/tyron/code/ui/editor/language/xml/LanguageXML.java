@@ -126,7 +126,8 @@ public class LanguageXML implements Language {
 
 	@Override
 	public int getIndentAdvance(@NonNull ContentReference content, int line, int column) {
-		return getIndentAdvance(String.valueOf(content.getReference()));
+		String text = content.getLine(line).substring(0, column);
+		return getIndentAdvance(text);
 	}
 
 	public int getIndentAdvance(String content) {
