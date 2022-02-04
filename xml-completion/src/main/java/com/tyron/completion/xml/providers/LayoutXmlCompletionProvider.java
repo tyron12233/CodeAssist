@@ -221,6 +221,9 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
 
         for (DeclareStyleable style : styles) {
             for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
+                if (attributeInfo.getFormats() == null || attributeInfo.getFormats().isEmpty()) {
+                    continue;
+                }
                 CompletionItem item = getAttributeItem(repository, attributeInfo, shouldShowNamespace, fullPrefix);
                 item.setInsertHandler(new AttributeInsertHandler(item));
                 list.items.add(item);
