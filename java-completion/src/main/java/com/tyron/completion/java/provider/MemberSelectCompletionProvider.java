@@ -29,6 +29,7 @@ import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Scope;
+import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
@@ -68,11 +69,11 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
             return completeDeclaredTypeMemberSelect(task, scope, (DeclaredType) type, isStatic,
                     partial, endsWithParen);
         } else if (type instanceof PrimitiveType) {
-            return completePrimitiveMemberSelect(task, scope, (PrimitiveType) type, isStatic,
-                    partial, endsWithParen);
-        } else {
-            return CompletionList.EMPTY;
+            if (path.getLeaf().getKind() != Tree.Kind.METHOD_INVOCATION) {
+                return completePrimitiveMemberSelect(task, scope, (PrimitiveType) type, isStatic, partial, endsWithParen);
+            }
         }
+        return CompletionList.EMPTY;
     }
 
 
