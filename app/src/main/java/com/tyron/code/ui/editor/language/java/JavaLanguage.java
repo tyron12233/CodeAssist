@@ -113,7 +113,12 @@ public class JavaLanguage implements Language {
     @Override
     public CharSequence format(CharSequence p1) {
         try {
-            return new Formatter(JavaFormatterOptions.builder().style(JavaFormatterOptions.Style.AOSP).build()).formatSourceAndFixImports(p1.toString());
+            JavaFormatterOptions options =
+                    JavaFormatterOptions.builder()
+                            .style(JavaFormatterOptions.Style.AOSP)
+                            .build();
+            Formatter formatter = new Formatter(options);
+            return formatter.formatSourceAndFixImports(p1.toString());
         } catch (FormatterException e) {
             Log.e("JavaFormatter", e.getMessage());
             return p1;
@@ -122,7 +127,9 @@ public class JavaLanguage implements Language {
 
     public CharSequence format(CharSequence contents, int start, int end) {
         JavaFormatterOptions options =
-                JavaFormatterOptions.builder().style(JavaFormatterOptions.Style.AOSP).build();
+                JavaFormatterOptions.builder()
+                        .style(JavaFormatterOptions.Style.AOSP)
+                        .build();
         Formatter formatter = new Formatter(options);
         Range<Integer> range = Range.closed(start, end);
         Collection<Range<Integer>> ranges = new ArrayList<>();

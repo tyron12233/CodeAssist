@@ -41,19 +41,34 @@ public class DefaultInsertHandler implements InsertHandler {
     @Override
     public void handleInsert(Editor editor) {
         deletePrefix(editor);
-        insert(item.commitText, editor);
+        insert(item.commitText, editor, false);
     }
 
-    protected void insert(String string, Editor editor) {
+    protected void insert(String string, Editor editor, boolean calcSpace) {
         Caret caret = editor.getCaret();
         if (string.contains("\n")) {
             editor.insertMultilineString(caret.getStartLine(), caret.getStartColumn(), string);
         } else {
+            if (calcSpace) {
+                if (isEndOfLine(caret.getStartLine(), caret.getStartColumn(), editor)) {
+                    string += " ";
+                }
+            }
             editor.insert(caret.getStartLine(), caret.getStartColumn(), string);
         }
     }
 
+    protected void insert(String string, Editor editor) {
+       insert(string, editor, true);
+    }
+
     private CharPosition getCharPosition(Caret caret) {
         return new CharPosition(caret.getStartLine(), caret.getEndColumn());
+    }
+
+    public boolean isEndOfLine(int line, int column, Editor editor) {
+        String lineString = editor.getContent().getLineString(line);
+        String substring = lineString.substring(column);
+        return substring.trim().isEmpty();
     }
 }

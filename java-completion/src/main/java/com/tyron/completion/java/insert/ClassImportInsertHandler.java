@@ -29,6 +29,8 @@ public class ClassImportInsertHandler extends DefaultInsertHandler {
     public void handleInsert(Editor editor) {
         super.handleInsert(editor);
 
+
+
         AddImport addImport = new AddImport(file, item.data);
         ParseTask parse = service.parse(new SourceFileObject(file.toPath(),
                 editor.getContent().toString(), Instant.now()));

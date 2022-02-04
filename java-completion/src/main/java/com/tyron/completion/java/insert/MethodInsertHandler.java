@@ -37,7 +37,7 @@ public class MethodInsertHandler extends DefaultInsertHandler {
             }
         }
 
-        insert(commitText, editor);
+        insert(commitText, editor, false);
         editor.setSelection(editor.getCaret().getStartLine(), editor.getCaret().getStartColumn() - diff);
     }
 
