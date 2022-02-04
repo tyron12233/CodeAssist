@@ -122,7 +122,12 @@ public class CodeEditorView extends CodeEditor implements Editor {
                 ? currentLine
                 : currentLine.substring(0, currentLine.indexOf(currentLine.trim()));
 
-        String textToInsert = Arrays.stream(string.split("\\n"))
+        String[] lines = string.split("\\n");
+        if (lines.length == 0) {
+            getText().insert(line, column, "\n" + currentIndent);
+            return;
+        }
+        String textToInsert = Arrays.stream(lines)
                 .map(s -> currentIndent + s)
                 .collect(Collectors.joining("\n"))
                 .substring(currentIndent.length());

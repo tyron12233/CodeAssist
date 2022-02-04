@@ -25,6 +25,9 @@ import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.completion.xml.XmlRepository;
+import com.tyron.completion.xml.insert.AttributeInsertHandler;
+import com.tyron.completion.xml.insert.LayoutTagInsertHandler;
+import com.tyron.completion.xml.insert.ValueInsertHandler;
 import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
@@ -208,6 +211,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
                             ? entry.getValue().getClassName()
                             : StyleUtils.getSimpleName(entry.getValue().getClassName()));
             item.cursorOffset = item.commitText.length();
+            item.setInsertHandler(new LayoutTagInsertHandler(entry.getValue(), item));
             list.items.add(item);
         }
     }
@@ -218,6 +222,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         for (DeclareStyleable style : styles) {
             for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
                 CompletionItem item = getAttributeItem(repository, attributeInfo, shouldShowNamespace, fullPrefix);
+                item.setInsertHandler(new AttributeInsertHandler(item));
                 list.items.add(item);
             }
         }
@@ -282,6 +287,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
                         item.iconKind = DrawableKind.Attribute;
                         item.cursorOffset = value.length();
                         item.detail = "Attribute";
+                        item.setInsertHandler(new ValueInsertHandler(attributeInfo, item));
                         list.items.add(item);
                     }
                 }
