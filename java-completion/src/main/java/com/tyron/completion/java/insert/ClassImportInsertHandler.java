@@ -4,6 +4,7 @@ import com.tyron.builder.model.SourceFileObject;
 import com.tyron.completion.DefaultInsertHandler;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.compiler.ParseTask;
+import com.tyron.completion.java.compiler.Parser;
 import com.tyron.completion.java.rewrite.AddImport;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.TextEdit;
@@ -29,12 +30,10 @@ public class ClassImportInsertHandler extends DefaultInsertHandler {
     public void handleInsert(Editor editor) {
         super.handleInsert(editor);
 
-
-
         AddImport addImport = new AddImport(file, item.data);
-        ParseTask parse = service.parse(new SourceFileObject(file.toPath(),
+        Parser parse = Parser.parseJavaFileObject(service.getProject(), new SourceFileObject(file.toPath(),
                 editor.getContent().toString(), Instant.now()));
-        Map<File, TextEdit> imports = addImport.getText(parse);
+        Map<File, TextEdit> imports = addImport.getText(new ParseTask(parse.task, parse.root));
         for (Map.Entry<File, TextEdit> entry : imports.entrySet()) {
             RewriteUtil.applyTextEdit(editor, entry.getValue());
         }
