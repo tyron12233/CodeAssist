@@ -47,8 +47,12 @@ public class KeywordInsertHandler extends DefaultInsertHandler {
             }
         }
 
+        if (isEndOfLine(line, column, editor)) {
+            string += " ";
+        }
         super.insert(string, editor);
     }
+
     private boolean isEndOfLine(int line, int column, Editor editor) {
         String lineString = editor.getContent().getLineString(line);
         String substring = lineString.substring(column);
