@@ -3,23 +3,14 @@ package com.tyron.completion.java.provider;
 import static com.tyron.completion.java.provider.ClassNameCompletionProvider.addClassNames;
 import static com.tyron.completion.java.provider.ImportCompletionProvider.addStaticImports;
 import static com.tyron.completion.java.provider.SwitchConstantCompletionProvider.completeSwitchConstant;
-import static com.tyron.completion.java.util.CompletionItemFactory.classItem;
 import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
-import com.tyron.common.util.StringSearch;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.model.CompletionList;
 
 import org.openjdk.source.tree.CaseTree;
-import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.util.TreePath;
-
-import java.util.HashSet;
-import java.util.Objects;
-import java.util.Set;
-
-import me.xdrop.fuzzywuzzy.FuzzySearch;
 
 public class IdentifierCompletionProvider extends BaseCompletionProvider {
 
@@ -43,7 +34,7 @@ public class IdentifierCompletionProvider extends BaseCompletionProvider {
             addClassNames(path.getCompilationUnit(), partial, list, getCompiler());
         }
 
-        KeywordCompletionProvider.addKeywords(path, partial, list);
+        KeywordCompletionProvider.addKeywords(task, path, partial, list);
 
         return list;
     }

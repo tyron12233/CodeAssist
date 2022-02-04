@@ -6,6 +6,7 @@ import com.tyron.completion.java.action.FindCurrentPath;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.javax.lang.model.element.TypeElement;
+import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
@@ -15,6 +16,7 @@ import org.openjdk.source.tree.LineMap;
 import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
+import org.openjdk.source.tree.PrimitiveTypeTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
@@ -34,6 +36,14 @@ public class TreeUtil {
            return findCallerPath((MethodInvocationTree) invocation.getLeaf());
         }
         return null;
+    }
+
+    public static boolean isVoid(MethodTree tree) {
+        Tree returnType = tree.getReturnType();
+        if (returnType.getKind() == Tree.Kind.PRIMITIVE_TYPE) {
+            return ((PrimitiveTypeTree) returnType).getPrimitiveTypeKind() == TypeKind.VOID;
+        }
+        return false;
     }
 
     private static Tree findCallerPath(MethodInvocationTree invocation) {
