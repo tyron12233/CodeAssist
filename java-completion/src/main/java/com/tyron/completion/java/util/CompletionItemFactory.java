@@ -158,8 +158,7 @@ public class CompletionItemFactory {
                                   boolean methodRef, ExecutableType type) {
         CompletionItem item = new CompletionItem();
         item.label = getMethodLabel(first, type);
-        item.commitText = first.getSimpleName() + ((methodRef || endsWithParen) ? "" :
-                "()");
+        item.commitText = first.getSimpleName().toString();
         item.detail = type != null
                 ? PrintHelper.printType(type.getReturnType())
                 : PrintHelper.printType(first.getReturnType());

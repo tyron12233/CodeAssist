@@ -1,9 +1,11 @@
 package com.tyron.completion.java.insert;
 
+import com.tyron.common.util.StringSearch;
 import com.tyron.completion.DefaultInsertHandler;
 import com.tyron.completion.InsertHandler;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.util.CompletionUtils;
+import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
 
 import org.openjdk.javax.lang.model.element.ExecutableElement;
@@ -15,9 +17,13 @@ public class MethodInsertHandler extends DefaultInsertHandler {
 
     private final ExecutableElement method;
 
-    public MethodInsertHandler(ExecutableElement method, CompletionItem item) {
+    public MethodInsertHandler(ExecutableElement method, boolean endsWithParen, CompletionItem item) {
         super(CompletionUtils.JAVA_PREDICATE, item);
         this.method = method;
+    }
+
+    public MethodInsertHandler(ExecutableElement method, CompletionItem item) {
+        this(method, false, item);
 
     }
     @Override
@@ -25,20 +31,36 @@ public class MethodInsertHandler extends DefaultInsertHandler {
         deletePrefix(editor);
 
         String commitText = item.commitText;
-        boolean insertSemi = shouldInsertSemiColon();
+        Caret caret = editor.getCaret();
+        boolean isEndOfLine = isEndOfLine(caret.getStartLine(), caret.getStartColumn(), editor);
+        boolean endsWithParen = StringSearch.endsWithParen(editor.getContent(), editor.getCaret().getStart());
+        if (endsWithParen) {
+            if (commitText.endsWith("()")) {
+                commitText = commitText.substring(0, commitText.length() - 2);
+            } else if (commitText.endsWith("();")) {
+                commitText = commitText.substring(0, commitText.length() - 3);
+            }
+        } else {
+            commitText += "()";
+        }
+        boolean insertSemi = shouldInsertSemiColon() && isEndOfLine;
         if (insertSemi) {
             commitText = commitText + ";";
         }
-        int diff = 0;
-        if (hasParameters()) {
-            diff++;
-            if (insertSemi) {
-                diff++;
-            }
-        }
 
         insert(commitText, editor, false);
-        editor.setSelection(editor.getCaret().getStartLine(), editor.getCaret().getStartColumn() - diff);
+
+        String lineString = editor.getContent().getLineString(caret.getStartLine());
+        int startIndex = caret.getStartColumn() - commitText.length();
+        int offset = 0;
+        if (hasParameters()) {
+            offset = lineString.indexOf('(', startIndex);
+        } else {
+            offset = lineString.indexOf(')', startIndex);
+        }
+        if (offset != -1) {
+            editor.setSelection(caret.getStartLine(), offset + 1);
+        }
     }
 
     private boolean hasParameters() {

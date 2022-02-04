@@ -320,7 +320,7 @@ public class StringSearch {
         }
     }
 
-    public static boolean endsWithParen(String contents, int cursor) {
+    public static boolean endsWithParen(CharSequence contents, int cursor) {
         for (int i = cursor; i < contents.length(); i++) {
             if (!Character.isJavaIdentifierPart(contents.charAt(i))) {
                 return contents.charAt(i) == '(';
