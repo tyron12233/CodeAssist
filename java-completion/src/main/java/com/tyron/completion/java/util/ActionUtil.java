@@ -44,6 +44,7 @@ import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.rewrite.EditHelper;
 
 import org.openjdk.javax.lang.model.element.Element;
+import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.TypeParameterElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
@@ -73,8 +74,10 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.tree.JCTree;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -348,6 +351,21 @@ public class ActionUtil {
         return false;
     }
 
+    public static boolean containsVariableAtScope(String name, CompileTask parse, TreePath path) {
+        Scope scope = Trees.instance(parse.task).getScope(path);
+        Iterable<? extends Element> localElements = scope.getLocalElements();
+        for (Element element : localElements) {
+            if (element.getKind() != ElementKind.LOCAL_VARIABLE &&
+                    !element.getKind().isField()) {
+                continue;
+            }
+            if (name.contentEquals(element.getSimpleName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static String getVariableName(String name) {
         Matcher matcher = DIGITS_PATTERN.matcher(name);
         if (matcher.matches()) {
@@ -360,6 +378,41 @@ public class ActionUtil {
             return variableName + number;
         }
         return name + "1";
+    }
+
+    public static List<String> guessNamesFromType(TypeMirror typeMirror) {
+        List<String> list = new ArrayList<>();
+        if (typeMirror.getKind() == TypeKind.DECLARED) {
+            DeclaredType type = (DeclaredType) typeMirror;
+
+            String typeName = guessNameFromTypeName(getSimpleName(type.toString()));
+            list.add(typeName);
+
+            List<String> typeNames = new ArrayList<>();
+            for (TypeMirror typeArgument : type.getTypeArguments()) {
+                String s = guessNameFromTypeName(getSimpleName(typeArgument.toString()));
+                if (!s.isEmpty()) {
+                    typeNames.add(s);
+                }
+            }
+
+            if (!typeNames.isEmpty()) {
+                StringBuilder stringBuilder = new StringBuilder();
+                for (int i = 0; i < typeNames.size(); i++) {
+                    String name = typeNames.get(i);
+                    if (i == 0) {
+                        name = Character.toLowerCase(name.charAt(0)) + name.substring(1);
+                    } else {
+                        name = Character.toUpperCase(name.charAt(0)) + name.substring(1);
+                    }
+                    stringBuilder.append(name);
+                }
+                stringBuilder.append(Character.toUpperCase(typeName.charAt(0)))
+                        .append(typeName.substring(1));
+                list.add(stringBuilder.toString());
+            }
+        }
+        return list;
     }
 
     /**
