@@ -39,6 +39,8 @@ import static org.openjdk.source.tree.Tree.Kind.WHILE_LOOP;
 import androidx.annotation.Nullable;
 
 import com.google.common.collect.ImmutableSet;
+import com.tyron.completion.java.action.FindCurrentPath;
+import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.rewrite.EditHelper;
 
 import org.openjdk.javax.lang.model.element.Element;
@@ -61,20 +63,26 @@ import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.ParenthesizedTree;
 import org.openjdk.source.tree.ReturnTree;
+import org.openjdk.source.tree.Scope;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.TryTree;
 import org.openjdk.source.tree.UnaryTree;
 import org.openjdk.source.tree.WhileLoopTree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
+import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.tree.JCTree;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class ActionUtil {
+
+    private static final Pattern DIGITS_PATTERN = Pattern.compile("^(.+?)(\\d+)$");
 
     private static final Set<Tree.Kind> DISALLOWED_KINDS_INTRODUCE_LOCAL_VARIABLE =
             ImmutableSet.of(IMPORT, PACKAGE, INTERFACE, METHOD, ANNOTATION, THROW,
@@ -325,6 +333,35 @@ public class ActionUtil {
         return className;
     }
 
+    public static boolean containsVariableAtScope(String name, long position, CompileTask parse) {
+        TreePath scan = new FindCurrentPath(parse.task).scan(parse.root(), position + 1);
+        if (scan == null) {
+            return false;
+        }
+        Scope scope = Trees.instance(parse.task).getScope(scan);
+        Iterable<? extends Element> localElements = scope.getLocalElements();
+        for (Element element : localElements) {
+            if (name.contentEquals(element.getSimpleName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static String getVariableName(String name) {
+        Matcher matcher = DIGITS_PATTERN.matcher(name);
+        if (matcher.matches()) {
+            String variableName = matcher.group(1);
+            String stringNumber = matcher.group(2);
+            if (stringNumber == null) {
+                stringNumber = "0";
+            }
+            int number = Integer.parseInt(stringNumber) + 1;
+            return variableName + number;
+        }
+        return name + "1";
+    }
+
     /**
      * @return null if type is an anonymous class
      */
@@ -338,11 +375,15 @@ public class ActionUtil {
             if (name.length() == 0) {
                 name = declared.toString();
                 name = name.substring("<anonymous ".length(), name.length() - 1);
-                name = ActionUtil.getSimpleName(name);
             }
-            return "" + Character.toLowerCase(name.charAt(0)) + name.substring(1);
+            name = ActionUtil.getSimpleName(name);
+            return guessNameFromTypeName(name);
         }
         return null;
+    }
+
+    public static String guessNameFromTypeName(String name) {
+        return "" + Character.toLowerCase(name.charAt(0)) + name.substring(1);
     }
 
     public static String guessNameFromMethodName(String methodName) {

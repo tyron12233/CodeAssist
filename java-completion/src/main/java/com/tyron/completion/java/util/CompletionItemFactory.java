@@ -82,6 +82,17 @@ public class CompletionItemFactory {
         return item;
     }
 
+    public static CompletionItem item(String element) {
+        CompletionItem item = new CompletionItem();
+        item.label = element;
+        item.detail = "";
+        item.commitText = element;
+        item.cursorOffset = item.commitText.length();
+        item.iconKind = DrawableKind.Snippet;
+        item.setInsertHandler(new DefaultInsertHandler(item));
+        return item;
+    }
+
     private String getThrowsType(ExecutableElement e) {
         if (e.getThrownTypes() == null) {
             return "";

@@ -1,7 +1,6 @@
 package com.tyron.completion.java.provider;
 
 import static com.tyron.common.util.StringSearch.endsWithParen;
-import static com.tyron.common.util.StringSearch.isQualifiedIdentifierChar;
 import static com.tyron.common.util.StringSearch.partialIdentifier;
 import static com.tyron.completion.java.patterns.JavacTreePatterns.tree;
 import static com.tyron.completion.java.util.CompletionItemFactory.classSnippet;
@@ -18,7 +17,6 @@ import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.compiler.ParseTask;
 import com.tyron.completion.java.patterns.JavacTreePattern;
-import com.tyron.completion.java.patterns.JavacTreePatterns;
 import com.tyron.completion.java.util.FileContentFixer;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
@@ -32,7 +30,7 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.parser.ScannerFactory;
+import org.openjdk.tools.javac.tree.JCTree;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -41,7 +39,6 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import me.xdrop.fuzzywuzzy.FuzzySearch;
 
@@ -60,6 +57,9 @@ public class Completions {
     private static final JavacTreePattern.Capture<IdentifierTree> INSIDE_RETURN =
             tree(IdentifierTree.class)
                     .withParent(ReturnTree.class);
+    private static final JavacTreePattern.Capture<IdentifierTree> VARIABLE_NAME =
+            tree(IdentifierTree.class)
+                    .withParent(JCTree.JCVariableDecl.class);
 
     private final JavaCompilerService compiler;
 
@@ -76,7 +76,6 @@ public class Completions {
             StringBuilder pruned = new PruneMethodBodies(task.task).scan(task.root, index);
             int end = StringSearch.endOfLine(pruned, (int) index);
             pruned.insert(end, ';');
-            contents = pruned;
             contents = new FileContentFixer(compiler.compiler.getCurrentContext())
                     .fixFileContent(pruned);
         } catch (IndexOutOfBoundsException e) {
@@ -111,7 +110,7 @@ public class Completions {
         checkCanceled();
         CompilerContainer container = compiler.compile(Collections.singletonList(source));
         return container.get(task -> {
-            TreePath path = new FindCompletionsAt(task.task).scan(task.root(), cursor);
+            TreePath path = new FindCurrentPath(task.task).scan(task.root(), cursor);
             String modifiedPartial = partial;
             if (path.getLeaf().getKind() == Tree.Kind.IMPORT) {
                 modifiedPartial = StringSearch.qualifiedPartialIdentifier(contents, (int) cursor);
@@ -149,6 +148,9 @@ public class Completions {
                         .complete(task, path, partial, endsWithParen);
             case STRING_LITERAL:
                 return CompletionList.EMPTY;
+            case VARIABLE:
+                return new VariableNameCompletionProvider(compiler)
+                        .complete(task, path, partial, endsWithParen);
             default:
                 return new KeywordCompletionProvider(compiler)
                         .complete(task, path, partial, endsWithParen);
