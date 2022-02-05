@@ -24,7 +24,9 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
+import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.SymbolPairMatch;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorTextActionWindow;
 
@@ -142,6 +144,28 @@ public class CodeEditorView extends CodeEditor implements Editor {
             }
         }
         super.commitText(text, applyAutoIndent);
+    }
+
+    @Override
+    public void deleteText() {
+        Cursor cursor = getCursor();
+        if (!cursor.isSelected()) {
+            io.github.rosemoe.sora.text.Content text = getText();
+            int startIndex = cursor.getLeft();
+            if (startIndex - 1 >= 0) {
+                char deleteChar = text.charAt(startIndex - 1);
+                char afterChar = text.charAt(startIndex);
+                SymbolPairMatch.Replacement replacement =
+                        getEditorLanguage().getSymbolPairs().getCompletion(deleteChar);
+                if (replacement != null) {
+                    if (("" + deleteChar + afterChar + "").equals(replacement.text)) {
+                        text.delete(startIndex - 1, startIndex + 1);
+                        return;
+                    }
+                }
+            }
+        }
+        super.deleteText();
     }
 
     @Override
