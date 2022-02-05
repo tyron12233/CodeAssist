@@ -14,6 +14,7 @@ import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
 import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.code.ui.editor.language.kotlin.KotlinLexer;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.Debouncer;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
@@ -129,7 +130,7 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
         }
         // do not compile the file if it not yet closed as it will cause issues when
         // compiling multiple files at the same time
-        if (mPreferences.getBoolean("code_editor_error_highlight", true) && !CompletionEngine.isIndexing()) {
+        if (mPreferences.getBoolean(SharedPreferenceKeys.JAVA_ERROR_HIGHLIGHTING, true)) {
             JavaCompilerService service = getCompiler(editor);
             if (service != null) {
                 try {

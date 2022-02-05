@@ -10,6 +10,7 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.editor.language.AbstractAutoCompleteProvider;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.main.CompletionEngine;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
@@ -30,7 +31,7 @@ public class JavaAutoCompleteProvider extends AbstractAutoCompleteProvider {
     @Nullable
     @Override
     public CompletionList getCompletionList(String prefix, int line, int column) {
-        if (!mPreferences.getBoolean("code_editor_completion", true)) {
+        if (!mPreferences.getBoolean(SharedPreferenceKeys.JAVA_CODE_COMPLETION, true)) {
             return null;
         }
 
