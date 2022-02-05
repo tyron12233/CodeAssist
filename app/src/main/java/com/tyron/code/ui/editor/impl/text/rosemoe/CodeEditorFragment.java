@@ -56,6 +56,7 @@ import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.java.rewrite.AddImport;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
+import com.tyron.completion.java.util.JavaDataContextUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.progress.ProgressManager;
@@ -300,24 +301,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
             dataContext.putData(CommonDataKeys.FILE, mCurrentFile);
             dataContext.putData(CommonDataKeys.EDITOR, mEditor);
 
-            if (currentProject != null) {
-                Module currentModule = currentProject.getModule(mCurrentFile);
-                if ((mLanguage instanceof JavaLanguage) && (currentModule instanceof JavaModule)) {
-                    JavaCompilerProvider service =
-                            CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-                    JavaCompilerService compiler = service.getCompiler(currentProject,
-                            (JavaModule) currentModule);
-
-                    compiler.getCachedContainer().run(task -> {
-                        if (task != null) {
-                            FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
-                            TreePath currentPath = findCurrentPath.scan(task.root(),
-                                    mEditor.getCursor().getLeft());
-                            dataContext.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
-                        }
-                    });
-                    dataContext.putData(CommonJavaContextKeys.COMPILER, compiler);
-                }
+            if (currentProject != null && mLanguage instanceof JavaLanguage) {
+                JavaDataContextUtil.addEditorKeys(dataContext,
+                        currentProject, mCurrentFile, mEditor.getCursor().getLeft());
             }
 
             DiagnosticWrapper diagnosticWrapper =
