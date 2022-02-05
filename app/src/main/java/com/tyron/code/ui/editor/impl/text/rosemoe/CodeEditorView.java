@@ -3,6 +3,7 @@ package com.tyron.code.ui.editor.impl.text.rosemoe;
 import android.content.Context;
 import android.util.AttributeSet;
 
+import com.google.common.collect.ImmutableSet;
 import com.tyron.actions.DataContext;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
@@ -18,6 +19,7 @@ import com.tyron.editor.Editor;
 import java.io.File;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -27,6 +29,14 @@ import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorTextActionWindow;
 
 public class CodeEditorView extends CodeEditor implements Editor {
+
+    private final Set<Character> IGNORED_PAIR_ENDS = ImmutableSet.<Character>builder()
+            .add(')')
+            .add(']')
+            .add('"')
+            .add('>')
+            .add('\'')
+            .build();
 
     private boolean mIsBackgroundAnalysisEnabled;
 
@@ -116,6 +126,25 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
+    public void commitText(CharSequence text) {
+        super.commitText(text);
+    }
+
+    @Override
+    public void commitText(CharSequence text, boolean applyAutoIndent) {
+        if (text.length() == 1) {
+            char currentChar = getText().charAt(getCursor().getLeft());
+            char c = text.charAt(0);
+            if (IGNORED_PAIR_ENDS.contains(c) && c == currentChar) {
+                // ignored pair end, just move the cursor over the character
+                setSelection(getCursor().getLeftLine(), getCursor().getLeftColumn() + 1);
+                return;
+            }
+        }
+        super.commitText(text, applyAutoIndent);
+    }
+
+    @Override
     public void insertMultilineString(int line, int column, String string) {
         String currentLine = getText().getLineString(line);
         String currentIndent = currentLine.trim().isEmpty()
@@ -133,25 +162,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
                 .substring(currentIndent.length());
 
         getText().insert(line, column, textToInsert);
-    }
-
-    private String createIndent(int p) {
-        int tab = 0;
-        int space;
-        if (getEditorLanguage().useTab()) {
-            tab = p / getTabWidth();
-            space = p % getTabWidth();
-        } else {
-            space = p;
-        }
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < tab; i++) {
-            sb.append('\t');
-        }
-        for (int i = 0; i < space; i++) {
-            sb.append(' ');
-        }
-        return sb.toString();
     }
 
     @Override
