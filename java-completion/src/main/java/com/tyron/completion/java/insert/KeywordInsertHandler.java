@@ -27,7 +27,7 @@ public class KeywordInsertHandler extends DefaultInsertHandler {
     }
 
     @Override
-    protected void insert(String string, Editor editor) {
+    protected void insert(String string, Editor editor, boolean calcSpace) {
         Caret caret = editor.getCaret();
         int line = caret.getStartLine();
         int column = caret.getStartColumn();
@@ -48,6 +48,6 @@ public class KeywordInsertHandler extends DefaultInsertHandler {
         }
 
         deletePrefix(editor);
-        insert(string, editor, true);
+        super.insert(string, editor, true);
     }
 }
