@@ -291,75 +291,12 @@ public class CodeEditorFragment extends Fragment implements Savable,
             mCanSave = false;
         }
 
-//        mEditorEventListener = new CodeEditorEventListener(module, mCurrentFile);
-//        mEditor.setEventListener(mEditorEventListener);
-//        mEditor.setOnCompletionItemSelectedListener((window, item) -> {
-//            Cursor cursor = mEditor.getCursor();
-//            if (!cursor.isSelected()) {
-//                window.setCancelShowUp(true);
-//
-//                int length = window.getLastPrefix().length();
-//                if (mLanguage instanceof JavaLanguage || mLanguage instanceof KotlinLanguage) {
-//                    if (window.getLastPrefix().contains(".")) {
-//                        length -= window.getLastPrefix().lastIndexOf(".") + 1;
-//                    }
-//                }
-
-//                window.setSelectedItem(item.commit);
-//                cursor.onCommitMultilineText(item.commit);
-//
-//                if (item.commit != null && item.cursorOffset != item.commit.length()) {
-//                    int delta = (item.commit.length() - item.cursorOffset);
-//                    int newSel = Math.max(mEditor.getCursor().getLeft() - delta, 0);
-//                    CharPosition charPosition =
-//                            mEditor.getCursor().getIndexer().getCharPosition(newSel);
-//                    mEditor.setSelection(charPosition.line, charPosition.column);
-//                }
-//
-//                if (item.item == null) {
-//                    return;
-//                }
-//
-//                if (item.item.additionalTextEdits != null) {
-//                    for (TextEdit edit : item.item.additionalTextEdits) {
-//                        window.applyTextEdit(edit);
-//                    }
-//                }
-//
-//                if (item.item.action == CompletionItem.Kind.IMPORT) {
-//                    if (module instanceof JavaModule) {
-//                        Parser parser = Parser.parseFile(currentProject,
-//                                mEditor.getCurrentFile().toPath());
-//                        ParseTask task = new ParseTask(parser.task, parser.root);
-//
-//                        boolean samePackage = false;
-//                        String packageName = task.root.getPackageName() == null ? "" :
-//                                task.root.getPackageName().toString();
-//                        //it's either in the same class or it's already imported
-//                        if (!item.item.data.contains(".") || packageName.equals(item.item.data.substring(0, item.item.data.lastIndexOf(".")))) {
-//                            samePackage = true;
-//                        }
-//
-//                        if (!samePackage && !ActionUtil.hasImport(task.root, item.item.data)) {
-//                            AddImport imp = new AddImport(new File(""), item.item.data);
-//                            Map<File, TextEdit> edits = imp.getText(task);
-//                            TextEdit edit = edits.values().iterator().next();
-//                            window.applyTextEdit(edit);
-//                        }
-//                    }
-//                }
-//                window.setCancelShowUp(false);
-//            }
-//            mEditor.postHideCompletionWindow();
-//        });
-
         mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
             menu.clear();
 
             DataContext dataContext = DataContextUtils.getDataContext(view1);
             dataContext.putData(CommonDataKeys.PROJECT, currentProject);
-            dataContext.putData(CommonDataKeys.FILE_EDITOR_KEY,
-                    mMainViewModel.getCurrentFileEditor());
+            dataContext.putData(CommonDataKeys.FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
             dataContext.putData(CommonDataKeys.FILE, mCurrentFile);
             dataContext.putData(CommonDataKeys.EDITOR, mEditor);
 
@@ -371,7 +308,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     JavaCompilerService compiler = service.getCompiler(currentProject,
                             (JavaModule) currentModule);
 
-                    compiler.compile(mCurrentFile.toPath()).run(task -> {
+                    compiler.getCachedContainer().run(task -> {
                         if (task != null) {
                             FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
                             TreePath currentPath = findCurrentPath.scan(task.root(),
@@ -387,8 +324,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     DiagnosticUtil.getDiagnosticWrapper(mEditor.getDiagnostics(),
                             mEditor.getCursor().getLeft());
             if (diagnosticWrapper == null && mLanguage instanceof LanguageXML) {
-                diagnosticWrapper =
-                        DiagnosticUtil.getXmlDiagnosticWrapper(mEditor.getDiagnostics(),
+                diagnosticWrapper = DiagnosticUtil.getXmlDiagnosticWrapper(mEditor.getDiagnostics(),
                                 mEditor.getCursor().getLeftLine());
             }
             dataContext.putData(CommonDataKeys.DIAGNOSTIC, diagnosticWrapper);
