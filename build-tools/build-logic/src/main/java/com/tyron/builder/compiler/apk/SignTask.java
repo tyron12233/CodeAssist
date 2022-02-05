@@ -7,6 +7,8 @@ import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.api.AndroidModule;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.File;
 import java.io.IOException;
 
@@ -26,7 +28,7 @@ public class SignTask extends Task<AndroidModule> {
 
     @Override
     public void prepare(BuildType type) throws IOException {
-        mInputApk = new File(getModule().getBuildDirectory(), "bin/generated.apk");
+        mInputApk = new File(getModule().getBuildDirectory(), "bin/aligned.apk");
         mOutputApk = new File(getModule().getBuildDirectory(), "bin/signed.apk");
         if (!mInputApk.exists()) {
             throw new IOException("Unable to find generated apk file.");
@@ -45,5 +47,7 @@ public class SignTask extends Task<AndroidModule> {
         } catch (Exception e) {
             throw new CompilationFailedException(e);
         }
+
+        FileUtils.forceDelete(mInputApk);
     }
 }
