@@ -2,6 +2,7 @@ package com.tyron.builder.compiler;
 
 import com.tyron.builder.compiler.apk.PackageTask;
 import com.tyron.builder.compiler.apk.SignTask;
+import com.tyron.builder.compiler.apk.ZipAlignTask;
 import com.tyron.builder.compiler.dex.R8Task;
 import com.tyron.builder.compiler.firebase.GenerateFirebaseConfigTask;
 import com.tyron.builder.compiler.incremental.dex.IncrementalD8Task;
@@ -27,26 +28,31 @@ public class AndroidAppBuilder extends BuilderImpl<AndroidModule> {
 
     @Override
     public List<Task<? super AndroidModule>> getTasks(BuildType type) {
+
+        AndroidModule module = getModule();
+        ILogger logger = getLogger();
+
         List<Task<? super AndroidModule>> tasks = new ArrayList<>();
-        tasks.add(new CleanTask(getModule(), getLogger()));
-        tasks.add(new CheckLibrariesTask(getModule(), getLogger()));
-        tasks.add(new ManifestMergeTask(getModule(), getLogger()));
-        tasks.add(new GenerateFirebaseConfigTask(getModule(), getLogger()));
+        tasks.add(new CleanTask(module, logger));
+        tasks.add(new CheckLibrariesTask(module, logger));
+        tasks.add(new ManifestMergeTask(module, logger));
+        tasks.add(new GenerateFirebaseConfigTask(module, logger));
         if (type == BuildType.DEBUG) {
-            tasks.add(new InjectLoggerTask(getModule(), getLogger()));
+            tasks.add(new InjectLoggerTask(module, logger));
         }
-        tasks.add(new IncrementalAapt2Task(getModule(), getLogger(), false));
-        tasks.add(new MergeSymbolsTask(getModule(), getLogger()));
-        tasks.add(new IncrementalKotlinCompiler(getModule(), getLogger()));
-        tasks.add(new IncrementalJavaTask(getModule(), getLogger()));
-        if (getModule().getSettings().getBoolean(ModuleSettings.USE_R8, false) &&
+        tasks.add(new IncrementalAapt2Task(module, logger, false));
+        tasks.add(new MergeSymbolsTask(module, logger));
+        tasks.add(new IncrementalKotlinCompiler(module, logger));
+        tasks.add(new IncrementalJavaTask(module, logger));
+        if (module.getSettings().getBoolean(ModuleSettings.USE_R8, false) &&
                 type == BuildType.RELEASE) {
-            tasks.add(new R8Task(getModule(), getLogger()));
+            tasks.add(new R8Task(module, logger));
         } else {
-            tasks.add(new IncrementalD8Task(getModule(), getLogger()));
+            tasks.add(new IncrementalD8Task(module, logger));
         }
-        tasks.add(new PackageTask(getModule(), getLogger()));
-        tasks.add(new SignTask(getModule(), getLogger()));
+        tasks.add(new PackageTask(module, logger));
+        tasks.add(new ZipAlignTask(module, logger));
+        tasks.add(new SignTask(module, logger));
         return tasks;
     }
 }

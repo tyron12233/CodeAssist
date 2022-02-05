@@ -19,6 +19,7 @@ public class Aapt2Jni {
     private static final Pattern DIAGNOSTIC_PATTERN = Pattern.compile("(.*?):(\\d+): (.*?): (.+)");
     private static final Pattern DIAGNOSTIC_PATTERN_NO_LINE = Pattern.compile("(.*?): (.*?)" + ":" +
             " (.+)");
+    private static final Pattern ERROR_PATTERN_NO_LINE = Pattern.compile("(error:) (.*?)");
 
     private static final int LOG_LEVEL_ERROR = 3;
     private static final int LOG_LEVEL_WARNING = 2;
@@ -155,6 +156,7 @@ public class Aapt2Jni {
 
             Matcher matcher = DIAGNOSTIC_PATTERN.matcher(line);
             Matcher m = DIAGNOSTIC_PATTERN_NO_LINE.matcher(line);
+            Matcher error = ERROR_PATTERN_NO_LINE.matcher(line);
 
             String path;
             String lineNumber;
@@ -172,9 +174,14 @@ public class Aapt2Jni {
                 level = m.group(2);
                 message = m.group(3);
             } else {
+                String trim = line.trim();
+                if (trim.startsWith("error")) {
+                    level = "error";
+                } else {
+                    level = "info";
+                }
                 path = "";
                 lineNumber = "-1";
-                level = "info";
                 message = line;
             }
 
