@@ -134,7 +134,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                                             toggleEmptyView(false, false, "");
                                         }
                                         save(((JavaModule) mainModule).getLibraryFile(), data);
-                                    } catch (IOException e) {
+                                    } catch (Throwable e) {
                                         new MaterialAlertDialogBuilder(requireContext())
                                                 .setTitle(R.string.error)
                                                 .setMessage(e.getMessage())
