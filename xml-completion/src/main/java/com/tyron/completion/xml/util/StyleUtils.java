@@ -94,6 +94,7 @@ public class StyleUtils {
 
     public static void putLayoutParams(JavaClass javaClass) {
         ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+        builder.add("ViewGroup_MarginLayout");
         try {
             JavaClass[] superClasses = javaClass.getSuperClasses();
             for (JavaClass superClass : superClasses) {
