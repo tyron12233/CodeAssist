@@ -84,6 +84,7 @@ import io.github.rosemoe.sora.event.EventReceiver;
 import io.github.rosemoe.sora.event.LongPressEvent;
 import io.github.rosemoe.sora.event.Unsubscribe;
 import io.github.rosemoe.sora.lang.Language;
+import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.DirectAccessProps;
@@ -466,6 +467,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
         int rightLine = savedInstanceState.getInt(EDITOR_RIGHT_LINE_KEY, 0);
         int rightColumn = savedInstanceState.getInt(EDITOR_RIGHT_COLUMN_KEY, 0);
 
+        Content text = mEditor.getText();
+        if (leftLine > text.getLineCount() || rightLine > text.getLineCount()) {
+            return;
+        }
         if (leftLine != rightLine && leftColumn != rightColumn) {
             mEditor.setSelectionRegion(leftLine, leftColumn, rightLine, rightColumn, true);
         } else {
