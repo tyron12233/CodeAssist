@@ -132,9 +132,9 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
         Iterator<String> keys = projectInfo.keys();
         Map<String, String> map = new HashMap<>();
         keys.forEachRemaining(s -> {
-            s = replaceKey(s);
+            String replacedKey = replaceKey(s);
             try {
-                map.put(s, projectInfo.getString(s));
+                map.put(replacedKey, projectInfo.getString(s));
             } catch (JSONException e) {
                 String message = "" +
                         "Failed to put value to secrets.xml.\n" +
@@ -144,8 +144,12 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
             }
         });
 
-        String mobileSdkAppId = clientInfo.getString(MOBILESDK_SDK_APP_ID);
-        map.put(GOOGLE_APP_ID, mobileSdkAppId);
+        try {
+            String mobileSdkAppId = clientInfo.getString(MOBILESDK_SDK_APP_ID);
+            map.put(GOOGLE_APP_ID, mobileSdkAppId);
+        } catch (JSONException ignored) {
+
+        }
 
         try {
             String oathClientId = client.getJSONObject(OAUTH_CLIENT)
