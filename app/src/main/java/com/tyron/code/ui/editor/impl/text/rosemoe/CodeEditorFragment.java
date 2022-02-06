@@ -111,6 +111,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
     private SharedPreferences mPreferences;
 
     private boolean mCanSave;
+    private boolean mReading;
 
     public static CodeEditorFragment newInstance(File file) {
         CodeEditorFragment fragment = new CodeEditorFragment();
@@ -132,7 +133,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
 
-        if (mCanSave) {
+        if (mCanSave && !mReading) {
             if (ProjectManager.getInstance().getCurrentProject() != null) {
                 ProjectManager.getInstance().getCurrentProject()
                         .getModule(mCurrentFile)
@@ -159,40 +160,11 @@ public class CodeEditorFragment extends Fragment implements Savable,
         if (BottomSheetBehavior.STATE_HIDDEN == mMainViewModel.getBottomSheetState().getValue()) {
             mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_COLLAPSED);
         }
-
-        Project currentProject = ProjectManager.getInstance().getCurrentProject();
-        if (currentProject != null) {
-            Module module = currentProject.getModule(mCurrentFile);
-            Optional<CharSequence> fileContent =
-                    module.getFileManager().getFileContent(mCurrentFile);
-            if (fileContent.isPresent()) {
-                CharSequence content = fileContent.get();
-                if (!content.equals(mEditor.getText())) {
-                    int line = mEditor.getCursor().getLeftLine();
-                    int column = mEditor.getCursor().getLeftColumn();
-
-                    int targetX = mEditor.getOffsetX();
-                    int targetY = mEditor.getOffsetY();
-
-                    mEditor.setText(content);
-
-                    mEditor.setSelection(line, column, false);
-
-                    mEditor.getScroller().startScroll(mEditor.getOffsetX(), mEditor.getOffsetY(),
-                            targetX - mEditor.getOffsetX(), targetY - mEditor.getOffsetY(), 0);
-                }
-            }
-        }
     }
 
 
     public void hideEditorWindows() {
         mEditor.hideAutoCompleteWindow();
-    }
-
-    @Override
-    public void onStart() {
-        super.onStart();
     }
 
     @Override
@@ -367,7 +339,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         hideEditorWindows();
 
-        if (mCanSave) {
+        if (mCanSave && !mReading) {
             if (ProjectManager.getInstance().getCurrentProject() != null) {
                 ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().setSnapshotContent(mCurrentFile, mEditor.getText().toString());
             } else {
@@ -397,20 +369,25 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
         if (mCurrentFile.exists()) {
             ProgressManager.getInstance().runNonCancelableAsync(() -> {
-                String oldContents = "";
+                mReading = true;
                 try {
-                    oldContents = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                if (oldContents.equals(mEditor.getText().toString())) {
-                    return;
-                }
+                    String oldContents = "";
+                    try {
+                        oldContents = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    if (oldContents.equals(mEditor.getText().toString())) {
+                        return;
+                    }
 
-                try {
-                    FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(), StandardCharsets.UTF_8);
-                } catch (IOException e) {
-                    // ignored
+                    try {
+                        FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(), StandardCharsets.UTF_8);
+                    } catch (IOException e) {
+                        // ignored
+                    }
+                } finally {
+                    mReading = false;
                 }
             });
         }
@@ -418,36 +395,45 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     private void readFile(Project currentProject, @Nullable Bundle savedInstanceState) {
         ProgressManager.getInstance().runNonCancelableAsync(() -> {
-            Module module;
-            if (currentProject != null) {
-                module = currentProject.getModule(mCurrentFile);
-            } else {
-                module = null;
-            }
-            if (mCurrentFile.exists()) {
-                String text;
-                try {
-                    text = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
-                    mCanSave = true;
-                } catch (IOException e) {
-                    text = "File does not exist: " + e.getMessage();
+            mReading = true;
+            mEditor.setBackgroundAnalysisEnabled(false);
+            try {
+                Module module;
+                if (currentProject != null) {
+                    module = currentProject.getModule(mCurrentFile);
+                } else {
+                    module = null;
+                }
+                if (mCurrentFile.exists()) {
+                    String text;
+                    try {
+                        text = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
+                        mCanSave = true;
+                    } catch (IOException e) {
+                        text = "File does not exist: " + e.getMessage();
+                        mCanSave = false;
+                    }
+                    if (module != null) {
+                        module.getFileManager().openFileForSnapshot(mCurrentFile, text);
+                    }
+
+                    String finalText = text;
+                    ProgressManager.getInstance().runLater(() -> {
+                        checkCanSave();
+                        mEditor.setText(finalText);
+
+                        if (savedInstanceState != null) {
+                            restoreState(savedInstanceState);
+                        }
+                    });
+                } else {
                     mCanSave = false;
                 }
-                if (module != null) {
-                    module.getFileManager().openFileForSnapshot(mCurrentFile, text);
+            } finally {
+                mReading = false;
+                if (mEditor != null) {
+                    mEditor.setBackgroundAnalysisEnabled(true);
                 }
-
-                String finalText = text;
-                ProgressManager.getInstance().runLater(() -> {
-                    checkCanSave();
-                    mEditor.setText(finalText);
-
-                    if (savedInstanceState != null) {
-                        restoreState(savedInstanceState);
-                    }
-                });
-            } else {
-                mCanSave = false;
             }
         });
     }
@@ -565,7 +551,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
      * Notifies the editor to analyze and highlight the current text
      */
     public void analyze() {
-        if (mEditor != null) {
+        if (mEditor != null && !mReading) {
             mEditor.rerunAnalysis();
         }
     }

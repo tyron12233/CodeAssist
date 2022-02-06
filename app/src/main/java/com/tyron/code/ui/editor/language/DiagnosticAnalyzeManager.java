@@ -10,7 +10,7 @@ import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager;
 
 public abstract class DiagnosticAnalyzeManager<T> extends SimpleAnalyzeManager<T> {
 
-    protected boolean mShouldAnalyzeInBg;
+    protected boolean mShouldAnalyzeInBg = false;
 
     public abstract void setDiagnostics(Editor editor, List<DiagnosticWrapper> diagnostics);
 

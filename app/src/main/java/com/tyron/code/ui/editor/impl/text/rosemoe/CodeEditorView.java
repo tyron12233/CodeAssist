@@ -262,6 +262,23 @@ public class CodeEditorView extends CodeEditor implements Editor {
         mIsBackgroundAnalysisEnabled = enabled;
     }
 
+    @Override
+    public void rerunAnalysis() {
+        //noinspection ConstantConditions
+        if (getEditorLanguage() != null) {
+            AnalyzeManager analyzeManager = getEditorLanguage().getAnalyzeManager();
+            if (mIsBackgroundAnalysisEnabled) {
+                analyzeManager.rerun();
+            } else {
+                if (analyzeManager instanceof DiagnosticAnalyzeManager) {
+                    ((DiagnosticAnalyzeManager<?>) analyzeManager).rerunWithoutBg();
+                } else {
+                    analyzeManager.rerun();
+                }
+            }
+        }
+    }
+
     public void setAnalyzing(boolean analyzing) {
         if (mViewModel != null) {
             mViewModel.setAnalyzeState(analyzing);
