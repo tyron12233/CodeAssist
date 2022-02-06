@@ -41,15 +41,22 @@ public class FileEditorManagerImpl extends FileEditorManager {
     public void openFile(@NonNull Context context, File file, Consumer<FileEditor> callback) {
         checkAttached();
 
-        FileEditor[] fileEditors = openFile(file, true);
+        FileEditor[] fileEditors = getFileEditors(file);
         openChooser(context, fileEditors, callback);
     }
 
     @NonNull
     @Override
-    public FileEditor[] openFile(@NonNull File file, boolean focus) {
+    public FileEditor[] openFile(@NonNull Context context, @NonNull File file, boolean focus) {
         checkAttached();
 
+        FileEditor[] editors = getFileEditors(file);
+        openChooser(context, editors, this::openFileEditor);
+        return editors;
+    }
+
+    @Override
+    public FileEditor[] getFileEditors(@NonNull File file) {
         FileEditor[] editors;
         FileEditorProvider[] providers = FileEditorProviderManagerImpl.getInstance().getProviders(file);
         editors = new FileEditor[providers.length];
@@ -57,9 +64,12 @@ public class FileEditorManagerImpl extends FileEditorManager {
             FileEditor editor = providers[i].createEditor(file);
             editors[i] = editor;
         }
-
-        openChooser(editors, mViewModel::openFile);
         return editors;
+    }
+
+    @Override
+    public void openFileEditor(@NonNull FileEditor fileEditor) {
+        mViewModel.openFile(fileEditor);
     }
 
     @Override
@@ -67,11 +77,8 @@ public class FileEditorManagerImpl extends FileEditorManager {
         mViewModel.removeFile(file);
     }
 
-    private void openChooser(FileEditor[] fileEditors, Consumer<FileEditor> callback) {
-        openChooser(ApplicationProvider.getApplicationContext(), fileEditors, callback);
-    }
-
-    private void openChooser(Context context, FileEditor[] fileEditors, Consumer<FileEditor> callback) {
+    @Override
+    public void openChooser(Context context, FileEditor[] fileEditors, Consumer<FileEditor> callback) {
         if (fileEditors.length == 0) {
             return;
         }

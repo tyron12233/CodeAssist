@@ -21,6 +21,7 @@ import com.tyron.code.ui.main.action.other.FormatAction;
 import com.tyron.code.ui.main.action.other.OpenSettingsAction;
 import com.tyron.code.ui.main.action.project.ProjectActionGroup;
 import com.tyron.code.ui.project.ProjectManagerFragment;
+import com.tyron.common.ApplicationProvider;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.JavaCompilerProvider;

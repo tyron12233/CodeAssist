@@ -15,7 +15,7 @@ public abstract class FileEditorManager {
      * @return the editor
      */
     public FileEditor openFile(FileEditorSavedState state) {
-        FileEditor[] fileEditors = openFile(state.getFile(), true);
+        FileEditor[] fileEditors = getFileEditors(state.getFile());
         for (FileEditor fileEditor : fileEditors) {
             if (state.getName().equals(fileEditor.getName())) {
                 return fileEditor;
@@ -43,7 +43,11 @@ public abstract class FileEditorManager {
      * @return array of opened editors
      */
     @NonNull
-    public abstract FileEditor[] openFile(@NonNull File file, boolean focus);
+    public abstract FileEditor[] openFile(@NonNull Context context, @NonNull File file, boolean focus);
+
+    public abstract FileEditor[] getFileEditors(@NonNull File file);
+
+    public abstract void openFileEditor(@NonNull FileEditor fileEditor);
 
     /**
      * Closes all editors opened for the file.
@@ -51,4 +55,6 @@ public abstract class FileEditorManager {
      * @param file file to be closed. Cannot be null.
      */
     public abstract void closeFile(@NonNull File file);
+
+    public abstract void openChooser(Context context, FileEditor[] fileEditors, Consumer<FileEditor> callback);
 }

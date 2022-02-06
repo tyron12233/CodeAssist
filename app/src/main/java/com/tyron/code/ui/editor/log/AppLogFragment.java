@@ -19,6 +19,7 @@ import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.fileeditor.api.FileEditorManager;
 
 import java.util.List;
 
@@ -60,7 +61,8 @@ public class AppLogFragment extends Fragment
         mAdapter.setListener(diagnostic -> {
             if (diagnostic.getSource() != null) {
                 if (getContext() != null) {
-                    FileEditorManagerImpl.getInstance().openFile(requireContext(), diagnostic.getSource(), fileEditor -> mMainViewModel.openFile(fileEditor));
+                    FileEditorManager manager = FileEditorManagerImpl.getInstance();
+                    manager.openFile(requireContext(), diagnostic.getSource(), mMainViewModel::openFile);
                 }
             }
         });
