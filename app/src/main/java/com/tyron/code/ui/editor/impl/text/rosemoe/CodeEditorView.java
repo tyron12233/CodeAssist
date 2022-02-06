@@ -38,6 +38,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
             .add('"')
             .add('>')
             .add('\'')
+            .add(';')
             .build();
 
     private boolean mIsBackgroundAnalysisEnabled;
