@@ -1,11 +1,13 @@
 package com.tyron.code.ui.editor;
 
+import android.util.Log;
 import android.widget.AdapterView;
 import android.widget.ListAdapter;
 import android.widget.ListView;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.completion.BuildConfig;
 import com.tyron.completion.progress.ProgressManager;
 
 import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
@@ -21,6 +23,8 @@ import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorCompletionAdapter;
 
 public class CodeAssistCompletionWindow extends EditorAutoCompletion {
+
+    private static final String TAG = CodeAssistCompletionWindow.class.getSimpleName();
 
     private final CodeEditor mEditor;
     private CompletionLayout mLayout;
@@ -53,6 +57,32 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
         super.setAdapter(adapter);
 
         mAdapter = adapter;
+    }
+
+    @Override
+    public void select(int pos) {
+        if (pos > mAdapter.getCount()) {
+            return;
+        }
+
+        try {
+            super.select(pos);
+        } catch (Throwable e) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "Failed to select item", e);
+            }
+        }
+    }
+
+    @Override
+    public void select() {
+        try {
+            super.select();
+        } catch (Throwable e) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "Failed to select item", e);
+            }
+        }
     }
 
     @Override

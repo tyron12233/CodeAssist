@@ -39,20 +39,31 @@ public class KotlinAnalyzer extends AbstractCodeAnalyzer<Object> {
                 KotlinLexer.WHILE, KotlinLexer.IN, KotlinLexer.INTERNAL,
                 KotlinLexer.AS, KotlinLexer.CONTINUE, KotlinLexer.RETURN,
                 KotlinLexer.GET, KotlinLexer.SET, KotlinLexer.SETTER,
-                KotlinLexer.VARARG, KotlinLexer.FINALLY);
+                KotlinLexer.VARARG, KotlinLexer.FINALLY, KotlinLexer.SEMICOLON,
+                KotlinLexer.IF, KotlinLexer.ELSE, KotlinLexer.INIT,
+                KotlinLexer.LATEINIT, KotlinLexer.OBJECT, KotlinLexer.REIFIED,
+                KotlinLexer.BY, KotlinLexer.CATCH, KotlinLexer.SEALED,
+                KotlinLexer.SUSPEND, KotlinLexer.IS, KotlinLexer.OPEN,
+                KotlinLexer.DATA, KotlinLexer.CONSTRUCTOR, KotlinLexer.WHEN,
+                KotlinLexer.WHERE, KotlinLexer.INFIX);
         putColor(EditorColorScheme.LITERAL, KotlinLexer.BinLiteral,
                 KotlinLexer.BooleanLiteral, KotlinLexer.LongLiteral,
                 KotlinLexer.IntegerLiteral, KotlinLexer.FloatLiteral,
                 KotlinLexer.CharacterLiteral, KotlinLexer.DoubleLiteral,
                 KotlinLexer.NullLiteral, KotlinLexer.RealLiteral,
                 KotlinLexer.LineString, KotlinLexer.MultiLineString,
-                KotlinLexer.StringExpression, KotlinLexer.MultiLineStringQuote);
+                KotlinLexer.StringExpression, KotlinLexer.MultiLineStringQuote,
+                KotlinLexer.LineStrText, KotlinLexer.SINGLE_QUOTE, KotlinLexer.QUOTE_OPEN,
+                KotlinLexer.QUOTE_CLOSE, KotlinLexer.HexLiteral, KotlinLexer.MultiLineStrText);
         putColor(EditorColorScheme.COMMENT, KotlinLexer.DelimitedComment,
                 KotlinLexer.StrExpr_Comment, KotlinLexer.LineComment,
                 KotlinLexer.Inside_Comment);
-
-        putColor(EditorColorScheme.OPERATOR, KotlinLexer.OPERATOR);
-
+        putColor(EditorColorScheme.ANNOTATION, KotlinLexer.AT,
+                KotlinLexer.LabelReference);
+        putColor(EditorColorScheme.OPERATOR, KotlinLexer.OPERATOR,
+                KotlinLexer.ADD, KotlinLexer.SUB,
+                KotlinLexer.MULT, KotlinLexer.DIV,
+                KotlinLexer.ELVIS);
         // todo add block lines
     }
 
