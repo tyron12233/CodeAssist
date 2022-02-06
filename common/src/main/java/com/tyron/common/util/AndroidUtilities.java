@@ -39,6 +39,11 @@ public class AndroidUtilities {
 				.getResources().getDisplayMetrics().density * px);
     }
 
+    public static void setMargins(View view, int startMargin, int topMargin, int endMargin, int bottomMargin) {
+		ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+		layoutParams.setMargins(dp(startMargin), dp(topMargin), dp(endMargin), dp(bottomMargin));
+	}
+
 	/**
 	 * Converts a dp value into px that can be applied on margins, paddings etc
 	 * @param dp The dp value that will be converted into px
