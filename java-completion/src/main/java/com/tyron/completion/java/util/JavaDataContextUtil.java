@@ -15,6 +15,7 @@ import com.tyron.completion.java.action.CommonJavaContextKeys;
 import com.tyron.completion.java.action.FindCurrentPath;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 
+import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.util.TreePath;
 
 import java.io.File;
@@ -30,10 +31,13 @@ public class JavaDataContextUtil {
                 JavaCompilerService compiler = service.getCompiler(project, (JavaModule) currentModule);
 
                 compiler.getCachedContainer().run(task -> {
-                    if (task != null && task.root(file) != null) {
-                        FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
-                        TreePath currentPath = findCurrentPath.scan(task.root(), cursor);
-                        context.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
+                    if (task != null) {
+                        CompilationUnitTree root = task.root(file);
+                        if (root != null) {
+                            FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
+                            TreePath currentPath = findCurrentPath.scan(root, cursor);
+                            context.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
+                        }
                     }
                 });
                 context.putData(CommonJavaContextKeys.COMPILER, compiler);
