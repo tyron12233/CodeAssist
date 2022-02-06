@@ -17,8 +17,8 @@ public class ValueInsertHandler extends DefaultXmlInsertHandler {
     }
 
     @Override
-    protected void insert(String string, Editor editor) {
-        super.insert(string, editor);
+    protected void insert(String string, Editor editor, boolean calcSpace) {
+        super.insert(string, editor, calcSpace);
 
         Caret caret = editor.getCaret();
         int line = caret.getStartLine();

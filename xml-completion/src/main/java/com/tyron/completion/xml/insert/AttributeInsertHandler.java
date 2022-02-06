@@ -10,8 +10,8 @@ public class AttributeInsertHandler extends DefaultXmlInsertHandler {
     }
 
     @Override
-    protected void insert(String string, Editor editor) {
-        super.insert(string, editor);
+    protected void insert(String string, Editor editor, boolean calcSpace) {
+        super.insert(string, editor, calcSpace);
         editor.setSelection(editor.getCaret().getStartLine(), editor.getCaret().getStartColumn() - 1);
     }
 }
