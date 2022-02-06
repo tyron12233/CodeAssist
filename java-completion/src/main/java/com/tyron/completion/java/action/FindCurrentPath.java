@@ -3,6 +3,7 @@ package com.tyron.completion.java.action;
 import android.util.Pair;
 
 import org.openjdk.source.tree.BlockTree;
+import org.openjdk.source.tree.CaseTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ErroneousTree;
@@ -15,6 +16,7 @@ import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.PrimitiveTypeTree;
+import org.openjdk.source.tree.SwitchTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.tree.VariableTree;
 import org.openjdk.source.util.JavacTask;
@@ -185,6 +187,34 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
         }
 
         if (isInside(t, find) && !isInside(t.getClassBody(), find)) {
+            return getCurrentPath();
+        }
+
+        return null;
+    }
+
+    @Override
+    public TreePath visitSwitch(SwitchTree switchTree, Pair<Long, Long> longLongPair) {
+        TreePath smaller = super.visitSwitch(switchTree, longLongPair);
+        if (smaller != null) {
+            return smaller;
+        }
+
+        if (isInside(switchTree, longLongPair)) {
+            return getCurrentPath();
+        }
+
+        return null;
+    }
+
+    @Override
+    public TreePath visitCase(CaseTree caseTree, Pair<Long, Long> longLongPair) {
+        TreePath smaller =  super.visitCase(caseTree, longLongPair);
+        if (smaller != null) {
+            return smaller;
+        }
+
+        if (isInside(caseTree, longLongPair)) {
             return getCurrentPath();
         }
 
