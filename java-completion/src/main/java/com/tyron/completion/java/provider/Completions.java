@@ -22,10 +22,12 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
+import org.openjdk.source.tree.CaseTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.ParameterizedTypeTree;
 import org.openjdk.source.tree.ReturnTree;
+import org.openjdk.source.tree.SwitchTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
@@ -60,6 +62,9 @@ public class Completions {
     private static final JavacTreePattern.Capture<IdentifierTree> VARIABLE_NAME =
             tree(IdentifierTree.class)
                     .withParent(JCTree.JCVariableDecl.class);
+    private static final JavacTreePattern.Capture<IdentifierTree> SWITCH_CONSTANT =
+            tree(IdentifierTree.class)
+                    .withParent(CaseTree.class);
 
     private final JavaCompilerService compiler;
 
@@ -131,6 +136,9 @@ public class Completions {
                 if (INSIDE_PARAMETERIZED.accepts(path.getLeaf(), context)) {
                     return new ClassNameCompletionProvider(compiler)
                             .complete(task, path, partial, endsWithParen);
+                } else if (SWITCH_CONSTANT.accepts(path.getLeaf(), context)) {
+                    return new SwitchConstantCompletionProvider(compiler)
+                            .complete(task, path, partial, endsWithParen);
                 }
                 return new IdentifierCompletionProvider(compiler)
                         .complete(task, path, partial, endsWithParen);
@@ -139,9 +147,6 @@ public class Completions {
                         .complete(task, path, partial, endsWithParen);
             case MEMBER_REFERENCE:
                 return new MemberReferenceCompletionProvider(compiler)
-                        .complete(task, path, partial, endsWithParen);
-            case CASE:
-                return new SwitchConstantCompletionProvider(compiler)
                         .complete(task, path, partial, endsWithParen);
             case IMPORT:
                 return new ImportCompletionProvider(compiler)
