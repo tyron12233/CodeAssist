@@ -364,6 +364,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                     new IntentFilter(((AndroidModule) module).getPackageName() + ".LOG"));
         }
     }
+
     private void injectData(DataContext context) {
         context.putData(CommonDataKeys.PROJECT, ProjectManager.getInstance().getCurrentProject());
         context.putData(CommonDataKeys.ACTIVITY, getActivity());
@@ -372,6 +373,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         context.putData(INDEX_CALLBACK_KEY, mIndexCallback);
         context.putData(CommonDataKeys.FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
     }
+
     public void refreshToolbar() {
         mToolbar.getMenu().clear();
 
