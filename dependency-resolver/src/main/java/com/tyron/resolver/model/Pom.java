@@ -110,8 +110,7 @@ public class Pom {
 
     public String getPath() {
         String path = groupId.replace('.', '/');
-        String artifact = artifactId.replace('.', '/');
-        return path + "/" + artifact + "/" + versionName;
+        return path + "/" + artifactId + "/" + versionName;
     }
 
     @NonNull

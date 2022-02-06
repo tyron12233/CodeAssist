@@ -98,7 +98,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
     private String getPathFromDeclaration(String[] pomNames) {
         String groupId = pomNames[0].replace('.', '/');
-        String artifactId = pomNames[1].replace('.','/');
+        String artifactId = pomNames[1];
         String path = groupId + "/" + artifactId + "/" + pomNames[2];
         return path + "/" + pomNames[1] + "-" + pomNames[2];
     }
@@ -120,7 +120,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
         StringBuilder sb = new StringBuilder();
         sb.append(pom.getGroupId().replace('.', '/'));
         sb.append('/');
-        sb.append(pom.getArtifactId().replace('.', '/'));
+        sb.append(pom.getArtifactId());
         sb.append('/');
         sb.append(pom.getVersionName());
         sb.append('/');
