@@ -54,7 +54,8 @@ public class KotlinAnalyzer extends AbstractCodeAnalyzer<Object> {
                 KotlinLexer.LineString, KotlinLexer.MultiLineString,
                 KotlinLexer.StringExpression, KotlinLexer.MultiLineStringQuote,
                 KotlinLexer.LineStrText, KotlinLexer.SINGLE_QUOTE, KotlinLexer.QUOTE_OPEN,
-                KotlinLexer.QUOTE_CLOSE, KotlinLexer.HexLiteral, KotlinLexer.MultiLineStrText);
+                KotlinLexer.QUOTE_CLOSE, KotlinLexer.HexLiteral, KotlinLexer.MultiLineStrText,
+                KotlinLexer.TRIPLE_QUOTE_CLOSE, KotlinLexer.TRIPLE_QUOTE_OPEN);
         putColor(EditorColorScheme.COMMENT, KotlinLexer.DelimitedComment,
                 KotlinLexer.StrExpr_Comment, KotlinLexer.LineComment,
                 KotlinLexer.Inside_Comment);
