@@ -51,7 +51,9 @@ public class AndroidAppBuilder extends BuilderImpl<AndroidModule> {
             tasks.add(new IncrementalD8Task(module, logger));
         }
         tasks.add(new PackageTask(module, logger));
-        tasks.add(new ZipAlignTask(module, logger));
+        if (module.getSettings().getBoolean(ModuleSettings.ZIP_ALIGN_ENABLED, false)) {
+            tasks.add(new ZipAlignTask(module, logger));
+        }
         tasks.add(new SignTask(module, logger));
         return tasks;
     }

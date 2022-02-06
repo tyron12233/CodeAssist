@@ -42,6 +42,7 @@ public class ModuleSettings implements SharedPreferences {
     public static final String JAVA_TARGET_VERSION = "javaTargetVersion";
     public static final String JAVA_SOURCE_VERSION = "javaSourceVersion";
     public static final String MODULE_TYPE = "moduleType";
+    public static final String ZIP_ALIGN_ENABLED = "zipAlignEnabled";
 
     private final File mConfigFile;
     private final Map<String, Object> mConfigMap;
@@ -72,6 +73,7 @@ public class ModuleSettings implements SharedPreferences {
         map.put(TARGET_SDK_VERSION, 30);
         map.put(VERSION_NAME, "1.0");
         map.put(VERSION_CODE, 1);
+        map.put(ZIP_ALIGN_ENABLED, false);
         return map;
     }
 

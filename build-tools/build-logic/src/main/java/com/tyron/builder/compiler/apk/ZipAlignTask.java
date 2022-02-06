@@ -49,7 +49,6 @@ public class ZipAlignTask extends Task<AndroidModule> {
         List<String> args = new ArrayList<>();
         args.add(binary.getAbsolutePath());
         args.add("-f");
-        args.add("-v");
         args.add("4");
         args.add(mApkFile.getAbsolutePath());
         args.add(mApkFile.getParent() + "/aligned.apk");
