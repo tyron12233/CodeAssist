@@ -16,6 +16,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.google.android.material.snackbar.Snackbar;
 import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
@@ -35,6 +36,7 @@ import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionLayout;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.Savable;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
 import com.tyron.code.ui.editor.language.kotlin.KotlinLanguage;
@@ -45,6 +47,7 @@ import com.tyron.code.ui.layoutEditor.LayoutEditorFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
+import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.compiler.JavaCompilerService;
@@ -61,8 +64,10 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.Editor;
+import com.tyron.fileeditor.api.FileEditorManager;
 
 import org.apache.commons.io.FileUtils;
+import org.openjdk.com.sun.org.apache.xpath.internal.operations.Mod;
 import org.openjdk.source.util.TreePath;
 
 import java.io.File;
@@ -268,29 +273,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        Module module;
         Project currentProject = ProjectManager.getInstance().getCurrentProject();
-        if (currentProject != null) {
-            module = currentProject.getModule(mCurrentFile);
-        } else {
-            module = null;
-        }
-        if (mCurrentFile.exists()) {
-            String text;
-            try {
-                text = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
-                mCanSave = true;
-            } catch (IOException e) {
-                text = "File does not exist: " + e.getMessage();
-                mCanSave = false;
-            }
-            if (module != null) {
-                module.getFileManager().openFileForSnapshot(mCurrentFile, text);
-            }
-            mEditor.setText(text);
-        } else {
-            mCanSave = false;
-        }
+        readFile(currentProject);
+        checkCanSave();
 
         mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
             menu.clear();
@@ -354,19 +339,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
-    private void restoreState(@NonNull Bundle savedInstanceState) {
-        int leftLine = savedInstanceState.getInt(EDITOR_LEFT_LINE_KEY, 0);
-        int leftColumn = savedInstanceState.getInt(EDITOR_LEFT_COLUMN_KEY, 0);
-        int rightLine = savedInstanceState.getInt(EDITOR_RIGHT_LINE_KEY, 0);
-        int rightColumn = savedInstanceState.getInt(EDITOR_RIGHT_COLUMN_KEY, 0);
-
-        if (leftLine != rightLine && leftColumn != rightColumn) {
-            mEditor.setSelectionRegion(leftLine, leftColumn, rightLine, rightColumn, true);
-        } else {
-            mEditor.setSelection(leftLine, leftColumn);
-        }
-    }
-
     @Override
     public void onDestroyView() {
         super.onDestroyView();
@@ -392,25 +364,23 @@ public class CodeEditorFragment extends Fragment implements Savable,
             if (ProjectManager.getInstance().getCurrentProject() != null) {
                 ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().setSnapshotContent(mCurrentFile, mEditor.getText().toString());
             } else {
-                try {
-                    FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(),
-                            StandardCharsets.UTF_8);
-                } catch (IOException e) {
-                    // ignored
-                }
+                ProgressManager.getInstance().runNonCancelableAsync(() -> {
+                    try {
+                        FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(),
+                                StandardCharsets.UTF_8);
+                    } catch (IOException e) {
+                        // ignored
+                    }
+                });
             }
         }
     }
 
-    private void updateFile(CharSequence contents) {
-        Project project = ProjectManager.getInstance().getCurrentProject();
-        if (project == null) {
-            return;
-        }
-        Module module = project.getModule(mCurrentFile);
-        if (module != null) {
-            module.getFileManager().setSnapshotContent(mCurrentFile, contents.toString());
-        }
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+
+        mEditor.setBackgroundAnalysisEnabled(false);
     }
 
     @Override
@@ -436,6 +406,71 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     // ignored
                 }
             });
+        }
+    }
+
+    private void readFile(Project currentProject) {
+        ProgressManager.getInstance().runNonCancelableAsync(() -> {
+            Module module;
+            if (currentProject != null) {
+                module = currentProject.getModule(mCurrentFile);
+            } else {
+                module = null;
+            }
+            if (mCurrentFile.exists()) {
+                String text;
+                try {
+                    text = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
+                    mCanSave = true;
+                } catch (IOException e) {
+                    text = "File does not exist: " + e.getMessage();
+                    mCanSave = false;
+                }
+                if (module != null) {
+                    module.getFileManager().openFileForSnapshot(mCurrentFile, text);
+                }
+
+                String finalText = text;
+                ProgressManager.getInstance().runLater(() -> mEditor.setText(finalText));
+            } else {
+                mCanSave = false;
+            }
+        });
+    }
+
+    private void checkCanSave() {
+        if (mCanSave) {
+            Snackbar snackbar = Snackbar.make(mEditor, R.string.editor_error_file,
+                    Snackbar.LENGTH_INDEFINITE).setAction(R.string.menu_close,
+                    v -> FileEditorManagerImpl.getInstance().closeFile(mCurrentFile));
+            ViewGroup snackbarView = (ViewGroup) snackbar.getView();
+            AndroidUtilities.setMargins(snackbarView.getChildAt(0),
+                    0, 0, 0,50);
+            snackbar.show();
+        }
+    }
+
+    private void restoreState(@NonNull Bundle savedInstanceState) {
+        int leftLine = savedInstanceState.getInt(EDITOR_LEFT_LINE_KEY, 0);
+        int leftColumn = savedInstanceState.getInt(EDITOR_LEFT_COLUMN_KEY, 0);
+        int rightLine = savedInstanceState.getInt(EDITOR_RIGHT_LINE_KEY, 0);
+        int rightColumn = savedInstanceState.getInt(EDITOR_RIGHT_COLUMN_KEY, 0);
+
+        if (leftLine != rightLine && leftColumn != rightColumn) {
+            mEditor.setSelectionRegion(leftLine, leftColumn, rightLine, rightColumn, true);
+        } else {
+            mEditor.setSelection(leftLine, leftColumn);
+        }
+    }
+
+    private void updateFile(CharSequence contents) {
+        Project project = ProjectManager.getInstance().getCurrentProject();
+        if (project == null) {
+            return;
+        }
+        Module module = project.getModule(mCurrentFile);
+        if (module != null) {
+            module.getFileManager().setSnapshotContent(mCurrentFile, contents.toString());
         }
     }
 
@@ -515,12 +550,5 @@ public class CodeEditorFragment extends Fragment implements Savable,
         if (mEditor != null) {
             mEditor.rerunAnalysis();
         }
-    }
-
-    @Override
-    public void onLowMemory() {
-        super.onLowMemory();
-
-        mEditor.setBackgroundAnalysisEnabled(false);
     }
 }

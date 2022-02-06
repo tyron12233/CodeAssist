@@ -42,7 +42,7 @@ public class KeywordInsertHandler extends DefaultInsertHandler {
                 } else if (isEndOfLine(line, column, editor)) {
                     textToInsert = "return ";
                 }
-                insert(textToInsert, editor);
+                super.insert(textToInsert, editor, false);
                 return;
             }
         }

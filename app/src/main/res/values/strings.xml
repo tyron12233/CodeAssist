@@ -123,6 +123,7 @@
     <string name="app_source_title">Source code</string>
     <string name="sketchub_team">Sketchub Team</string>
     <string name="community">Community</string>
+
     <!-- file manager menu -->
     <string name="error">Error</string>
     <string name="error_resource_name_restriction">Resource names must only contain lowercase a–z, 0–9 or an underscore.</string>
@@ -189,4 +190,7 @@
     <string name="menu_close_file">Close</string>
     <string name="menu_close_others">Close others</string>
     <string name="menu_close_all">Close all</string>
+
+    <!-- Editor -->
+    <string name="editor_error_file">An error has occurred while reading the file. Changes will not be saved.</string>
 </resources>

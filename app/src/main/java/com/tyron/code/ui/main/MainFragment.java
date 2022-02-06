@@ -32,6 +32,7 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.fileeditor.api.FileEditorSavedState;
 import com.tyron.code.ui.project.ProjectManager;
@@ -127,6 +128,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
         mIndexServiceConnection = new IndexServiceConnection(mMainViewModel, mLogViewModel);
         mServiceConnection = new CompilerServiceConnection(mMainViewModel, mLogViewModel);
+
+        ((FileEditorManagerImpl) FileEditorManagerImpl.getInstance()).attach(mMainViewModel);
     }
 
     @Override
