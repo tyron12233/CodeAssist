@@ -57,6 +57,12 @@ public class MethodInsertHandler extends DefaultInsertHandler {
             offset = lineString.indexOf('(', startIndex);
         } else {
             offset = lineString.indexOf(')', startIndex);
+
+            int semicolon = lineString.indexOf(';', startIndex);
+            // if the text contains semicolon and the semicolon is right next to the ')' character
+            if (semicolon == offset + 1) {
+                offset = semicolon;
+            }
         }
         if (offset != -1) {
             editor.setSelection(caret.getStartLine(), offset + 1);
