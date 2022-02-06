@@ -6,7 +6,7 @@ import com.google.common.base.Objects;
 import java.io.File;
 import java.io.Serializable;
 
-import javax.annotation.concurrent.Immutable;
+import com.google.errorprone.annotations.Immutable;
 
 @Immutable
 public final class SourceFilePosition implements Serializable {

@@ -8,7 +8,7 @@ import java.io.File;
 import java.io.Serializable;
 import java.nio.file.Paths;
 
-import javax.annotation.concurrent.Immutable;
+import com.google.errorprone.annotations.Immutable;
 
 /**
  * Represents a source file. Note: Since the same file may have different representations (eg a/b vs

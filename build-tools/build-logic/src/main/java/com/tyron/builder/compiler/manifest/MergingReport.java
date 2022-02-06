@@ -11,7 +11,7 @@ import com.tyron.builder.compiler.manifest.blame.SourceFilePosition;
 import com.tyron.builder.compiler.manifest.blame.SourcePosition;
 import com.tyron.builder.log.ILogger;
 
-import javax.annotation.concurrent.Immutable;
+import com.google.errorprone.annotations.Immutable;
 
 /**
  * Contains the result of 2 files merging.

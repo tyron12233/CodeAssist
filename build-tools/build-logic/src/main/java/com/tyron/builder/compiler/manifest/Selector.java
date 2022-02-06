@@ -6,7 +6,7 @@ import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 
 
-import javax.annotation.concurrent.Immutable;
+import com.google.errorprone.annotations.Immutable;
 
 /**
  * Represents a selector to be able to identify manifest file xml elements.
