@@ -97,6 +97,10 @@ public class SelectJavaParentAction extends AnAction {
 
     @NonNull
     private TreePath modifyTreePath(TreePath treePath) {
+        if (true) {
+            return treePath;
+        }
+
         TreePath parent = treePath.getParentPath();
 
         if (treePath.getLeaf().getKind() == Tree.Kind.BLOCK) {
