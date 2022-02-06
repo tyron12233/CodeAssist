@@ -94,7 +94,6 @@ public class StyleUtils {
 
     public static void putLayoutParams(JavaClass javaClass) {
         ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-        builder.add("ViewGroup_MarginLayout");
         try {
             JavaClass[] superClasses = javaClass.getSuperClasses();
             for (JavaClass superClass : superClasses) {
@@ -197,7 +196,7 @@ public class StyleUtils {
             return params;
         }
         params.add(map.get(simpleName));
-
+        params.add(map.get("ViewGroup_MarginLayout"));
         ImmutableSet<String> strings = sLayoutParamsMap.get(simpleName);
         if (strings != null) {
             for (String string : strings) {
