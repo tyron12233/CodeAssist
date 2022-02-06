@@ -5,6 +5,7 @@ import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
+import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.progress.ProgressManager;
@@ -18,6 +19,8 @@ import org.antlr.v4.runtime.TokenSource;
 
 import java.lang.ref.WeakReference;
 
+import io.github.rosemoe.sora.lang.styling.MappedSpans;
+import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class KotlinAnalyzer extends AbstractCodeAnalyzer<Object> {
@@ -91,6 +94,16 @@ public class KotlinAnalyzer extends AbstractCodeAnalyzer<Object> {
                     }, 1500);
                 }
             }
+        }
+    }
+
+    @Override
+    protected void afterAnalyze(CharSequence content, Styles styles, MappedSpans.Builder colors) {
+        super.afterAnalyze(content, styles, colors);
+
+        Editor editor = mEditorReference.get();
+        if (editor != null) {
+            HighlightUtil.markDiagnostics(editor, mDiagnostics, styles);
         }
     }
 

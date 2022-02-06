@@ -330,9 +330,12 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         LogViewModel logViewModel =
                 new ViewModelProvider(requireActivity()).get(LogViewModel.class);
-        mEditor.setDiagnosticsListener(diagnostics ->
-                ProgressManager.getInstance().runLater(() ->
-                        logViewModel.updateLogs(LogViewModel.DEBUG, diagnostics)));
+        mEditor.setDiagnosticsListener(diagnostics -> {
+            for (DiagnosticWrapper diagnostic : diagnostics) {
+                DiagnosticUtil.setLineAndColumn(diagnostic, mEditor);
+            }
+            ProgressManager.getInstance().runLater(() -> logViewModel.updateLogs(LogViewModel.DEBUG, diagnostics));
+        });
 
         getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
                 getViewLifecycleOwner(), ((requestKey, result) -> {

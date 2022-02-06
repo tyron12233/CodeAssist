@@ -35,14 +35,14 @@ public abstract class AbstractCodeAnalyzer<T> extends DiagnosticAnalyzeManager<T
     private StyleReceiver mReceiver;
     private Token mPreviousToken;
     private Styles mLastStyles;
-    protected final List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
+    protected List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
 
     public AbstractCodeAnalyzer() {
         setup();
     }
 
     @Override
-    public void setReceiver(@NonNull StyleReceiver receiver) {
+    public void setReceiver(@Nullable StyleReceiver receiver) {
         super.setReceiver(receiver);
 
         mReceiver = receiver;
@@ -99,8 +99,7 @@ public abstract class AbstractCodeAnalyzer<T> extends DiagnosticAnalyzeManager<T
 
     @Override
     public void setDiagnostics(Editor editor, List<DiagnosticWrapper> diagnostics) {
-        mDiagnostics.clear();
-        mDiagnostics.addAll(diagnostics);
+        mDiagnostics = diagnostics;
     }
 
     public void setup() {

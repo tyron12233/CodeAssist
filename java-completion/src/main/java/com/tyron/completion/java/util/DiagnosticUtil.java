@@ -6,6 +6,8 @@ import androidx.annotation.Nullable;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.action.FindMethodDeclarationAt;
+import com.tyron.editor.CharPosition;
+import com.tyron.editor.Editor;
 
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.TypeElement;
@@ -29,6 +31,25 @@ public class DiagnosticUtil {
 
     private static final Pattern UNREPORTED_EXCEPTION =
             Pattern.compile("unreported exception (" + "(\\w+\\.)*\\w+)");
+
+    public static void setLineAndColumn(DiagnosticWrapper diagnostic, Editor editor) {
+        try {
+            if (diagnostic.getStartLine() <= -1 && diagnostic.getStartPosition() > 0) {
+                CharPosition start = editor.getCharPosition(((int) diagnostic.getStartPosition()));
+                diagnostic.setStartLine(start.getLine() + 1);
+                diagnostic.setStartColumn(start.getColumn());
+                diagnostic.setLineNumber(start.getLine() + 1);
+                diagnostic.setColumnNumber(start.getColumn());
+            }
+            if (diagnostic.getEndLine() <= -1 && diagnostic.getEndPosition() > 0) {
+                CharPosition end = editor.getCharPosition(((int) diagnostic.getEndPosition()));
+                diagnostic.setEndLine(end.getLine() + 1);
+                diagnostic.setEndColumn(end.getColumn());
+            }
+        } catch (IndexOutOfBoundsException ignored) {
+            // unknown index, dont display line number
+        }
+    }
 
     public static class MethodPtr {
         public String className, methodName;
