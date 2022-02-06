@@ -7,9 +7,12 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.util.BinaryExecutor;
+
+import org.openjdk.javax.tools.Diagnostic;
 
 import java.io.File;
 import java.io.IOException;
@@ -52,8 +55,47 @@ public class ZipAlignTask extends Task<AndroidModule> {
         args.add(mApkFile.getParent() + "/aligned.apk");
         BinaryExecutor executor = new BinaryExecutor();
         executor.setCommands(args);
-        if (!executor.execute().isEmpty()) {
-            throw new CompilationFailedException(executor.getLog());
+
+        List<DiagnosticWrapper> wrappers = new ArrayList<>();
+        String logs = executor.execute();
+        if (!logs.isEmpty()) {
+            String[] lines = logs.split("\n");
+            if (lines.length == 0) {
+                lines = new String[]{logs};
+            }
+
+            for (String line : lines) {
+                Diagnostic.Kind kind = getKind(line);
+                if (line.contains(":")) {
+                    line = line.substring(line.indexOf(':'));
+                }
+
+                DiagnosticWrapper wrapper = new DiagnosticWrapper();
+                wrapper.setLineNumber(-1);
+                wrapper.setColumnNumber(-1);
+                wrapper.setStartPosition(-1);
+                wrapper.setEndPosition(-1);
+                wrapper.setKind(kind);
+                wrapper.setMessage(line);
+                wrappers.add(wrapper);
+            }
+        }
+
+        boolean hasErrors = wrappers.stream()
+                .anyMatch(it -> it.getKind() == Diagnostic.Kind.ERROR);
+        if (hasErrors) {
+            throw new CompilationFailedException("Check logs for more details.");
+        }
+    }
+
+    private Diagnostic.Kind getKind(String string) {
+        String trimmed = string.trim();
+        if (trimmed.startsWith("WARNING")) {
+            return Diagnostic.Kind.WARNING;
+        } else if (trimmed.startsWith("ERROR")) {
+            return Diagnostic.Kind.ERROR;
+        } else {
+            return Diagnostic.Kind.NOTE;
         }
     }
 
