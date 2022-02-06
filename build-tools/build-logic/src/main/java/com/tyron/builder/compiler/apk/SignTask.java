@@ -30,6 +30,11 @@ public class SignTask extends Task<AndroidModule> {
     public void prepare(BuildType type) throws IOException {
         mInputApk = new File(getModule().getBuildDirectory(), "bin/aligned.apk");
         mOutputApk = new File(getModule().getBuildDirectory(), "bin/signed.apk");
+
+        if (!mInputApk.exists()) {
+            mInputApk = new File(getModule().getBuildDirectory(), "bin/generated.apk");
+        }
+
         if (!mInputApk.exists()) {
             throw new IOException("Unable to find generated apk file.");
         }
