@@ -1,11 +1,14 @@
 package com.tyron.completion.java.compiler;
 
 import android.annotation.SuppressLint;
+import android.net.Uri;
 
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.util.JavacTask;
 
 
+import java.io.File;
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -35,21 +38,24 @@ public class CompileTask implements AutoCloseable {
 
     @SuppressLint("NewApi")
     public CompilationUnitTree root(Path file) {
-        for (CompilationUnitTree root : roots) {
-            if (root.getSourceFile().toUri().equals(file.toUri())) {
-                return root;
-            }
-        }
-        throw new RuntimeException("not found");
+        return root(file.toUri());
+    }
+
+    public CompilationUnitTree root(File file) {
+        return root(file.toURI());
     }
 
     public CompilationUnitTree root(JavaFileObject file) {
+        return root(file.toUri());
+    }
+
+    public CompilationUnitTree root(URI uri) {
         for (CompilationUnitTree root : roots) {
-            if (root.getSourceFile().toUri().equals(file.toUri())) {
+            if (root.getSourceFile().toUri().equals(uri)) {
                 return root;
             }
         }
-        throw new RuntimeException("not found");
+        return null;
     }
 
     @Override

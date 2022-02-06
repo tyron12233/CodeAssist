@@ -30,7 +30,7 @@ public class JavaDataContextUtil {
                 JavaCompilerService compiler = service.getCompiler(project, (JavaModule) currentModule);
 
                 compiler.getCachedContainer().run(task -> {
-                    if (task != null) {
+                    if (task != null && task.root(file) != null) {
                         FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
                         TreePath currentPath = findCurrentPath.scan(task.root(), cursor);
                         context.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
