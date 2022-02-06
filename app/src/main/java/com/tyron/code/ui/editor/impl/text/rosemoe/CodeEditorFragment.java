@@ -11,6 +11,7 @@ import android.view.inputmethod.EditorInfo;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
+import androidx.core.math.MathUtils;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
@@ -63,6 +64,7 @@ import com.tyron.completion.java.util.JavaDataContextUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.progress.ProgressManager;
+import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
 import com.tyron.fileeditor.api.FileEditorManager;
 
@@ -81,7 +83,6 @@ import io.github.rosemoe.sora.event.EventReceiver;
 import io.github.rosemoe.sora.event.LongPressEvent;
 import io.github.rosemoe.sora.event.Unsubscribe;
 import io.github.rosemoe.sora.lang.Language;
-import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.DirectAccessProps;
@@ -304,17 +305,23 @@ public class CodeEditorFragment extends Fragment implements Savable,
         });
         mEditor.subscribeEvent(LongPressEvent.class, (event, unsubscribe) -> {
             MotionEvent e = event.getCausingEvent();
-            // wait for the cursor to move
             save();
-            Cursor cursor = mEditor.getCursor();
-            if (cursor.isSelected()) {
-                int index = mEditor.getCharIndex(event.getLine(), event.getColumn());
-                if (cursor.getLeft() > index && index < cursor.getRight()) {
-                    EditorUtil.selectWord(mEditor, event.getLine(), event.getColumn());
+            // wait for the cursor to move
+            ProgressManager.getInstance().runLater(() -> {
+                Cursor cursor = mEditor.getCursor();
+                if (cursor.isSelected()) {
+                    int index = mEditor.getCharIndex(event.getLine(), event.getColumn());
+                    int cursorLeft = cursor.getLeft();
+                    int cursorRight = cursor.getRight();
+                    char c = mEditor.getText().charAt(index);
+                    if (Character.isWhitespace(c)) {
+                        mEditor.setSelection(event.getLine(), event.getColumn());
+                    } else if (index < cursorLeft || index > cursorRight) {
+                        EditorUtil.selectWord(mEditor, event.getLine(), event.getColumn());
+                    }
                 }
-            }
-            ProgressManager.getInstance().runLater(() ->
-                    event.getEditor().showContextMenu(e.getX(), e.getY()));
+                mEditor.showContextMenu(e.getX(), e.getY());
+            });
         });
         mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) ->
                 updateFile(event.getEditor().getText()));
@@ -441,7 +448,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
     }
 
     private void checkCanSave() {
-        if (mCanSave) {
+        if (!mCanSave) {
             Snackbar snackbar = Snackbar.make(mEditor, R.string.editor_error_file,
                     Snackbar.LENGTH_INDEFINITE).setAction(R.string.menu_close,
                     v -> FileEditorManagerImpl.getInstance().closeFile(mCurrentFile));

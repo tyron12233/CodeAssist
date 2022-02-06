@@ -8,6 +8,15 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class EditorUtil {
 
+    public static boolean isWhitespace(CharSequence charSequence) {
+        for (int i = 0; i < charSequence.length(); i++) {
+            char c = charSequence.charAt(i);
+            if (Character.isWhitespace(c)) {
+                return true;
+            }
+        }
+        return false;
+    }
     public static void selectWord(CodeEditor editor, int line, int column) {
         // Find word edges
         int startLine = line, endLine = line;
