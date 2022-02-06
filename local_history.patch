@@ -9025,7 +9025,7 @@ deleted file mode 100644
 -import java.io.Serializable;
 -import java.nio.file.Paths;
 -
--import javax.annotation.concurrent.Immutable;
+-import com.google.errorprone.annotations.Immutable;
 -
 -/**
 - * Represents a source file. Note: Since the same file may have different representations (eg a/b vs
@@ -9166,7 +9166,7 @@ deleted file mode 100644
 -import com.google.common.base.Objects;
 -import java.io.Serializable;
 -
--import javax.annotation.concurrent.Immutable;
+-import com.google.errorprone.annotations.Immutable;
 -
 -/**
 - * An immutable position in a text file, used in errors to point the user to an issue.
@@ -9398,7 +9398,7 @@ deleted file mode 100644
 -import java.io.File;
 -import java.io.Serializable;
 -
--import javax.annotation.concurrent.Immutable;
+-import com.google.errorprone.annotations.Immutable;
 -
 -@Immutable
 -public final class SourceFilePosition implements Serializable {
@@ -10428,7 +10428,7 @@ deleted file mode 100644
 -import java.util.Map;
 -import java.util.Set;
 -
--import javax.annotation.concurrent.Immutable;
+-import com.google.errorprone.annotations.Immutable;
 -import javax.xml.parsers.ParserConfigurationException;
 -
 -/**
@@ -11130,7 +11130,7 @@ deleted file mode 100644
 -import com.google.common.base.Preconditions;
 -
 -
--import javax.annotation.concurrent.Immutable;
+-import com.google.errorprone.annotations.Immutable;
 -
 -/**
 - * Represents a selector to be able to identify manifest file xml elements.
@@ -14846,7 +14846,7 @@ deleted file mode 100644
 -import java.util.Collections;
 -import java.util.List;
 -
--import javax.annotation.concurrent.Immutable;
+-import com.google.errorprone.annotations.Immutable;
 -
 -/**
 - * Model for the manifest file merging activities.
@@ -16452,7 +16452,7 @@ deleted file mode 100644
 -import com.tyron.build.compiler.manifest.blame.SourcePosition;
 -import com.tyron.build.log.ILogger;
 -
--import javax.annotation.concurrent.Immutable;
+-import com.google.errorprone.annotations.Immutable;
 -
 -/**
 - * Contains the result of 2 files merging.
@@ -19883,7 +19883,7 @@ deleted file mode 100644
 -import java.util.List;
 -import java.util.Map;
 -
--import javax.annotation.concurrent.Immutable;
+-import com.google.errorprone.annotations.Immutable;
 -
 -/**
 - * merges android manifest files, idempotent.
@@ -21842,7 +21842,7 @@ deleted file mode 100644
 -import java.util.ArrayList;
 -import java.util.List;
 -
--import javax.annotation.concurrent.Immutable;
+-import com.google.errorprone.annotations.Immutable;
 -
 -/**
 - * Removes all "tools:" statements from the resulting xml.

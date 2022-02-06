@@ -9,8 +9,8 @@ android {
         applicationId "com.tyron.code"
         minSdkVersion 26
         targetSdkVersion 31
-        versionCode 9
-        versionName "0.2.4.1 ALPHA"
+        versionCode 10
+        versionName "0.2.5 ALPHA"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -60,6 +60,9 @@ dependencies {
     implementation project(path: ':editor-api')
     implementation project(path: ':fileeditor-api')
 
+    // formatters
+    implementation project(path: ':google-java-format')
+
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:1.1.5")
 
     implementation 'androidx.appcompat:appcompat:1.4.0'
@@ -86,7 +89,6 @@ dependencies {
 
 
     implementation files (
-        'libs/google-java-format-1.7.jar',
         'libs/language-base-0.5.0.jar',
         'libs/language-java-0.5.0.jar'
     )

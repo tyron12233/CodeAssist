@@ -5,7 +5,7 @@ import androidx.annotation.NonNull;
 import com.google.common.base.Objects;
 import java.io.Serializable;
 
-import javax.annotation.concurrent.Immutable;
+import com.google.errorprone.annotations.Immutable;
 
 /**
  * An immutable position in a text file, used in errors to point the user to an issue.

@@ -1,6 +1,6 @@
 package com.tyron.builder.api.internal.typeconversion;
 
-import javax.annotation.Nullable;
+import org.openjdk.javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Formatter;
