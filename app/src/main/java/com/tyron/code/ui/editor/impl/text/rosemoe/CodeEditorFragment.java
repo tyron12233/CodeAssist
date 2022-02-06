@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.core.math.MathUtils;
 import androidx.fragment.app.Fragment;
@@ -271,11 +272,11 @@ public class CodeEditorFragment extends Fragment implements Savable,
     }
 
     @Override
-    public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
         Project currentProject = ProjectManager.getInstance().getCurrentProject();
-        readFile(currentProject);
+        readFile(currentProject, savedInstanceState);
 
         mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
             menu.clear();
@@ -339,10 +340,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     XmlFormatStyle.LAYOUT, "\n");
             mEditor.setText(xml);
         }));
-
-        if (savedInstanceState != null) {
-            restoreState(savedInstanceState);
-        }
     }
 
     @Override
@@ -415,7 +412,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
-    private void readFile(Project currentProject) {
+    private void readFile(Project currentProject, @Nullable Bundle savedInstanceState) {
         ProgressManager.getInstance().runNonCancelableAsync(() -> {
             Module module;
             if (currentProject != null) {
@@ -440,6 +437,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 ProgressManager.getInstance().runLater(() -> {
                     checkCanSave();
                     mEditor.setText(finalText);
+
+                    if (savedInstanceState != null) {
+                        restoreState(savedInstanceState);
+                    }
                 });
             } else {
                 mCanSave = false;
