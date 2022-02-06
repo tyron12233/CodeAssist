@@ -275,7 +275,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         Project currentProject = ProjectManager.getInstance().getCurrentProject();
         readFile(currentProject);
-        checkCanSave();
 
         mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
             menu.clear();
@@ -431,7 +430,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 }
 
                 String finalText = text;
-                ProgressManager.getInstance().runLater(() -> mEditor.setText(finalText));
+                ProgressManager.getInstance().runLater(() -> {
+                    checkCanSave();
+                    mEditor.setText(finalText);
+                });
             } else {
                 mCanSave = false;
             }
@@ -444,7 +446,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     Snackbar.LENGTH_INDEFINITE).setAction(R.string.menu_close,
                     v -> FileEditorManagerImpl.getInstance().closeFile(mCurrentFile));
             ViewGroup snackbarView = (ViewGroup) snackbar.getView();
-            AndroidUtilities.setMargins(snackbarView.getChildAt(0),
+            AndroidUtilities.setMargins(snackbarView,
                     0, 0, 0,50);
             snackbar.show();
         }

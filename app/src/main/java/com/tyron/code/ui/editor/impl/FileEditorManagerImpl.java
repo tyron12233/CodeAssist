@@ -6,6 +6,8 @@ import androidx.annotation.NonNull;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.code.R;
+import com.tyron.code.ui.main.MainViewModel;
+import com.tyron.common.ApplicationProvider;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.fileeditor.api.FileEditorManager;
 import com.tyron.fileeditor.api.FileEditorProvider;
@@ -25,9 +27,51 @@ public class FileEditorManagerImpl extends FileEditorManager {
         return sInstance;
     }
 
+    private MainViewModel mViewModel;
+
+    FileEditorManagerImpl() {
+
+    }
+
+    public void attach(MainViewModel mainViewModel) {
+        mViewModel = mainViewModel;
+    }
+
     @Override
     public void openFile(@NonNull Context context, File file, Consumer<FileEditor> callback) {
+        checkAttached();
+
         FileEditor[] fileEditors = openFile(file, true);
+        openChooser(context, fileEditors, callback);
+    }
+
+    @NonNull
+    @Override
+    public FileEditor[] openFile(@NonNull File file, boolean focus) {
+        checkAttached();
+
+        FileEditor[] editors;
+        FileEditorProvider[] providers = FileEditorProviderManagerImpl.getInstance().getProviders(file);
+        editors = new FileEditor[providers.length];
+        for (int i = 0; i < providers.length; i++) {
+            FileEditor editor = providers[i].createEditor(file);
+            editors[i] = editor;
+        }
+
+        openChooser(editors, mViewModel::openFile);
+        return editors;
+    }
+
+    @Override
+    public void closeFile(@NonNull File file) {
+        mViewModel.removeFile(file);
+    }
+
+    private void openChooser(FileEditor[] fileEditors, Consumer<FileEditor> callback) {
+        openChooser(ApplicationProvider.getApplicationContext(), fileEditors, callback);
+    }
+
+    private void openChooser(Context context, FileEditor[] fileEditors, Consumer<FileEditor> callback) {
         if (fileEditors.length == 0) {
             return;
         }
@@ -46,25 +90,9 @@ public class FileEditorManagerImpl extends FileEditorManager {
         }
     }
 
-    public FileEditorManagerImpl() {
-
-    }
-
-    @NonNull
-    @Override
-    public FileEditor[] openFile(@NonNull File file, boolean focus) {
-        FileEditor[] editors;
-        FileEditorProvider[] providers = FileEditorProviderManagerImpl.getInstance().getProviders(file);
-        editors = new FileEditor[providers.length];
-        for (int i = 0; i < providers.length; i++) {
-            FileEditor editor = providers[i].createEditor(file);
-            editors[i] = editor;
+    private void checkAttached() {
+        if (mViewModel == null) {
+            throw new IllegalStateException("File editor manager is not yet attached to a ViewModel");
         }
-        return editors;
-    }
-
-    @Override
-    public void closeFile(@NonNull File file) {
-
     }
 }
