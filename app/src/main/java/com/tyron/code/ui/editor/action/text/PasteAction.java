@@ -6,6 +6,7 @@ import androidx.core.content.res.ResourcesCompat;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
+import com.tyron.actions.Presentation;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
@@ -16,15 +17,15 @@ public class PasteAction extends CopyAction {
     public void update(@NonNull AnActionEvent event) {
         super.update(event);
 
-        if (AndroidUtilities.getPrimaryClip() == null) {
-            event.getPresentation().setVisible(false);
-            return;
+        Presentation presentation = event.getPresentation();
+        if (!presentation.isVisible() && AndroidUtilities.getPrimaryClip() != null) {
+            presentation.setVisible(true);
         }
 
-        if (event.getPresentation().isVisible()) {
+        if (presentation.isVisible()) {
             DataContext context = event.getDataContext();
-            event.getPresentation().setText(context.getString(io.github.rosemoe.sora2.R.string.paste));
-            event.getPresentation().setIcon(ResourcesCompat.getDrawable(context.getResources(),
+            presentation.setText(context.getString(io.github.rosemoe.sora2.R.string.paste));
+            presentation.setIcon(ResourcesCompat.getDrawable(context.getResources(),
                     io.github.rosemoe.sora2.R.drawable.round_content_paste_20, context.getTheme()));
         }
     }
