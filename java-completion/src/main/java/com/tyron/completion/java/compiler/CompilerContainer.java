@@ -70,6 +70,10 @@ public class CompilerContainer {
         }
     }
 
+    public boolean isWriting() {
+        return mIsWriting;
+    }
+
     void initialize(Runnable runnable) {
         synchronized (mLock) {
             assertIsNotReader();

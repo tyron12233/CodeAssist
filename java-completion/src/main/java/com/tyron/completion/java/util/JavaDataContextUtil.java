@@ -13,6 +13,7 @@ import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
 import com.tyron.completion.java.action.FindCurrentPath;
+import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 
 import org.openjdk.source.tree.CompilationUnitTree;
@@ -30,16 +31,20 @@ public class JavaDataContextUtil {
                 JavaCompilerProvider service = CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
                 JavaCompilerService compiler = service.getCompiler(project, (JavaModule) currentModule);
 
-                compiler.getCachedContainer().run(task -> {
-                    if (task != null) {
-                        CompilationUnitTree root = task.root(file);
-                        if (root != null) {
-                            FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
-                            TreePath currentPath = findCurrentPath.scan(root, cursor);
-                            context.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
+                CompilerContainer cachedContainer = compiler.getCachedContainer();
+                // don't block the ui thread
+                if (!cachedContainer.isWriting()) {
+                    cachedContainer.run(task -> {
+                        if (task != null) {
+                            CompilationUnitTree root = task.root(file);
+                            if (root != null) {
+                                FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
+                                TreePath currentPath = findCurrentPath.scan(root, cursor);
+                                context.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
+                            }
                         }
-                    }
-                });
+                    });
+                }
                 context.putData(CommonJavaContextKeys.COMPILER, compiler);
             }
         }
