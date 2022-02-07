@@ -199,7 +199,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
             repository.setCacheDirectory(cacheDir);
 
             File rootDirectory = repository.getRootDirectory();
-            if (!rootDirectory.exists()) {
+            if (rootDirectory == null || !rootDirectory.exists()) {
                 continue;
             }
             Iterator<File> pomFiles = FileUtils.iterateFiles(rootDirectory,

@@ -34,7 +34,12 @@ public interface Repository {
     @NonNull
     File getCacheDirectory();
 
+    @Nullable
     default File getRootDirectory() {
+        String name = getName();
+        if (name == null) {
+            return null;
+        }
         return new File(getCacheDirectory(), getName());
     }
 }
