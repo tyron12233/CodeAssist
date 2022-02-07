@@ -159,8 +159,12 @@ public class CodeEditorView extends CodeEditor implements Editor {
             if (startIndex - 1 >= 0) {
                 char deleteChar = text.charAt(startIndex - 1);
                 char afterChar = text.charAt(startIndex);
-                SymbolPairMatch.Replacement replacement =
-                        getEditorLanguage().getSymbolPairs().getCompletion(deleteChar);
+                SymbolPairMatch.Replacement replacement = null;
+
+                SymbolPairMatch pairs = getEditorLanguage().getSymbolPairs();
+                if (pairs != null) {
+                    replacement = pairs.getCompletion(deleteChar);
+                }
                 if (replacement != null) {
                     if (("" + deleteChar + afterChar + "").equals(replacement.text)) {
                         text.delete(startIndex - 1, startIndex + 1);
