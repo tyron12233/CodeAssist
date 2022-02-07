@@ -11,6 +11,7 @@ import android.view.inputmethod.EditorInfo;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.core.math.MathUtils;
 import androidx.fragment.app.Fragment;
@@ -19,6 +20,10 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.snackbar.Snackbar;
+import com.google.common.util.concurrent.AsyncCallable;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
@@ -30,6 +35,7 @@ import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.listener.FileListener;
@@ -79,6 +85,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.EventReceiver;
@@ -97,7 +104,8 @@ import io.github.rosemoe.sora2.text.EditorUtil;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class CodeEditorFragment extends Fragment implements Savable,
-        SharedPreferences.OnSharedPreferenceChangeListener, FileListener {
+        SharedPreferences.OnSharedPreferenceChangeListener, FileListener,
+        ProjectManager.OnProjectOpenListener {
 
     private static final String EDITOR_LEFT_LINE_KEY = "line";
     private static final String EDITOR_LEFT_COLUMN_KEY = "column";
@@ -249,15 +257,17 @@ public class CodeEditorFragment extends Fragment implements Savable,
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        Project currentProject = ProjectManager.getInstance().getCurrentProject();
-        Module module = currentProject.getModule(mCurrentFile);
-        if (module != null) {
-            module.getFileManager().addSnapshotListener(this);
+        Project project = ProjectManager.getInstance().getCurrentProject();
+        if (project != null) {
+            readFile(project);
+        } else {
+            ProjectManager.getInstance().addOnProjectOpenListener(this);
         }
-        readFile(currentProject, savedInstanceState);
 
         mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
             menu.clear();
+
+            Project currentProject = ProjectManager.getInstance().getCurrentProject();
 
             DataContext dataContext = DataContextUtils.getDataContext(view1);
             dataContext.putData(CommonDataKeys.PROJECT, currentProject);
@@ -418,50 +428,39 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
-    private void readFile(Project currentProject, @Nullable Bundle savedInstanceState) {
-        ProgressManager.getInstance().runNonCancelableAsync(() -> {
-            mReading = true;
-            mEditor.setBackgroundAnalysisEnabled(false);
-            try {
-                Module module;
-                if (currentProject != null) {
-                    module = currentProject.getModule(mCurrentFile);
-                } else {
-                    module = null;
-                }
-                if (mCurrentFile.exists()) {
-                    String text;
-                    try {
-                        text = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
-                        mCanSave = true;
-                    } catch (IOException e) {
-                        text = "File does not exist: " + e.getMessage();
-                        mCanSave = false;
-                    }
+    private ListenableFuture<String> readFile() {
+        return ProgressManager.getInstance().computeNonCancelableAsync(() ->
+                Futures.immediateFuture(FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8)));
+    }
 
-                    String finalText = text;
-                    ProgressManager.getInstance().runLater(() -> {
-                        checkCanSave();
-                        if (module != null) {
-                            module.getFileManager().openFileForSnapshot(mCurrentFile, finalText);
-                        } else {
-                            mCanSave = false;
-                        }
-                        mEditor.setText(finalText);
-                        if (savedInstanceState != null) {
-                            restoreState(savedInstanceState);
-                        }
-                    });
-                } else {
-                    mCanSave = false;
-                }
-            } finally {
+    @Override
+    public void onProjectOpen(Project project) {
+        readFile(project);
+    }
+
+    private void readFile(@NonNull Project currentProject) {
+        Module module = currentProject.getModule(mCurrentFile);
+        FileManager fileManager = module.getFileManager();
+        fileManager.addSnapshotListener(this);
+
+        mReading = true;
+        ListenableFuture<String> future = readFile();
+        Futures.addCallback(future, new FutureCallback<String>() {
+            @Override
+            public void onSuccess(@NonNull String result) {
+                mCanSave = true;
                 mReading = false;
-                if (mEditor != null) {
-                    mEditor.setBackgroundAnalysisEnabled(true);
-                }
+                fileManager.openFileForSnapshot(mCurrentFile, result);
+                mEditor.setText(result);
             }
-        });
+
+            @Override
+            public void onFailure(Throwable t) {
+                mCanSave = false;
+                mReading = false;
+                checkCanSave();
+            }
+        }, ContextCompat.getMainExecutor(requireContext()));
     }
 
     private void checkCanSave() {
