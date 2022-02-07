@@ -133,13 +133,7 @@ public class ProjectManager {
             try {
                 JavaCompilerProvider provider = CompilerService.getInstance()
                         .getIndex(JavaCompilerProvider.KEY);
-                JavaCompilerService service = provider.get(project, (JavaModule) module);
-                ((JavaModule) module).getJavaFiles().forEach((key, value) -> {
-                    CompilerContainer container = service.compile(value.toPath());
-                    container.run(__ -> {
-
-                    });
-                });
+                provider.get(project, module);
             } catch (Throwable e) {
                 String message = "Failure indexing project.\n" +
                         Throwables.getStackTraceAsString(e);
