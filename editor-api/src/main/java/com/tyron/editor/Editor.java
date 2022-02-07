@@ -15,6 +15,8 @@ public interface Editor {
 
     void setDiagnostics(List<DiagnosticWrapper> diagnostics);
 
+    boolean isBackgroundAnalysisEnabled();
+
     /**
      * Get the current file opened in the editor
      * @return the file opened in the editor

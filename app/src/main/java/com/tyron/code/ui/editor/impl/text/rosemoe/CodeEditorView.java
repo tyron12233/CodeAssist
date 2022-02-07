@@ -1,7 +1,10 @@
 package com.tyron.code.ui.editor.impl.text.rosemoe;
 
 import android.content.Context;
+import android.os.Bundle;
 import android.util.AttributeSet;
+
+import androidx.annotation.Nullable;
 
 import com.google.common.collect.ImmutableSet;
 import com.tyron.actions.DataContext;
@@ -267,7 +270,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
         //noinspection ConstantConditions
         if (getEditorLanguage() != null) {
             AnalyzeManager analyzeManager = getEditorLanguage().getAnalyzeManager();
-            if (mIsBackgroundAnalysisEnabled) {
+            if (isBackgroundAnalysisEnabled()) {
                 analyzeManager.rerun();
             } else {
                 if (analyzeManager instanceof DiagnosticAnalyzeManager) {
@@ -277,6 +280,11 @@ public class CodeEditorView extends CodeEditor implements Editor {
                 }
             }
         }
+    }
+
+    @Override
+    public boolean isBackgroundAnalysisEnabled() {
+        return mIsBackgroundAnalysisEnabled;
     }
 
     public void setAnalyzing(boolean analyzing) {
