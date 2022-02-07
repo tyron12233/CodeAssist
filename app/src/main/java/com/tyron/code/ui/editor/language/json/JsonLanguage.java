@@ -61,10 +61,11 @@ public class JsonLanguage implements Language {
 
     @Override
     public int getIndentAdvance(@NonNull ContentReference content, int line, int column) {
-        return getIndentAdvance(String.valueOf(content.getReference()), line, column);
+        String text = content.getLine(line).substring(0, column);
+        return getIndentAdvance(text);
     }
 
-    private int getIndentAdvance(String content, int line, int column) {
+    private int getIndentAdvance(String content) {
         JSONLexer lexer = new JSONLexer(CharStreams.fromString(content));
         Token token;
         int advance = 0;
@@ -130,8 +131,8 @@ public class JsonLanguage implements Language {
         @Override
         public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
             int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            int advanceBefore = getIndentAdvance(beforeText, -1, -1);
-            int advanceAfter = getIndentAdvance(afterText, -1, -1);
+            int advanceBefore = getIndentAdvance(beforeText);
+            int advanceAfter = getIndentAdvance(afterText);
             String text;
             StringBuilder sb = new StringBuilder("\n")
                     .append(TextUtils.createIndent(count + advanceBefore, tabSize, useTab()))
