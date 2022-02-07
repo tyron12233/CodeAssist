@@ -122,8 +122,14 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                                 File gradleFile = new File(rootFile, "build.gradle");
                                 if (gradleFile.exists()) {
                                     try {
-                                        List<Dependency> poms = DependencyUtils.parseGradle(mRepositoryManager,
-                                                gradleFile, ILogger.EMPTY);
+                                        List<Dependency> poms;
+                                        if (mainModule.getFileManager().isOpened(gradleFile) && mainModule.getFileManager().getFileContent(gradleFile).isPresent()) {
+                                            poms = DependencyUtils.parseGradle(mRepositoryManager,
+                                                    mainModule.getFileManager().getFileContent(gradleFile).toString(),
+                                                    ILogger.EMPTY);
+                                        } else {
+                                            poms = DependencyUtils.parseGradle(mRepositoryManager, gradleFile, ILogger.EMPTY);
+                                        }
                                         List<Dependency> data = new ArrayList<>(mAdapter.getData());
                                         poms.forEach(dependency -> {
                                             if (!data.contains(dependency)) {
