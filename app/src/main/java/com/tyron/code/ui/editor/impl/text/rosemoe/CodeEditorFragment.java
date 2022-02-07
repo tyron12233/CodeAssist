@@ -345,6 +345,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 module.getFileManager().removeSnapshotListener(this);
             }
         }
+
+        ProjectManager.getInstance().removeOnProjectOpenListener(this);
     }
 
     @Override
@@ -403,6 +405,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
             return;
         }
         if (mCurrentFile.exists()) {
+            final Content content = mEditor.getText();
             ProgressManager.getInstance().runNonCancelableAsync(() -> {
                 mReading = true;
                 try {
@@ -417,7 +420,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     }
 
                     try {
-                        FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(), StandardCharsets.UTF_8);
+                        FileUtils.writeStringToFile(mCurrentFile, content.toString(), StandardCharsets.UTF_8);
                     } catch (IOException e) {
                         // ignored
                     }
@@ -428,14 +431,14 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
-    private ListenableFuture<String> readFile() {
-        return ProgressManager.getInstance().computeNonCancelableAsync(() ->
-                Futures.immediateFuture(FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8)));
-    }
-
     @Override
     public void onProjectOpen(Project project) {
         readFile(project);
+    }
+
+    private ListenableFuture<String> readFile() {
+        return ProgressManager.getInstance().computeNonCancelableAsync(() ->
+                Futures.immediateFuture(FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8)));
     }
 
     private void readFile(@NonNull Project currentProject) {
