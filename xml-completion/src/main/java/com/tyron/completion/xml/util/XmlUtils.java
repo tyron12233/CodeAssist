@@ -8,6 +8,7 @@ import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.XmlCharacter;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.lexer.XMLLexer;
@@ -148,9 +149,9 @@ public class XmlUtils {
         int previousDepth = 0;
         String tag = null;
         do {
+            ProgressManager.checkCanceled();
             try {
                 parser.next();
-
             } catch (IOException | XmlPullParserException e) {
                 System.out.println(e);
                 // continue
