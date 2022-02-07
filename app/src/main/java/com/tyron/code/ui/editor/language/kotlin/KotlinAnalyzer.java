@@ -89,8 +89,15 @@ public class KotlinAnalyzer extends AbstractCodeAnalyzer<Object> {
                 if (ApplicationLoader.getDefaultPreferences()
                         .getBoolean(SharedPreferenceKeys.KOTLIN_HIGHLIGHTING, true)) {
                     ProgressManager.getInstance().runLater(() -> {
+
+                        editor.setAnalyzing(true);
+
                         CompletionEngine.getInstance((AndroidModule) module)
-                                .doLint(editor.getCurrentFile(), content.toString(), editor::setDiagnostics);
+                                .doLint(editor.getCurrentFile(), content.toString(), diagnostics -> {
+                                    editor.setDiagnostics(diagnostics);
+
+                                    ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(false), 300);
+                                });
                     }, 1500);
                 }
             }

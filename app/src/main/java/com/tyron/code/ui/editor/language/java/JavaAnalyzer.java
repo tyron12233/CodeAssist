@@ -10,6 +10,7 @@ import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.BuildConfig;
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
 import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.code.ui.editor.language.kotlin.KotlinLexer;
@@ -24,6 +25,7 @@ import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.java.util.ErrorCodes;
 import com.tyron.completion.java.util.TreeUtil;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStream;
@@ -98,6 +100,7 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
 
     @Override
     public void analyzeInBackground(CharSequence contents) {
+        sDebouncer.cancel();
         sDebouncer.schedule(cancel -> {
             doAnalyzeInBackground(cancel, contents);
             return Unit.INSTANCE;
@@ -128,6 +131,9 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
         if (cancel.invoke()) {
             return;
         }
+
+        ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(true));
+
         // do not compile the file if it not yet closed as it will cause issues when
         // compiling multiple files at the same time
         if (mPreferences.getBoolean(SharedPreferenceKeys.JAVA_ERROR_HIGHLIGHTING, true)) {
@@ -146,6 +152,8 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
                                             .map(d -> modifyDiagnostic(task, d))
                                             .collect(Collectors.toList());
                             editor.setDiagnostics(collect);
+
+                            ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(false), 300);
                         }
                     });
                 } catch (Throwable e) {

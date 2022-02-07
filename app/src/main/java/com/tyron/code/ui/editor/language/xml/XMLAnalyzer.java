@@ -82,6 +82,8 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
 
         List<DiagnosticWrapper> diagnosticWrappers = new ArrayList<>();
 
+        ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(true));
+
         sDebouncer.cancel();
         sDebouncer.schedule(cancel -> {
             compile(currentFile, contents.toString(), new ILogger() {
@@ -117,6 +119,7 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
                     editor.setDiagnostics(diagnosticWrappers.stream()
                             .filter(it -> it.getLineNumber() > 0)
                             .collect(Collectors.toList()));
+                    ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(false), 300);
                 });
             }
             return Unit.INSTANCE;

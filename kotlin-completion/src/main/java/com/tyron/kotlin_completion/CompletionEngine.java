@@ -218,6 +218,7 @@ public class CompletionEngine {
     }
 
     public void doLint(File file, String contents, LintCallback callback) {
+        debounceLint.cancel();
         debounceLint.schedule(cancel -> {
             doLint(file, contents, cancel, callback);
             return Unit.INSTANCE;

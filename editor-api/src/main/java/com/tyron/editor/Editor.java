@@ -131,4 +131,10 @@ public interface Editor {
     void moveSelectionLeft();
 
     void moveSelectionRight();
+
+    /**
+     * Notify the editor to show a progress that it is analyzing in background
+     * @param analyzing whether to show the progress bar.
+     */
+    void setAnalyzing(boolean analyzing);
 }
