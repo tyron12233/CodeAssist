@@ -24,6 +24,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.transition.MaterialFade;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
@@ -197,6 +198,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                 for (Repository repository : repositories) {
                     mRepositoryManager.addRepository(repository);
                 }
+                mRepositoryManager.setCacheDirectory(requireContext().getExternalFilesDir("cache"));
                 mRepositoryManager.initialize();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -324,11 +326,17 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
             return Collections.emptyList();
         }
         String contents;
-        try {
-            contents = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            contents = "";
+        Module module = getContainingModule(file);
+        if (module != null && module.getFileManager().isOpened(file) && module.getFileManager().getFileContent(file).isPresent()) {
+            contents = module.getFileManager().getFileContent(file).get().toString();
+        } else {
+            try {
+                contents = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                contents = "";
+            }
         }
+
         if (contents.isEmpty()) {
             return Collections.emptyList();
         }
@@ -340,14 +348,31 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
     }
 
     private Future<Boolean> save(File file, List<Dependency> dependencies) {
-        String jsonString = new Gson().toJson(dependencies, TYPE);
+        String jsonString = new GsonBuilder()
+                .setPrettyPrinting()
+                .create()
+                .toJson(dependencies, TYPE);
         return CompletableFuture.supplyAsync(() -> {
             try {
-                FileUtils.writeStringToFile(file, jsonString, StandardCharsets.UTF_8);
+                Module module = getContainingModule(file);
+                if (module != null && module.getFileManager().isOpened(file)) {
+                    module.getFileManager().setSnapshotContent(file, jsonString);
+                } else {
+                    FileUtils.writeStringToFile(file, jsonString, StandardCharsets.UTF_8);
+                }
                 return true;
             } catch (IOException e) {
                 return false;
             }
         });
+    }
+
+    @Nullable
+    private Module getContainingModule(@NonNull File file) {
+        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+        if (currentProject == null) {
+            return null;
+        }
+        return currentProject.getModule(file);
     }
 }

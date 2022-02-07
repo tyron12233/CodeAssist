@@ -65,6 +65,9 @@ public class DependencyManager {
         List<RepositoryModel> repositoryModels = parseFile(repositoriesFile);
         List<Repository> repositories = new ArrayList<>();
         for (RepositoryModel model : repositoryModels) {
+            if (model.getName() == null) {
+                continue;
+            }
             if (model.getUrl() == null) {
                 repositories.add(new LocalRepository(model.getName()));
             } else {

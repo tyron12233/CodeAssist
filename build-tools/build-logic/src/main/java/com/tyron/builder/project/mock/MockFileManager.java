@@ -1,6 +1,7 @@
 package com.tyron.builder.project.mock;
 
 import com.tyron.builder.project.api.FileManager;
+import com.tyron.builder.project.listener.FileListener;
 
 import org.apache.commons.io.FileUtils;
 
@@ -26,8 +27,18 @@ public class MockFileManager implements FileManager {
     }
 
     @Override
+    public boolean isOpened(File file) {
+        return mSnapshots.containsKey(file);
+    }
+
+    @Override
     public void openFileForSnapshot(File file, String content) {
         mSnapshots.put(file, content);
+    }
+
+    @Override
+    public void setSnapshotContent(File file, String content, boolean notify) {
+
     }
 
     @Override
@@ -38,6 +49,16 @@ public class MockFileManager implements FileManager {
     @Override
     public void closeFileForSnapshot(File file) {
         mSnapshots.remove(file);
+    }
+
+    @Override
+    public void addSnapshotListener(FileListener listener) {
+
+    }
+
+    @Override
+    public void removeSnapshotListener(FileListener listener) {
+
     }
 
     @Override
