@@ -447,12 +447,14 @@ public class CodeEditorFragment extends Fragment implements Savable,
         fileManager.addSnapshotListener(this);
 
         mReading = true;
+        mEditor.setBackgroundAnalysisEnabled(false);
         ListenableFuture<String> future = readFile();
         Futures.addCallback(future, new FutureCallback<String>() {
             @Override
             public void onSuccess(@NonNull String result) {
                 mCanSave = true;
                 mReading = false;
+                mEditor.setBackgroundAnalysisEnabled(true);
                 fileManager.openFileForSnapshot(mCurrentFile, result);
                 mEditor.setText(result);
             }
