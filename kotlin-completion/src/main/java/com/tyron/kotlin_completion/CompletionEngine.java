@@ -227,17 +227,23 @@ public class CompletionEngine {
 
     public void doLint(File file, String contents, Function0<Boolean> cancelCallback,
                        LintCallback callback) {
+        if (cancelCallback.invoke()) {
+            return;
+        }
+
         sp.put(file, contents, false);
         BindingContext context = sp.compileFiles(Collections.singletonList(file));
-        if (!cancelCallback.invoke()) {
-            List<DiagnosticWrapper> diagnosticWrappers = new ArrayList<>();
-            Diagnostics diagnostics = context.getDiagnostics();
-            for (Diagnostic it : diagnostics) {
-                diagnosticWrappers.addAll(ConvertDiagnosticKt.convertDiagnostic(it));
-            }
-            lintCount++;
-            callback.onLint(diagnosticWrappers);
+        if (cancelCallback.invoke()) {
+           return;
         }
+
+        List<DiagnosticWrapper> diagnosticWrappers = new ArrayList<>();
+        Diagnostics diagnostics = context.getDiagnostics();
+        for (Diagnostic it : diagnostics) {
+            diagnosticWrappers.addAll(ConvertDiagnosticKt.convertDiagnostic(it));
+        }
+        lintCount++;
+        callback.onLint(diagnosticWrappers);
     }
 
     public List<DiagnosticWrapper> doLint(Function0<Boolean> cancelCallback) {
