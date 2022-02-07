@@ -380,8 +380,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     @Override
     public void onSnapshotChanged(File file, CharSequence contents) {
-        if (mEditor != null) {
-            mEditor.setText(contents);
+        if (mCurrentFile.equals(file)) {
+            if (mEditor != null) {
+                mEditor.setText(contents);
+            }
         }
     }
 
