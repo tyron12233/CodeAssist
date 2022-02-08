@@ -9,6 +9,7 @@ import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.Presentation;
+import com.tyron.code.R;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
@@ -48,6 +49,7 @@ public class CopyAction extends AnAction {
         Caret caret = editor.getCaret();
         CharSequence textToCopy = editor.getContent().subSequence(caret.getStart(),
                 caret.getEnd());
-        AndroidUtilities.copyToClipboard(textToCopy.toString(), true);
+        AndroidUtilities.copyToClipboard(textToCopy.toString(), false);
+        AndroidUtilities.showToast(R.string.copied_to_clipoard);
     }
 }

@@ -33,6 +33,10 @@ public class AndroidUtilities {
 	public static void showToast(String message) {
 		Toast.makeText(ApplicationProvider.getApplicationContext(), message, Toast.LENGTH_LONG).show();
 	}
+
+	public static void showToast(@StringRes int id) {
+		Toast.makeText(ApplicationProvider.getApplicationContext(), id, Toast.LENGTH_SHORT).show();
+	}
     
     public static int dp(float px) {
         return Math.round(ApplicationProvider.getApplicationContext()
