@@ -238,7 +238,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
     private void configure(DirectAccessProps props) {
         props.overScrollEnabled = false;
         props.allowFullscreen = false;
-        props.deleteEmptyLineFast = false;
+        props.deleteEmptyLineFast = mPreferences.getBoolean(SharedPreferenceKeys.DELETE_WHITESPACES, false);
     }
 
 
@@ -260,6 +260,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 break;
             case SharedPreferenceKeys.EDITOR_WORDWRAP:
                 mEditor.setWordwrap(pref.getBoolean(key, false));
+                break;
+            case SharedPreferenceKeys.DELETE_WHITESPACES:
+                mEditor.getProps().deleteEmptyLineFast = pref.getBoolean(SharedPreferenceKeys.DELETE_WHITESPACES, false);
                 break;
         }
     }

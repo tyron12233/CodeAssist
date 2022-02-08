@@ -75,6 +75,12 @@
             app:defaultValue="false"
             app:title="@string/editor_settings_wordwrap"
             app:key="editor_wordwrap" />
+
+        <SwitchPreference
+            app:iconSpaceReserved="false"
+            app:defaultValue="false"
+            app:title="@string/editor_delete_whitespaces"
+            app:key="editor_delete_whitespaces"/>
     </PreferenceCategory>
 
     <PreferenceCategory

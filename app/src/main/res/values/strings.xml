@@ -86,6 +86,7 @@
 
     <string name="editor_settings_title">Code Editor settings</string>
     <string name="editor_settings_wordwrap">Word wrap mode</string>
+    <string name="editor_delete_whitespaces">Auto delete whitespace</string>
     <string name="font_size_title">Font size</string>
     <string name="font_size_message">Set editor font size</string>
     <string name="font_size_summary">Specify the default font size of the editor</string>
