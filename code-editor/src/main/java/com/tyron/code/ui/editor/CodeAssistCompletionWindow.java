@@ -1,6 +1,7 @@
 package com.tyron.code.ui.editor;
 
 import android.util.Log;
+import android.view.ViewTreeObserver;
 import android.widget.AdapterView;
 import android.widget.ListAdapter;
 import android.widget.ListView;
@@ -50,6 +51,9 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
 
         mLayout = layout;
         mListView = (ListView) layout.getCompletionList();
+        mListView.getViewTreeObserver().addOnTouchModeChangeListener(b -> {
+            mAdapter.notifyDataSetChanged();
+        });
     }
 
     @Override
@@ -128,6 +132,7 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
         if (!mAdapter.equals(mListView.getAdapter())) {
             mListView.setAdapter(mAdapter);
         }
+
         mThread = new CompletionThread(mRequestTime, publisher);
         setLoading(true);
         mThread.start();

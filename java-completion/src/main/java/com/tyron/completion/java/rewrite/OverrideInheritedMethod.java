@@ -21,6 +21,7 @@ import org.openjdk.javax.lang.model.type.ExecutableType;
 import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
@@ -66,17 +67,23 @@ public class OverrideInheritedMethod implements JavaRewrite {
             ExecutableElement superMethod = FindHelper.findMethod(task, superClassName,
                     methodName, erasedParameterTypes);
             if (superMethod == null) {
-                return null;
+                return CANCELLED;
             }
 
-            ClassTree thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(),
+            CompilationUnitTree root = task.root(file);
+            if (root == null) {
+                return CANCELLED;
+            }
+
+            ClassTree thisTree = new FindTypeDeclarationAt(task.task).scan(root,
                     (long) insertPosition);
-            TreePath thisPath = trees.getPath(task.root(), thisTree);
+            TreePath thisPath = trees.getPath(root, thisTree);
+
             TypeElement thisClass = (TypeElement) trees.getElement(thisPath);
             ExecutableType parameterizedType =
                     (ExecutableType) types.asMemberOf((DeclaredType) thisClass.asType(),
                             superMethod);
-            int indent = EditHelper.indent(task.task, task.root(), thisTree) + 1;
+            int indent = EditHelper.indent(task.task, root, thisTree) + 1;
 
             Set<String> typesToImport = ActionUtil.getTypesToImport(parameterizedType);
 
@@ -101,7 +108,7 @@ public class OverrideInheritedMethod implements JavaRewrite {
             edits.add(new TextEdit(new Range(insertPoint, insertPoint), text));
 
             for (String s : typesToImport) {
-                if (!ActionUtil.hasImport(task.root(), s)) {
+                if (!ActionUtil.hasImport(root, s)) {
                     JavaRewrite addImport = new AddImport(file.toFile(), s);
                     Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
                     TextEdit[] textEdits = rewrite.get(file);

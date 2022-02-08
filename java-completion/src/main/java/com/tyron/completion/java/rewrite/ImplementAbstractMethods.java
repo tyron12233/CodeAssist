@@ -27,6 +27,7 @@ import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.javax.lang.model.util.Types;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.util.TreePath;
@@ -103,7 +104,12 @@ public class ImplementAbstractMethods implements JavaRewrite {
         if (thisTree == null) {
             thisTree = trees.getTree(thisClass);
         }
-        TreePath path = trees.getPath(task.root(), thisTree);
+        CompilationUnitTree root = task.root(file);
+        if (root == null) {
+            return CANCELLED;
+        }
+
+        TreePath path = trees.getPath(root, thisTree);
         Element element = trees.getElement(path);
         DeclaredType thisType = (DeclaredType) element.asType();
 

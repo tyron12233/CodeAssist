@@ -8,6 +8,7 @@ import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
 import org.openjdk.javax.lang.model.element.ExecutableElement;
+import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.LineMap;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.util.SourcePositions;
@@ -39,13 +40,17 @@ public class AddException implements JavaRewrite {
         }
         CompilerContainer container = compiler.compile(file);
         return container.get(task -> {
+            CompilationUnitTree root = task.root(file);
+            if (root == null) {
+                return CANCELLED;
+            }
+
             Trees trees = Trees.instance(task.task);
             ExecutableElement methodElement = FindHelper.findMethod(task, className, methodName,
                     erasedParameterTypes);
             MethodTree methodTree = trees.getTree(methodElement);
             SourcePositions pos = trees.getSourcePositions();
-            LineMap lines = task.root().getLineMap();
-            long startBody = pos.getStartPosition(task.root(), methodTree.getBody());
+            long startBody = pos.getStartPosition(root, methodTree.getBody());
             String packageName = "";
             String simpleName = exceptionType;
             int lastDot = simpleName.lastIndexOf('.');
