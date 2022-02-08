@@ -7,6 +7,7 @@ import org.openjdk.source.tree.CaseTree;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.ErroneousTree;
+import org.openjdk.source.tree.ExpressionStatementTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.LambdaExpressionTree;
@@ -109,10 +110,30 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
 
     @Override
     public TreePath visitMemberSelect(MemberSelectTree t, Pair<Long, Long> find) {
+        TreePath smaller = super.visitMemberSelect(t, find);
+        if (smaller != null) {
+            return smaller;
+        }
+
         if (isInside(t, find)) {
             return getCurrentPath();
         }
-        return super.visitMemberSelect(t, find);
+
+        return null;
+    }
+
+    @Override
+    public TreePath visitExpressionStatement(ExpressionStatementTree t,
+                                             Pair<Long, Long> find) {
+        TreePath smaller = super.visitExpressionStatement(t, find);
+        if (smaller != null) {
+            return smaller;
+        }
+
+        if (isInside(t, find)) {
+            return getCurrentPath();
+        }
+        return null;
     }
 
     @Override
