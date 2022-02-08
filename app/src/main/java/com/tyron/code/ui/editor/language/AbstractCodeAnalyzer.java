@@ -75,7 +75,7 @@ public abstract class AbstractCodeAnalyzer<T> extends DiagnosticAnalyzeManager<T
         super.delete(start, end, deletedContent);
 
         if (start.getLine() != end.getLine()) {
-            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineInsert(
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineDelete(
                     mDiagnostics,
                     start.getLine(),
                     start.getColumn(),
@@ -83,7 +83,7 @@ public abstract class AbstractCodeAnalyzer<T> extends DiagnosticAnalyzeManager<T
                     end.getColumn()
             );
         } else {
-            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineInsert(
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineDelete(
                     mDiagnostics,
                     start.getLine(),
                     start.getColumn(),
