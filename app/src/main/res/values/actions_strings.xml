@@ -4,6 +4,7 @@
     <!-- Text Actions -->
     <string name="text_actions">Text Actions</string>
     <string name="expand_selection">Expand Selection</string>
+    <string name="copied_to_clipoard">Text has been copied to clipboard.</string>
 
     <!-- File Actions -->
     <string name="menu_action_new_java_class">Java class </string>
