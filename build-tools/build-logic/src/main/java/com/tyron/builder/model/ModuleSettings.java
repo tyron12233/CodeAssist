@@ -15,6 +15,7 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -54,13 +55,12 @@ public class ModuleSettings implements SharedPreferences {
 
     private Map<String, Object> parseFile() {
         HashMap<String, Object> config = null;
-        try {
-            Gson gson = new GsonBuilder()
-                    .setLenient()
-                    .create();
-            config = gson.fromJson(new FileReader(mConfigFile),
-                    new TypeToken<HashMap<String, Object>>(){}.getType());
-        } catch (FileNotFoundException | JsonSyntaxException e) {
+        try (FileReader reader = new FileReader(mConfigFile)) {
+                Gson gson = new GsonBuilder().setLenient().create();
+                config = gson.fromJson(reader, new TypeToken<HashMap<String, Object>>() {
+                }.getType());
+
+        } catch (IOException  | JsonSyntaxException e) {
             Log.e("ModuleSettings", "Failed to parse module settings", e);
         }
         return config == null ? getDefaults() : config;

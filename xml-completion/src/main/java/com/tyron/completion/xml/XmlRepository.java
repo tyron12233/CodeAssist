@@ -38,6 +38,7 @@ import org.xmlpull.v1.XmlPullParserFactory;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.Reader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -176,11 +177,11 @@ public class XmlRepository {
         }
     }
 
-
-    private Map<String, DeclareStyleable> parse(File file, String namespace) throws XmlPullParserException, IOException {
+    private Map<String, DeclareStyleable> parse(Reader reader, String namespace) throws XmlPullParserException, IOException {
         XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
         XmlPullParser parser = factory.newPullParser();
-        parser.setInput(new FileReader(file));
+
+        parser.setInput(reader);
 
         Map<String, DeclareStyleable> declareStyleables = new TreeMap<>();
 
@@ -205,6 +206,12 @@ public class XmlRepository {
         }
 
         return declareStyleables;
+    }
+
+    private Map<String, DeclareStyleable> parse(File file, String namespace) throws XmlPullParserException, IOException {
+        try (FileReader reader = new FileReader(file)) {
+            return parse(reader, namespace);
+        }
     }
 
     private DeclareStyleable parseDeclareStyleable(XmlPullParser parser, String namespace) throws IOException,

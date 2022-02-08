@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.StrictMode;
 import android.widget.Toast;
 
 import androidx.annotation.VisibleForTesting;
