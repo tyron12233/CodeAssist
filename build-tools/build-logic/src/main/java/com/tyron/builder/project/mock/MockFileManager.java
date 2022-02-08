@@ -1,5 +1,7 @@
 package com.tyron.builder.project.mock;
 
+import androidx.annotation.NonNull;
+
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.listener.FileListener;
 
@@ -27,17 +29,17 @@ public class MockFileManager implements FileManager {
     }
 
     @Override
-    public boolean isOpened(File file) {
+    public boolean isOpened(@NonNull File file) {
         return mSnapshots.containsKey(file);
     }
 
     @Override
-    public void openFileForSnapshot(File file, String content) {
+    public void openFileForSnapshot(@NonNull File file, String content) {
         mSnapshots.put(file, content);
     }
 
     @Override
-    public void setSnapshotContent(File file, String content, boolean notify) {
+    public void setSnapshotContent(@NonNull File file, String content, boolean notify) {
 
     }
 
@@ -47,7 +49,7 @@ public class MockFileManager implements FileManager {
     }
 
     @Override
-    public void closeFileForSnapshot(File file) {
+    public void closeFileForSnapshot(@NonNull File file) {
         mSnapshots.remove(file);
     }
 
