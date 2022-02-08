@@ -353,7 +353,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
     public void onDestroy() {
         super.onDestroy();
         if (ProjectManager.getInstance().getCurrentProject() != null) {
-            ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile).getFileManager().closeFileForSnapshot(mCurrentFile);
+            ProjectManager.getInstance().getCurrentProject()
+                    .getModule(mCurrentFile).getFileManager()
+                    .closeFileForSnapshot(mCurrentFile);
         }
         mPreferences.unregisterOnSharedPreferenceChangeListener(this);
     }

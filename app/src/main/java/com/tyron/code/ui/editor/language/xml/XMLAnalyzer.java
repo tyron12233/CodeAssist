@@ -38,6 +38,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Stack;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
@@ -289,6 +290,19 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
         if (!file.canWrite() || !file.canRead()) {
             return;
         }
+
+        if (!module.getFileManager().isOpened(file)) {
+            Log.e("XMLAnalyzer", "File is not yet opened!");
+            return;
+        }
+
+        Optional<CharSequence> fileContent = module.getFileManager().getFileContent(file);
+        if (!fileContent.isPresent()) {
+            Log.e("XMLAnalyzer", "No snapshot for file found.");
+            return;
+        }
+
+        contents = fileContent.get().toString();
 
         FileUtils.writeStringToFile(file, contents, StandardCharsets.UTF_8);
         IncrementalAapt2Task task = new IncrementalAapt2Task(module, logger, false);

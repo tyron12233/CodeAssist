@@ -85,12 +85,6 @@ public class FileManagerImpl implements FileManager {
         if (content != null) {
             return Optional.of(content);
         }
-
-        try {
-            return Optional.of(FileUtils.readFileToString(file, StandardCharsets.UTF_8));
-        } catch (IOException ignore) {
-            // fall through
-        }
         return Optional.empty();
     }
 
