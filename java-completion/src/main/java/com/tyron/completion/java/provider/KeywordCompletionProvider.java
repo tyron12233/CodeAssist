@@ -10,11 +10,26 @@ import com.tyron.completion.java.insert.KeywordInsertHandler;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
+import org.openjdk.javax.lang.model.element.Element;
+import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
+import org.openjdk.source.tree.TreeVisitor;
+import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
+import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.api.BasicJavacTask;
+import org.openjdk.tools.javac.api.JavacTaskImpl;
+import org.openjdk.tools.javac.parser.ParserFactory;
+import org.openjdk.tools.javac.parser.ScannerFactory;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class KeywordCompletionProvider extends BaseCompletionProvider {
 
@@ -23,12 +38,15 @@ public class KeywordCompletionProvider extends BaseCompletionProvider {
 
     private static final String[] CLASS_BODY_KEYWORDS = {"public", "private", "protected",
             "static", "final", "native", "synchronized", "abstract", "default", "class",
-            "interface", "void", "boolean", "int", "long", "float", "double",};
+            "interface", "void", "boolean", "int", "long", "float", "double", "implements", "extends"};
 
     private static final String[] METHOD_BODY_KEYWORDS = {"new", "assert", "try", "catch",
             "finally", "throw", "return", "break", "case", "continue", "default", "do", "while",
             "for", "switch", "if", "else", "instanceof", "final", "class", "void", "boolean",
             "int", "long", "float", "double"};
+
+    private static final String[] CLASS_LEVEL_KEYWORDS = {"public", "private", "protected",
+            "abstract", "class", "interface", "@interface", "extends", "implements"};
 
     public KeywordCompletionProvider(JavaCompilerService service) {
         super(service);
@@ -37,15 +55,23 @@ public class KeywordCompletionProvider extends BaseCompletionProvider {
     public static void addKeywords(CompileTask task, TreePath path, String partial, CompletionList list) {
         checkCanceled();
 
-        Tree level = findKeywordLevel(path);
-        String[] keywords = {};
-        if (level instanceof CompilationUnitTree) {
-            keywords = TOP_LEVEL_KEYWORDS;
-        } else if (level instanceof ClassTree) {
-            keywords = CLASS_BODY_KEYWORDS;
-        } else if (level instanceof MethodTree) {
-            keywords = METHOD_BODY_KEYWORDS;
+        if (!partial.isEmpty() && Character.isUpperCase(partial.charAt(0))) {
+            // keywords are only lowercase
+            return;
         }
+
+        TreePath keywordPath = findKeywordLevel(path);
+        Tree level = keywordPath.getLeaf();
+
+        Set<String> keywords = new HashSet<>();
+        if (level instanceof CompilationUnitTree) {
+            keywords.addAll(Arrays.asList(TOP_LEVEL_KEYWORDS));
+        } else if (level instanceof ClassTree) {
+            keywords.addAll(Arrays.asList(CLASS_BODY_KEYWORDS));
+        } else if (level instanceof MethodTree) {
+            keywords.addAll(Arrays.asList(METHOD_BODY_KEYWORDS));
+        }
+
         for (String k : keywords) {
             if (StringSearch.matchesPartialName(k, partial)) {
                 CompletionItem keyword = keyword(k);
@@ -63,11 +89,11 @@ public class KeywordCompletionProvider extends BaseCompletionProvider {
         return list;
     }
 
-    public static Tree findKeywordLevel(TreePath path) {
+    public static TreePath findKeywordLevel(TreePath path) {
         while (path != null) {
             checkCanceled();
             if (path.getLeaf() instanceof CompilationUnitTree || path.getLeaf() instanceof ClassTree || path.getLeaf() instanceof MethodTree) {
-                return path.getLeaf();
+                return path;
             }
             path = path.getParentPath();
         }
