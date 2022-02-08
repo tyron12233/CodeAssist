@@ -469,7 +469,9 @@ public class ActionUtil {
 
         TypeMirror returnType = type.getReturnType();
         if (returnType != null) {
-            if (returnType.getKind() != TypeKind.VOID && returnType.getKind() != TypeKind.TYPEVAR) {
+            if (returnType.getKind() != TypeKind.VOID
+                    && returnType.getKind() != TypeKind.TYPEVAR
+                    && !returnType.getKind().isPrimitive()) {
                 String fqn = getTypeToImport(returnType);
                 if (fqn != null) {
                     types.add(fqn);
@@ -486,6 +488,9 @@ public class ActionUtil {
             }
         }
         for (TypeMirror t : type.getParameterTypes()) {
+            if (t.getKind().isPrimitive()) {
+                continue;
+            }
             String fqn = getTypeToImport(t);
             if (fqn != null) {
                 types.add(fqn);
