@@ -132,14 +132,13 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
             return;
         }
 
-        ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(true));
-
         // do not compile the file if it not yet closed as it will cause issues when
         // compiling multiple files at the same time
         if (mPreferences.getBoolean(SharedPreferenceKeys.JAVA_ERROR_HIGHLIGHTING, true)) {
             JavaCompilerService service = getCompiler(editor);
             if (service != null) {
                 try {
+                    ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(true));
                     SourceFileObject sourceFileObject =
                             new SourceFileObject(editor.getCurrentFile().toPath(),
                                     contents.toString(), Instant.now());
@@ -161,6 +160,7 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
                         Log.e(TAG, "Unable to get diagnostics", e);
                     }
                     service.close();
+                    ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(false));
                 }
             }
         }
