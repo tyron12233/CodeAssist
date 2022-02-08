@@ -143,6 +143,7 @@ public class EditorContainerFragment extends Fragment {
             }
         });
         mBehavior.setHalfExpandedRatio(0.3f);
+        mBehavior.setFitToContents(false);
 
         if (savedInstanceState != null) {
             restoreViewState(savedInstanceState);

@@ -41,6 +41,7 @@
         android:layout_height="match_parent"
         android:background="#2e2e2e"
         app:behavior_peekHeight="38dp"
+        app:behavior_hideable="false"
         app:layout_behavior="@string/bottom_sheet_behavior"
         tools:layout="@layout/bottom_editor_fragment" />
 
