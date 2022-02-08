@@ -3,6 +3,7 @@ package com.tyron.code.ui.editor.impl.text.rosemoe;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -136,6 +137,16 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         mCurrentFile = new File(requireArguments().getString("path", ""));
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
+
+        Thread.UncaughtExceptionHandler previousHandler =
+                Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            Log.d("Uncaught exception handler", "Saving " + mCurrentFile + " before crashing.");
+            save();
+            if (previousHandler != null) {
+                previousHandler.uncaughtException(thread, throwable);
+            }
+        });
     }
 
     @Override
