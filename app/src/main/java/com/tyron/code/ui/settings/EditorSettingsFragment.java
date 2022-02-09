@@ -64,8 +64,8 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
 
             AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
                     .setView(R.layout.base_textinput_layout)
-                    .setTitle(R.string.change_scheme_title)
-                    .setNegativeButton(R.string.defaultString, (d, w) -> {
+                    .setTitle(R.string.change_scheme_dialog_title)
+                    .setNeutralButton(R.string.defaultString, (d, w) -> {
                         pref.edit().putString(SharedPreferenceKeys.SCHEME, null).apply();
                         preference.callChangeListener(null);
                     })
