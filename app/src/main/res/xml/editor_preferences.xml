@@ -85,7 +85,8 @@
         <Preference
             app:key="scheme"
             app:iconSpaceReserved="false"
-            app:title="Scheme"/>
+            app:title="@string/editor_scheme_title"
+            app:summary="@string/editor_scheme_desc"/>
     </PreferenceCategory>
 
     <PreferenceCategory

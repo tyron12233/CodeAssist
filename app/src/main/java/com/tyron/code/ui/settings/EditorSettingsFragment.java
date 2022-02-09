@@ -64,9 +64,13 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
 
             AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
                     .setView(R.layout.base_textinput_layout)
-                    .setTitle("Paste the path of theme file")
+                    .setTitle(R.string.change_scheme_title)
+                    .setNegativeButton(R.string.defaultString, (d, w) -> {
+                        pref.edit().putString(SharedPreferenceKeys.SCHEME, null).apply();
+                        preference.callChangeListener(null);
+                    })
                     .setNegativeButton(android.R.string.cancel, null)
-                    .setPositiveButton("Save", null)
+                    .setPositiveButton(R.string.save, null)
                     .create();
             dialog.setOnShowListener(d -> {
                 final Button button = dialog.getButton(DialogInterface.BUTTON_POSITIVE);

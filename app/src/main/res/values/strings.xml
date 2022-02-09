@@ -87,6 +87,11 @@
     <string name="editor_settings_title">Code Editor settings</string>
     <string name="editor_settings_wordwrap">Word wrap mode</string>
     <string name="editor_delete_whitespaces">Auto delete whitespace</string>
+    <string name="save">Save</string>
+    <string name="defaultString">Default</string>
+    <string name="editor_scheme_title">Editor color scheme</string>
+    <string name="editor_scheme_desc">Change the color scheme</string>
+    <string name="change_scheme_dialog_title">Paste the path of theme file</string>
     <string name="font_size_title">Font size</string>
     <string name="font_size_message">Set editor font size</string>
     <string name="font_size_summary">Specify the default font size of the editor</string>
