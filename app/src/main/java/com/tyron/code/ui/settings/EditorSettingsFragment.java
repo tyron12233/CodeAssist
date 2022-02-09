@@ -84,8 +84,9 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
                     @Override
                     public void afterTextChanged(Editable editable) {
                         File file = new File(editable.toString());
-                        button
-                                .setEnabled(file.exists());
+                        boolean enabled = file.exists() && file.canRead()
+                                && file.isFile();
+                        button.setEnabled(enabled);
                     }
                 });
 
