@@ -34,12 +34,16 @@ public class CompiledEditorScheme extends EditorColorScheme {
             .put(R.styleable.EditorColorScheme_functionName, FUNCTION_NAME)
             .put(R.styleable.EditorColorScheme_literal, LITERAL)
             .put(R.styleable.EditorColorScheme_textNormal, TEXT_NORMAL)
+            .put(R.styleable.EditorColorScheme_blockLineColor, BLOCK_LINE)
             .put(R.styleable.EditorColorScheme_problemError, PROBLEM_ERROR)
             .put(R.styleable.EditorColorScheme_problemWarning, PROBLEM_WARNING)
             .put(R.styleable.EditorColorScheme_problemTypo, PROBLEM_TYPO)
             .put(R.styleable.EditorColorScheme_selectedTextBackground, SELECTED_TEXT_BACKGROUND)
             .put(R.styleable.EditorColorScheme_completionPanelBackground, AUTO_COMP_PANEL_BG)
             .put(R.styleable.EditorColorScheme_completionPanelStrokeColor, AUTO_COMP_PANEL_CORNER)
+            .put(R.styleable.EditorColorScheme_lineNumberBackground, LINE_NUMBER_BACKGROUND)
+            .put(R.styleable.EditorColorScheme_lineNumberTextColor, LINE_NUMBER_PANEL_TEXT)
+            .put(R.styleable.EditorColorScheme_lineNumberDividerColor, LINE_DIVIDER)
             .put(R.styleable.EditorColorScheme_wholeBackground, WHOLE_BACKGROUND)
             .build();
 

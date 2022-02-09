@@ -74,10 +74,12 @@
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/bottom_editor_fragment.xml" value="0.25416666666666665" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/code_editor_fragment.xml" value="0.4" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/editor_container_fragment.xml" value="0.25416666666666665" />
+        <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/empty_projects_layout.xml" value="0.2" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/file_manager_fragment.xml" value="0.25416666666666665" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/main_fragment.xml" value="0.25416666666666665" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/project_manager_fragment.xml" value="0.23487179487179488" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/settings_activity.xml" value="0.1" />
+        <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/wizard_templates.xml" value="0.25416666666666665" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/xml/editor_preferences.xml" value="0.23854166666666668" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/code-editor/src/main/res/font-v26/mono_font.xml" value="0.22447916666666667" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/code-editor/src/main/res/font/mono_font.xml" value="0.22447916666666667" />

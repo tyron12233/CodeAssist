@@ -36,10 +36,18 @@
         <attr name="problemError" format="color"/>
 
         <attr name="selectedTextBackground" format="color" />
+        <attr name="blockLineColor" format="color"/>
 
         <!-- Editor view colors -->
+
+        <attr name="lineNumberDividerColor" format="color"/>
+
         <attr name="wholeBackground" format="color"/>
         <attr name="completionPanelBackground" format="color" />
         <attr name="completionPanelStrokeColor" format="color" />
+
+        <attr name="lineNumberBackground" format="color" />
+        <attr name="lineNumberTextColor" format="color" />
+
     </declare-styleable>
 </resources>
