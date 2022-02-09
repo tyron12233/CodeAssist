@@ -22,7 +22,7 @@
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tablayout"
         app:tabIndicator="@drawable/tab_indicator"
-        app:tabIndicatorColor="@color/colorPrimary"
+        app:tabIndicatorColor="?attr/colorPrimary"
         app:tabIndicatorFullWidth="false"
         app:tabInlineLabel="true"
         android:layout_width="match_parent"
