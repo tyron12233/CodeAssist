@@ -51,12 +51,14 @@ import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
 import com.tyron.code.ui.editor.language.kotlin.KotlinLanguage;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
+import com.tyron.code.ui.editor.scheme.CodeAssistColorScheme;
 import com.tyron.code.ui.editor.scheme.CompiledEditorScheme;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.layoutEditor.LayoutEditorFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.code.ui.settings.EditorSettingsFragment;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.index.CompilerService;
@@ -228,13 +230,45 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
         mPreferences.registerOnSharedPreferenceChangeListener(this);
 
-        CompiledEditorScheme scheme = new CompiledEditorScheme(requireContext());
-//        scheme.setColor(EditorColorScheme.HTML_TAG, 0xFFF0C56C);
-//        scheme.setColor(EditorColorScheme.ATTRIBUTE_NAME, 0xff9876AA);
-//        scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_BG, 0xff2b2b2b);
-//        scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_CORNER, 0xff575757);
-        mEditor.setColorScheme(scheme);
+        String schemePath = mPreferences.getString("scheme", null);
+        setScheme(schemePath);
+
         return root;
+    }
+
+    private void setScheme(@Nullable String path) {
+        if (path == null) {
+            setDefaultColorScheme();
+            return;
+        }
+
+        File schemeFile = new File(path);
+        if (!schemeFile.exists()) {
+            setDefaultColorScheme();
+            return;
+        }
+
+        ListenableFuture<CodeAssistColorScheme> future =
+                EditorSettingsFragment.getColorScheme(schemeFile);
+        Futures.addCallback(future, new FutureCallback<CodeAssistColorScheme>() {
+            @Override
+            public void onSuccess(@Nullable CodeAssistColorScheme result) {
+                if (result == null) {
+                    setDefaultColorScheme();
+                    return;
+                }
+                mEditor.setColorScheme(result);
+            }
+
+            @Override
+            public void onFailure(@NonNull Throwable t) {
+                setDefaultColorScheme();
+            }
+        }, ContextCompat.getMainExecutor(requireContext()));
+    }
+
+    private void setDefaultColorScheme() {
+        mEditor.setColorScheme(new CompiledEditorScheme(requireContext()));
     }
 
     private void configure(DirectAccessProps props) {
@@ -265,6 +299,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 break;
             case SharedPreferenceKeys.DELETE_WHITESPACES:
                 mEditor.getProps().deleteEmptyLineFast = pref.getBoolean(SharedPreferenceKeys.DELETE_WHITESPACES, false);
+                break;
+            case SharedPreferenceKeys.SCHEME:
+                setScheme(pref.getString(SharedPreferenceKeys.SCHEME, null));
                 break;
         }
     }
