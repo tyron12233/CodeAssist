@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="50dp"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingStart="4dp"
@@ -30,9 +31,9 @@
             android:layout_marginStart="4dp"
             android:fontFamily="@font/mono_font"
             android:singleLine="true"
-            android:textColor="#FFFEFEFE"
             android:textSize="12sp"
-            tools:text="listOf(element: T)" />
+            tools:text="listOf(element: T)"
+            android:textAppearance="@style/TextAppearance.Material3.TitleSmall"/>
 
         <TextView
             android:id="@+id/result_item_desc"
@@ -42,10 +43,9 @@
             android:layout_marginStart="4dp"
             android:layout_marginEnd="8dp"
             android:ellipsize="end"
+            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
             android:fontFamily="@font/mono_font"
             android:singleLine="true"
-            android:textColor="#808080"
-            android:textSize="11sp"
             tools:text="inline fun &lt;T&gt; listOf(element: T)" />
 
     </LinearLayout>

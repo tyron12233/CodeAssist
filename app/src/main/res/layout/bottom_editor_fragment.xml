@@ -8,7 +8,7 @@
         android:id="@+id/row_layout"
         android:layout_width="match_parent"
         android:layout_height="38dp"
-        android:background="#212121"
+        android:background="?attr/colorSurface"
         android:orientation="horizontal">
 
         <androidx.recyclerview.widget.RecyclerView
@@ -21,10 +21,6 @@
 
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tablayout"
-        android:theme="@style/CodeEditorActionBar"
-        android:background="#212121"
-        app:tabSelectedTextColor="#FFCC7832"
-        app:tabTextColor="@android:color/white"
         app:tabIndicator="@drawable/tab_indicator"
         app:tabIndicatorColor="@color/colorPrimary"
         app:tabIndicatorFullWidth="false"

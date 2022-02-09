@@ -4,6 +4,7 @@ import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.view.WindowCompat;
 
 import com.tyron.actions.ActionManager;
 import com.tyron.code.ui.editor.action.CloseAllEditorAction;
@@ -38,6 +39,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         StartupManager startupManager = new StartupManager();
         startupManager.addStartupActivity(() -> {

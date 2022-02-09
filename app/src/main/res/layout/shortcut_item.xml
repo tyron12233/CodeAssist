@@ -7,7 +7,7 @@
     <TextView
         android:id="@+id/shortcut_label"
         android:gravity="center"
-        android:textSize="18sp"
+        android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
         android:layout_width="38dp"
         android:layout_height="38dp"/>
 </LinearLayout>

@@ -11,16 +11,13 @@
         android:id="@+id/app_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#212121"
         android:fitsSystemWindows="true"
-        android:theme="@style/CodeEditorActionBar"
         app:elevation="0dp">
 
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:theme="@style/CodeEditorThemeOverlay"
             app:navigationIcon="?attr/homeAsUpIndicator"
             app:title="Library Dependencies" />
     </com.google.android.material.appbar.AppBarLayout>

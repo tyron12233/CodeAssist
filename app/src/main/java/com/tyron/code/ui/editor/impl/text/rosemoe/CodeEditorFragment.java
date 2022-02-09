@@ -51,6 +51,7 @@ import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
 import com.tyron.code.ui.editor.language.kotlin.KotlinLanguage;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
+import com.tyron.code.ui.editor.scheme.CompiledEditorScheme;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.layoutEditor.LayoutEditorFragment;
@@ -197,12 +198,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
         mEditor = root.findViewById(R.id.code_editor);
         configure(mEditor.getProps());
         mEditor.setEditorLanguage(mLanguage = LanguageManager.getInstance().get(mEditor, mCurrentFile));
-        SchemeDarcula scheme = new SchemeDarcula();
-        scheme.setColor(EditorColorScheme.HTML_TAG, 0xFFF0C56C);
-        scheme.setColor(EditorColorScheme.ATTRIBUTE_NAME, 0xff9876AA);
-        scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_BG, 0xff2b2b2b);
-        scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_CORNER, 0xff575757);
-        mEditor.setColorScheme(scheme);
         mEditor.setTextSize(Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
         mEditor.openFile(mCurrentFile);
         mEditor.getComponent(EditorAutoCompletion.class).setLayout(new CodeAssistCompletionLayout());
@@ -232,6 +227,13 @@ public class CodeEditorFragment extends Fragment implements Savable,
             mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS | EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         }
         mPreferences.registerOnSharedPreferenceChangeListener(this);
+
+        CompiledEditorScheme scheme = new CompiledEditorScheme(requireContext());
+//        scheme.setColor(EditorColorScheme.HTML_TAG, 0xFFF0C56C);
+//        scheme.setColor(EditorColorScheme.ATTRIBUTE_NAME, 0xff9876AA);
+//        scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_BG, 0xff2b2b2b);
+//        scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_CORNER, 0xff575757);
+        mEditor.setColorScheme(scheme);
         return root;
     }
 

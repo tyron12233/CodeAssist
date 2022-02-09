@@ -95,10 +95,6 @@ public class ProjectManagerFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-
-        NestedScrollView scrollView = view.findViewById(R.id.scrolling_view);
-        scrollView.setNestedScrollingEnabled(false);
-
         MaterialToolbar toolbar = view.findViewById(R.id.toolbar);
         toolbar.setTitle(R.string.app_name);
 

@@ -3,28 +3,24 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/colorBackground"
-    android:clickable="true"
-    android:fitsSystemWindows="true">
+    android:clickable="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:fitsSystemWindows="true"
         android:orientation="vertical">
 
         <com.google.android.material.appbar.AppBarLayout
             android:id="@+id/app_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#212121"
-            android:theme="@style/CodeEditorActionBar"
             app:elevation="0dp">
 
             <com.tyron.actions.impl.ActionToolbar
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:theme="@style/CodeEditorThemeOverlay" />
+                android:layout_height="wrap_content" />
         </com.google.android.material.appbar.AppBarLayout>
 
         <com.google.android.material.progressindicator.LinearProgressIndicator
@@ -48,7 +44,7 @@
         android:name="com.tyron.code.ui.file.tree.TreeFileManagerFragment"
         android:layout_width="300dp"
         android:layout_height="match_parent"
-        android:layout_gravity="start"
-        android:background="#2b2b2b" />
+        android:background="?android:attr/colorBackground"
+        android:layout_gravity="start" />
 
 </androidx.drawerlayout.widget.DrawerLayout>

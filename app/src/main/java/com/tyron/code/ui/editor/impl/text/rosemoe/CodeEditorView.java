@@ -14,6 +14,7 @@ import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
 import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
+import com.tyron.code.ui.editor.scheme.CompiledEditorScheme;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
@@ -32,6 +33,7 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorTextActionWindow;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class CodeEditorView extends CodeEditor implements Editor {
 
@@ -52,19 +54,15 @@ public class CodeEditorView extends CodeEditor implements Editor {
     private EditorViewModel mViewModel;
 
     public CodeEditorView(Context context) {
-        super(DataContext.wrap(context));
+        this(DataContext.wrap(context), null);
     }
 
     public CodeEditorView(Context context, AttributeSet attrs) {
-        super(DataContext.wrap(context), attrs);
-
-        init();
+        this(DataContext.wrap(context), attrs, 0);
     }
 
     public CodeEditorView(Context context, AttributeSet attrs, int defStyleAttr) {
-        super(DataContext.wrap(context), attrs, defStyleAttr);
-
-        init();
+        this(DataContext.wrap(context), attrs, defStyleAttr, 0);
     }
 
     public CodeEditorView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
