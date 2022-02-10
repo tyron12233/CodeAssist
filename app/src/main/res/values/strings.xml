@@ -124,11 +124,12 @@
     <string name="settings_about_us_title">About Us</string>
     <string name="settings_about_us_desc">More info about the developers.</string>
     <string name="app_description">Powerful and lightweight IDE for Android app development right within your pocket.</string>
-    <string name="app_version">Version %1$s</string>
+    <string name="app_version">Version</string>
     <string name="contact_group_title">Contact</string>
     <string name="app_source_title">Source code</string>
     <string name="sketchub_team">Sketchub Team</string>
     <string name="community">Community</string>
+    <string name="rate_us">Rate us</string>
 
     <!-- file manager menu -->
     <string name="error">Error</string>

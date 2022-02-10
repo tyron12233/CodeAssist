@@ -42,7 +42,6 @@ dependencies {
     implementation project(path: ':build-tools:lint')
     implementation project(path: ':layout-preview')
     implementation project(path: ':kotlin-completion')
-    implementation 'io.github.medyo:android-about-page:2.0.0'
     
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     implementation project(path: ':dependency-resolver')
@@ -62,6 +61,10 @@ dependencies {
 
     // formatters
     implementation project(path: ':google-java-format')
+
+    // about
+    implementation 'io.github.medyo:android-about-page:2.0.0'
+    implementation 'com.github.daniel-stoneuk:material-about-library:3.1.2'
 
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:1.1.5")
 
