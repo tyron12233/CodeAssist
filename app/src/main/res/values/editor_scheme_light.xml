@@ -21,7 +21,7 @@
         <item name="htmlTag">#000080</item>
 
         <item name="wholeBackground">?attr/backgroundColor</item>
-        <item name="completionPanelBackground">@color/colorSurface</item>
+        <item name="completionPanelBackground">?attr/colorSurface</item>
         <item name="completionPanelStrokeColor">?attr/dividerColor</item>
     </style>
 </resources>

@@ -8,14 +8,14 @@
     <LinearLayout
         android:id="@+id/row_layout"
         android:layout_width="match_parent"
-        android:layout_height="38dp"
+        android:layout_height="45dp"
         android:orientation="horizontal">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerview_shortcuts"
             android:nestedScrollingEnabled="false"
             android:layout_width="match_parent"
-            android:layout_height="38dp"/>
+            android:layout_height="50dp"/>
 
     </LinearLayout>
 
