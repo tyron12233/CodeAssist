@@ -45,6 +45,13 @@ public interface Editor {
     int getCharIndex(int line, int column);
 
     /**
+     * @return Whether the editor uses tab instead of white spaces.
+     */
+    boolean useTab();
+
+    int getTabCount();
+
+    /**
      * Inserts the text at the specified line and column
      * @param line 0-based line
      * @param column 0-based column

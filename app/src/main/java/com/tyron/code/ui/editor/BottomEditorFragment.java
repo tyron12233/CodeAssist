@@ -16,6 +16,7 @@ import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
+import com.google.common.base.Strings;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
@@ -152,7 +153,12 @@ public class BottomEditorFragment extends Fragment {
             @Override
             public void apply(Editor editor, ShortcutItem item) {
                 Caret cursor = editor.getCaret();
-                editor.insert(cursor.getStartLine(), cursor.getStartColumn(), "\t");
+                if (editor.useTab()) {
+                    editor.insert(cursor.getStartLine(), cursor.getStartColumn(), "\t");
+                } else {
+                    editor.insert(cursor.getStartLine(), cursor.getStartColumn(),
+                            Strings.repeat(" ", editor.getTabCount()));
+                }
             }
         }), "->", "tab"));
         items.addAll(strings.stream()

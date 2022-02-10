@@ -15,19 +15,24 @@ import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
 import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
+import com.tyron.code.ui.editor.language.json.JsonLanguage;
 import com.tyron.code.ui.editor.scheme.CompiledEditorScheme;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 
+import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
+
 import java.io.File;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -128,6 +133,46 @@ public class CodeEditorView extends CodeEditor implements Editor {
     @Override
     public int getCharIndex(int line, int column) {
         return getText().getCharIndex(line, column);
+    }
+
+    @Override
+    public boolean useTab() {
+        //noinspection ConstantConditions, editor language can be null
+        if (getEditorLanguage() == null) {
+            // enabled by default
+            return true;
+        }
+
+        return getEditorLanguage().useTab();
+    }
+
+    @Override
+    public int getTabCount() {
+        return getTabWidth();
+    }
+
+    @Override
+    public int getTabWidth() {
+        //noinspection ConstantConditions
+        if (getEditorLanguage() == null) {
+            return super.getTabWidth();
+        }
+
+        // languages should have an option to declare their own tab width
+        try {
+            Class<? extends Language> aClass = getEditorLanguage().getClass();
+            Method method = ReflectionUtil.getDeclaredMethod(aClass, "getTabWidth");
+            if (method != null) {
+                Object invoke = method.invoke(getEditorLanguage());
+                if (invoke instanceof Integer) {
+                    return (int) invoke;
+                }
+            }
+        } catch (Throwable e) {
+            // use default
+        }
+
+        return super.getTabWidth();
     }
 
     @Override

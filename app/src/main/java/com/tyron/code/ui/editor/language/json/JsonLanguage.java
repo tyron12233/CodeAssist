@@ -59,6 +59,10 @@ public class JsonLanguage implements Language {
 
     }
 
+    public int getTabWidth() {
+        return 2;
+    }
+
     @Override
     public int getIndentAdvance(@NonNull ContentReference content, int line, int column) {
         String text = content.getLine(line).substring(0, column);
