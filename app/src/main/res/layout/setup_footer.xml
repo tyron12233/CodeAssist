@@ -18,7 +18,7 @@
         android:layout_height="wrap_content"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:textColor="@color/white"
+        android:textColor="?attr/colorOnSurface"
         android:background="@android:color/transparent"
         android:elevation="0dp"
         android:text="@string/wizard_exit"/>
