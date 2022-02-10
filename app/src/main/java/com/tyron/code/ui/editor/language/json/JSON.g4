@@ -8,8 +8,8 @@ json
    ;
 
 obj
-   : LBRACKET pair (',' pair)* RBRACKET
-   | LBRACKET RBRACKET
+   : LBRACE pair (',' pair)* RBRACE
+   | LBRACE RBRACE
    ;
 
 pair
@@ -17,8 +17,8 @@ pair
    ;
 
 arr
-   : '[' value (COMMA value)* ']'
-   | '[' ']'
+   : LBRACKET value (COMMA value)* RBRACKET
+   | LBRACKET RBRACKET
    ;
 
 value
@@ -50,12 +50,21 @@ STRING
    : '"' (ESC | SAFECODEPOINT)* '"'
    ;
 
-LBRACKET
+LBRACE
    : '{'
    ;
 
-RBRACKET
+RBRACE
    : '}'
+   ;
+
+
+LBRACKET
+   : '['
+   ;
+
+RBRACKET
+   : ']'
    ;
 
 COMMA

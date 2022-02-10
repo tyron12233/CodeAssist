@@ -17,7 +17,7 @@ public class JSONParser extends Parser {
 	protected static final PredictionContextCache _sharedContextCache =
 		new PredictionContextCache();
 	public static final int
-		T__0=1, T__1=2, TRUE=3, FALSE=4, NULL=5, COLON=6, STRING=7, LBRACKET=8, 
+		TRUE=1, FALSE=2, NULL=3, COLON=4, STRING=5, LBRACE=6, RBRACE=7, LBRACKET=8, 
 		RBRACKET=9, COMMA=10, NUMBER=11, WS=12;
 	public static final int
 		RULE_json = 0, RULE_obj = 1, RULE_pair = 2, RULE_arr = 3, RULE_value = 4;
@@ -30,15 +30,15 @@ public class JSONParser extends Parser {
 
 	private static String[] makeLiteralNames() {
 		return new String[] {
-			null, "'['", "']'", "'true'", "'false'", "'null'", "':'", null, "'{'", 
-			"'}'", "','"
+			null, "'true'", "'false'", "'null'", "':'", null, "'{'", "'}'", "'['", 
+			"']'", "','"
 		};
 	}
 	private static final String[] _LITERAL_NAMES = makeLiteralNames();
 	private static String[] makeSymbolicNames() {
 		return new String[] {
-			null, null, null, "TRUE", "FALSE", "NULL", "COLON", "STRING", "LBRACKET", 
-			"RBRACKET", "COMMA", "NUMBER", "WS"
+			null, "TRUE", "FALSE", "NULL", "COLON", "STRING", "LBRACE", "RBRACE", 
+			"LBRACKET", "RBRACKET", "COMMA", "NUMBER", "WS"
 		};
 	}
 	private static final String[] _SYMBOLIC_NAMES = makeSymbolicNames();
@@ -137,14 +137,14 @@ public class JSONParser extends Parser {
 	}
 
 	public static class ObjContext extends ParserRuleContext {
-		public TerminalNode LBRACKET() { return getToken(JSONParser.LBRACKET, 0); }
+		public TerminalNode LBRACE() { return getToken(JSONParser.LBRACE, 0); }
 		public List<PairContext> pair() {
 			return getRuleContexts(PairContext.class);
 		}
 		public PairContext pair(int i) {
 			return getRuleContext(PairContext.class,i);
 		}
-		public TerminalNode RBRACKET() { return getToken(JSONParser.RBRACKET, 0); }
+		public TerminalNode RBRACE() { return getToken(JSONParser.RBRACE, 0); }
 		public List<TerminalNode> COMMA() { return getTokens(JSONParser.COMMA); }
 		public TerminalNode COMMA(int i) {
 			return getToken(JSONParser.COMMA, i);
@@ -180,7 +180,7 @@ public class JSONParser extends Parser {
 				enterOuterAlt(_localctx, 1);
 				{
 				setState(12);
-				match(LBRACKET);
+				match(LBRACE);
 				setState(13);
 				pair();
 				setState(18);
@@ -200,16 +200,16 @@ public class JSONParser extends Parser {
 					_la = _input.LA(1);
 				}
 				setState(21);
-				match(RBRACKET);
+				match(RBRACE);
 				}
 				break;
 			case 2:
 				enterOuterAlt(_localctx, 2);
 				{
 				setState(23);
-				match(LBRACKET);
+				match(LBRACE);
 				setState(24);
-				match(RBRACKET);
+				match(RBRACE);
 				}
 				break;
 			}
@@ -276,12 +276,14 @@ public class JSONParser extends Parser {
 	}
 
 	public static class ArrContext extends ParserRuleContext {
+		public TerminalNode LBRACKET() { return getToken(JSONParser.LBRACKET, 0); }
 		public List<ValueContext> value() {
 			return getRuleContexts(ValueContext.class);
 		}
 		public ValueContext value(int i) {
 			return getRuleContext(ValueContext.class,i);
 		}
+		public TerminalNode RBRACKET() { return getToken(JSONParser.RBRACKET, 0); }
 		public List<TerminalNode> COMMA() { return getTokens(JSONParser.COMMA); }
 		public TerminalNode COMMA(int i) {
 			return getToken(JSONParser.COMMA, i);
@@ -317,7 +319,7 @@ public class JSONParser extends Parser {
 				enterOuterAlt(_localctx, 1);
 				{
 				setState(31);
-				match(T__0);
+				match(LBRACKET);
 				setState(32);
 				value();
 				setState(37);
@@ -337,16 +339,16 @@ public class JSONParser extends Parser {
 					_la = _input.LA(1);
 				}
 				setState(40);
-				match(T__1);
+				match(RBRACKET);
 				}
 				break;
 			case 2:
 				enterOuterAlt(_localctx, 2);
 				{
 				setState(42);
-				match(T__0);
+				match(LBRACKET);
 				setState(43);
-				match(T__1);
+				match(RBRACKET);
 				}
 				break;
 			}
@@ -414,14 +416,14 @@ public class JSONParser extends Parser {
 				match(NUMBER);
 				}
 				break;
-			case LBRACKET:
+			case LBRACE:
 				enterOuterAlt(_localctx, 3);
 				{
 				setState(48);
 				obj();
 				}
 				break;
-			case T__0:
+			case LBRACKET:
 				enterOuterAlt(_localctx, 4);
 				{
 				setState(49);
@@ -470,15 +472,15 @@ public class JSONParser extends Parser {
 		"\26\13\3\3\3\3\3\3\3\3\3\5\3\34\n\3\3\4\3\4\3\4\3\4\3\5\3\5\3\5\3\5\7"+
 		"\5&\n\5\f\5\16\5)\13\5\3\5\3\5\3\5\3\5\5\5/\n\5\3\6\3\6\3\6\3\6\3\6\3"+
 		"\6\3\6\5\68\n\6\3\6\2\2\7\2\4\6\b\n\2\2\2>\2\f\3\2\2\2\4\33\3\2\2\2\6"+
-		"\35\3\2\2\2\b.\3\2\2\2\n\67\3\2\2\2\f\r\5\n\6\2\r\3\3\2\2\2\16\17\7\n"+
+		"\35\3\2\2\2\b.\3\2\2\2\n\67\3\2\2\2\f\r\5\n\6\2\r\3\3\2\2\2\16\17\7\b"+
 		"\2\2\17\24\5\6\4\2\20\21\7\f\2\2\21\23\5\6\4\2\22\20\3\2\2\2\23\26\3\2"+
-		"\2\2\24\22\3\2\2\2\24\25\3\2\2\2\25\27\3\2\2\2\26\24\3\2\2\2\27\30\7\13"+
-		"\2\2\30\34\3\2\2\2\31\32\7\n\2\2\32\34\7\13\2\2\33\16\3\2\2\2\33\31\3"+
-		"\2\2\2\34\5\3\2\2\2\35\36\7\t\2\2\36\37\7\b\2\2\37 \5\n\6\2 \7\3\2\2\2"+
-		"!\"\7\3\2\2\"\'\5\n\6\2#$\7\f\2\2$&\5\n\6\2%#\3\2\2\2&)\3\2\2\2\'%\3\2"+
-		"\2\2\'(\3\2\2\2(*\3\2\2\2)\'\3\2\2\2*+\7\4\2\2+/\3\2\2\2,-\7\3\2\2-/\7"+
-		"\4\2\2.!\3\2\2\2.,\3\2\2\2/\t\3\2\2\2\608\7\t\2\2\618\7\r\2\2\628\5\4"+
-		"\3\2\638\5\b\5\2\648\7\5\2\2\658\7\6\2\2\668\7\7\2\2\67\60\3\2\2\2\67"+
+		"\2\2\24\22\3\2\2\2\24\25\3\2\2\2\25\27\3\2\2\2\26\24\3\2\2\2\27\30\7\t"+
+		"\2\2\30\34\3\2\2\2\31\32\7\b\2\2\32\34\7\t\2\2\33\16\3\2\2\2\33\31\3\2"+
+		"\2\2\34\5\3\2\2\2\35\36\7\7\2\2\36\37\7\6\2\2\37 \5\n\6\2 \7\3\2\2\2!"+
+		"\"\7\n\2\2\"\'\5\n\6\2#$\7\f\2\2$&\5\n\6\2%#\3\2\2\2&)\3\2\2\2\'%\3\2"+
+		"\2\2\'(\3\2\2\2(*\3\2\2\2)\'\3\2\2\2*+\7\13\2\2+/\3\2\2\2,-\7\n\2\2-/"+
+		"\7\13\2\2.!\3\2\2\2.,\3\2\2\2/\t\3\2\2\2\608\7\7\2\2\618\7\r\2\2\628\5"+
+		"\4\3\2\638\5\b\5\2\648\7\3\2\2\658\7\4\2\2\668\7\5\2\2\67\60\3\2\2\2\67"+
 		"\61\3\2\2\2\67\62\3\2\2\2\67\63\3\2\2\2\67\64\3\2\2\2\67\65\3\2\2\2\67"+
 		"\66\3\2\2\28\13\3\2\2\2\7\24\33\'.\67";
 	public static final ATN _ATN =

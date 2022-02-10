@@ -27,7 +27,7 @@ public class JsonAnalyzer extends AbstractCodeAnalyzer<Object> {
     @Override
     public void setup() {
         putColor(EditorColorScheme.TEXT_NORMAL, JSONLexer.LBRACKET,
-                JSONLexer.RBRACKET);
+                JSONLexer.RBRACKET, JSONLexer.LBRACE, JSONLexer.RBRACE);
         putColor(EditorColorScheme.KEYWORD, JSONLexer.TRUE,
                 JSONLexer.FALSE, JSONLexer.NULL,
                 JSONLexer.COLON, JSONLexer.COMMA);
@@ -63,7 +63,7 @@ public class JsonAnalyzer extends AbstractCodeAnalyzer<Object> {
                     }
                 }
                 break;
-            case JSONLexer.RBRACKET:
+            case JSONLexer.RBRACE:
                 if (!mBlockLines.isEmpty()) {
                     CodeBlock b = mBlockLines.pop();
                     b.endLine = line;
@@ -73,7 +73,7 @@ public class JsonAnalyzer extends AbstractCodeAnalyzer<Object> {
                     }
                 }
                 return false;
-            case JSONLexer.LBRACKET:
+            case JSONLexer.LBRACE:
                 if (mBlockLines.isEmpty()) {
                     if (mCurrSwitch > mMaxSwitch) {
                         mMaxSwitch = mCurrSwitch;
