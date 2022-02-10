@@ -13,4 +13,6 @@ public interface Caret {
     int getEndLine();
 
     int getEndColumn();
+
+    boolean isSelected();
 }

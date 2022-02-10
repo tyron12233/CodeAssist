@@ -7,9 +7,13 @@ import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.Presentation;
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
+
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 public class PasteAction extends CopyAction {
 
@@ -34,12 +38,27 @@ public class PasteAction extends CopyAction {
     public void actionPerformed(@NonNull AnActionEvent e) {
         Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
         Caret caret = editor.getCaret();
-        editor.replace(
+
+        if (caret.isSelected()) {
+            editor.delete(caret.getStart(), caret.getEnd());
+        }
+
+        String clip = String.valueOf(AndroidUtilities.getPrimaryClip());
+        String[] lines = clip.split("\n");
+        if (lines.length == 0) {
+            lines = new String[]{clip};
+        }
+
+        for (int i = 0; i < lines.length; i++) {
+            String trimmed = lines[i].trim();
+            lines[i] = trimmed;
+        }
+
+        String textToCopy = String.join("\n", lines);
+        editor.insertMultilineString(
                 caret.getStartLine(),
                 caret.getStartColumn(),
-                caret.getEndLine(),
-                caret.getEndColumn(),
-                String.valueOf(AndroidUtilities.getPrimaryClip())
+                textToCopy
         );
     }
 }
