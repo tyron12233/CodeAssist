@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Bundle;
 import android.util.AttributeSet;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.common.collect.ImmutableSet;
@@ -77,6 +78,11 @@ public class CodeEditorView extends CodeEditor implements Editor {
         window.setAdapter(new CodeAssistCompletionAdapter());
         replaceComponent(EditorAutoCompletion.class, window);
         replaceComponent(EditorTextActionWindow.class, new NoOpTextActionWindow(this));
+    }
+
+    @Override
+    public void setColorScheme(@NonNull EditorColorScheme colors) {
+        super.setColorScheme(colors);
     }
 
     @Override

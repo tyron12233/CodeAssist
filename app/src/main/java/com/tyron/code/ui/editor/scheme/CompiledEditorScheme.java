@@ -9,6 +9,7 @@ import android.util.TypedValue;
 import androidx.annotation.StyleableRes;
 import androidx.appcompat.widget.ThemeUtils;
 
+import com.google.android.material.color.MaterialColors;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.code.R;
 
@@ -71,7 +72,8 @@ public class CompiledEditorScheme extends EditorColorScheme {
         if (array.getType(res) == TypedValue.TYPE_ATTRIBUTE) {
             TypedValue typedValue = new TypedValue();
             array.getValue(res, typedValue);
-            setColorInternal(integer, ThemeUtils.getThemeAttrColor(context, typedValue.data));
+            int color = MaterialColors.getColor(context, typedValue.data, -1);
+            setColorInternal(integer, color);
             return;
         }
         setColorInternal(integer, array.getColor(res, 0));

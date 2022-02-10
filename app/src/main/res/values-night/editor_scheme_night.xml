@@ -14,7 +14,7 @@
         <item name="blockLineColor">?attr/dividerColor</item>
         <item name="textNormal">@color/white</item>
 
-        <item name="wholeBackground">?attr/backgroundColor</item>
+        <item name="wholeBackground">?android:attr/colorBackground</item>
         <item name="completionPanelBackground">?attr/colorSurface</item>
         <item name="completionPanelStrokeColor">?attr/dividerColor</item>
 
