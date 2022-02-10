@@ -70,7 +70,8 @@ public class JsonLanguage implements Language {
         Token token;
         int advance = 0;
         while ((token = lexer.nextToken()).getType() != Token.EOF) {
-            if (token.getType() == JSONLexer.LBRACKET) {
+            int type = token.getType();
+            if (type == JSONLexer.LBRACKET || type == JSONLexer.LBRACE) {
                 advance++;
             }
         }
