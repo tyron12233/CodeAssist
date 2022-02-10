@@ -23,6 +23,7 @@
         android:id="@+id/scrolling_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:fillViewport="true"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <androidx.constraintlayout.widget.ConstraintLayout
@@ -80,7 +81,7 @@
 
             <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -108,6 +109,7 @@
 
                 <include
                     android:id="@+id/empty_projects"
+                    android:layout_gravity="center"
                     layout="@layout/empty_projects_layout"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent" />

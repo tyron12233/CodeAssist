@@ -14,10 +14,11 @@
         android:padding="8dp"
         android:gravity="center"
         android:text="@string/project_manager_null_projects"
-        android:textColor="?attr/colorOnSurface"
-        android:textAppearance="@style/TextAppearance.Material3.TitleLarge"/>
+        tools:text="No Projects found"
+        android:textAppearance="@style/TextAppearance.Material3.BodyLarge"/>
 
     <TextView
+        android:visibility="gone"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:alpha="0.7"

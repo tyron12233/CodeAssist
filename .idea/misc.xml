@@ -129,9 +129,11 @@
         <entry key="app/src/main/res/layout/loading_layout.xml" value="0.1" />
         <entry key="app/src/main/res/layout/main.xml" value="0.1" />
         <entry key="app/src/main/res/layout/main_fragment.xml" value="0.1" />
+        <entry key="app/src/main/res/layout/setup_footer.xml" value="0.1" />
         <entry key="app/src/main/res/layout/shortcut_item.xml" value="0.33" />
         <entry key="app/src/main/res/layout/text_compose_panel.xml" value="0.25" />
         <entry key="app/src/main/res/layout/text_compose_popup_window.xml" value="0.33" />
+        <entry key="app/src/main/res/layout/wizard_template_item.xml" value="0.1" />
         <entry key="app/src/main/res/menu/code_editor_menu.xml" value="0.19322916666666667" />
         <entry key="app/src/main/res/menu/project_list_fragment_menu.xml" value="0.15555555555555556" />
         <entry key="app/src/main/res/xml/build_preferences.xml" value="0.25" />
