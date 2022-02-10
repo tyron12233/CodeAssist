@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:weightSum="100"
-    android:background="@color/colorBackground">
+    android:background="?attr/colorSurface">
 
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/palette_container"
@@ -16,11 +16,6 @@
         tools:layout="@layout/view_palette_fragment">
 
     </androidx.fragment.app.FragmentContainerView>
-
-    <View
-        android:layout_width="2dp"
-        android:layout_height="match_parent"
-        android:background="@color/cardview_shadow_start_color" />
 
     <FrameLayout
         android:id="@+id/editor_layout"
