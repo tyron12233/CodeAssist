@@ -20,6 +20,9 @@
     <option name="filePathToZoomLevelMap">
       <map>
         <entry key="../../../../layout/custom_preview.xml" value="0.22135416666666666" />
+        <entry key="../../.gradle/caches/transforms-3/1280ac89ade2374e5db8941ab76016dd/transformed/appcompat-1.4.1/res/drawable/abc_item_background_holo_dark.xml" value="0.16197916666666667" />
+        <entry key="../../.gradle/caches/transforms-3/1280ac89ade2374e5db8941ab76016dd/transformed/appcompat-1.4.1/res/drawable/abc_list_selector_holo_light.xml" value="0.16197916666666667" />
+        <entry key="../../Android/Sdk/platforms/android-31/data/res/drawable/list_selector_background.xml" value="0.16197916666666667" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/LayoutPreview/proteus-core/src/main/res/layout/layout_params_hack.xml" value="0.1" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/drawable/messages.xml" value="0.18489583333333334" />
         <entry key="..\:/Users/admin/StudioProjects/CodeAssist/app/src/main/res/drawable/round_play_arrow_24.xml" value="0.171875" />

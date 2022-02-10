@@ -9,6 +9,7 @@
     android:paddingStart="4dp"
     android:paddingTop="4dp"
     android:paddingEnd="4dp"
+    android:background="?attr/selectableItemBackground"
     android:paddingBottom="4dp">
 
     <ImageView
