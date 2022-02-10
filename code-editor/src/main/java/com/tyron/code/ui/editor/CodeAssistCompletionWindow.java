@@ -1,5 +1,7 @@
 package com.tyron.code.ui.editor;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.ViewTreeObserver;
 import android.widget.AdapterView;
@@ -7,6 +9,7 @@ import android.widget.ListAdapter;
 import android.widget.ListView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 
 import com.tyron.completion.BuildConfig;
 import com.tyron.completion.progress.ProgressManager;
@@ -15,7 +18,11 @@ import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 import org.jetbrains.kotlin.utils.ReflectionUtilKt;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
+import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -31,6 +38,8 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
     private CompletionLayout mLayout;
     private ListView mListView;
     private EditorCompletionAdapter mAdapter;
+
+    private final List<CompletionItem> mItems = new ArrayList<>();
 
     /**
      * Create a panel instance for the given editor
@@ -51,9 +60,7 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
 
         mLayout = layout;
         mListView = (ListView) layout.getCompletionList();
-        mListView.getViewTreeObserver().addOnTouchModeChangeListener(b -> {
-            mAdapter.notifyDataSetChanged();
-        });
+        mListView.setAdapter(mAdapter);
     }
 
     @Override
@@ -61,6 +68,9 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
         super.setAdapter(adapter);
 
         mAdapter = adapter;
+        mAdapter.attachValues(this, mItems);
+        mAdapter.notifyDataSetInvalidated();
+        mListView.setAdapter(adapter);
     }
 
     @Override
@@ -115,23 +125,23 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
 
         setCurrent(-1);
 
+        AtomicReference<List<CompletionItem>> reference = new AtomicReference<>();
+
         CompletionPublisher publisher = new CompletionPublisher(mEditor.getHandler(), () -> {
+            List<CompletionItem> newItems = reference.get();
+            mItems.clear();
+            mItems.addAll(newItems);
             mAdapter.notifyDataSetChanged();
             float newHeight = mAdapter.getItemHeight() * mAdapter.getCount();
             setSize(getWidth(), (int) Math.min(newHeight, mMaxHeight));
             if (!isShowing()) {
                 show();
             }
+            if (mAdapter.getCount() >= 1) {
+                setCurrent(0);
+            }
         }, mEditor.getEditorLanguage().getInterruptionLevel());
-
-        if (mAdapter instanceof CodeAssistCompletionAdapter) {
-            ((CodeAssistCompletionAdapter) mAdapter).setItems(this, publisher.getItems());
-        }
-        // only change the adapter if it does not match with the previous one
-        // to reduce flickering
-        if (!mAdapter.equals(mListView.getAdapter())) {
-            mListView.setAdapter(mAdapter);
-        }
+        reference.set(publisher.getItems());
 
         mThread = new CompletionThread(mRequestTime, publisher);
         setLoading(true);

@@ -118,6 +118,7 @@
         <entry key="app/src/main/res/layout/create_class_dialog.xml" value="0.1" />
         <entry key="app/src/main/res/layout/default_completion_result_item.xml" value="0.33" />
         <entry key="app/src/main/res/layout/editor_container_fragment.xml" value="0.1" />
+        <entry key="app/src/main/res/layout/editor_palette_item.xml" value="0.1" />
         <entry key="app/src/main/res/layout/empty_projects_layout.xml" value="0.22" />
         <entry key="app/src/main/res/layout/layout_editor_fragment.xml" value="0.22" />
         <entry key="app/src/main/res/layout/library_manager_fragment.xml" value="0.22" />
@@ -132,6 +133,7 @@
         <entry key="app/src/main/res/xml/build_preferences.xml" value="0.25" />
         <entry key="app/src/main/res/xml/editor_preferences.xml" value="0.1" />
         <entry key="app/src/main/res/xml/root_preferences.xml" value="0.22" />
+        <entry key="java-completion/src/main/res/layout/override_node_item.xml" value="0.1" />
       </map>
     </option>
   </component>

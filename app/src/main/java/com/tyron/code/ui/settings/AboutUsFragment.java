@@ -21,6 +21,7 @@ import com.danielstone.materialaboutlibrary.items.MaterialAboutActionItem;
 import com.danielstone.materialaboutlibrary.model.MaterialAboutCard;
 import com.danielstone.materialaboutlibrary.model.MaterialAboutList;
 import com.danielstone.materialaboutlibrary.util.OpenSourceLicense;
+import com.google.android.material.transition.MaterialSharedAxis;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.R;
 
@@ -28,6 +29,14 @@ import mehdi.sakout.aboutpage.AboutPage;
 import mehdi.sakout.aboutpage.Element;
 
 public class AboutUsFragment extends MaterialAboutFragment {
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        setEnterTransition(new MaterialSharedAxis(MaterialSharedAxis.X, false));
+        setExitTransition(new MaterialSharedAxis(MaterialSharedAxis.X, true));
+    }
 
     @Override
     protected MaterialAboutList getMaterialAboutList(Context context) {
