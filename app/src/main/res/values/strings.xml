@@ -71,8 +71,28 @@
     <string name="menu_settings">Settings</string>
 
     <!-- preferences -->
+    <string name="settings_title_application">Application</string>
+    <string name="settings_desc_application">General application preferences.</string>
     <string name="settings_title_editor">Editor</string>
+    <string name="settings_desc_editor">Configure the editor</string>
     <string name="title_activity_settings">Settings</string>
+
+    <!-- Application settings -->
+    <string name="settings_theme_title">Theme</string>
+    <string name="settings_theme_value_default">System default</string>
+    <string name="settings_theme_value_light">Light</string>
+    <string name="settings_theme_value_dark">Dark</string>
+
+    <string-array name="theme_values">
+        <item>default</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
+    <string-array name="theme_entries">
+        <item>@string/settings_theme_value_default</item>
+        <item>@string/settings_theme_value_light</item>
+        <item>@string/settings_theme_value_dark</item>
+    </string-array>
     
 
     <!-- Editor settings -->

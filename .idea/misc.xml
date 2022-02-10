@@ -129,6 +129,7 @@
         <entry key="app/src/main/res/layout/loading_layout.xml" value="0.1" />
         <entry key="app/src/main/res/layout/main.xml" value="0.1" />
         <entry key="app/src/main/res/layout/main_fragment.xml" value="0.1" />
+        <entry key="app/src/main/res/layout/project_manager_fragment.xml" value="0.19322916666666667" />
         <entry key="app/src/main/res/layout/setup_footer.xml" value="0.1" />
         <entry key="app/src/main/res/layout/shortcut_item.xml" value="0.33" />
         <entry key="app/src/main/res/layout/text_compose_panel.xml" value="0.25" />
