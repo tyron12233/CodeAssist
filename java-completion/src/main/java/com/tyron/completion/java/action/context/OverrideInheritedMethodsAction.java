@@ -2,7 +2,6 @@ package com.tyron.completion.java.action.context;
 
 import static com.tyron.completion.java.util.DiagnosticUtil.MethodPtr;
 
-import android.app.AlertDialog;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.View;
@@ -11,7 +10,9 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
@@ -105,7 +106,7 @@ public class OverrideInheritedMethodsAction extends AnAction {
         OverrideNodeViewFactory factory = new OverrideNodeViewFactory();
         treeView.setAdapter(factory);
 
-        AlertDialog dialog = new AlertDialog.Builder(e.getDataContext())
+        AlertDialog dialog = new MaterialAlertDialogBuilder(e.getDataContext())
                 .setTitle(R.string.menu_quickfix_implement_abstract_methods_title)
                 .setView(treeView.getView())
                 .setNegativeButton(android.R.string.cancel, null)

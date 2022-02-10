@@ -16,6 +16,7 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.common.ApplicationProvider;
 
 import java.io.File;
@@ -122,7 +123,7 @@ public class AndroidUtilities {
 	}
 
 	public static void showSimpleAlert(Context context, String title, String message) {
-		new AlertDialog.Builder(context)
+		new MaterialAlertDialogBuilder(context)
 				.setTitle(title)
 				.setMessage(message)
 				.setPositiveButton(android.R.string.ok, null)
