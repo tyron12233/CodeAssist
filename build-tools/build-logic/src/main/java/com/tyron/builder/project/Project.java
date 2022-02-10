@@ -40,12 +40,22 @@ public class Project {
     private final File mRoot;
 
     private final ProjectSettings mSettings;
+
+    private volatile boolean mCompiling;
     
     public Project(File root) {
         mRoot = root;
         mModules = new LinkedHashMap<>();
         mMainModule = new AndroidModuleImpl(new File(mRoot, "app"));
         mSettings = new ProjectSettings(new File(root, "settings.json"));
+    }
+
+    public boolean isCompiling() {
+        return mCompiling;
+    }
+
+    public void setCompiling(boolean compiling) {
+        mCompiling = compiling;
     }
 
     public void open() throws IOException {

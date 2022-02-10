@@ -10,6 +10,7 @@ import androidx.annotation.Nullable;
 import com.google.common.collect.ImmutableSet;
 import com.tyron.actions.DataContext;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.project.Project;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
@@ -17,6 +18,7 @@ import com.tyron.code.ui.editor.NoOpTextActionWindow;
 import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
 import com.tyron.code.ui.editor.language.json.JsonLanguage;
 import com.tyron.code.ui.editor.scheme.CompiledEditorScheme;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
@@ -323,7 +325,8 @@ public class CodeEditorView extends CodeEditor implements Editor {
         //noinspection ConstantConditions
         if (getEditorLanguage() != null) {
             AnalyzeManager analyzeManager = getEditorLanguage().getAnalyzeManager();
-            if (isBackgroundAnalysisEnabled()) {
+            Project project = ProjectManager.getInstance().getCurrentProject();
+            if (isBackgroundAnalysisEnabled() && (project != null && !project.isCompiling())) {
                 analyzeManager.rerun();
             } else {
                 if (analyzeManager instanceof DiagnosticAnalyzeManager) {

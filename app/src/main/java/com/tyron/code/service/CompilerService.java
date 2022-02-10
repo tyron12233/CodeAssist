@@ -171,12 +171,17 @@ public class CompilerService extends Service {
             return;
         }
 
+        project.setCompiling(true);
         ProgressIndicator indicator = new ProgressIndicator();
         ProgressManager.getInstance().runAsync(() -> {
-           if (true) {
-               buildProject(project, type);
-           } else {
-               buildMainModule(project, type);
+            try {
+                if (true) {
+                    buildProject(project, type);
+                } else {
+                    buildMainModule(project, type);
+                }
+            } finally {
+                project.setCompiling(false);
             }
         }, i -> {
 

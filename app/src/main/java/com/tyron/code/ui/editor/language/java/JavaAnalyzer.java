@@ -112,6 +112,9 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
         if (project == null) {
             return null;
         }
+        if (project.isCompiling()) {
+            return null;
+        }
         Module module = project.getModule(editor.getCurrentFile());
         if (module instanceof JavaModule) {
             JavaCompilerProvider provider =
