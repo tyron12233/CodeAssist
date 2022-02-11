@@ -460,31 +460,26 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     @Override
     public void save() {
-        if (!mCanSave) {
+        if (!mCanSave && mReading) {
             return;
         }
-        if (mCurrentFile.exists()) {
-            final Content content = mEditor.getText();
-            ProgressManager.getInstance().runNonCancelableAsync(() -> {
-                mReading = true;
-                try {
-                    String oldContents = "";
-                    try {
-                        oldContents = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                    if (oldContents.equals(mEditor.getText().toString())) {
-                        return;
-                    }
 
-                    try {
-                        FileUtils.writeStringToFile(mCurrentFile, content.toString(), StandardCharsets.UTF_8);
-                    } catch (IOException e) {
-                        // ignored
-                    }
-                } finally {
-                    mReading = false;
+        if (!mCurrentFile.exists()) {
+            return;
+        }
+
+        if (ProjectManager.getInstance().getCurrentProject() != null) {
+            ProjectManager.getInstance().getCurrentProject()
+                    .getModule(mCurrentFile)
+                    .getFileManager()
+                    .setSnapshotContent(mCurrentFile, mEditor.getText().toString(), false);
+        } else {
+            ProgressManager.getInstance().runNonCancelableAsync(() -> {
+                try {
+                    FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(),
+                            StandardCharsets.UTF_8);
+                } catch (IOException e) {
+                    // ignored
                 }
             });
         }
