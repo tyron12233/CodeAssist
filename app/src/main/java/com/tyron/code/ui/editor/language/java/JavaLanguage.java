@@ -56,13 +56,9 @@ public class JavaLanguage implements Language {
                 case LBRACE:
                     advance++;
                     break;
-//                case RBRACE:
-//                    advance--;
-//                    break;
             }
         }
-        advance = Math.max(0, advance);
-        return advance * 4;
+        return advance * getTabWidth();
     }
 
     @NonNull
@@ -107,6 +103,11 @@ public class JavaLanguage implements Language {
     public boolean useTab() {
         return true;
     }
+
+    public int getTabWidth() {
+        return 4;
+    }
+
 
     @Override
     public CharSequence format(CharSequence p1) {

@@ -15,6 +15,9 @@ import com.tyron.editor.Editor;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
+import io.github.rosemoe.sora.text.TextUtils;
+import io.github.rosemoe.sora2.text.EditorUtil;
+
 public class PasteAction extends CopyAction {
 
     @Override
@@ -49,9 +52,20 @@ public class PasteAction extends CopyAction {
             lines = new String[]{clip};
         }
 
+        int count = TextUtils.countLeadingSpaceCount(lines[0], editor.getTabCount());
         for (int i = 0; i < lines.length; i++) {
-            String trimmed = lines[i].trim();
-            lines[i] = trimmed;
+            String line = lines[i];
+            if (count < line.length()) {
+                String whitespace = line.substring(0, count);
+                if (EditorUtil.isWhitespace(whitespace)) {
+                    line = line.substring(count);
+                } else {
+                    line = line.trim();
+                }
+            } else {
+                line = line.trim();
+            }
+            lines[i] = line;
         }
 
         String textToCopy = String.join("\n", lines);

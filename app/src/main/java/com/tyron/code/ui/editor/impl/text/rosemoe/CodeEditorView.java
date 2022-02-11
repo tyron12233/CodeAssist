@@ -1,7 +1,6 @@
 package com.tyron.code.ui.editor.impl.text.rosemoe;
 
 import android.content.Context;
-import android.os.Bundle;
 import android.util.AttributeSet;
 
 import androidx.annotation.NonNull;
@@ -16,8 +15,6 @@ import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
 import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
-import com.tyron.code.ui.editor.language.json.JsonLanguage;
-import com.tyron.code.ui.editor.scheme.CompiledEditorScheme;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
@@ -36,12 +33,16 @@ import java.util.stream.Collectors;
 
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
+import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
+import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
 import io.github.rosemoe.sora.text.Cursor;
+import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorTextActionWindow;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
+import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class CodeEditorView extends CodeEditor implements Editor {
 
@@ -77,6 +78,27 @@ public class CodeEditorView extends CodeEditor implements Editor {
         super(DataContext.wrap(context), attrs, defStyleAttr, defStyleRes);
 
         init();
+    }
+
+    @Override
+    public void setEditorLanguage(@Nullable Language lang) {
+        super.setEditorLanguage(lang);
+
+        if (lang != null) {
+            // languages should have an option to declare their own tab width
+            try {
+                Class<? extends Language> aClass = lang.getClass();
+                Method method = ReflectionUtil.getDeclaredMethod(aClass, "getTabWidth");
+                if (method != null) {
+                    Object invoke = method.invoke(getEditorLanguage());
+                    if (invoke instanceof Integer) {
+                        setTabWidth((Integer) invoke);
+                    }
+                }
+            } catch (Throwable e) {
+                // use default
+            }
+        }
     }
 
     private void init() {
@@ -154,30 +176,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
-    public int getTabWidth() {
-        //noinspection ConstantConditions
-        if (getEditorLanguage() == null) {
-            return super.getTabWidth();
-        }
-
-        // languages should have an option to declare their own tab width
-        try {
-            Class<? extends Language> aClass = getEditorLanguage().getClass();
-            Method method = ReflectionUtil.getDeclaredMethod(aClass, "getTabWidth");
-            if (method != null) {
-                Object invoke = method.invoke(getEditorLanguage());
-                if (invoke instanceof Integer) {
-                    return (int) invoke;
-                }
-            }
-        } catch (Throwable e) {
-            // use default
-        }
-
-        return super.getTabWidth();
-    }
-
-    @Override
     public void insert(int line, int column, String string) {
         getText().insert(line, column, string);
     }
@@ -233,14 +231,22 @@ public class CodeEditorView extends CodeEditor implements Editor {
         String currentIndent = currentLine.trim().isEmpty()
                 ? currentLine
                 : currentLine.substring(0, currentLine.indexOf(currentLine.trim()));
+        int count = currentIndent.length();
 
         String[] lines = string.split("\\n");
         if (lines.length == 0) {
-            getText().insert(line, column, "\n" + currentIndent);
             return;
         }
         String textToInsert = Arrays.stream(lines)
-                .map(s -> currentIndent + s)
+                .map(s -> {
+                    if (count < s.length()) {
+                        String whitespace = s.substring(0, count);
+                        if (EditorUtil.isWhitespace(whitespace)) {
+                            s = s.substring(count);
+                        }
+                    }
+                    return currentIndent + s;
+                })
                 .collect(Collectors.joining("\n"))
                 .substring(currentIndent.length());
 

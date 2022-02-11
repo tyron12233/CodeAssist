@@ -11,11 +11,11 @@ public class EditorUtil {
     public static boolean isWhitespace(CharSequence charSequence) {
         for (int i = 0; i < charSequence.length(); i++) {
             char c = charSequence.charAt(i);
-            if (Character.isWhitespace(c)) {
-                return true;
+            if (!Character.isWhitespace(c)) {
+                return false;
             }
         }
-        return false;
+        return true;
     }
     public static void selectWord(CodeEditor editor, int line, int column) {
         // Find word edges
