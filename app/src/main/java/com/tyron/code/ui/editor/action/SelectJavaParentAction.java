@@ -9,6 +9,7 @@ import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.Presentation;
+import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.code.R;
 import com.tyron.completion.java.action.FindCurrentPath;
@@ -23,6 +24,7 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
 import java.io.File;
+import java.time.Instant;
 
 public class SelectJavaParentAction extends AnAction {
 
@@ -63,7 +65,10 @@ public class SelectJavaParentAction extends AnAction {
         Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
         Project project = e.getRequiredData(CommonDataKeys.PROJECT);
         File file = e.getRequiredData(CommonDataKeys.FILE);
-        Parser parser = Parser.parseFile(project, file.toPath());
+
+        SourceFileObject fileObject = new SourceFileObject(file.toPath(),
+                editor.getContent().toString(), Instant.now());
+        Parser parser = Parser.parseJavaFileObject(project, fileObject);
 
         FindCurrentPath findCurrentPath = new FindCurrentPath(parser.task);
 
