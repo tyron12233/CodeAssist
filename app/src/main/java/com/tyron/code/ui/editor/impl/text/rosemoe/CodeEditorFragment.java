@@ -126,6 +126,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
     private MainViewModel mMainViewModel;
     private SharedPreferences mPreferences;
 
+    private Bundle mSavedInstanceState;
+
     private boolean mCanSave;
     private boolean mReading;
 
@@ -153,6 +155,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 previousHandler.uncaughtException(thread, throwable);
             }
         });
+
+        mSavedInstanceState = savedInstanceState;
     }
 
     @Override
@@ -315,7 +319,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         Project project = ProjectManager.getInstance().getCurrentProject();
         if (project != null) {
-            readFile(project);
+            readFile(project, savedInstanceState);
         } else {
             ProjectManager.getInstance().addOnProjectOpenListener(this);
         }
@@ -487,7 +491,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     @Override
     public void onProjectOpen(Project project) {
-        readFile(project);
+        readFile(project, mSavedInstanceState);
     }
 
     private ListenableFuture<String> readFile() {
@@ -495,7 +499,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 Futures.immediateFuture(FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8)));
     }
 
-    private void readFile(@NonNull Project currentProject) {
+    private void readFile(@NonNull Project currentProject, @Nullable Bundle savedInstanceState) {
         Module module = currentProject.getModule(mCurrentFile);
         FileManager fileManager = module.getFileManager();
         fileManager.addSnapshotListener(this);
@@ -519,6 +523,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 mEditor.setBackgroundAnalysisEnabled(true);
                 fileManager.openFileForSnapshot(mCurrentFile, result);
                 mEditor.setText(result);
+
+                if (savedInstanceState != null) {
+                    restoreState(savedInstanceState);
+                }
             }
 
             @Override
