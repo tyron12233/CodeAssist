@@ -77,7 +77,7 @@ public class AboutUsFragment extends MaterialAboutFragment {
                         getDrawable(R.drawable.ic_icons8_telegram_app),
                         "Telegram",
                         false,
-                        Uri.parse("https://discord.gg/pffnyE6prs")))
+                        Uri.parse("https://t.me/codeassist_app")))
                 .build();
 
         MaterialAboutCard licenseCard = ConvenienceBuilder.createLicenseCard(context,
