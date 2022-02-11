@@ -45,6 +45,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.wizard.adapter.WizardTemplateAdapter;
+import com.tyron.code.util.UiUtilsKt;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.Decompress;
@@ -143,6 +144,9 @@ public class WizardFragment extends Fragment {
 
         View view = inflater.inflate(R.layout.wizard_fragment, container, false);
         LinearLayout layout = view.findViewById(R.id.setup_wizard_layout);
+
+        View footer = view.findViewById(R.id.footer);
+        UiUtilsKt.addSystemWindowInsetToPadding(footer, false, true, false, true);
 
         mNavigateButton = layout.findViewById(R.id.wizard_next);
         mNavigateButton.setVisibility(View.GONE);

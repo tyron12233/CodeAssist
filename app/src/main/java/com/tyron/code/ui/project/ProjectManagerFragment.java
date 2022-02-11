@@ -16,6 +16,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewKt;
 import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 import androidx.preference.PreferenceManager;
@@ -37,6 +38,7 @@ import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.project.adapter.ProjectManagerAdapter;
 import com.tyron.code.ui.settings.SettingsActivity;
 import com.tyron.code.ui.wizard.WizardFragment;
+import com.tyron.code.util.UiUtilsKt;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.common.SharedPreferenceKeys;
 
@@ -133,6 +135,8 @@ public class ProjectManagerFragment extends Fragment {
                     .addToBackStack(null)
                     .commit();
         });
+        UiUtilsKt.addSystemWindowInsetToMargin(mCreateProjectFab, false, false, false, true);
+
         mAdapter = new ProjectManagerAdapter();
         mAdapter.setOnProjectSelectedListener(this::openProject);
         mAdapter.setOnProjectLongClickListener(this::inflateProjectMenus);

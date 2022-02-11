@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <style name="AppThemeNew" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/md_theme_dark_primary</item>
@@ -35,6 +35,8 @@
 
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowTranslucentNavigation">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

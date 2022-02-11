@@ -20,6 +20,7 @@ import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.code.R;
+import com.tyron.code.util.UiUtilsKt;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
 import com.tyron.ui.treeview.TreeView;
@@ -68,10 +69,10 @@ public class TreeFileManagerFragment extends Fragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         FrameLayout root = new FrameLayout(requireContext());
-        root.setFitsSystemWindows(true);
         root.setLayoutParams(
                 new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
+        UiUtilsKt.addSystemWindowInsetToPadding(root, false, true, false, true);
 
         treeView = new TreeView<>(
                 requireContext(), TreeNode.root(Collections.emptyList()));
