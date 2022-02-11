@@ -162,10 +162,10 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
         }
         if (xmlRepository != null) {
             List<String> values = new ArrayList<>();
-            Set<DeclareStyleable> styles = new HashSet<>();
             Map<String, DeclareStyleable> declareStyleables =
                     xmlRepository.getDeclareStyleables();
-            styles.addAll(StyleUtils.getStyles(declareStyleables, mTag, mParentTag));
+            Set<DeclareStyleable> styles = new HashSet<>(StyleUtils.getStyles(declareStyleables,
+                    mTag, mParentTag));
 
             for (DeclareStyleable style : styles) {
                 for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
