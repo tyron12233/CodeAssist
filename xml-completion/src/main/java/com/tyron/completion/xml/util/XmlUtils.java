@@ -19,6 +19,7 @@ import com.tyron.completion.xml.model.Format;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
+import org.eclipse.lemminx.dom.DOMNode;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.parser.Parser;
@@ -195,10 +196,9 @@ public class XmlUtils {
      * @param index The index of the cursor
      * @return whther the index is at the attribite tag of the node
      */
-    public static boolean isTag(Node node, long index) {
+    public static boolean isTag(DOMNode node, long index) {
         String name = node.getNodeName();
-        SourcePosition position = PositionXmlParser.getPosition(node);
-        return position.getStartOffset() < index && index < position.getStartOffset() + name.length();
+        return node.getStart() < index && index <= node.getStart() + name.length();
     }
 
     /**
@@ -225,6 +225,8 @@ public class XmlUtils {
     public static String buildFixedXml(String contents) {
         Parser parser = Parser.xmlParser();
         Document document = Jsoup.parse(contents, "", parser);
+        Document.OutputSettings settings = document.outputSettings();
+        settings.prettyPrint(false);
         return document.toString();
     }
 

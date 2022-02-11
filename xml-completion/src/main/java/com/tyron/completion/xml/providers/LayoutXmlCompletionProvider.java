@@ -44,6 +44,9 @@ import com.tyron.completion.xml.util.XmlUtils;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
 import org.apache.bcel.classfile.JavaClass;
+import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.dom.DOMNode;
+import org.eclipse.lemminx.dom.DOMParser;
 import org.openjdk.javax.xml.parsers.ParserConfigurationException;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
@@ -153,10 +156,8 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         String fixedPrefix = partialIdentifier(contents, (int) index);
         String fullPrefix = fullIdentifier(contents, (int) index);
 
-        String fixed = XmlUtils.buildFixedXml(contents);
-        Document document = PositionXmlParser.parse(fixed, false);
-        Node node = PositionXmlParser.findNodeAtOffset(document, (int) index);
-        assert node != null;
+        DOMDocument parsed = DOMParser.getInstance().parse(contents, "", null);
+        DOMNode node = parsed.findNodeAt((int) index);
 
         String parentTag = "";
         String tag = "";

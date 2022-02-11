@@ -43,6 +43,7 @@ dependencies {
     implementation project(path: ':java-completion')
 
     implementation project(path: ':build-tools:build-logic')
+    implementation files('libs\\org.eclipse.lemminx-0.11.0-uber.jar')
     testImplementation 'junit:junit:4.+'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'

@@ -1,12 +1,14 @@
 package com.tyron.completion.xml.providers;
 
-import static com.tyron.completion.xml.util.XmlUtils.*;
+import static com.tyron.completion.xml.util.XmlUtils.fullIdentifier;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeItem;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeNameFromPrefix;
+import static com.tyron.completion.xml.util.XmlUtils.getElementNode;
+import static com.tyron.completion.xml.util.XmlUtils.isInAttributeValue;
+import static com.tyron.completion.xml.util.XmlUtils.isIncrementalCompletion;
+import static com.tyron.completion.xml.util.XmlUtils.isTag;
+import static com.tyron.completion.xml.util.XmlUtils.newPullParser;
 import static com.tyron.completion.xml.util.XmlUtils.partialIdentifier;
-
-import android.Manifest;
-import android.util.Pair;
 
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
@@ -23,10 +25,12 @@ import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.XmlCachedCompletion;
-import com.tyron.completion.xml.util.AndroidResourcesUtils;
 import com.tyron.completion.xml.util.StyleUtils;
 import com.tyron.completion.xml.util.XmlUtils;
 
+import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.dom.DOMNode;
+import org.eclipse.lemminx.dom.DOMParser;
 import org.openjdk.javax.xml.parsers.ParserConfigurationException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -157,9 +161,9 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
         return CompletionList.EMPTY;
     }
 
-    public XmlCachedCompletion completeInternal(Project project, Module module, File file,
-                                                String contents, String prefix, int line,
-                                                int column, long index) throws XmlPullParserException, ParserConfigurationException, IOException, SAXException {
+    public XmlCachedCompletion completeInternal(
+            Project project, Module module, File file, String contents,
+            String prefix, int line, int column, long index) throws XmlPullParserException, ParserConfigurationException, IOException, SAXException {
         CompletionList list = new CompletionList();
         XmlCachedCompletion xmlCachedCompletion = new XmlCachedCompletion(file, line, column,
                 prefix, list);
@@ -175,10 +179,8 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
         repository.initialize((AndroidModule) module);
         Map<String, DeclareStyleable> manifestAttrs = repository.getManifestAttrs();
 
-        String fixed = XmlUtils.buildFixedXml(contents);
-        Document document = PositionXmlParser.parse(fixed, false);
-        Node node = PositionXmlParser.findNodeAtOffset(document, (int) index);
-        assert node != null;
+        DOMDocument parsed = DOMParser.getInstance().parse(contents, "", null);
+        DOMNode node = parsed.findNodeAt((int) index);
 
         String parentTag = "";
         String tag = "";
@@ -189,7 +191,10 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
                     : ownerNode.getParentNode().getNodeName();
             tag = ownerNode.getTagName();
         }
-
+        tag = getTag(tag);
+        if (tag == null) {
+            tag = "";
+        }
         Set<DeclareStyleable> styles = StyleUtils.getStyles(manifestAttrs, tag);
 
         if (isTag(node, index)) {
