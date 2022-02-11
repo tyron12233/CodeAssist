@@ -197,6 +197,15 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
                             start = end - 2;
                         }
                         break;
+                    case ErrorCodes.DEPRECATED:
+                        if (treePath.getLeaf().getKind() == Tree.Kind.METHOD) {
+                            MethodTree methodTree = (MethodTree) treePath.getLeaf();
+                            if (methodTree.getBody() != null) {
+                                start = positions.getStartPosition(task.root(), methodTree);
+                                end = positions.getStartPosition(task.root(), methodTree.getBody());
+                            }
+                        }
+                        break;
                 }
 
                 wrapped.setStartPosition(start);
