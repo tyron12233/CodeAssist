@@ -46,7 +46,6 @@ public class MainActivity extends AppCompatActivity {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         runStartup();
-        setupTheme();
 
         if (getSupportFragmentManager().findFragmentByTag(ProjectManagerFragment.TAG) == null) {
             getSupportFragmentManager().beginTransaction()
@@ -103,12 +102,6 @@ public class MainActivity extends AppCompatActivity {
             KotlinCompletionModule.registerActions(manager);
         });
         startupManager.startup();
-    }
-
-    private void setupTheme() {
-        ApplicationSettingsFragment.ThemeProvider provider = new ApplicationSettingsFragment.ThemeProvider(this);
-        int theme = provider.getThemeFromPreferences();
-        AppCompatDelegate.setDefaultNightMode(theme);
     }
 	
 	@Override
