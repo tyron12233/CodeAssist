@@ -1,5 +1,6 @@
 package com.tyron.code.ui.editor.language.json;
 
+import android.annotation.SuppressLint;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
@@ -9,12 +10,16 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.google.gson.stream.JsonWriter;
 import com.tyron.completion.java.rewrite.EditHelper;
 import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
 import org.apache.commons.io.input.CharSequenceReader;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
@@ -85,15 +90,22 @@ public class JsonLanguage implements Language {
 
     @Override
     public boolean useTab() {
-        return false;
+        return true;
     }
 
+    @SuppressLint("WrongThread")
     @Override
     public CharSequence format(CharSequence text) {
         try {
-            Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            JsonElement jsonElement = JsonParser.parseString(text.toString());
-            return gson.toJson(jsonElement);
+            Gson gson = new GsonBuilder()
+                    .setPrettyPrinting()
+                    .create();
+            try (StringWriter writer = new StringWriter()) {
+                JsonWriter jsonWriter = gson.newJsonWriter(writer);
+                jsonWriter.setIndent(useTab() ? "\t" : " ");
+                gson.toJson(JsonParser.parseString(text.toString()), jsonWriter);
+                return writer.toString();
+            }
         } catch (Throwable e) {
             // format error, return the original string
             return text;
