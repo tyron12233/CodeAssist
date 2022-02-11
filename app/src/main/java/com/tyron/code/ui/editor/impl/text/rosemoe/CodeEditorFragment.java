@@ -409,9 +409,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
     public void onDestroy() {
         super.onDestroy();
         if (ProjectManager.getInstance().getCurrentProject() != null) {
-            ProjectManager.getInstance().getCurrentProject()
-                    .getModule(mCurrentFile).getFileManager()
-                    .closeFileForSnapshot(mCurrentFile);
+            ProgressManager.getInstance().runNonCancelableAsync(() ->
+                    ProjectManager.getInstance().getCurrentProject()
+                            .getModule(mCurrentFile).getFileManager()
+                            .closeFileForSnapshot(mCurrentFile));
         }
         mPreferences.unregisterOnSharedPreferenceChangeListener(this);
     }
@@ -504,12 +505,20 @@ public class CodeEditorFragment extends Fragment implements Savable,
         FileManager fileManager = module.getFileManager();
         fileManager.addSnapshotListener(this);
 
+        if (fileManager.isOpened(mCurrentFile)) {
+            Optional<CharSequence> contents = fileManager.getFileContent(mCurrentFile);
+            if (contents.isPresent()) {
+                mEditor.setText(contents.get());
+                return;
+            }
+        }
+
         mReading = true;
         mEditor.setBackgroundAnalysisEnabled(false);
         ListenableFuture<String> future = readFile();
         Futures.addCallback(future, new FutureCallback<String>() {
             @Override
-            public void onSuccess(@NonNull String result) {
+            public void onSuccess(@Nullable String result) {
                 mCanSave = true;
                 mReading = false;
                 mEditor.setBackgroundAnalysisEnabled(true);
