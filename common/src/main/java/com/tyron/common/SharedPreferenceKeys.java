@@ -16,4 +16,5 @@ public class SharedPreferenceKeys {
     public static final String JAVA_ERROR_HIGHLIGHTING = "code_editor_error_highlight";
     public static final String JAVA_CODE_COMPLETION = "code_editor_completion";
     public static final String SCHEME = "scheme";
+    public static final String THEME = "theme";
 }

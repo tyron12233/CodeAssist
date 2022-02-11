@@ -1,9 +1,11 @@
 package com.tyron.code;
 
+import android.content.SharedPreferences;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.view.WindowCompat;
 
 import com.tyron.actions.ActionManager;
@@ -22,7 +24,9 @@ import com.tyron.code.ui.main.action.other.FormatAction;
 import com.tyron.code.ui.main.action.other.OpenSettingsAction;
 import com.tyron.code.ui.main.action.project.ProjectActionGroup;
 import com.tyron.code.ui.project.ProjectManagerFragment;
+import com.tyron.code.ui.settings.ApplicationSettingsFragment;
 import com.tyron.common.ApplicationProvider;
+import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.JavaCompilerProvider;
@@ -41,6 +45,19 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.main);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
+        runStartup();
+        setupTheme();
+
+        if (getSupportFragmentManager().findFragmentByTag(ProjectManagerFragment.TAG) == null) {
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.fragment_container,
+                            new ProjectManagerFragment(),
+                            ProjectManagerFragment.TAG)
+                    .commit();
+        }
+    }
+
+    private void runStartup() {
         StartupManager startupManager = new StartupManager();
         startupManager.addStartupActivity(() -> {
             CompletionEngine engine = CompletionEngine.getInstance();
@@ -86,14 +103,12 @@ public class MainActivity extends AppCompatActivity {
             KotlinCompletionModule.registerActions(manager);
         });
         startupManager.startup();
+    }
 
-        if (getSupportFragmentManager().findFragmentByTag(ProjectManagerFragment.TAG) == null) {
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container,
-                            new ProjectManagerFragment(),
-                            ProjectManagerFragment.TAG)
-                    .commit();
-        }
+    private void setupTheme() {
+        ApplicationSettingsFragment.ThemeProvider provider = new ApplicationSettingsFragment.ThemeProvider(this);
+        int theme = provider.getThemeFromPreferences();
+        AppCompatDelegate.setDefaultNightMode(theme);
     }
 	
 	@Override

@@ -6,15 +6,17 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 
 import androidx.appcompat.app.AppCompatDelegate;
+import androidx.core.content.SharedPreferencesKt;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 
 import com.tyron.code.R;
+import com.tyron.common.SharedPreferenceKeys;
 
 public class ApplicationSettingsFragment extends PreferenceFragmentCompat {
 
-    private static class ThemeProvider {
+    public static class ThemeProvider {
 
         private final Context context;
 
@@ -49,7 +51,7 @@ public class ApplicationSettingsFragment extends PreferenceFragmentCompat {
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         setPreferencesFromResource(R.xml.application_preferences, rootKey);
 
-        Preference theme = findPreference("theme");
+        Preference theme = findPreference(SharedPreferenceKeys.THEME);
         assert theme != null;
         theme.setOnPreferenceChangeListener((preference, newValue) -> {
             if (newValue instanceof String) {
