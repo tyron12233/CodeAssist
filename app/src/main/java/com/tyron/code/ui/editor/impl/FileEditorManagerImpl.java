@@ -3,6 +3,7 @@ package com.tyron.code.ui.editor.impl;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
+import androidx.fragment.app.FragmentManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.code.R;
@@ -28,13 +29,15 @@ public class FileEditorManagerImpl extends FileEditorManager {
     }
 
     private MainViewModel mViewModel;
+    private FragmentManager mFragmentManager;
 
     FileEditorManagerImpl() {
 
     }
 
-    public void attach(MainViewModel mainViewModel) {
+    public void attach(MainViewModel mainViewModel, FragmentManager fragmentManager) {
         mViewModel = mainViewModel;
+        mFragmentManager = fragmentManager;
     }
 
     @Override
@@ -97,8 +100,13 @@ public class FileEditorManagerImpl extends FileEditorManager {
         }
     }
 
+    public FragmentManager getFragmentManager() {
+        checkAttached();
+        return this.mFragmentManager;
+    }
+
     private void checkAttached() {
-        if (mViewModel == null) {
+        if (mViewModel == null || mFragmentManager == null) {
             throw new IllegalStateException("File editor manager is not yet attached to a ViewModel");
         }
     }

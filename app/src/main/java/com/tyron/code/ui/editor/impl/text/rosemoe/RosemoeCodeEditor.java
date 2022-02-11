@@ -5,6 +5,8 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.fileeditor.api.FileEditorManager;
 import com.tyron.fileeditor.api.TextEditor;
 
 import java.io.File;
@@ -28,6 +30,14 @@ public class RosemoeCodeEditor implements TextEditor {
 
     @Override
     public Fragment getFragment() {
+        if (mFragment == null || mFragment.isDetached()) {
+            FileEditorManagerImpl instance = (FileEditorManagerImpl) FileEditorManagerImpl.getInstance();
+            Fragment fragment =
+                    instance.getFragmentManager().findFragmentByTag("f-" + mFile.hashCode());
+            if (fragment != null) {
+                return fragment;
+            }
+        }
         return mFragment;
     }
 

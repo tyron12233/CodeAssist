@@ -26,6 +26,7 @@ import com.tyron.actions.DataContext;
 import com.tyron.actions.util.DataContextUtils;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.adapter.PageAdapter;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
 import com.tyron.code.ui.main.MainFragment;
@@ -81,6 +82,9 @@ public class EditorContainerFragment extends Fragment {
                              @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View root = inflater.inflate(R.layout.editor_container_fragment, container, false);
+
+        ((FileEditorManagerImpl) FileEditorManagerImpl.getInstance())
+                .attach(mMainViewModel, getChildFragmentManager());
 
         mAdapter = new PageAdapter(getChildFragmentManager(), getLifecycle());
         mPager = root.findViewById(R.id.viewpager);

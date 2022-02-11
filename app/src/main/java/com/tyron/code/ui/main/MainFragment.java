@@ -131,8 +131,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
         mIndexServiceConnection = new IndexServiceConnection(mMainViewModel, mLogViewModel);
         mServiceConnection = new CompilerServiceConnection(mMainViewModel, mLogViewModel);
-
-        ((FileEditorManagerImpl) FileEditorManagerImpl.getInstance()).attach(mMainViewModel);
     }
 
     @Override
