@@ -3,10 +3,13 @@ package com.tyron.completion.xml.providers;
 import static com.tyron.completion.xml.util.XmlUtils.fullIdentifier;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeItem;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeNameFromPrefix;
+import static com.tyron.completion.xml.util.XmlUtils.getElementNode;
 import static com.tyron.completion.xml.util.XmlUtils.getTagAtPosition;
 import static com.tyron.completion.xml.util.XmlUtils.isInAttribute;
 import static com.tyron.completion.xml.util.XmlUtils.isInAttributeValue;
 import static com.tyron.completion.xml.util.XmlUtils.isIncrementalCompletion;
+import static com.tyron.completion.xml.util.XmlUtils.isTag;
+import static com.tyron.completion.xml.util.XmlUtils.newPullParser;
 import static com.tyron.completion.xml.util.XmlUtils.partialIdentifier;
 
 import android.annotation.SuppressLint;
@@ -15,8 +18,10 @@ import android.util.Pair;
 
 import androidx.annotation.RequiresApi;
 
+import com.tyron.builder.compiler.manifest.blame.SourcePosition;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.util.PositionXmlParser;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
@@ -39,6 +44,12 @@ import com.tyron.completion.xml.util.XmlUtils;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
 import org.apache.bcel.classfile.JavaClass;
+import org.openjdk.javax.xml.parsers.ParserConfigurationException;
+import org.w3c.dom.Attr;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -108,7 +119,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
             CompletionList completionList = list.getCompletionList();
             sort(completionList.items, list.getFilterPrefix());
             return completionList;
-        } catch (XmlPullParserException | IOException e) {
+        } catch (XmlPullParserException | IOException | ParserConfigurationException | SAXException e) {
             e.printStackTrace();
         }
 
@@ -128,7 +139,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     private XmlCachedCompletion completeInternal(Project project, AndroidModule module, File file, String contents,
-                                                 String prefix, int line, int column, long index) throws XmlPullParserException, IOException {
+                                                 String prefix, int line, int column, long index) throws XmlPullParserException, IOException, ParserConfigurationException, SAXException {
         CompletionList list = new CompletionList();
         XmlCachedCompletion xmlCachedCompletion = new XmlCachedCompletion(file,
                 line, column, prefix, list);
@@ -142,27 +153,34 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         String fixedPrefix = partialIdentifier(contents, (int) index);
         String fullPrefix = fullIdentifier(contents, (int) index);
 
-        XmlPullParser parser = XmlUtils.newPullParser();
-        parser.setInput(new StringReader(contents));
+        String fixed = XmlUtils.buildFixedXml(contents);
+        Document document = PositionXmlParser.parse(fixed, false);
+        Node node = PositionXmlParser.findNodeAtOffset(document, (int) index);
+        assert node != null;
 
-        list.items = new ArrayList<>();
-
-        Pair<String, String> tagPair = getTagAtPosition(parser, line + 1, column + 1);
-        String parentTag = tagPair.first;
-        String tag = tagPair.second;
+        String parentTag = "";
+        String tag = "";
+        Element ownerNode = getElementNode(node);
+        if (ownerNode != null) {
+            parentTag = ownerNode.getParentNode() == null
+                    ? ""
+                    : ownerNode.getParentNode().getNodeName();
+            tag = ownerNode.getTagName();
+        }
 
         // first get the attributes based on the current tag
         Set<DeclareStyleable> styles = StyleUtils.getStyles(declareStyleables, tag, parentTag);
+        list.items = new ArrayList<>();
 
-        if (prefix.startsWith("<") || prefix.startsWith("</")) {
+        if (isTag(node, index)) {
             addTagItems(repository, prefix, list, xmlCachedCompletion);
+        } if (isInAttributeValue(contents, (int) index)) {
+            addAttributeValueItems(styles, prefix, fixedPrefix, repository, list, xmlCachedCompletion);
         } else {
-            if (isInAttributeValue(contents, (int) index)) {
-                addAttributeValueItems(styles, prefix, fixedPrefix, repository, list, xmlCachedCompletion);
-            } else {
-                addAttributeItems(styles, fullPrefix, fixedPrefix, repository, list, xmlCachedCompletion);
-            }
+            addAttributeItems(styles, fullPrefix, fixedPrefix, repository, list, xmlCachedCompletion);
         }
+
+
         return xmlCachedCompletion;
     }
 

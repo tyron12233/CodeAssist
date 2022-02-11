@@ -4,6 +4,8 @@ import android.annotation.SuppressLint;
 import android.text.TextUtils;
 import android.util.Pair;
 
+import com.tyron.builder.compiler.manifest.blame.SourcePosition;
+import com.tyron.builder.util.PositionXmlParser;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
@@ -17,6 +19,13 @@ import com.tyron.completion.xml.model.Format;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.parser.Parser;
+import org.jsoup.select.Elements;
+import org.w3c.dom.Attr;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
@@ -147,6 +156,7 @@ public class XmlUtils {
 
         String parentTag = null;
         int previousDepth = 0;
+        int currentDepth = 0;
         String tag = null;
         do {
             ProgressManager.checkCanceled();
@@ -164,6 +174,7 @@ public class XmlUtils {
             }
 
             if (parser.getLineNumber() >= line && type != XmlPullParser.TEXT) {
+                currentDepth = parser.getDepth();
                 tag = parser.getName();
                 break;
             }
@@ -176,6 +187,45 @@ public class XmlUtils {
         } while (true);
 
         return Pair.create(parentTag, tag);
+    }
+
+    /**
+     * Checks whether the index is at the attribute tag of the node
+     * @param node The xml nod
+     * @param index The index of the cursor
+     * @return whther the index is at the attribite tag of the node
+     */
+    public static boolean isTag(Node node, long index) {
+        String name = node.getNodeName();
+        SourcePosition position = PositionXmlParser.getPosition(node);
+        return position.getStartOffset() < index && index < position.getStartOffset() + name.length();
+    }
+
+    /**
+     * Return the owner element of an attribute node
+     * @param element The element
+     * @return The owner element
+     */
+    public static Element getElementNode(Node element) {
+        if (element.getNodeType() == Node.ELEMENT_NODE) {
+            return (Element) element;
+        }
+        if (element.getNodeType() == Node.ATTRIBUTE_NODE) {
+            return ((Attr) element).getOwnerElement();
+        }
+        return null;
+    }
+
+    /**
+     * Uses jsoup to build a well formed xml from a broken one.
+     * Do not depend on the attribute positions as it does not match the original source.
+     * @param contents The broken xml contents
+     * @return Well formed xml
+     */
+    public static String buildFixedXml(String contents) {
+        Parser parser = Parser.xmlParser();
+        Document document = Jsoup.parse(contents, "", parser);
+        return document.toString();
     }
 
     /**

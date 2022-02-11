@@ -11,6 +11,7 @@ import android.util.Pair;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.builder.util.PositionXmlParser;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
@@ -26,6 +27,11 @@ import com.tyron.completion.xml.util.AndroidResourcesUtils;
 import com.tyron.completion.xml.util.StyleUtils;
 import com.tyron.completion.xml.util.XmlUtils;
 
+import org.openjdk.javax.xml.parsers.ParserConfigurationException;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -144,7 +150,7 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
             CompletionList completionList = list.getCompletionList();
             sort(completionList.items, list.getFilterPrefix());
             return completionList;
-        } catch (XmlPullParserException e) {
+        } catch (XmlPullParserException | ParserConfigurationException | IOException | SAXException e) {
             e.printStackTrace();
         }
 
@@ -153,7 +159,7 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
 
     public XmlCachedCompletion completeInternal(Project project, Module module, File file,
                                                 String contents, String prefix, int line,
-                                                int column, long index) throws XmlPullParserException {
+                                                int column, long index) throws XmlPullParserException, ParserConfigurationException, IOException, SAXException {
         CompletionList list = new CompletionList();
         XmlCachedCompletion xmlCachedCompletion = new XmlCachedCompletion(file, line, column,
                 prefix, list);
@@ -169,25 +175,33 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
         repository.initialize((AndroidModule) module);
         Map<String, DeclareStyleable> manifestAttrs = repository.getManifestAttrs();
 
-        Pair<String, String> tagAtPosition = getTagAtPosition(parser, line, column);
-        String currentTag = getTag(tagAtPosition.second);
-        if (currentTag == null) {
-            return xmlCachedCompletion;
+        String fixed = XmlUtils.buildFixedXml(contents);
+        Document document = PositionXmlParser.parse(fixed, false);
+        Node node = PositionXmlParser.findNodeAtOffset(document, (int) index);
+        assert node != null;
+
+        String parentTag = "";
+        String tag = "";
+        Element ownerNode = getElementNode(node);
+        if (ownerNode != null) {
+            parentTag = ownerNode.getParentNode() == null
+                    ? ""
+                    : ownerNode.getParentNode().getNodeName();
+            tag = ownerNode.getTagName();
         }
 
-        Set<DeclareStyleable> styles = StyleUtils.getStyles(manifestAttrs, currentTag);
+        Set<DeclareStyleable> styles = StyleUtils.getStyles(manifestAttrs, tag);
 
-        if (prefix.startsWith("<") || prefix.startsWith("</")) {
+        if (isTag(node, index)) {
             addTagItems(prefix, list, xmlCachedCompletion);
+        } if (isInAttributeValue(contents, (int) index)) {
+            addAttributeValueItems(styles, repository, prefix, fixedPrefix, list,
+                    xmlCachedCompletion);
         } else {
-            if (isInAttributeValue(contents, (int) index)) {
-                addAttributeValueItems(styles, repository, prefix, fixedPrefix, list,
-                        xmlCachedCompletion);
-            } else {
-                addAttributeItems(styles, fullPrefix, fixedPrefix, repository, list,
-                        xmlCachedCompletion);
-            }
+            addAttributeItems(styles, fullPrefix, fixedPrefix, repository, list,
+                    xmlCachedCompletion);
         }
+
         return xmlCachedCompletion;
     }
 
