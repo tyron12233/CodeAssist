@@ -1,10 +1,12 @@
 package com.tyron.builder.project.api;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.tyron.builder.project.listener.FileListener;
 
 import java.io.File;
+import java.time.Instant;
 import java.util.Optional;
 
 public interface FileManager {
@@ -15,12 +17,25 @@ public interface FileManager {
      */
     boolean isOpened(@NonNull File file);
 
+    @Nullable
+    Instant getLastModified(@NonNull File file);
+
+    void setLastModified(@NonNull File file, Instant instant);
+
     /**
      * Open the file and save its content in memory
      * @param file The file
      * @param content The contents of the file
      */
     void openFileForSnapshot(@NonNull File file, String content);
+
+    /**
+     * Sets the file content without notifying the passed FileListener
+     * @param file The file
+     * @param content The contents
+     * @param listener The listner to ignore
+     */
+    void setSnapshotContent(@NonNull File file, String content, FileListener listener);
 
     /**
      * Change the stored contents of this file only if it has been opened before

@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -303,8 +304,8 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
         }
 
         contents = fileContent.get().toString();
-
         FileUtils.writeStringToFile(file, contents, StandardCharsets.UTF_8);
+        module.getFileManager().setLastModified(file, Instant.ofEpochMilli(file.lastModified()));
         IncrementalAapt2Task task = new IncrementalAapt2Task(module, logger, false);
 
         try {

@@ -5,11 +5,15 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
+import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.fileeditor.api.FileEditorManager;
 import com.tyron.fileeditor.api.TextEditor;
 
 import java.io.File;
+import java.time.Instant;
 import java.util.Objects;
 
 public class RosemoeCodeEditor implements TextEditor {
@@ -54,12 +58,23 @@ public class RosemoeCodeEditor implements TextEditor {
 
     @Override
     public boolean isModified() {
+        Project project = ProjectManager.getInstance().getCurrentProject();
+        if (project != null) {
+            Module module = project.getModule(mFile);
+            if (module != null) {
+                Instant diskModified = Instant.ofEpochMilli(mFile.lastModified());
+                Instant lastModified = module.getFileManager().getLastModified(mFile);
+                if (lastModified != null) {
+                    return lastModified.isAfter(diskModified);
+                }
+            }
+        }
         return false;
     }
 
     @Override
     public boolean isValid() {
-        return true;
+        return mFile.exists();
     }
 
     @Override

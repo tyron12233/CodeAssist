@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.math.MathUtils;
+import androidx.core.os.BundleKt;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
@@ -108,6 +109,7 @@ import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 import io.github.rosemoe.sora2.text.EditorUtil;
+import kotlin.Pair;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class CodeEditorFragment extends Fragment implements Savable,
@@ -372,8 +374,12 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 mEditor.showContextMenu(e.getX(), e.getY());
             });
         });
-        mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) ->
-                updateFile(event.getEditor().getText()));
+        mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
+            if (event.getAction() == ContentChangeEvent.ACTION_SET_NEW_TEXT) {
+                return;
+            }
+            updateFile(event.getEditor().getText());
+        });
 
         LogViewModel logViewModel =
                 new ViewModelProvider(requireActivity()).get(LogViewModel.class);
@@ -578,7 +584,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
         Module module = project.getModule(mCurrentFile);
         if (module != null) {
-            module.getFileManager().setSnapshotContent(mCurrentFile, contents.toString(), false);
+            module.getFileManager().setSnapshotContent(mCurrentFile, contents.toString(), this);
         }
     }
 

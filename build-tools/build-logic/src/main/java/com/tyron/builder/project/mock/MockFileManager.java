@@ -1,6 +1,7 @@
 package com.tyron.builder.project.mock;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.listener.FileListener;
@@ -10,6 +11,8 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -25,7 +28,7 @@ public class MockFileManager implements FileManager {
 
     public MockFileManager(File root) {
         mRoot = root;
-        mSnapshots = new HashMap<>();
+        mSnapshots = Collections.synchronizedMap(new HashMap<>());
     }
 
     @Override
@@ -33,9 +36,25 @@ public class MockFileManager implements FileManager {
         return mSnapshots.containsKey(file);
     }
 
+    @Nullable
+    @Override
+    public Instant getLastModified(@NonNull File file) {
+        return null;
+    }
+
+    @Override
+    public void setLastModified(@NonNull File file, Instant instant) {
+
+    }
+
     @Override
     public void openFileForSnapshot(@NonNull File file, String content) {
         mSnapshots.put(file, content);
+    }
+
+    @Override
+    public void setSnapshotContent(@NonNull File file, String content, FileListener listener) {
+
     }
 
     @Override

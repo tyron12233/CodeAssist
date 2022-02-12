@@ -24,6 +24,10 @@ import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.util.DataContextUtils;
+import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.FileManager;
+import com.tyron.builder.project.api.Module;
+import com.tyron.builder.project.listener.FileListener;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.adapter.PageAdapter;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
@@ -33,12 +37,14 @@ import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.util.AndroidUtilities;
+import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.fileeditor.api.FileEditorManager;
 
 import java.io.File;
+import java.util.List;
 import java.util.Objects;
 
-public class EditorContainerFragment extends Fragment {
+public class EditorContainerFragment extends Fragment implements FileListener, ProjectManager.OnProjectOpenListener {
 
     public static final String SAVE_ALL_KEY = "saveAllEditors";
     public static final String PREVIEW_KEY = "previewEditor";
@@ -121,17 +127,14 @@ public class EditorContainerFragment extends Fragment {
 
             @Override
             public void onTabSelected(TabLayout.Tab p1) {
+                updateTab(p1, p1.getPosition());
                 mMainViewModel.setCurrentPosition(p1.getPosition(), false);
                 getParentFragmentManager()
                         .setFragmentResult(MainFragment.REFRESH_TOOLBAR_KEY, Bundle.EMPTY);
             }
         });
 
-        new TabLayoutMediator(mTabLayout, mPager, true, true, (tab, pos) -> {
-            File current = Objects.requireNonNull(mMainViewModel.getFiles().getValue()).get(pos)
-                    .getFile();
-            tab.setText(current != null ? current.getName() : "Unknown");
-        }).attach();
+        new TabLayoutMediator(mTabLayout, mPager, true, true, this::updateTab).attach();
 
         mBehavior = BottomSheetBehavior.from(root.findViewById(R.id.persistent_sheet));
         mBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
@@ -153,23 +156,46 @@ public class EditorContainerFragment extends Fragment {
         mBehavior.setHalfExpandedRatio(0.3f);
         mBehavior.setFitToContents(false);
 
+        ProjectManager.getInstance().addOnProjectOpenListener(this);
+
         if (savedInstanceState != null) {
             restoreViewState(savedInstanceState);
         }
         return root;
     }
 
+    private void updateTab(TabLayout.Tab tab, int pos) {
+        FileEditor currentEditor = Objects.requireNonNull(mMainViewModel.getFiles().getValue()).get(pos);
+        File current = currentEditor.getFile();
+
+        String text = current != null ? current.getName() : "Unknown";
+        if (currentEditor.isModified()) {
+            text = "*" + text;
+        }
+
+        tab.setText(text);
+    }
+
+    @Override
+    public void onProjectOpen(Project project) {
+        for (Module module : project.getModules()) {
+            FileManager fileManager = module.getFileManager();
+            fileManager.addSnapshotListener(this);
+        }
+    }
+
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        mMainViewModel.getCurrentPosition().observe(getViewLifecycleOwner(), pos -> {
-            mPager.setCurrentItem(pos, false);
-        });
         mMainViewModel.getFiles().observe(getViewLifecycleOwner(), files -> {
             mAdapter.submitList(files);
             mTabLayout.setVisibility(files.isEmpty() ? View.GONE : View.VISIBLE);
         });
         mMainViewModel.getCurrentPosition().observe(getViewLifecycleOwner(), pos -> {
             mPager.setCurrentItem(pos, false);
+            TabLayout.Tab tab = mTabLayout.getTabAt(pos);
+            if (tab != null) {
+                updateTab(tab, pos);
+            }
             if (mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {
                 mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_COLLAPSED);
             }
@@ -197,6 +223,20 @@ public class EditorContainerFragment extends Fragment {
         getChildFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY, floatOffset);
     }
 
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+
+        ProjectManager projectManager = ProjectManager.getInstance();
+        Project currentProject = projectManager.getCurrentProject();
+        if (currentProject != null) {
+            for (Module module : currentProject.getModules()) {
+                FileManager fileManager = module.getFileManager();
+                fileManager.removeSnapshotListener(this);
+            }
+        }
+    }
+
     private void formatCurrent() {
         String tag = "f" + mAdapter.getItemId(mPager.getCurrentItem());
         Fragment fragment = getChildFragmentManager().findFragmentByTag(tag);
@@ -221,5 +261,35 @@ public class EditorContainerFragment extends Fragment {
                 ((Savable) fragment).save(true);
             }
         }
+    }
+
+    @Override
+    public void onSnapshotChanged(File file, CharSequence contents) {
+        if (mTabLayout == null) {
+            return;
+        }
+        List<FileEditor> editors = mMainViewModel.getFiles().getValue();
+        if (editors == null) {
+            return;
+        }
+
+        int found = -1;
+        for (int i = 0; i < editors.size(); i++) {
+            FileEditor editor = editors.get(i);
+            if (file.equals(editor.getFile())) {
+                found = i;
+                break;
+            }
+        }
+
+        if (found == -1) {
+            return;
+        }
+
+        TabLayout.Tab tab = mTabLayout.getTabAt(found);
+        if (tab == null) {
+            return;
+        }
+        updateTab(tab, found);
     }
 }
