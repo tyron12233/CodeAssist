@@ -37,6 +37,7 @@ import com.tyron.code.ui.library.adapter.LibraryManagerAdapter;
 import com.tyron.code.ui.project.DependencyManager;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.DependencyUtils;
+import com.tyron.code.util.UiUtilsKt;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.model.Dependency;
@@ -240,6 +241,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         JavaModule javaModule = ((JavaModule) module);
 
         FloatingActionButton fab = requireView().findViewById(R.id.fab_add_dependency);
+        UiUtilsKt.addSystemWindowInsetToMargin(fab, false, false, true);
         fab.setOnClickListener(v -> {
             FragmentManager fm = getChildFragmentManager();
             if (fm.findFragmentByTag(AddDependencyDialogFragment.TAG) == null) {
