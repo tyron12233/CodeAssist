@@ -85,7 +85,7 @@ public class JsonLanguage implements Language {
             }
         }
         advance = Math.max(0, advance);
-        return advance * 2;
+        return advance * getTabWidth();
     }
 
     @Override
