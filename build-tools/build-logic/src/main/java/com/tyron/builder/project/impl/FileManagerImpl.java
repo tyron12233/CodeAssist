@@ -89,6 +89,10 @@ public class FileManagerImpl implements FileManager {
             return;
         }
         state.setModified(instant);
+
+        for (FileListener listener : mListeners) {
+            listener.onSnapshotChanged(file, state.getContents());
+        }
     }
 
     @Override
