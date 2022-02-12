@@ -199,6 +199,9 @@ public class XmlUtils {
      */
     public static boolean isTag(DOMNode node, long index) {
         String name = node.getNodeName();
+        if (name == null) {
+            name = "";
+        }
         return node.getStart() < index && index <= (node.getStart() + name.length() + 1);
     }
 

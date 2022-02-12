@@ -99,6 +99,8 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         if (isIncrementalCompletion(mCachedCompletion, params)) {
             if (mCachedCompletion.getCompletionType() == XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE) {
                 mCachedCompletion.setFilterPrefix(prefix);
+            } else if (mCachedCompletion.getCompletionType() == XmlCachedCompletion.TYPE_TAG) {
+                mCachedCompletion.setFilterPrefix(partialIdentifier);
             } else {
                 mCachedCompletion.setFilterPrefix(partialIdentifier);
             }
@@ -176,7 +178,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
 
         if (isTag(node, index) || isEndTag(node, index)) {
             addTagItems(repository, prefix, list, xmlCachedCompletion);
-        } if (isInAttributeValue(contents, (int) index)) {
+        } else if (isInAttributeValue(contents, (int) index)) {
             addAttributeValueItems(styles, prefix, fixedPrefix, repository, list, xmlCachedCompletion);
         } else {
             addAttributeItems(styles, fullPrefix, fixedPrefix, repository, list, xmlCachedCompletion);

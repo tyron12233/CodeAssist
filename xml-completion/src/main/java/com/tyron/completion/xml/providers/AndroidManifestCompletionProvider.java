@@ -130,8 +130,11 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
         String partialIdentifier = partialIdentifier(params.getContents(), (int) params.getIndex());
 
         if (isIncrementalCompletion(mCachedCompletion, params)) {
+            String prefix = params.getPrefix();
             if (mCachedCompletion.getCompletionType() == XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE) {
-                mCachedCompletion.setFilterPrefix(params.getPrefix());
+                mCachedCompletion.setFilterPrefix(prefix);
+            } else if (mCachedCompletion.getCompletionType() == XmlCachedCompletion.TYPE_TAG) {
+                mCachedCompletion.setFilterPrefix(partialIdentifier);
             } else {
                 mCachedCompletion.setFilterPrefix(partialIdentifier);
             }
