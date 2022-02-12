@@ -1,12 +1,29 @@
 package io.github.rosemoe.sora2.text;
 
+import java.lang.reflect.Method;
+
 import io.github.rosemoe.sora.event.SelectionChangeEvent;
+import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.text.ContentLine;
 import io.github.rosemoe.sora.text.ICUUtils;
 import io.github.rosemoe.sora.util.IntPair;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class EditorUtil {
+
+    public static int getFormatIndent(Language language, String line) {
+        Class<? extends Language> aClass = language.getClass();
+        try {
+            Method getIndentAdvance = aClass.getDeclaredMethod("getFormatIndent", String.class);
+            Object indent = getIndentAdvance.invoke(language, line);
+            if (indent instanceof Integer) {
+                return (int) indent;
+            }
+        } catch (Throwable e) {
+            // ignored
+        }
+        return 0;
+    }
 
     public static boolean isWhitespace(CharSequence charSequence) {
         for (int i = 0; i < charSequence.length(); i++) {

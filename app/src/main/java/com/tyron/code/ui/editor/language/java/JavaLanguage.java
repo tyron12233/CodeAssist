@@ -31,6 +31,7 @@ import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.util.MyCharacter;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
+import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class JavaLanguage implements Language {
 
@@ -58,7 +59,23 @@ public class JavaLanguage implements Language {
                     break;
             }
         }
-        return advance * getTabWidth();
+        return (advance * getTabWidth());
+    }
+
+    public int getFormatIndent(String line) {
+        JavaTextTokenizer tokenizer = new JavaTextTokenizer(line);
+        Tokens token;
+        int advance = 0;
+        while ((token = tokenizer.directNextToken()) != Tokens.EOF) {
+            switch (token) {
+                case LBRACE:
+                    advance++;
+                    break;
+                case RBRACE:
+                    advance--;
+            }
+        }
+        return (advance * getTabWidth());
     }
 
     @NonNull

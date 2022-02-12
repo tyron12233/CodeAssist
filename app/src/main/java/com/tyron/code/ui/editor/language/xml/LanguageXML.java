@@ -13,7 +13,13 @@ import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.Token;
+import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.dom.DOMParser;
+import org.eclipse.lemminx.dom.parser.Scanner;
+import org.eclipse.lemminx.dom.parser.TokenType;
+import org.eclipse.lemminx.dom.parser.XMLScanner;
 
 import java.io.File;
 import java.util.List;
@@ -130,25 +136,37 @@ public class LanguageXML implements Language {
 		return getIndentAdvance(text);
 	}
 
-	public int getIndentAdvance(String content) {
-		XMLLexer lexer = new XMLLexer(CharStreams.fromString(content));
-		int advance = 0;
-		Token token;
-		while ((token = lexer.nextToken()) != null) {
-			if (token.getType() == XMLLexer.EOF) {
-				break;
-			}
+	public int getIndentAdvance(String content){
+		return getIndentAdvance(content, XMLLexer.DEFAULT_MODE, true);
+	}
 
-			if (token.getType() == XMLLexer.OPEN) {
-				advance++;
-			} else if (token.getType() == XMLLexer.SLASH_CLOSE) {
-				advance--;
-			} else if (token.getType() == XMLLexer.CLOSE) {
-				advance--;
+	public int getIndentAdvance(String content, int mode, boolean ignore) {
+		XMLLexer lexer = new XMLLexer(CharStreams.fromString(content));
+		lexer.pushMode(mode);
+
+		int advance = 0;
+		while (lexer.nextToken().getType() != Lexer.EOF) {
+			switch (lexer.getToken().getType()) {
+				case XMLLexer.OPEN:
+					advance++;
+					break;
+				case XMLLexer.SLASH_CLOSE:
+					if (!ignore) {
+						advance--;
+					}
+					break;
 			}
 		}
-		advance = Math.max(0, advance);
-		return advance * 4;
+
+		if (advance == 0 && mode != XMLLexer.INSIDE) {
+			return getIndentAdvance(content, XMLLexer.INSIDE, ignore);
+		}
+
+		return advance * mEditor.getTabCount();
+	}
+
+	public int getFormatIndent(String line) {
+		return getIndentAdvance(line, XMLLexer.DEFAULT_MODE, false);
 	}
 
 	private class StartTagHandler implements NewlineHandler {

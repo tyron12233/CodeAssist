@@ -25,16 +25,12 @@ import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 
 import java.io.File;
 import java.lang.reflect.Method;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
-import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
-import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -228,28 +224,34 @@ public class CodeEditorView extends CodeEditor implements Editor {
     @Override
     public void insertMultilineString(int line, int column, String string) {
         String currentLine = getText().getLineString(line);
-        String currentIndent = currentLine.trim().isEmpty()
-                ? currentLine
-                : currentLine.substring(0, currentLine.indexOf(currentLine.trim()));
-        int count = currentIndent.length();
 
         String[] lines = string.split("\\n");
         if (lines.length == 0) {
             return;
         }
-        String textToInsert = Arrays.stream(lines)
-                .map(s -> {
-                    if (count < s.length()) {
-                        String whitespace = s.substring(0, count);
-                        if (EditorUtil.isWhitespace(whitespace)) {
-                            s = s.substring(count);
-                        }
-                    }
-                    return currentIndent + s;
-                })
-                .collect(Collectors.joining("\n"))
-                .substring(currentIndent.length());
+        int count = TextUtils.countLeadingSpaceCount(currentLine, getTabWidth());
+        for (int i = 0; i < lines.length; i++) {
+            String trimmed = lines[i].trim();
 
+            int advance = EditorUtil.getFormatIndent(getEditorLanguage(), trimmed);
+
+            if (advance < 0) {
+                count += advance;
+            }
+
+            if (i != 0) {
+                String indent = TextUtils.createIndent(count, getTabWidth(), useTab());
+                trimmed = indent + trimmed;
+            }
+
+            lines[i] = trimmed;
+
+            if (advance > 0) {
+                count += advance;
+            }
+        }
+
+        String textToInsert = String.join("\n", lines);
         getText().insert(line, column, textToInsert);
     }
 
