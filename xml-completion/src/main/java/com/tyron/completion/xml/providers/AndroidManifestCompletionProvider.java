@@ -4,6 +4,7 @@ import static com.tyron.completion.xml.util.XmlUtils.fullIdentifier;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeItem;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeNameFromPrefix;
 import static com.tyron.completion.xml.util.XmlUtils.getElementNode;
+import static com.tyron.completion.xml.util.XmlUtils.isEndTag;
 import static com.tyron.completion.xml.util.XmlUtils.isInAttributeValue;
 import static com.tyron.completion.xml.util.XmlUtils.isIncrementalCompletion;
 import static com.tyron.completion.xml.util.XmlUtils.isTag;
@@ -197,7 +198,7 @@ public class AndroidManifestCompletionProvider extends CompletionProvider {
         }
         Set<DeclareStyleable> styles = StyleUtils.getStyles(manifestAttrs, tag);
 
-        if (isTag(node, index)) {
+        if (isTag(node, index) || isEndTag(node, index)) {
             addTagItems(prefix, list, xmlCachedCompletion);
         } if (isInAttributeValue(contents, (int) index)) {
             addAttributeValueItems(styles, repository, prefix, fixedPrefix, list,

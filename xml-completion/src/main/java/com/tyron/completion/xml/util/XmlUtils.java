@@ -19,6 +19,7 @@ import com.tyron.completion.xml.model.Format;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
+import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -198,7 +199,19 @@ public class XmlUtils {
      */
     public static boolean isTag(DOMNode node, long index) {
         String name = node.getNodeName();
-        return node.getStart() < index && index <= node.getStart() + name.length();
+        return node.getStart() < index && index <= (node.getStart() + name.length() + 1);
+    }
+
+    public static boolean isEndTag(DOMNode node, long index) {
+        if (!(node instanceof DOMElement)) {
+            return false;
+        }
+        DOMElement element = (DOMElement) node;
+        int endOpenOffset = element.getEndTagOpenOffset();
+        if (endOpenOffset == -1) {
+            return false;
+        }
+        return index >= endOpenOffset;
     }
 
     /**
