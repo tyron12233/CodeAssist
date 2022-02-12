@@ -229,7 +229,14 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     public void onDestroy() {
         super.onDestroy();
 
-        ProjectManager.getInstance().removeOnProjectOpenListener(this);
+        ProjectManager manager = ProjectManager.getInstance();
+        Project project = manager.getCurrentProject();
+        if (project != null) {
+            for (Module module : project.getModules()) {
+                module.getFileManager().shutdown();
+            }
+        }
+        manager.removeOnProjectOpenListener(this);
 
         if (mLogReceiver != null) {
             requireActivity().unregisterReceiver(mLogReceiver);
@@ -274,6 +281,10 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         if (CompletionEngine.isIndexing()) {
             return;
         }
+        if (getContext() == null) {
+            return;
+        }
+
         mProject = project;
         mIndexServiceConnection.setProject(project);
 

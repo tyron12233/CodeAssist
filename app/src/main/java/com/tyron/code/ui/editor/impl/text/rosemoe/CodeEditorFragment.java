@@ -150,7 +150,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             Log.d("Uncaught exception handler", "Saving " + mCurrentFile + " before crashing.");
-            save();
+            save(true);
             if (previousHandler != null) {
                 previousHandler.uncaughtException(thread, throwable);
             }
@@ -354,7 +354,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         });
         mEditor.subscribeEvent(LongPressEvent.class, (event, unsubscribe) -> {
             MotionEvent e = event.getCausingEvent();
-            save();
+            save(false);
             // wait for the cursor to move
             ProgressManager.getInstance().runLater(() -> {
                 Cursor cursor = mEditor.getCursor();
@@ -463,7 +463,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
     }
 
     @Override
-    public void save() {
+    public void save(boolean toDisk) {
         if (!mCanSave && mReading) {
             return;
         }
@@ -472,7 +472,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
             return;
         }
 
-        if (ProjectManager.getInstance().getCurrentProject() != null) {
+        if (ProjectManager.getInstance().getCurrentProject() != null && !toDisk) {
             ProjectManager.getInstance().getCurrentProject()
                     .getModule(mCurrentFile)
                     .getFileManager()

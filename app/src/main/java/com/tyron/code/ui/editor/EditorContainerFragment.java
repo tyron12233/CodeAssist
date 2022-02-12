@@ -98,7 +98,7 @@ public class EditorContainerFragment extends Fragment {
                 Fragment fragment = getChildFragmentManager()
                         .findFragmentByTag("f" + mAdapter.getItemId(p1.getPosition()));
                 if (fragment instanceof CodeEditorFragment) {
-                    ((CodeEditorFragment) fragment).save();
+                    ((CodeEditorFragment) fragment).save(true);
                 }
             }
 
@@ -218,7 +218,7 @@ public class EditorContainerFragment extends Fragment {
             String tag = "f" + mAdapter.getItemId(i);
             Fragment fragment = getChildFragmentManager().findFragmentByTag(tag);
             if (fragment instanceof Savable) {
-                ((Savable) fragment).save();
+                ((Savable) fragment).save(true);
             }
         }
     }
