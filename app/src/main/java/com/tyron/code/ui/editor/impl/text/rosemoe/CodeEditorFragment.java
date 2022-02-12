@@ -463,7 +463,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
     public void onSnapshotChanged(File file, CharSequence contents) {
         if (mCurrentFile.equals(file)) {
             if (mEditor != null) {
-                if (!mEditor.getText().toString().equals(contents)) {
+                if (!mEditor.getText().toString().contentEquals(contents)) {
                     Cursor cursor = mEditor.getCursor();
                     int left = cursor.getLeft();
                     mEditor.setText(contents);

@@ -1,5 +1,7 @@
 package com.tyron.builder.compiler.manifest;
 
+import com.tyron.builder.util.CharSequences;
+
 import java.io.File;
 /**
  * Constant definition class.<br>
@@ -496,6 +498,8 @@ public final class SdkConstants {
     public static final String CLASS_TAB_LAYOUT = "android.support.design.widget.TabLayout"; //$NON-NLS-1$
     public static final String CLASS_TEXT_INPUT_LAYOUT = "android.support.design.widget.TextInputLayout"; //$NON-NLS-1$
     public static final String CLASS_NESTED_SCROLL_VIEW = "android.support.v4.widget.NestedScrollView";  //$NON-NLS-1$
+    public static final String URI_DOMAIN_PREFIX = "http://schemas.android.com/";
+
     /** Returns the appropriate name for the 'android' command, which is 'android.exe' for
      * Windows and 'android' for all other platforms. */
     public static String androidCmdName() {
@@ -582,6 +586,7 @@ public final class SdkConstants {
     public static final String RES_QUALIFIER_SEP = "-"; //$NON-NLS-1$
     /** Namespace used in XML files for Android attributes */
     // ---- XML ----
+    public static final String AAPT_URI = "http://schemas.android.com/aapt";
     /** URI of the reserved "xmlns"  prefix */
     public static final String XMLNS_URI = "http://www.w3.org/2000/xmlns/";  //$NON-NLS-1$
     /** The "xmlns" attribute name */
@@ -657,6 +662,7 @@ public final class SdkConstants {
     public static final String TAG_FLAG = "flag";                      //$NON-NLS-1$
     public static final String TAG_ATTR = "attr";                      //$NON-NLS-1$
     public static final String TAG_DECLARE_STYLEABLE = "declare-styleable"; //$NON-NLS-1$
+    public static final String TAG_PUBLIC = "public"; //$NON-NLS-1$
     public static final String TAG_EAT_COMMENT = "eat-comment";        //$NON-NLS-1$
     public static final String TAG_SKIP = "skip";                      //$NON-NLS-1$
     public static final String TAG_SELECTOR = "selector";              //$NON-NLS-1$

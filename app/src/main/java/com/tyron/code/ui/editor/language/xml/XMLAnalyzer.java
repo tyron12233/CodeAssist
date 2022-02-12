@@ -305,7 +305,6 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
 
         contents = fileContent.get().toString();
         FileUtils.writeStringToFile(file, contents, StandardCharsets.UTF_8);
-        module.getFileManager().setLastModified(file, Instant.ofEpochMilli(file.lastModified()));
         IncrementalAapt2Task task = new IncrementalAapt2Task(module, logger, false);
 
         try {

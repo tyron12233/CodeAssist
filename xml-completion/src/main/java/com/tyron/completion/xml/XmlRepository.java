@@ -323,7 +323,7 @@ public class XmlRepository {
         }
     }
 
-    private static File getOrExtractFiles() {
+    public static File getOrExtractFiles() {
         File filesDir = ApplicationProvider.getApplicationContext().getFilesDir();
         File check = new File(filesDir,
                 "sources/android-31/data/res/values/attrs.xml");
