@@ -1,5 +1,7 @@
 package com.tyron.completion.xml.repository.parser;
 
+import android.util.Pair;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -80,6 +82,9 @@ public class ValuesXmlParser implements ResourceParser {
                     break;
                 case BOOL:
                     value = parseBoolean(child, namespace);
+                    break;
+                case INTEGER:
+                    value = parseInteger(child, namespace);
                     break;
                 case STYLE:
                     value = parseStyle(child, namespace);
@@ -162,6 +167,27 @@ public class ValuesXmlParser implements ResourceParser {
         String value = firstChild.getTextContent();
         ResourceReference reference =
                 new ResourceReference(namespace, ResourceType.BOOL, name);
+        return new ResourceValueImpl(reference, value);
+    }
+
+    @Nullable
+    private ResourceValue parseInteger(DOMNode node, ResourceNamespace namespace) {
+        String name = node.getAttribute("name");
+        if (name == null) {
+            return null;
+        }
+
+        DOMNode firstChild = node.getFirstChild();
+        if (firstChild == null) {
+            return null;
+        }
+        if (!firstChild.isText()) {
+            return null;
+        }
+
+        String value = firstChild.getTextContent();
+        ResourceReference reference =
+                new ResourceReference(namespace, ResourceType.INTEGER, name);
         return new ResourceValueImpl(reference, value);
     }
 
