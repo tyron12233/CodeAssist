@@ -78,6 +78,9 @@ public class ValuesXmlParser implements ResourceParser {
                 case STRING:
                     value = parseString(child, namespace);
                     break;
+                case BOOL:
+                    value = parseBoolean(child, namespace);
+                    break;
                 case STYLE:
                     value = parseStyle(child, namespace);
                     break;
@@ -138,6 +141,27 @@ public class ValuesXmlParser implements ResourceParser {
         String value = firstChild.getTextContent();
         ResourceReference reference =
                 new ResourceReference(namespace, ResourceType.STRING, name);
+        return new ResourceValueImpl(reference, value);
+    }
+
+    @Nullable
+    private ResourceValue parseBoolean(DOMNode node, ResourceNamespace namespace) {
+        String name = node.getAttribute("name");
+        if (name == null) {
+            return null;
+        }
+
+        DOMNode firstChild = node.getFirstChild();
+        if (firstChild == null) {
+            return null;
+        }
+        if (!firstChild.isText()) {
+            return null;
+        }
+
+        String value = firstChild.getTextContent();
+        ResourceReference reference =
+                new ResourceReference(namespace, ResourceType.BOOL, name);
         return new ResourceValueImpl(reference, value);
     }
 
