@@ -1,6 +1,10 @@
 package com.tyron.completion.java.compiler;
 
+import android.util.Log;
+
 import androidx.annotation.GuardedBy;
+
+import com.tyron.completion.java.BuildConfig;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,6 +28,8 @@ import kotlin.jvm.functions.Function1;
  */
 public class CompilerContainer {
 
+    private static final String TAG = CompilerContainer.class.getSimpleName();
+
     private volatile boolean mIsWriting;
 
     @GuardedBy("mLock")
@@ -39,6 +45,9 @@ public class CompilerContainer {
 
     private void closeIfEmpty() {
         if (mReaders.isEmpty()) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, Thread.currentThread().getName() + " has closed the compile task.");
+            }
             if (mCompileTask != null) {
                 mCompileTask.close();
             }
@@ -70,6 +79,17 @@ public class CompilerContainer {
         }
     }
 
+    public <T> T getWithLock(Function1<CompileTask, T> fun) {
+        waitForWriter();
+        waitForReaders();
+        try {
+            mReaders.add(Thread.currentThread());
+            return fun.invoke(mCompileTask);
+        } finally {
+            mReaders.remove(Thread.currentThread());
+        }
+    }
+
     public boolean isWriting() {
         return mIsWriting;
     }
@@ -88,6 +108,12 @@ public class CompilerContainer {
     }
 
     private void waitForReaders() {
+        if (!mReaders.isEmpty()) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, Thread.currentThread().getName() + " is waiting for readers:" +
+                           mReaders);
+            }
+        }
         while (true) {
             if (mReaders.isEmpty()) {
                 closeIfEmpty();
@@ -97,6 +123,11 @@ public class CompilerContainer {
     }
 
     private void waitForWriter() {
+        if (mIsWriting) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, Thread.currentThread().getName() + " is waiting for writer");
+            }
+        }
         while (true) {
             if (!mIsWriting) {
                 return;
@@ -112,8 +143,6 @@ public class CompilerContainer {
 
 
     void setCompileTask(CompileTask task) {
-        // there might be readers currently reading the container, wait for them to finish
-        waitForReaders();
         mCompileTask = task;
     }
 }

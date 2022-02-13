@@ -144,6 +144,7 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
         reference.set(publisher.getItems());
 
         mThread = new CompletionThread(mRequestTime, publisher);
+        mThread.setName("CompletionThread " + mRequestTime);
         setLoading(true);
         mThread.start();
     }
