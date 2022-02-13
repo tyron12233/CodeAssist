@@ -30,6 +30,7 @@ import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.Lexer;
+import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.BlockTree;
@@ -45,6 +46,7 @@ import org.openjdk.tools.javac.tree.JCTree;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -55,6 +57,7 @@ import java.util.stream.Collectors;
 
 import io.github.rosemoe.editor.langs.java.JavaTextTokenizer;
 import io.github.rosemoe.editor.langs.java.Tokens;
+import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager;
 import io.github.rosemoe.sora.lang.styling.CodeBlock;
 import io.github.rosemoe.sora.lang.styling.MappedSpans;
 import io.github.rosemoe.sora.lang.styling.Styles;
@@ -70,12 +73,12 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
     /**
      * These are tokens that cannot exist before a valid function identifier
      */
-    private static final Tokens[] sKeywordsBeforeFunctionName = new Tokens[]{Tokens.RETURN,
-            Tokens.BREAK, Tokens.IF, Tokens.AND, Tokens.OR, Tokens.OREQ, Tokens.OROR,
-            Tokens.ANDAND, Tokens.ANDEQ, Tokens.RPAREN, Tokens.LPAREN, Tokens.LBRACE, Tokens.NEW,
-            Tokens.DOT, Tokens.SEMICOLON, Tokens.EQ, Tokens.NOTEQ, Tokens.NOT, Tokens.RBRACE,
-            Tokens.COMMA, Tokens.PLUS, Tokens.PLUSEQ, Tokens.MINUS, Tokens.MINUSEQ, Tokens.MULT,
-            Tokens.MULTEQ, Tokens.DIV, Tokens.DIVEQ};
+    private static final Tokens[] sKeywordsBeforeFunctionName =
+            new Tokens[]{Tokens.RETURN, Tokens.BREAK, Tokens.IF, Tokens.AND, Tokens.OR, Tokens.OREQ,
+                    Tokens.OROR, Tokens.ANDAND, Tokens.ANDEQ, Tokens.RPAREN, Tokens.LPAREN, Tokens.LBRACE, Tokens.NEW,
+                    Tokens.DOT, Tokens.SEMICOLON, Tokens.EQ, Tokens.NOTEQ, Tokens.NOT, Tokens.RBRACE,
+                    Tokens.COMMA, Tokens.PLUS, Tokens.PLUSEQ, Tokens.MINUS, Tokens.MINUSEQ, Tokens.MULT,
+                    Tokens.MULTEQ, Tokens.DIV, Tokens.DIVEQ};
 
     private final WeakReference<Editor> mEditorReference;
     private List<DiagnosticWrapper> mDiagnostics;
@@ -108,7 +111,8 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
     }
 
     private JavaCompilerService getCompiler(Editor editor) {
-        Project project = ProjectManager.getInstance().getCurrentProject();
+        Project project = ProjectManager.getInstance()
+                .getCurrentProject();
         if (project == null) {
             return null;
         }
@@ -117,8 +121,8 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
         }
         Module module = project.getModule(editor.getCurrentFile());
         if (module instanceof JavaModule) {
-            JavaCompilerProvider provider =
-                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+            JavaCompilerProvider provider = CompilerService.getInstance()
+                    .getIndex(JavaCompilerProvider.KEY);
             if (provider != null) {
                 return provider.getCompiler(project, (JavaModule) module);
             }
@@ -141,21 +145,22 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
             JavaCompilerService service = getCompiler(editor);
             if (service != null) {
                 try {
-                    ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(true));
-                    SourceFileObject sourceFileObject =
-                            new SourceFileObject(editor.getCurrentFile().toPath(),
-                                    contents.toString(), Instant.now());
-                    CompilerContainer container =
-                                 service.compile(Collections.singletonList(sourceFileObject));
+                    ProgressManager.getInstance()
+                            .runLater(() -> editor.setAnalyzing(true));
+                    SourceFileObject sourceFileObject = new SourceFileObject(editor.getCurrentFile()
+                                                                                     .toPath(),
+                                                                             contents.toString(),
+                                                                             Instant.now());
+                    CompilerContainer container = service.compile(Collections.singletonList(sourceFileObject));
                     container.run(task -> {
                         if (!cancel.invoke()) {
-                            List<DiagnosticWrapper> collect =
-                                    task.diagnostics.stream()
-                                            .map(d -> modifyDiagnostic(task, d))
-                                            .collect(Collectors.toList());
+                            List<DiagnosticWrapper> collect = task.diagnostics.stream()
+                                    .map(d -> modifyDiagnostic(task, d))
+                                    .collect(Collectors.toList());
                             editor.setDiagnostics(collect);
 
-                            ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(false), 300);
+                            ProgressManager.getInstance()
+                                    .runLater(() -> editor.setAnalyzing(false), 300);
                         }
                     });
                 } catch (Throwable e) {
@@ -163,7 +168,8 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
                         Log.e(TAG, "Unable to get diagnostics", e);
                     }
                     service.close();
-                    ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(false));
+                    ProgressManager.getInstance()
+                            .runLater(() -> editor.setAnalyzing(false));
                 }
             }
         }
@@ -189,8 +195,7 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
                 long end = diagnostic.getEndPosition();
                 switch (code) {
                     case ErrorCodes.MISSING_RETURN_STATEMENT:
-                        TreePath block = TreeUtil.findParentOfType(treePath,
-                                BlockTree.class);
+                        TreePath block = TreeUtil.findParentOfType(treePath, BlockTree.class);
                         if (block != null) {
                             // show error span only at the end parenthesis
                             end = positions.getEndPosition(task.root(), block.getLeaf()) + 1;
@@ -198,7 +203,8 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
                         }
                         break;
                     case ErrorCodes.DEPRECATED:
-                        if (treePath.getLeaf().getKind() == Tree.Kind.METHOD) {
+                        if (treePath.getLeaf()
+                                    .getKind() == Tree.Kind.METHOD) {
                             MethodTree methodTree = (MethodTree) treePath.getLeaf();
                             if (methodTree.getBody() != null) {
                                 start = positions.getStartPosition(task.root(), methodTree);
@@ -414,5 +420,42 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
         }
         HighlightUtil.markDiagnostics(editor, mDiagnostics, styles);
         return styles;
+    }
+
+    /**
+     * CodeAssist changed: do not interrupt the thread when destroying this analyzer, as it will
+     * also destroy the cache.
+     */
+    @Override
+    public void destroy() {
+        setToNull("ref");
+        setToNull("extraArguments");
+        setToNull("data");
+
+        Field thread = ReflectionUtil.getDeclaredField(SimpleAnalyzeManager.class, "thread");
+        if (thread != null) {
+            thread.setAccessible(true);
+            try {
+                Thread o = (Thread) thread.get(this);
+                ProgressManager.getInstance().cancelThread(o);
+
+                thread.set(this, null);
+            } catch (Throwable e) {
+                throw new Error(e);
+            }
+        }
+    }
+
+    private void setToNull(String fieldName) {
+        Field declaredField =
+                ReflectionUtil.getDeclaredField(SimpleAnalyzeManager.class, fieldName);
+        if (declaredField != null) {
+            declaredField.setAccessible(true);
+            try {
+                declaredField.set(this, null);
+            } catch (IllegalAccessException e) {
+                throw new Error(e);
+            }
+        }
     }
 }
