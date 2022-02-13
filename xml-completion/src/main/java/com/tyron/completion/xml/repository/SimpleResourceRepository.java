@@ -32,6 +32,7 @@ import org.apache.commons.io.filefilter.TrueFileFilter;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -39,6 +40,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -101,6 +103,21 @@ public class SimpleResourceRepository implements Repository {
                                            @NonNull ResourceType resourceType,
                                            @NonNull String resourceName) {
         return mTable.getOrPutEmpty(namespace, resourceType).get(resourceName);
+    }
+
+    @NonNull
+    @Override
+    public List<ResourceItem> getResources(@NonNull ResourceNamespace namespace,
+                                           @NonNull ResourceType type, @NonNull Predicate<ResourceItem> filter) {
+        ListMultimap<String, ResourceItem> value =
+                mTable.get(namespace, type);
+        List<ResourceItem> items = new ArrayList<>();
+        for (Map.Entry<String, ResourceItem> entry : value.entries()) {
+            if (filter.test(entry.getValue())) {
+                items.add(entry.getValue());
+            }
+        }
+        return items;
     }
 
     @NonNull

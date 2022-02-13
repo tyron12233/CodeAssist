@@ -177,7 +177,7 @@ public class ResourceNamespace implements Comparable<ResourceNamespace>, Seriali
      *     source XML document contained snippet such as {@code
      *     xmlns:foo="http://schemas.android.com/apk/res/com.foo"}, it should return {@code
      *     "http://schemas.android.com/apk/res/com.foo"} when applied to argument {@code "foo"}.
-     * @see com.android.resources.ResourceUrl#namespace
+     * @see ResourceUrl#namespace
      */
     @Nullable
     public static ResourceNamespace fromNamespacePrefix(
