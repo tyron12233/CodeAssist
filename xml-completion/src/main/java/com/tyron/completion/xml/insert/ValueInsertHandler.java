@@ -3,14 +3,16 @@ package com.tyron.completion.xml.insert;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.Format;
+import com.tyron.completion.xml.repository.api.AttrResourceValue;
+import com.tyron.completion.xml.repository.api.AttributeFormat;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
 
 public class ValueInsertHandler extends DefaultXmlInsertHandler {
 
-    private final AttributeInfo attributeInfo;
+    private final AttrResourceValue attributeInfo;
 
-    public ValueInsertHandler(AttributeInfo attributeInfo, CompletionItem item) {
+    public ValueInsertHandler(AttrResourceValue attributeInfo, CompletionItem item) {
         super(item);
 
         this.attributeInfo = attributeInfo;
@@ -23,7 +25,7 @@ public class ValueInsertHandler extends DefaultXmlInsertHandler {
         Caret caret = editor.getCaret();
         int line = caret.getStartLine();
         int column = caret.getStartColumn();
-        if (!attributeInfo.getFormats().contains(Format.FLAG)) {
+        if (!attributeInfo.getFormats().contains(AttributeFormat.FLAGS)) {
             String lineString = editor.getContent().getLineString(line);
             if (lineString.charAt(column) == '"') {
                 editor.setSelection(line, column + 1);

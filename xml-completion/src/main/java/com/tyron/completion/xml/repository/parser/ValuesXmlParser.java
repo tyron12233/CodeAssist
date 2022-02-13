@@ -1,7 +1,5 @@
 package com.tyron.completion.xml.repository.parser;
 
-import android.util.Pair;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -9,7 +7,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.primitives.Ints;
 import com.tyron.builder.compiler.manifest.SdkConstants;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
-import com.tyron.completion.xml.repository.ResourceRepository;
 import com.tyron.completion.xml.repository.api.AttrResourceValue;
 import com.tyron.completion.xml.repository.api.AttrResourceValueImpl;
 import com.tyron.completion.xml.repository.api.AttributeFormat;
@@ -68,7 +65,7 @@ public class ValuesXmlParser implements ResourceParser {
 
         for (DOMNode child : children) {
             ResourceType type = ResourceType.fromXmlTag(child);
-            if  (type == null) {
+            if (type == null) {
                 continue;
             }
 
@@ -123,8 +120,7 @@ public class ValuesXmlParser implements ResourceParser {
         }
 
         String value = firstChild.getTextContent();
-        ResourceReference reference =
-                new ResourceReference(namespace, ResourceType.COLOR, name);
+        ResourceReference reference = new ResourceReference(namespace, ResourceType.COLOR, name);
         return new ResourceValueImpl(reference, value);
     }
 
@@ -144,8 +140,7 @@ public class ValuesXmlParser implements ResourceParser {
         }
 
         String value = firstChild.getTextContent();
-        ResourceReference reference =
-                new ResourceReference(namespace, ResourceType.STRING, name);
+        ResourceReference reference = new ResourceReference(namespace, ResourceType.STRING, name);
         return new ResourceValueImpl(reference, value);
     }
 
@@ -165,8 +160,7 @@ public class ValuesXmlParser implements ResourceParser {
         }
 
         String value = firstChild.getTextContent();
-        ResourceReference reference =
-                new ResourceReference(namespace, ResourceType.BOOL, name);
+        ResourceReference reference = new ResourceReference(namespace, ResourceType.BOOL, name);
         return new ResourceValueImpl(reference, value);
     }
 
@@ -186,8 +180,7 @@ public class ValuesXmlParser implements ResourceParser {
         }
 
         String value = firstChild.getTextContent();
-        ResourceReference reference =
-                new ResourceReference(namespace, ResourceType.INTEGER, name);
+        ResourceReference reference = new ResourceReference(namespace, ResourceType.INTEGER, name);
         return new ResourceValueImpl(reference, value);
     }
 
@@ -245,6 +238,10 @@ public class ValuesXmlParser implements ResourceParser {
             return null;
         }
 
+        if ("ViewGroup_Layout".equals(name)) {
+            System.out.println(name);
+        }
+
         StyleableResourceValueImpl resourceValue =
                 new StyleableResourceValueImpl(namespace, name, null, null);
 
@@ -283,6 +280,7 @@ public class ValuesXmlParser implements ResourceParser {
 
         List<DOMNode> children = node.getChildren();
         boolean hasEnum = false;
+        boolean hasFlag = false;
         if (children != null) {
             for (DOMNode child : children) {
                 String nodeName = child.getNodeName();
@@ -290,11 +288,16 @@ public class ValuesXmlParser implements ResourceParser {
                     continue;
                 }
 
-                if (!SdkConstants.TAG_ENUM.equals(nodeName)) {
+                if (SdkConstants.TAG_FLAG.equals(nodeName)) {
+                    hasFlag = true;
+                } else if (SdkConstants.TAG_ENUM.equals(nodeName)) {
+                    hasEnum = true;
+                } else {
+                    hasFlag = false;
+                    hasEnum = false;
                     continue;
                 }
 
-                hasEnum = true;
                 String attributeName = child.getAttribute("name");
                 if (attributeName == null) {
                     continue;
@@ -310,14 +313,22 @@ public class ValuesXmlParser implements ResourceParser {
                     DOMComment comment = (DOMComment) previous;
                     description = comment.getTextContent();
                 }
-                resourceValue.addValue(value, integer, description);
+                resourceValue.addValue(attributeName, integer, description);
             }
         }
 
-        if (hasEnum && !resourceValue.getFormats().contains(AttributeFormat.ENUM)) {
+        if (hasEnum &&
+            !resourceValue.getFormats()
+                    .contains(AttributeFormat.ENUM)) {
             ImmutableSet<AttributeFormat> build = ImmutableSet.<AttributeFormat>builder()
                     .addAll(resourceValue.getFormats())
                     .add(AttributeFormat.ENUM)
+                    .build();
+            resourceValue.setFormats(build);
+        } else if (hasFlag && !resourceValue.getFormats().contains(AttributeFormat.FLAGS)) {
+            ImmutableSet<AttributeFormat> build = ImmutableSet.<AttributeFormat>builder()
+                    .addAll(resourceValue.getFormats())
+                    .add(AttributeFormat.FLAGS)
                     .build();
             resourceValue.setFormats(build);
         }

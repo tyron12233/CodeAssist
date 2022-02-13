@@ -148,7 +148,11 @@ public class ProjectManager {
             index.clear();
 
             XmlRepository xmlRepository = index.get(project, module);
-            xmlRepository.initialize((AndroidModule) module);
+            try {
+                xmlRepository.initialize((AndroidModule) module);
+            } catch (IOException e) {
+                // ignored
+            }
         }
 
         mListener.onComplete(project, true, "Index successful");

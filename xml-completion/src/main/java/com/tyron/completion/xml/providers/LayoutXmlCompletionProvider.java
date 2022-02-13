@@ -19,7 +19,10 @@ import android.util.Pair;
 
 import androidx.annotation.RequiresApi;
 
+import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Sets;
 import com.tyron.builder.compiler.manifest.blame.SourcePosition;
+import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.util.PositionXmlParser;
@@ -38,8 +41,12 @@ import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.XmlCachedCompletion;
+import com.tyron.completion.xml.repository.ResourceItem;
+import com.tyron.completion.xml.repository.api.AttrResourceValue;
+import com.tyron.completion.xml.repository.api.AttributeFormat;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.util.AndroidResourcesUtils;
+import com.tyron.completion.xml.util.AttributeProcessingUtil;
 import com.tyron.completion.xml.util.DOMUtils;
 import com.tyron.completion.xml.util.StyleUtils;
 import com.tyron.completion.xml.util.XmlUtils;
@@ -187,13 +194,17 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
             DOMAttr attr = parsed.findAttrAt((int) index);
             String uri = DOMUtils.lookupPrefix(attr);
             ResourceNamespace resourceNamespace = ResourceNamespace.fromNamespaceUri(uri);
-            addAttributeValueItems(styles, prefix, fixedPrefix, repository, list,
+            AttrResourceValue attrValue =
+                    AttributeProcessingUtil.getLayoutAttributeFromNode(repository.getRepository(),
+                                                                       attr.getOwnerElement(),
+                                                                       attr.getLocalName(),
+                                                                       resourceNamespace);
+            addAttributeValueItems(attrValue, prefix, fixedPrefix, repository, list,
                                    xmlCachedCompletion);
         } else {
             addAttributeItems(styles, fullPrefix, fixedPrefix, repository, list,
                               xmlCachedCompletion);
         }
-
 
         return xmlCachedCompletion;
     }
@@ -295,51 +306,63 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         });
     }
 
-    private void addAttributeValueItems(Set<DeclareStyleable> styles, String prefix,
+    private void addAttributeValueItems(AttrResourceValue styles, String prefix,
                                         String fixedPrefix, XmlRepository repository,
                                         CompletionList list,
                                         XmlCachedCompletion xmlCachedCompletion) {
-        for (DeclareStyleable style : styles) {
-            for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
-                String attributeName = getAttributeNameFromPrefix(fixedPrefix);
-                String namespace = "";
-                if (fixedPrefix.contains(":")) {
-                    namespace = fixedPrefix.substring(0, fixedPrefix.indexOf(':'));
-                    if (namespace.contains("=")) {
-                        namespace = namespace.substring(0, namespace.indexOf('='));
-                    }
-                }
-                if (!namespace.equals(attributeInfo.getNamespace())) {
-                    continue;
-                }
-                if (!attributeName.isEmpty()) {
-                    if (!attributeName.equals(attributeInfo.getName())) {
-                        continue;
-                    }
-                }
+//        String attributeName = getAttributeNameFromPrefix(fixedPrefix);
+//        String namespace = "";
+//        if (fixedPrefix.contains(":")) {
+//            namespace = fixedPrefix.substring(0, fixedPrefix.indexOf(':'));
+//            if (namespace.contains("=")) {
+//                namespace = namespace.substring(0, namespace.indexOf('='));
+//            }
+//        }
+//        if (!namespace.equals(attributeInfo.getNamespace())) {
+//            continue;
+//        }
+//        if (!attributeName.isEmpty()) {
+//            if (!attributeName.equals(attributeInfo.getName())) {
+//                continue;
+//            }
+//        }
+        if (styles == null) {
+            return;
+        }
 
-                List<String> values = attributeInfo.getValues();
-                if (values == null || values.isEmpty()) {
-                    AttributeInfo extraAttribute =
-                            repository.getExtraAttribute(attributeInfo.getName());
-                    if (extraAttribute != null) {
-                        values = extraAttribute.getValues();
-                    }
-                }
-                if (values != null) {
-                    for (String value : values) {
+        Set<AttributeFormat> formats = styles.getFormats();
+        if (!formats.contains(AttributeFormat.ENUM) && !formats.contains(AttributeFormat.FLAGS)) {
+            for (AttributeFormat format : formats) {
+                Set<ResourceType> matchingTypes = format.getMatchingTypes();
+                for (ResourceType matchingType : matchingTypes) {
+                    ListMultimap<String, ResourceItem> resources = repository.getRepository()
+                            .getResources(ResourceNamespace.RES_AUTO, matchingType);
+                    for (ResourceItem value : resources.values()) {
                         CompletionItem item = new CompletionItem();
                         item.action = CompletionItem.Kind.NORMAL;
-                        item.label = value;
-                        item.commitText = value;
+                        item.label = value.getName();
+                        item.commitText = value.getQualifiedNameWithType();
                         item.iconKind = DrawableKind.Attribute;
-                        item.cursorOffset = value.length();
+                        item.cursorOffset = item.commitText.length();
                         item.detail = "Attribute";
-                        item.setInsertHandler(new ValueInsertHandler(attributeInfo, item));
+                        item.setInsertHandler(new ValueInsertHandler(styles, item));
                         list.items.add(item);
                     }
                 }
             }
+            return;
+        }
+        for (String value : styles.getAttributeValues()
+                .keySet()) {
+            CompletionItem item = new CompletionItem();
+            item.action = CompletionItem.Kind.NORMAL;
+            item.label = value;
+            item.commitText = value;
+            item.iconKind = DrawableKind.Attribute;
+            item.cursorOffset = value.length();
+            item.detail = "Attribute";
+            item.setInsertHandler(new ValueInsertHandler(styles, item));
+            list.items.add(item);
         }
         xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE);
         xmlCachedCompletion.setFilterPrefix(prefix);

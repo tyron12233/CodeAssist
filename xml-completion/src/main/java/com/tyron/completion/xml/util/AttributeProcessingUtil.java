@@ -3,19 +3,143 @@ package com.tyron.completion.xml.util;
 import static com.tyron.builder.compiler.manifest.SdkConstants.TABLE_ROW;
 import static com.tyron.builder.compiler.manifest.SdkConstants.VIEW_GROUP;
 
+import android.content.res.Resources;
+
 import androidx.annotation.NonNull;
 
+import com.google.common.collect.ImmutableSet;
+import com.tyron.builder.compiler.manifest.configuration.FolderConfiguration;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.completion.xml.repository.ResourceItem;
 import com.tyron.completion.xml.repository.ResourceRepository;
+import com.tyron.completion.xml.repository.api.AttrResourceValue;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
+import com.tyron.completion.xml.repository.api.ResourceReference;
+import com.tyron.completion.xml.repository.api.ResourceValue;
+import com.tyron.completion.xml.repository.api.StyleableResourceValue;
 
 import org.eclipse.lemminx.dom.DOMElement;
-import org.openjdk.source.tree.ClassTree;
 
 import java.util.List;
+import java.util.Set;
 
 public class AttributeProcessingUtil {
+
+    private static final FolderConfiguration DEFAULT = FolderConfiguration.createDefault();
+
+    public static AttrResourceValue getLayoutAttributeFromNode(@NonNull ResourceRepository repository, @NonNull DOMElement node, @NonNull String attributeName, @NonNull ResourceNamespace namespace) {
+        String tagName = getSimpleName(node.getTagName());
+        Set<String> classes = StyleUtils.getClasses(tagName);
+        // get all the attributes of the superclasses of the view
+        for (String aClass : classes) {
+            String modified = aClass;
+            if (aClass.equals(VIEW_GROUP)) {
+                modified = "ViewGroup_Layout";
+            }
+            Set<String> names = ImmutableSet.of(modified, getLayoutStyleablePrimary(aClass),
+                                                getLayoutStyleableSecondary(aClass));
+            for (String name : names) {
+
+                ResourceValue resourceValue = getResourceValue(repository, name, namespace);
+                if (resourceValue == null) {
+                    continue;
+                }
+
+                StyleableResourceValue styleable = (StyleableResourceValue) resourceValue;
+                AttrResourceValue previous = null;
+                for (AttrResourceValue attribute : styleable.getAllAttributes()) {
+                    if (attributeName.equals(attribute.getName())) {
+                        AttrResourceValue attributeResourceValue =
+                                getAttributeResourceValue(repository, attribute);
+                        if (attributeResourceValue != null) {
+                            return attributeResourceValue;
+                        } else {
+                            previous = attribute;
+                        }
+                    }
+                }
+            }
+        }
+
+        DOMElement parentElement = node.getParentElement();
+        if (parentElement == null) {
+            return null;
+        }
+        tagName = parentElement.getTagName();
+        if (tagName == null) {
+            return null;
+        }
+
+        tagName = getSimpleName(tagName);
+        classes = StyleUtils.getClasses(tagName);
+        // get all the attributes of the superclasses of the view
+        for (String aClass : classes) {
+            String modified = aClass;
+            if (aClass.equals(VIEW_GROUP)) {
+                modified = "ViewGroup_Layout";
+            }
+            Set<String> names = ImmutableSet.of(modified, getLayoutStyleablePrimary(aClass),
+                                                getLayoutStyleableSecondary(aClass));
+            for (String name : names) {
+                ResourceValue resourceValue = getResourceValue(repository, name, namespace);
+                if (resourceValue == null) {
+                    continue;
+                }
+
+                StyleableResourceValue styleable = (StyleableResourceValue) resourceValue;
+                AttrResourceValue previous = null;
+                for (AttrResourceValue attribute : styleable.getAllAttributes()) {
+                    if (attributeName.equals(attribute.getName())) {
+                        AttrResourceValue attributeResourceValue =
+                                getAttributeResourceValue(repository, attribute);
+                        if (attributeResourceValue != null) {
+                            return attributeResourceValue;
+                        } else {
+                            previous = attribute;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static ResourceValue getResourceValue(@NonNull ResourceRepository repository,
+                                                  String name, ResourceNamespace namespace) {
+        ResourceValue value = null;
+        try {
+            value = repository.getValue(
+                    ResourceReference.styleable(ResourceNamespace.ANDROID, name));
+        } catch (Resources.NotFoundException ignored) {
+
+        }
+
+        if (value == null) {
+            try {
+                value = repository.getValue(ResourceReference.styleable(namespace, name));
+            } catch (Resources.NotFoundException ignored) {
+
+            }
+        }
+
+        return value;
+    }
+
+    private static AttrResourceValue getAttributeResourceValue(@NonNull ResourceRepository repository, @NonNull AttrResourceValue value) {
+        if (value.getFormats()
+                    .isEmpty() &&
+            value.getAttributeValues()
+                    .isEmpty()) {
+            try {
+                return (AttrResourceValue) repository.getValue(
+                        ResourceReference.attr(value.getNamespace(), value.getName()));
+            } catch (Resources.NotFoundException ignored) {
+                return null;
+            }
+        }
+
+        return value;
+    }
 
     private static void registerAttributesForClassAndSuperclasses() {
 
@@ -45,21 +169,21 @@ public class AttributeProcessingUtil {
         return simpleName + "_LayoutParams";
     }
 
-    private static void registerAttributesFromSuffixedStyleableForNamespace(
-            @NonNull ResourceRepository repository,
-            @NonNull DOMElement element,
-            @NonNull ResourceNamespace namespace) {
-        List<ResourceItem> resources = repository.getResources(namespace, ResourceType.STYLEABLE, (item -> {
+    private static List<ResourceItem> getAttributesFromSuffixedStyleableForNamespace(@NonNull ResourceRepository repository, @NonNull DOMElement element, @NonNull ResourceNamespace namespace) {
+        return repository.getResources(namespace, ResourceType.STYLEABLE, (item -> {
             String name = item.getName();
             return name.endsWith("_Layout") ||
                    name.endsWith("_LayoutParams") ||
                    name.equals("ViewGroup_MarginLayout") ||
                    name.equals("TableRow_Cell");
         }));
-        for (ResourceItem resource : resources) {
-            String name = resource.getName();
-            int indexOfLastUnderscore = name.lastIndexOf('_');
-            String viewName = name.substring(0, indexOfLastUnderscore);
+    }
+
+    private static String getSimpleName(String qualifiedName) {
+        int index = qualifiedName.lastIndexOf('.');
+        if (index == -1) {
+            return qualifiedName;
         }
+        return qualifiedName.substring(index);
     }
 }

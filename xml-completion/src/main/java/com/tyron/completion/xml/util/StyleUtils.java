@@ -72,6 +72,17 @@ public class StyleUtils {
         putStyle(ViewSwitcher.class);
     }
 
+    public static Set<String> getClasses(String... classNames) {
+        ImmutableSet.Builder<String> classes = ImmutableSet.builder();
+        for (String className : classNames) {
+            ImmutableSet<String> strings = sViewStyleMap.get(className);
+            if (strings != null) {
+                classes.addAll(strings);
+            }
+        }
+        return classes.build();
+    }
+
     public static void putStyles(JavaClass javaClass) {
         ImmutableSet.Builder<String> builder = ImmutableSet.builder();
         try {
