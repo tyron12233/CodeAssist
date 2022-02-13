@@ -112,6 +112,8 @@ public class CompilerContainer {
 
 
     void setCompileTask(CompileTask task) {
+        // there might be readers currently reading the container, wait for them to finish
+        waitForReaders();
         mCompileTask = task;
     }
 }
