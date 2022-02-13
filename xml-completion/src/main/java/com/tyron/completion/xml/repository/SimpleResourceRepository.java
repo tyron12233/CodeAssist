@@ -5,9 +5,11 @@ import android.graphics.Color;
 
 import androidx.annotation.NonNull;
 
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Maps;
+import com.google.common.collect.MultimapBuilder;
 import com.tyron.builder.compiler.manifest.configuration.Configurable;
 import com.tyron.builder.compiler.manifest.configuration.FolderConfiguration;
 import com.tyron.builder.compiler.manifest.resources.ResourceFolderType;
@@ -35,6 +37,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -104,6 +107,24 @@ public class SimpleResourceRepository implements Repository {
     @Override
     public ListMultimap<String, ResourceItem> getResources(@NonNull ResourceNamespace namespace,
                                                            @NonNull ResourceType resourceType) {
+        ListMultimap<String, ResourceItem> resources = ArrayListMultimap.create();
+        if (namespace.equals(ResourceNamespace.RES_AUTO)) {
+            Set<ResourceNamespace> namespaces = mTable.rowKeySet();
+            for (ResourceNamespace resourceNamespace : namespaces) {
+                // TODO: should android namespace be included in namespace resolution?
+                if (namespace == ResourceNamespace.ANDROID) {
+                    continue;
+                }
+
+                ListMultimap<String, ResourceItem> values =
+                        mTable.get(resourceNamespace, resourceType);
+                if (values != null) {
+                    resources.putAll(values);
+                }
+            }
+            return resources;
+        }
+
         return mTable.getOrPutEmpty(namespace, resourceType);
     }
 

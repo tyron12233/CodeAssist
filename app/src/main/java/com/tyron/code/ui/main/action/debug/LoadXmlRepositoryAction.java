@@ -39,47 +39,5 @@ public class LoadXmlRepositoryAction extends AnAction {
         } catch (IOException ioException) {
             ioException.printStackTrace();
         }
-
-        FolderConfiguration defaultConfig = FolderConfiguration.createDefault();
-        FolderConfiguration specificConfig = FolderConfiguration.createDefault();
-        specificConfig.setSmallestScreenWidthQualifier(SmallestScreenWidthQualifier.getQualifier("600"));
-        specificConfig.setScreenOrientationQualifier(new ScreenOrientationQualifier(
-                ScreenOrientation.LANDSCAPE));
-
-
-        ImmutableList<Configurable> configurables = ImmutableList.<Configurable>builder()
-                .add(new MockConfigurable("layout"))
-                .add(new MockConfigurable("layout", "land"))
-                .add(new MockConfigurable("layout", "sw600dp", "land"))
-                .build();
-
-        Configurable defaultMatch = defaultConfig.findMatchingConfigurable(configurables);
-        Configurable specificMatch = specificConfig.findMatchingConfigurable(configurables);
-
-        System.out.println(defaultMatch);
-    }
-
-    private static class MockConfigurable implements Configurable {
-        private final FolderConfiguration mConfig;
-
-        public MockConfigurable(FolderConfiguration configuration) {
-            mConfig = configuration;
-        }
-
-        public MockConfigurable(String... qualifiers) {
-            mConfig = FolderConfiguration.getConfig(qualifiers);
-        }
-
-        @NonNull
-        @Override
-        public FolderConfiguration getConfiguration() {
-            return mConfig;
-        }
-
-        @NonNull
-        @Override
-        public String toString() {
-            return mConfig.toString();
-        }
     }
 }

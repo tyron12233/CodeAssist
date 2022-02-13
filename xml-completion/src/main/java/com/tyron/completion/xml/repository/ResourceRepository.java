@@ -4,6 +4,9 @@ import android.content.res.Resources;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.builder.compiler.manifest.resources.ResourceType;
+import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
+import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
@@ -11,6 +14,7 @@ import com.tyron.completion.xml.repository.api.ResourceValue;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 
 public class ResourceRepository extends SimpleResourceRepository {
 
@@ -18,7 +22,8 @@ public class ResourceRepository extends SimpleResourceRepository {
     private final AndroidResourceRepository mAndroidRepository;
 
     public ResourceRepository(AndroidModule module) {
-        super(module.getAndroidResourcesDirectory(), ResourceNamespace.fromPackageName(module.getPackageName()));
+        super(module.getAndroidResourcesDirectory(),
+              ResourceNamespace.fromPackageName(module.getPackageName()));
         mModule = module;
         mAndroidRepository = AndroidResourceRepository.getInstance();
     }
@@ -29,6 +34,29 @@ public class ResourceRepository extends SimpleResourceRepository {
 
         File resDir = mModule.getAndroidResourcesDirectory();
         parse(resDir, getNamespace());
+
+        for (File library : mModule.getLibraries()) {
+            File parent = library.getParentFile();
+            if (parent == null) {
+                continue;
+            }
+
+            ResourceNamespace namespace;
+            File manifest = new File(parent, "AndroidManifest.xml");
+            try {
+                ManifestData data = AndroidManifestParser.parse(manifest);
+                namespace = ResourceNamespace.fromPackageName(data.getPackage());
+            } catch (IOException ignored) {
+                namespace = ResourceNamespace.RES_AUTO;
+            }
+
+            File libraryResDir = new File(parent, "res");
+            if (!libraryResDir.exists()) {
+                continue;
+            }
+
+            parse(libraryResDir, namespace);
+        }
     }
 
     @NonNull
@@ -43,5 +71,20 @@ public class ResourceRepository extends SimpleResourceRepository {
             }
         }
         return super.getValue(reference);
+    }
+
+    @NonNull
+    @Override
+    public List<ResourceItem> getResources(@NonNull ResourceNamespace namespace,
+                                           @NonNull ResourceType resourceType,
+                                           @NonNull String resourceName) {
+        if (namespace == ResourceNamespace.ANDROID) {
+            try {
+                return mAndroidRepository.getResources(namespace, resourceType, resourceName);
+            } catch (Resources.NotFoundException ignored) {
+                // try again below
+            }
+        }
+        return super.getResources(namespace, resourceType, resourceName);
     }
 }
