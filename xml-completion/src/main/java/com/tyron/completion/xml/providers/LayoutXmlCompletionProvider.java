@@ -77,8 +77,6 @@ import me.xdrop.fuzzywuzzy.FuzzySearch;
 @SuppressLint("NewApi")
 public class LayoutXmlCompletionProvider extends CompletionProvider {
 
-    private static final String EXTENSION = ".xml";
-
     private CachedCompletion mCachedCompletion;
 
     public LayoutXmlCompletionProvider() {
@@ -132,9 +130,6 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
                     completeInternal(params.getProject(), ((AndroidModule) params.getModule()),
                                      repository, parsed, prefix, completionType, namespace,
                                      params.getIndex());
-            if (builder == null) {
-                return CompletionList.EMPTY;
-            }
             CompletionList build = builder.build();
             mCachedCompletion =
                     new CachedCompletion(params.getFile(), params.getLine(), params.getColumn(),
@@ -182,114 +177,5 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         XmlRepository repository = indexProvider.get(project, module);
         repository.initialize(module);
         return repository;
-    }
-
-    private void addAttributeItems(Set<DeclareStyleable> styles, String fullPrefix,
-                                   String fixedPrefix, XmlRepository repository,
-                                   CompletionList list, XmlCachedCompletion xmlCachedCompletion) {
-        boolean shouldShowNamespace = !fixedPrefix.contains(":");
-
-        for (DeclareStyleable style : styles) {
-            for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
-                if (attributeInfo.getFormats() == null ||
-                    attributeInfo.getFormats()
-                            .isEmpty()) {
-                    AttributeInfo extra = repository.getExtraAttribute(attributeInfo.getName());
-                    if (extra != null) {
-                        attributeInfo = extra;
-                    }
-                }
-                CompletionItem item =
-                        getAttributeItem(repository, attributeInfo, shouldShowNamespace,
-                                         fullPrefix);
-                item.setInsertHandler(new AttributeInsertHandler(item));
-                list.items.add(item);
-            }
-        }
-        xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_ATTRIBUTE);
-        xmlCachedCompletion.setFilterPrefix(fixedPrefix);
-        xmlCachedCompletion.setFilter((it, pre) -> {
-            if (pre.contains(":")) {
-                if (pre.endsWith(":")) {
-                    return true;
-                }
-                if (it.label.contains(":")) {
-                    if (!it.label.startsWith(pre)) {
-                        return false;
-                    }
-                    it.label = it.label.substring(it.label.indexOf(':') + 1);
-                }
-            }
-            if (it.label.startsWith(pre)) {
-                return true;
-            }
-
-            String labelPrefix = getAttributeNameFromPrefix(it.label);
-            String prePrefix = getAttributeNameFromPrefix(pre);
-            return FuzzySearch.partialRatio(labelPrefix, prePrefix) >= 70;
-        });
-    }
-
-    private void addAttributeValueItems(AttrResourceValue styles, String prefix,
-                                        String fixedPrefix, XmlRepository repository,
-                                        CompletionList list,
-                                        XmlCachedCompletion xmlCachedCompletion) {
-//        String attributeName = getAttributeNameFromPrefix(fixedPrefix);
-//        String namespace = "";
-//        if (fixedPrefix.contains(":")) {
-//            namespace = fixedPrefix.substring(0, fixedPrefix.indexOf(':'));
-//            if (namespace.contains("=")) {
-//                namespace = namespace.substring(0, namespace.indexOf('='));
-//            }
-//        }
-//        if (!namespace.equals(attributeInfo.getNamespace())) {
-//            continue;
-//        }
-//        if (!attributeName.isEmpty()) {
-//            if (!attributeName.equals(attributeInfo.getName())) {
-//                continue;
-//            }
-//        }
-        if (styles == null) {
-            return;
-        }
-
-        Set<AttributeFormat> formats = styles.getFormats();
-        if (!formats.contains(AttributeFormat.ENUM) && !formats.contains(AttributeFormat.FLAGS)) {
-            for (AttributeFormat format : formats) {
-                Set<ResourceType> matchingTypes = format.getMatchingTypes();
-                for (ResourceType matchingType : matchingTypes) {
-                    ListMultimap<String, ResourceItem> resources = repository.getRepository()
-                            .getResources(ResourceNamespace.RES_AUTO, matchingType);
-                    for (ResourceItem value : resources.values()) {
-                        CompletionItem item = new CompletionItem();
-                        item.action = CompletionItem.Kind.NORMAL;
-                        item.label = value.getName();
-                        item.commitText = value.getQualifiedNameWithType();
-                        item.iconKind = DrawableKind.Attribute;
-                        item.cursorOffset = item.commitText.length();
-                        item.detail = "Attribute";
-                        item.setInsertHandler(new ValueInsertHandler(styles, item));
-                        list.items.add(item);
-                    }
-                }
-            }
-            return;
-        }
-        for (String value : styles.getAttributeValues()
-                .keySet()) {
-            CompletionItem item = new CompletionItem();
-            item.action = CompletionItem.Kind.NORMAL;
-            item.label = value;
-            item.commitText = value;
-            item.iconKind = DrawableKind.Attribute;
-            item.cursorOffset = value.length();
-            item.detail = "Attribute";
-            item.setInsertHandler(new ValueInsertHandler(styles, item));
-            list.items.add(item);
-        }
-        xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE);
-        xmlCachedCompletion.setFilterPrefix(prefix);
-        xmlCachedCompletion.setFilter((item, pre) -> item.label.startsWith(pre));
     }
 }
