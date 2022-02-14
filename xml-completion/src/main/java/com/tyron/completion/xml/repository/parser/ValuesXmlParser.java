@@ -23,9 +23,11 @@ import com.tyron.completion.xml.repository.api.StyleableResourceValueImpl;
 import org.apache.commons.io.FileUtils;
 import org.eclipse.lemminx.dom.DOMComment;
 import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
 import org.eclipse.lemminx.dom.DOMParser;
 import org.eclipse.lemminx.dom.DOMProcessingInstruction;
+import org.eclipse.lemminx.utils.XMLBuilder;
 
 import java.io.File;
 import java.io.IOException;
@@ -38,7 +40,8 @@ import java.util.Set;
 public class ValuesXmlParser implements ResourceParser {
 
     @Override
-    public List<ResourceValue> parse(@NonNull File file, ResourceNamespace namespace) throws IOException {
+    public List<ResourceValue> parse(@NonNull File file,
+                                     ResourceNamespace namespace) throws IOException {
         String contents = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
         DOMDocument document = DOMParser.getInstance()
                 .parse(contents, "", null);
@@ -69,32 +72,7 @@ public class ValuesXmlParser implements ResourceParser {
                 continue;
             }
 
-            ResourceValue value;
-            switch (type) {
-                case COLOR:
-                    value = parseColor(child, namespace);
-                    break;
-                case STRING:
-                    value = parseString(child, namespace);
-                    break;
-                case BOOL:
-                    value = parseBoolean(child, namespace);
-                    break;
-                case INTEGER:
-                    value = parseInteger(child, namespace);
-                    break;
-                case STYLE:
-                    value = parseStyle(child, namespace);
-                    break;
-                case STYLEABLE:
-                    value = parseStyleable(child, namespace);
-                    break;
-                case ATTR:
-                    value = parseAttrResourceValue(child, namespace);
-                    break;
-                default:
-                    value = null;
-            }
+            ResourceValue value = parseType(type, child, namespace);
 
             if (value != null) {
                 resourceValues.add(value);
@@ -102,6 +80,50 @@ public class ValuesXmlParser implements ResourceParser {
         }
 
         return resourceValues;
+    }
+
+    private ResourceValue parseType(ResourceType resourceType,
+                                    DOMNode child,
+                                    ResourceNamespace namespace) {
+        switch (resourceType) {
+            case COLOR:
+                return parseColor(child, namespace);
+            case STRING:
+                return parseString(child, namespace);
+            case BOOL:
+                return parseBoolean(child, namespace);
+            case INTEGER:
+                return parseInteger(child, namespace);
+            case STYLE:
+                return parseStyle(child, namespace);
+            case STYLEABLE:
+                return parseStyleable(child, namespace);
+            case ATTR:
+                return parseAttrResourceValue(child, namespace);
+            case PUBLIC:
+                return parsePublic(child, namespace);
+            default:
+                return null;
+        }
+    }
+
+    @Nullable
+    private ResourceValue parsePublic(DOMNode child, ResourceNamespace namespace) {
+        String type = child.getAttribute("type");
+        if (type == null) {
+            return null;
+        }
+        ResourceType resourceType = ResourceType.fromXmlTagName(type);
+        if (resourceType == null) {
+            return null;
+        }
+        String name = child.getAttribute("name");
+        if (name == null) {
+            return null;
+        }
+        ResourceReference resourceReference =
+                new ResourceReference(namespace, ResourceType.PUBLIC, name);
+        return new ResourceValueImpl(resourceReference, null);
     }
 
     @Nullable
@@ -320,16 +342,18 @@ public class ValuesXmlParser implements ResourceParser {
         if (hasEnum &&
             !resourceValue.getFormats()
                     .contains(AttributeFormat.ENUM)) {
-            ImmutableSet<AttributeFormat> build = ImmutableSet.<AttributeFormat>builder()
-                    .addAll(resourceValue.getFormats())
-                    .add(AttributeFormat.ENUM)
-                    .build();
+            ImmutableSet<AttributeFormat> build =
+                    ImmutableSet.<AttributeFormat>builder().addAll(resourceValue.getFormats())
+                            .add(AttributeFormat.ENUM)
+                            .build();
             resourceValue.setFormats(build);
-        } else if (hasFlag && !resourceValue.getFormats().contains(AttributeFormat.FLAGS)) {
-            ImmutableSet<AttributeFormat> build = ImmutableSet.<AttributeFormat>builder()
-                    .addAll(resourceValue.getFormats())
-                    .add(AttributeFormat.FLAGS)
-                    .build();
+        } else if (hasFlag &&
+                   !resourceValue.getFormats()
+                           .contains(AttributeFormat.FLAGS)) {
+            ImmutableSet<AttributeFormat> build =
+                    ImmutableSet.<AttributeFormat>builder().addAll(resourceValue.getFormats())
+                            .add(AttributeFormat.FLAGS)
+                            .build();
             resourceValue.setFormats(build);
         }
         return resourceValue;

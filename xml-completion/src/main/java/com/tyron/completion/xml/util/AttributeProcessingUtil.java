@@ -8,6 +8,7 @@ import android.content.res.Resources;
 import androidx.annotation.NonNull;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.ListMultimap;
 import com.tyron.builder.compiler.manifest.configuration.FolderConfiguration;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.completion.xml.repository.ResourceItem;
@@ -29,32 +30,54 @@ public class AttributeProcessingUtil {
 
     private static final FolderConfiguration DEFAULT = FolderConfiguration.createDefault();
 
-    public static List<AttrResourceValue> getTagAttributes(@NonNull ResourceRepository repository
-            , @NonNull DOMNode node, ResourceNamespace namespace) {
+    public static List<AttrResourceValue> getTagAttributes(@NonNull ResourceRepository repository,
+                                                           @NonNull DOMNode node,
+                                                           @NonNull ResourceNamespace namespace,
+                                                           boolean layoutParams) {
         String tagName = getSimpleName(node.getNodeName());
         Set<String> classes = StyleUtils.getClasses(tagName);
         return classes.stream()
-                .flatMap(it -> getAttributes(repository, it, namespace).stream())
+                .flatMap(it -> getAttributes(repository, it, namespace, layoutParams).stream())
+                .filter(it -> {
+                    ListMultimap<String, ResourceItem> resources =
+                            repository.getResources(it.getNamespace(), ResourceType.PUBLIC);
+                    if (!resources.isEmpty() && !it.getNamespace().equals(namespace)) {
+                        return resources.containsKey(it.getName());
+                    }
+                    return true;
+                })
                 .collect(Collectors.toList());
     }
 
     public static List<AttrResourceValue> getAttributes(@NonNull ResourceRepository repository,
                                                         @NonNull String tag,
-                                                        @NonNull ResourceNamespace namespace) {
+                                                        @NonNull ResourceNamespace namespace,
+                                                        boolean layoutParams) {
         String modified = tag;
         if (VIEW_GROUP.equals(modified)) {
             modified = "ViewGroup_Layout";
         }
-        Set<String> names = ImmutableSet.of(modified, getLayoutStyleablePrimary(tag),
-                                            getLayoutStyleableSecondary(tag));
+
+        ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+        builder.add(modified);
+        if (layoutParams) {
+            builder.add(getLayoutStyleablePrimary(tag));
+            builder.add(getLayoutStyleableSecondary(tag));
+        }
+
+        Set<String> names = builder.build();
         return names.stream()
                 .map(it -> getResourceValue(repository, it, namespace))
                 .filter(it -> it instanceof StyleableResourceValue)
-                .flatMap(it -> ((StyleableResourceValue) it).getAllAttributes().stream())
+                .flatMap(it -> ((StyleableResourceValue) it).getAllAttributes()
+                        .stream())
                 .collect(Collectors.toList());
     }
 
-    public static AttrResourceValue getLayoutAttributeFromNode(@NonNull ResourceRepository repository, @NonNull DOMElement node, @NonNull String attributeName, @NonNull ResourceNamespace namespace) {
+    public static AttrResourceValue getLayoutAttributeFromNode(@NonNull ResourceRepository repository,
+                                                               @NonNull DOMElement node,
+                                                               @NonNull String attributeName,
+                                                               @NonNull ResourceNamespace namespace) {
         String tagName = getSimpleName(node.getTagName());
         Set<String> classes = StyleUtils.getClasses(tagName);
         // get all the attributes of the superclasses of the view
@@ -132,7 +155,8 @@ public class AttributeProcessingUtil {
     }
 
     private static ResourceValue getResourceValue(@NonNull ResourceRepository repository,
-                                                  String name, ResourceNamespace namespace) {
+                                                  String name,
+                                                  ResourceNamespace namespace) {
         ResourceValue value = null;
         try {
             value = repository.getValue(
@@ -152,7 +176,8 @@ public class AttributeProcessingUtil {
         return value;
     }
 
-    private static AttrResourceValue getAttributeResourceValue(@NonNull ResourceRepository repository, @NonNull AttrResourceValue value) {
+    private static AttrResourceValue getAttributeResourceValue(@NonNull ResourceRepository repository,
+                                                               @NonNull AttrResourceValue value) {
         if (value.getFormats()
                     .isEmpty() &&
             value.getAttributeValues()
@@ -196,7 +221,9 @@ public class AttributeProcessingUtil {
         return simpleName + "_LayoutParams";
     }
 
-    private static List<ResourceItem> getAttributesFromSuffixedStyleableForNamespace(@NonNull ResourceRepository repository, @NonNull DOMElement element, @NonNull ResourceNamespace namespace) {
+    private static List<ResourceItem> getAttributesFromSuffixedStyleableForNamespace(@NonNull ResourceRepository repository,
+                                                                                     @NonNull DOMElement element,
+                                                                                     @NonNull ResourceNamespace namespace) {
         return repository.getResources(namespace, ResourceType.STYLEABLE, (item -> {
             String name = item.getName();
             return name.endsWith("_Layout") ||

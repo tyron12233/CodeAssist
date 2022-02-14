@@ -1,11 +1,16 @@
 package com.tyron.completion.xml.repository;
 
+import android.content.res.Resources;
+
 import androidx.annotation.NonNull;
 
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
+import com.tyron.completion.xml.repository.api.ResourceReference;
+import com.tyron.completion.xml.repository.api.ResourceValue;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -14,6 +19,7 @@ import java.util.Map;
 import java.util.function.Predicate;
 
 public class AndroidResourceRepository extends SimpleResourceRepository {
+
 
     private static AndroidResourceRepository sInstance = null;
 
@@ -31,6 +37,19 @@ public class AndroidResourceRepository extends SimpleResourceRepository {
 
     public AndroidResourceRepository(File resDir, ResourceNamespace namespace) {
         super(resDir, namespace);
+    }
+
+    @NonNull
+    @Override
+    public ResourceValue getValue(ResourceReference reference) {
+        return super.getValue(reference);
+    }
+
+    @Override
+    public boolean hasResources(@NonNull ResourceNamespace namespace,
+                                @NonNull ResourceType resourceType,
+                                @NonNull String resourceName) {
+        return !mTable.getOrPutEmpty(namespace, resourceType).get(resourceName).isEmpty();
     }
 
     @NonNull

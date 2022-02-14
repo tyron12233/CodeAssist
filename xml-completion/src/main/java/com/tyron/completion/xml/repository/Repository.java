@@ -52,6 +52,10 @@ public interface Repository {
     ListMultimap<String, ResourceItem> getResources(@NonNull ResourceNamespace namespace,
                                                     @NonNull ResourceType resourceType);
 
+    boolean hasResources(@NonNull ResourceNamespace namespace,
+                         @NonNull ResourceType resourceType,
+                         @NonNull String resourceName);
+
     /**
      * Returns the names of resources with the given namespace and type. For some resource
      * repositories calling this method can be more efficient than calling

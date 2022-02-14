@@ -9,6 +9,11 @@ import java.io.Serializable;
 
 /** Represents an Android resource with a name and a string value. */
 public interface ResourceValue extends Serializable {
+
+    default boolean isPublic() {
+        return true;
+    }
+
     @NonNull
     ResourceType getResourceType();
 

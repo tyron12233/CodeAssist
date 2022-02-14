@@ -6,6 +6,7 @@ import android.graphics.Color;
 import androidx.annotation.NonNull;
 
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Maps;
@@ -102,6 +103,13 @@ public class SimpleResourceRepository implements Repository {
     public List<ResourceItem> getResources(@NonNull ResourceNamespace namespace,
                                            @NonNull ResourceType resourceType,
                                            @NonNull String resourceName) {
+        ListMultimap<String, ResourceItem> publicResources =
+                mTable.get(namespace, ResourceType.PUBLIC);
+        if (publicResources != null) {
+            if (!publicResources.containsKey(resourceName)) {
+                return ImmutableList.of();
+            }
+        }
         return mTable.getOrPutEmpty(namespace, resourceType).get(resourceName);
     }
 
@@ -140,7 +148,16 @@ public class SimpleResourceRepository implements Repository {
             return resources;
         }
 
+        ListMultimap<String, ResourceItem> publicResources =
+                mTable.getOrPutEmpty(namespace, ResourceType.PUBLIC);
         return mTable.getOrPutEmpty(namespace, resourceType);
+    }
+
+    @Override
+    public boolean hasResources(@NonNull ResourceNamespace namespace,
+                                @NonNull ResourceType resourceType,
+                                @NonNull String resourceName) {
+        return !mTable.getOrPutEmpty(namespace, resourceType).isEmpty();
     }
 
     @NonNull
@@ -151,8 +168,8 @@ public class SimpleResourceRepository implements Repository {
 
     @NonNull
     public ResourceValue getValue(ResourceReference reference) {
-        List<ResourceItem> resourceItems = mTable.get(reference);
-        if (resourceItems == null || resourceItems.isEmpty()) {
+        List<ResourceItem> resourceItems = getResources(reference);
+        if (resourceItems.isEmpty()) {
             throw new Resources.NotFoundException();
         }
         Map<Configurable, ResourceItem> map = new HashMap<>();

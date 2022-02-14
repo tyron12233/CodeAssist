@@ -26,12 +26,13 @@ public class AndroidAttributeUtils {
                                            @NonNull DOMNode node,
                                            @NonNull ResourceNamespace namespace) {
         List<AttrResourceValue> tagAttributes =
-                AttributeProcessingUtil.getTagAttributes(repository,node,namespace);
+                AttributeProcessingUtil.getTagAttributes(repository, node, namespace, false);
 
         DOMNode parentNode = node.getParentNode();
         if (parentNode != null) {
             tagAttributes.addAll(
-                    AttributeProcessingUtil.getTagAttributes(repository,node,namespace));
+                    AttributeProcessingUtil.getTagAttributes(repository, parentNode, namespace,
+                                                             true));
         }
 
         Set<String> uniques = new HashSet<>();
@@ -43,10 +44,8 @@ public class AndroidAttributeUtils {
             }
 
             CompletionItem attribute =
-                    CompletionItem.create(reference.getQualifiedName(),
-                                          "Attribute",
-                                          commitText + "=\"\"",
-                                          DrawableKind.Attribute);
+                    CompletionItem.create(reference.getQualifiedName(), "Attribute",
+                                          commitText + "=\"\"", DrawableKind.Attribute);
             attribute.addFilterText(commitText);
             attribute.addFilterText(reference.getName());
             attribute.setInsertHandler(new AttributeInsertHandler(attribute));
