@@ -24,9 +24,14 @@ public abstract class DiagnosticAnalyzeManager<T> extends SimpleAnalyzeManager<T
         super.rerun();
     }
 
+    public void rerunWithBg() {
+        mShouldAnalyzeInBg = true;
+        super.rerun();
+    }
+
     @Override
     public void rerun() {
-        mShouldAnalyzeInBg = true;
+        mShouldAnalyzeInBg = false;
         super.rerun();
     }
 

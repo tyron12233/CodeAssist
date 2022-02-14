@@ -3,6 +3,7 @@ package com.tyron.code.ui.editor.language;
 import android.util.Log;
 
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
 
@@ -20,12 +21,14 @@ public class HighlightUtil {
 
     public static void markProblemRegion(Styles styles, int newFlag, int startLine, int startColumn, int endLine, int endColumn) {
         for (int line = startLine; line <= endLine; line++) {
+            ProgressManager.checkCanceled();
             int start = (line == startLine ? startColumn : 0);
             int end = (line == endLine ? endColumn : Integer.MAX_VALUE);
             Spans.Reader read = styles.getSpans().read();
             List<io.github.rosemoe.sora.lang.styling.Span> spans = new ArrayList<>(read.getSpansOnLine(line));
             int increment;
             for (int i = 0; i < spans.size(); i += increment) {
+                ProgressManager.checkCanceled();
                 io.github.rosemoe.sora.lang.styling.Span span = spans.get(i);
                 increment = 1;
                 if (span.column >= end) {
@@ -79,6 +82,7 @@ public class HighlightUtil {
     public static void markDiagnostics(Editor editor, List<DiagnosticWrapper> diagnostics,
                                        Styles styles) {
         diagnostics.forEach(it -> {
+            ProgressManager.checkCanceled();
             try {
                 int startLine;
                 int startColumn;

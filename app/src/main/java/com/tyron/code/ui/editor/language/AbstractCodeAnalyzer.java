@@ -50,7 +50,7 @@ public abstract class AbstractCodeAnalyzer<T> extends DiagnosticAnalyzeManager<T
 
     @Override
     public void insert(CharPosition start, CharPosition end, CharSequence insertedContent) {
-        super.insert(start, end, insertedContent);
+        rerunWithBg();
 
         if (start.getLine() != end.getLine()) {
             DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineInsert(
@@ -72,7 +72,7 @@ public abstract class AbstractCodeAnalyzer<T> extends DiagnosticAnalyzeManager<T
 
     @Override
     public void delete(CharPosition start, CharPosition end, CharSequence deletedContent) {
-        super.delete(start, end, deletedContent);
+        rerunWithBg();
 
         if (start.getLine() != end.getLine()) {
             DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineDelete(

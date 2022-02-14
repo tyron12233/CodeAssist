@@ -334,14 +334,15 @@ public class CodeEditorView extends CodeEditor implements Editor {
         if (getEditorLanguage() != null) {
             AnalyzeManager analyzeManager = getEditorLanguage().getAnalyzeManager();
             Project project = ProjectManager.getInstance().getCurrentProject();
-            if (isBackgroundAnalysisEnabled() && (project != null && !project.isCompiling())) {
-                analyzeManager.rerun();
-            } else {
-                if (analyzeManager instanceof DiagnosticAnalyzeManager) {
-                    ((DiagnosticAnalyzeManager<?>) analyzeManager).rerunWithoutBg();
+
+            if (analyzeManager instanceof DiagnosticAnalyzeManager) {
+                if (isBackgroundAnalysisEnabled() && (project != null && !project.isCompiling())) {
+                    ((DiagnosticAnalyzeManager<?>) analyzeManager).rerunWithBg();
                 } else {
-                    analyzeManager.rerun();
+                    ((DiagnosticAnalyzeManager<?>) analyzeManager).rerunWithoutBg();
                 }
+            } else {
+                analyzeManager.rerun();
             }
         }
     }

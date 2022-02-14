@@ -209,6 +209,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         View root = inflater.inflate(R.layout.code_editor_fragment, container, false);
 
         mEditor = root.findViewById(R.id.code_editor);
+        mEditor.setBackgroundAnalysisEnabled(false);
         mEditor.setText(NO_PROJECT_OPEN_STRING);
         configure(mEditor.getProps());
         mEditor.setEditorLanguage(mLanguage = LanguageManager.getInstance().get(mEditor, mCurrentFile));
@@ -543,6 +544,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 mEditor.setBackgroundAnalysisEnabled(true);
                 fileManager.openFileForSnapshot(mCurrentFile, result);
                 mEditor.setText(result);
+                mEditor.rerunAnalysis();
 
                 if (savedInstanceState != null) {
                     restoreState(savedInstanceState);

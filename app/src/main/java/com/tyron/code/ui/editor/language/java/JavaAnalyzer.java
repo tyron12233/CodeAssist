@@ -45,6 +45,7 @@ import org.openjdk.tools.javac.api.ClientCodeWrapper;
 import org.openjdk.tools.javac.tree.JCTree;
 import org.openjdk.tools.javac.util.JCDiagnostic;
 
+import java.io.File;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.time.Duration;
@@ -144,10 +145,18 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
         if (mPreferences.getBoolean(SharedPreferenceKeys.JAVA_ERROR_HIGHLIGHTING, true)) {
             JavaCompilerService service = getCompiler(editor);
             if (service != null) {
+                File currentFile = editor.getCurrentFile();
+                if (currentFile == null) {
+                    return;
+                }
+                Module module = ProjectManager.getInstance().getCurrentProject().getModule(currentFile);
+                if (!module.getFileManager().isOpened(currentFile)) {
+                    return;
+                }
                 try {
                     ProgressManager.getInstance()
                             .runLater(() -> editor.setAnalyzing(true));
-                    SourceFileObject sourceFileObject = new SourceFileObject(editor.getCurrentFile()
+                    SourceFileObject sourceFileObject = new SourceFileObject(currentFile
                                                                                      .toPath(),
                                                                              contents.toString(),
                                                                              Instant.now());
@@ -156,6 +165,7 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
                         if (!cancel.invoke()) {
                             List<DiagnosticWrapper> collect = task.diagnostics.stream()
                                     .map(d -> modifyDiagnostic(task, d))
+                                    .peek(it -> ProgressManager.checkCanceled())
                                     .collect(Collectors.toList());
                             editor.setDiagnostics(collect);
 
@@ -242,6 +252,7 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
         boolean first = true;
 
         while (!delegate.isCancelled()) {
+            ProgressManager.checkCanceled();
             try {
                 // directNextToken() does not skip any token
                 token = tokenizer.directNextToken();
@@ -416,6 +427,7 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
         styles.spans = colors.build();
 
         if (mShouldAnalyzeInBg) {
+            ProgressManager.checkCanceled();
             analyzeInBackground(text);
         }
         HighlightUtil.markDiagnostics(editor, mDiagnostics, styles);
