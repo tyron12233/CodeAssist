@@ -389,6 +389,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             if (packageName != null) {
                 requireActivity().registerReceiver(mLogReceiver,
                                                    new IntentFilter(packageName + ".LOG"));
+            } else {
+                mLogReceiver = null;
             }
         }
     }
