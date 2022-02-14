@@ -13,6 +13,7 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
 import com.tyron.completion.xml.XmlRepository;
+import com.tyron.completion.xml.insert.ValueInsertHandler;
 import com.tyron.completion.xml.repository.ResourceItem;
 import com.tyron.completion.xml.repository.ResourceRepository;
 import com.tyron.completion.xml.repository.api.AttrResourceValue;
@@ -40,6 +41,7 @@ public class AttributeValueUtils {
 
     public static void addValueItems(@NonNull Project project, @NonNull Module module,
                                      @NonNull String prefix,
+                                     @NonNull int index,
                                      @NonNull XmlRepository repo, @NonNull DOMAttr attr,
                                      @NonNull ResourceNamespace attrNamespace,
                                      @NonNull ResourceNamespace appNamespace,
@@ -53,6 +55,19 @@ public class AttributeValueUtils {
             return;
         }
 
+        Set<AttributeFormat> formats = attribute.getFormats();
+        if (formats.contains(AttributeFormat.FLAGS) || formats.contains(AttributeFormat.ENUM)) {
+            if (formats.contains(AttributeFormat.ENUM) && XmlUtils.isFlagValue(attr, index)) {
+                return;
+            }
+            Map<String, Integer> attributeValues = attribute.getAttributeValues();
+            for (String flag : attributeValues.keySet()) {
+                CompletionItem item = CompletionItem.create(flag, "Value", flag, DrawableKind.Snippet);
+                item.setInsertHandler(new ValueInsertHandler(attribute, item));
+                list.addItem(item);
+            }
+        }
+
         if (prefix.startsWith("@")) {
             String resourceType = getResourceType(prefix);
             if (resourceType == null) {
@@ -64,9 +79,9 @@ public class AttributeValueUtils {
 
             ResourceNamespace namespace;
             if (resourceType.contains(":")) {
-                int index = resourceType.indexOf(':');
-                String packagePrefix = resourceType.substring(0 , index);
-                resourceType = resourceType.substring(index + 1);
+                int i = resourceType.indexOf(':');
+                String packagePrefix = resourceType.substring(0 , i);
+                resourceType = resourceType.substring(i + 1);
                 namespace = ResourceNamespace.fromPackageName(packagePrefix);
             } else {
                 namespace = appNamespace;
@@ -94,6 +109,7 @@ public class AttributeValueUtils {
                     CompletionItem item = CompletionItem.create(label, "Value",
                                                                   label);
                     item.iconKind = DrawableKind.LocalVariable;
+                    item.setInsertHandler(new ValueInsertHandler(attribute, item));
                     list.addItem(item);
                 }
             }

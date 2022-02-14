@@ -355,6 +355,14 @@ public class XmlUtils {
         return item;
     }
 
+    public static boolean isFlagValue(DOMAttr attr, int index) {
+        String text = attr.getOwnerDocument()
+                .getText();
+        String value = text.substring(attr.getNodeAttrValue()
+                                                  .getStart() + 1, (int) index);
+        return value.contains("|");
+    }
+
     public static String getPrefix(DOMDocument parsed, long index, XmlCompletionType type) {
         String text = parsed.getText();
         switch (type) {
@@ -366,10 +374,17 @@ public class XmlUtils {
                                               .getStart(), (int) index);
             case ATTRIBUTE_VALUE:
                 DOMAttr attrAt = parsed.findAttrAt((int) index);
-                return text.substring(attrAt.getNodeAttrValue()
-                                              .getStart() + 1, (int) index);
+                return getFlagValuePrefix(text.substring(attrAt.getNodeAttrValue()
+                                                                 .getStart() + 1, (int) index));
         }
         return null;
+    }
+
+    private static String getFlagValuePrefix(String prefix) {
+        if (prefix.contains("|")) {
+            prefix = prefix.substring(prefix.lastIndexOf('|') + 1);
+        }
+        return prefix;
     }
 
     public static XmlCompletionType getCompletionType(DOMDocument parsed, long cursor) {

@@ -91,29 +91,48 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
             return CompletionList.EMPTY;
         }
 
-        String contents = params.getContents();
-        String prefix = params.getPrefix();
-        String partialIdentifier = partialIdentifier(contents, (int) params.getIndex());
-
-        if (isIncrementalCompletion(mCachedCompletion, params)) {
-            CompletionList completionList = mCachedCompletion.getCompletionList();
-            if (!completionList.items.isEmpty()) {
-                return CompletionList.copy(completionList, prefix);
-            }
-        }
         try {
+            XmlRepository repository =
+                    getRepository(params.getProject(), (AndroidModule) params.getModule());
+
+            String contents = params.getContents();
+
+            ResourceNamespace namespace =
+                    ResourceNamespace.fromPackageName(((AndroidModule) params.getModule()).getPackageName());
+            DOMDocument parsed = DOMParser.getInstance()
+                    .parse(contents, namespace.getXmlNamespaceUri(),
+                           new URIResolverExtensionManager());
+            DOMNode node = parsed.findNodeAt((int) params.getIndex());
+
+            XmlCompletionType completionType =
+                    XmlUtils.getCompletionType(parsed, params.getIndex());
+            if (completionType == XmlCompletionType.UNKNOWN) {
+                return CompletionList.EMPTY;
+            }
+
+            String prefix = XmlUtils.getPrefix(parsed, params.getIndex(), completionType);
+            if (prefix == null) {
+                return CompletionList.EMPTY;
+            }
+
+            if (isIncrementalCompletion(mCachedCompletion, params)) {
+                CompletionList completionList = mCachedCompletion.getCompletionList();
+                if (!completionList.items.isEmpty()) {
+                    return CompletionList.copy(completionList, prefix);
+                }
+            }
+
             CompletionList.Builder builder =
-                    completeInternal(params.getProject(), (AndroidModule) params.getModule(),
-                                     params.getFile(), contents, prefix, params.getLine(),
-                                     params.getColumn(), params.getIndex());
+                    completeInternal(params.getProject(), ((AndroidModule) params.getModule()),
+                                     repository, parsed, prefix, completionType, namespace,
+                                     params.getIndex());
             if (builder == null) {
                 return CompletionList.EMPTY;
             }
             CompletionList build = builder.build();
-            mCachedCompletion = new CachedCompletion(params.getFile(),
-                                                     params.getLine(),
-                                                     params.getColumn(),
-                                                     builder.getPrefix(), build);
+            mCachedCompletion =
+                    new CachedCompletion(params.getFile(), params.getLine(), params.getColumn(),
+                                         builder.getPrefix(), build);
             return build;
         } catch (XmlPullParserException | IOException | ParserConfigurationException | SAXException e) {
             e.printStackTrace();
@@ -122,48 +141,15 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         return CompletionList.EMPTY;
     }
 
-    private void sort(List<CompletionItem> items, String filterPrefix) {
-        items.sort(Comparator.comparingInt(it -> {
-            if (it.label.equals(filterPrefix)) {
-                return 100;
-            }
-            return FuzzySearch.ratio(it.label, filterPrefix);
-        }));
-        Collections.reverse(items);
-    }
-
-
     @Nullable
     @RequiresApi(api = Build.VERSION_CODES.N)
-    private CompletionList.Builder completeInternal(Project project, AndroidModule module, File file
-            , String contents, String prefix, int line, int column, long index) throws XmlPullParserException, IOException, ParserConfigurationException, SAXException {
-        XmlRepository repository = getRepository(project, module);
+    private CompletionList.Builder completeInternal(Project project, AndroidModule module,
+                                                    XmlRepository repository, DOMDocument parsed,
+                                                    String prefix,
+                                                    XmlCompletionType completionType,
+                                                    ResourceNamespace namespace, long index) throws XmlPullParserException, IOException, ParserConfigurationException, SAXException {
 
-        ResourceNamespace namespace = ResourceNamespace.fromPackageName(module.getPackageName());
-        DOMDocument parsed = DOMParser.getInstance()
-                .parse(contents, namespace.getXmlNamespaceUri(), new URIResolverExtensionManager());
-        DOMNode node = parsed.findNodeAt((int) index);
-
-        String parentTag = "";
-        String tag = "";
-        Element ownerNode = getElementNode(node);
-        if (ownerNode != null) {
-            parentTag = ownerNode.getParentNode() == null ? "" : ownerNode.getParentNode()
-                    .getNodeName();
-            tag = ownerNode.getTagName();
-        }
-
-        XmlCompletionType completionType = XmlUtils.getCompletionType(parsed, index);
-        if (completionType == XmlCompletionType.UNKNOWN) {
-            return null;
-        }
-
-        String fixedPrefix = XmlUtils.getPrefix(parsed, index, completionType);
-        if (fixedPrefix == null) {
-            return null;
-        }
-
-        CompletionList.Builder builder = CompletionList.builder(fixedPrefix);
+        CompletionList.Builder builder = CompletionList.builder(prefix);
         switch (completionType) {
             case TAG:
             case ATTRIBUTE:
@@ -171,12 +157,8 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
                 DOMAttr attr = parsed.findAttrAt((int) index);
                 String uri = DOMUtils.lookupPrefix(attr);
                 ResourceNamespace resourceNamespace = ResourceNamespace.fromNamespaceUri(uri);
-                AttributeValueUtils.addValueItems(project, module,
-                                                  fixedPrefix,
-                                                  repository,
-                                                  attr,
-                                                  resourceNamespace,
-                                                  namespace, builder);
+                AttributeValueUtils.addValueItems(project, module, prefix, (int) index, repository, attr,
+                                                  resourceNamespace, namespace, builder);
         }
         return builder;
     }
