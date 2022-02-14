@@ -116,6 +116,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
         SharedPreferences.OnSharedPreferenceChangeListener, FileListener,
         ProjectManager.OnProjectOpenListener {
 
+    private static final String NO_PROJECT_OPEN_STRING = "Cannot read file: No project is currently opened. The changes will not be saved.";
+
     private static final String EDITOR_LEFT_LINE_KEY = "line";
     private static final String EDITOR_LEFT_COLUMN_KEY = "column";
     private static final String EDITOR_RIGHT_LINE_KEY = "rightLine";
@@ -207,6 +209,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         View root = inflater.inflate(R.layout.code_editor_fragment, container, false);
 
         mEditor = root.findViewById(R.id.code_editor);
+        mEditor.setText(NO_PROJECT_OPEN_STRING);
         configure(mEditor.getProps());
         mEditor.setEditorLanguage(mLanguage = LanguageManager.getInstance().get(mEditor, mCurrentFile));
         mEditor.setTextSize(Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
@@ -543,6 +546,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 if (savedInstanceState != null) {
                     restoreState(savedInstanceState);
                 }
+
+                checkCanSave();
             }
 
             @Override
