@@ -78,8 +78,6 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
         checkCanceled();
         builder.addItem(keyword("class"));
     }
-
-
     private void completeArrayMemberSelect(CompletionList.Builder builder, boolean isStatic) {
         checkCanceled();
 
@@ -122,7 +120,7 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
             if (member.getKind() == ElementKind.CONSTRUCTOR) {
                 continue;
             }
-            if (FuzzySearch.weightedRatio(String.valueOf(member.getSimpleName()), partial) < 70 &&
+            if (FuzzySearch.tokenSetPartialRatio(String.valueOf(member.getSimpleName()), partial) < 70 &&
                 !partial.endsWith(".") &&
                 !partial.isEmpty()) {
                 continue;

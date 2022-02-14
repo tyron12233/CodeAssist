@@ -11,6 +11,8 @@ import com.tyron.completion.progress.ProcessCanceledException;
 import com.tyron.completion.progress.ProgressManager;
 
 import java.io.File;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -74,11 +76,14 @@ public class CompletionEngine {
                 .setIndex(index)
                 .build();
 
+        Instant now = Instant.now();
         List<CompletionProvider> providers = getCompletionProviders(file);
         for (CompletionProvider provider : providers) {
             CompletionList complete = provider.complete(parameters);
             list.items.addAll(complete.items);
         }
+
+        Log.d("CompletionEngine", "Completions took " + Duration.between(now, Instant.now()).toMillis() + " ms");
         return list;
     }
 

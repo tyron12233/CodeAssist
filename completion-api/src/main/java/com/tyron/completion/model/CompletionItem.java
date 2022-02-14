@@ -19,9 +19,9 @@ public class CompletionItem implements Comparable<CompletionItem> {
 
     @SuppressWarnings("NewApi")
     public static final Comparator<CompletionItem> COMPARATOR =
-            Comparator.comparing(CompletionItem::getSortText)
-                    .thenComparing(item -> item.getMatchLevel()
-                            .ordinal(), Comparator.reverseOrder())
+            Comparator.comparing((CompletionItem item) -> item.getMatchLevel()
+                    .ordinal(), Comparator.reverseOrder())
+                    .thenComparing(CompletionItem::getSortText)
                     .thenComparing(it -> it.getFilterTexts()
                             .isEmpty() ? it.getLabel() : it.getFilterTexts()
                             .get(0));
