@@ -44,6 +44,7 @@ public class ModuleSettings implements SharedPreferences {
     public static final String JAVA_SOURCE_VERSION = "javaSourceVersion";
     public static final String MODULE_TYPE = "moduleType";
     public static final String ZIP_ALIGN_ENABLED = "zipAlignEnabled";
+    public static final String PACKAGE_NAME = "packageName";
 
     private final File mConfigFile;
     private final Map<String, Object> mConfigMap;

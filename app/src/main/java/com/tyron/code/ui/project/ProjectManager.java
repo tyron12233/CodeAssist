@@ -88,13 +88,20 @@ public class ProjectManager {
                                ILogger logger) {
         mCurrentProject = project;
 
+        boolean shouldReturn = false;
         // Index the project after downloading dependencies so it will get added to classpath
         try {
             mCurrentProject.open();
         } catch (IOException exception) {
             logger.warning("Failed to open project: " + exception.getMessage());
+            shouldReturn = true;
         }
         mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
+
+        if (shouldReturn) {
+            mListener.onComplete(project, false, "Failed to open project.");
+            return;
+        }
 
         try {
             mCurrentProject.index();

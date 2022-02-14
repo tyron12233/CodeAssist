@@ -811,7 +811,35 @@ public class AndroidManifestParser {
 
             ManifestData data = new ManifestData();
 
-            ManifestHandler manifestHandler = new ManifestHandler(data, null);
+            ManifestHandler manifestHandler = new ManifestHandler(data, new ManifestErrorHandler() {
+                @Override
+                public void handleError(Exception exception, int lineNumber) {
+
+                }
+
+                @Override
+                public void checkClass(Locator locator,
+                                       String className,
+                                       String superClassName,
+                                       boolean testVisibility) {
+
+                }
+
+                @Override
+                public void warning(SAXParseException e) throws SAXException {
+
+                }
+
+                @Override
+                public void error(SAXParseException e) throws SAXException {
+
+                }
+
+                @Override
+                public void fatalError(SAXParseException e) throws SAXException {
+
+                }
+            });
             parser.parse(new InputSource(manifestFileStream), manifestHandler);
 
             return data;
