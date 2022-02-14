@@ -238,6 +238,6 @@ public class AttributeProcessingUtil {
         if (index == -1) {
             return qualifiedName;
         }
-        return qualifiedName.substring(index);
+        return qualifiedName.substring(index + 1);
     }
 }

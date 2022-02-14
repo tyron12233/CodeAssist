@@ -2,6 +2,7 @@ package com.tyron.completion.xml.util;
 
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.WebView;
 import android.widget.AbsoluteLayout;
 import android.widget.Button;
 import android.widget.CalendarView;
@@ -21,6 +22,7 @@ import android.widget.TableLayout;
 import android.widget.TextView;
 import android.widget.ViewFlipper;
 import android.widget.ViewSwitcher;
+import android.widget.ZoomButton;
 
 import androidx.annotation.NonNull;
 
@@ -70,6 +72,9 @@ public class StyleUtils {
         putStyle(DatePicker.class);
         putStyle(ViewFlipper.class);
         putStyle(ViewSwitcher.class);
+        putStyle(AbsoluteLayout.class);
+        putStyle(ZoomButton.class);
+        putStyle(WebView.class);
     }
 
     public static Set<String> getClasses(String... classNames) {
