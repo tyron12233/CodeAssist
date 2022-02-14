@@ -4,6 +4,7 @@ import com.tyron.common.util.ThreadUtil;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.Rewrite;
 import com.tyron.completion.model.TextEdit;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
 
@@ -14,9 +15,9 @@ import java.util.Map;
 public class RewriteUtil {
 
     public static <T> void performRewrite(Editor editor, File file, T neededClass, Rewrite<T> rewrite) {
-        ThreadUtil.runOnBackgroundThread(() -> {
+        ProgressManager.getInstance().runNonCancelableAsync(() -> {
             Map<Path, TextEdit[]> rewrites = rewrite.rewrite(neededClass);
-            ThreadUtil.runOnUiThread(() -> {
+            ProgressManager.getInstance().runLater(() -> {
                 editor.beginBatchEdit();
                 rewrites.forEach((k, v) -> {
                     if (k.equals(file.toPath())) {

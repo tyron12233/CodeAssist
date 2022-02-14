@@ -98,11 +98,11 @@ public class ImportClassAction extends AnAction {
             return;
         }
 
-        Editor editor = e.getData(CommonDataKeys.EDITOR);
+        Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
         JCDiagnostic d = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) diagnostic).d;
         String simpleName= String.valueOf(d.getArgs()[1]);
-        JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
-        Path file = e.getData(CommonDataKeys.FILE).toPath();
+        JavaCompilerService compiler = e.getRequiredData(CommonJavaContextKeys.COMPILER);
+        Path file = e.getRequiredData(CommonDataKeys.FILE).toPath();
 
         Map<String, JavaRewrite> map = new TreeMap<>();
         for (String qualifiedName : compiler.publicTopLevelTypes()) {

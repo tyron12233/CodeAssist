@@ -7,6 +7,9 @@ import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.Presentation;
 
+/**
+ * Used to test whether files are saved when the app crashes.
+ */
 public class CrashAction extends AnAction {
 
     @Override
