@@ -2,6 +2,8 @@ package com.tyron.completion.java.action.context;
 
 import static com.tyron.completion.java.util.DiagnosticUtil.MethodPtr;
 
+import android.app.Activity;
+import android.app.ProgressDialog;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.View;
@@ -10,14 +12,23 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.WorkerThread;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.Presentation;
+import com.tyron.builder.model.SourceFileObject;
+import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.FileManager;
+import com.tyron.builder.project.api.Module;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.java.R;
@@ -27,10 +38,11 @@ import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.drawable.CircleDrawable;
 import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.rewrite.OverrideInheritedMethod;
-import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.CompletionItemFactory;
 import com.tyron.completion.java.util.PrintHelper;
 import com.tyron.completion.model.DrawableKind;
+import com.tyron.completion.progress.ProgressIndicator;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.util.RewriteUtil;
 import com.tyron.editor.Editor;
 import com.tyron.ui.treeview.TreeNode;
@@ -38,6 +50,7 @@ import com.tyron.ui.treeview.TreeView;
 import com.tyron.ui.treeview.base.BaseNodeViewBinder;
 import com.tyron.ui.treeview.base.BaseNodeViewFactory;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
@@ -50,12 +63,13 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
 import java.io.File;
-import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class OverrideInheritedMethodsAction extends AnAction {
 
@@ -86,28 +100,92 @@ public class OverrideInheritedMethodsAction extends AnAction {
         }
 
         presentation.setVisible(true);
-        presentation.setText(event.getDataContext().getString(R.string.menu_quickfix_override_inherited_methods_title));
+        presentation.setText(event.getDataContext()
+                                     .getString(
+                                             R.string.menu_quickfix_override_inherited_methods_title));
     }
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
         Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
+        Activity activity = e.getRequiredData(CommonDataKeys.ACTIVITY);
         File file = e.getRequiredData(CommonDataKeys.FILE);
+        Project project = e.getRequiredData(CommonDataKeys.PROJECT);
         JavaCompilerService compiler = e.getRequiredData(CommonJavaContextKeys.COMPILER);
         TreePath currentPath = e.getRequiredData(CommonJavaContextKeys.CURRENT_PATH);
 
-        List<MethodPtr> pointers = performInternal(compiler, file.toPath(), currentPath);
-        Collections.reverse(pointers);
+        Module module = project.getModule(file);
+        if (module == null) {
+            AndroidUtilities.showSimpleAlert(e.getDataContext(), "Error",
+                                             "The file is not part of any modules.");
+            return;
+        }
 
-        TreeView<OverrideNode> treeView = new TreeView<>(e.getDataContext(),
-                buildTreeNode(pointers));
-        treeView.getView().setPaddingRelative(0, AndroidUtilities.dp(8), 0, 0);
+        FileManager fileManager = module.getFileManager();
+        Optional<CharSequence> fileContent = fileManager.getFileContent(file);
+        if (!fileManager.isOpened(file) || !fileContent.isPresent()) {
+            AndroidUtilities.showSimpleAlert(e.getDataContext(), "Error",
+                                             "The file is not currently opened in any editors.");
+            return;
+        }
+
+        SourceFileObject sourceFileObject =
+                new SourceFileObject(file.toPath(), String.valueOf(fileContent.get()),
+                                     Instant.now());
+        ListenableFuture<List<MethodPtr>> future = ProgressManager.getInstance()
+                .computeNonCancelableAsync(() -> {
+                    List<MethodPtr> pointers =
+                            performInternal(compiler, sourceFileObject, currentPath);
+                    Collections.reverse(pointers);
+                    return Futures.immediateFuture(pointers);
+                });
+
+
+        ProgressDialog dialog = new ProgressDialog(e.getDataContext());
+        Runnable showLoadingRunnable = dialog::show;
+        // show a progress bar if task is still running after 2 seconds
+        ProgressManager.getInstance().runLater(showLoadingRunnable, 2000);
+
+        Futures.addCallback(future, new FutureCallback<List<MethodPtr>>() {
+            @Override
+            public void onSuccess(@Nullable List<MethodPtr> pointers) {
+                if (activity.isFinishing() || activity.isDestroyed()) {
+                    return;
+                }
+                dialog.dismiss();
+                OverrideInheritedMethodsAction.this.onSuccess(pointers, showLoadingRunnable, e, file, editor, compiler);
+            }
+
+            @Override
+            public void onFailure(@NonNull Throwable t) {
+                if (activity.isFinishing() || activity.isDestroyed()) {
+                    return;
+                }
+                dialog.dismiss();
+                ProgressManager.getInstance().cancelRunLater(showLoadingRunnable);
+                AndroidUtilities.showSimpleAlert(e.getDataContext(), "Error", t.getMessage());
+            }
+        }, ContextCompat.getMainExecutor(e.getDataContext()));
+    }
+
+    private void onSuccess(@Nullable List<MethodPtr> pointers,
+                           Runnable showLoadingRunnable,
+                           @NonNull AnActionEvent e,
+                           File file,
+                           Editor editor,
+                           JavaCompilerService compiler) {
+        ProgressManager.getInstance().cancelRunLater(showLoadingRunnable);
+
+        TreeView<OverrideNode> treeView =
+                new TreeView<>(e.getDataContext(), buildTreeNode(pointers));
+        treeView.getView()
+                .setPaddingRelative(0, AndroidUtilities.dp(8), 0, 0);
 
         OverrideNodeViewFactory factory = new OverrideNodeViewFactory();
         treeView.setAdapter(factory);
 
-        AlertDialog dialog = new MaterialAlertDialogBuilder(e.getDataContext())
-                .setTitle(R.string.menu_quickfix_implement_abstract_methods_title)
+        AlertDialog dialog = new MaterialAlertDialogBuilder(e.getDataContext()).setTitle(
+                R.string.menu_quickfix_implement_abstract_methods_title)
                 .setView(treeView.getView())
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
@@ -119,25 +197,31 @@ public class OverrideInheritedMethodsAction extends AnAction {
                 OverrideNode value = node.getValue();
                 MethodPtr ptr = value.getMethodPtr();
                 JavaRewrite rewrite = new OverrideInheritedMethod(ptr.className, ptr.methodName,
-                        ptr.erasedParameterTypes, file.toPath(), editor.getCaret().getStart());
+                                                                  ptr.erasedParameterTypes,
+                                                                  file.toPath(), editor.getCaret()
+                                                                          .getStart());
                 RewriteUtil.performRewrite(editor, file, compiler, rewrite);
             }
         });
     }
 
-    private List<MethodPtr> performInternal(JavaCompilerService compiler, Path file,
+    @WorkerThread
+    private List<MethodPtr> performInternal(JavaCompilerService compiler,
+                                            SourceFileObject file,
                                             TreePath currentPath) {
-        CompilerContainer container = compiler.compile(file);
+        CompilerContainer container = compiler.compile(Collections.singletonList(file));
         return container.get(task -> {
             Trees trees = Trees.instance(task.task);
             Element classElement = trees.getElement(currentPath);
             Elements elements = task.task.getElements();
             List<MethodPtr> methodPtrs = new ArrayList<>();
             for (Element member : elements.getAllMembers((TypeElement) classElement)) {
-                if (member.getModifiers().contains(Modifier.FINAL)) {
+                if (member.getModifiers()
+                        .contains(Modifier.FINAL)) {
                     continue;
                 }
-                if (member.getModifiers().contains(Modifier.STATIC)) {
+                if (member.getModifiers()
+                        .contains(Modifier.STATIC)) {
                     continue;
                 }
                 if (member.getKind() != ElementKind.METHOD) {
@@ -174,7 +258,8 @@ public class OverrideInheritedMethodsAction extends AnAction {
         for (String key : classToPtr.keySet()) {
             List<MethodPtr> methods = classToPtr.get(key);
             if (methods != null && !methods.isEmpty()) {
-                OverrideNode classNode = new OverrideNode(methods.iterator().next(), false);
+                OverrideNode classNode = new OverrideNode(methods.iterator()
+                                                                  .next(), false);
                 TreeNode<OverrideNode> classTreeNode = new TreeNode<>(classNode, 1);
                 classTreeNode.setExpanded(true);
                 for (MethodPtr method : methods) {
@@ -247,17 +332,19 @@ public class OverrideInheritedMethodsAction extends AnAction {
 
         @Override
         public void bindView(TreeNode<OverrideNode> treeNode) {
-            DisplayMetrics displayMetrics =
-                    ApplicationProvider.getApplicationContext().getResources().getDisplayMetrics();
+            DisplayMetrics displayMetrics = ApplicationProvider.getApplicationContext()
+                    .getResources()
+                    .getDisplayMetrics();
             int startMargin = treeNode.getLevel() *
-                    Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 15,displayMetrics));
+                              Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 15,
+                                                                   displayMetrics));
             ((ViewGroup.MarginLayoutParams) root.getLayoutParams()).setMarginStart(startMargin);
 
             OverrideNode value = treeNode.getValue();
             MethodPtr ptr = value.getMethodPtr();
             if (value.isMethod()) {
                 String methodLabel = CompletionItemFactory.getMethodLabel(ptr.method,
-                        (ExecutableType) ptr.method.asType());
+                                                                          (ExecutableType) ptr.method.asType());
                 methodLabel += ":" + PrintHelper.printType(ptr.method.getReturnType());
                 text.setText(methodLabel);
                 icon.setImageDrawable(new CircleDrawable(DrawableKind.Method, true));
@@ -293,7 +380,8 @@ public class OverrideInheritedMethodsAction extends AnAction {
         }
 
         @Override
-        public boolean onNodeLongClicked(View view, TreeNode<OverrideNode> treeNode,
+        public boolean onNodeLongClicked(View view,
+                                         TreeNode<OverrideNode> treeNode,
                                          boolean expanded) {
             return super.onNodeLongClicked(view, treeNode, expanded);
         }

@@ -336,6 +336,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
             DataContext dataContext = DataContextUtils.getDataContext(view1);
             dataContext.putData(CommonDataKeys.PROJECT, currentProject);
+            dataContext.putData(CommonDataKeys.ACTIVITY, requireActivity());
             dataContext.putData(CommonDataKeys.FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
             dataContext.putData(CommonDataKeys.FILE, mCurrentFile);
             dataContext.putData(CommonDataKeys.EDITOR, mEditor);

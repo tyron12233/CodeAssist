@@ -94,6 +94,10 @@ public class ProgressManager {
         mMainHandler.postDelayed(runnable, delay);
     }
 
+    public void cancelRunLater(Runnable runnable) {
+        mMainHandler.removeCallbacks(runnable);
+    }
+
     public void cancelThread(Thread thread) {
         ProgressIndicator indicator = mThreadToIndicator.get(thread);
         if (indicator == null) {
