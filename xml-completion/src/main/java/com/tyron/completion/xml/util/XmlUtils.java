@@ -4,8 +4,6 @@ import android.annotation.SuppressLint;
 import android.text.TextUtils;
 import android.util.Pair;
 
-import com.tyron.builder.compiler.manifest.blame.SourcePosition;
-import com.tyron.builder.util.PositionXmlParser;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
@@ -16,15 +14,17 @@ import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.Format;
+import com.tyron.completion.xml.model.XmlCompletionType;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
+import org.eclipse.lemminx.dom.DOMAttr;
+import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.parser.Parser;
-import org.jsoup.select.Elements;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -66,7 +66,8 @@ public class XmlUtils {
 
     public static String fullIdentifier(String contents, int start) {
         int end = start;
-        while (end < contents.length() && !XmlCharacter.isNonXmlCharacterPart(contents.charAt(end - 1))) {
+        while (end < contents.length() &&
+               !XmlCharacter.isNonXmlCharacterPart(contents.charAt(end - 1))) {
             end++;
         }
         return contents.substring(start, end);
@@ -193,7 +194,8 @@ public class XmlUtils {
 
     /**
      * Checks whether the index is at the attribute tag of the node
-     * @param node The xml nod
+     *
+     * @param node  The xml nod
      * @param index The index of the cursor
      * @return whther the index is at the attribite tag of the node
      */
@@ -219,6 +221,7 @@ public class XmlUtils {
 
     /**
      * Return the owner element of an attribute node
+     *
      * @param element The element
      * @return The owner element
      */
@@ -235,6 +238,7 @@ public class XmlUtils {
     /**
      * Uses jsoup to build a well formed xml from a broken one.
      * Do not depend on the attribute positions as it does not match the original source.
+     *
      * @param contents The broken xml contents
      * @return Well formed xml
      */
@@ -309,15 +313,19 @@ public class XmlUtils {
             return false;
         }
 
-        return prefix.length() - cachedCompletion.getPrefix().length() == column - cachedCompletion.getColumn();
+        return prefix.length() -
+               cachedCompletion.getPrefix()
+                       .length() == column - cachedCompletion.getColumn();
     }
 
     @SuppressLint("NewApi")
-    public static CompletionItem getAttributeItem(XmlRepository repository, AttributeInfo attributeInfo,
-                                            boolean shouldShowNamespace,
-                                            String fixedPrefix) {
+    public static CompletionItem getAttributeItem(XmlRepository repository,
+                                                  AttributeInfo attributeInfo,
+                                                  boolean shouldShowNamespace, String fixedPrefix) {
 
-        if (attributeInfo.getFormats() == null || attributeInfo.getFormats().isEmpty()) {
+        if (attributeInfo.getFormats() == null ||
+            attributeInfo.getFormats()
+                    .isEmpty()) {
             AttributeInfo extraAttributeInfo =
                     repository.getExtraAttribute(attributeInfo.getName());
             if (extraAttributeInfo != null) {
@@ -325,16 +333,18 @@ public class XmlUtils {
             }
         }
         String commitText = "";
-        commitText = (TextUtils.isEmpty(attributeInfo.getNamespace()) ? "" :
-                attributeInfo.getNamespace() + ":");
+        commitText = (TextUtils.isEmpty(
+                attributeInfo.getNamespace()) ? "" : attributeInfo.getNamespace() + ":");
         commitText += attributeInfo.getName();
 
         CompletionItem item = new CompletionItem();
         item.action = CompletionItem.Kind.NORMAL;
         item.label = commitText;
         item.iconKind = DrawableKind.Attribute;
-        item.detail = attributeInfo.getFormats().stream()
-                .map(Format::name).collect(Collectors.joining("|"));
+        item.detail = attributeInfo.getFormats()
+                .stream()
+                .map(Format::name)
+                .collect(Collectors.joining("|"));
         item.commitText = commitText;
         if (!fixedPrefix.contains("=")) {
             item.commitText += "=\"\"";
@@ -345,5 +355,37 @@ public class XmlUtils {
         return item;
     }
 
+    public static String getPrefix(DOMDocument parsed, long index, XmlCompletionType type) {
+        String text = parsed.getText();
+        switch (type) {
+            case TAG:
+                DOMNode nodeAt = parsed.findNodeAt((int) index);
+                return text.substring(nodeAt.getStart(), (int) index);
+            case ATTRIBUTE:
+                return text.substring(parsed.findAttrAt((int) index)
+                                              .getStart(), (int) index);
+            case ATTRIBUTE_VALUE:
+                DOMAttr attrAt = parsed.findAttrAt((int) index);
+                return text.substring(attrAt.getNodeAttrValue()
+                                              .getStart() + 1, (int) index);
+        }
+        return null;
+    }
 
+    public static XmlCompletionType getCompletionType(DOMDocument parsed, long cursor) {
+        DOMNode nodeAt = parsed.findNodeAt((int) cursor);
+        if (nodeAt == null) {
+            return XmlCompletionType.UNKNOWN;
+        }
+
+        if (isTag(nodeAt, cursor) || isEndTag(nodeAt, cursor)) {
+            return XmlCompletionType.TAG;
+        }
+
+        if (isInAttributeValue(parsed.getTextDocument()
+                                       .getText(), (int) cursor)) {
+            return XmlCompletionType.ATTRIBUTE_VALUE;
+        }
+        return XmlCompletionType.ATTRIBUTE;
+    }
 }

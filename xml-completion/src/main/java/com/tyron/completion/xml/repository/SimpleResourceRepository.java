@@ -125,14 +125,12 @@ public class SimpleResourceRepository implements Repository {
     public ListMultimap<String, ResourceItem> getResources(@NonNull ResourceNamespace namespace,
                                                            @NonNull ResourceType resourceType) {
         ListMultimap<String, ResourceItem> resources = ArrayListMultimap.create();
+        if (namespace.equals(ResourceNamespace.ANDROID)) {
+            return AndroidResourceRepository.getInstance().getResources(namespace, resourceType);
+        }
         if (namespace.equals(ResourceNamespace.RES_AUTO)) {
             Set<ResourceNamespace> namespaces = mTable.rowKeySet();
             for (ResourceNamespace resourceNamespace : namespaces) {
-                // TODO: should android namespace be included in namespace resolution?
-                if (namespace == ResourceNamespace.ANDROID) {
-                    continue;
-                }
-
                 ListMultimap<String, ResourceItem> values =
                         mTable.get(resourceNamespace, resourceType);
                 if (values != null) {

@@ -72,6 +72,10 @@ public class CompletionList {
             this.completionPrefix = completionPrefix;
         }
 
+        public String getPrefix() {
+            return completionPrefix;
+        }
+
         public Builder addItems(Collection<CompletionItem> items) {
             for (CompletionItem item : items) {
                 addItem(item);

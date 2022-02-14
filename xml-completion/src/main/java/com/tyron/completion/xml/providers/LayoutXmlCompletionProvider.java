@@ -4,31 +4,26 @@ import static com.tyron.completion.xml.util.XmlUtils.fullIdentifier;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeItem;
 import static com.tyron.completion.xml.util.XmlUtils.getAttributeNameFromPrefix;
 import static com.tyron.completion.xml.util.XmlUtils.getElementNode;
-import static com.tyron.completion.xml.util.XmlUtils.getTagAtPosition;
 import static com.tyron.completion.xml.util.XmlUtils.isEndTag;
-import static com.tyron.completion.xml.util.XmlUtils.isInAttribute;
 import static com.tyron.completion.xml.util.XmlUtils.isInAttributeValue;
 import static com.tyron.completion.xml.util.XmlUtils.isIncrementalCompletion;
 import static com.tyron.completion.xml.util.XmlUtils.isTag;
-import static com.tyron.completion.xml.util.XmlUtils.newPullParser;
 import static com.tyron.completion.xml.util.XmlUtils.partialIdentifier;
 
 import android.annotation.SuppressLint;
 import android.os.Build;
-import android.util.Pair;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
 import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Sets;
-import com.tyron.builder.compiler.manifest.blame.SourcePosition;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.builder.util.PositionXmlParser;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
@@ -37,47 +32,36 @@ import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.insert.AttributeInsertHandler;
 import com.tyron.completion.xml.insert.LayoutTagInsertHandler;
 import com.tyron.completion.xml.insert.ValueInsertHandler;
-import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.XmlCachedCompletion;
+import com.tyron.completion.xml.model.XmlCompletionType;
 import com.tyron.completion.xml.repository.ResourceItem;
 import com.tyron.completion.xml.repository.api.AttrResourceValue;
 import com.tyron.completion.xml.repository.api.AttributeFormat;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.util.AndroidResourcesUtils;
-import com.tyron.completion.xml.util.AttributeProcessingUtil;
+import com.tyron.completion.xml.util.AttributeValueUtils;
 import com.tyron.completion.xml.util.DOMUtils;
 import com.tyron.completion.xml.util.StyleUtils;
 import com.tyron.completion.xml.util.XmlUtils;
 
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.Token;
 import org.apache.bcel.classfile.JavaClass;
 import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;
-import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
 import org.eclipse.lemminx.dom.DOMParser;
-import org.eclipse.lemminx.dom.DOMProcessingInstruction;
-import org.eclipse.lemminx.uriresolver.URIResolverExtension;
 import org.eclipse.lemminx.uriresolver.URIResolverExtensionManager;
 import org.openjdk.javax.xml.parsers.ParserConfigurationException;
-import org.w3c.dom.Attr;
-import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
-import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -89,7 +73,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
 
     private static final String EXTENSION = ".xml";
 
-    private XmlCachedCompletion mCachedCompletion;
+    private CachedCompletion mCachedCompletion;
 
     public LayoutXmlCompletionProvider() {
 
@@ -112,29 +96,25 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         String partialIdentifier = partialIdentifier(contents, (int) params.getIndex());
 
         if (isIncrementalCompletion(mCachedCompletion, params)) {
-            if (mCachedCompletion.getCompletionType() == XmlCachedCompletion.TYPE_ATTRIBUTE_VALUE) {
-                mCachedCompletion.setFilterPrefix(prefix);
-            } else if (mCachedCompletion.getCompletionType() == XmlCachedCompletion.TYPE_TAG) {
-                mCachedCompletion.setFilterPrefix(partialIdentifier);
-            } else {
-                mCachedCompletion.setFilterPrefix(partialIdentifier);
-            }
             CompletionList completionList = mCachedCompletion.getCompletionList();
             if (!completionList.items.isEmpty()) {
-                String filterPrefix = mCachedCompletion.getFilterPrefix();
-                sort(completionList.items, filterPrefix);
-                return completionList;
+                return CompletionList.copy(completionList, prefix);
             }
         }
         try {
-            XmlCachedCompletion list =
+            CompletionList.Builder builder =
                     completeInternal(params.getProject(), (AndroidModule) params.getModule(),
                                      params.getFile(), contents, prefix, params.getLine(),
                                      params.getColumn(), params.getIndex());
-            mCachedCompletion = list;
-            CompletionList completionList = list.getCompletionList();
-            sort(completionList.items, list.getFilterPrefix());
-            return completionList;
+            if (builder == null) {
+                return CompletionList.EMPTY;
+            }
+            CompletionList build = builder.build();
+            mCachedCompletion = new CachedCompletion(params.getFile(),
+                                                     params.getLine(),
+                                                     params.getColumn(),
+                                                     builder.getPrefix(), build);
+            return build;
         } catch (XmlPullParserException | IOException | ParserConfigurationException | SAXException e) {
             e.printStackTrace();
         }
@@ -153,23 +133,12 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
     }
 
 
+    @Nullable
     @RequiresApi(api = Build.VERSION_CODES.N)
-    private XmlCachedCompletion completeInternal(Project project, AndroidModule module, File file
+    private CompletionList.Builder completeInternal(Project project, AndroidModule module, File file
             , String contents, String prefix, int line, int column, long index) throws XmlPullParserException, IOException, ParserConfigurationException, SAXException {
-        CompletionList list = new CompletionList();
-        XmlCachedCompletion xmlCachedCompletion =
-                new XmlCachedCompletion(file, line, column, prefix, list);
+        XmlRepository repository = getRepository(project, module);
 
-        XmlIndexProvider indexProvider = CompilerService.getInstance()
-                .getIndex(XmlIndexProvider.KEY);
-        XmlRepository repository = indexProvider.get(project, module);
-        repository.initialize(module);
-        Map<String, DeclareStyleable> declareStyleables = repository.getDeclareStyleables();
-
-        String fixedPrefix = partialIdentifier(contents, (int) index);
-        String fullPrefix = fullIdentifier(contents, (int) index);
-
-        URIResolverExtensionManager manager = new URIResolverExtensionManager();
         ResourceNamespace namespace = ResourceNamespace.fromPackageName(module.getPackageName());
         DOMDocument parsed = DOMParser.getInstance()
                 .parse(contents, namespace.getXmlNamespaceUri(), new URIResolverExtensionManager());
@@ -184,29 +153,40 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
             tag = ownerNode.getTagName();
         }
 
-        // first get the attributes based on the current tag
-        Set<DeclareStyleable> styles = StyleUtils.getStyles(declareStyleables, tag, parentTag);
-        list.items = new ArrayList<>();
-
-        if (isTag(node, index) || isEndTag(node, index)) {
-            addTagItems(repository, prefix, list, xmlCachedCompletion);
-        } else if (isInAttributeValue(contents, (int) index)) {
-            DOMAttr attr = parsed.findAttrAt((int) index);
-            String uri = DOMUtils.lookupPrefix(attr);
-            ResourceNamespace resourceNamespace = ResourceNamespace.fromNamespaceUri(uri);
-            AttrResourceValue attrValue =
-                    AttributeProcessingUtil.getLayoutAttributeFromNode(repository.getRepository(),
-                                                                       attr.getOwnerElement(),
-                                                                       attr.getLocalName(),
-                                                                       resourceNamespace);
-            addAttributeValueItems(attrValue, prefix, fixedPrefix, repository, list,
-                                   xmlCachedCompletion);
-        } else {
-            addAttributeItems(styles, fullPrefix, fixedPrefix, repository, list,
-                              xmlCachedCompletion);
+        XmlCompletionType completionType = XmlUtils.getCompletionType(parsed, index);
+        if (completionType == XmlCompletionType.UNKNOWN) {
+            return null;
         }
 
-        return xmlCachedCompletion;
+        String fixedPrefix = XmlUtils.getPrefix(parsed, index, completionType);
+        if (fixedPrefix == null) {
+            return null;
+        }
+
+        CompletionList.Builder builder = CompletionList.builder(fixedPrefix);
+        switch (completionType) {
+            case TAG:
+            case ATTRIBUTE:
+            case ATTRIBUTE_VALUE:
+                DOMAttr attr = parsed.findAttrAt((int) index);
+                String uri = DOMUtils.lookupPrefix(attr);
+                ResourceNamespace resourceNamespace = ResourceNamespace.fromNamespaceUri(uri);
+                AttributeValueUtils.addValueItems(project, module,
+                                                  fixedPrefix,
+                                                  repository,
+                                                  attr,
+                                                  resourceNamespace,
+                                                  namespace, builder);
+        }
+        return builder;
+    }
+
+    private XmlRepository getRepository(Project project, AndroidModule module) throws IOException {
+        XmlIndexProvider indexProvider = CompilerService.getInstance()
+                .getIndex(XmlIndexProvider.KEY);
+        XmlRepository repository = indexProvider.get(project, module);
+        repository.initialize(module);
+        return repository;
     }
 
     private void addTagItems(XmlRepository repository, String prefix, CompletionList list,
@@ -252,9 +232,10 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
             item.detail = entry.getValue()
                     .getPackageName();
             item.iconKind = DrawableKind.Class;
-            item.commitText = commitPrefix + (useFqn ? entry.getValue()
-                    .getClassName() : StyleUtils.getSimpleName(entry.getValue()
-                                                                       .getClassName()));
+            item.commitText = commitPrefix +
+                              (useFqn ? entry.getValue()
+                                      .getClassName() : StyleUtils.getSimpleName(entry.getValue()
+                                                                                         .getClassName()));
             item.cursorOffset = item.commitText.length();
             item.setInsertHandler(new LayoutTagInsertHandler(entry.getValue(), item));
             list.items.add(item);
@@ -268,8 +249,9 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
 
         for (DeclareStyleable style : styles) {
             for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
-                if (attributeInfo.getFormats() == null || attributeInfo.getFormats()
-                        .isEmpty()) {
+                if (attributeInfo.getFormats() == null ||
+                    attributeInfo.getFormats()
+                            .isEmpty()) {
                     AttributeInfo extra = repository.getExtraAttribute(attributeInfo.getName());
                     if (extra != null) {
                         attributeInfo = extra;
