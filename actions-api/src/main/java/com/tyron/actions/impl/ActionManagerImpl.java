@@ -1,6 +1,9 @@
 package com.tyron.actions.impl;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.os.Build;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.SubMenu;
@@ -8,6 +11,7 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.actions.ActionGroup;
 import com.tyron.actions.ActionManager;
 import com.tyron.actions.AnAction;
@@ -29,7 +33,11 @@ public class ActionManagerImpl extends ActionManager {
     private final Map<Object, String> mActionToId = new HashMap<>();
 
     @Override
-    public void fillMenu(DataContext context, Menu menu, String place, boolean isContext, boolean isToolbar) {
+    public void fillMenu(DataContext context,
+                         Menu menu,
+                         String place,
+                         boolean isContext,
+                         boolean isToolbar) {
         // Inject values
         context.putData(CommonDataKeys.CONTEXT, context);
         if (Build.VERSION_CODES.P <= Build.VERSION.SDK_INT) {
@@ -38,17 +46,16 @@ public class ActionManagerImpl extends ActionManager {
 
         for (AnAction value : mIdToAction.values()) {
 
-            AnActionEvent event = new AnActionEvent(context,
-                    place,
-                    value.getTemplatePresentation(),
-                    isContext,
-                    isToolbar);
+            AnActionEvent event =
+                    new AnActionEvent(context, place, value.getTemplatePresentation(), isContext,
+                                      isToolbar);
 
             event.setPresentation(value.getTemplatePresentation());
 
             value.update(event);
 
-            if (event.getPresentation().isVisible()) {
+            if (event.getPresentation()
+                    .isVisible()) {
                 fillMenu(menu, value, event);
             }
         }
@@ -75,7 +82,8 @@ public class ActionManagerImpl extends ActionManager {
 
                     child.update(event);
 
-                    if (event.getPresentation().isVisible()) {
+                    if (event.getPresentation()
+                            .isVisible()) {
                         if (actionGroup.isPopup()) {
                             fillSubMenu(subMenu, child, event);
                         }
@@ -94,10 +102,7 @@ public class ActionManagerImpl extends ActionManager {
             menuItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         }
         menuItem.setIcon(presentation.getIcon());
-        menuItem.setOnMenuItemClickListener(item -> {
-            action.actionPerformed(event);
-            return true;
-        });
+        menuItem.setOnMenuItemClickListener(item -> performAction(action, event));
     }
 
     private void fillMenu(int id, Menu menu, ActionGroup group, AnActionEvent event) {
@@ -109,19 +114,19 @@ public class ActionManagerImpl extends ActionManager {
         for (AnAction child : children) {
             event.setPresentation(child.getTemplatePresentation());
             child.update(event);
-            if (event.getPresentation().isVisible()) {
-                MenuItem add = menu.add(id, Menu.NONE, Menu.NONE,
-                        event.getPresentation().getText());
-                add.setEnabled(event.getPresentation().isEnabled());
-                add.setIcon(event.getPresentation().getIcon());
-                add.setOnMenuItemClickListener(item -> {
-                    child.actionPerformed(event);
-                    return true;
-                });
+            if (event.getPresentation()
+                    .isVisible()) {
+                MenuItem add = menu.add(id, Menu.NONE, Menu.NONE, event.getPresentation()
+                        .getText());
+                add.setEnabled(event.getPresentation()
+                                       .isEnabled());
+                add.setIcon(event.getPresentation()
+                                    .getIcon());
+                add.setOnMenuItemClickListener(item -> performAction(child, event));
             }
         }
     }
-    
+
     private void fillSubMenu(SubMenu subMenu, AnAction action, AnActionEvent event) {
         Presentation presentation = event.getPresentation();
 
@@ -143,7 +148,8 @@ public class ActionManagerImpl extends ActionManager {
 
                     child.update(event);
 
-                    if (event.getPresentation().isVisible()) {
+                    if (event.getPresentation()
+                            .isVisible()) {
                         fillSubMenu(subSubMenu, child, event);
                     }
                 }
@@ -160,10 +166,27 @@ public class ActionManagerImpl extends ActionManager {
         }
         menuItem.setIcon(presentation.getIcon());
         menuItem.setContentDescription(presentation.getDescription());
-        menuItem.setOnMenuItemClickListener(item -> {
+        menuItem.setOnMenuItemClickListener(item -> performAction(action, event));
+    }
+
+    private boolean performAction(AnAction action, AnActionEvent event) {
+        try {
             action.actionPerformed(event);
-            return true;
-        });
+        } catch (Throwable e) {
+            ClipboardManager clipboardManager = event.getDataContext()
+                    .getSystemService(ClipboardManager.class);
+            new MaterialAlertDialogBuilder(event.getDataContext()).setTitle(
+                    "Unable to perform action")
+                    .setMessage(e.getMessage())
+                    .setPositiveButton(android.R.string.ok, null)
+                    .setNegativeButton(android.R.string.copy,
+                                       (d, w) -> clipboardManager.setPrimaryClip(
+                                               ClipData.newPlainText("Error report",
+                                                                     Log.getStackTraceString(e))))
+                    .show();
+            return false;
+        }
+        return true;
     }
 
     @Override
