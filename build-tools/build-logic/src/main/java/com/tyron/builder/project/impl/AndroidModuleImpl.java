@@ -14,9 +14,12 @@ import com.tyron.common.util.StringSearch;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.FileFilterUtils;
 import org.apache.commons.io.filefilter.TrueFileFilter;
+import org.openjdk.javax.xml.transform.TransformerException;
+import org.xml.sax.SAXException;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +41,11 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     public void open() throws IOException {
         super.open();
 
-        mManifestData = AndroidManifestParser.parse(getManifestFile());
+        try {
+            mManifestData = AndroidManifestParser.parse(getManifestFile());
+        } catch (IOException e) {
+            throw new IOException("Unable to parse manifest. Fix manifest errors and then refresh the module.");
+        }
     }
 
     @Override
@@ -107,6 +114,9 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
 
     @Override
     public String getPackageName() {
+        if (mManifestData == null) {
+            return null;
+        }
         return mManifestData.getPackage();
     }
 

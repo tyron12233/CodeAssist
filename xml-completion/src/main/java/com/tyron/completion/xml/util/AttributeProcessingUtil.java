@@ -24,20 +24,30 @@ import org.eclipse.lemminx.dom.DOMNode;
 
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class AttributeProcessingUtil {
 
     private static final FolderConfiguration DEFAULT = FolderConfiguration.createDefault();
 
+
     public static List<AttrResourceValue> getTagAttributes(@NonNull ResourceRepository repository,
                                                            @NonNull DOMNode node,
                                                            @NonNull ResourceNamespace namespace,
-                                                           boolean layoutParams) {
+                                                           @NonNull Function<String, Set<String>> provider) {
+        return getTagAttributes(repository, node, namespace,
+                                (StyleUtils::getClasses), provider);
+    }
+    public static List<AttrResourceValue> getTagAttributes(@NonNull ResourceRepository repository,
+                                                           @NonNull DOMNode node,
+                                                           @NonNull ResourceNamespace namespace,
+                                                           @NonNull Function<String, Set<String>> styleProvider,
+                                                           @NonNull Function<String, Set<String>> provider) {
         String tagName = getSimpleName(node.getNodeName());
-        Set<String> classes = StyleUtils.getClasses(tagName);
+        Set<String> classes = styleProvider.apply(tagName);
         return classes.stream()
-                .flatMap(it -> getAttributes(repository, it, namespace, layoutParams).stream())
+                .flatMap(it -> getAttributes(repository, it, namespace, provider).stream())
                 .filter(it -> {
                     ListMultimap<String, ResourceItem> resources =
                             repository.getResources(it.getNamespace(), ResourceType.PUBLIC);
@@ -52,20 +62,13 @@ public class AttributeProcessingUtil {
     public static List<AttrResourceValue> getAttributes(@NonNull ResourceRepository repository,
                                                         @NonNull String tag,
                                                         @NonNull ResourceNamespace namespace,
-                                                        boolean layoutParams) {
+                                                        @NonNull Function<String, Set<String>> provider) {
         String modified = tag;
         if (VIEW_GROUP.equals(modified)) {
             modified = "ViewGroup_Layout";
         }
 
-        ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-        builder.add(modified);
-        if (layoutParams) {
-            builder.add(getLayoutStyleablePrimary(tag));
-            builder.add(getLayoutStyleableSecondary(tag));
-        }
-
-        Set<String> names = builder.build();
+        Set<String> names = provider.apply(modified);
         return names.stream()
                 .map(it -> getResourceValue(repository, it, namespace))
                 .filter(it -> it instanceof StyleableResourceValue)
@@ -154,7 +157,7 @@ public class AttributeProcessingUtil {
         return null;
     }
 
-    private static ResourceValue getResourceValue(@NonNull ResourceRepository repository,
+    public static ResourceValue getResourceValue(@NonNull ResourceRepository repository,
                                                   String name,
                                                   ResourceNamespace namespace) {
         ResourceValue value = null;
@@ -176,8 +179,8 @@ public class AttributeProcessingUtil {
         return value;
     }
 
-    private static AttrResourceValue getAttributeResourceValue(@NonNull ResourceRepository repository,
-                                                               @NonNull AttrResourceValue value) {
+    public static AttrResourceValue getAttributeResourceValue(@NonNull ResourceRepository repository,
+                                                              @NonNull AttrResourceValue value) {
         if (value.getFormats()
                     .isEmpty() &&
             value.getAttributeValues()
