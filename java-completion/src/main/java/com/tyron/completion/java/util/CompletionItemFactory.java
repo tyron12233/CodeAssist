@@ -56,6 +56,7 @@ public class CompletionItemFactory {
                 className, simpleClassName(className), DrawableKind.Class);
         item.data = className;
         item.action = CompletionItem.Kind.IMPORT;
+        item.setSortText(JavaSortCategory.TO_IMPORT.toString());
         return item;
     }
 

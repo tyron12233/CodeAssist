@@ -55,6 +55,7 @@ public class CompletionItem implements Comparable<CompletionItem> {
 
     public CompletionItem() {
         this.insertHandler = new DefaultInsertHandler(CompletionUtils.JAVA_PREDICATE, this);
+        this.sortText = "";
     }
 
     public CompletionItem(String label, String details, String commitText, DrawableKind kind) {
@@ -64,6 +65,7 @@ public class CompletionItem implements Comparable<CompletionItem> {
         this.cursorOffset = commitText.length();
         this.iconKind = kind;
         this.insertHandler = new DefaultInsertHandler(CompletionUtils.JAVA_PREDICATE, this);
+        this.sortText = "";
     }
 
     public CompletionItem(String label) {
