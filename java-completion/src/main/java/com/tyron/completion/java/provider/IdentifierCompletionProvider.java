@@ -5,6 +5,11 @@ import static com.tyron.completion.java.provider.ImportCompletionProvider.addSta
 import static com.tyron.completion.java.provider.SwitchConstantCompletionProvider.completeSwitchConstant;
 import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
+
+import com.tyron.common.ApplicationProvider;
+import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.model.CompletionList;
@@ -19,18 +24,31 @@ public class IdentifierCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public void complete(CompletionList.Builder builder, CompileTask task, TreePath path, String partial, boolean endsWithParen) {
+    public void complete(CompletionList.Builder builder,
+                         CompileTask task,
+                         TreePath path,
+                         String partial,
+                         boolean endsWithParen) {
         checkCanceled();
 
-        if (path.getParentPath().getLeaf() instanceof CaseTree) {
+        if (path.getParentPath()
+                .getLeaf() instanceof CaseTree) {
             completeSwitchConstant(builder, task, path.getParentPath(), partial);
             return;
         }
 
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(
+                ApplicationProvider.getApplicationContext());
+        boolean caseSensitiveMatch =
+                !preferences.getBoolean(SharedPreferenceKeys.JAVA_CASE_INSENSITIVE_MATCH, false);
+
         ScopeCompletionProvider.addCompletionItems(task, path, partial, endsWithParen, builder);
         addStaticImports(task, path.getCompilationUnit(), partial, endsWithParen, builder);
-        if (!builder.isIncomplete() && partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
-            addClassNames(path.getCompilationUnit(), partial, builder, getCompiler());
+        if (!builder.isIncomplete()) {
+            if (!caseSensitiveMatch ||
+                partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
+                addClassNames(path.getCompilationUnit(), partial, builder, getCompiler(), caseSensitiveMatch);
+            }
         }
 
         KeywordCompletionProvider.addKeywords(task, path, partial, builder);

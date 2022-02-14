@@ -12,6 +12,7 @@ public class SharedPreferenceKeys {
     public static final String INSTALL_APK_DIRECTLY = "install_apk_directly";
     public static final String JAVA_COMPLETIONS_TARGET_VERSION = "javaCompletionsTargetVersion";
     public static final String JAVA_COMPLETIONS_SOURCE_VERSION = "javaCompletionsSourceVersion";
+    public static final String JAVA_CASE_INSENSITIVE_MATCH = "java_case_insensitive_match";
     public static final String KOTLIN_HIGHLIGHTING = "kotlin_error_highlight";
     public static final String JAVA_ERROR_HIGHLIGHTING = "code_editor_error_highlight";
     public static final String JAVA_CODE_COMPLETION = "code_editor_completion";

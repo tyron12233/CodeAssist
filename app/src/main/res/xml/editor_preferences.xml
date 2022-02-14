@@ -32,6 +32,15 @@
             app:iconSpaceReserved="false"
             android:title="@string/settings_code_completions" />
 
+        <SwitchPreference
+            android:defaultValue="true"
+            android:iconSpaceReserved="false"
+            android:key="java_case_insensitive_match"
+            app:iconSpaceReserved="false"
+            app:defaultValue="false"
+            app:summary="@string/settings_case_insensitive_match_desc"
+            app:title="@string/settings_case_insensitive_match_title" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

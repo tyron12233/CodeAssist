@@ -102,6 +102,8 @@
     <string name="settings_kotlin_completions_desc">This feature is still experimental and may be slow.
         Requires a powerful device.
     </string>
+    <string name="settings_case_insensitive_match_title">Case insensitive match</string>
+    <string name="settings_case_insensitive_match_desc">Suggest class names with lowercase prefix.</string>
     <string name="code_editor_error_highlight">Enable error highlighting</string>
 
     <string name="editor_settings_title">Code Editor settings</string>
