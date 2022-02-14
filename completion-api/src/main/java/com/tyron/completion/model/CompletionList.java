@@ -12,6 +12,8 @@ import com.tyron.completion.CompletionProvider;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -92,17 +94,22 @@ public class CompletionList {
         }
 
         public Builder addItem(CompletionItem item) {
+            List<MatchLevel> matchLevels = new ArrayList<>();
             for (String filterText : item.getFilterTexts()) {
                 MatchLevel matchLevel =
                         CompletionPrefixMatcher.computeMatchLevel(filterText, completionPrefix);
                 if (matchLevel == MatchLevel.NOT_MATCH) {
                     continue;
                 }
-
-                item.setMatchLevel(matchLevel);
-                items.add(item);
+                matchLevels.add(matchLevel);
+            }
+            if (matchLevels.isEmpty()) {
                 return this;
             }
+            Collections.sort(matchLevels);
+            MatchLevel matchLevel = matchLevels.get(matchLevels.size() - 1);
+            item.setMatchLevel(matchLevel);
+            items.add(item);
             return this;
         }
 
