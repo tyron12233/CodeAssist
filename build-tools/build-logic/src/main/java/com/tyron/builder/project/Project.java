@@ -42,6 +42,11 @@ public class Project {
     private final ProjectSettings mSettings;
 
     private volatile boolean mCompiling;
+
+    MutableGraph<Module> graph = GraphBuilder
+            .directed()
+            .allowsSelfLoops(false)
+            .build();
     
     public Project(File root) {
         mRoot = root;
@@ -58,18 +63,24 @@ public class Project {
         mCompiling = compiling;
     }
 
-    public void open() throws IOException {
-        MutableGraph<Module> graph = GraphBuilder
-                .directed()
-                .allowsSelfLoops(false).build();
+    public void open() throws IOException { ;
+        mMainModule.open();
+
         graph.addNode(mMainModule);
         addEdges(graph, mMainModule);
         Set<Module> modules = Graphs.reachableNodes(graph, mMainModule);
         for (Module module : modules) {
-            module.clear();
-            module.index();
+            module.open();
             File rootFile = module.getRootFile();
             mModules.put(rootFile.getName(), module);
+        }
+    }
+
+    public void index() throws IOException {
+        Set<Module> modules = Graphs.reachableNodes(graph, mMainModule);
+        for (Module module : modules) {
+            module.clear();
+            module.index();
         }
     }
 

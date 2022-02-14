@@ -144,7 +144,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
 
     @NonNull
     @RequiresApi(api = Build.VERSION_CODES.N)
-    private CompletionList.Builder completeInternal(Project project, AndroidModule module,
+    protected CompletionList.Builder completeInternal(Project project, AndroidModule module,
                                                     XmlRepository repository, DOMDocument parsed,
                                                     String prefix,
                                                     XmlCompletionType completionType,

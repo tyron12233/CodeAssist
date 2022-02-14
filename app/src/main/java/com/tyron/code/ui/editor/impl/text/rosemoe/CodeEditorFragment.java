@@ -421,7 +421,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (ProjectManager.getInstance().getCurrentProject() != null) {
+        if (ProjectManager.getInstance().getCurrentProject() != null && mCanSave) {
             ProgressManager.getInstance().runNonCancelableAsync(() ->
                     ProjectManager.getInstance().getCurrentProject()
                             .getModule(mCurrentFile).getFileManager()
@@ -483,7 +483,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     @Override
     public void save(boolean toDisk) {
-        if (!mCanSave && mReading) {
+        if (!mCanSave || mReading) {
             return;
         }
 

@@ -27,6 +27,7 @@ import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.completion.xml.XmlRepository;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.lemminx.dom.DOMParser;
 
 import java.io.File;
 import java.io.IOException;
@@ -85,15 +86,23 @@ public class ProjectManager {
                                boolean downloadLibs,
                                TaskListener mListener,
                                ILogger logger) {
-        Module module = project.getMainModule();
+        mCurrentProject = project;
+
+        // Index the project after downloading dependencies so it will get added to classpath
         try {
-            module.open();
-        } catch (IOException e) {
-            mListener.onComplete(project,false, "Unable to open project: " + e.getMessage());
-            return;
+            mCurrentProject.open();
+        } catch (IOException exception) {
+            logger.warning("Failed to open project: " + exception.getMessage());
+        }
+        mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
+
+        try {
+            mCurrentProject.index();
+        } catch (IOException exception) {
+            logger.warning("Failed to open project: " + exception.getMessage());
         }
 
-        mCurrentProject = project;
+        Module module = mCurrentProject.getMainModule();
 
         if (module instanceof JavaModule) {
             JavaModule javaModule = (JavaModule) module;
@@ -104,14 +113,6 @@ public class ProjectManager {
             }
         }
 
-        // Index the project after downloading dependencies so it will get added to classpath
-        try {
-            mCurrentProject.open();
-        } catch (IOException exception) {
-            logger.warning("Failed to open project: " + exception.getMessage());
-            return;
-        }
-        mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
 
         if (module instanceof AndroidModule) {
             mListener.onTaskStarted("Generating resource files.");

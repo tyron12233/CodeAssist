@@ -33,7 +33,7 @@ public final class ManifestData {
     public static final int GL_ES_VERSION_NOT_SET = -1;
 
     /** Application package */
-    String mPackage;
+    String mPackage = "";
     /** Application version code, null if the attribute is not present. */
     Integer mVersionCode = null;
     /** Application version name, null if the attribute is not present. */

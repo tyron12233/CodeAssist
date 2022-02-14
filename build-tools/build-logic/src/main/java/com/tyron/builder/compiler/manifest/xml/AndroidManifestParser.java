@@ -18,6 +18,13 @@ import com.tyron.builder.util.XmlUtils;
 import org.openjdk.javax.xml.parsers.ParserConfigurationException;
 import org.openjdk.javax.xml.parsers.SAXParser;
 import org.openjdk.javax.xml.parsers.SAXParserFactory;
+import org.openjdk.javax.xml.transform.Transformer;
+import org.openjdk.javax.xml.transform.TransformerConfigurationException;
+import org.openjdk.javax.xml.transform.TransformerException;
+import org.openjdk.javax.xml.transform.TransformerFactory;
+import org.openjdk.javax.xml.transform.dom.DOMSource;
+import org.openjdk.javax.xml.transform.sax.SAXResult;
+import org.w3c.dom.Document;
 import org.xml.sax.Attributes;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
@@ -30,6 +37,7 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
@@ -758,6 +766,34 @@ public class AndroidManifestParser {
      */
     public static ManifestData parse(IAbstractFile manifestFile) throws IOException, SAXException {
         return parse(manifestFile, true, null);
+    }
+
+    /**
+     * Currently using reflection, nasty can be fixed later by moving the module
+     */
+    public static ManifestData parse(String xml) throws IOException, SAXException, TransformerException {
+        Document document;
+        try {
+            Class<?> aClass = Class.forName("org.eclipse.lemminx.dom.DOMParser");
+            Method getInstance = aClass.getDeclaredMethod("getInstance");
+            Object parser = getInstance.invoke(null);
+
+            Class<?> extensionManager =
+                    Class.forName("org.eclipse.lemminx.uriresolver.URIResolverExtensionManager");
+            Method parse =
+                    aClass.getDeclaredMethod("parse", String.class, String.class, extensionManager);
+            document = (Document) parse.invoke(parser, xml, "", null);
+        } catch (Throwable e) {
+            throw new Error(e);
+        }
+        TransformerFactory factory = TransformerFactory.newInstance();
+        Transformer transformer = factory.newTransformer();
+
+        ManifestData data = new ManifestData();
+        ManifestHandler manifestHandler = new ManifestHandler(data, null);
+        transformer.transform(new DOMSource(document),
+                              new SAXResult(manifestHandler));
+        return data;
     }
 
 
