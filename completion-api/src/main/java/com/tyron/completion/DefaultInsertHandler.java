@@ -28,14 +28,15 @@ public class DefaultInsertHandler implements InsertHandler {
 
     protected void deletePrefix(Editor editor) {
         Caret caret = editor.getCaret();
-        String lineString = editor.getContent().getLineString(caret.getStartLine());
+        String lineString = editor.getContent()
+                .getLineString(caret.getStartLine());
         String prefix = getPrefix(lineString, getCharPosition(caret));
         int length = prefix.length();
         if (prefix.contains(".")) {
             length -= prefix.lastIndexOf('.') + 1;
         }
-        editor.delete(caret.getStartLine(), caret.getStartColumn() - length, caret.getStartLine()
-                , caret.getStartColumn());
+        editor.delete(caret.getStartLine(), caret.getStartColumn() - length, caret.getStartLine(),
+                      caret.getStartColumn());
     }
 
     @Override
@@ -62,7 +63,7 @@ public class DefaultInsertHandler implements InsertHandler {
        insert(string, editor, true);
     }
 
-    private CharPosition getCharPosition(Caret caret) {
+    protected CharPosition getCharPosition(Caret caret) {
         return new CharPosition(caret.getStartLine(), caret.getEndColumn());
     }
 
