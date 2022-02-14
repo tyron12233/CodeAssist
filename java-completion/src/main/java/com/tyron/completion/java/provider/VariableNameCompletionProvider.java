@@ -40,14 +40,13 @@ public class VariableNameCompletionProvider extends BaseCompletionProvider {
             return;
         }
 
-        CompletionList list = new CompletionList();
         for (String name : names) {
             while (ActionUtil.containsVariableAtScope(name, task, path)) {
                 name = ActionUtil.getVariableName(name);
             }
             CompletionItem item = CompletionItemFactory.item(name);
             item.setSortText(JavaSortCategory.UNKNOWN.toString());
-            list.items.add(item);
+            builder.addItem(item);
         }
     }
 }

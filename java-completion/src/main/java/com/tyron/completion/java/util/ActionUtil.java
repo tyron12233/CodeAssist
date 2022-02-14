@@ -43,6 +43,7 @@ import com.tyron.completion.java.action.FindCurrentPath;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.rewrite.EditHelper;
 
+import org.openjdk.javax.lang.model.SourceVersion;
 import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
@@ -75,6 +76,7 @@ import org.openjdk.source.util.Trees;
 import org.openjdk.tools.javac.tree.JCTree;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -86,6 +88,7 @@ import java.util.stream.Collectors;
 public class ActionUtil {
 
     private static final Pattern DIGITS_PATTERN = Pattern.compile("^(.+?)(\\d+)$");
+    private static final Pattern CAMEL_CASE_PATTERN = Pattern.compile("(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])");
 
     private static final Set<Tree.Kind> DISALLOWED_KINDS_INTRODUCE_LOCAL_VARIABLE =
             ImmutableSet.of(IMPORT, PACKAGE, INTERFACE, METHOD, ANNOTATION, THROW,
@@ -379,14 +382,29 @@ public class ActionUtil {
         }
         return name + "1";
     }
-
     public static List<String> guessNamesFromType(TypeMirror typeMirror) {
         List<String> list = new ArrayList<>();
         if (typeMirror.getKind() == TypeKind.DECLARED) {
             DeclaredType type = (DeclaredType) typeMirror;
 
             String typeName = guessNameFromTypeName(getSimpleName(type.toString()));
-            list.add(typeName);
+            String[] types = getSimpleName(type.toString())
+                    .split(CAMEL_CASE_PATTERN.pattern());
+            if (types.length != 0) {
+                for (int i = 0; i < types.length; i++) {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append(guessNameFromTypeName(types[i]));
+                    if (i + 1 < types.length) {
+                        for (int j = i + 1; j < types.length; j++) {
+                            sb.append(Character.toUpperCase(types[j].charAt(0)))
+                                    .append(types[j].substring(1));
+                        }
+                    }
+                    list.add(sb.toString());
+                }
+            } else {
+                list.add(typeName);
+            }
 
             List<String> typeNames = new ArrayList<>();
             for (TypeMirror typeArgument : type.getTypeArguments()) {
@@ -436,7 +454,17 @@ public class ActionUtil {
     }
 
     public static String guessNameFromTypeName(String name) {
-        return "" + Character.toLowerCase(name.charAt(0)) + name.substring(1);
+        String lowercase = "" + Character.toLowerCase(name.charAt(0)) + name.substring(1);
+        if (!SourceVersion.isName(lowercase)) {
+            String uppercase = Character.toUpperCase(name.charAt(0)) + name.substring(1);
+            char c = lowercase.charAt(0);
+            if ("aeiouAEIOU".indexOf(c) != -1) {
+                return "an" + uppercase;
+            }  else {
+                return "a" + uppercase;
+            }
+        }
+        return lowercase;
     }
 
     public static String guessNameFromMethodName(String methodName) {
