@@ -64,6 +64,7 @@ public class AttributeValueUtils {
             for (String flag : attributeValues.keySet()) {
                 CompletionItem item = CompletionItem.create(flag, "Value", flag, DrawableKind.Snippet);
                 item.setInsertHandler(new ValueInsertHandler(attribute, item));
+                item.addFilterText(flag);
                 list.addItem(item);
             }
         }

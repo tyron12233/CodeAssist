@@ -173,7 +173,7 @@ public class CompletionItemFactory {
                     ((methodRef || endsWithParen) ? 0 : 1);
         }
         item.setInsertHandler(new MethodInsertHandler(first, item));
-        item.setName(first.getSimpleName().toString());
+        item.addFilterText(first.getSimpleName().toString());
         return item;
     }
 

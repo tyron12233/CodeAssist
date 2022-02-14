@@ -1,11 +1,13 @@
 package com.tyron.completion.model;
 
+import com.google.common.collect.ImmutableList;
 import com.tyron.completion.CompletionPrefixMatcher;
 import com.tyron.completion.DefaultInsertHandler;
 import com.tyron.completion.InsertHandler;
 import com.tyron.completion.util.CompletionUtils;
 import com.tyron.editor.Editor;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -20,7 +22,9 @@ public class CompletionItem implements Comparable<CompletionItem> {
             Comparator.comparing(CompletionItem::getSortText)
                     .thenComparing(item -> item.getMatchLevel()
                             .ordinal(), Comparator.reverseOrder())
-                    .thenComparing(CompletionItem::getName);
+                    .thenComparing(it -> it.getFilterTexts()
+                            .isEmpty() ? it.getLabel() : it.getFilterTexts()
+                            .get(0));
 
 
     public static CompletionItem create(String label, String detail, String commitText) {
@@ -46,7 +50,7 @@ public class CompletionItem implements Comparable<CompletionItem> {
     public String data = "";
 
     private String sortText;
-    private String name;
+    private List<String> filterTexts = new ArrayList<>(1);
     private CompletionPrefixMatcher.MatchLevel matchLevel;
 
     public CompletionItem() {
@@ -70,15 +74,15 @@ public class CompletionItem implements Comparable<CompletionItem> {
         this.sortText = sortText;
     }
 
-    public String getName() {
-        if (name == null) {
-            return getLabel();
+    public ImmutableList<String> getFilterTexts() {
+        if (filterTexts.isEmpty()) {
+            return ImmutableList.of(label);
         }
-        return name;
+        return ImmutableList.copyOf(filterTexts);
     }
 
-    public void setName(String name) {
-        this.name = name;
+    public void addFilterText(String text) {
+        filterTexts.add(text);
     }
 
     public String getSortText() {

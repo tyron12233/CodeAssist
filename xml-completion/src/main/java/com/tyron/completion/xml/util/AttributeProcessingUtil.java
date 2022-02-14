@@ -19,13 +19,40 @@ import com.tyron.completion.xml.repository.api.ResourceValue;
 import com.tyron.completion.xml.repository.api.StyleableResourceValue;
 
 import org.eclipse.lemminx.dom.DOMElement;
+import org.eclipse.lemminx.dom.DOMNode;
 
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class AttributeProcessingUtil {
 
     private static final FolderConfiguration DEFAULT = FolderConfiguration.createDefault();
+
+    public static List<AttrResourceValue> getTagAttributes(@NonNull ResourceRepository repository
+            , @NonNull DOMNode node, ResourceNamespace namespace) {
+        String tagName = getSimpleName(node.getNodeName());
+        Set<String> classes = StyleUtils.getClasses(tagName);
+        return classes.stream()
+                .flatMap(it -> getAttributes(repository, it, namespace).stream())
+                .collect(Collectors.toList());
+    }
+
+    public static List<AttrResourceValue> getAttributes(@NonNull ResourceRepository repository,
+                                                        @NonNull String tag,
+                                                        @NonNull ResourceNamespace namespace) {
+        String modified = tag;
+        if (VIEW_GROUP.equals(modified)) {
+            modified = "ViewGroup_Layout";
+        }
+        Set<String> names = ImmutableSet.of(modified, getLayoutStyleablePrimary(tag),
+                                            getLayoutStyleableSecondary(tag));
+        return names.stream()
+                .map(it -> getResourceValue(repository, it, namespace))
+                .filter(it -> it instanceof StyleableResourceValue)
+                .flatMap(it -> ((StyleableResourceValue) it).getAllAttributes().stream())
+                .collect(Collectors.toList());
+    }
 
     public static AttrResourceValue getLayoutAttributeFromNode(@NonNull ResourceRepository repository, @NonNull DOMElement node, @NonNull String attributeName, @NonNull ResourceNamespace namespace) {
         String tagName = getSimpleName(node.getTagName());

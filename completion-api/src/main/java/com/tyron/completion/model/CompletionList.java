@@ -92,14 +92,17 @@ public class CompletionList {
         }
 
         public Builder addItem(CompletionItem item) {
-            String name = item.getName();
-            MatchLevel matchLevel =
-                    CompletionPrefixMatcher.computeMatchLevel(name, completionPrefix);
-            if (matchLevel == MatchLevel.NOT_MATCH) {
+            for (String filterText : item.getFilterTexts()) {
+                MatchLevel matchLevel =
+                        CompletionPrefixMatcher.computeMatchLevel(filterText, completionPrefix);
+                if (matchLevel == MatchLevel.NOT_MATCH) {
+                    continue;
+                }
+
+                item.setMatchLevel(matchLevel);
+                items.add(item);
                 return this;
             }
-            item.setMatchLevel(matchLevel);
-            items.add(item);
             return this;
         }
 

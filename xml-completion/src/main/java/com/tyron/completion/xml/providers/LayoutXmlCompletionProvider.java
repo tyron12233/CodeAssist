@@ -40,7 +40,10 @@ import com.tyron.completion.xml.repository.ResourceItem;
 import com.tyron.completion.xml.repository.api.AttrResourceValue;
 import com.tyron.completion.xml.repository.api.AttributeFormat;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
+import com.tyron.completion.xml.repository.api.ResourceReference;
+import com.tyron.completion.xml.util.AndroidAttributeUtils;
 import com.tyron.completion.xml.util.AndroidResourcesUtils;
+import com.tyron.completion.xml.util.AttributeProcessingUtil;
 import com.tyron.completion.xml.util.AttributeValueUtils;
 import com.tyron.completion.xml.util.DOMUtils;
 import com.tyron.completion.xml.util.StyleUtils;
@@ -62,6 +65,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -153,6 +157,11 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         switch (completionType) {
             case TAG:
             case ATTRIBUTE:
+                AndroidAttributeUtils.addLayoutAttributes(builder,
+                                                          repository.getRepository(),
+                                                          parsed.findNodeAt((int) index),
+                                                          namespace);
+                break;
             case ATTRIBUTE_VALUE:
                 DOMAttr attr = parsed.findAttrAt((int) index);
                 String uri = DOMUtils.lookupPrefix(attr);
