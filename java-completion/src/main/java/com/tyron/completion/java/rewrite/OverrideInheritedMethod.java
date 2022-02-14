@@ -2,6 +2,7 @@ package com.tyron.completion.java.rewrite;
 
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.google.common.base.Strings;
+import com.tyron.builder.model.SourceFileObject;
 import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.FindTypeDeclarationAt;
@@ -44,6 +45,7 @@ public class OverrideInheritedMethod implements JavaRewrite {
     final String[] erasedParameterTypes;
     final Path file;
     final int insertPosition;
+    private final SourceFileObject sourceFileObject;
 
     public OverrideInheritedMethod(String superClassName, String methodName,
                                    String[] erasedParameterTypes, Path file, int insertPosition) {
@@ -51,6 +53,17 @@ public class OverrideInheritedMethod implements JavaRewrite {
         this.methodName = methodName;
         this.erasedParameterTypes = erasedParameterTypes;
         this.file = file;
+        this.sourceFileObject = null;
+        this.insertPosition = insertPosition;
+    }
+
+    public OverrideInheritedMethod(String superClassName, String methodName,
+                                   String[] erasedParameterTypes, SourceFileObject file, int insertPosition) {
+        this.superClassName = superClassName;
+        this.methodName = methodName;
+        this.erasedParameterTypes = erasedParameterTypes;
+        this.file = null;
+        this.sourceFileObject = file;
         this.insertPosition = insertPosition;
     }
 
@@ -60,7 +73,9 @@ public class OverrideInheritedMethod implements JavaRewrite {
         List<TextEdit> edits = new ArrayList<>();
         Position insertPoint = insertNearCursor(compiler);
 
-        CompilerContainer container = compiler.compile(file);
+        CompilerContainer container = sourceFileObject == null
+                ? compiler.compile(file)
+                : compiler.compile(Collections.singletonList(sourceFileObject));
         return container.get(task -> {
             Types types = task.task.getTypes();
             Trees trees = Trees.instance(task.task);
@@ -70,7 +85,7 @@ public class OverrideInheritedMethod implements JavaRewrite {
                 return CANCELLED;
             }
 
-            CompilationUnitTree root = task.root(file);
+            CompilationUnitTree root = task.root();
             if (root == null) {
                 return CANCELLED;
             }

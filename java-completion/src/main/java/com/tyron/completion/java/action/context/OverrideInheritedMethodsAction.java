@@ -144,7 +144,8 @@ public class OverrideInheritedMethodsAction extends AnAction {
         ProgressDialog dialog = new ProgressDialog(e.getDataContext());
         Runnable showLoadingRunnable = dialog::show;
         // show a progress bar if task is still running after 2 seconds
-        ProgressManager.getInstance().runLater(showLoadingRunnable, 2000);
+        ProgressManager.getInstance()
+                .runLater(showLoadingRunnable, 2000);
 
         Futures.addCallback(future, new FutureCallback<List<MethodPtr>>() {
             @Override
@@ -153,7 +154,12 @@ public class OverrideInheritedMethodsAction extends AnAction {
                     return;
                 }
                 dialog.dismiss();
-                OverrideInheritedMethodsAction.this.onSuccess(pointers, showLoadingRunnable, e, file, editor, compiler);
+                if (pointers == null) {
+                    return;
+                }
+                OverrideInheritedMethodsAction.this.onSuccess(pointers, showLoadingRunnable, e,
+                                                              sourceFileObject, file, editor,
+                                                              compiler);
             }
 
             @Override
@@ -162,19 +168,22 @@ public class OverrideInheritedMethodsAction extends AnAction {
                     return;
                 }
                 dialog.dismiss();
-                ProgressManager.getInstance().cancelRunLater(showLoadingRunnable);
+                ProgressManager.getInstance()
+                        .cancelRunLater(showLoadingRunnable);
                 AndroidUtilities.showSimpleAlert(e.getDataContext(), "Error", t.getMessage());
             }
         }, ContextCompat.getMainExecutor(e.getDataContext()));
     }
 
-    private void onSuccess(@Nullable List<MethodPtr> pointers,
+    private void onSuccess(@NonNull List<MethodPtr> pointers,
                            Runnable showLoadingRunnable,
                            @NonNull AnActionEvent e,
+                           SourceFileObject sourceFileObject,
                            File file,
                            Editor editor,
                            JavaCompilerService compiler) {
-        ProgressManager.getInstance().cancelRunLater(showLoadingRunnable);
+        ProgressManager.getInstance()
+                .cancelRunLater(showLoadingRunnable);
 
         TreeView<OverrideNode> treeView =
                 new TreeView<>(e.getDataContext(), buildTreeNode(pointers));
