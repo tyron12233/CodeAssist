@@ -20,10 +20,8 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Objects;
 import java.util.function.Predicate;
 
 import me.xdrop.fuzzywuzzy.FuzzySearch;
@@ -35,16 +33,14 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public CompletionList complete(CompileTask task, TreePath path, String partial,
-                                   boolean endsWithParen) {
+    public void complete(CompletionList.Builder builder, CompileTask task, TreePath path,
+                         String partial, boolean endsWithParen) {
         checkCanceled();
-        CompletionList completionList = new CompletionList();
-        addCompletionItems(task, path, partial, endsWithParen, completionList);
-        return completionList;
+        addCompletionItems(task, path, partial, endsWithParen, builder);
     }
 
-    public static void addCompletionItems(
-            CompileTask task, TreePath path, String partial, boolean endsWithParen, CompletionList completionList) {
+    public static void addCompletionItems(CompileTask task, TreePath path, String partial,
+                                          boolean endsWithParen, CompletionList.Builder builder) {
         Trees trees = Trees.instance(task.task);
         Scope scope = trees.getScope(path);
 
@@ -56,7 +52,8 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
             return FuzzySearch.partialRatio(label, partial) >= 70;
         };
 
-        TreePath parentPath = path.getParentPath().getParentPath();
+        TreePath parentPath = path.getParentPath()
+                .getParentPath();
         Tree parentLeaf = parentPath.getLeaf();
 
         for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
@@ -64,15 +61,34 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
 
             if (element.getKind() == ElementKind.METHOD) {
                 ExecutableElement executableElement = (ExecutableElement) element;
-                if (parentLeaf.getKind() == Tree.Kind.CLASS && !ElementUtil.isFinal(executableElement)) {
-                    completionList.items.addAll(overridableMethod(task, parentPath,
-                            Collections.singletonList(executableElement), endsWithParen));
+                String sortText = "";
+                if (Objects.equals(scope.getEnclosingClass(), element.getEnclosingElement())) {
+                    sortText = JavaSortCategory.DIRECT_MEMBER.toString();
                 } else {
-                    completionList.items.addAll(method(task, Collections.singletonList(executableElement),
-                            endsWithParen, false, (ExecutableType) executableElement.asType()));
+                    sortText = JavaSortCategory.ACCESSIBLE_SYMBOL.toString();
+                }
+                if (parentLeaf.getKind() == Tree.Kind.CLASS &&
+                    !ElementUtil.isFinal(executableElement)) {
+                    builder.addItems(overridableMethod(task, parentPath,
+                                                       Collections.singletonList(executableElement),
+                                                       endsWithParen), sortText);
+                } else {
+                    builder.addItems(method(task, Collections.singletonList(executableElement),
+                                            endsWithParen, false,
+                                            (ExecutableType) executableElement.asType()), sortText);
                 }
             } else {
-                completionList.items.add(item(element));
+                CompletionItem item = item(element);
+                if (Objects.equals(scope.getEnclosingClass(), element.getEnclosingElement())) {
+                    item.setSortText(JavaSortCategory.DIRECT_MEMBER.toString());
+                } else if (Objects.nonNull(scope.getEnclosingMethod()) &&
+                           Objects.equals(scope.getEnclosingMethod(),
+                                          element.getEnclosingElement())) {
+                    item.setSortText(JavaSortCategory.LOCAL_VARIABLE.toString());
+                } else {
+                    item.setSortText(JavaSortCategory.ACCESSIBLE_SYMBOL.toString());
+                }
+                builder.addItem(item);
             }
         }
     }

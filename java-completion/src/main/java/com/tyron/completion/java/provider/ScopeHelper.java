@@ -26,7 +26,10 @@ public class ScopeHelper {
         // the scope within that contains the top level elements of the compilation unit, including any named
         // imports.
         // https://parent.docs.oracle.com/en/java/javase/11/docs/api/jdk.compiler/org.openjdk.source/tree/Scope.html
-        return scopes.subList(0, scopes.size() - 2);
+
+        // CodeAssist changed: allow top level scopes, but not imports they are handled in
+        // ImportCompletionProvider
+        return scopes.subList(0, scopes.size() - 1);
     }
 
     public static List<Element> scopeMembers(CompileTask task, Scope inner, Predicate<CharSequence> filter) {
