@@ -81,6 +81,9 @@ public class ClassNameCompletionProvider extends BaseCompletionProvider {
                 list.incomplete();
                 break;
             }
+            if (ActionUtil.hasImport(root, className)) {
+                continue;
+            }
             CompletionItem item = classItem(className);
             item.setInsertHandler(new ClassImportInsertHandler(compiler, new File(
                     root.getSourceFile()
