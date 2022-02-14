@@ -13,6 +13,7 @@ import static com.tyron.completion.xml.util.XmlUtils.partialIdentifier;
 import android.annotation.SuppressLint;
 import android.os.Build;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
@@ -43,6 +44,7 @@ import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
 import com.tyron.completion.xml.util.AndroidAttributeUtils;
 import com.tyron.completion.xml.util.AndroidResourcesUtils;
+import com.tyron.completion.xml.util.AndroidXmlTagUtils;
 import com.tyron.completion.xml.util.AttributeProcessingUtil;
 import com.tyron.completion.xml.util.AttributeValueUtils;
 import com.tyron.completion.xml.util.DOMUtils;
@@ -145,7 +147,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         return CompletionList.EMPTY;
     }
 
-    @Nullable
+    @NonNull
     @RequiresApi(api = Build.VERSION_CODES.N)
     private CompletionList.Builder completeInternal(Project project, AndroidModule module,
                                                     XmlRepository repository, DOMDocument parsed,
@@ -156,6 +158,8 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         CompletionList.Builder builder = CompletionList.builder(prefix);
         switch (completionType) {
             case TAG:
+                AndroidXmlTagUtils.addTagItems(repository, prefix, builder);
+                break;
             case ATTRIBUTE:
                 AndroidAttributeUtils.addLayoutAttributes(builder,
                                                           repository.getRepository(),
@@ -178,59 +182,6 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         XmlRepository repository = indexProvider.get(project, module);
         repository.initialize(module);
         return repository;
-    }
-
-    private void addTagItems(XmlRepository repository, String prefix, CompletionList list,
-                             XmlCachedCompletion xmlCachedCompletion) {
-        xmlCachedCompletion.setCompletionType(XmlCachedCompletion.TYPE_TAG);
-        xmlCachedCompletion.setFilterPrefix(prefix);
-        xmlCachedCompletion.setFilter((item, pre) -> {
-            String prefixSet = pre;
-
-            if (pre.startsWith("</")) {
-                prefixSet = pre.substring(2);
-            } else if (pre.startsWith("<")) {
-                prefixSet = pre.substring(1);
-            }
-
-            if (prefixSet.contains(".")) {
-                if (FuzzySearch.partialRatio(prefixSet, item.detail) >= 80) {
-                    return true;
-                }
-            } else {
-                if (FuzzySearch.partialRatio(prefixSet, item.label) >= 80) {
-                    return true;
-                }
-            }
-
-            String className = item.detail + "." + item.label;
-            return FuzzySearch.partialRatio(prefixSet, className) >= 30;
-
-        });
-        for (Map.Entry<String, JavaClass> entry : repository.getJavaViewClasses()
-                .entrySet()) {
-            CompletionItem item = new CompletionItem();
-            String commitPrefix = "<";
-            if (prefix.startsWith("</")) {
-                commitPrefix = "</";
-            }
-            boolean useFqn = prefix.contains(".");
-            if (!entry.getKey()
-                    .startsWith("android.widget")) {
-                useFqn = true;
-            }
-            item.label = StyleUtils.getSimpleName(entry.getKey());
-            item.detail = entry.getValue()
-                    .getPackageName();
-            item.iconKind = DrawableKind.Class;
-            item.commitText = commitPrefix +
-                              (useFqn ? entry.getValue()
-                                      .getClassName() : StyleUtils.getSimpleName(entry.getValue()
-                                                                                         .getClassName()));
-            item.cursorOffset = item.commitText.length();
-            item.setInsertHandler(new LayoutTagInsertHandler(entry.getValue(), item));
-            list.items.add(item);
-        }
     }
 
     private void addAttributeItems(Set<DeclareStyleable> styles, String fullPrefix,
