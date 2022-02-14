@@ -18,5 +18,6 @@ public abstract class BaseCompletionProvider {
         return mCompiler;
     }
 
-    public abstract CompletionList complete(CompileTask task, TreePath path, String partial, boolean endsWithParen);
+    public abstract void complete(CompletionList.Builder builder, CompileTask task, TreePath path
+            , String partial, boolean endsWithParen);
 }

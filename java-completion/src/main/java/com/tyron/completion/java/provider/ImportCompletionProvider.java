@@ -1,7 +1,6 @@
 package com.tyron.completion.java.provider;
 
 import static com.tyron.completion.java.provider.MemberSelectCompletionProvider.putMethod;
-import static com.tyron.completion.java.util.CompletionItemFactory.classItem;
 import static com.tyron.completion.java.util.CompletionItemFactory.importClassItem;
 import static com.tyron.completion.java.util.CompletionItemFactory.item;
 import static com.tyron.completion.java.util.CompletionItemFactory.method;
@@ -48,14 +47,10 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public CompletionList complete(CompileTask task,
-                                   TreePath treePath,
-                                   String path,
-                                   boolean endsWithParen) {
+    public void complete(CompletionList.Builder builder, CompileTask task, TreePath treePath, String path, boolean endsWithParen) {
         checkCanceled();
 
         Set<String> names = new HashSet<>();
-        CompletionList list = new CompletionList();
         for (String className : getCompiler().publicTopLevelTypes()) {
             if (className.startsWith(path)) {
                 int start = path.lastIndexOf('.');
@@ -66,13 +61,12 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
                 names.add(segment);
                 boolean isClass = className.endsWith(segment);
                 if (isClass) {
-                    list.items.add(importClassItem(className));
+                    builder.addItem(importClassItem(className));
                 } else {
-                    list.items.add(packageItem(segment));
+                    builder.addItem(packageItem(segment));
                 }
             }
         }
-        return list;
     }
 
     public List<CompletionItem> addAnonymous(CompileTask task, TreePath path, String partial) {
@@ -132,7 +126,7 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
     }
 
     public static void addStaticImports(CompileTask task, CompilationUnitTree root, String partial,
-                                  boolean endsWithParen, CompletionList list) {
+                                  boolean endsWithParen, CompletionList.Builder list) {
         checkCanceled();
 
         Trees trees = Trees.instance(task.task);
@@ -151,11 +145,16 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
                     methods.clear();
                     putMethod((ExecutableElement) member, methods);
                     for (List<ExecutableElement> overloads : methods.values()) {
-                        list.items.addAll(method(task, overloads, endsWithParen, false,
-                                (DeclaredType) type.asType()));
+                        for (CompletionItem item : method(task, overloads, endsWithParen, false,
+                                                          (DeclaredType) type.asType())) {
+                            item.setSortText(JavaSortCategory.ACCESSIBLE_SYMBOL.toString());
+                            list.addItem(item);
+                        }
                     }
                 } else {
-                    list.items.add(item(member));
+                    CompletionItem item = item(member);
+                    item.setSortText(JavaSortCategory.ACCESSIBLE_SYMBOL.toString());
+                    list.addItem(item);
                 }
             }
         }

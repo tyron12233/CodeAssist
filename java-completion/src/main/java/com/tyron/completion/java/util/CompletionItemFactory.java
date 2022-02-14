@@ -7,6 +7,7 @@ import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 import com.tyron.completion.DefaultInsertHandler;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.insert.MethodInsertHandler;
+import com.tyron.completion.java.provider.JavaSortCategory;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;
 
@@ -40,7 +41,10 @@ public class CompletionItemFactory {
     }
 
     public static CompletionItem keyword(String keyword) {
-        return CompletionItem.create(keyword, keyword, keyword, DrawableKind.Keyword);
+        CompletionItem completionItem =
+                CompletionItem.create(keyword, keyword, keyword, DrawableKind.Keyword);
+        completionItem.setSortText(JavaSortCategory.KEYWORD.toString());
+        return completionItem;
     }
 
     public static CompletionItem packageItem(String name) {
@@ -169,6 +173,7 @@ public class CompletionItemFactory {
                     ((methodRef || endsWithParen) ? 0 : 1);
         }
         item.setInsertHandler(new MethodInsertHandler(first, item));
+        item.setName(first.getSimpleName().toString());
         return item;
     }
 

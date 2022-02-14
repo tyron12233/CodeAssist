@@ -19,23 +19,20 @@ public class IdentifierCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public CompletionList complete(CompileTask task, TreePath path, String partial,
-                                   boolean endsWithParen) {
+    public void complete(CompletionList.Builder builder, CompileTask task, TreePath path, String partial, boolean endsWithParen) {
         checkCanceled();
 
         if (path.getParentPath().getLeaf() instanceof CaseTree) {
-            return completeSwitchConstant(task, path.getParentPath(), partial);
+            completeSwitchConstant(builder, task, path.getParentPath(), partial);
+            return;
         }
 
-        CompletionList list = new CompletionList();
-        ScopeCompletionProvider.addCompletionItems(task, path, partial, endsWithParen, list);
-        addStaticImports(task, path.getCompilationUnit(), partial, endsWithParen, list);
-        if (!list.isIncomplete && partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
-            addClassNames(path.getCompilationUnit(), partial, list, getCompiler());
+        ScopeCompletionProvider.addCompletionItems(task, path, partial, endsWithParen, builder);
+        addStaticImports(task, path.getCompilationUnit(), partial, endsWithParen, builder);
+        if (!builder.isIncomplete() && partial.length() > 0 && Character.isUpperCase(partial.charAt(0))) {
+            addClassNames(path.getCompilationUnit(), partial, builder, getCompiler());
         }
 
-        KeywordCompletionProvider.addKeywords(task, path, partial, list);
-
-        return list;
+        KeywordCompletionProvider.addKeywords(task, path, partial, builder);
     }
 }

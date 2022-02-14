@@ -47,18 +47,16 @@ public class JavaCompletionProvider extends CompletionProvider {
             String partial = partialIdentifier(params.getPrefix(), params.getPrefix().length());
             CompletionList cachedList = mCachedCompletion.getCompletionList();
             if (!cachedList.items.isEmpty() && !cachedList.isIncomplete) {
-                List<CompletionItem> narrowedList =
-                        cachedList.items.stream()
-                                .sorted(Comparator.comparingInt((CompletionItem it) -> getRatio(it, partial)).reversed())
-                                .collect(Collectors.toList());
-                CompletionList completionList = new CompletionList();
-                completionList.items = narrowedList;
-                return completionList;
+                return CompletionList.copy(cachedList, partial);
             }
         }
 
-        CompletionList complete = complete(params.getProject(), (JavaModule) params.getModule(),
+        CompletionList.Builder complete = complete(params.getProject(), (JavaModule) params.getModule(),
                 params.getFile(), params.getContents(), params.getIndex());
+        if (complete == null) {
+            return CompletionList.EMPTY;
+        }
+        CompletionList list = complete.build();
 
         String newPrefix = params.getPrefix();
         if (params.getPrefix().contains(".")) {
@@ -66,11 +64,11 @@ public class JavaCompletionProvider extends CompletionProvider {
         }
 
         mCachedCompletion = new CachedCompletion(params.getFile(), params.getLine(),
-                params.getColumn(), newPrefix, complete);
-        return complete;
+                params.getColumn(), newPrefix, list);
+        return list;
     }
 
-    public CompletionList complete(
+    public CompletionList.Builder complete(
             Project project, JavaModule module, File file, String contents, long cursor) {
         JavaCompilerProvider compilerProvider =
                 CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
@@ -87,7 +85,7 @@ public class JavaCompletionProvider extends CompletionProvider {
             }
             service.close();
         }
-        return CompletionList.EMPTY;
+        return null;
     }
 
     private String partialIdentifier(String contents, int end) {

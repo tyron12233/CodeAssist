@@ -8,9 +8,7 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
 import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.VariableElement;
 import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.source.tree.VariableTree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
@@ -27,22 +25,19 @@ public class VariableNameCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public CompletionList complete(CompileTask task,
-                                   TreePath path,
-                                   String partial,
-                                   boolean endsWithParen) {
+    public void complete(CompletionList.Builder builder, CompileTask task, TreePath path, String partial, boolean endsWithParen) {
         Element element = Trees.instance(task.task).getElement(path);
         if (element == null) {
-            return CompletionList.EMPTY;
+            return;
         }
         TypeMirror type = element.asType();
         if (type == null) {
-            return CompletionList.EMPTY;
+            return;
         }
 
         List<String> names = ActionUtil.guessNamesFromType(type);
         if (names.isEmpty()) {
-            return CompletionList.EMPTY;
+            return;
         }
 
         CompletionList list = new CompletionList();
@@ -51,8 +46,8 @@ public class VariableNameCompletionProvider extends BaseCompletionProvider {
                 name = ActionUtil.getVariableName(name);
             }
             CompletionItem item = CompletionItemFactory.item(name);
+            item.setSortText(JavaSortCategory.UNKNOWN.toString());
             list.items.add(item);
         }
-        return list;
     }
 }

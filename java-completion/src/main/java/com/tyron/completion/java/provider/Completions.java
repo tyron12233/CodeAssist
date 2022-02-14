@@ -18,7 +18,6 @@ import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.compiler.ParseTask;
 import com.tyron.completion.java.patterns.JavacTreePattern;
 import com.tyron.completion.java.util.FileContentFixer;
-import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
@@ -27,7 +26,6 @@ import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.ParameterizedTypeTree;
 import org.openjdk.source.tree.ReturnTree;
-import org.openjdk.source.tree.SwitchTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.TreePath;
@@ -39,10 +37,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-
-import me.xdrop.fuzzywuzzy.FuzzySearch;
 
 /**
  * Main entry point for getting completions
@@ -72,7 +66,7 @@ public class Completions {
         this.compiler = compiler;
     }
 
-    public CompletionList complete(File file, String fileContents, long index) {
+    public CompletionList.Builder complete(File file, String fileContents, long index) {
         checkCanceled();
 
         ParseTask task = compiler.parse(file.toPath(), fileContents);
@@ -85,28 +79,14 @@ public class Completions {
                     .fixFileContent(pruned);
         } catch (IndexOutOfBoundsException e) {
             Log.w(TAG, "Unable to fix file content", e);
-            return new CompletionList();
+            return null;
         }
 
         String partial = partialIdentifier(contents.toString(), (int) index);
-        CompletionList list = compileAndComplete(file, contents.toString(), partial, index);
-        sort(list.items, partial);
-        return list;
+        return compileAndComplete(file, contents.toString(), partial, index);
     }
 
-    private void sort(List<CompletionItem> items, String partial) {
-        items.sort(Comparator.comparingInt(it -> {
-            String label = it.label;
-            if (label.contains("(")) {
-                label = label.substring(0, label.indexOf('('));
-            }
-
-            return FuzzySearch.ratio(label, partial);
-        }));
-        Collections.reverse(items);
-    }
-
-    private CompletionList compileAndComplete(File file, String contents,
+    private CompletionList.Builder compileAndComplete(File file, String contents,
                                               final String partial,
                                               long cursor) {
         SourceFileObject source = new SourceFileObject(file.toPath(), contents, Instant.now());
@@ -127,39 +107,47 @@ public class Completions {
         });
     }
 
-    private CompletionList getCompletionList(CompileTask task, TreePath path, String partial,
+    private CompletionList.Builder getCompletionList(CompileTask task, TreePath path, String partial,
                                              boolean endsWithParen) {
         ProcessingContext context = createProcessingContext(task.task, task.root());
+        CompletionList.Builder builder = CompletionList.builder(partial);
         switch (path.getLeaf().getKind()) {
             case IDENTIFIER:
                 // suggest only classes on a parameterized tree
                 if (INSIDE_PARAMETERIZED.accepts(path.getLeaf(), context)) {
-                    return new ClassNameCompletionProvider(compiler)
-                            .complete(task, path, partial, endsWithParen);
+                    new ClassNameCompletionProvider(compiler)
+                            .complete(builder, task, path, partial, endsWithParen);
                 } else if (SWITCH_CONSTANT.accepts(path.getLeaf(), context)) {
-                    return new SwitchConstantCompletionProvider(compiler)
-                            .complete(task, path, partial, endsWithParen);
+                    new SwitchConstantCompletionProvider(compiler)
+                            .complete(builder, task, path, partial, endsWithParen);
                 }
-                return new IdentifierCompletionProvider(compiler)
-                        .complete(task, path, partial, endsWithParen);
+                new IdentifierCompletionProvider(compiler)
+                        .complete(builder, task, path, partial, endsWithParen);
+                break;
             case MEMBER_SELECT:
-                return new MemberSelectCompletionProvider(compiler)
-                        .complete(task, path, partial, endsWithParen);
+                new MemberSelectCompletionProvider(compiler)
+                        .complete(builder, task, path, partial, endsWithParen);
+                break;
             case MEMBER_REFERENCE:
-                return new MemberReferenceCompletionProvider(compiler)
-                        .complete(task, path, partial, endsWithParen);
+                new MemberReferenceCompletionProvider(compiler)
+                        .complete(builder, task, path, partial, endsWithParen);
+                break;
             case IMPORT:
-                return new ImportCompletionProvider(compiler)
-                        .complete(task, path, partial, endsWithParen);
+                new ImportCompletionProvider(compiler)
+                        .complete(builder, task, path, partial, endsWithParen);
+                break;
             case STRING_LITERAL:
-                return CompletionList.EMPTY;
+                break;
             case VARIABLE:
-                return new VariableNameCompletionProvider(compiler)
-                        .complete(task, path, partial, endsWithParen);
+                new VariableNameCompletionProvider(compiler)
+                        .complete(builder, task, path, partial, endsWithParen);
+                break;
             default:
-                return new KeywordCompletionProvider(compiler)
-                        .complete(task, path, partial, endsWithParen);
+                new KeywordCompletionProvider(compiler)
+                        .complete(builder, task, path, partial, endsWithParen);
+                break;
         }
+        return builder;
     }
 
     private void addTopLevelSnippets(ParseTask task, CompletionList list) {

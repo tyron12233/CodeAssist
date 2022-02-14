@@ -10,25 +10,14 @@ import com.tyron.completion.java.insert.KeywordInsertHandler;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.TreeVisitor;
-import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.api.BasicJavacTask;
-import org.openjdk.tools.javac.api.JavacTaskImpl;
-import org.openjdk.tools.javac.parser.ParserFactory;
-import org.openjdk.tools.javac.parser.ScannerFactory;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public class KeywordCompletionProvider extends BaseCompletionProvider {
@@ -52,7 +41,7 @@ public class KeywordCompletionProvider extends BaseCompletionProvider {
         super(service);
     }
 
-    public static void addKeywords(CompileTask task, TreePath path, String partial, CompletionList list) {
+    public static void addKeywords(CompileTask task, TreePath path, String partial, CompletionList.Builder list) {
         checkCanceled();
 
         if (!partial.isEmpty() && Character.isUpperCase(partial.charAt(0))) {
@@ -76,17 +65,15 @@ public class KeywordCompletionProvider extends BaseCompletionProvider {
             if (StringSearch.matchesPartialName(k, partial)) {
                 CompletionItem keyword = keyword(k);
                 keyword.setInsertHandler(new KeywordInsertHandler(task, path, keyword));
-                list.items.add(keyword);
+                keyword.setSortText(JavaSortCategory.KEYWORD.toString());
+                list.addItem(keyword);
             }
         }
     }
 
     @Override
-    public CompletionList complete(CompileTask task, TreePath path, String partial,
-                                   boolean endsWithParen) {
-        CompletionList list = new CompletionList();
-        addKeywords(task, path, partial, list);
-        return list;
+    public void complete(CompletionList.Builder builder, CompileTask task, TreePath path, String partial, boolean endsWithParen) {
+        addKeywords(task, path, partial, builder);
     }
 
     public static TreePath findKeywordLevel(TreePath path) {

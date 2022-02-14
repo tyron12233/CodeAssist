@@ -4,7 +4,6 @@ import static com.tyron.completion.java.util.CompletionItemFactory.classItem;
 import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
 import com.tyron.common.util.StringSearch;
-import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.insert.ClassImportInsertHandler;
@@ -20,8 +19,6 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 
-import me.xdrop.fuzzywuzzy.FuzzySearch;
-
 public class ClassNameCompletionProvider extends BaseCompletionProvider {
 
     public ClassNameCompletionProvider(JavaCompilerService service) {
@@ -29,14 +26,11 @@ public class ClassNameCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public CompletionList complete(CompileTask task, TreePath path, String partial,
-                                   boolean endsWithParen) {
-        CompletionList list = new CompletionList();
-        addClassNames(task.root(), partial, list, getCompiler());
-        return list;
+    public void complete(CompletionList.Builder builder, CompileTask task, TreePath path, String partial, boolean endsWithParen) {
+        addClassNames(task.root(), partial, builder, getCompiler());
     }
 
-    public static void addClassNames(CompilationUnitTree root, String partial, CompletionList list, JavaCompilerService compiler) {
+    public static void addClassNames(CompilationUnitTree root, String partial, CompletionList.Builder list, JavaCompilerService compiler) {
         checkCanceled();
 
         String packageName = Objects.toString(root.getPackageName(), "");
@@ -45,7 +39,7 @@ public class ClassNameCompletionProvider extends BaseCompletionProvider {
             if (!StringSearch.matchesPartialName(className, partial)) {
                 continue;
             }
-            list.items.add(classItem(className));
+            list.addItem(classItem(className));
             uniques.add(className);
         }
 
@@ -58,14 +52,15 @@ public class ClassNameCompletionProvider extends BaseCompletionProvider {
             if (uniques.contains(className)) {
                 continue;
             }
-            if (list.items.size() >= Completions.MAX_COMPLETION_ITEMS) {
-                list.setIncomplete(true);
+            if (list.getItemCount() >= Completions.MAX_COMPLETION_ITEMS) {
+                list.incomplete();
                 break;
             }
             CompletionItem item = classItem(className);
             item.setInsertHandler(new ClassImportInsertHandler(compiler,
                     new File(root.getSourceFile().toUri()), item));
-            list.items.add(item);
+            item.setSortText(JavaSortCategory.TO_IMPORT.toString());
+            list.addItem(item);
             uniques.add(className);
         }
     }
