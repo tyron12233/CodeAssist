@@ -46,8 +46,9 @@ public class JavaCompletionProvider extends CompletionProvider {
         if (isIncrementalCompletion(mCachedCompletion, params)) {
             String partial = partialIdentifier(params.getPrefix(), params.getPrefix().length());
             CompletionList cachedList = mCachedCompletion.getCompletionList();
-            if (!cachedList.items.isEmpty() && !cachedList.isIncomplete) {
-                return CompletionList.copy(cachedList, partial);
+            CompletionList copy = CompletionList.copy(cachedList, partial);
+            if (!copy.isIncomplete && !copy.items.isEmpty()) {
+                return copy;
             }
         }
 

@@ -49,7 +49,7 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
             if (label.contains("(")) {
                 label = label.substring(0, label.indexOf('('));
             }
-            return FuzzySearch.partialRatio(label, partial) >= 70;
+            return FuzzySearch.weightedRatio(label, partial) >= 70;
         };
 
         TreePath parentPath = path.getParentPath()

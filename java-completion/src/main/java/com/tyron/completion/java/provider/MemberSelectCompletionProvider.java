@@ -122,7 +122,7 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
             if (member.getKind() == ElementKind.CONSTRUCTOR) {
                 continue;
             }
-            if (FuzzySearch.partialRatio(String.valueOf(member.getSimpleName()), partial) < 70 &&
+            if (FuzzySearch.weightedRatio(String.valueOf(member.getSimpleName()), partial) < 70 &&
                 !partial.endsWith(".") &&
                 !partial.isEmpty()) {
                 continue;
