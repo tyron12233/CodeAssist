@@ -37,6 +37,7 @@ import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.code.util.UiUtilsKt;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.fileeditor.api.FileEditorSavedState;
 import com.tyron.code.ui.project.ProjectManager;
@@ -147,6 +148,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 
         mToolbar = mRoot.findViewById(R.id.toolbar);
         mToolbar.setNavigationIcon(R.drawable.ic_baseline_menu_24);
+        UiUtilsKt.addSystemWindowInsetToPadding(mToolbar, false, true, false, false);
 
         getChildFragmentManager().setFragmentResultListener(REFRESH_TOOLBAR_KEY,
                                                             getViewLifecycleOwner(),
