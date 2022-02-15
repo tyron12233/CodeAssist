@@ -207,7 +207,7 @@ public class OverrideInheritedMethodsAction extends AnAction {
                 MethodPtr ptr = value.getMethodPtr();
                 JavaRewrite rewrite = new OverrideInheritedMethod(ptr.className, ptr.methodName,
                                                                   ptr.erasedParameterTypes,
-                                                                  file.toPath(), editor.getCaret()
+                                                                  sourceFileObject, editor.getCaret()
                                                                           .getStart());
                 RewriteUtil.performRewrite(editor, file, compiler, rewrite);
             }
