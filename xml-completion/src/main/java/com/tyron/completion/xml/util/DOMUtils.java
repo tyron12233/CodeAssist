@@ -9,11 +9,14 @@ import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
+import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
 
 import java.util.List;
 
 public class DOMUtils {
+
+    private static final String RESOLVER_KEY = "uriResolver";
 
     public static String lookupPrefix(DOMAttr attr) {
         return lookupPrefix(attr, getPrefix(attr));
@@ -64,8 +67,12 @@ public class DOMUtils {
         if (rootElement == null) {
             return ResourceNamespace.Resolver.EMPTY_RESOLVER;
         }
+        Object userData = rootElement.getUserData(RESOLVER_KEY);
+        if (userData instanceof ResourceNamespace.Resolver) {
+            return (ResourceNamespace.Resolver) userData;
+        }
 
-        return new ResourceNamespace.Resolver() {
+        ResourceNamespace.Resolver resolver = new ResourceNamespace.Resolver() {
 
             @Nullable
             @Override
@@ -83,6 +90,8 @@ public class DOMUtils {
                 return null;
             }
         };
+        rootElement.setUserData(RESOLVER_KEY, resolver, null);
+        return resolver;
     }
 
     public static boolean isClosed(DOMNode nodeAt) {
