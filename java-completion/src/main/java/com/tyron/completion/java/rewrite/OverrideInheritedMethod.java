@@ -137,7 +137,9 @@ public class OverrideInheritedMethod implements JavaRewrite {
     }
 
     private Position insertNearCursor(CompilerProvider compiler) {
-        ParseTask task = compiler.parse(file);
+        ParseTask task = file != null
+                ? compiler.parse(file)
+                : compiler.parse(sourceFileObject);
         ClassTree parent = new FindTypeDeclarationAt(task.task).scan(task.root,
                 (long) insertPosition);
         Position next = nextMember(task, parent);
