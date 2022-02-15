@@ -54,6 +54,8 @@ import kotlin.Unit;
 
 public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
 
+    private boolean mAnalyzerEnabled = false;
+
     private static final Debouncer sDebouncer = new Debouncer(Duration.ofMillis(900L));
 
     private final WeakReference<Editor> mEditorReference;
@@ -72,6 +74,9 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
 
     @Override
     public void analyzeInBackground(CharSequence contents) {
+        if (!mAnalyzerEnabled) {
+            return;
+        }
         Editor editor = mEditorReference.get();
         if (editor == null) {
             return;
