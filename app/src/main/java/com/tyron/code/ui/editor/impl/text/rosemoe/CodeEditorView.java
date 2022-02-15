@@ -18,6 +18,7 @@ import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.progress.ProgressManager;
+import com.tyron.completion.xml.util.DOMUtils;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
@@ -211,7 +212,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
             DOMDocument document = DOMParser.getInstance()
                     .parse(getText().toString(), "", null);
             DOMNode nodeAt = document.findNodeAt(getCursor().getLeft());
-            if (!nodeAt.isClosed()) {
+            if (!DOMUtils.isClosed(nodeAt)) {
                 String insertText = "</" + nodeAt.getNodeName() + ">";
                 commitText(insertText);
                 setSelection(getCursor().getLeftLine(),

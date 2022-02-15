@@ -84,4 +84,17 @@ public class DOMUtils {
             }
         };
     }
+
+    public static boolean isClosed(DOMNode nodeAt) {
+        if (!nodeAt.isClosed()) {
+            return false;
+        }
+        DOMElement parent = nodeAt.getParentElement();
+        if (parent != null && !parent.isClosed()) {
+            if (nodeAt.getNodeName().equals(parent.getTagName())) {
+                return false;
+            }
+        }
+        return nodeAt.isClosed();
+    }
 }
