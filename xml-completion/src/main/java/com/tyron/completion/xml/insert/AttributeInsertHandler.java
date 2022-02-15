@@ -8,8 +8,16 @@ import org.jetbrains.kotlin.checkers.TextDiagnosticDescriptor;
 
 public class AttributeInsertHandler extends DefaultXmlInsertHandler {
 
+    private final String mValueToInsert;
+
     public AttributeInsertHandler(CompletionItem item) {
+        this(null, item);
+    }
+
+    public AttributeInsertHandler(String value, CompletionItem item) {
         super(item);
+
+        mValueToInsert = value;
     }
 
     @Override
@@ -39,6 +47,11 @@ public class AttributeInsertHandler extends DefaultXmlInsertHandler {
         } else {
             super.insert("=\"\"", editor, false);
             editor.setSelection(startLine, startColumn + 2);
+        }
+
+        if (mValueToInsert != null) {
+            super.insert(mValueToInsert, editor, false);
+            editor.setSelection(caret.getStartLine(), caret.getStartColumn() + 1);
         }
     }
 }

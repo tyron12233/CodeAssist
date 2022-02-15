@@ -18,6 +18,8 @@ import com.tyron.completion.xml.repository.api.AttrResourceValue;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
 
+import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
 
 import java.util.HashSet;
@@ -47,6 +49,14 @@ public class AndroidAttributeUtils {
                                            @NonNull ResourceRepository repository,
                                            @NonNull DOMNode node,
                                            @NonNull ResourceNamespace namespace) {
+        DOMDocument ownerDocument = node.getOwnerDocument();
+        DOMElement rootElement = DOMUtils.getRootElement(ownerDocument);
+        if (node.equals(rootElement)) {
+            ResourceNamespace.Resolver resolver = DOMUtils.getNamespaceResolver(ownerDocument);
+            if (resolver != null) {
+                addNamespaceAttributes(builder, rootElement, resolver);
+            }
+        }
         List<AttrResourceValue> tagAttributes =
                 getTagAttributes(repository, node, namespace, ImmutableSet::of);
 
@@ -59,6 +69,31 @@ public class AndroidAttributeUtils {
         }
 
         addAttributes(tagAttributes, node, builder);
+    }
+
+    private static void addNamespaceAttributes(CompletionList.Builder builder,
+                                               DOMElement rootElement,
+                                               ResourceNamespace.Resolver resolver) {
+        if (resolver.uriToPrefix(ResourceNamespace.ANDROID.getXmlNamespaceUri()) == null) {
+            CompletionItem completionItem =
+                    CompletionItem.create("androidNs", "Namespace", "xmlns:android",
+                                          DrawableKind.Attribute);
+            completionItem.addFilterText("android");
+            completionItem.setInsertHandler(
+                    new AttributeInsertHandler(ResourceNamespace.ANDROID.getXmlNamespaceUri(),
+                                               completionItem));
+            builder.addItem(completionItem);
+        }
+
+        if (resolver.uriToPrefix(ResourceNamespace.RES_AUTO.getXmlNamespaceUri()) == null) {
+            CompletionItem completionItem = CompletionItem.create("appNs", "Namespace", "xmlns:app",
+                                                                  DrawableKind.Attribute);
+            completionItem.addFilterText("app");
+            completionItem.setInsertHandler(
+                    new AttributeInsertHandler(ResourceNamespace.RES_AUTO.getXmlNamespaceUri(),
+                                               completionItem));
+            builder.addItem(completionItem);
+        }
     }
 
     private static void addAttributes(List<AttrResourceValue> tagAttributes,
@@ -74,10 +109,11 @@ public class AndroidAttributeUtils {
             if (name.contains(":")) {
                 String prefix = name.substring(0, name.indexOf(':'));
                 String fixedName = name.substring(name.indexOf(':') + 1);
-                ResourceNamespace namespace = ResourceNamespace.fromNamespacePrefix(prefix, tagAttribute.getNamespace(),
-                                                                                    tagAttribute.getNamespaceResolver());
-                reference = new ResourceReference(namespace, tagAttribute.getResourceType(),
-                                                  fixedName);
+                ResourceNamespace namespace =
+                        ResourceNamespace.fromNamespacePrefix(prefix, tagAttribute.getNamespace(),
+                                                              tagAttribute.getNamespaceResolver());
+                reference =
+                        new ResourceReference(namespace, tagAttribute.getResourceType(), fixedName);
             } else {
                 reference = tagAttribute.asReference();
             }
@@ -89,16 +125,15 @@ public class AndroidAttributeUtils {
                     prefix = resolver.uriToPrefix(ResourceNamespace.RES_AUTO.getXmlNamespaceUri());
                 }
             }
-            String commitText = TextUtils.isEmpty(prefix)
-                    ? reference.getName()
-                    : prefix + ":" + reference.getName();
+            String commitText = TextUtils.isEmpty(prefix) ? reference.getName() : prefix +
+                                                                                  ":" +
+                                                                                  reference.getName();
             if (uniques.contains(commitText)) {
                 continue;
             }
 
-            CompletionItem attribute =
-                    CompletionItem.create(commitText, "Attribute",
-                                          commitText, DrawableKind.Attribute);
+            CompletionItem attribute = CompletionItem.create(commitText, "Attribute", commitText,
+                                                             DrawableKind.Attribute);
             attribute.addFilterText(commitText);
             attribute.addFilterText(reference.getName());
             attribute.setInsertHandler(new AttributeInsertHandler(attribute));
