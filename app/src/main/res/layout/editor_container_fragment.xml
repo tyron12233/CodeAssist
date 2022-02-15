@@ -19,6 +19,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="start"
+            android:gravity="start"
             app:tabIndicator="@drawable/tab_indicator"
             app:tabIndicatorColor="?attr/colorPrimary"
             app:tabIndicatorFullWidth="false"
