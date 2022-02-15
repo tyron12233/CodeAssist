@@ -9,6 +9,7 @@ import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.progress.ProcessCanceledException;
 import com.tyron.completion.progress.ProgressManager;
+import com.tyron.editor.Editor;
 
 import java.io.File;
 import java.time.Duration;
@@ -56,6 +57,7 @@ public class CompletionEngine {
 
     public CompletionList complete(Project project,
                                    Module module,
+                                   Editor editor,
                                    File file,
                                    String contents,
                                    String prefix,
@@ -68,6 +70,7 @@ public class CompletionEngine {
         CompletionParameters parameters = CompletionParameters.builder()
                 .setProject(project)
                 .setModule(module)
+                .setEditor(editor)
                 .setFile(file)
                 .setContents(contents)
                 .setPrefix(prefix)

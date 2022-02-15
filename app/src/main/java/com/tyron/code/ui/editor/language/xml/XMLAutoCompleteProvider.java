@@ -45,7 +45,7 @@ public class XMLAutoCompleteProvider extends AbstractAutoCompleteProvider {
         if (currentFile == null) {
             return null;
         }
-        return CompletionEngine.getInstance().complete(currentProject, module,
+        return CompletionEngine.getInstance().complete(currentProject, module, mEditor,
                 currentFile, mEditor.getContent().toString(), prefix, line, column,
                 mEditor.getCaret().getStart());
     }

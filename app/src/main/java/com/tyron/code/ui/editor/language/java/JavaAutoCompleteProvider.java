@@ -50,6 +50,7 @@ public class JavaAutoCompleteProvider extends AbstractAutoCompleteProvider {
                  return CompletionEngine.getInstance()
                         .complete(project,
                                 currentModule,
+                                mEditor,
                                 mEditor.getCurrentFile(),
                                 content.get().toString(),
                                 prefix,
