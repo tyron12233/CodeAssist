@@ -170,9 +170,6 @@ public class AttributeValueUtils {
                     .collect(Collectors.toList());
 
             for (ResourceValue value : items) {
-                if (!namespace.equals(value.getNamespace())) {
-                    continue;
-                }
                 if (value.getResourceType()
                         .getName()
                         .startsWith(resourceType)) {
@@ -182,6 +179,8 @@ public class AttributeValueUtils {
                     CompletionItem item = CompletionItem.create(label, "Value", label);
                     item.iconKind = DrawableKind.LocalVariable;
                     item.setInsertHandler(new ValueInsertHandler(attribute, item));
+                    item.addFilterText(value.asReference().getRelativeResourceUrl(appNamespace).toString());
+                    item.addFilterText(value.getName());
                     list.addItem(item);
                 }
             }
