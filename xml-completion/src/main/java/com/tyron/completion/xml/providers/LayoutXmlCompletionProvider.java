@@ -128,7 +128,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
 
             CompletionList.Builder builder =
                     completeInternal(params.getProject(), ((AndroidModule) params.getModule()),
-                                     repository, parsed, prefix, completionType, namespace,
+                                     repository, parsed, prefix, completionType, ResourceNamespace.RES_AUTO,
                                      params.getIndex());
             CompletionList build = builder.build();
             mCachedCompletion =

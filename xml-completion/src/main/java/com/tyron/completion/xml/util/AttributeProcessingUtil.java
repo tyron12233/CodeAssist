@@ -22,6 +22,7 @@ import com.tyron.completion.xml.repository.api.StyleableResourceValue;
 import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
@@ -36,9 +37,14 @@ public class AttributeProcessingUtil {
                                                            @NonNull DOMNode node,
                                                            @NonNull ResourceNamespace namespace,
                                                            @NonNull Function<String, Set<String>> provider) {
-        return getTagAttributes(repository, node, namespace,
-                                (StyleUtils::getClasses), provider);
+        return getTagAttributes(repository, node, namespace, it -> {
+            ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+            builder.add(it);
+            builder.addAll(StyleUtils.getClasses(it));
+            return builder.build();
+        }, provider);
     }
+
     public static List<AttrResourceValue> getTagAttributes(@NonNull ResourceRepository repository,
                                                            @NonNull DOMNode node,
                                                            @NonNull ResourceNamespace namespace,
@@ -51,7 +57,9 @@ public class AttributeProcessingUtil {
                 .filter(it -> {
                     ListMultimap<String, ResourceItem> resources =
                             repository.getResources(it.getNamespace(), ResourceType.PUBLIC);
-                    if (!resources.isEmpty() && !it.getNamespace().equals(namespace)) {
+                    if (!resources.isEmpty() &&
+                        !it.getNamespace()
+                                .equals(namespace)) {
                         return resources.containsKey(it.getName());
                     }
                     return true;
@@ -158,21 +166,32 @@ public class AttributeProcessingUtil {
     }
 
     public static ResourceValue getResourceValue(@NonNull ResourceRepository repository,
-                                                  String name,
-                                                  ResourceNamespace namespace) {
+                                                 String name,
+                                                 ResourceNamespace namespace) {
         ResourceValue value = null;
         try {
             value = repository.getValue(
                     ResourceReference.styleable(ResourceNamespace.ANDROID, name));
+            return value;
         } catch (Resources.NotFoundException ignored) {
 
         }
 
-        if (value == null) {
-            try {
-                value = repository.getValue(ResourceReference.styleable(namespace, name));
-            } catch (Resources.NotFoundException ignored) {
+        try {
+            value = repository.getValue(ResourceReference.styleable(namespace, name));
+            return value;
+        } catch (Resources.NotFoundException ignored) {
 
+        }
+
+        for (ResourceNamespace ns : repository.getNamespaces()) {
+            if (value == null) {
+                try {
+                    value = repository.getValue(ResourceReference.styleable(ns, name));
+                    return value;
+                } catch (Resources.NotFoundException ignored) {
+
+                }
             }
         }
 

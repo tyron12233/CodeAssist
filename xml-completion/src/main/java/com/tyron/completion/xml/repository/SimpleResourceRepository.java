@@ -9,16 +9,10 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Maps;
-import com.google.common.collect.MultimapBuilder;
 import com.tyron.builder.compiler.manifest.configuration.Configurable;
 import com.tyron.builder.compiler.manifest.configuration.FolderConfiguration;
 import com.tyron.builder.compiler.manifest.resources.ResourceFolderType;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
-import com.tyron.completion.xml.repository.Repository;
-import com.tyron.completion.xml.repository.ResourceItem;
-import com.tyron.completion.xml.repository.ResourceTable;
-import com.tyron.completion.xml.repository.SimpleResourceItem;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
 import com.tyron.completion.xml.repository.api.ResourceValue;
@@ -40,14 +34,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class SimpleResourceRepository implements Repository {
 
     private static final ImmutableMap<ResourceFolderType, ResourceParser> sParsers;
+
     static {
         ImmutableMap.Builder<ResourceFolderType, ResourceParser> parsers = ImmutableMap.builder();
         parsers.put(ResourceFolderType.VALUES, new ValuesXmlParser());
@@ -68,10 +60,10 @@ public class SimpleResourceRepository implements Repository {
 
     @Override
     public void initialize() throws IOException {
-        parse(mResDir, mNamespace);
+        parse(mResDir, mNamespace, null);
     }
 
-    protected void parse(File resDir, ResourceNamespace namespace) throws IOException {
+    protected void parse(File resDir, ResourceNamespace namespace, String name) throws IOException {
         Collection<File> dirs = FileUtils.listFilesAndDirs(resDir, FalseFileFilter.INSTANCE,
                                                            TrueFileFilter.INSTANCE);
         for (File dir : dirs) {
@@ -88,7 +80,7 @@ public class SimpleResourceRepository implements Repository {
                     FileUtils.listFiles(dir, new SuffixFileFilter("xml"), FalseFileFilter.INSTANCE);
 
             for (File xmlFile : xmlFiles) {
-                List<ResourceValue> values = parser.parse(xmlFile, namespace);
+                List<ResourceValue> values = parser.parse(xmlFile, namespace, name);
                 for (ResourceValue value : values) {
                     ListMultimap<String, ResourceItem> tableValue =
                             mTable.getOrPutEmpty(value.getNamespace(), value.getResourceType());
@@ -105,20 +97,21 @@ public class SimpleResourceRepository implements Repository {
                                            @NonNull String resourceName) {
         ListMultimap<String, ResourceItem> publicResources =
                 mTable.get(namespace, ResourceType.PUBLIC);
-        if (publicResources != null) {
+        if (publicResources != null && !publicResources.isEmpty()) {
             if (!publicResources.containsKey(resourceName)) {
                 return ImmutableList.of();
             }
         }
-        return mTable.getOrPutEmpty(namespace, resourceType).get(resourceName);
+        return mTable.getOrPutEmpty(namespace, resourceType)
+                .get(resourceName);
     }
 
     @NonNull
     @Override
     public List<ResourceItem> getResources(@NonNull ResourceNamespace namespace,
-                                           @NonNull ResourceType type, @NonNull Predicate<ResourceItem> filter) {
-        ListMultimap<String, ResourceItem> value =
-                mTable.get(namespace, type);
+                                           @NonNull ResourceType type,
+                                           @NonNull Predicate<ResourceItem> filter) {
+        ListMultimap<String, ResourceItem> value = mTable.get(namespace, type);
         List<ResourceItem> items = new ArrayList<>();
         for (Map.Entry<String, ResourceItem> entry : value.entries()) {
             if (filter.test(entry.getValue())) {
@@ -134,7 +127,8 @@ public class SimpleResourceRepository implements Repository {
                                                            @NonNull ResourceType resourceType) {
         ListMultimap<String, ResourceItem> resources = ArrayListMultimap.create();
         if (namespace.equals(ResourceNamespace.ANDROID)) {
-            return AndroidResourceRepository.getInstance().getResources(namespace, resourceType);
+            return AndroidResourceRepository.getInstance()
+                    .getResources(namespace, resourceType);
         }
         if (namespace.equals(ResourceNamespace.RES_AUTO)) {
             Set<ResourceNamespace> namespaces = mTable.rowKeySet();
@@ -157,7 +151,8 @@ public class SimpleResourceRepository implements Repository {
     public boolean hasResources(@NonNull ResourceNamespace namespace,
                                 @NonNull ResourceType resourceType,
                                 @NonNull String resourceName) {
-        return !mTable.getOrPutEmpty(namespace, resourceType).isEmpty();
+        return !mTable.getOrPutEmpty(namespace, resourceType)
+                .isEmpty();
     }
 
     @NonNull
@@ -167,7 +162,20 @@ public class SimpleResourceRepository implements Repository {
     }
 
     @NonNull
+    @Override
+    public List<ResourceNamespace> getNamespaces() {
+        return ImmutableList.copyOf(mTable.rowKeySet());
+    }
+
+    @NonNull
     public ResourceValue getValue(ResourceReference reference) {
+        if (reference.getName()
+                .startsWith("CoordinatorLayout")) {
+            if ("androidx.coordinatorlayout".equals(reference.getNamespace()
+                                                            .getPackageName())) {
+                System.out.println(reference);
+            }
+        }
         List<ResourceItem> resourceItems = getResources(reference);
         if (resourceItems.isEmpty()) {
             throw new Resources.NotFoundException();
@@ -188,7 +196,9 @@ public class SimpleResourceRepository implements Repository {
     }
 
     @NonNull
-    public ResourceValue getValue(ResourceNamespace resourceNamespace, String name, boolean resolveRefs) {
+    public ResourceValue getValue(ResourceNamespace resourceNamespace,
+                                  String name,
+                                  boolean resolveRefs) {
 //        if (resourceNamespace.equals(ResourceNamespace.ANDROID)) {
 //            return mAndroidRepository.getValue(resourceNamespace, name, resolveRefs);
 //        }
@@ -227,9 +237,9 @@ public class SimpleResourceRepository implements Repository {
     public String getString(ResourceNamespace namespace, String name) {
         ResourceValue value = getValue(namespace, name, true);
         if (value.getResourceType() != ResourceType.STRING) {
-            throw new Resources.NotFoundException(
-                    "Found resource is not a string but is a " + value.getResourceType()
-                            .getDisplayName());
+            throw new Resources.NotFoundException("Found resource is not a string but is a " +
+                                                  value.getResourceType()
+                                                          .getDisplayName());
         }
         return value.getValue();
     }
@@ -241,9 +251,9 @@ public class SimpleResourceRepository implements Repository {
     public StyleResourceValue getStyle(ResourceNamespace namespace, String name) {
         ResourceValue value = getValue(namespace, name, true);
         if (value.getResourceType() != ResourceType.STYLE) {
-            throw new Resources.NotFoundException(
-                    "Found resource is not a style but is a " + value.getResourceType()
-                            .getDisplayName());
+            throw new Resources.NotFoundException("Found resource is not a style but is a " +
+                                                  value.getResourceType()
+                                                          .getDisplayName());
         }
         return (StyleResourceValue) value;
     }

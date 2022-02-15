@@ -4,6 +4,8 @@ import static com.tyron.completion.xml.util.AttributeProcessingUtil.*;
 import static com.tyron.completion.xml.util.AttributeProcessingUtil.getLayoutStyleablePrimary;
 import static com.tyron.completion.xml.util.AttributeProcessingUtil.getLayoutStyleableSecondary;
 
+import android.text.TextUtils;
+
 import androidx.annotation.NonNull;
 
 import com.google.common.collect.ImmutableSet;
@@ -16,8 +18,6 @@ import com.tyron.completion.xml.repository.api.AttrResourceValue;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
 
-import org.eclipse.lemminx.dom.DOMDocument;
-import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
 
 import java.util.HashSet;
@@ -40,7 +40,7 @@ public class AndroidAttributeUtils {
         };
         List<AttrResourceValue> tagAttributes =
                 getTagAttributes(repository, node, namespace, provider, ImmutableSet::of);
-        addAttributes(tagAttributes, builder);
+        addAttributes(tagAttributes, node, builder);
     }
 
     public static void addLayoutAttributes(@NonNull CompletionList.Builder builder,
@@ -58,20 +58,46 @@ public class AndroidAttributeUtils {
             tagAttributes.addAll(getTagAttributes(repository, parentNode, namespace, provider));
         }
 
-        addAttributes(tagAttributes, builder);
+        addAttributes(tagAttributes, node, builder);
     }
 
-    private static void addAttributes(List<AttrResourceValue> tagAttributes, CompletionList.Builder builder) {
+    private static void addAttributes(List<AttrResourceValue> tagAttributes,
+                                      DOMNode node,
+                                      CompletionList.Builder builder) {
+        ResourceNamespace.Resolver resolver =
+                DOMUtils.getNamespaceResolver(node.getOwnerDocument());
+
         Set<String> uniques = new HashSet<>();
         for (AttrResourceValue tagAttribute : tagAttributes) {
-            ResourceReference reference = tagAttribute.asReference();
-            String commitText = reference.getQualifiedName();
+            String name = tagAttribute.getName();
+            ResourceReference reference;
+            if (name.contains(":")) {
+                String prefix = name.substring(0, name.indexOf(':'));
+                String fixedName = name.substring(name.indexOf(':') + 1);
+                ResourceNamespace namespace = ResourceNamespace.fromNamespacePrefix(prefix, tagAttribute.getNamespace(),
+                                                                                    tagAttribute.getNamespaceResolver());
+                reference = new ResourceReference(namespace, tagAttribute.getResourceType(),
+                                                  fixedName);
+            } else {
+                reference = tagAttribute.asReference();
+            }
+            String prefix = resolver.uriToPrefix(reference.getNamespace()
+                                                         .getXmlNamespaceUri());
+            if (TextUtils.isEmpty(prefix)) {
+                if (tagAttribute.getLibraryName() != null) {
+                    // default to res-auto namespace, commonly prefixed as 'app'
+                    prefix = resolver.uriToPrefix(ResourceNamespace.RES_AUTO.getXmlNamespaceUri());
+                }
+            }
+            String commitText = TextUtils.isEmpty(prefix)
+                    ? reference.getName()
+                    : prefix + ":" + reference.getName();
             if (uniques.contains(commitText)) {
                 continue;
             }
 
             CompletionItem attribute =
-                    CompletionItem.create(reference.getQualifiedName(), "Attribute",
+                    CompletionItem.create(commitText, "Attribute",
                                           commitText + "=\"\"", DrawableKind.Attribute);
             attribute.addFilterText(commitText);
             attribute.addFilterText(reference.getName());

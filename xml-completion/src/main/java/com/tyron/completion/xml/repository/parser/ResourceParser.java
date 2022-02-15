@@ -11,5 +11,5 @@ import java.util.List;
 
 public interface ResourceParser {
 
-    List<ResourceValue> parse(@NonNull File file, ResourceNamespace namespace) throws IOException;
+    List<ResourceValue> parse(@NonNull File file, ResourceNamespace namespace, String name) throws IOException;
 }

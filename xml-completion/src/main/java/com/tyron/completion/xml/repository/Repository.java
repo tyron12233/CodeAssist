@@ -75,6 +75,9 @@ public interface Repository {
     @NonNull
     ResourceNamespace getNamespace();
 
+    @NonNull
+    List<ResourceNamespace> getNamespaces();
+
     ResourceValue getValue(ResourceReference reference);
 
     default ResourceValue getValue(String name, boolean resolveRefs) {

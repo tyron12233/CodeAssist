@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
+import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
@@ -33,7 +34,7 @@ public class ResourceRepository extends SimpleResourceRepository {
         mAndroidRepository.initialize();
 
         File resDir = mModule.getAndroidResourcesDirectory();
-        parse(resDir, getNamespace());
+        parse(resDir, getNamespace(), null);
 
         for (File library : mModule.getLibraries()) {
             File parent = library.getParentFile();
@@ -55,7 +56,14 @@ public class ResourceRepository extends SimpleResourceRepository {
                 continue;
             }
 
-            parse(libraryResDir, namespace);
+            Library lib = mModule.getLibrary(parent.getName());
+            String name = null;
+            if (lib != null) {
+                name = lib.getSourceFile()
+                        .getName();
+            }
+
+            parse(libraryResDir, namespace, name);
         }
     }
 
