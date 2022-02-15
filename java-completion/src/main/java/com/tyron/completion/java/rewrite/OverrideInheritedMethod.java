@@ -75,6 +75,10 @@ public class OverrideInheritedMethod implements JavaRewrite {
         List<TextEdit> edits = new ArrayList<>();
         Position insertPoint = insertNearCursor(compiler);
 
+        if (insertPoint == Position.NONE) {
+            return CANCELLED;
+        }
+
         CompilerContainer container = sourceFileObject == null
                 ? compiler.compile(file)
                 : compiler.compile(Collections.singletonList(sourceFileObject));
