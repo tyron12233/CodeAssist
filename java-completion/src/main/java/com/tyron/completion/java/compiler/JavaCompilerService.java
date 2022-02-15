@@ -406,7 +406,8 @@ public class JavaCompilerService implements CompilerProvider {
      */
     @Override
     public ParseTask parse(JavaFileObject file) {
-        return cachedParse(file);
+        Parser parser = Parser.parseJavaFileObject(mProject, file);
+        return new ParseTask(parser.task, parser.root);
     }
 
     public ParseTask parse(Path file, String contents) {

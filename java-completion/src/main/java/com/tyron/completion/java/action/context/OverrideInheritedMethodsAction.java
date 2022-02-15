@@ -28,6 +28,7 @@ import com.tyron.actions.Presentation;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.FileManager;
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.util.AndroidUtilities;
@@ -130,8 +131,7 @@ public class OverrideInheritedMethodsAction extends AnAction {
         }
 
         SourceFileObject sourceFileObject =
-                new SourceFileObject(file.toPath(), String.valueOf(fileContent.get()),
-                                     Instant.now());
+                new SourceFileObject(file.toPath(), (JavaModule) module);
         ListenableFuture<List<MethodPtr>> future = ProgressManager.getInstance()
                 .computeNonCancelableAsync(() -> {
                     List<MethodPtr> pointers =
