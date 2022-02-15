@@ -19,8 +19,13 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
+import com.tyron.code.ui.layoutEditor.dom.FakeDomElement;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.xml.repository.api.AttrResourceValue;
+import com.tyron.completion.xml.repository.api.ResourceNamespace;
+import com.tyron.completion.xml.util.AttributeProcessingUtil;
+import com.tyron.completion.xml.util.AttributeValueUtils;
 import com.tyron.completion.xml.util.StyleUtils;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.completion.xml.XmlRepository;
@@ -155,38 +160,21 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
         MaterialAutoCompleteTextView editText = v.findViewById(R.id.value);
         XmlRepository xmlRepository = getXmlRepository();
 
-        String attributeName = attribute.getFirst();
-        String attributeNamespace = "";
-        if (attributeName.contains(":")) {
-            attributeNamespace = attributeName.substring(0, attributeName.indexOf(':'));
-            attributeName = attributeName.substring(attributeName.indexOf(':') + 1);
-        }
         if (xmlRepository != null) {
+            FakeDomElement fakeDomElement = new FakeDomElement(-1, -1);
+            fakeDomElement.setTagName(mTag);
+
+            FakeDomElement fakeParent = new FakeDomElement(-1, -1);
+            fakeParent.setTagName(mParentTag);
+            fakeDomElement.setParent(fakeParent);
+
+            AttrResourceValue attr =
+                    AttributeProcessingUtil.getLayoutAttributeFromNode(
+                            xmlRepository.getRepository(), fakeDomElement,
+                            attribute.getFirst(),
+                            ResourceNamespace.RES_AUTO);
+
             List<String> values = new ArrayList<>();
-            Map<String, DeclareStyleable> declareStyleables =
-                    xmlRepository.getDeclareStyleables();
-            Set<DeclareStyleable> styles = new HashSet<>(StyleUtils.getStyles(declareStyleables,
-                    mTag, mParentTag));
-
-            for (DeclareStyleable style : styles) {
-                for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
-                    if (!attributeNamespace.equals(attributeInfo.getNamespace())) {
-                        continue;
-                    }
-                    if (!attributeName.equals(attributeInfo.getName())) {
-                        continue;
-                    }
-
-                    if (attributeInfo.getFormats() == null || attributeInfo.getFormats().isEmpty()) {
-                        AttributeInfo extraAttribute =
-                                xmlRepository.getExtraAttribute(attributeName);
-                        if (extraAttribute != null) {
-                            attributeInfo = extraAttribute;
-                        }
-                    }
-                    values.addAll(attributeInfo.getValues());
-                }
-            }
             ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
                     android.R.layout.simple_list_item_1, values);
             editText.setThreshold(1);

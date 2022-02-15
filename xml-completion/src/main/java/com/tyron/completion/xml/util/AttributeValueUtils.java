@@ -144,7 +144,7 @@ public class AttributeValueUtils {
             }
 
             ResourceNamespace.Resolver resolver =
-                    namespacePrefix -> DOMUtils.lookupPrefix(attr, namespacePrefix);
+                    DOMUtils.getNamespaceResolver(attr.getOwnerDocument());
 
             ResourceNamespace namespace;
             if (resourceType.contains(":")) {
