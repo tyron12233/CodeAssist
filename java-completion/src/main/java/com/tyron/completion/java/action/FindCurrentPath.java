@@ -245,6 +245,9 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
     @Override
     public TreePath visitErroneous(ErroneousTree t, Pair<Long, Long> find) {
         List<? extends Tree> errorTrees = t.getErrorTrees();
+        if (errorTrees == null) {
+            return null;
+        }
         for (Tree error : errorTrees) {
             TreePath scan = super.scan(error, find);
             if (scan != null) {
