@@ -77,6 +77,10 @@ public class CompletionParameters {
         return mIndex;
     }
 
+    public Editor getEditor() {
+        return mEditor;
+    }
+
     public static final class Builder {
 
         private Project project;

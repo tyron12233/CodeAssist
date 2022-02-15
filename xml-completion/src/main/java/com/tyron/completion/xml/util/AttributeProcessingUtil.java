@@ -168,7 +168,10 @@ public class AttributeProcessingUtil {
     public static ResourceValue getResourceValue(@NonNull ResourceRepository repository,
                                                  String name,
                                                  ResourceNamespace namespace) {
-        ResourceValue value = null;
+        if (name == null || namespace == null) {
+            return null;
+        }
+        ResourceValue value;
         try {
             value = repository.getValue(
                     ResourceReference.styleable(ResourceNamespace.ANDROID, name));
@@ -185,17 +188,15 @@ public class AttributeProcessingUtil {
         }
 
         for (ResourceNamespace ns : repository.getNamespaces()) {
-            if (value == null) {
-                try {
-                    value = repository.getValue(ResourceReference.styleable(ns, name));
-                    return value;
-                } catch (Resources.NotFoundException ignored) {
+            try {
+                value = repository.getValue(ResourceReference.styleable(ns, name));
+                return value;
+            } catch (Resources.NotFoundException ignored) {
 
-                }
             }
         }
 
-        return value;
+        return null;
     }
 
     public static AttrResourceValue getAttributeResourceValue(@NonNull ResourceRepository repository,

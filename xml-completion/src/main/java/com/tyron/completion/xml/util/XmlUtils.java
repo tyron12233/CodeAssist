@@ -4,6 +4,8 @@ import android.annotation.SuppressLint;
 import android.text.TextUtils;
 import android.util.Pair;
 
+import androidx.annotation.Nullable;
+
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
@@ -363,17 +365,27 @@ public class XmlUtils {
         return value.contains("|");
     }
 
+    @Nullable
     public static String getPrefix(DOMDocument parsed, long index, XmlCompletionType type) {
         String text = parsed.getText();
         switch (type) {
             case TAG:
                 DOMNode nodeAt = parsed.findNodeAt((int) index);
+                if (nodeAt == null) {
+                    return null;
+                }
                 return text.substring(nodeAt.getStart(), (int) index);
             case ATTRIBUTE:
-                return text.substring(parsed.findAttrAt((int) index)
-                                              .getStart(), (int) index);
+                DOMAttr attr = parsed.findAttrAt((int) index);
+                if (attr == null) {
+                    return null;
+                }
+                return text.substring(attr.getStart(), (int) index);
             case ATTRIBUTE_VALUE:
                 DOMAttr attrAt = parsed.findAttrAt((int) index);
+                if (attrAt == null) {
+                    return null;
+                }
                 return getFlagValuePrefix(text.substring(attrAt.getNodeAttrValue()
                                                                  .getStart() + 1, (int) index));
         }

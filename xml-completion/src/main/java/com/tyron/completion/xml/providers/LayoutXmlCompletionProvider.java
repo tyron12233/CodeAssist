@@ -50,6 +50,8 @@ import com.tyron.completion.xml.util.AttributeValueUtils;
 import com.tyron.completion.xml.util.DOMUtils;
 import com.tyron.completion.xml.util.StyleUtils;
 import com.tyron.completion.xml.util.XmlUtils;
+import com.tyron.editor.Caret;
+import com.tyron.editor.Editor;
 
 import org.apache.bcel.classfile.JavaClass;
 import org.eclipse.lemminx.dom.DOMAttr;
