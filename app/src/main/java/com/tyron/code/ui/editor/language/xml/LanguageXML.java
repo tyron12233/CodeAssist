@@ -145,30 +145,30 @@ public class LanguageXML implements Language {
     }
 
     public int getIndentAdvance(String content, int mode, boolean ignore) {
-        XMLLexer lexer = new XMLLexer(CharStreams.fromString(content));
-        lexer.pushMode(mode);
-
-        int advance = 0;
-        while (lexer.nextToken()
-                       .getType() != Lexer.EOF) {
-            switch (lexer.getToken()
-                    .getType()) {
-                case XMLLexer.OPEN:
-                    advance++;
-                    break;
-                case XMLLexer.SLASH_CLOSE:
-                    if (!ignore) {
-                        advance--;
-                    }
-                    break;
-            }
-        }
-
-        if (advance == 0 && mode != XMLLexer.INSIDE) {
-            return getIndentAdvance(content, XMLLexer.INSIDE, ignore);
-        }
-
-        return advance * mEditor.getTabCount();
+        return 0;
+//        XMLLexer lexer = new XMLLexer(CharStreams.fromString(content));
+//        lexer.pushMode(mode);
+//
+//        int advance = 0;
+//        while (lexer.nextToken()
+//                       .getType() != Lexer.EOF) {
+//            switch (lexer.getToken()
+//                    .getType()) {
+//                case XMLLexer.OPEN:
+//                    advance++;
+//                    break;
+//                case XMLLexer.CLOSE:
+//                case XMLLexer.SLASH_CLOSE:
+//                    advance--;
+//                    break;
+//            }
+//        }
+//
+//        if (advance == 0 && mode != XMLLexer.INSIDE) {
+//            return getIndentAdvance(content, XMLLexer.INSIDE, ignore);
+//        }
+//
+//        return advance * mEditor.getTabCount();
     }
 
     public int getFormatIndent(String line) {
@@ -183,11 +183,11 @@ public class LanguageXML implements Language {
             if (!trim.startsWith("<")) {
                 return false;
             }
-            if (!trim.endsWith("/>")) {
+            if (!trim.endsWith(">")) {
                 return false;
             }
             return afterText.trim()
-                    .startsWith("<");
+                    .startsWith("</");
         }
 
         @Override

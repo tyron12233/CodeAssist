@@ -1,5 +1,6 @@
 package com.tyron.code.ui.editor.impl.text.rosemoe;
 
+
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -14,18 +15,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.res.ResourcesCompat;
-import androidx.core.graphics.Insets;
-import androidx.core.math.MathUtils;
-import androidx.core.os.BundleKt;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.snackbar.Snackbar;
-import com.google.common.util.concurrent.AsyncCallable;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -41,10 +36,8 @@ import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.FileManager;
-import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.listener.FileListener;
-import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionLayout;
@@ -53,7 +46,6 @@ import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
-import com.tyron.code.ui.editor.language.kotlin.KotlinLanguage;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.scheme.CodeAssistColorScheme;
 import com.tyron.code.ui.editor.scheme.CompiledEditorScheme;
@@ -65,51 +57,28 @@ import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.ui.settings.EditorSettingsFragment;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.AndroidUtilities;
-import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.java.JavaCompilerProvider;
-import com.tyron.completion.java.compiler.JavaCompilerService;
-import com.tyron.completion.java.compiler.ParseTask;
-import com.tyron.completion.java.compiler.Parser;
-import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.action.FindCurrentPath;
 import com.tyron.completion.java.provider.CompletionEngine;
-import com.tyron.completion.java.rewrite.AddImport;
-import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.JavaDataContextUtil;
-import com.tyron.completion.model.CompletionItem;
-import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
-import com.tyron.fileeditor.api.FileEditorManager;
 
 import org.apache.commons.io.FileUtils;
-import org.openjdk.com.sun.org.apache.xpath.internal.operations.Mod;
-import org.openjdk.source.util.TreePath;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 import io.github.rosemoe.sora.event.ContentChangeEvent;
-import io.github.rosemoe.sora.event.EventReceiver;
 import io.github.rosemoe.sora.event.LongPressEvent;
-import io.github.rosemoe.sora.event.Unsubscribe;
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.Cursor;
-import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.DirectAccessProps;
-import io.github.rosemoe.sora.widget.component.DefaultCompletionLayout;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
-import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
-import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 import io.github.rosemoe.sora2.text.EditorUtil;
-import kotlin.Pair;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class CodeEditorFragment extends Fragment implements Savable,
