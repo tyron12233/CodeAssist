@@ -15,12 +15,17 @@ import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
 import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
+import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 
+import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.dom.DOMNode;
+import org.eclipse.lemminx.dom.DOMParser;
 import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 
 import java.io.File;
@@ -42,8 +47,7 @@ import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class CodeEditorView extends CodeEditor implements Editor {
 
-    private final Set<Character> IGNORED_PAIR_ENDS = ImmutableSet.<Character>builder()
-            .add(')')
+    private final Set<Character> IGNORED_PAIR_ENDS = ImmutableSet.<Character>builder().add(')')
             .add(']')
             .add('"')
             .add('>')
@@ -98,8 +102,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     private void init() {
-        CodeAssistCompletionWindow window =
-                new CodeAssistCompletionWindow(this);
+        CodeAssistCompletionWindow window = new CodeAssistCompletionWindow(this);
         window.setAdapter(new CodeAssistCompletionAdapter());
         replaceComponent(EditorAutoCompletion.class, window);
         replaceComponent(EditorTextActionWindow.class, new NoOpTextActionWindow(this));
@@ -145,8 +148,8 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     public CharPosition getCharPosition(int index) {
-        io.github.rosemoe.sora.text.CharPosition charPosition =
-                getText().getIndexer().getCharPosition(index);
+        io.github.rosemoe.sora.text.CharPosition charPosition = getText().getIndexer()
+                .getCharPosition(index);
         return new CharPosition(charPosition.line, charPosition.column);
     }
 
@@ -193,6 +196,28 @@ public class CodeEditorView extends CodeEditor implements Editor {
             }
         }
         super.commitText(text, applyAutoIndent);
+
+        if (text.length() == 1) {
+            char c = text.charAt(0);
+            handleAutoInsert(c);
+        }
+    }
+
+    private void handleAutoInsert(char c) {
+        if (getEditorLanguage() instanceof LanguageXML) {
+            if (c != '>') {
+                return;
+            }
+            DOMDocument document = DOMParser.getInstance()
+                    .parse(getText().toString(), "", null);
+            DOMNode nodeAt = document.findNodeAt(getCursor().getLeft());
+            if (!nodeAt.isClosed()) {
+                String insertText = "</" + nodeAt.getNodeName() + ">";
+                commitText(insertText);
+                setSelection(getCursor().getLeftLine(),
+                             getCursor().getLeftColumn() - insertText.length());
+            }
+        }
     }
 
     @Override
@@ -284,8 +309,8 @@ public class CodeEditorView extends CodeEditor implements Editor {
     public void setSelectionRegion(int startIndex, int endIndex) {
         CharPosition start = getCharPosition(startIndex);
         CharPosition end = getCharPosition(endIndex);
-        CodeEditorView.super.setSelectionRegion(start.getLine(), start.getColumn(),
-                end.getLine(), end.getColumn());
+        CodeEditorView.super.setSelectionRegion(start.getLine(), start.getColumn(), end.getLine(),
+                                                end.getColumn());
     }
 
     @Override
@@ -333,7 +358,8 @@ public class CodeEditorView extends CodeEditor implements Editor {
         //noinspection ConstantConditions
         if (getEditorLanguage() != null) {
             AnalyzeManager analyzeManager = getEditorLanguage().getAnalyzeManager();
-            Project project = ProjectManager.getInstance().getCurrentProject();
+            Project project = ProjectManager.getInstance()
+                    .getCurrentProject();
 
             if (analyzeManager instanceof DiagnosticAnalyzeManager) {
                 if (isBackgroundAnalysisEnabled() && (project != null && !project.isCompiling())) {
