@@ -34,10 +34,10 @@ public class RosemoeCodeEditor implements TextEditor {
 
     @Override
     public Fragment getFragment() {
-        if (mFragment == null || mFragment.isDetached()) {
+        if (mFragment == null || mFragment.getContext() == null || mFragment.isDetached()) {
             FileEditorManagerImpl instance = (FileEditorManagerImpl) FileEditorManagerImpl.getInstance();
             Fragment fragment =
-                    instance.getFragmentManager().findFragmentByTag("f-" + mFile.hashCode());
+                    instance.getFragmentManager().findFragmentByTag("f" + hashCode());
             if (fragment != null) {
                 return fragment;
             }
