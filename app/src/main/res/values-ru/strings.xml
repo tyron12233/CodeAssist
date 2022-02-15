@@ -66,8 +66,8 @@
     <string name="menu_create_project">Создать проект</string>
     <string name="menu_run">Запустить</string>
     <string name="menu_refresh">Обновить проект</string>
-    <string name="menu_library_manager">Библиотеки</string>
-    <string name="menu_format">Форматировать</string>
+    <string name="menu_library_manager">Библиотеки проекта</string>
+    <string name="menu_format">Форматировать код</string>
     <string name="menu_settings">Настройки</string>
 
     <!-- preferences -->
@@ -110,15 +110,15 @@
     <!-- file manager menu -->
     <string name="error">Error</string>
     <string name="error_resource_name_restriction">Имена ресурсов должны содержать только строчные буквы a–z, 0–9 и знаки подчеркивания.</string>
-    <string name="menu_action_new_java_class">Класс Java </string>
-    <string name="menu_action_new_kotlin_class">Класс Kotlin</string>
-    <string name="menu_action_new_directory">Папка</string>
-    <string name="menu_action_new_file">Файл</string>
+    <string name="menu_action_new_java_class">Java-класс</string>
+    <string name="menu_action_new_kotlin_class">Kotlin-класс</string>
+    <string name="menu_action_new_directory">Новая папка</string>
+    <string name="menu_action_new_file">Новый файл</string>
     <string name="directory_name">Имя папки</string>
     <string name="file_name">Имя файла</string>
-    <string name="menu_new">Новый</string>
+    <string name="menu_new">Создать</string>
     <string name="menu_refactor">Рефакторинг</string>
-    <string name="item_project">Проект</string>
+    <string name="item_project">Ваш проект</string>
     <string name="dialog_create_class_title">Создать класс</string>
     <string name="create_class_dialog_class_name">Название класса</string>
     <string name="create_class_dialog_positive">Создать</string>
@@ -129,9 +129,9 @@
     <string name="delete_success">Успешно удалено.</string>
     <string name="dialog_confirm_delete">Вы уверены, что хотите удалить %1$s?</string>
     <string name="dialog_delete">Удалить</string>
-    <string name="menu_preview_layout">Предпросмотр интерфейса</string>
-    <string name="action_menu_build_release">Собрать release APK</string>
-    <string name="action_menu_build_debug">Собрать debug APK</string>
+    <string name="menu_preview_layout">Предпросмотр макета</string>
+    <string name="action_menu_build_release">Собрать APK-release</string>
+    <string name="action_menu_build_debug">Собрать APK-debug</string>
     <string name="action_menu_build_aab">Собрать AAB</string>
     
     <string name="project_manager_alpha_notice_title">Уведомление об альфа-версии</string>
@@ -155,11 +155,11 @@
     <string name="project_manager_create_project">Создать модуль</string>
     <string name="project_path_menu_title">Путь к проектам</string>
     <string name="project_manager_null_projects">Проекты не найдены</string>
-    <string name="project_manager_suggestions">Советы:\n\n  - Создать новый проект\n  - Изменить путь к проекту</string>
+    <string name="project_manager_suggestions">Советы:\n\n  - Создайте новый проект\n  - Измените путь к текущему проекту</string>
     
     <!-- Compiler Service -->
-    <string name="compilation_state_compiling">Компиляция</string>
-    <string name="compilation_button_install">УСТАНОВИТЬ</string>
+    <string name="compilation_state_compiling">Идет компиляция</string>
+    <string name="compilation_button_install">Установить</string>
     <string name="compilation_result_success">Успешная компиляция</string>
     <string name="compilation_result_failed">Сбой компиляции</string>
 
