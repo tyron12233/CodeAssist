@@ -98,7 +98,7 @@ public class AndroidAttributeUtils {
 
             CompletionItem attribute =
                     CompletionItem.create(commitText, "Attribute",
-                                          commitText + "=\"\"", DrawableKind.Attribute);
+                                          commitText, DrawableKind.Attribute);
             attribute.addFilterText(commitText);
             attribute.addFilterText(reference.getName());
             attribute.setInsertHandler(new AttributeInsertHandler(attribute));
