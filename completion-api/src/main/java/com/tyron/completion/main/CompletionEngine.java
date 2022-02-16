@@ -80,7 +80,7 @@ public class CompletionEngine {
                 .build();
 
         Instant now = Instant.now();
-        List<CompletionProvider> providers = getCompletionProviders(file);
+        List<CompletionProvider> providers = CompletionProvider.forParameters(parameters);
         for (CompletionProvider provider : providers) {
             CompletionList complete = provider.complete(parameters);
             list.items.addAll(complete.items);

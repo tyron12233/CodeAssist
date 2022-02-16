@@ -84,4 +84,14 @@ public class ContentWrapper implements Content {
     public String getLineString(int line) {
         return mContent.getLineString(line);
     }
+
+    @Override
+    public void insert(int line, int column, CharSequence text) {
+        mContent.insert(line, column, text);
+    }
+
+    @Override
+    public void delete(int start, int end) {
+        mContent.delete(start, end);
+    }
 }

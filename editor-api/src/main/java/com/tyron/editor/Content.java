@@ -1,6 +1,6 @@
 package com.tyron.editor;
 
-public interface Content extends CharSequence{
+public interface Content extends CharSequence {
 
     /**
      * Checks if this content can be redone to the previous action
@@ -25,4 +25,8 @@ public interface Content extends CharSequence{
     void undo();
 
     String getLineString(int line);
+
+    void insert(int line, int column, CharSequence text);
+
+    void delete(int start, int end);
 }

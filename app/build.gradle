@@ -52,6 +52,8 @@ dependencies {
     // not used for compilation, but for analysis
     implementation project(path: ':build-tools:javac')
 
+    implementation project(path: ':language-api')
+
     implementation project(path: ':build-tools:build-logic')
     implementation project(path: ':build-tools:manifmerger')
     implementation project(path: ':build-tools:project')

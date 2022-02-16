@@ -38,6 +38,7 @@ dependencies {
     implementation 'org.antlr:antlr4-runtime:4.9.2'
     implementation 'org.jsoup:jsoup:1.14.3'
 
+    implementation project(path: ':language-api')
     implementation project(path: ':completion-api')
     implementation project(path: ':common')
     implementation project(path: ':java-completion')

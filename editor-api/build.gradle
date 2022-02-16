@@ -4,6 +4,9 @@ plugins {
 
 dependencies {
     implementation project(path: ':build-tools:logging')
+    implementation project(path: ':build-tools:project')
+
+    testImplementation project(path: ':code-editor')
     testImplementation 'junit:junit:4.+'
 }
 java {
