@@ -26,7 +26,6 @@ import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
-import io.github.rosemoe.sora2.text.DiagnosticSpanMapUpdater;
 
 public abstract class AbstractCodeAnalyzer<T> extends DiagnosticAnalyzeManager<T> {
 

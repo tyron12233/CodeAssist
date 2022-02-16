@@ -1,4 +1,4 @@
-package io.github.rosemoe.sora2.text;
+package com.tyron.code.ui.editor.language;
 
 import com.tyron.builder.model.DiagnosticWrapper;
 
