@@ -81,6 +81,13 @@ public class CodeEditorView extends CodeEditor implements Editor {
         init();
     }
 
+    @Nullable
+    @Override
+    public Project getProject() {
+        return ProjectManager.getInstance()
+                .getCurrentProject();
+    }
+
     @Override
     public void setEditorLanguage(@Nullable Language lang) {
         super.setEditorLanguage(lang);

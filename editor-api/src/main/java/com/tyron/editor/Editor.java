@@ -1,11 +1,20 @@
 package com.tyron.editor;
 
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.project.Project;
+
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.List;
 
 public interface Editor {
+
+    /**
+     * @return The project this editor is associated with
+     */
+    @Nullable
+    Project getProject();
 
     /**
      * Returns a mutable list of diagnostics from this editor

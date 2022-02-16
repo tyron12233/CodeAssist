@@ -37,12 +37,14 @@ import com.tyron.completion.xml.XmlCompletionModule;
 import com.tyron.completion.xml.providers.AndroidManifestCompletionProvider;
 import com.tyron.completion.xml.providers.LayoutXmlCompletionProvider;
 import com.tyron.completion.xml.XmlIndexProvider;
+import com.tyron.editor.selection.ExpandSelectionProvider;
 import com.tyron.kotlin_completion.KotlinCompletionModule;
 import com.tyron.language.fileTypes.FileTypeManager;
 import com.tyron.language.java.JavaFileType;
 import com.tyron.language.java.JavaLanguage;
 import com.tyron.language.xml.XmlFileType;
 import com.tyron.language.xml.XmlLanguage;
+import com.tyron.selection.java.JavaExpandSelectionProvider;
 
 public class MainActivity extends AppCompatActivity {
     @Override
@@ -51,71 +53,12 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.main);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
-        runStartup();
-
         if (getSupportFragmentManager().findFragmentByTag(ProjectManagerFragment.TAG) == null) {
             getSupportFragmentManager().beginTransaction()
                     .replace(R.id.fragment_container, new ProjectManagerFragment(),
                              ProjectManagerFragment.TAG)
                     .commit();
         }
-    }
-
-    private void runStartup() {
-        StartupManager startupManager = new StartupManager();
-        startupManager.addStartupActivity(() -> {
-            FileTypeManager manager = FileTypeManager.getInstance();
-            manager.registerFileType(JavaFileType.INSTANCE);
-            manager.registerFileType(XmlFileType.INSTANCE);
-        });
-        startupManager.addStartupActivity(() -> {
-            CompletionEngine engine = CompletionEngine.getInstance();
-            CompilerService index = CompilerService.getInstance();
-            if (index.isEmpty()) {
-                index.registerIndexProvider(JavaCompilerProvider.KEY, new JavaCompilerProvider());
-                index.registerIndexProvider(XmlIndexProvider.KEY, new XmlIndexProvider());
-
-                CompletionProvider.registerCompletionProvider(JavaLanguage.INSTANCE,
-                                                              new JavaCompletionProvider());
-                CompletionProvider.registerCompletionProvider(XmlLanguage.INSTANCE,
-                                                              new LayoutXmlCompletionProvider());
-                CompletionProvider.registerCompletionProvider(XmlLanguage.INSTANCE,
-                                                              new AndroidManifestCompletionProvider());
-            }
-        });
-        startupManager.addStartupActivity(() -> {
-            ActionManager manager = ActionManager.getInstance();
-            // main toolbar actions
-            manager.registerAction(CompileActionGroup.ID, new CompileActionGroup());
-            manager.registerAction(ProjectActionGroup.ID, new ProjectActionGroup());
-            manager.registerAction(PreviewLayoutAction.ID, new PreviewLayoutAction());
-            manager.registerAction(OpenSettingsAction.ID, new OpenSettingsAction());
-            manager.registerAction(FormatAction.ID, new FormatAction());
-            manager.registerAction(DebugActionGroup.ID, new DebugActionGroup());
-
-            // editor tab actions
-            manager.registerAction(CloseFileEditorAction.ID, new CloseFileEditorAction());
-            manager.registerAction(CloseOtherEditorAction.ID, new CloseOtherEditorAction());
-            manager.registerAction(CloseAllEditorAction.ID, new CloseAllEditorAction());
-
-            // editor actions
-            manager.registerAction(TextActionGroup.ID, new TextActionGroup());
-            manager.registerAction(DiagnosticInfoAction.ID, new DiagnosticInfoAction());
-
-            // file manager actions
-            manager.registerAction(NewFileActionGroup.ID, new NewFileActionGroup());
-            manager.registerAction(DeleteFileAction.ID, new DeleteFileAction());
-
-            // java actions
-            CompletionModule.registerActions(manager);
-
-            // xml actions
-            XmlCompletionModule.registerActions(manager);
-
-            // kotlin actions
-            KotlinCompletionModule.registerActions(manager);
-        });
-        startupManager.startup();
     }
 
     @Override

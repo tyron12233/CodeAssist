@@ -3,6 +3,7 @@ package com.tyron.code.ui.editor.action;
 import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
 
+import com.google.common.collect.Range;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
@@ -12,10 +13,12 @@ import com.tyron.actions.Presentation;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.code.R;
+import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.java.action.FindCurrentPath;
 import com.tyron.completion.java.compiler.Parser;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
+import com.tyron.editor.selection.ExpandSelectionProvider;
 
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.Tree;
@@ -63,82 +66,19 @@ public class SelectJavaParentAction extends AnAction {
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
         Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
-        Project project = e.getRequiredData(CommonDataKeys.PROJECT);
-        File file = e.getRequiredData(CommonDataKeys.FILE);
-
-        SourceFileObject fileObject = new SourceFileObject(file.toPath(),
-                editor.getContent().toString(), Instant.now());
-        Parser parser = Parser.parseJavaFileObject(project, fileObject);
-
-        FindCurrentPath findCurrentPath = new FindCurrentPath(parser.task);
-
-        int cursorStart = editor.getCaret().getStart();
-        int cursorEnd = editor.getCaret().getEnd();
-
-        SourcePositions positions = Trees.instance(parser.task).getSourcePositions();
-        TreePath path = findCurrentPath.scan(parser.root, cursorStart, cursorEnd);
-        if (path != null) {
-            path = modifyTreePath(path);
-
-            long afterStart;
-            long afterEnd;
-
-            long currentStart = positions.getStartPosition(parser.root, path.getLeaf());
-            long currentEnd = positions.getEndPosition(parser.root, path.getLeaf());
-            if (currentStart == cursorStart && currentEnd == cursorEnd) {
-                TreePath parentPath = path.getParentPath();
-                afterStart = positions.getStartPosition(parser.root, parentPath.getLeaf());
-                afterEnd = positions.getEndPosition(parser.root, parentPath.getLeaf());
-            } else {
-                afterStart = currentStart;
-                afterEnd = currentEnd;
-            }
-            CharPosition start = editor.getCharPosition((int) afterStart);
-            CharPosition end = editor.getCharPosition((int) afterEnd);
-            editor.setSelectionRegion(start.getLine(), start.getColumn(),
-                    end.getLine(), end.getColumn());
+        ExpandSelectionProvider provider = ExpandSelectionProvider.forEditor(editor);
+        if (provider == null) {
+            AndroidUtilities.showSimpleAlert(e.getDataContext(), "No provider",
+                                             "No expand selection provider found.");
+            return;
         }
-    }
-
-    @NonNull
-    private TreePath modifyTreePath(TreePath treePath) {
-        if (true) {
-            return treePath;
+        Range<Integer> range = provider.expandSelection(editor);
+        if (range == null) {
+            AndroidUtilities.showSimpleAlert(e.getDataContext(),
+                                             "Error",
+                                             "Cannot expand selection");
+            return;
         }
-
-        TreePath parent = treePath.getParentPath();
-
-        if (treePath.getLeaf().getKind() == Tree.Kind.BLOCK) {
-            // select the parent of { }
-            return parent;
-        }
-
-        if (treePath.getLeaf().getKind() == Tree.Kind.MEMBER_SELECT) {
-            return modifyTreePath(parent);
-        }
-
-        if (treePath.getLeaf() instanceof ClassTree
-                && parent.getLeaf().getKind() == Tree.Kind.NEW_CLASS) {
-            if (parent.getParentPath().getLeaf().getKind() == Tree.Kind.EXPRESSION_STATEMENT) {
-                return parent.getParentPath();
-            }
-
-            return parent;
-        }
-
-        if (treePath.getLeaf().getKind() == Tree.Kind.IDENTIFIER) {
-            if (parent.getLeaf().getKind() == Tree.Kind.MEMBER_SELECT) {
-                return modifyTreePath(parent);
-            }
-            if (parent.getLeaf() .getKind() == Tree.Kind.METHOD_INVOCATION) {
-                // identifier -> method call -> expression
-                return parent.getParentPath();
-            }
-        }
-
-        if (treePath.getLeaf().getKind() == Tree.Kind.METHOD_INVOCATION) {
-            return parent;
-        }
-        return treePath;
+        editor.setSelectionRegion(range.lowerEndpoint(), range.upperEndpoint());
     }
 }
