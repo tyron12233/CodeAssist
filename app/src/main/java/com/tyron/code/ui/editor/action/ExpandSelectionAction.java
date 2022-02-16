@@ -29,9 +29,9 @@ import org.openjdk.source.util.Trees;
 import java.io.File;
 import java.time.Instant;
 
-public class SelectJavaParentAction extends AnAction {
+public class ExpandSelectionAction extends AnAction {
 
-    public static final String ID = "selectScopeParent";
+    public static final String ID = "expandSelection";
 
     @Override
     public void update(@NonNull AnActionEvent event) {
@@ -43,7 +43,7 @@ public class SelectJavaParentAction extends AnAction {
         }
 
         File file = event.getData(CommonDataKeys.FILE);
-        if (file == null || !file.getName().endsWith(".java")) {
+        if (file == null) {
             return;
         }
 

@@ -34,6 +34,15 @@ public abstract class ExpandSelectionProvider {
         return sRegisteredProviders.get(fileType.getLanguage());
     }
 
+    public static boolean hasProvider(File file) {
+        LanguageFileType fileType = FileTypeManager.getInstance()
+                .findFileType(file);
+        if (fileType == null) {
+            return false;
+        }
+        return sRegisteredProviders.get(fileType.getLanguage()) != null;
+    }
+
     public static void registerProvider(@NotNull Language language, @NotNull ExpandSelectionProvider provider) {
         ExpandSelectionProvider previous =
                 sRegisteredProviders.putIfAbsent(language, provider);

@@ -9,7 +9,7 @@ import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.Presentation;
 import com.tyron.code.R;
-import com.tyron.code.ui.editor.action.SelectJavaParentAction;
+import com.tyron.code.ui.editor.action.ExpandSelectionAction;
 
 public class TextActionGroup extends ActionGroup {
 
@@ -36,7 +36,7 @@ public class TextActionGroup extends ActionGroup {
     @Override
     public AnAction[] getChildren(@Nullable AnActionEvent e) {
         return new AnAction[] {
-                new SelectJavaParentAction(),
+                new ExpandSelectionAction(),
                 new SelectAllAction(),
                 new CutAction(),
                 new CopyAction(),
