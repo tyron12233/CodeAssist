@@ -6,7 +6,6 @@ import androidx.annotation.Nullable;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
-import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
 import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.StringSearch;
@@ -14,14 +13,11 @@ import com.tyron.common.util.StringSearch;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.FileFilterUtils;
 import org.apache.commons.io.filefilter.TrueFileFilter;
-import org.openjdk.javax.xml.transform.TransformerException;
-import org.xml.sax.SAXException;
+import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -175,6 +171,11 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     public void clear() {
         super.clear();
 
-        removeCache(MergeSymbolsTask.CACHE_KEY);
+        try {
+            Class<?> clazz = Class.forName("com.tyron.builder.compiler.symbol.MergeSymbolsTask");
+            removeCache(ReflectionUtil.getStaticFieldValue(clazz, CacheKey.class, "CACHE_KEY"));
+        } catch (Throwable e) {
+            throw new Error(e);
+        }
     }
 }

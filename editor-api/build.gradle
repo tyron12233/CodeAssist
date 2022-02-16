@@ -3,7 +3,7 @@ plugins {
 }
 
 dependencies {
-    implementation project(path: ':build-tools:build-logic')
+    implementation project(path: ':build-tools:logging')
     testImplementation 'junit:junit:4.+'
 }
 java {

@@ -49,6 +49,7 @@ dependencies {
     implementation project(path: ':completion-api')
 
     implementation project(path: ':build-tools:javac')
+    implementation project(path: ':build-tools:logging')
 
     api project(path: ':build-tools:build-logic')
 

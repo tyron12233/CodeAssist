@@ -17,7 +17,7 @@ public interface CacheHolder {
         }
     }
 
-    public <K, V> Cache<K, V> getCache(CacheKey<K, V> key, Cache<K, V> defaultValue);
+    <K, V> Cache<K, V> getCache(CacheKey<K, V> key, Cache<K, V> defaultValue);
 
-    public <K, V> void put(CacheKey<K, V> key, Cache<K, V> value);
+    <K, V> void put(CacheKey<K, V> key, Cache<K, V> value);
 }

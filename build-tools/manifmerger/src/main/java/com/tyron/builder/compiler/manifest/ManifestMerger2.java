@@ -1,9 +1,10 @@
 package com.tyron.builder.compiler.manifest;
 
+import android.util.Pair;
+
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import com.android.apksig.internal.util.Pair;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -476,10 +477,10 @@ public class ManifestMerger2 {
         ImmutableList.Builder<LoadedManifestInfo> loadedLibraryDocuments = ImmutableList.builder();
         for (Pair<String, File> libraryFile : mLibraryFiles) {
             if (mVerbose) {
-                mLogger.verbose("Loading library manifest " + libraryFile.getSecond().getPath());
+                mLogger.verbose("Loading library manifest " + libraryFile.second.getPath());
             }
-            ManifestInfo manifestInfo = new ManifestInfo(libraryFile.getFirst(),
-                    libraryFile.getSecond(),
+            ManifestInfo manifestInfo = new ManifestInfo(libraryFile.first,
+                    libraryFile.second,
                     XmlDocument.Type.LIBRARY, Optional.<String>absent());
             XmlDocument libraryDocument;
             try {
@@ -495,7 +496,7 @@ public class ManifestMerger2 {
             String libraryPackage = libraryDocument.getRootNode().getXml().getAttribute("package");
             // save it in the selector instance.
             if (!Strings.isNullOrEmpty(libraryPackage)) {
-                selectors.addSelector(libraryPackage, libraryFile.getFirst());
+                selectors.addSelector(libraryPackage, libraryFile.first);
             }
 
             // perform placeholder substitution, this is useful when the library is using
@@ -908,7 +909,7 @@ public class ManifestMerger2 {
                 throw new IllegalStateException(
                         "Cannot add library dependencies manifests when creating a library");
             }
-            mLibraryFilesBuilder.add(Pair.of(file.getName(), file));
+            mLibraryFilesBuilder.add(Pair.create(file.getName(), file));
             return thisAsT();
         }
 

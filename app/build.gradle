@@ -53,6 +53,9 @@ dependencies {
     implementation project(path: ':build-tools:javac')
 
     implementation project(path: ':build-tools:build-logic')
+    implementation project(path: ':build-tools:manifmerger')
+    implementation project(path: ':build-tools:project')
+    implementation project(path: ':build-tools:logging')
     implementation project(path: ':build-tools:jaxp:jaxp-internal')
     implementation project(path: ':build-tools:jaxp:xml')
     implementation project(path: ':common')

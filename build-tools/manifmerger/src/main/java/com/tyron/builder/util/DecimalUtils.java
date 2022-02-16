@@ -1,6 +1,6 @@
 package com.tyron.builder.util;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import java.text.DecimalFormatSymbols;
 
@@ -14,8 +14,8 @@ public class DecimalUtils {
      * @param floatingPointNumber the string representing a floating point number
      * @return the original number with trailing zeros removed
      */
-    @NonNull
-    public static String trimInsignificantZeros(@NonNull String floatingPointNumber) {
+    @NotNull
+    public static String trimInsignificantZeros(@NotNull String floatingPointNumber) {
         return trimInsignificantZeros(floatingPointNumber, '.', "E");
     }
 
@@ -28,7 +28,7 @@ public class DecimalUtils {
      * @return the original number with trailing zeros removed
      */
     public static String trimInsignificantZeros(
-            @NonNull String floatingPointNumber, @NonNull DecimalFormatSymbols symbols) {
+            @NotNull String floatingPointNumber, @NotNull DecimalFormatSymbols symbols) {
         return trimInsignificantZeros(
                 floatingPointNumber, symbols.getDecimalSeparator(), symbols.getExponentSeparator());
     }
@@ -43,7 +43,7 @@ public class DecimalUtils {
      * @return the original number with trailing zeros removed
      */
     public static String trimInsignificantZeros(
-            @NonNull String floatingPointNumber,
+            @NotNull String floatingPointNumber,
             char decimalSeparator,
             String exponentialSeparator) {
         int pos = floatingPointNumber.lastIndexOf(decimalSeparator);

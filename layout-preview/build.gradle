@@ -38,6 +38,8 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
 
     implementation project(path: ':build-tools:build-logic')
+    implementation project(path: ':build-tools:project')
+    implementation project(path: ':build-tools:manifmerger')
     implementation project(path: ':build-tools:kotlinc')
     implementation project(path: ':build-tools:jaxp:xml')
     implementation project(path: ':layout-preview:appcompat-widgets')

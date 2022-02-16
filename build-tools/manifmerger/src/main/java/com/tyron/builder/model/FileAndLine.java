@@ -1,7 +1,7 @@
 package com.tyron.builder.model;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.tyron.builder.compiler.manifest.IMergerLog;
 
@@ -26,7 +26,7 @@ public class FileAndLine {
         return mLine;
     }
 
-    @NonNull
+    @NotNull
     @Override
     public String toString() {
         String name = mFilePath;

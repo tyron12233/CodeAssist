@@ -12,5 +12,8 @@ dependencies {
     implementation project(path: ':common')
     // for manifest  parsing
     implementation project(path: ':build-tools:manifmerger')
+
+    // user data holder
+    implementation project(path: ':build-tools:kotlinc')
     compileOnly project(path: ':android-stubs')
 }

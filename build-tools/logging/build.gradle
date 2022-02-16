@@ -9,4 +9,7 @@ java {
 
 dependencies {
     compileOnly project(path: ':android-stubs')
+
+    // diagnostics
+    implementation project(path: ':build-tools:javac')
 }

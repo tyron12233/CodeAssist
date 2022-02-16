@@ -4,7 +4,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.BuildModule;
 import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.util.StringSearch;
@@ -12,10 +11,11 @@ import com.tyron.common.util.StringSearch;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.FileFilterUtils;
 import org.apache.commons.io.filefilter.TrueFileFilter;
+import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.lang.reflect.Method;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -179,12 +179,24 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
 
     @Override
     public File getLambdaStubsJarFile() {
-        return BuildModule.getLambdaStubs();
+        try {
+            Method getLambdaStubs = ReflectionUtil.getDeclaredMethod(Class.forName("com.tyron.builder.BuildModule"),
+                                                                     "getLambdaStubs");
+            return (File) getLambdaStubs.invoke(null);
+        } catch (Throwable e) {
+            throw new Error(e);
+        }
     }
 
     @Override
     public File getBootstrapJarFile() {
-        return BuildModule.getAndroidJar();
+        try {
+            Method getLambdaStubs = ReflectionUtil.getDeclaredMethod(Class.forName("com.tyron.builder.BuildModule"),
+                                                                     "getAndroidJar");
+            return (File) getLambdaStubs.invoke(null);
+        } catch (Throwable e) {
+            throw new Error(e);
+        }
     }
 
     @Override
@@ -195,7 +207,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     @Override
     public void index() {
         try {
-            putJar(BuildModule.getAndroidJar());
+            putJar(getBootstrapJarFile());
         } catch (IOException e) {
             // ignored
         }

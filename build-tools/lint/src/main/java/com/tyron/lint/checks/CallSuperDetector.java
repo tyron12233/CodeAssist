@@ -1,11 +1,5 @@
 package com.tyron.lint.checks;
 
-import static com.tyron.builder.compiler.manifest.SdkConstants.SUPPORT_ANNOTATIONS_PREFIX;
-
-import android.app.Activity;
-import android.os.Bundle;
-import android.util.Log;
-
 import androidx.annotation.CallSuper;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -25,9 +19,6 @@ import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.element.TypeElement;
 import org.openjdk.javax.lang.model.type.DeclaredType;
-import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.javax.lang.model.util.Elements;
 import org.openjdk.source.tree.ExpressionTree;
 import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
@@ -35,7 +26,6 @@ import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.code.Symbol;
 
 import java.util.Collections;
 import java.util.List;
@@ -45,7 +35,7 @@ import java.util.List;
  */
 public class CallSuperDetector extends Detector implements Detector.JavaScanner {
 
-    private static final String CALL_SUPER_ANNOTATION = SUPPORT_ANNOTATIONS_PREFIX + "CallSuper"; //$NON-NLS-1$
+    private static final String CALL_SUPER_ANNOTATION = "androidx.annotation." + "CallSuper"; //$NON-NLS-1$
     private static final String ON_DETACHED_FROM_WINDOW = "onDetachedFromWindow";   //$NON-NLS-1$
     private static final String ON_VISIBILITY_CHANGED = "onVisibilityChanged";      //$NON-NLS-1$
 

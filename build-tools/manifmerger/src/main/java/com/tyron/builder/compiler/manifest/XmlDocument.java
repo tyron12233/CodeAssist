@@ -1,12 +1,8 @@
 package com.tyron.builder.compiler.manifest;
 
-import com.android.sdklib.SdkVersionInfo;
-
 import android.util.Pair;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
+import com.android.sdklib.SdkVersionInfo;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -19,6 +15,8 @@ import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.builder.util.PositionXmlParser;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;

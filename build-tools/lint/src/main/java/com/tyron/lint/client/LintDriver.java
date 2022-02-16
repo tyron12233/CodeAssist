@@ -1,7 +1,5 @@
 package com.tyron.lint.client;
 
-import static com.tyron.builder.compiler.manifest.SdkConstants.SUPPRESS_ALL;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -125,7 +123,7 @@ public class LintDriver {
     }
 
     private static boolean matches(@Nullable Issue issue, @NonNull String id) {
-        if (id.equalsIgnoreCase(SUPPRESS_ALL)) {
+        if (id.equalsIgnoreCase("all")) {
             return true;
         }
 
