@@ -14,7 +14,6 @@ import org.openjdk.tools.javac.util.Assert;
 import org.openjdk.tools.javac.util.Context;
 import org.openjdk.tools.javac.util.JDK9Wrappers.Configuration;
 import org.openjdk.tools.javac.util.JDK9Wrappers.Layer;
-import org.openjdk.tools.javac.util.JDK9Wrappers.Module;
 import org.openjdk.tools.javac.util.JDK9Wrappers.ModuleFinder;
 import org.openjdk.tools.javac.util.JDK9Wrappers.ServiceLoaderHelper;
 import org.openjdk.tools.javac.util.List;
@@ -61,7 +60,7 @@ import java.util.stream.Stream;
  * I have modified this a bit to use the custom file system manager because
  * android doesn't provide a ZipFileSystemProvider
  */
-@SuppressWarnings("ALL")
+@SuppressWarnings({"unchecked", "unused"})
 public class JavacFileManager extends BaseFileManager implements StandardJavaFileManager {
     private FSInfo fsInfo;
     private final Set<Kind> sourceOrClass;
@@ -147,14 +146,14 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
         ListBuffer<Path> var2 = new ListBuffer<>();
 
         for (String var4 : var1) {
-            var2.append(this.getPath(BaseFileManager.nullCheck(var4)));
+            var2.append(this.getPath(nullCheck(var4)));
         }
 
         return this.getJavaFileObjectsFromPaths(var2.toList());
     }
 
     public Iterable<? extends JavaFileObject> getJavaFileObjects(String... var1) {
-        return this.getJavaFileObjectsFromStrings(Arrays.asList((BaseFileManager.nullCheck(var1))));
+        return this.getJavaFileObjectsFromStrings(Arrays.asList((nullCheck(var1))));
     }
 
     private static boolean isValidName(String var0) {
@@ -277,7 +276,7 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
     }
 
     private boolean isValidFile(String var1, Set<Kind> var2) {
-        Kind var3 = BaseFileManager.getKind(var1);
+        Kind var3 = getKind(var1);
         return var2.contains(var3);
     }
 
@@ -365,8 +364,8 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
 
     public Iterable<JavaFileObject> list(Location var1, String var2, Set<Kind> var3, boolean var4) throws IOException {
         this.checkNotModuleOrientedLocation(var1);
-        BaseFileManager.nullCheck(var2);
-        BaseFileManager.nullCheck(var3);
+        nullCheck(var2);
+        nullCheck(var3);
         Iterable var5 = this.getLocationAsPaths(var1);
         if (var5 == null) {
             return List.nil();
@@ -399,20 +398,20 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
     }
 
     public boolean isSameFile(FileObject var1, FileObject var2) {
-        BaseFileManager.nullCheck(var1);
-        BaseFileManager.nullCheck(var2);
+        nullCheck(var1);
+        nullCheck(var2);
         return var1 instanceof PathFileObject && var2 instanceof PathFileObject ? ((PathFileObject)var1).isSameFile((PathFileObject)var2) : var1.equals(var2);
     }
 
     public boolean hasLocation(Location var1) {
-        BaseFileManager.nullCheck(var1);
+        nullCheck(var1);
         return this.locations.hasLocation(var1);
     }
 
     public JavaFileObject getJavaFileForInput(Location var1, String var2, Kind var3) throws IOException {
         this.checkNotModuleOrientedLocation(var1);
-        BaseFileManager.nullCheck(var2);
-        BaseFileManager.nullCheck(var3);
+        nullCheck(var2);
+        nullCheck(var3);
         if (!this.sourceOrClass.contains(var3)) {
             throw new IllegalArgumentException("Invalid kind: " + var3);
         } else {
@@ -422,7 +421,7 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
 
     public FileObject getFileForInput(Location var1, String var2, String var3) throws IOException {
         this.checkNotModuleOrientedLocation(var1);
-        BaseFileManager.nullCheck(var2);
+        nullCheck(var2);
         if (!isRelativeUri(var3)) {
             throw new IllegalArgumentException("Invalid relative name: " + var3);
         } else {
@@ -454,8 +453,8 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
 
     public JavaFileObject getJavaFileForOutput(Location var1, String var2, Kind var3, FileObject var4) throws IOException {
         this.checkOutputLocation(var1);
-        BaseFileManager.nullCheck(var2);
-        BaseFileManager.nullCheck(var3);
+        nullCheck(var2);
+        nullCheck(var3);
         if (!this.sourceOrClass.contains(var3)) {
             throw new IllegalArgumentException("Invalid kind: " + var3);
         } else {
@@ -465,7 +464,7 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
 
     public FileObject getFileForOutput(Location var1, String var2, String var3, FileObject var4) throws IOException {
         this.checkOutputLocation(var1);
-        BaseFileManager.nullCheck(var2);
+        nullCheck(var2);
         if (!isRelativeUri(var3)) {
             throw new IllegalArgumentException("Invalid relative name: " + var3);
         } else {
@@ -550,36 +549,36 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
     }
 
     public Iterable<? extends JavaFileObject> getJavaFileObjects(File... var1) {
-        return this.getJavaFileObjectsFromFiles(Arrays.asList(BaseFileManager.nullCheck(var1)));
+        return this.getJavaFileObjectsFromFiles(Arrays.asList(nullCheck(var1)));
     }
 
     public Iterable<? extends JavaFileObject> getJavaFileObjects(Path... var1) {
-        return this.getJavaFileObjectsFromPaths(Arrays.asList(BaseFileManager.nullCheck(var1)));
+        return this.getJavaFileObjectsFromPaths(Arrays.asList(nullCheck(var1)));
     }
 
     public void setLocation(Location var1, Iterable<? extends File> var2) throws IOException {
-        BaseFileManager.nullCheck(var1);
+        nullCheck(var1);
         this.locations.setLocation(var1, asPaths(var2));
     }
 
     public void setLocationFromPaths(Location var1, Collection<? extends Path> var2) throws IOException {
-        BaseFileManager.nullCheck(var1);
-        this.locations.setLocation(var1, BaseFileManager.nullCheck(var2));
+        nullCheck(var1);
+        this.locations.setLocation(var1, nullCheck(var2));
     }
 
     public Iterable<? extends File> getLocation(Location var1) {
-        BaseFileManager.nullCheck(var1);
+        nullCheck(var1);
         return asFiles(this.locations.getLocation(var1));
     }
 
     public Iterable<? extends Path> getLocationAsPaths(Location var1) {
-        BaseFileManager.nullCheck(var1);
+        nullCheck(var1);
         return this.locations.getLocation(var1);
     }
 
     public boolean contains(Location var1, FileObject var2) throws IOException {
-        BaseFileManager.nullCheck(var1);
-        BaseFileManager.nullCheck(var2);
+        nullCheck(var1);
+        nullCheck(var2);
         Path var3 = this.asPath(var2);
         return this.locations.contains(var1, var3);
     }
@@ -594,7 +593,7 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
 
     public Location getLocationForModule(Location var1, String var2) throws IOException {
         this.checkModuleOrientedOrOutputLocation((Location)var1);
-        BaseFileManager.nullCheck(var2);
+        nullCheck(var2);
         if (var1 == StandardLocation.SOURCE_OUTPUT && this.getSourceOutDir() == null) {
             var1 = StandardLocation.CLASS_OUTPUT;
         }
@@ -603,9 +602,9 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
     }
 
     public <S> ServiceLoader<S> getServiceLoader(Location var1, Class<S> var2) throws IOException {
-        BaseFileManager.nullCheck(var1);
-        BaseFileManager.nullCheck(var2);
-        Module.getModule(this.getClass()).addUses(var2);
+        nullCheck(var1);
+        nullCheck(var2);
+        getClass().getModule().addUses(var2);
         if (var1.isModuleOrientedLocation()) {
             Collection var3 = this.locations.getLocation(var1);
             ModuleFinder var4 = ModuleFinder.of((Path[])var3.toArray(new Path[var3.size()]));
@@ -629,9 +628,9 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
     }
 
     public void setLocationForModule(Location var1, String var2, Collection<? extends Path> var3) throws IOException {
-        BaseFileManager.nullCheck(var1);
+        nullCheck(var1);
         this.checkModuleOrientedOrOutputLocation(var1);
-        this.locations.setLocationForModule(var1, (String) BaseFileManager.nullCheck(var2), BaseFileManager.nullCheck(var3));
+        this.locations.setLocationForModule(var1, (String) nullCheck(var2), nullCheck(var3));
     }
 
     public String inferModuleName(Location var1) {
@@ -801,7 +800,7 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
                     }
 
                     public FileVisitResult visitFile(Path var1, BasicFileAttributes var2) {
-                        if (var2.isRegularFile() && var3.contains(BaseFileManager.getKind(var1.getFileName().toString()))) {
+                        if (var2.isRegularFile() && var3.contains(getKind(var1.getFileName().toString()))) {
                             PathFileObject var3x = PathFileObject.forJarPath(JavacFileManager.this, var1, ArchiveContainer.this.archivePath);
                             var5.append(var3x);
                         }
@@ -944,7 +943,7 @@ public class JavacFileManager extends BaseFileManager implements StandardJavaFil
 
                 while(var7.hasNext()) {
                     Path var8 = (Path)var7.next();
-                    if (var3.contains(BaseFileManager.getKind(var8))) {
+                    if (var3.contains(getKind(var8))) {
                         PathFileObject var9 = PathFileObject.forJRTPath(JavacFileManager.this, var8);
                         var5.append(var9);
                     }

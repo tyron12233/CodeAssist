@@ -49,6 +49,8 @@ dependencies {
     implementation project(path: ':code-editor')
     implementation project(path: ':xml-completion')
     implementation project(path: ':java-completion')
+    // not used for compilation, but for analysis
+    implementation project(path: ':build-tools:javac')
 
     implementation project(path: ':build-tools:build-logic')
     implementation project(path: ':build-tools:jaxp:jaxp-internal')
@@ -84,6 +86,7 @@ dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.2.1'
     implementation 'androidx.lifecycle:lifecycle-livedata-core:2.4.1'
     implementation 'androidx.lifecycle:lifecycle-viewmodel:2.4.1'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.4.1'
     implementation 'androidx.lifecycle:lifecycle-livedata:2.4.1'
     implementation 'androidx.fragment:fragment:1.4.1'
     implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
@@ -93,7 +96,7 @@ dependencies {
 
     // image loading
     implementation 'com.github.bumptech.glide:glide:4.12.0'
-    
+
     implementation 'androidx.preference:preference:1.2.0'
     implementation 'com.github.TutorialsAndroid:crashx:v6.0.19'
 

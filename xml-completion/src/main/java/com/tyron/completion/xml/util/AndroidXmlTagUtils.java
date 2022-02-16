@@ -1,34 +1,18 @@
 package com.tyron.completion.xml.util;
 
-import android.view.View;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.java.JavaCompilerProvider;
-import com.tyron.completion.java.compiler.CompilerContainer;
-import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.insert.LayoutTagInsertHandler;
-import com.tyron.completion.xml.model.XmlCachedCompletion;
 
 import org.apache.bcel.classfile.JavaClass;
-import org.openjdk.javax.lang.model.element.TypeElement;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
-
-import me.xdrop.fuzzywuzzy.FuzzySearch;
 
 public class AndroidXmlTagUtils {
 

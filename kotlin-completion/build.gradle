@@ -34,6 +34,7 @@ configurations.implementation {
 dependencies {
 
     implementation project(path: ':build-tools:kotlinc')
+    implementation project(path: ':build-tools:javac')
     implementation project(path: ':build-tools:build-logic')
     implementation project(path: ':completion-api')
     implementation project(path: ':common')

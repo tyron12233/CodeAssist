@@ -47,6 +47,9 @@ dependencies {
 
     implementation project(path: ':common')
     implementation project(path: ':completion-api')
+
+    implementation project(path: ':build-tools:javac')
+
     api project(path: ':build-tools:build-logic')
 
     compileOnly 'androidx.recyclerview:recyclerview:1.1.0'
