@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
@@ -19,9 +19,9 @@ public class Selector {
      */
     public static final String SELECTOR_LOCAL_NAME = "selector";
 
-    @NonNull private final String mPackageName;
+    @NotNull private final String mPackageName;
 
-    public Selector(@NonNull String packageName) {
+    public Selector(@NotNull String packageName) {
         mPackageName = Preconditions.checkNotNull(packageName);
     }
 

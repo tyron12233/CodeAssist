@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.tyron.builder.compiler.manifest.blame.SourcePosition;
 
@@ -33,13 +33,13 @@ public class PlaceholderHandler {
          * Returns a placeholder value for the placeholder key or null if none exists.
          */
         @Nullable
-        String getValue(@NonNull T key);
+        String getValue(@NotNull T key);
     }
 
     /**
      * Returns true if the passed string is a placeholder value, false otherwise.
      */
-    public static boolean isPlaceHolder(@NonNull String string) {
+    public static boolean isPlaceHolder(@NotNull String string) {
         return PATTERN.matcher(string).matches();
     }
 
@@ -55,19 +55,19 @@ public class PlaceholderHandler {
      * @param mergingReportBuilder to report errors and log actions.
      */
     public void visit(
-            @NonNull ManifestMerger2.MergeType mergeType,
-            @NonNull XmlDocument xmlDocument,
-            @NonNull KeyBasedValueResolver<String> valueProvider,
-            @NonNull MergingReport.Builder mergingReportBuilder) {
+            @NotNull ManifestMerger2.MergeType mergeType,
+            @NotNull XmlDocument xmlDocument,
+            @NotNull KeyBasedValueResolver<String> valueProvider,
+            @NotNull MergingReport.Builder mergingReportBuilder) {
 
         visit(mergeType, xmlDocument.getRootNode(), valueProvider, mergingReportBuilder);
     }
 
     private void visit(
-            @NonNull ManifestMerger2.MergeType mergeType,
-            @NonNull XmlElement xmlElement,
-            @NonNull KeyBasedValueResolver<String> valueProvider,
-            @NonNull MergingReport.Builder mergingReportBuilder) {
+            @NotNull ManifestMerger2.MergeType mergeType,
+            @NotNull XmlElement xmlElement,
+            @NotNull KeyBasedValueResolver<String> valueProvider,
+            @NotNull MergingReport.Builder mergingReportBuilder) {
 
         for (XmlAttribute xmlAttribute : xmlElement.getAttributes()) {
 

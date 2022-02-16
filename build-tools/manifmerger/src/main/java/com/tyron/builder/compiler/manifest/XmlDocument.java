@@ -4,8 +4,8 @@ import com.android.sdklib.SdkVersionInfo;
 
 import android.util.Pair;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
@@ -66,12 +66,12 @@ public class XmlDocument {
     private final Optional<String> mMainManifestPackageName;
 
     public XmlDocument(
-            @NonNull SourceFile sourceLocation,
-            @NonNull KeyResolver<String> selectors,
-            @NonNull PlaceholderHandler.KeyBasedValueResolver<ManifestMerger2.SystemProperty> systemPropertyResolver,
-            @NonNull Element element,
-            @NonNull Type type,
-            @NonNull Optional<String> mainManifestPackageName) {
+            @NotNull SourceFile sourceLocation,
+            @NotNull KeyResolver<String> selectors,
+            @NotNull PlaceholderHandler.KeyBasedValueResolver<ManifestMerger2.SystemProperty> systemPropertyResolver,
+            @NotNull Element element,
+            @NotNull Type type,
+            @NotNull Optional<String> mainManifestPackageName) {
         this.mSourceFile = Preconditions.checkNotNull(sourceLocation);
         this.mRootElement = Preconditions.checkNotNull(element);
         this.mSelectors = Preconditions.checkNotNull(selectors);
@@ -167,7 +167,7 @@ public class XmlDocument {
     /**
      * Returns the position of the specified {@link XmlNode}.
      */
-    @NonNull
+    @NotNull
     static SourcePosition getNodePosition(XmlNode node) {
         return getNodePosition(node.getXml());
     }
@@ -175,12 +175,12 @@ public class XmlDocument {
     /**
      * Returns the position of the specified {@link org.w3c.dom.Node}.
      */
-    @NonNull
+    @NotNull
     static SourcePosition getNodePosition(Node xml) {
         return PositionXmlParser.getPosition(xml);
     }
 
-    @NonNull
+    @NotNull
     public SourceFile getSourceFile() {
         return mSourceFile;
     }
@@ -515,8 +515,8 @@ public class XmlDocument {
      * it does not exist in this document.
      */
     private Optional<Element> addIfAbsent(
-            @NonNull ActionRecorder actionRecorder,
-            @NonNull ManifestModel.NodeTypes nodeType,
+            @NotNull ActionRecorder actionRecorder,
+            @NotNull ManifestModel.NodeTypes nodeType,
             @Nullable String keyValue,
             @Nullable String reason,
             @Nullable Pair<String, String>... attributes) {

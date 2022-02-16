@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.configuration;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.tyron.builder.compiler.manifest.resources.ResourceEnum;
 import com.tyron.builder.compiler.manifest.resources.UiMode;
@@ -75,7 +75,7 @@ public final class UiModeQualifier extends EnumBasedResourceQualifier {
 
     @Override
     public boolean isBetterMatchThan(@Nullable ResourceQualifier compareTo,
-                                     @NonNull ResourceQualifier reference) {
+                                     @NotNull ResourceQualifier reference) {
         if (compareTo == null) {
             return true;
         }

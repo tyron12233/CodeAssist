@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.configuration;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -24,7 +24,7 @@ public final class VersionQualifier extends ResourceQualifier {
      * @param segment the folder segment from which to create a qualifier
      * @return a new VersionQualifier object or {@code null}
      */
-    public static VersionQualifier getQualifier(@NonNull String segment) {
+    public static VersionQualifier getQualifier(@NotNull String segment) {
         Matcher m = sVersionPattern.matcher(segment);
         if (m.matches()) {
             String v = m.group(1);
@@ -87,7 +87,7 @@ public final class VersionQualifier extends ResourceQualifier {
     }
 
     @Override
-    public boolean checkAndSet(@NonNull String value, @NonNull FolderConfiguration config) {
+    public boolean checkAndSet(@NotNull String value, @NotNull FolderConfiguration config) {
         VersionQualifier qualifier = getQualifier(value);
         if (qualifier != null) {
             config.setVersionQualifier(qualifier);
@@ -105,7 +105,7 @@ public final class VersionQualifier extends ResourceQualifier {
     }
 
     @Override
-    public boolean isMatchFor(@NonNull ResourceQualifier qualifier) {
+    public boolean isMatchFor(@NotNull ResourceQualifier qualifier) {
         if (qualifier instanceof VersionQualifier) {
             // It is considered a match if our API level is equal or lower to the given qualifier,
             // or the given qualifier doesn't specify an API Level.
@@ -118,7 +118,7 @@ public final class VersionQualifier extends ResourceQualifier {
 
     @Override
     public boolean isBetterMatchThan(
-            @Nullable ResourceQualifier compareTo, @NonNull ResourceQualifier reference) {
+            @Nullable ResourceQualifier compareTo, @NotNull ResourceQualifier reference) {
         if (compareTo == null) {
             return true;
         }

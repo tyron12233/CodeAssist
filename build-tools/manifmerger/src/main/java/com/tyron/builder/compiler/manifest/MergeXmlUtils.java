@@ -1,8 +1,8 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import com.google.common.annotations.VisibleForTesting;
 
 import com.tyron.builder.model.FileAndLine;
 import com.tyron.builder.compiler.manifest.IMergerLog.Severity;
@@ -63,8 +63,8 @@ class MergerXmlUtils {
      * @return A new DOM {@link Document}, or null.
      */
     @Nullable
-    static Document parseDocument(@NonNull final File xmlFile, @NonNull final IMergerLog log,
-                                  @NonNull ManifestMerger merger) {
+    static Document parseDocument(@NotNull final File xmlFile, @NotNull final IMergerLog log,
+                                  @NotNull ManifestMerger merger) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             Reader reader = XmlUtils.getUtfReader(xmlFile);
@@ -134,9 +134,9 @@ class MergerXmlUtils {
      */
     @VisibleForTesting
     @Nullable
-    static Document parseDocument(@NonNull String xml,
-                                  @NonNull IMergerLog log,
-                                  @NonNull FileAndLine errorContext) {
+    static Document parseDocument(@NotNull String xml,
+                                  @NotNull IMergerLog log,
+                                  @NotNull FileAndLine errorContext) {
         try {
             Document doc = XmlUtils.parseDocument(xml, true);
             findLineNumbers(doc, 1);
@@ -164,7 +164,7 @@ class MergerXmlUtils {
      * @param doc The document to decorate.
      * @param fileName The name to retrieve later for that document.
      */
-    static void decorateDocument(@NonNull Document doc, @NonNull String fileName) {
+    static void decorateDocument(@NotNull Document doc, @NotNull String fileName) {
         doc.setUserData(DATA_FILE_NAME, fileName, null /*handler*/);
         findLineNumbers(doc, 1);
     }
@@ -179,8 +179,8 @@ class MergerXmlUtils {
      * @param node The node or document where the error occurs. Must not be null.
      * @return A new non-null {@link FileAndLine} combining the file name and line number.
      */
-    @NonNull
-    static FileAndLine xmlFileAndLine(@NonNull Node node) {
+    @NotNull
+    static FileAndLine xmlFileAndLine(@NotNull Node node) {
         String name = extractXmlFilename(node);
         int line = extractLineNumber(node); // 0 in case of error or unknown
         return new FileAndLine(name, line);
@@ -213,7 +213,7 @@ class MergerXmlUtils {
         return null;
     }
 
-    public static void setSource(@NonNull Node node, @NonNull File source) {
+    public static void setSource(@NotNull Node node, @NotNull File source) {
         //noinspection ConstantConditions
         for (; node != null; node = node.getNextSibling()) {
             short nodeType = node.getNodeType();
@@ -289,9 +289,9 @@ class MergerXmlUtils {
      * @return True if the file was written, false in case of error.
      */
     static boolean printXmlFile(
-            @NonNull Document doc,
-            @NonNull File outFile,
-            @NonNull IMergerLog log) {
+            @NotNull Document doc,
+            @NotNull File outFile,
+            @NotNull IMergerLog log) {
         // Quick thing based on comments from http://stackoverflow.com/questions/139076
         try {
             Transformer tf = TransformerFactory.newInstance().newTransformer();
@@ -321,8 +321,8 @@ class MergerXmlUtils {
      * @return A string representation of the XML. Null in case of error.
      */
     static String printXmlString(
-            @NonNull Document doc,
-            @NonNull IMergerLog log) {
+            @NotNull Document doc,
+            @NotNull IMergerLog log) {
         try {
             Transformer tf = TransformerFactory.newInstance().newTransformer();
             tf.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");        //$NON-NLS-1$
@@ -350,7 +350,7 @@ class MergerXmlUtils {
      *   If false, it will just process the given node.
      * @return A string representation of the Node structure, useful for debugging.
      */
-    @NonNull
+    @NotNull
     static String dump(@Nullable Node node, boolean nextSiblings) {
         return dump(node, 0 /*offset*/, nextSiblings, true /*deep*/, null /*keyAttr*/);
     }
@@ -370,7 +370,7 @@ class MergerXmlUtils {
      *   For example when writing an Activity, it helps to always insert "name" attribute.
      * @return A string representation of the Node structure, useful for debugging.
      */
-    @NonNull
+    @NotNull
     static String dump(
             @Nullable Node node,
             int offsetIndex,
@@ -471,7 +471,7 @@ class MergerXmlUtils {
      * @return A non-null, possible empty, list of all nodes that are actual {@link Attr},
      *   sorted by increasing attribute name.
      */
-    @NonNull
+    @NotNull
     static List<Attr> sortedAttributeList(@Nullable NamedNodeMap attrMap) {
         List<Attr> list = new ArrayList<Attr>();
 
@@ -496,7 +496,7 @@ class MergerXmlUtils {
      * Returns a comparator for {@link Attr}, alphabetically sorted by name.
      * The "name" attribute is special and always sorted to the front.
      */
-    @NonNull
+    @NotNull
     static Comparator<? super Attr> getAttrComparator() {
         return new Comparator<Attr>() {
             @Override
@@ -537,7 +537,7 @@ class MergerXmlUtils {
     static void injectAttributes(
             @Nullable Document doc,
             @Nullable Map<String, String> attributeMap,
-            @NonNull IMergerLog log) {
+            @NotNull IMergerLog log) {
         if (doc == null || attributeMap == null || attributeMap.isEmpty()) {
             return;
         }
@@ -641,11 +641,11 @@ class MergerXmlUtils {
      * @param prefix A "space" prefix added at the beginning of each line for indentation
      *   purposes. The diff printer later relies on this to find out the structure.
      */
-    @NonNull
+    @NotNull
     static String printElement(
-            @NonNull Node node,
-            @NonNull Map<String, String> nsPrefix,
-            @NonNull String prefix) {
+            @NotNull Node node,
+            @NotNull Map<String, String> nsPrefix,
+            @NotNull String prefix) {
         StringBuilder sb = new StringBuilder();
         sb.append(prefix).append('<');
         String uri = node.getNamespaceURI();
@@ -680,13 +680,13 @@ class MergerXmlUtils {
      * of a parent and get a string showing all the children at the same time. They are
      * sorted to avoid the ordering issue.
      */
-    @NonNull
+    @NotNull
     private static StringBuilder printChildren(
-            @NonNull StringBuilder sb,
-            @NonNull Node child,
+            @NotNull StringBuilder sb,
+            @NotNull Node child,
             boolean nextSiblings,
-            @NonNull Map<String, String> nsPrefix,
-            @NonNull String prefix) {
+            @NotNull Map<String, String> nsPrefix,
+            @NotNull String prefix) {
         ArrayList<String> children = new ArrayList<String>();
 
         boolean hasText = false;
@@ -727,12 +727,12 @@ class MergerXmlUtils {
      * Flatten several attributes to a string using their alphabetical order.
      * This is an implementation detail for {@link #printElement(Node, Map, String)}.
      */
-    @NonNull
+    @NotNull
     private static StringBuilder printAttributes(
-            @NonNull StringBuilder sb,
-            @NonNull Node node,
-            @NonNull Map<String, String> nsPrefix,
-            @NonNull String prefix) {
+            @NotNull StringBuilder sb,
+            @NotNull Node node,
+            @NotNull Map<String, String> nsPrefix,
+            @NotNull String prefix) {
         ArrayList<String> attrs = new ArrayList<String>();
 
         NamedNodeMap attrMap = node.getAttributes();
@@ -923,7 +923,7 @@ class MergerXmlUtils {
      * file associated with this specific node, if any.
      */
     @Nullable
-    public static File getFileFor(@NonNull Node node) {
+    public static File getFileFor(@NotNull Node node) {
         return (File) node.getUserData(DATA_ORIGIN_FILE);
     }
 

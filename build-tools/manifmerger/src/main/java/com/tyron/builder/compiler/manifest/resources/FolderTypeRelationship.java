@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.resources;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -94,9 +94,9 @@ public final class FolderTypeRelationship {
      * @param folderType The folder type.
      * @return a list of {@link ResourceType}, possibly empty but never null.
      */
-    @NonNull
+    @NotNull
     public static List<ResourceType> getRelatedResourceTypes(
-            @NonNull ResourceFolderType folderType) {
+            @NotNull ResourceFolderType folderType) {
         List<ResourceType> list = mFolderToTypeMap.get(folderType);
         if (list != null) {
             return list;
@@ -112,8 +112,8 @@ public final class FolderTypeRelationship {
      * @param folderType The folder type.
      * @return a single non-ID {@link ResourceType}.
      */
-    @NonNull
-    public static ResourceType getNonIdRelatedResourceType(@NonNull ResourceFolderType folderType) {
+    @NotNull
+    public static ResourceType getNonIdRelatedResourceType(@NotNull ResourceFolderType folderType) {
         List<ResourceType> resourceTypes = getRelatedResourceTypes(folderType);
         if (resourceTypes.isEmpty()) {
             throw new IllegalArgumentException(
@@ -137,8 +137,8 @@ public final class FolderTypeRelationship {
      * @param resType the type of resource.
      * @return a list of {@link ResourceFolderType}, possibly empty but never null.
      */
-    @NonNull
-    public static List<ResourceFolderType> getRelatedFolders(@NonNull ResourceType resType) {
+    @NotNull
+    public static List<ResourceFolderType> getRelatedFolders(@NotNull ResourceType resType) {
         List<ResourceFolderType> list = mTypeToFolderMap.get(resType);
         if (list != null) {
             return list;
@@ -156,7 +156,7 @@ public final class FolderTypeRelationship {
      * ResourceFolderType} that contains only ids.
      */
     @Nullable
-    public static ResourceFolderType getNonValuesRelatedFolder(@NonNull ResourceType resType) {
+    public static ResourceFolderType getNonValuesRelatedFolder(@NotNull ResourceType resType) {
         if (resType == ResourceType.ID) {
             return null;
         }
@@ -178,11 +178,11 @@ public final class FolderTypeRelationship {
      * @param folderType The folder type.
      * @return true if folder may contain ID generating types.
      */
-    public static boolean isIdGeneratingFolderType(@NonNull ResourceFolderType folderType) {
+    public static boolean isIdGeneratingFolderType(@NotNull ResourceFolderType folderType) {
         return ID_PROVIDING_RESOURCE_TYPES.contains(folderType);
     }
 
-    @NonNull
+    @NotNull
     public static Collection<ResourceFolderType> getIdGeneratingFolderTypes() {
         return ID_PROVIDING_RESOURCE_TYPES;
     }
@@ -194,7 +194,7 @@ public final class FolderTypeRelationship {
      * @return true if files inside the folder of the specified {@link ResourceFolderType}
      * could generate a resource of the specified {@link ResourceType}
      */
-    public static boolean match(@NonNull ResourceType resType, @NonNull ResourceFolderType folderType) {
+    public static boolean match(@NotNull ResourceType resType, @NotNull ResourceFolderType folderType) {
         List<ResourceFolderType> list = mTypeToFolderMap.get(resType);
 
         if (list != null) {

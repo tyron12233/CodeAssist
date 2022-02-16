@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler.manifest.resources;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * An enum representing visibility of an android resource.
@@ -59,7 +59,7 @@ public enum ResourceVisibility {
         return qualifier;
     }
 
-    public static ResourceVisibility getEnum(@NonNull String qualifier) {
+    public static ResourceVisibility getEnum(@NotNull String qualifier) {
         for (ResourceVisibility accessibility : values()) {
             if (accessibility.qualifier.equals(qualifier)) {
                 return accessibility;
@@ -70,7 +70,7 @@ public enum ResourceVisibility {
     }
 
     public static ResourceVisibility max(
-            @NonNull ResourceVisibility v1, @NonNull ResourceVisibility v2) {
+            @NotNull ResourceVisibility v1, @NotNull ResourceVisibility v2) {
         return v1.compareTo(v2) <= 0 ? v2 : v1;
     }
 }

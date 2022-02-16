@@ -1,6 +1,6 @@
 package com.tyron.builder.util;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import com.google.common.base.Preconditions;
 import java.util.concurrent.CancellationException;
@@ -38,7 +38,7 @@ public abstract class ProgressManagerAdapter {
      *     }
      * </pre>
      */
-    public static void throwIfCancellation(@NonNull Throwable t) {
+    public static void throwIfCancellation(@NotNull Throwable t) {
         ProgressManagerAdapter instance = ourInstance;
         if (instance == null) {
             throwIfCancellationException(t);
@@ -49,17 +49,17 @@ public abstract class ProgressManagerAdapter {
 
     protected abstract void doCheckCanceled();
 
-    protected void doThrowIfCancellation(@NonNull Throwable t) {
+    protected void doThrowIfCancellation(@NotNull Throwable t) {
         throwIfCancellationException(t);
     }
 
-    private static void throwIfCancellationException(@NonNull Throwable t) {
+    private static void throwIfCancellationException(@NotNull Throwable t) {
         if (t instanceof CancellationException) {
             throw (CancellationException) t;
         }
     }
 
-    protected static void setInstance(@NonNull ProgressManagerAdapter instance) {
+    protected static void setInstance(@NotNull ProgressManagerAdapter instance) {
         Preconditions.checkState(ourInstance == null);
         ourInstance = instance;
     }

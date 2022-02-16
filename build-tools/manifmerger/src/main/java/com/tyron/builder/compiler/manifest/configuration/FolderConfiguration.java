@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.configuration;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableSet;
@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
  * means that the property is not set.
  */
 public final class FolderConfiguration implements Comparable<FolderConfiguration>, Serializable {
-    @NonNull private static final ResourceQualifier[] DEFAULT_QUALIFIERS;
+    @NotNull private static final ResourceQualifier[] DEFAULT_QUALIFIERS;
 
     /** Splitter which can be used to split qualifiers. */
     public static final Splitter QUALIFIER_SPLITTER = Splitter.on('-');
@@ -79,7 +79,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
         mQualifierString = "";
     }
 
-    private FolderConfiguration(@NonNull ResourceQualifier[] qualifiers) {
+    private FolderConfiguration(@NotNull ResourceQualifier[] qualifiers) {
         mQualifiers = new ResourceQualifier[INDEX_COUNT];
         System.arraycopy(qualifiers, 0, mQualifiers, 0, INDEX_COUNT);
     }
@@ -92,7 +92,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * @return a FolderConfiguration object, or null if the folder name isn't valid
      */
     @Nullable
-    public static FolderConfiguration getConfig(@NonNull String[] folderSegments) {
+    public static FolderConfiguration getConfig(@NotNull String[] folderSegments) {
         Iterator<String> iterator = Iterators.forArray(folderSegments);
         if (iterator.hasNext()) {
             // Skip the first segment: it should be just the base folder, such as "values" or
@@ -112,7 +112,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * @see FolderConfiguration#getConfig(String[])
      */
     @Nullable
-    public static FolderConfiguration getConfig(@NonNull Iterable<String> folderSegments) {
+    public static FolderConfiguration getConfig(@NotNull Iterable<String> folderSegments) {
         Iterator<String> iterator = folderSegments.iterator();
         if (iterator.hasNext()) {
             // Skip the first segment: it should be just the base folder, such as "values" or
@@ -131,7 +131,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      */
     @Nullable
     public static FolderConfiguration getConfigFromQualifiers(
-            @NonNull Iterable<String> qualifiers) {
+            @NotNull Iterable<String> qualifiers) {
         return getConfigFromQualifiers(qualifiers.iterator());
     }
 
@@ -143,7 +143,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      */
     @Nullable
     public static FolderConfiguration getConfigFromQualifiers(
-            @NonNull Iterator<String> qualifiers) {
+            @NotNull Iterator<String> qualifiers) {
         FolderConfiguration config = new FolderConfiguration();
 
         // we are going to loop through the segments, and match them with the first
@@ -305,8 +305,8 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * @param qualifierString the list of dash-separated qualifier
      * @return a list of language-rRegion
      */
-    @NonNull
-    public static Set<String> getLanguageConfigFromQualifiers(@NonNull String qualifierString) {
+    @NotNull
+    public static Set<String> getLanguageConfigFromQualifiers(@NotNull String qualifierString) {
         // because the format breaks the normal list of dash-separated qualifiers, we have to
         // process things differently.
         // the string will look like this:
@@ -400,9 +400,9 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
     }
 
     private static boolean checkQualifier(
-            @NonNull FolderConfiguration config,
+            @NotNull FolderConfiguration config,
             int qualifierIndex,
-            @NonNull String qualifierValue) {
+            @NotNull String qualifierValue) {
         if (DEFAULT_QUALIFIERS[qualifierIndex].checkAndSet(qualifierValue, config)) {
             return true;
         }
@@ -425,7 +425,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * @return a FolderConfiguration object, or null if the folder name isn't valid
      */
     @Nullable
-    public static FolderConfiguration getConfigForFolder(@NonNull String folderName) {
+    public static FolderConfiguration getConfigForFolder(@NotNull String folderName) {
         return getConfig(QUALIFIER_SPLITTER.split(folderName));
     }
 
@@ -433,8 +433,8 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * Creates a copy of the given {@link FolderConfiguration}, that can be modified without
      * affecting the original.
      */
-    @NonNull
-    public static FolderConfiguration copyOf(@NonNull FolderConfiguration original) {
+    @NotNull
+    public static FolderConfiguration copyOf(@NotNull FolderConfiguration original) {
         return new FolderConfiguration(original.mQualifiers);
     }
 
@@ -446,7 +446,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * @return a FolderConfiguration object, or null if the qualifier string isn't valid
      */
     @Nullable
-    public static FolderConfiguration getConfigForQualifierString(@NonNull String qualifierString) {
+    public static FolderConfiguration getConfigForQualifierString(@NotNull String qualifierString) {
         if (qualifierString.isEmpty()) {
             return new FolderConfiguration();
         } else {
@@ -505,7 +505,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * Removes the qualifiers from the receiver if they are present (and valid)
      * in the given configuration.
      */
-    public void substract(@NonNull FolderConfiguration config) {
+    public void substract(@NotNull FolderConfiguration config) {
         for (int i = 0; i < INDEX_COUNT; i++) {
             if (ResourceQualifier.isValid(config.mQualifiers[i])) {
                 mQualifiers[i] = NULL_QUALIFIERS[i];
@@ -518,7 +518,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * Adds the non-qualifiers from the given config.
      * Qualifiers that are null in the given config do not change in the receiver.
      */
-    public void add(@NonNull FolderConfiguration config) {
+    public void add(@NotNull FolderConfiguration config) {
         for (int i = 0; i < INDEX_COUNT; i++) {
             if (config.mQualifiers[i] != NULL_QUALIFIERS[i]) {
                 mQualifiers[i] = config.mQualifiers[i];
@@ -602,7 +602,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * Removes a given qualifier from the {@link FolderConfiguration}.
      * @param qualifier the {@link ResourceQualifier} to remove.
      */
-    public void removeQualifier(@NonNull ResourceQualifier qualifier) {
+    public void removeQualifier(@NotNull ResourceQualifier qualifier) {
         for (int i = 0; i < INDEX_COUNT; i++) {
             if (mQualifiers[i] == qualifier) {
                 mQualifiers[i] = NULL_QUALIFIERS[i];
@@ -624,7 +624,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
     }
 
     /** Performs the given action on each non-default qualifier */
-    public void forEach(@NonNull Consumer<? super ResourceQualifier> action) {
+    public void forEach(@NotNull Consumer<? super ResourceQualifier> action) {
         for (int i = 0; i < INDEX_COUNT; i++) {
             ResourceQualifier qualifier = mQualifiers[i];
             if (qualifier != null && qualifier != NULL_QUALIFIERS[i]) {
@@ -1054,8 +1054,8 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
     /**
      * Returns the name of a folder with the configuration.
      */
-    @NonNull
-    public String getFolderName(@NonNull ResourceFolderType folder) {
+    @NotNull
+    public String getFolderName(@NotNull ResourceFolderType folder) {
         StringBuilder result = new StringBuilder(folder.getName());
 
         for (int i = 0; i < mQualifiers.length; i++) {
@@ -1077,7 +1077,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * for the folder values-en-rUS this returns "en-rUS". For the
      * default configuration it returns "".
      */
-    @NonNull
+    @NotNull
     public String getQualifierString() {
         if (mQualifierString == null) {
             StringBuilder result = null;
@@ -1105,7 +1105,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * Returns {@link #toDisplayString()}.
      */
     @Override
-    @NonNull
+    @NotNull
     public String toString() {
         return toDisplayString();
     }
@@ -1113,7 +1113,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
     /**
      * Returns a string valid for display purpose.
      */
-    @NonNull
+    @NotNull
     public String toDisplayString() {
         if (isDefault()) {
             return "default";
@@ -1141,7 +1141,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
     /**
      * Returns a string for display purposes which uses only the short names of the qualifiers
      */
-    @NonNull
+    @NotNull
     public String toShortDisplayString() {
         if (isDefault()) {
             return "default";
@@ -1164,7 +1164,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
     }
 
     @Override
-    public int compareTo(@NonNull FolderConfiguration folderConfig) {
+    public int compareTo(@NotNull FolderConfiguration folderConfig) {
         // Default are always at the top.
         if (isDefault()) {
             if (folderConfig.isDefault()) {
@@ -1213,7 +1213,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * @param configurables the list of {@code Configurable} to choose from.
      * @return a list of items from the above list. This may be empty.
      */
-    @NonNull
+    @NotNull
     public <T extends Configurable> List<T> findMatchingConfigurables(
             @Nullable Collection<T> configurables) {
         if (configurables == null) {
@@ -1396,7 +1396,7 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
     /**
      * Returns an array of all the non null qualifiers.
      */
-    @NonNull
+    @NotNull
     public ResourceQualifier[] getQualifiers() {
         int count = 0;
         for (int i = 0; i < INDEX_COUNT; i++) {
@@ -1420,8 +1420,8 @@ public final class FolderConfiguration implements Comparable<FolderConfiguration
      * Returns qualifier of a folder name, e.g. "zh-rHK-watch" for "values-zh-rHK-watch" or an empty
      * string for "drawable".
      */
-    @NonNull
-    public static String getQualifier(@NonNull String folderName) {
+    @NotNull
+    public static String getQualifier(@NotNull String folderName) {
         int dashPos = folderName.indexOf('-');
         return dashPos < 0 ? "" : folderName.substring(dashPos + 1);
     }

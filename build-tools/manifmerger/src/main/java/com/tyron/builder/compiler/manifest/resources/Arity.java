@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.resources;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Represents Android quantities.
@@ -19,20 +19,20 @@ public enum Arity {
 
     public static final Arity[] EMPTY_ARRAY = {};
 
-    @NonNull
+    @NotNull
     private final String name;
 
-    Arity(@NonNull String name) {
+    Arity(@NotNull String name) {
         this.name = name;
     }
 
-    @NonNull
+    @NotNull
     public String getName() {
         return name;
     }
 
     @Nullable
-    public static Arity getEnum(@NonNull String name) {
+    public static Arity getEnum(@NotNull String name) {
         for (Arity value : values()) {
             if (value.name.equals(name)) {
                 return value;

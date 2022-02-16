@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler.manifest.blame;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import com.google.common.base.Objects;
 import java.io.File;
@@ -14,40 +14,40 @@ public final class SourceFilePosition implements Serializable {
     public static final SourceFilePosition UNKNOWN =
             new SourceFilePosition(SourceFile.UNKNOWN, SourcePosition.UNKNOWN);
 
-    @NonNull
+    @NotNull
     private final SourceFile mSourceFile;
 
-    @NonNull
+    @NotNull
     private final SourcePosition mSourcePosition;
 
-    public SourceFilePosition(@NonNull SourceFile sourceFile,
-                              @NonNull SourcePosition sourcePosition) {
+    public SourceFilePosition(@NotNull SourceFile sourceFile,
+                              @NotNull SourcePosition sourcePosition) {
         mSourceFile = sourceFile;
         mSourcePosition = sourcePosition;
     }
 
-    public SourceFilePosition(@NonNull File file,
-                              @NonNull SourcePosition sourcePosition) {
+    public SourceFilePosition(@NotNull File file,
+                              @NotNull SourcePosition sourcePosition) {
         this(new SourceFile(file), sourcePosition);
     }
 
-    @NonNull
+    @NotNull
     public SourcePosition getPosition() {
         return mSourcePosition;
     }
 
-    @NonNull
+    @NotNull
     public SourceFile getFile() {
         return mSourceFile;
     }
 
-    @NonNull
+    @NotNull
     @Override
     public String toString() {
         return print(false);
     }
 
-    @NonNull
+    @NotNull
     public String print(boolean shortFormat) {
         if (mSourcePosition.equals(SourcePosition.UNKNOWN)) {
             return mSourceFile.print(shortFormat);

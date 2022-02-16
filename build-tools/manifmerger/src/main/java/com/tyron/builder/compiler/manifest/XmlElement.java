@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Optional;
@@ -43,7 +43,7 @@ import java.util.Map;
  */
 public class XmlElement extends OrphanXmlElement {
 
-    @NonNull private final XmlDocument mDocument;
+    @NotNull private final XmlDocument mDocument;
 
     private final NodeOperationType mNodeOperationType;
     // list of non tools related attributes.
@@ -55,10 +55,10 @@ public class XmlElement extends OrphanXmlElement {
     // optional selector declared on this xml element.
     @Nullable private final Selector mSelector;
     // optional list of libraries that we should ignore the minSdk version
-    @NonNull private final List<Selector> mOverrideUsesSdkLibrarySelectors;
+    @NotNull private final List<Selector> mOverrideUsesSdkLibrarySelectors;
 
 
-    public XmlElement(@NonNull Element xml, @NonNull XmlDocument document) {
+    public XmlElement(@NotNull Element xml, @NotNull XmlDocument document) {
         super(xml);
 
         mDocument = Preconditions.checkNotNull(document);
@@ -146,7 +146,7 @@ public class XmlElement extends OrphanXmlElement {
     /**
      * Returns the owning {@link XmlDocument}
      */
-    @NonNull
+    @NotNull
     public XmlDocument getDocument() {
         return mDocument;
     }
@@ -198,19 +198,19 @@ public class XmlElement extends OrphanXmlElement {
         return mAttributesOperationTypes.entrySet();
     }
 
-    @NonNull
+    @NotNull
     public List<Selector> getOverrideUsesSdkLibrarySelectors() {
         return mOverrideUsesSdkLibrarySelectors;
     }
 
 
-    @NonNull
+    @NotNull
     @Override
     public SourcePosition getPosition() {
         return mDocument.getNodePosition(this);
     }
 
-    @NonNull
+    @NotNull
     @Override
     public SourceFile getSourceFile() {
         return mDocument.getSourceFile();
@@ -591,8 +591,8 @@ public class XmlElement extends OrphanXmlElement {
      * lower priority nodes merging.
      */
     private static NodeOperationType calculateNodeOperationType(
-            @NonNull XmlElement higherPriority,
-            @NonNull XmlElement lowerPriority) {
+            @NotNull XmlElement higherPriority,
+            @NotNull XmlElement lowerPriority) {
 
         NodeOperationType operationType = higherPriority.getOperationType();
         // if the operation's selector exists and the lower priority node is not selected,

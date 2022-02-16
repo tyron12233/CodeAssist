@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import com.google.common.base.Function;
 import com.google.common.base.Objects;
@@ -48,13 +48,13 @@ public abstract class XmlNode {
     /**
      * Returns the element's position
      */
-    @NonNull
+    @NotNull
     public abstract SourcePosition getPosition();
 
     /**
      * Returns the element's document xml source file location.
      */
-    @NonNull
+    @NotNull
     public abstract SourceFile getSourceFile();
 
     /**
@@ -67,7 +67,7 @@ public abstract class XmlNode {
     /**
      * Returns the element's xml
      */
-    @NonNull
+    @NotNull
     public abstract Node getXml();
 
     /**
@@ -141,7 +141,7 @@ public abstract class XmlNode {
     public static final class Name implements NodeName {
         private final String mName;
 
-        private Name(@NonNull String name) {
+        private Name(@NotNull String name) {
             this.mName = Preconditions.checkNotNull(name);
         }
 
@@ -188,15 +188,15 @@ public abstract class XmlNode {
         private final String mPrefix;
         private final String mLocalName;
 
-        private NamespaceAwareName(@NonNull Node node) {
+        private NamespaceAwareName(@NotNull Node node) {
             this.mNamespaceURI = Preconditions.checkNotNull(node.getNamespaceURI());
             this.mPrefix = Preconditions.checkNotNull(node.getPrefix());
             this.mLocalName = Preconditions.checkNotNull(node.getLocalName());
         }
 
-        private NamespaceAwareName(@NonNull String namespaceURI,
-                                   @NonNull String prefix,
-                                   @NonNull String localName) {
+        private NamespaceAwareName(@NotNull String namespaceURI,
+                                   @NotNull String prefix,
+                                   @NotNull String localName) {
             mNamespaceURI = Preconditions.checkNotNull(namespaceURI);
             mPrefix = Preconditions.checkNotNull(prefix);
             mLocalName = Preconditions.checkNotNull(localName);
@@ -242,10 +242,10 @@ public abstract class XmlNode {
     @Immutable
     public static class NodeKey {
 
-        @NonNull
+        @NotNull
         private final String mKey;
 
-        NodeKey(@NonNull String key) {
+        NodeKey(@NotNull String key) {
             mKey = key;
         }
 

@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler.manifest.blame;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import com.google.common.base.Objects;
 import java.io.Serializable;
@@ -15,7 +15,7 @@ import com.google.errorprone.annotations.Immutable;
 @Immutable
 public final class SourcePosition implements Serializable {
 
-    @NonNull
+    @NotNull
     public static final SourcePosition UNKNOWN = new SourcePosition();
 
     private final int mStartLine, mStartColumn, mStartOffset, mEndLine, mEndColumn, mEndOffset;
@@ -197,7 +197,7 @@ public final class SourcePosition implements Serializable {
      * Compares the start of this SourcePosition with another.
      * @return 0 if they are the same, &lt; 0 if this &lt; other and &gt; 0 if this &gt; other
      */
-    public int compareStart(@NonNull SourcePosition other) {
+    public int compareStart(@NotNull SourcePosition other) {
         if (mStartOffset != -1 && other.mStartOffset != -1) {
             return mStartOffset - other.mStartOffset;
         }
@@ -211,7 +211,7 @@ public final class SourcePosition implements Serializable {
      * Compares the end of this SourcePosition with another.
      * @return 0 if they are the same, &lt; 0 if this &lt; other and &gt; 0 if this &gt; other
      */
-    public int compareEnd(@NonNull SourcePosition other) {
+    public int compareEnd(@NotNull SourcePosition other) {
         if (mEndOffset != -1 && other.mEndOffset != -1) {
             return mEndOffset - other.mEndOffset;
         }

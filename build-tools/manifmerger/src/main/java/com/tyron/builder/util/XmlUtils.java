@@ -1,10 +1,5 @@
 package com.tyron.builder.util;
 
-import android.util.Log;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
 import com.google.common.base.CharMatcher;
 import com.google.common.base.Charsets;
 import com.google.common.collect.Sets;
@@ -14,6 +9,8 @@ import com.tyron.builder.compiler.manifest.blame.SourceFile;
 import com.tyron.builder.compiler.manifest.blame.SourceFilePosition;
 import com.tyron.builder.compiler.manifest.blame.SourcePosition;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.openjdk.javax.xml.parsers.DocumentBuilder;
 import org.openjdk.javax.xml.parsers.DocumentBuilderFactory;
 import org.openjdk.javax.xml.parsers.ParserConfigurationException;
@@ -104,8 +101,8 @@ public class XmlUtils {
      * @return The first prefix declared or the default "android" prefix
      *              (or "app" for non-Android URIs)
      */
-    @NonNull
-    public static String lookupNamespacePrefix(@NonNull Node node, @NonNull String nsUri) {
+    @NotNull
+    public static String lookupNamespacePrefix(@NotNull Node node, @NotNull String nsUri) {
         String defaultPrefix = SdkConstants.ANDROID_URI.equals(nsUri) ? SdkConstants.ANDROID_NS_NAME : SdkConstants.APP_PREFIX;
         return lookupNamespacePrefix(node, nsUri, defaultPrefix, true /*create*/);
     }
@@ -123,8 +120,8 @@ public class XmlUtils {
      * @return The first prefix declared or the default "android" prefix (or
      *         "app" for non-Android URIs)
      */
-    @NonNull
-    public static String lookupNamespacePrefix(@NonNull Node node, @NonNull String nsUri,
+    @NotNull
+    public static String lookupNamespacePrefix(@NotNull Node node, @NotNull String nsUri,
                                                boolean create) {
         String defaultPrefix = SdkConstants.ANDROID_URI.equals(nsUri) ? SdkConstants.ANDROID_NS_NAME : SdkConstants.APP_PREFIX;
         return lookupNamespacePrefix(node, nsUri, defaultPrefix, create);
@@ -256,8 +253,8 @@ public class XmlUtils {
      * @param attrValue the value to be escaped
      * @return the escaped value
      */
-    @NonNull
-    public static String toXmlAttributeValue(@NonNull String attrValue) {
+    @NotNull
+    public static String toXmlAttributeValue(@NotNull String attrValue) {
         for (int i = 0, n = attrValue.length(); i < n; i++) {
             char c = attrValue.charAt(i);
             if (c == '"' || c == '\'' || c == '<' || c == '>' || c == '&' || c == '\n') {
@@ -276,8 +273,8 @@ public class XmlUtils {
      * @param escapedAttrValue the escaped value
      * @return the unescaped value
      */
-    @NonNull
-    public static String fromXmlAttributeValue(@NonNull String escapedAttrValue) {
+    @NotNull
+    public static String fromXmlAttributeValue(@NotNull String escapedAttrValue) {
         // See https://www.w3.org/TR/2000/WD-xml-c14n-20000119.html#charescaping
         if (escapedAttrValue.indexOf('&') == -1) {
             return escapedAttrValue;
@@ -299,8 +296,8 @@ public class XmlUtils {
      * @param textValue the text value to be escaped
      * @return the escaped value
      */
-    @NonNull
-    public static String toXmlTextValue(@NonNull String textValue) {
+    @NotNull
+    public static String toXmlTextValue(@NotNull String textValue) {
         for (int i = 0, n = textValue.length(); i < n; i++) {
             char c = textValue.charAt(i);
             if (c == '<' || c == '&') {
@@ -320,8 +317,8 @@ public class XmlUtils {
      * @param sb the string builder
      * @param attrValue the attribute value to be appended and escaped
      */
-    public static void appendXmlAttributeValue(@NonNull StringBuilder sb,
-                                               @NonNull String attrValue) {
+    public static void appendXmlAttributeValue(@NotNull StringBuilder sb,
+                                               @NotNull String attrValue) {
         appendXmlAttributeValue(sb, attrValue, 0, attrValue.length());
     }
 
@@ -335,7 +332,7 @@ public class XmlUtils {
      * @param end the ending offset in the text string
      */
     public static void appendXmlAttributeValue(
-            @NonNull StringBuilder sb, @NonNull String attrValue, int start, int end) {
+            @NotNull StringBuilder sb, @NotNull String attrValue, int start, int end) {
         // See https://www.w3.org/TR/2000/WD-xml-c14n-20000119.html#charescaping
         // &, ", ' and < are illegal in attributes; see http://www.w3.org/TR/REC-xml/#NT-AttValue
         // (' legal in a " string and " is legal in a ' string but here we'll stay on the safe
@@ -371,7 +368,7 @@ public class XmlUtils {
      * @param sb the string builder
      * @param textValue the text value to be appended and escaped
      */
-    public static void appendXmlTextValue(@NonNull StringBuilder sb, @NonNull String textValue) {
+    public static void appendXmlTextValue(@NotNull StringBuilder sb, @NotNull String textValue) {
         appendXmlTextValue(sb, textValue, 0, textValue.length());
     }
 
@@ -385,7 +382,7 @@ public class XmlUtils {
      * @param end the ending offset in the text string
      */
     public static void appendXmlTextValue(
-            @NonNull StringBuilder sb, @NonNull String textValue, int start, int end) {
+            @NotNull StringBuilder sb, @NotNull String textValue, int start, int end) {
         for (int i = start, n = Math.min(textValue.length(), end); i < n; i++) {
             char c = textValue.charAt(i);
             if (c == '<') {
@@ -404,7 +401,7 @@ public class XmlUtils {
      * @param node the node to test for element children
      * @return true if the node has one or more element children
      */
-    public static boolean hasElementChildren(@NonNull Node node) {
+    public static boolean hasElementChildren(@NotNull Node node) {
         NodeList children = node.getChildNodes();
         for (int i = 0, n = children.getLength(); i < n; i++) {
             if (children.item(i).getNodeType() == Node.ELEMENT_NODE) {
@@ -422,8 +419,8 @@ public class XmlUtils {
      * full in one shot and the resulting array is then wrapped in a byte array input stream,
      * which does not need to be closed.)
      */
-    @NonNull
-    public static Reader getUtfReader(@NonNull File file) throws IOException {
+    @NotNull
+    public static Reader getUtfReader(@NotNull File file) throws IOException {
         byte[] bytes = Files.toByteArray(file);
         int length = bytes.length;
         if (length == 0) {
@@ -493,8 +490,8 @@ public class XmlUtils {
      * @param namespaceAware whether the parser is namespace aware
      * @return the DOM document
      */
-    @NonNull
-    public static Document parseDocument(@NonNull String xml, boolean namespaceAware)
+    @NotNull
+    public static Document parseDocument(@NotNull String xml, boolean namespaceAware)
             throws IOException, SAXException {
         xml = stripBom(xml);
         return parseDocument(new StringReader(xml), namespaceAware);
@@ -508,8 +505,8 @@ public class XmlUtils {
      * @param namespaceAware whether the parser is namespace aware
      * @return the DOM document
      */
-    @NonNull
-    public static Document parseDocument(@NonNull Reader xml, boolean namespaceAware)
+    @NotNull
+    public static Document parseDocument(@NotNull Reader xml, boolean namespaceAware)
             throws IOException, SAXException {
         InputSource is = new InputSource(xml);
         return createDocumentBuilder(namespaceAware).parse(is);
@@ -523,8 +520,8 @@ public class XmlUtils {
      * @param namespaceAware whether the parser is namespace aware
      * @return the DOM document
      */
-    @NonNull
-    public static Document parseUtfXmlFile(@NonNull File file, boolean namespaceAware)
+    @NotNull
+    public static Document parseUtfXmlFile(@NotNull File file, boolean namespaceAware)
             throws IOException, SAXException {
         try (Reader reader = getUtfReader(file)) {
             return parseDocument(reader, namespaceAware);
@@ -532,13 +529,13 @@ public class XmlUtils {
     }
 
     /** Creates and returns a new empty document. */
-    @NonNull
+    @NotNull
     public static Document createDocument(boolean namespaceAware) {
         return createDocumentBuilder(namespaceAware).newDocument();
     }
 
     /** Creates a preconfigured document builder. */
-    @NonNull
+    @NotNull
     private static DocumentBuilder createDocumentBuilder(boolean namespaceAware) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -554,8 +551,8 @@ public class XmlUtils {
     }
 
     /** Strips out a leading UTF byte order mark, if present */
-    @NonNull
-    public static String stripBom(@NonNull String xml) {
+    @NotNull
+    public static String stripBom(@NotNull String xml) {
         if (!xml.isEmpty() && xml.charAt(0) == '\uFEFF') {
             return xml.substring(1);
         }
@@ -571,11 +568,10 @@ public class XmlUtils {
      * @return the DOM document, or null
      */
     @Nullable
-    public static Document parseDocumentSilently(@NonNull String xml, boolean namespaceAware) {
+    public static Document parseDocumentSilently(@NotNull String xml, boolean namespaceAware) {
         try {
             return parseDocument(xml, namespaceAware);
         } catch (Exception e) {
-            Log.d("XmlUtils", "Unable to parse document", e);
             // pass
             // This method is deliberately silent; will return null
         }
@@ -583,7 +579,7 @@ public class XmlUtils {
         return null;
     }
 
-    public static SAXParserFactory configureSaxFactory(@NonNull SAXParserFactory factory,
+    public static SAXParserFactory configureSaxFactory(@NotNull SAXParserFactory factory,
                                                        boolean namespaceAware, boolean checkDtd) {
         try {
             factory.setXIncludeAware(false);
@@ -603,15 +599,15 @@ public class XmlUtils {
         return configureSaxFactory(factory, namespaceAware, checkDtd);
     }
 
-    @NonNull
-    public static SAXParser createSaxParser(@NonNull SAXParserFactory factory)
+    @NotNull
+    public static SAXParser createSaxParser(@NotNull SAXParserFactory factory)
             throws ParserConfigurationException, SAXException {
         return createSaxParser(factory, false);
     }
 
-    @NonNull
+    @NotNull
     public static SAXParser createSaxParser(
-            @NonNull SAXParserFactory factory,
+            @NotNull SAXParserFactory factory,
             boolean allowDocTypeDeclarations) throws ParserConfigurationException, SAXException {
         SAXParser parser = factory.newSAXParser();
         XMLReader reader = parser.getXMLReader();
@@ -634,12 +630,12 @@ public class XmlUtils {
      * To perform pretty printing, use {@code XmlPrettyPrinter.prettyPrint(node)} in
      * {@code sdk-common}.
      */
-    public static String toXml(@NonNull Node node) {
+    public static String toXml(@NotNull Node node) {
         return toXml(node, null);
     }
 
     public static String toXml(
-            @NonNull Node node,
+            @NotNull Node node,
             @Nullable Map<SourcePosition, SourceFilePosition> blame) {
         PositionAwareStringBuilder sb = new PositionAwareStringBuilder(1000);
         Set<Node> nodesInPath = Sets.newHashSet();
@@ -649,10 +645,10 @@ public class XmlUtils {
 
     /** Dump node to string without indentation adjustments */
     private static void append(
-            @NonNull PositionAwareStringBuilder sb,
-            @NonNull Node node,
+            @NotNull PositionAwareStringBuilder sb,
+            @NotNull Node node,
             @Nullable Map<SourcePosition, SourceFilePosition> blame,
-            @NonNull Set<Node> nodesInPath) {
+            @NotNull Set<Node> nodesInPath) {
         if (!nodesInPath.add(node)) {
             throw new RuntimeException("Circular dependency in XML " + sb.toString());
         }
@@ -804,12 +800,12 @@ public class XmlUtils {
         }
     }
 
-    public static void attachSourceFile(@NonNull Node node, @NonNull SourceFile sourceFile) {
+    public static void attachSourceFile(@NotNull Node node, @NotNull SourceFile sourceFile) {
         node.setUserData(SOURCE_FILE_USER_DATA_KEY, sourceFile, null);
     }
 
-    @NonNull
-    public static SourceFilePosition getSourceFilePosition(@NonNull Node node) {
+    @NotNull
+    public static SourceFilePosition getSourceFilePosition(@NotNull Node node) {
         SourceFile sourceFile = (SourceFile) node.getUserData(SOURCE_FILE_USER_DATA_KEY);
         if (sourceFile == null) {
             sourceFile = SourceFile.UNKNOWN;
@@ -824,7 +820,7 @@ public class XmlUtils {
      * @param value the value to be formatted
      * @return the corresponding XML string for the value
      */
-    @NonNull
+    @NotNull
     public static String formatFloatValue(double value) {
         if (!Double.isFinite(value)) {
             throw new IllegalArgumentException("Invalid number: " + value);
@@ -841,7 +837,7 @@ public class XmlUtils {
      * determined.
      */
     @Nullable
-    public static String getRootTagName(@NonNull File xmlFile) {
+    public static String getRootTagName(@NotNull File xmlFile) {
         try (InputStream stream = new BufferedInputStream(new FileInputStream(xmlFile))) {
             XMLInputFactory factory = XMLInputFactory.newFactory();
             XMLStreamReader xmlStreamReader = factory.createXMLStreamReader(stream);
@@ -864,7 +860,7 @@ public class XmlUtils {
      * determined.
      */
     @Nullable
-    public static String getRootTagName(@NonNull String xmlText) {
+    public static String getRootTagName(@NotNull String xmlText) {
         XMLInputFactory factory = XMLInputFactory.newFactory();
         try (Reader reader = new StringReader(xmlText)) {
             XMLStreamReader xmlStreamReader = factory.createXMLStreamReader(reader);
@@ -887,8 +883,8 @@ public class XmlUtils {
      * @param parent the parent node
      * @return a list of element children, never null
      */
-    @NonNull
-    public static List<Element> getSubTagsAsList(@NonNull Node parent) {
+    @NotNull
+    public static List<Element> getSubTagsAsList(@NotNull Node parent) {
         NodeList childNodes = parent.getChildNodes();
         List<Element> children = new ArrayList<>(childNodes.getLength());
         for (int i = 0, n = childNodes.getLength(); i < n; i++) {
@@ -908,7 +904,7 @@ public class XmlUtils {
      * <p>
      * <b>NOTE: The iterator() call can only be called once!</b>
      */
-    @NonNull
+    @NotNull
     public static Iterable<Element> getSubTags(@Nullable Node parent) {
         return new SubTagIterator(parent);
     }
@@ -922,8 +918,8 @@ public class XmlUtils {
      * <p>
      * <b>NOTE: The iterator() call can only be called once!</b>
      */
-    @NonNull
-    public static Iterable<Element> getSubTagsByName(@Nullable Node parent, @NonNull String tagName) {
+    @NotNull
+    public static Iterable<Element> getSubTagsByName(@Nullable Node parent, @NotNull String tagName) {
         return new NamedSubTagIterator(parent, tagName);
     }
 
@@ -947,7 +943,7 @@ public class XmlUtils {
             return ret;
         }
 
-        @NonNull
+        @NotNull
         @Override
         public Iterator<Element> iterator() {
             assert !used;
@@ -961,7 +957,7 @@ public class XmlUtils {
         private Element next;
         private boolean used;
 
-        public NamedSubTagIterator(@Nullable Node parent, @NonNull String name) {
+        public NamedSubTagIterator(@Nullable Node parent, @NotNull String name) {
             this.name = name;
             this.next = getFirstSubTagByName(parent, name);
         }
@@ -978,7 +974,7 @@ public class XmlUtils {
             return ret;
         }
 
-        @NonNull
+        @NotNull
         @Override
         public Iterator<Element> iterator() {
             assert !used;
@@ -1043,7 +1039,7 @@ public class XmlUtils {
 
     /** Returns the next sibling element from the given node that matches the given name */
     @Nullable
-    public static Element getFirstSubTagByName(@Nullable Node parent, @NonNull String name) {
+    public static Element getFirstSubTagByName(@Nullable Node parent, @NotNull String name) {
         if (parent == null) {
             return null;
         }
@@ -1067,7 +1063,7 @@ public class XmlUtils {
 
     /** Returns the next sibling element from the given node */
     @Nullable
-    public static Element getNextTagByName(@Nullable Node node, @NonNull String name) {
+    public static Element getNextTagByName(@Nullable Node node, @NotNull String name) {
         if (node == null) {
             return null;
         }
@@ -1090,7 +1086,7 @@ public class XmlUtils {
     }
 
     @Nullable
-    public static Element getPreviousTagByName(@Nullable Node node, @NonNull String name) {
+    public static Element getPreviousTagByName(@Nullable Node node, @NotNull String name) {
         if (node == null) {
             return null;
         }
@@ -1117,7 +1113,7 @@ public class XmlUtils {
      * if the element is not preceded by a comment.
      */
     @Nullable
-    public static Comment getPreviousComment(@NonNull Node element) {
+    public static Comment getPreviousComment(@NotNull Node element) {
         Node node = element;
         do {
             node = node.getPreviousSibling();
@@ -1135,7 +1131,7 @@ public class XmlUtils {
      * or consists of only whitespace characters.
      */
     @Nullable
-    public static String getPreviousCommentText(@NonNull Node element) {
+    public static String getPreviousCommentText(@NotNull Node element) {
         Comment comment = getPreviousComment(element);
         if (comment != null) {
             String text = comment.getNodeValue();
@@ -1174,7 +1170,7 @@ public class XmlUtils {
      * @param bytes the candidate XML contents to check
      * @return true if the bytes are likely to represent proto XML
      */
-    public static boolean isProtoXml(@NonNull byte[] bytes) {
+    public static boolean isProtoXml(@NotNull byte[] bytes) {
         for (int i = 0; i < bytes.length; i++) {
             byte c = bytes[i];
             if (i == 0 && c != PROTO_XML_LEAD_BYTE) {
@@ -1192,7 +1188,7 @@ public class XmlUtils {
      * @param stream the candidate XML stream to check
      * @return true if the stream is likely to represent proto XML
      */
-    public static boolean isProtoXml(@NonNull InputStream stream) {
+    public static boolean isProtoXml(@NotNull InputStream stream) {
         boolean isProto = false;
         int readLimit = 100;
         if (stream.markSupported()) {

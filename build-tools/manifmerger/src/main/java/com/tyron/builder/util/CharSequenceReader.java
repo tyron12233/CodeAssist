@@ -1,6 +1,6 @@
 package com.tyron.builder.util;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -18,7 +18,7 @@ public final class CharSequenceReader extends Reader {
     private int pos;
     private int mark;
 
-    public CharSequenceReader(@NonNull CharSequence seq) {
+    public CharSequenceReader(@NotNull CharSequence seq) {
         this.seq = seq;
     }
 
@@ -31,7 +31,7 @@ public final class CharSequenceReader extends Reader {
     }
 
     @Override
-    public int read(@NonNull CharBuffer target) {
+    public int read(@NotNull CharBuffer target) {
         if (!hasRemaining()) {
             return -1;
         }
@@ -48,7 +48,7 @@ public final class CharSequenceReader extends Reader {
     }
 
     @Override
-    public int read(@NonNull char[] cbuf, int off, int len) {
+    public int read(@NotNull char[] cbuf, int off, int len) {
         if (!hasRemaining()) {
             return -1;
         }

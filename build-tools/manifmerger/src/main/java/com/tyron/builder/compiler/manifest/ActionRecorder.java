@@ -2,9 +2,9 @@ package com.tyron.builder.compiler.manifest;
 
 import static com.tyron.builder.compiler.manifest.XmlNode.NodeKey;
 
-import androidx.annotation.GuardedBy;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.blame.SourceFilePosition;
 import com.tyron.builder.compiler.manifest.blame.SourcePosition;
@@ -181,8 +181,8 @@ public class ActionRecorder {
      *                               decision.
      */
     synchronized void recordAttributeAction(
-            @NonNull XmlAttribute attribute,
-            @NonNull Actions.ActionType actionType,
+            @NotNull XmlAttribute attribute,
+            @NotNull Actions.ActionType actionType,
             @Nullable AttributeOperationType attributeOperationType) {
 
         recordAttributeAction(
@@ -199,9 +199,9 @@ public class ActionRecorder {
      *                               decision.
      */
     synchronized void recordAttributeAction(
-            @NonNull XmlAttribute attribute,
-            @NonNull SourcePosition attributePosition,
-            @NonNull Actions.ActionType actionType,
+            @NotNull XmlAttribute attribute,
+            @NotNull SourcePosition attributePosition,
+            @NotNull Actions.ActionType actionType,
             @Nullable AttributeOperationType attributeOperationType) {
 
         XmlElement originElement = attribute.getOwnerElement();
@@ -239,8 +239,8 @@ public class ActionRecorder {
      * @param implicitAttributeOwner the element owning the implicit default value.
      */
     synchronized void recordImplicitRejection(
-            @NonNull XmlAttribute attribute,
-            @NonNull XmlElement implicitAttributeOwner) {
+            @NotNull XmlAttribute attribute,
+            @NotNull XmlElement implicitAttributeOwner) {
 
         List<Actions.AttributeRecord> attributeRecords = getAttributeRecords(attribute);
         Actions.AttributeRecord attributeRecord = new Actions.AttributeRecord(

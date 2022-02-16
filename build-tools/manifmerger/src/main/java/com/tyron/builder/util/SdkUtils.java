@@ -1,7 +1,7 @@
 package com.tyron.builder.util;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import com.google.common.base.CaseFormat;
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
@@ -31,7 +31,7 @@ public class SdkUtils {
      * @param suffix the suffix to be checked for
      * @return true if the string case-insensitively ends with the given suffix
      */
-    public static boolean endsWithIgnoreCase(@NonNull String string, @NonNull String suffix) {
+    public static boolean endsWithIgnoreCase(@NotNull String string, @NotNull String suffix) {
         return string.regionMatches(true /* ignoreCase */, string.length() - suffix.length(),
                 suffix, 0, suffix.length());
     }
@@ -44,7 +44,7 @@ public class SdkUtils {
      * @param suffix the suffix to look for
      * @return true if the given sequence ends with the given suffix
      */
-    public static boolean endsWith(@NonNull CharSequence sequence, @NonNull CharSequence suffix) {
+    public static boolean endsWith(@NotNull CharSequence sequence, @NotNull CharSequence suffix) {
         return endsWith(sequence, sequence.length(), suffix);
     }
 
@@ -57,8 +57,8 @@ public class SdkUtils {
      * @param suffix the suffix to look for
      * @return true if the given sequence ends with the given suffix
      */
-    public static boolean endsWith(@NonNull CharSequence sequence, int endOffset,
-                                   @NonNull CharSequence suffix) {
+    public static boolean endsWith(@NotNull CharSequence sequence, int endOffset,
+                                   @NotNull CharSequence suffix) {
         if (endOffset < suffix.length()) {
             return false;
         }
@@ -80,7 +80,7 @@ public class SdkUtils {
      * @param prefix the prefix to be checked for
      * @return true if the string case-insensitively starts with the given prefix
      */
-    public static boolean startsWithIgnoreCase(@NonNull String string, @NonNull String prefix) {
+    public static boolean startsWithIgnoreCase(@NotNull String string, @NotNull String prefix) {
         return string.regionMatches(true /* ignoreCase */, 0, prefix, 0, prefix.length());
     }
 
@@ -94,7 +94,7 @@ public class SdkUtils {
      * @return true if the string case-insensitively starts at the given offset
      *         with the given prefix
      */
-    public static boolean startsWith(@NonNull String string, int offset, @NonNull String prefix) {
+    public static boolean startsWith(@NotNull String string, int offset, @NotNull String prefix) {
         return string.regionMatches(true /* ignoreCase */, offset, prefix, 0, prefix.length());
     }
 
@@ -104,7 +104,7 @@ public class SdkUtils {
      * @param string the string to be cleaned up
      * @return the string, without whitespace
      */
-    public static String stripWhitespace(@NonNull String string) {
+    public static String stripWhitespace(@NotNull String string) {
         StringBuilder sb = new StringBuilder(string.length());
         for (int i = 0, n = string.length(); i < n; i++) {
             char c = string.charAt(i);
@@ -122,7 +122,7 @@ public class SdkUtils {
      * @param s the string to check
      * @return true if it contains uppercase characters
      */
-    public static boolean hasUpperCaseCharacter(@NonNull String s) {
+    public static boolean hasUpperCaseCharacter(@NotNull String s) {
         for (int i = 0; i < s.length(); i++) {
             if (Character.isUpperCase(s.charAt(i))) {
                 return true;
@@ -145,7 +145,7 @@ public class SdkUtils {
      *
      * @return the delimiter string to use
      */
-    @NonNull
+    @NotNull
     public static String getLineSeparator() {
         if (sLineSeparator == null) {
             // This is guaranteed to exist:
@@ -165,9 +165,9 @@ public class SdkUtils {
      *            subsequent lines in each paragraph, or null if not known
      * @return the string, wrapped
      */
-    @NonNull
+    @NotNull
     public static String wrap(
-            @NonNull String text,
+            @NotNull String text,
             int lineWidth,
             @Nullable String hangingIndent) {
         if (hangingIndent == null) {
@@ -229,7 +229,7 @@ public class SdkUtils {
      * @return the integer value
      * @throws ParseException if the format is not correct
      */
-    public static int parseLocalizedInt(@NonNull String string) throws ParseException {
+    public static int parseLocalizedInt(@NotNull String string) throws ParseException {
         if (string.isEmpty()) {
             return 0;
         }
@@ -245,7 +245,7 @@ public class SdkUtils {
      * @param defaultValue the value to be returned if there is a parsing error
      * @return the integer value
      */
-    public static int parseLocalizedInt(@NonNull String string, int defaultValue) {
+    public static int parseLocalizedInt(@NotNull String string, int defaultValue) {
         try {
             return parseLocalizedInt(string);
         } catch (ParseException e) {
@@ -266,7 +266,7 @@ public class SdkUtils {
      * @return the double value
      * @throws ParseException if the format is not correct
      */
-    public static double parseLocalizedDouble(@NonNull String string) throws ParseException {
+    public static double parseLocalizedDouble(@NotNull String string) throws ParseException {
         if (string.isEmpty()) {
             return 0.0;
         }
@@ -282,7 +282,7 @@ public class SdkUtils {
      * @param defaultValue the value to be returned if there is a parsing error
      * @return the double value
      */
-    public static double parseLocalizedDouble(@NonNull String string, double defaultValue) {
+    public static double parseLocalizedDouble(@NotNull String string, double defaultValue) {
         try {
             return parseLocalizedDouble(string);
         } catch (ParseException e) {
@@ -297,13 +297,13 @@ public class SdkUtils {
      * @return the corresponding {@link File} (which may or may not exist)
      * @throws MalformedURLException if the URL string is malformed or is not a file: URL
      */
-    @NonNull
-    public static File urlToFile(@NonNull String url) throws MalformedURLException {
+    @NotNull
+    public static File urlToFile(@NotNull String url) throws MalformedURLException {
         return urlToFile(new URL(url));
     }
 
-    @NonNull
-    public static File urlToFile(@NonNull URL url) throws MalformedURLException {
+    @NotNull
+    public static File urlToFile(@NotNull URL url) throws MalformedURLException {
         try {
             return new File(url.toURI());
         }
@@ -324,7 +324,7 @@ public class SdkUtils {
      * @return the corresponding URL
      * @throws MalformedURLException in very unexpected cases
      */
-    public static String fileToUrlString(@NonNull File file) throws MalformedURLException {
+    public static String fileToUrlString(@NotNull File file) throws MalformedURLException {
         return fileToUrl(file).toExternalForm();
     }
 
@@ -335,7 +335,7 @@ public class SdkUtils {
      * @return the corresponding URL
      * @throws MalformedURLException in very unexpected cases
      */
-    public static URL fileToUrl(@NonNull File file) throws MalformedURLException {
+    public static URL fileToUrl(@NotNull File file) throws MalformedURLException {
         return file.toURI().toURL();
     }
 
@@ -355,7 +355,7 @@ public class SdkUtils {
      *                       already is in a context where the padding has been added.
      * @return the corresponding XML contents of the string
      */
-    public static String createPathComment(@NonNull File file, boolean includePadding)
+    public static String createPathComment(@NotNull File file, boolean includePadding)
             throws MalformedURLException {
         String url = fileToUrlString(file);
         int dashes = url.indexOf("--");
@@ -377,13 +377,13 @@ public class SdkUtils {
      * say layout or manifest files, which occur in the merged (copied) output, and present
      * it as an error pointing to one of the user's original source files.
      */
-    public static void copyXmlWithSourceReference(@NonNull File from, @NonNull File to)
+    public static void copyXmlWithSourceReference(@NotNull File from, @NotNull File to)
             throws IOException {
         copyXmlWithComment(from, to, createPathComment(from, true));
     }
 
     /** Copies a given XML file, and appends a given comment to the end */
-    private static void copyXmlWithComment(@NonNull File from, @NonNull File to,
+    private static void copyXmlWithComment(@NotNull File from, @NotNull File to,
                                            @Nullable String comment) throws IOException {
         assert endsWithIgnoreCase(from.getPath(), SdkConstants.DOT_XML) : from;
 
@@ -452,8 +452,8 @@ public class SdkUtils {
      * @param resourceName the name to convert
      * @return the corresponding R field name
      */
-    @NonNull
-    public static String getResourceFieldName(@NonNull String resourceName) {
+    @NotNull
+    public static String getResourceFieldName(@NotNull String resourceName) {
         // AAPT will flatten the namespace, turning dots, dashes and colons into _
         for (int i = 0, n = resourceName.length(); i < n; i++) {
             char c = resourceName.charAt(i);

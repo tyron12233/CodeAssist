@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.configuration;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.CharMatcher;
@@ -34,7 +34,7 @@ public final class LocaleQualifier extends ResourceQualifier {
      */
     private static final String CAR_DOCK_MODE = "car";
 
-    @NonNull private String mFull;
+    @NotNull private String mFull;
     @Nullable private String mLanguage;
     @Nullable private String mRegion;
     @Nullable private String mScript;
@@ -43,13 +43,13 @@ public final class LocaleQualifier extends ResourceQualifier {
         mFull = "";
     }
 
-    public LocaleQualifier(@NonNull String language) {
+    public LocaleQualifier(@NotNull String language) {
         assert language.length() == 2 || language.length() == 3;
         mLanguage = language;
         mFull = language;
     }
 
-    public LocaleQualifier(@Nullable String full, @NonNull String language,
+    public LocaleQualifier(@Nullable String full, @NotNull String language,
                            @Nullable String region, @Nullable String script) {
         if (full == null) {
             if (region != null && region.length() == 3 || script != null) {
@@ -76,7 +76,7 @@ public final class LocaleQualifier extends ResourceQualifier {
         mScript = script;
     }
 
-    public static boolean isRegionSegment(@NonNull String segment) {
+    public static boolean isRegionSegment(@NotNull String segment) {
         return (segment.startsWith("r") || segment.startsWith("R")) && segment.length() == 3
                 && Character.isLetter(segment.charAt(0)) && Character.isLetter(segment.charAt(1));
     }
@@ -86,7 +86,7 @@ public final class LocaleQualifier extends ResourceQualifier {
      * @param str the string to check
      * @return is it valid?
      */
-    private static boolean isValidAlpha2Code(@NonNull String str) {
+    private static boolean isValidAlpha2Code(@NotNull String str) {
         return str.length() == 2 && CharMatcher.javaLetter().matchesAllOf(str);
     }
 
@@ -95,7 +95,7 @@ public final class LocaleQualifier extends ResourceQualifier {
      * @param str the string to check
      * @return is it valid?
      */
-    private static boolean isValidAlpha3Code(@NonNull String str) {
+    private static boolean isValidAlpha3Code(@NotNull String str) {
         return str.length() == 3 && CharMatcher.javaLetter().matchesAllOf(str);
     }
 
@@ -104,7 +104,7 @@ public final class LocaleQualifier extends ResourceQualifier {
      * @param str the string to check
      * @return is it valid?
      */
-    private static boolean isValidM49Code(@NonNull String str) {
+    private static boolean isValidM49Code(@NotNull String str) {
         return str.length() == 3 && Character.isDigit(str.charAt(0))
                 && Character.isDigit(str.charAt(1))&& Character.isDigit(str.charAt(2));
     }
@@ -116,7 +116,7 @@ public final class LocaleQualifier extends ResourceQualifier {
      * @return a new {@link LocaleQualifier} object or <code>null</code>
      */
     @Nullable
-    public static LocaleQualifier getQualifier(@NonNull String segment) {
+    public static LocaleQualifier getQualifier(@NotNull String segment) {
         /*
          * Special case: "car" is a valid 3 letter language code (Carib language), but
          * it conflicts with the (much older) UI mode constant for
@@ -178,8 +178,8 @@ public final class LocaleQualifier extends ResourceQualifier {
     }
 
     /** Given a BCP-47 string, normalizes the case to the recommended casing */
-    @NonNull
-    public static String normalizeCase(@NonNull String segment) {
+    @NotNull
+    public static String normalizeCase(@NotNull String segment) {
         /* According to the BCP-47 spec:
            o  [ISO639-1] recommends that language codes be written in lowercase
               ('mn' Mongolian).
@@ -270,7 +270,7 @@ public final class LocaleQualifier extends ResourceQualifier {
      * should be compared case insensitively)
      */
     @VisibleForTesting
-    static boolean isNormalizedCase(@NonNull String segment) {
+    static boolean isNormalizedCase(@NotNull String segment) {
         if (segment.startsWith(BCP_47_PREFIX)) {
             assert segment.startsWith(BCP_47_PREFIX);
             int segmentBegin = BCP_47_PREFIX.length();
@@ -336,7 +336,7 @@ public final class LocaleQualifier extends ResourceQualifier {
         return true;
     }
 
-    private static boolean isNotLowerCase(@NonNull String segment, int start, int end) {
+    private static boolean isNotLowerCase(@NotNull String segment, int start, int end) {
         for (int i = start; i < end; i++) {
             if (Character.isUpperCase(segment.charAt(i))) {
                 return true;
@@ -346,7 +346,7 @@ public final class LocaleQualifier extends ResourceQualifier {
         return false;
     }
 
-    private static boolean isNotUpperCase(@NonNull String segment, int start, int end) {
+    private static boolean isNotUpperCase(@NotNull String segment, int start, int end) {
         for (int i = start; i < end; i++) {
             if (Character.isLowerCase(segment.charAt(i))) {
                 return true;
@@ -356,7 +356,7 @@ public final class LocaleQualifier extends ResourceQualifier {
         return false;
     }
 
-    @NonNull
+    @NotNull
     public String getValue() {
         return mFull;
     }
@@ -399,7 +399,7 @@ public final class LocaleQualifier extends ResourceQualifier {
     }
 
     @Override
-    public boolean checkAndSet(@NonNull String value, @NonNull FolderConfiguration config) {
+    public boolean checkAndSet(@NotNull String value, @NotNull FolderConfiguration config) {
         LocaleQualifier qualifier = getQualifier(value);
         if (qualifier != null) {
             config.setLocaleQualifier(qualifier);
@@ -413,7 +413,7 @@ public final class LocaleQualifier extends ResourceQualifier {
      * Used only when constructing the qualifier, don't use after it's been assigned to a
      * {@link FolderConfiguration}.
      */
-    void setRegionSegment(@NonNull String segment) {
+    void setRegionSegment(@NotNull String segment) {
         assert segment.length() == 3 : segment;
         mRegion = new String(new char[] {
                 Character.toUpperCase(segment.charAt(1)),
@@ -501,7 +501,7 @@ public final class LocaleQualifier extends ResourceQualifier {
      *     or null if not a valid Android BCP 47 tag
      */
     @Nullable
-    public static LocaleQualifier parseBcp47(@NonNull String qualifier) {
+    public static LocaleQualifier parseBcp47(@NotNull String qualifier) {
         if (qualifier.startsWith(BCP_47_PREFIX)) {
             qualifier = normalizeCase(qualifier);
             Iterator<String> iterator = Splitter.on('+').split(qualifier).iterator();
@@ -560,7 +560,7 @@ public final class LocaleQualifier extends ResourceQualifier {
         return mScript;
     }
 
-    @NonNull
+    @NotNull
     public String getFull() {
         return mFull;
     }

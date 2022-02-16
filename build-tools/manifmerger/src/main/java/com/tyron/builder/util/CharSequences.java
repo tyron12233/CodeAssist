@@ -1,7 +1,6 @@
 package com.tyron.builder.util;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
 
 import com.google.common.base.Charsets;
 import java.io.ByteArrayInputStream;
@@ -9,6 +8,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 import java.util.Arrays;
+
+import org.jetbrains.annotations.Nullable;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
 
@@ -23,11 +24,11 @@ import org.xml.sax.SAXException;
  */
 public class CharSequences {
 
-    public static int indexOf(@NonNull CharSequence sequence, char c) {
+    public static int indexOf(@NotNull CharSequence sequence, char c) {
         return indexOf(sequence, c, 0);
     }
 
-    public static int indexOf(@NonNull CharSequence sequence, char c, int start) {
+    public static int indexOf(@NotNull CharSequence sequence, char c, int start) {
         for (int i = start; i < sequence.length(); i++) {
             if (sequence.charAt(i) == c) {
                 return i;
@@ -37,7 +38,7 @@ public class CharSequences {
         return -1;
     }
 
-    public static int lastIndexOf(@NonNull CharSequence haystack, @NonNull String needle,
+    public static int lastIndexOf(@NotNull CharSequence haystack, @NotNull String needle,
                                   int start) {
         int length = haystack.length();
 
@@ -70,11 +71,11 @@ public class CharSequences {
         return -1;
     }
 
-    public static int lastIndexOf(@NonNull CharSequence sequence, char c) {
+    public static int lastIndexOf(@NotNull CharSequence sequence, char c) {
         return lastIndexOf(sequence, c, sequence.length());
     }
 
-    public static int lastIndexOf(@NonNull CharSequence sequence, int c, int start) {
+    public static int lastIndexOf(@NotNull CharSequence sequence, int c, int start) {
         int length = sequence.length();
         if (start >= 0) {
             if (start >= length) {
@@ -91,14 +92,14 @@ public class CharSequences {
         return -1;
     }
 
-    public static int lastIndexOf(@NonNull CharSequence haystack, @NonNull String needle) {
+    public static int lastIndexOf(@NotNull CharSequence haystack, @NotNull String needle) {
         return lastIndexOf(haystack, needle, haystack.length());
     }
 
     public static boolean regionMatches(
-            @NonNull CharSequence sequence,
+            @NotNull CharSequence sequence,
             int thisStart,
-            @NonNull CharSequence string,
+            @NotNull CharSequence string,
             int start,
             int length) {
         if (start < 0 || string.length() - start < length) {
@@ -119,10 +120,10 @@ public class CharSequences {
     }
 
     public static boolean regionMatches(
-            @NonNull CharSequence sequence,
+            @NotNull CharSequence sequence,
             boolean ignoreCase,
             int thisStart,
-            @NonNull CharSequence string,
+            @NotNull CharSequence string,
             int start,
             int length) {
         if (!ignoreCase) {
@@ -155,11 +156,11 @@ public class CharSequences {
         return Character.toLowerCase(Character.toUpperCase(ch));
     }
 
-    public static boolean startsWith(@NonNull CharSequence sequence, @NonNull CharSequence prefix) {
+    public static boolean startsWith(@NotNull CharSequence sequence, @NotNull CharSequence prefix) {
         return startsWith(sequence, prefix, 0);
     }
 
-    public static boolean startsWith(@NonNull CharSequence sequence, @NonNull CharSequence prefix,
+    public static boolean startsWith(@NotNull CharSequence sequence, @NotNull CharSequence prefix,
                                      int start) {
         int sequenceLength = sequence.length();
         int prefixLength = prefix.length();
@@ -184,7 +185,7 @@ public class CharSequences {
      * @param caseSensitive whether the check should be case sensitive
      * @return true if the sequence ends with the given suffix
      */
-    public static boolean endsWith(@NonNull CharSequence sequence, @NonNull CharSequence suffix,
+    public static boolean endsWith(@NotNull CharSequence sequence, @NotNull CharSequence suffix,
                                    boolean caseSensitive) {
         if (suffix.length() > sequence.length()) {
             return false;
@@ -226,12 +227,12 @@ public class CharSequences {
         return false;
     }
 
-    public static int indexOf(@NonNull CharSequence haystack, @NonNull CharSequence needle) {
+    public static int indexOf(@NotNull CharSequence haystack, @NotNull CharSequence needle) {
         return indexOf(haystack, needle, 0);
     }
 
     public static int indexOf(
-            @NonNull CharSequence haystack, @NonNull CharSequence needle, int start) {
+            @NotNull CharSequence haystack, @NotNull CharSequence needle, int start) {
         int needleLength = needle.length();
         if (needleLength == 0) {
             return start;
@@ -260,7 +261,7 @@ public class CharSequences {
 
     /** Similar to {@link String#indexOf(int, int)} but with case insensitive comparison. */
     public static int indexOfIgnoreCase(
-            @NonNull CharSequence where, @NonNull CharSequence what, int fromIndex) {
+            @NotNull CharSequence where, @NotNull CharSequence what, int fromIndex) {
         int targetCount = what.length();
         int sourceCount = where.length();
 
@@ -330,18 +331,18 @@ public class CharSequences {
         return Character.toLowerCase(c);
     }
 
-    @NonNull
-    public static CharSequence createSequence(@NonNull char[] data) {
+    @NotNull
+    public static CharSequence createSequence(@NotNull char[] data) {
         return new ArrayBackedCharSequence(data);
     }
 
-    @NonNull
-    public static CharSequence createSequence(@NonNull char[] data, int offset, int length) {
+    @NotNull
+    public static CharSequence createSequence(@NotNull char[] data, int offset, int length) {
         return new ArrayBackedCharSequence(data, offset, length);
     }
 
-    @NonNull
-    public static char[] getCharArray(@NonNull CharSequence sequence) {
+    @NotNull
+    public static char[] getCharArray(@NotNull CharSequence sequence) {
         if (sequence instanceof ArrayBackedCharSequence) {
             return ((ArrayBackedCharSequence)sequence).getCharArray();
         }
@@ -358,8 +359,8 @@ public class CharSequences {
      *     be skipped if present
      * @return the reader obtaining its data from the given characher sequence
      */
-    @NonNull
-    public static CharSequenceReader getReader(@NonNull CharSequence data, boolean stripBom) {
+    @NotNull
+    public static CharSequenceReader getReader(@NotNull CharSequence data, boolean stripBom) {
         CharSequenceReader reader = new CharSequenceReader(data);
         if (stripBom) {
             if (data.length() > 0 && data.charAt(0) == '\uFEFF') {
@@ -373,7 +374,7 @@ public class CharSequences {
     }
 
     @Nullable
-    public static Document parseDocumentSilently(@NonNull CharSequence xml, boolean namespaceAware) {
+    public static Document parseDocumentSilently(@NotNull CharSequence xml, boolean namespaceAware) {
         try {
             Reader reader = getReader(xml, true);
             return XmlUtils.parseDocument(reader, namespaceAware);
@@ -384,8 +385,8 @@ public class CharSequences {
         return null;
     }
 
-    @NonNull
-    public static InputStream getInputStream(@NonNull CharSequence text) {
+    @NotNull
+    public static InputStream getInputStream(@NotNull CharSequence text) {
         return new ByteArrayInputStream(text.toString().getBytes(Charsets.UTF_8));
     }
 
@@ -402,17 +403,17 @@ public class CharSequences {
         private final int offset;
         private final int length;
 
-        public ArrayBackedCharSequence(@NonNull char[] data) {
+        public ArrayBackedCharSequence(@NotNull char[] data) {
             this(data, 0, data.length);
         }
 
-        public ArrayBackedCharSequence(@NonNull char[] data, int offset, int length) {
+        public ArrayBackedCharSequence(@NotNull char[] data, int offset, int length) {
             this.data = data;
             this.offset = offset;
             this.length = length;
         }
 
-        @NonNull
+        @NotNull
         public char[] getCharArray() {
             if (offset == 0 && length == data.length) {
                 return data;
@@ -436,7 +437,7 @@ public class CharSequences {
             return new ArrayBackedCharSequence(data, offset + start, end - start);
         }
 
-        @NonNull
+        @NotNull
         @Override
         public String toString() {
             return new String(data, offset, length);

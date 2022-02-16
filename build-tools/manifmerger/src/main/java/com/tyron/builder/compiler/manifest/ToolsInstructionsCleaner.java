@@ -2,8 +2,8 @@ package com.tyron.builder.compiler.manifest;
 
 import static com.tyron.builder.compiler.manifest.MergingReport.Result.ERROR;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -43,8 +43,8 @@ public class ToolsInstructionsCleaner {
      */
     @Nullable
     public static XmlDocument cleanToolsReferences(
-            @NonNull XmlDocument document,
-            @NonNull ILogger logger) {
+            @NotNull XmlDocument document,
+            @NotNull ILogger logger) {
 
         document = Preconditions.checkNotNull(document);
         logger = Preconditions.checkNotNull(logger);

@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Facility to identify an element from its key.

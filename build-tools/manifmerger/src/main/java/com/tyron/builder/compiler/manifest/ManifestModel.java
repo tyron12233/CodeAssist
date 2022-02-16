@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
@@ -53,7 +53,7 @@ class ManifestModel {
          * Returns the attribute(s) used to store the xml element key.
          * @return the key attribute(s) name(s) or null of this element does not have a key.
          */
-        @NonNull
+        @NotNull
         ImmutableList<String> getKeyAttributesNames();
     }
 
@@ -69,7 +69,7 @@ class ManifestModel {
             return null;
         }
 
-        @NonNull
+        @NotNull
         @Override
         public ImmutableList<String> getKeyAttributesNames() {
             return ImmutableList.of();
@@ -93,7 +93,7 @@ class ManifestModel {
          * @param attributeName attribute name
          */
         private AttributeBasedNodeKeyResolver(@Nullable String namespaceUri,
-                                              @NonNull String attributeName) {
+                                              @NotNull String attributeName) {
             this.mNamespaceUri = namespaceUri;
             this.mAttributeName = Preconditions.checkNotNull(attributeName);
         }
@@ -108,7 +108,7 @@ class ManifestModel {
             return key;
         }
 
-        @NonNull
+        @NotNull
         @Override
         public ImmutableList<String> getKeyAttributesNames() {
             return ImmutableList.of(mAttributeName);
@@ -144,7 +144,7 @@ class ManifestModel {
                     : key;
         }
 
-        @NonNull
+        @NotNull
         @Override
         public ImmutableList<String> getKeyAttributesNames() {
             return ImmutableList.of(SdkConstants.ATTR_NAME, AndroidManifest.ATTRIBUTE_GLESVERSION);
@@ -185,7 +185,7 @@ class ManifestModel {
             return Joiner.on('+').join(allSubElementKeys);
         }
 
-        @NonNull
+        @NotNull
         @Override
         public ImmutableList<String> getKeyAttributesNames() {
             return ImmutableList.of("action#name", "category#name");
@@ -219,7 +219,7 @@ class ManifestModel {
                     : firstKey + "+" + secondKey;
         }
 
-        @NonNull
+        @NotNull
         @Override
         public ImmutableList<String> getKeyAttributesNames() {
             return ImmutableList.of(firstAttributeKeyResolver.getKeyAttributesNames().get(0),
@@ -566,15 +566,15 @@ class ManifestModel {
         private final boolean mMultipleDeclarationAllowed;
 
         NodeTypes(
-                @NonNull MergeType mergeType,
-                @NonNull NodeKeyResolver nodeKeyResolver,
+                @NotNull MergeType mergeType,
+                @NotNull NodeKeyResolver nodeKeyResolver,
                 @Nullable AttributeModel.Builder... attributeModelBuilders) {
             this(mergeType, nodeKeyResolver, false, attributeModelBuilders);
         }
 
         NodeTypes(
-                @NonNull MergeType mergeType,
-                @NonNull NodeKeyResolver nodeKeyResolver,
+                @NotNull MergeType mergeType,
+                @NotNull NodeKeyResolver nodeKeyResolver,
                 boolean mutipleDeclarationAllowed,
                 @Nullable AttributeModel.Builder... attributeModelBuilders) {
             this.mMergeType = Preconditions.checkNotNull(mergeType);
@@ -590,7 +590,7 @@ class ManifestModel {
             this.mMultipleDeclarationAllowed = mutipleDeclarationAllowed;
         }
 
-        @NonNull
+        @NotNull
         NodeKeyResolver getNodeKeyResolver() {
             return mNodeKeyResolver;
         }

@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler.manifest.configuration;
 
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import com.tyron.builder.compiler.manifest.resources.HighDynamicRange;
 import com.tyron.builder.compiler.manifest.resources.ResourceEnum;

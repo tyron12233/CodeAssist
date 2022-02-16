@@ -6,8 +6,8 @@ import java.util.Comparator;
 
 import static com.google.common.base.Strings.nullToEmpty;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.tyron.builder.compiler.manifest.SdkConstants;
 
@@ -130,8 +130,8 @@ public enum XmlAttributeSortOrder {
      * @return a negative number if name1 should be ordered before name2
      */
     public static int compareAttributes(
-            @Nullable String prefix1, @NonNull String name1,
-            @Nullable String prefix2, @NonNull String name2) {
+            @Nullable String prefix1, @NotNull String name1,
+            @Nullable String prefix2, @NotNull String name2) {
         int priority1 = getAttributePriority(name1);
         int priority2 = getAttributePriority(name2);
         if (priority1 != priority2) {

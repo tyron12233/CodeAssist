@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.xml;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.tyron.builder.compiler.manifest.SdkConstants;
 import com.tyron.builder.compiler.manifest.resources.ResourceFolderType;
@@ -96,7 +96,7 @@ public class XmlPrettyPrinter {
         mIndentationLevels = indentationLevels;
     }
 
-    @NonNull
+    @NotNull
     private String getLineSeparator() {
         return mLineSeparator;
     }
@@ -113,11 +113,11 @@ public class XmlPrettyPrinter {
      * @return the formatted document (or if a parsing error occurred, returns the
      *     unformatted document)
      */
-    @NonNull
+    @NotNull
     public static String prettyPrint(
-            @NonNull String xml,
-            @NonNull XmlFormatPreferences prefs,
-            @NonNull XmlFormatStyle style,
+            @NotNull String xml,
+            @NotNull XmlFormatPreferences prefs,
+            @NotNull XmlFormatStyle style,
             @Nullable String lineSeparator) {
         Document document = XmlUtils.parseDocumentSilently(xml, true);
         if (document != null) {
@@ -144,12 +144,12 @@ public class XmlPrettyPrinter {
      * @deprecated Use {@link #prettyPrint(org.w3c.dom.Node, XmlFormatPreferences,
      *      XmlFormatStyle, String, boolean)} instead
      */
-    @NonNull
+    @NotNull
     @Deprecated
     public static String prettyPrint(
-            @NonNull Node node,
-            @NonNull XmlFormatPreferences prefs,
-            @NonNull XmlFormatStyle style,
+            @NotNull Node node,
+            @NotNull XmlFormatPreferences prefs,
+            @NotNull XmlFormatStyle style,
             @Nullable String lineSeparator) {
         return prettyPrint(node, prefs, style, lineSeparator, false);
     }
@@ -165,11 +165,11 @@ public class XmlPrettyPrinter {
      * @param endWithNewline if true, ensure that the printed output ends with a newline
      * @return a formatted string
      */
-    @NonNull
+    @NotNull
     public static String prettyPrint(
-            @NonNull Node node,
-            @NonNull XmlFormatPreferences prefs,
-            @NonNull XmlFormatStyle style,
+            @NotNull Node node,
+            @NotNull XmlFormatPreferences prefs,
+            @NotNull XmlFormatStyle style,
             @Nullable String lineSeparator,
             boolean endWithNewline) {
         XmlPrettyPrinter printer = new XmlPrettyPrinter(prefs, style, lineSeparator);
@@ -190,9 +190,9 @@ public class XmlPrettyPrinter {
      * @return the resulting formatted string
      * @deprecated Use {@link #prettyPrint(org.w3c.dom.Node, boolean)} instead
      */
-    @NonNull
+    @NotNull
     @Deprecated
-    public static String prettyPrint(@NonNull Node node) {
+    public static String prettyPrint(@NotNull Node node) {
         return prettyPrint(node, false);
     }
 
@@ -203,8 +203,8 @@ public class XmlPrettyPrinter {
      * @param endWithNewline if true, ensure that the printed output ends with a newline
      * @return the resulting formatted string
      */
-    @NonNull
-    public static String prettyPrint(@NonNull Node node, boolean endWithNewline) {
+    @NotNull
+    public static String prettyPrint(@NotNull Node node, boolean endWithNewline) {
         return prettyPrint(
                 node,
                 XmlFormatPreferences.defaults(),
@@ -348,7 +348,7 @@ public class XmlPrettyPrinter {
 
     @Nullable
     @SuppressWarnings("MethodMayBeStatic") // Intentionally instance method so it can be overridden
-    protected String getSource(@NonNull Node node) {
+    protected String getSource(@NotNull Node node) {
         return null;
     }
 
@@ -1153,7 +1153,7 @@ public class XmlPrettyPrinter {
     }
 
     @VisibleForTesting
-    static void mainThrowOnFailure(@NonNull String[] args) throws ExitWithErrorStatusException {
+    static void mainThrowOnFailure(@NotNull String[] args) throws ExitWithErrorStatusException {
         if (args.length == 0) {
             printUsage();
         }
@@ -1193,7 +1193,7 @@ public class XmlPrettyPrinter {
         }
     }
 
-    private static void formatFile(@NonNull XmlFormatPreferences prefs, File file,
+    private static void formatFile(@NotNull XmlFormatPreferences prefs, File file,
                                    boolean stdout) throws ExitWithErrorStatusException {
         if (file.isDirectory()) {
             File[] files = file.listFiles();

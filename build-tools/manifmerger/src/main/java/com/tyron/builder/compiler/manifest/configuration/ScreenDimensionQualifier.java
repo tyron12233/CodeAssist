@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler.manifest.configuration;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -137,13 +137,13 @@ public final class ScreenDimensionQualifier extends ResourceQualifier {
 
     /** Returns the string used to represent this qualifier in the folder name. */
     @Override
-    @NonNull
+    @NotNull
     public String getFolderSegment() {
         return mShortDisplayValue;
     }
 
     @Override
-    @NonNull
+    @NotNull
     public String getShortDisplayValue() {
         if (isValid()) {
             return getFolderSegment();
@@ -153,7 +153,7 @@ public final class ScreenDimensionQualifier extends ResourceQualifier {
     }
 
     @Override
-    @NonNull
+    @NotNull
     public String getLongDisplayValue() {
         if (isValid()) {
             return "Screen resolution " + getFolderSegment();

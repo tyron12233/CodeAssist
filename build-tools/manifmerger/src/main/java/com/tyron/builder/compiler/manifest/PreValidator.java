@@ -2,7 +2,7 @@ package com.tyron.builder.compiler.manifest;
 
 import static com.tyron.builder.compiler.manifest.XmlNode.NodeKey;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 import com.google.common.base.Joiner;
 import com.google.common.base.Optional;
 import com.google.common.base.Strings;
@@ -55,10 +55,10 @@ public class PreValidator {
      * @param xmlDocument the loaded xml part.
      * @return one the {@link MergingReport.Result} value.
      */
-    @NonNull
+    @NotNull
     public static MergingReport.Result validate(
-            @NonNull MergingReport.Builder mergingReport,
-            @NonNull XmlDocument xmlDocument) {
+            @NotNull MergingReport.Builder mergingReport,
+            @NotNull XmlDocument xmlDocument) {
 
         validateManifestAttribute(
                 mergingReport, xmlDocument.getRootNode(), xmlDocument.getFileType());

@@ -13,6 +13,10 @@ dependencies {
     api project(path: ':build-tools:jaxp:xml')
     api project(path: ':build-tools:kotlinc')
 
+    implementation project(path: ':build-tools:logging')
+    implementation project(path: ':build-tools:manifmerger')
+    implementation project(path: ':build-tools:project')
+
     // javac
     implementation project(path: ':build-tools:javac')
 

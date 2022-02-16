@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.resources;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.collect.Maps;
 import java.util.EnumSet;
@@ -48,12 +48,12 @@ public enum Density implements ResourceEnum {
         }
     }
 
-    @NonNull private final String mValue;
-    @NonNull private final String mDisplayValue;
+    @NotNull private final String mValue;
+    @NotNull private final String mDisplayValue;
     private final int mDpi;
     private final int mSince;
 
-    Density(@NonNull String value, @NonNull String displayValue, int density, int since) {
+    Density(@NotNull String value, @NotNull String displayValue, int density, int since) {
         mValue = value;
         mDisplayValue = displayValue;
         mDpi = density;
@@ -89,7 +89,7 @@ public enum Density implements ResourceEnum {
     }
 
     @Override
-    @NonNull
+    @NotNull
     public String getResourceValue() {
         return mValue;
     }
@@ -103,13 +103,13 @@ public enum Density implements ResourceEnum {
     }
 
     @Override
-    @NonNull
+    @NotNull
     public String getShortDisplayValue() {
         return mDisplayValue;
     }
 
     @Override
-    @NonNull
+    @NotNull
     public String getLongDisplayValue() {
         return mDisplayValue;
     }
@@ -133,7 +133,7 @@ public enum Density implements ResourceEnum {
      * @see #isRecommended()
      * @see #isValidValueForDevice()
      */
-    @NonNull
+    @NotNull
     public static Set<Density> getRecommendedValuesForDevice() {
         EnumSet<Density> result = EnumSet.noneOf(Density.class);
         for (Density value : values()) {

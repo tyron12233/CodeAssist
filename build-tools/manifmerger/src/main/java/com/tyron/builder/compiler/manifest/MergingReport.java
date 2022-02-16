@@ -1,7 +1,6 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.VisibleForTesting;
+
 
 import com.google.common.base.CaseFormat;
 import com.google.common.base.Optional;
@@ -12,6 +11,9 @@ import com.tyron.builder.compiler.manifest.blame.SourcePosition;
 import com.tyron.builder.log.ILogger;
 
 import com.google.errorprone.annotations.Immutable;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.VisibleForTesting;
 
 /**
  * Contains the result of 2 files merging.
@@ -29,10 +31,10 @@ public class MergingReport {
     private final Actions mActions;
 
     private MergingReport(Optional<XmlDocument> mergedDocument,
-                          @NonNull Result result,
-                          @NonNull ImmutableList<Record> records,
-                          @NonNull ImmutableList<String> intermediaryStages,
-                          @NonNull Actions actions) {
+                          @NotNull Result result,
+                          @NotNull ImmutableList<Record> records,
+                          @NotNull ImmutableList<String> intermediaryStages,
+                          @NotNull Actions actions) {
         mMergedDocument = mergedDocument;
         mResult = result;
         mRecords = records;
@@ -106,22 +108,22 @@ public class MergingReport {
         }
     }
 
-    @NonNull
+    @NotNull
     public Result getResult() {
         return mResult;
     }
 
-    @NonNull
+    @NotNull
     public ImmutableList<Record> getLoggingRecords() {
         return mRecords;
     }
 
-    @NonNull
+    @NotNull
     public Actions getActions() {
         return mActions;
     }
 
-    @NonNull
+    @NotNull
     public String getReportString() {
         switch (mResult) {
             case SUCCESS:
@@ -153,9 +155,9 @@ public class MergingReport {
         private final SourceFilePosition mSourceLocation;
 
         private Record(
-                @NonNull SourceFilePosition sourceLocation,
-                @NonNull Severity severity,
-                @NonNull String mLog) {
+                @NotNull SourceFilePosition sourceLocation,
+                @NotNull Severity severity,
+                @NotNull String mLog) {
             this.mSourceLocation = sourceLocation;
             this.mSeverity = severity;
             this.mLog = mLog;
@@ -202,17 +204,17 @@ public class MergingReport {
         }
 
 
-        Builder setMergedDocument(@NonNull XmlDocument mergedDocument) {
+        Builder setMergedDocument(@NotNull XmlDocument mergedDocument) {
             mMergedDocument = Optional.of(mergedDocument);
             return this;
         }
 
         @VisibleForTesting
-        Builder addMessage(@NonNull SourceFile sourceFile,
+        Builder addMessage(@NotNull SourceFile sourceFile,
                            int line,
                            int column,
-                           @NonNull Record.Severity severity,
-                           @NonNull String message) {
+                           @NotNull Record.Severity severity,
+                           @NotNull String message) {
             // The line and column used are 1-based, but SourcePosition uses zero-based.
             return addMessage(
                     new SourceFilePosition(sourceFile, new SourcePosition(line - 1, column -1, -1)),
@@ -220,18 +222,18 @@ public class MergingReport {
                     message);
         }
 
-        Builder addMessage(@NonNull SourceFile sourceFile,
-                           @NonNull Record.Severity severity,
-                           @NonNull String message) {
+        Builder addMessage(@NotNull SourceFile sourceFile,
+                           @NotNull Record.Severity severity,
+                           @NotNull String message) {
             return addMessage(
                     new SourceFilePosition(sourceFile, SourcePosition.UNKNOWN),
                     severity,
                     message);
         }
 
-        Builder addMessage(@NonNull SourceFilePosition sourceFilePosition,
-                           @NonNull Record.Severity severity,
-                           @NonNull String message) {
+        Builder addMessage(@NotNull SourceFilePosition sourceFilePosition,
+                           @NotNull Record.Severity severity,
+                           @NotNull String message) {
             switch (severity) {
                 case ERROR:
                     mHasErrors = true;

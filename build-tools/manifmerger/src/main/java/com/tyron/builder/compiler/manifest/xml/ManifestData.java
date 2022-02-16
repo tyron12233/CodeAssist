@@ -1,8 +1,8 @@
 package com.tyron.builder.compiler.manifest.xml;
 
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.compiler.manifest.resources.Keyboard;
@@ -171,19 +171,19 @@ public final class ManifestData {
     }
 
     public static final class KeepClass {
-        @NonNull
+        @NotNull
         private final String name;
         @Nullable
         private final String process;
-        @NonNull private final String type;
+        @NotNull private final String type;
 
-        public KeepClass(@NonNull String name, @Nullable String process, @NonNull String type) {
+        public KeepClass(@NotNull String name, @Nullable String process, @NotNull String type) {
             this.name = name;
             this.process = process;
             this.type = type;
         }
 
-        @NonNull
+        @NotNull
         public String getName() {
             return name;
         }
@@ -193,7 +193,7 @@ public final class ManifestData {
             return process;
         }
 
-        @NonNull
+        @NotNull
         public String getType() {
             return type;
         }

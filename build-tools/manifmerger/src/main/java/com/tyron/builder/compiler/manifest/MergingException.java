@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
@@ -27,7 +27,7 @@ public class MergingException extends Exception {
 
     public static final String MULTIPLE_ERRORS = "Multiple errors:";
 
-    @NonNull
+    @NotNull
     private final List<Message> mMessages;
 
     /**
@@ -36,7 +36,7 @@ public class MergingException extends Exception {
      * @param cause    the original exception. May be null.
      * @param messages the messaged. Must contain at least one item.
      */
-    protected MergingException(@Nullable Throwable cause, @NonNull Message... messages) {
+    protected MergingException(@Nullable Throwable cause, @NotNull Message... messages) {
         super(messages.length == 1 ? messages[0].getText() : MULTIPLE_ERRORS, cause);
         mMessages = ImmutableList.copyOf(messages);
     }
@@ -52,37 +52,37 @@ public class MergingException extends Exception {
         @Nullable
         private String mOriginalMessageText = null;
 
-        @NonNull
+        @NotNull
         private SourceFile mFile = SourceFile.UNKNOWN;
 
-        @NonNull
+        @NotNull
         private SourcePosition mPosition = SourcePosition.UNKNOWN;
 
         private Builder() {
         }
 
-        public Builder wrapException(@NonNull Throwable cause) {
+        public Builder wrapException(@NotNull Throwable cause) {
             mCause = cause;
             mOriginalMessageText = Throwables.getStackTraceAsString(cause);
             return this;
         }
 
-        public Builder withFile(@NonNull File file) {
+        public Builder withFile(@NotNull File file) {
             mFile = new SourceFile(file);
             return this;
         }
 
-        public Builder withFile(@NonNull SourceFile file) {
+        public Builder withFile(@NotNull SourceFile file) {
             mFile = file;
             return this;
         }
 
-        public Builder withPosition(@NonNull SourcePosition position) {
+        public Builder withPosition(@NotNull SourcePosition position) {
             mPosition = position;
             return this;
         }
 
-        public Builder withMessage(@NonNull String messageText, Object... args) {
+        public Builder withMessage(@NotNull String messageText, Object... args) {
             mMessageText = args.length == 0 ? messageText : String.format(messageText, args);
             return this;
         }
@@ -119,11 +119,11 @@ public class MergingException extends Exception {
 
     }
 
-    public static Builder wrapException(@NonNull Throwable cause) {
+    public static Builder wrapException(@NotNull Throwable cause) {
         return new Builder().wrapException(cause);
     }
 
-    public static Builder withMessage(@NonNull String message, Object... args) {
+    public static Builder withMessage(@NotNull String message, Object... args) {
         return new Builder().withMessage(message, args);
     }
 
@@ -134,7 +134,7 @@ public class MergingException extends Exception {
         }
     }
 
-    @NonNull
+    @NotNull
     public List<Message> getMessages() {
         return mMessages;
     }
@@ -142,7 +142,7 @@ public class MergingException extends Exception {
     /**
      * Computes the error message to display for this error
      */
-    @NonNull
+    @NotNull
     @Override
     public String getMessage() {
         List<String> messages = Lists.newArrayListWithCapacity(mMessages.size());

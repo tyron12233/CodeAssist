@@ -31,8 +31,8 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.NotNull;
 
 import com.tyron.builder.compiler.manifest.SdkConstants;
 import com.tyron.builder.compiler.manifest.blame.SourcePosition;
@@ -75,8 +75,8 @@ public class PositionXmlParser {
      * @throws IOException if something is seriously wrong. This should not happen since the input
      *         source is known to be constructed from a string
      */
-    @NonNull
-    public static Document parse(@NonNull InputStream input, boolean namespaceAware)
+    @NotNull
+    public static Document parse(@NotNull InputStream input, boolean namespaceAware)
             throws ParserConfigurationException, SAXException, IOException {
         return parse(readAllBytes(input), namespaceAware);
     }
@@ -96,9 +96,9 @@ public class PositionXmlParser {
      * @throws IOException if something is seriously wrong. This should not happen since the input
      *         source is known to be constructed from a string
      */
-    @NonNull
+    @NotNull
     public static Document parse(
-            @NonNull InputStream input, boolean namespaceAware, @NonNull List<String> parseErrors)
+            @NotNull InputStream input, boolean namespaceAware, @NotNull List<String> parseErrors)
             throws ParserConfigurationException, IOException {
         return parse(readAllBytes(input), namespaceAware, parseErrors);
     }
@@ -106,8 +106,8 @@ public class PositionXmlParser {
     /**
      * @see #parse(InputStream, boolean)
      */
-    @NonNull
-    public static Document parse(@NonNull InputStream input)
+    @NotNull
+    public static Document parse(@NotNull InputStream input)
             throws IOException, SAXException, ParserConfigurationException {
         return parse(input, true);
     }
@@ -115,8 +115,8 @@ public class PositionXmlParser {
     /**
      * @see #parse(byte[], boolean)
      */
-    @NonNull
-    public static Document parse(@NonNull byte[] data)
+    @NotNull
+    public static Document parse(@NotNull byte[] data)
             throws ParserConfigurationException, SAXException, IOException {
         return parse(data, true);
     }
@@ -124,8 +124,8 @@ public class PositionXmlParser {
     /**
      * @see #parse(String, boolean)
      */
-    @NonNull
-    public static Document parse(@NonNull String xml)
+    @NotNull
+    public static Document parse(@NotNull String xml)
             throws ParserConfigurationException, SAXException, IOException {
         return parse(xml, true);
     }
@@ -141,8 +141,8 @@ public class PositionXmlParser {
      * @throws IOException if something is seriously wrong. This should not happen since the input
      *         source is known to be constructed from a string.
      */
-    @NonNull
-    public static Document parse(@NonNull byte[] data, boolean namespaceAware)
+    @NotNull
+    public static Document parse(@NotNull byte[] data, boolean namespaceAware)
             throws ParserConfigurationException, SAXException, IOException {
         String xml = getXmlString(data);
         xml = XmlUtils.stripBom(xml);
@@ -164,9 +164,9 @@ public class PositionXmlParser {
      * @throws IOException if something is seriously wrong. This should not happen since the input
      *         source is known to be constructed from a string.
      */
-    @NonNull
+    @NotNull
     public static Document parse(
-            @NonNull byte[] data, boolean namespaceAware, @NonNull List<String> parseErrors)
+            @NotNull byte[] data, boolean namespaceAware, @NotNull List<String> parseErrors)
             throws ParserConfigurationException, IOException {
         String xml = getXmlString(data);
         xml = XmlUtils.stripBom(xml);
@@ -184,15 +184,15 @@ public class PositionXmlParser {
      * @throws IOException if something is seriously wrong. This should not happen since the input
      *         source is known to be constructed from a string
      */
-    @NonNull
-    public static Document parse(@NonNull String xml, boolean namespaceAware)
+    @NotNull
+    public static Document parse(@NotNull String xml, boolean namespaceAware)
             throws ParserConfigurationException, SAXException, IOException {
         xml = XmlUtils.stripBom(xml);
         return parseInternal(xml, namespaceAware);
     }
 
-    @NonNull
-    private static Document parseInternal(@NonNull String xml, boolean namespaceAware)
+    @NotNull
+    private static Document parseInternal(@NotNull String xml, boolean namespaceAware)
             throws ParserConfigurationException, SAXException, IOException {
         DomBuilder domBuilder;
         boolean retry = false;
@@ -215,9 +215,9 @@ public class PositionXmlParser {
         return domBuilder.getDocument();
     }
 
-    @NonNull
+    @NotNull
     private static Document parseInternal(
-            @NonNull String xml, boolean namespaceAware, @NonNull List<String> parseErrors)
+            @NotNull String xml, boolean namespaceAware, @NotNull List<String> parseErrors)
             throws ParserConfigurationException, IOException {
         DomBuilder domBuilder = null;
         boolean retry = false;
@@ -243,7 +243,7 @@ public class PositionXmlParser {
     }
 
     private static void parseInternal(
-            @NonNull String xml, boolean namespaceAware, @NonNull DefaultHandler handler)
+            @NotNull String xml, boolean namespaceAware, @NotNull DefaultHandler handler)
             throws ParserConfigurationException, IOException, SAXException {
         SAXParserFactory factory =
                 namespaceAware ? NAMESPACE_AWARE_SAX_PARSER_FACTORY : SAX_PARSER_FACTORY;
@@ -259,7 +259,7 @@ public class PositionXmlParser {
      * @param input the stream to read from
      * @return the contents of the stream as a byte array
      */
-    private static byte[] readAllBytes(@NonNull InputStream input) throws IOException {
+    private static byte[] readAllBytes(@NotNull InputStream input) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buf = new byte[1024];
         try (InputStream stream = input) {
@@ -275,7 +275,7 @@ public class PositionXmlParser {
         return out.toByteArray();
     }
 
-    private static InputSource createSource(@NonNull String xml) {
+    private static InputSource createSource(@NotNull String xml) {
         return new InputSource(new StringReader(xml));
     }
 
@@ -287,8 +287,8 @@ public class PositionXmlParser {
      * @param data the XML data to be decoded into a string
      * @return a string corresponding to the XML data
      */
-    @NonNull
-    public static String getXmlString(@NonNull byte[] data) {
+    @NotNull
+    public static String getXmlString(@NotNull byte[] data) {
         return getXmlString(data, SdkConstants.UTF_8);
     }
 
@@ -301,8 +301,8 @@ public class PositionXmlParser {
      *                       attribute or a byte order mark
      * @return a string corresponding to the XML data
      */
-    @NonNull
-    public static String getXmlString(@NonNull byte[] data, @NonNull String defaultCharset) {
+    @NotNull
+    public static String getXmlString(@NotNull byte[] data, @NotNull String defaultCharset) {
         int offset = 0;
 
         String charset = null;
@@ -426,8 +426,8 @@ public class PositionXmlParser {
      * @param node the node to look up position for
      * @return the position, or null if the node type is not supported for position info
      */
-    @NonNull
-    public static SourcePosition getPosition(@NonNull Node node) {
+    @NotNull
+    public static SourcePosition getPosition(@NotNull Node node) {
         return getPosition(node, -1, -1);
     }
 
@@ -444,8 +444,8 @@ public class PositionXmlParser {
      * @return the position, or null if the node type is not supported for
      *         position info
      */
-    @NonNull
-    public static SourcePosition getPosition(@NonNull Node node, int start, int end) {
+    @NotNull
+    public static SourcePosition getPosition(@NotNull Node node, int start, int end) {
         Position p = getPositionHelper(node, start, end);
         return p == null ? SourcePosition.UNKNOWN : p.toSourcePosition();
     }
@@ -458,7 +458,7 @@ public class PositionXmlParser {
      * @return the leaf node at that offset, if any
      */
     @Nullable
-    public static Node findNodeAtOffset(@NonNull Document document, int offset) {
+    public static Node findNodeAtOffset(@NotNull Document document, int offset) {
         Element root = document.getDocumentElement();
         if (root != null) {
             return findNodeAtOffset(root, offset);
@@ -468,7 +468,7 @@ public class PositionXmlParser {
     }
 
     @Nullable
-    private static Node findNodeAtOffset(@NonNull Node node, int offset) {
+    private static Node findNodeAtOffset(@NotNull Node node, int offset) {
         Position p = getPositionHelper(node, -1, -1);
         if (p != null) {
             if (offset < p.getOffset()) {
@@ -516,7 +516,7 @@ public class PositionXmlParser {
      * @return the leaf node at that offset, if any
      */
     @Nullable
-    public static Node findNodeAtLineAndCol(@NonNull Document document, int line, int column) {
+    public static Node findNodeAtLineAndCol(@NotNull Document document, int line, int column) {
         Element root = document.getDocumentElement();
         if (root != null) {
             return findNodeAtLineAndCol(root, line, column);
@@ -526,7 +526,7 @@ public class PositionXmlParser {
     }
 
     @Nullable
-    private static Node findNodeAtLineAndCol(@NonNull Node node, int line, int column) {
+    private static Node findNodeAtLineAndCol(@NotNull Node node, int line, int column) {
         Position p = getPositionHelper(node, -1, -1);
         if (p != null) {
             if (line < p.getLine() || line == p.getLine() && column != -1
@@ -568,7 +568,7 @@ public class PositionXmlParser {
     }
 
     @Nullable
-    private static Position getPositionHelper(@NonNull Node node, int start, int end) {
+    private static Position getPositionHelper(@NotNull Node node, int start, int end) {
         // Look up the position information stored while parsing for the given node.
         // Note however that we only store position information for elements (because
         // there is no SAX callback for individual attributes).
@@ -774,7 +774,7 @@ public class PositionXmlParser {
         }
 
         /** Returns the document parsed by the handler. */
-        @NonNull
+        @NotNull
         Document getDocument() {
             closeUnfinishedElements();
             return mDocument;
@@ -1041,7 +1041,7 @@ public class PositionXmlParser {
             return mEnd;
         }
 
-        public void setEnd(@NonNull Position end) {
+        public void setEnd(@NotNull Position end) {
             mEnd = end;
         }
 

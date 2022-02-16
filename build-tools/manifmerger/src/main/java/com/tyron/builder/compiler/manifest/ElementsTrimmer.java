@@ -2,7 +2,7 @@ package com.tyron.builder.compiler.manifest;
 
 import static com.tyron.builder.compiler.manifest.SdkConstants.ANDROID_URI;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import com.tyron.builder.compiler.manifest.xml.AndroidManifest;
 
@@ -39,8 +39,8 @@ public class ElementsTrimmer {
      * @param mergingReport the report to log errors and actions.
      */
     public static void trim(
-            @NonNull XmlDocument xmlDocument,
-            @NonNull MergingReport.Builder mergingReport) {
+            @NotNull XmlDocument xmlDocument,
+            @NotNull MergingReport.Builder mergingReport) {
 
         // I sort the glEsVersion declaration by value.
         NavigableMap<Integer, XmlElement> glEsVersionDeclarations = new TreeMap<Integer, XmlElement>();
@@ -119,7 +119,7 @@ public class ElementsTrimmer {
 
     }
 
-    private static Integer getGlEsVersion(@NonNull XmlElement xmlElement) {
+    private static Integer getGlEsVersion(@NotNull XmlElement xmlElement) {
         Attr glEsVersion = xmlElement.getXml()
                 .getAttributeNodeNS(ANDROID_URI, AndroidManifest.ATTRIBUTE_GLESVERSION);
         if (glEsVersion == null) {
@@ -128,7 +128,7 @@ public class ElementsTrimmer {
         return getHexValue(glEsVersion);
     }
 
-    private static Integer getHexValue(@NonNull Attr attribute) {
+    private static Integer getHexValue(@NotNull Attr attribute) {
         return Integer.decode(attribute.getValue());
     }
 }

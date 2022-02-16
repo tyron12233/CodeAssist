@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.xml;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.tyron.builder.compiler.manifest.SdkConstants;
 import com.tyron.builder.compiler.manifest.resources.Keyboard;
@@ -848,12 +848,12 @@ public class AndroidManifestParser {
         return null;
     }
 
-    public static ManifestData parse(@NonNull File manifestFile) throws IOException {
+    public static ManifestData parse(@NotNull File manifestFile) throws IOException {
         return parse(manifestFile.toPath());
     }
 
-    @NonNull
-    public static ManifestData parse(@NonNull Path manifestFile) throws IOException {
+    @NotNull
+    public static ManifestData parse(@NotNull Path manifestFile) throws IOException {
         try (InputStream is = new BufferedInputStream(Files.newInputStream(manifestFile))) {
             return parse(is);
         } catch (SAXException | ParserConfigurationException e) {

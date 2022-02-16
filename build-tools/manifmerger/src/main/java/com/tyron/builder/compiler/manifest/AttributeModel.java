@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.base.Joiner;
 
@@ -14,13 +14,13 @@ import java.util.regex.Pattern;
  */
 class AttributeModel {
 
-    @NonNull private final XmlNode.NodeName mName;
+    @NotNull private final XmlNode.NodeName mName;
     private final boolean mIsPackageDependent;
     @Nullable
     private final String mDefaultValue;
     @Nullable private final Validator mOnReadValidator;
     @Nullable private final Validator mOnWriteValidator;
-    @NonNull private final MergingPolicy mMergingPolicy;
+    @NotNull private final MergingPolicy mMergingPolicy;
 
     /**
      * Define a new attribute with specific characteristics.
@@ -31,12 +31,12 @@ class AttributeModel {
      * @param defaultValue an optional default value.
      * @param onReadValidator an optional validator to validate values against.
      */
-    private AttributeModel(@NonNull XmlNode.NodeName name,
+    private AttributeModel(@NotNull XmlNode.NodeName name,
                            boolean isPackageDependent,
                            @Nullable String defaultValue,
                            @Nullable Validator onReadValidator,
                            @Nullable Validator onWriteValidator,
-                           @NonNull MergingPolicy mergingPolicy) {
+                           @NotNull MergingPolicy mergingPolicy) {
         mName = name;
         mIsPackageDependent = isPackageDependent;
         mDefaultValue = defaultValue;
@@ -45,7 +45,7 @@ class AttributeModel {
         mMergingPolicy = mergingPolicy;
     }
 
-    @NonNull
+    @NotNull
     XmlNode.NodeName getName() {
         return mName;
     }
@@ -91,7 +91,7 @@ class AttributeModel {
      * Returns the {@link AttributeModel.MergingPolicy} for this
      * attribute.
      */
-    @NonNull
+    @NotNull
     public MergingPolicy getMergingPolicy() {
         return mMergingPolicy;
     }
@@ -192,7 +192,7 @@ class AttributeModel {
          * merged, return null.
          */
         @Nullable
-        String merge(@NonNull String higherPriority, @NonNull String lowerPriority);
+        String merge(@NotNull String higherPriority, @NotNull String lowerPriority);
     }
 
     /**
@@ -207,7 +207,7 @@ class AttributeModel {
 
         @Nullable
         @Override
-        public String merge(@NonNull String higherPriority, @NonNull String lowerPriority) {
+        public String merge(@NotNull String higherPriority, @NotNull String lowerPriority) {
             // it's ok if the values are equal, otherwise it's not.
             return higherPriority.equals(lowerPriority)
                     ? higherPriority
@@ -226,7 +226,7 @@ class AttributeModel {
 
         @Nullable
         @Override
-        public String merge(@NonNull String higherPriority, @NonNull String lowerPriority) {
+        public String merge(@NotNull String higherPriority, @NotNull String lowerPriority) {
             return Boolean.toString(BooleanValidator.isTrue(higherPriority) ||
                     BooleanValidator.isTrue(lowerPriority));
         }
@@ -245,7 +245,7 @@ class AttributeModel {
 
         @Nullable
         @Override
-        public String merge(@NonNull String higherPriority, @NonNull String lowerPriority) {
+        public String merge(@NotNull String higherPriority, @NotNull String lowerPriority) {
             return higherPriority;
         }
     };
@@ -284,9 +284,9 @@ class AttributeModel {
          * @param value the proposed or existing attribute value.
          * @return true if the value is legal for this attribute.
          */
-        boolean validates(@NonNull MergingReport.Builder mergingReport,
-                          @NonNull XmlAttribute attribute,
-                          @NonNull String value);
+        boolean validates(@NotNull MergingReport.Builder mergingReport,
+                          @NotNull XmlAttribute attribute,
+                          @NotNull String value);
     }
 
     /**
@@ -303,9 +303,9 @@ class AttributeModel {
         }
 
         @Override
-        public boolean validates(@NonNull MergingReport.Builder mergingReport,
-                                 @NonNull XmlAttribute attribute,
-                                 @NonNull String value) {
+        public boolean validates(@NotNull MergingReport.Builder mergingReport,
+                                 @NotNull XmlAttribute attribute,
+                                 @NotNull String value) {
             boolean matches = TRUE_PATTERN.matcher(value).matches() ||
                     FALSE_PATTERN.matcher(value).matches();
             if (!matches) {
@@ -338,8 +338,8 @@ class AttributeModel {
         }
 
         @Override
-        public boolean validates(@NonNull MergingReport.Builder mergingReport,
-                                 @NonNull XmlAttribute attribute, @NonNull String value) {
+        public boolean validates(@NotNull MergingReport.Builder mergingReport,
+                                 @NotNull XmlAttribute attribute, @NotNull String value) {
             for (String multiValue : multiValues) {
                 if (multiValue.equals(value)) {
                     return true;
@@ -366,8 +366,8 @@ class AttributeModel {
     static class IntegerValueValidator implements Validator {
 
         @Override
-        public boolean validates(@NonNull MergingReport.Builder mergingReport,
-                                 @NonNull XmlAttribute attribute, @NonNull String value) {
+        public boolean validates(@NotNull MergingReport.Builder mergingReport,
+                                 @NotNull XmlAttribute attribute, @NotNull String value) {
             try {
                 return Integer.parseInt(value) > 0;
             } catch (NumberFormatException e) {
@@ -391,8 +391,8 @@ class AttributeModel {
         protected static final Pattern PATTERN = Pattern.compile("0[xX]([0-9a-fA-F]+)");
 
         @Override
-        public boolean validates(@NonNull MergingReport.Builder mergingReport,
-                                 @NonNull XmlAttribute attribute, @NonNull String value) {
+        public boolean validates(@NotNull MergingReport.Builder mergingReport,
+                                 @NotNull XmlAttribute attribute, @NotNull String value) {
             Matcher matcher = PATTERN.matcher(value);
             boolean valid = matcher.matches() && matcher.group(1).length() <= 8;
             if (!valid) {
@@ -422,8 +422,8 @@ class AttributeModel {
         }
 
         @Override
-        public boolean validates(@NonNull MergingReport.Builder mergingReport,
-                                 @NonNull XmlAttribute attribute, @NonNull String value) {
+        public boolean validates(@NotNull MergingReport.Builder mergingReport,
+                                 @NotNull XmlAttribute attribute, @NotNull String value) {
             boolean valid = super.validates(mergingReport, attribute, value);
             if (valid) {
                 try {

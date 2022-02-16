@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.resources;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -45,7 +45,7 @@ public enum ResourceFolderType {
     /**
      * Returns the folder name for this resource folder type.
      */
-    @NonNull
+    @NotNull
     public String getName() {
         return name;
     }
@@ -56,7 +56,7 @@ public enum ResourceFolderType {
      * @return the enum or null if not found.
      */
     @Nullable
-    public static ResourceFolderType getTypeByName(@NonNull String name) {
+    public static ResourceFolderType getTypeByName(@NotNull String name) {
         assert name.indexOf('-') == -1 : name; // use #getFolderType instead
         return nameToType.get(name);
     }
@@ -69,7 +69,7 @@ public enum ResourceFolderType {
      * <code>null</code> if no matching type was found.
      */
     @Nullable
-    public static ResourceFolderType getFolderType(@NonNull String folderName) {
+    public static ResourceFolderType getFolderType(@NotNull String folderName) {
         int index = folderName.indexOf(ResourceConstants.RES_QUALIFIER_SEP);
         if (index != -1) {
             folderName = folderName.substring(0, index);

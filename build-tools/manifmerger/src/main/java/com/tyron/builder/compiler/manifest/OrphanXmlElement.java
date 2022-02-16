@@ -2,8 +2,8 @@ package com.tyron.builder.compiler.manifest;
 
 import static com.tyron.builder.compiler.manifest.ManifestModel.NodeTypes;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -18,13 +18,13 @@ import org.w3c.dom.Element;
  */
 public class OrphanXmlElement extends XmlNode {
 
-    @NonNull
+    @NotNull
     private final Element mXml;
 
-    @NonNull
+    @NotNull
     private final NodeTypes mType;
 
-    public OrphanXmlElement(@NonNull Element xml) {
+    public OrphanXmlElement(@NotNull Element xml) {
 
         mXml = Preconditions.checkNotNull(xml);
         NodeTypes nodeType;
@@ -54,7 +54,7 @@ public class OrphanXmlElement extends XmlNode {
         return this.mType == type;
     }
 
-    @NonNull
+    @NotNull
     @Override
     public Element getXml() {
         return mXml;
@@ -76,7 +76,7 @@ public class OrphanXmlElement extends XmlNode {
     /**
      * Returns this xml element {@link NodeTypes}
      */
-    @NonNull
+    @NotNull
     public NodeTypes getType() {
         return mType;
     }
@@ -90,14 +90,14 @@ public class OrphanXmlElement extends XmlNode {
         return mType.getNodeKeyResolver().getKey(mXml);
     }
 
-    @NonNull
+    @NotNull
     @Override
     public SourcePosition getPosition() {
         return SourcePosition.UNKNOWN;
     }
 
     @Override
-    @NonNull
+    @NotNull
     public SourceFile getSourceFile() {
         return SourceFile.UNKNOWN;
     }

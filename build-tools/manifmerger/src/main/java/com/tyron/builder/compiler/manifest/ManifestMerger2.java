@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.android.apksig.internal.util.Pair;
 import com.google.common.base.Optional;
@@ -34,13 +34,13 @@ import com.google.errorprone.annotations.Immutable;
 @Immutable
 public class ManifestMerger2 {
 
-    @NonNull
+    @NotNull
     private final File mManifestFile;
 
-    @NonNull
+    @NotNull
     private final Map<String, Object> mPlaceHolderValues;
 
-    @NonNull
+    @NotNull
     private final PlaceholderHandler.KeyBasedValueResolver<SystemProperty> mSystemPropertyResolver;
 
     private final ILogger mLogger;
@@ -57,15 +57,15 @@ public class ManifestMerger2 {
     }
 
     private ManifestMerger2(
-            @NonNull ILogger logger,
-            @NonNull File mainManifestFile,
-            @NonNull ImmutableList<Pair<String, File>> libraryFiles,
-            @NonNull ImmutableList<File> flavorsAndBuildTypeFiles,
-            @NonNull ImmutableList<Invoker.Feature> optionalFeatures,
-            @NonNull Map<String, Object> placeHolderValues,
-            @NonNull PlaceholderHandler.KeyBasedValueResolver<SystemProperty> systemPropertiesResolver,
-            @NonNull MergeType mergeType,
-            @NonNull Optional<File> reportFile) {
+            @NotNull ILogger logger,
+            @NotNull File mainManifestFile,
+            @NotNull ImmutableList<Pair<String, File>> libraryFiles,
+            @NotNull ImmutableList<File> flavorsAndBuildTypeFiles,
+            @NotNull ImmutableList<Invoker.Feature> optionalFeatures,
+            @NotNull Map<String, Object> placeHolderValues,
+            @NotNull PlaceholderHandler.KeyBasedValueResolver<SystemProperty> systemPropertiesResolver,
+            @NotNull MergeType mergeType,
+            @NotNull Optional<File> reportFile) {
         this.mSystemPropertyResolver = systemPropertiesResolver;
         this.mPlaceHolderValues = placeHolderValues;
         this.mManifestFile = mainManifestFile;
@@ -526,9 +526,9 @@ public class ManifestMerger2 {
      * @return an {@link ManifestMerger2.Invoker} instance that will allow
      * further customization and trigger the merging tool.
      */
-    public static Invoker newMerger(@NonNull File mainManifestFile,
-                                    @NonNull ILogger logger,
-                                    @NonNull MergeType mergeType) {
+    public static Invoker newMerger(@NotNull File mainManifestFile,
+                                    @NotNull ILogger logger,
+                                    @NotNull MergeType mergeType) {
         return new Invoker(mainManifestFile, logger, mergeType);
     }
 
@@ -543,9 +543,9 @@ public class ManifestMerger2 {
          */
         PACKAGE {
             @Override
-            public void addTo(@NonNull ActionRecorder actionRecorder,
-                              @NonNull XmlDocument document,
-                              @NonNull String value) {
+            public void addTo(@NotNull ActionRecorder actionRecorder,
+                              @NotNull XmlDocument document,
+                              @NotNull String value) {
                 addToElement(this, actionRecorder, value, document.getRootNode());
             }
         },
@@ -554,9 +554,9 @@ public class ManifestMerger2 {
          */
         VERSION_CODE {
             @Override
-            public void addTo(@NonNull ActionRecorder actionRecorder,
-                              @NonNull XmlDocument document,
-                              @NonNull String value) {
+            public void addTo(@NotNull ActionRecorder actionRecorder,
+                              @NotNull XmlDocument document,
+                              @NotNull String value) {
                 addToElementInAndroidNS(this, actionRecorder, value, document.getRootNode());
             }
         },
@@ -565,9 +565,9 @@ public class ManifestMerger2 {
          */
         VERSION_NAME {
             @Override
-            public void addTo(@NonNull ActionRecorder actionRecorder,
-                              @NonNull XmlDocument document,
-                              @NonNull String value) {
+            public void addTo(@NotNull ActionRecorder actionRecorder,
+                              @NotNull XmlDocument document,
+                              @NotNull String value) {
                 addToElementInAndroidNS(this, actionRecorder, value, document.getRootNode());
             }
         },
@@ -576,9 +576,9 @@ public class ManifestMerger2 {
          */
         MIN_SDK_VERSION {
             @Override
-            public void addTo(@NonNull ActionRecorder actionRecorder,
-                              @NonNull XmlDocument document,
-                              @NonNull String value) {
+            public void addTo(@NotNull ActionRecorder actionRecorder,
+                              @NotNull XmlDocument document,
+                              @NotNull String value) {
                 addToElementInAndroidNS(this, actionRecorder, value,
                         createOrGetUseSdk(actionRecorder, document));
             }
@@ -588,9 +588,9 @@ public class ManifestMerger2 {
          */
         TARGET_SDK_VERSION {
             @Override
-            public void addTo(@NonNull ActionRecorder actionRecorder,
-                              @NonNull XmlDocument document,
-                              @NonNull String value) {
+            public void addTo(@NotNull ActionRecorder actionRecorder,
+                              @NotNull XmlDocument document,
+                              @NotNull String value) {
                 addToElementInAndroidNS(this, actionRecorder, value,
                         createOrGetUseSdk(actionRecorder, document));
             }
@@ -598,9 +598,9 @@ public class ManifestMerger2 {
 
         MAX_SDK_VERSION {
             @Override
-            public void addTo(@NonNull ActionRecorder actionRecorder,
-                              @NonNull XmlDocument document,
-                              @NonNull String value) {
+            public void addTo(@NotNull ActionRecorder actionRecorder,
+                              @NotNull XmlDocument document,
+                              @NotNull String value) {
                 addToElementInAndroidNS(this, actionRecorder, value,
                         createOrGetUseSdk(actionRecorder, document));
             }
@@ -735,9 +735,9 @@ public class ManifestMerger2 {
          * @param document the xml document to add itself to.
          * @param value the value to set of this property.
          */
-        void addTo(@NonNull ActionRecorder actionRecorder,
-                   @NonNull XmlDocument document,
-                   @NonNull String value);
+        void addTo(@NotNull ActionRecorder actionRecorder,
+                   @NotNull XmlDocument document,
+                   @NotNull String value);
     }
 
     /**
@@ -878,8 +878,8 @@ public class ManifestMerger2 {
          * @param logger the logger interface to use.
          */
         private Invoker(
-                @NonNull File mainManifestFile,
-                @NonNull ILogger logger,
+                @NotNull File mainManifestFile,
+                @NotNull ILogger logger,
                 MergeType mergeType) {
             this.mMainManifestFile = Preconditions.checkNotNull(mainManifestFile);
             this.mLogger = logger;
@@ -892,7 +892,7 @@ public class ManifestMerger2 {
          * @param mergeReport the file to write the report in.
          * @return itself.
          */
-        public Invoker setMergeReportFile(@NonNull File mergeReport) {
+        public Invoker setMergeReportFile(@NotNull File mergeReport) {
             mReportFile = mergeReport;
             return this;
         }
@@ -1027,7 +1027,7 @@ public class ManifestMerger2 {
 
         @Nullable
         @Override
-        public String getValue(@NonNull T key) {
+        public String getValue(@NotNull T key) {
             Object value = keyValues.get(key);
             return value == null ? null : value.toString();
         }
@@ -1066,12 +1066,12 @@ public class ManifestMerger2 {
 
     private static class LoadedManifestInfo extends ManifestInfo {
 
-        @NonNull private final XmlDocument mXmlDocument;
-        @NonNull private final Optional<String> mOriginalPackageName;
+        @NotNull private final XmlDocument mXmlDocument;
+        @NotNull private final Optional<String> mOriginalPackageName;
 
-        private LoadedManifestInfo(@NonNull ManifestInfo manifestInfo,
-                                   @NonNull Optional<String> originalPackageName,
-                                   @NonNull XmlDocument xmlDocument) {
+        private LoadedManifestInfo(@NotNull ManifestInfo manifestInfo,
+                                   @NotNull Optional<String> originalPackageName,
+                                   @NotNull XmlDocument xmlDocument) {
             super(manifestInfo.mName,
                     manifestInfo.mLocation,
                     manifestInfo.mType,
@@ -1080,12 +1080,12 @@ public class ManifestMerger2 {
             mOriginalPackageName = originalPackageName;
         }
 
-        @NonNull
+        @NotNull
         public XmlDocument getXmlDocument() {
             return mXmlDocument;
         }
 
-        @NonNull
+        @NotNull
         public Optional<String> getOriginalPackageName() {
             return mOriginalPackageName;
         }

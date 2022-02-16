@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Optional;
@@ -37,8 +37,8 @@ public class XmlAttribute extends XmlNode {
      * @param xml the xml definition of the attribute.
      */
     public XmlAttribute(
-            @NonNull XmlElement ownerElement,
-            @NonNull Attr xml,
+            @NotNull XmlElement ownerElement,
+            @NotNull Attr xml,
             @Nullable AttributeModel attributeModel) {
         this.mOwnerElement = Preconditions.checkNotNull(ownerElement);
         this.mXml = Preconditions.checkNotNull(xml);
@@ -89,7 +89,7 @@ public class XmlAttribute extends XmlNode {
         return new NodeKey(mOwnerElement.getId() + "@" + myName);
     }
 
-    @NonNull
+    @NotNull
     @Override
     public SourcePosition getPosition() {
         try {
@@ -99,7 +99,7 @@ public class XmlAttribute extends XmlNode {
         }
     }
 
-    @NonNull
+    @NotNull
     @Override
     public Attr getXml() {
         return mXml;
@@ -301,9 +301,9 @@ public class XmlAttribute extends XmlNode {
     }
 
     private void addIllegalImplicitOverrideMessage(
-            @NonNull MergingReport.Builder mergingReport,
-            @NonNull AttributeModel attributeModel,
-            @NonNull XmlElement implicitNode) {
+            @NotNull MergingReport.Builder mergingReport,
+            @NotNull AttributeModel attributeModel,
+            @NotNull XmlElement implicitNode) {
         String error = String.format("Attribute %1$s value=(%2$s) at %3$s"
                         + " cannot override implicit default value=(%4$s) at %5$s",
                 getId(),
@@ -374,7 +374,7 @@ public class XmlAttribute extends XmlNode {
                 severity, message);
     }
 
-    @NonNull
+    @NotNull
     @Override
     public SourceFile getSourceFile() {
         return getOwnerElement().getSourceFile();

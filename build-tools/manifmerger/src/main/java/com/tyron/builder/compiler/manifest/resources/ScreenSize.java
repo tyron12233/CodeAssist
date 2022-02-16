@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.resources;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Screen size enum.
@@ -71,7 +71,7 @@ public enum ScreenSize implements ResourceEnum {
      * @param diagonalSize Diagonal Screen size in inches.
      *                     If null, a default diagonal size is used
      */
-    @NonNull
+    @NotNull
     public static ScreenSize getScreenSize(@Nullable Double diagonalSize) {
         if (diagonalSize == null) {
             return ScreenSize.NORMAL;

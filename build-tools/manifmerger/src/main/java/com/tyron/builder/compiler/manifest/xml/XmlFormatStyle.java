@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.xml;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.tyron.builder.compiler.manifest.SdkConstants;
 
@@ -36,7 +36,7 @@ public enum XmlFormatStyle {
      */
     MANIFEST;
 
-    @NonNull
+    @NotNull
     public static XmlFormatStyle get(@Nullable Node node) {
         if (node != null) {
             Document doc = (node.getNodeType() == Node.DOCUMENT_NODE)

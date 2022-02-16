@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.xml;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
 import java.util.Comparator;
@@ -53,7 +53,7 @@ public class XmlFormatPreferences {
      *
      * @return an {@link XmlFormatPreferences} object
      */
-    @NonNull
+    @NotNull
     public static XmlFormatPreferences defaults() {
         return new XmlFormatPreferences();
     }

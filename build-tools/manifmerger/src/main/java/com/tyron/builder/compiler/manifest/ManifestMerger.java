@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import com.tyron.builder.compiler.manifest.IMergerLog.Severity;
 import com.tyron.builder.model.FileAndLine;
 import com.tyron.builder.util.SdkUtils;
@@ -162,7 +162,7 @@ public class ManifestMerger {
      * @param log A non-null merger log to capture all warnings, errors and their location.
      * @param callback An optional callback that the merger can use to query the calling SDK.
      */
-    public ManifestMerger(@NonNull IMergerLog log, @Nullable ICallback callback) {
+    public ManifestMerger(@NotNull IMergerLog log, @Nullable ICallback callback) {
         mLog = log;
         mCallback = callback;
     }
@@ -305,7 +305,7 @@ public class ManifestMerger {
      *                    These will be modified in-place.
      * @return True on success, false if any error occurred (printed to the {@link IMergerLog}).
      */
-    public boolean process(@NonNull Document mainDoc, @NonNull Document... libraryDocs) {
+    public boolean process(@NotNull Document mainDoc, @NotNull Document... libraryDocs) {
 
         boolean success = true;
         mMainDoc = mainDoc;
@@ -1250,7 +1250,7 @@ public class ManifestMerger {
      * <p/>
      * This may returns either {@code end} or a previous sibling. Never returns null.
      */
-    @NonNull
+    @NotNull
     private Node selectPreviousSiblings(Node end) {
 
         Node start = end;
@@ -1383,8 +1383,8 @@ public class ManifestMerger {
      * @return True if {@code e1} and {@code e2} are equal.
      */
     private boolean compareElements(
-            @NonNull Node expected,
-            @NonNull Node actual,
+            @NotNull Node expected,
+            @NotNull Node actual,
             boolean nextSiblings,
             @Nullable StringBuilder diff,
             @Nullable String keyAttr) {
@@ -1411,8 +1411,8 @@ public class ManifestMerger {
      */
     @Nullable
     private Element findFirstElement(
-            @NonNull Document doc,
-            @NonNull String path) {
+            @NotNull Document doc,
+            @NotNull String path) {
         Node result;
         try {
             result = (Node) mXPath.evaluate(path, doc, XPathConstants.NODE);
@@ -1443,8 +1443,8 @@ public class ManifestMerger {
      * @return A list of {@link Element} found, possibly empty but never null.
      */
     private List<Element> findElements(
-            @NonNull Document doc,
-            @NonNull String path) {
+            @NotNull Document doc,
+            @NotNull String path) {
         return findElements(doc, path, null, null);
     }
 
@@ -1469,8 +1469,8 @@ public class ManifestMerger {
      * @see #findElements(Document, String)
      */
     private List<Element> findElements(
-            @NonNull Document doc,
-            @NonNull String path,
+            @NotNull Document doc,
+            @NotNull String path,
             @Nullable String attrName,
             @Nullable String attrValue) {
         List<Element> elements = new ArrayList<Element>();
@@ -1519,8 +1519,8 @@ public class ManifestMerger {
      * @param node The node or document where the error occurs. Must not be null.
      * @return A new non-null {@link FileAndLine} combining the file name and line number.
      */
-    @NonNull
-    private FileAndLine xmlFileAndLine(@NonNull Node node) {
+    @NotNull
+    private FileAndLine xmlFileAndLine(@NotNull Node node) {
         return MergerXmlUtils.xmlFileAndLine(node);
     }
 
@@ -1599,7 +1599,7 @@ public class ManifestMerger {
     /**
      * @see #cleanupToolsAttributes(Node)
      */
-    private Document cleanupToolsAttributes(@NonNull Document doc) {
+    private Document cleanupToolsAttributes(@NotNull Document doc) {
         cleanupToolsAttributes(doc.getFirstChild());
         return doc;
     }
@@ -1623,7 +1623,7 @@ public class ManifestMerger {
     }
 
     /** Inserts source markers in the given document */
-    private static void insertSourceMarkers(@NonNull Document mainDoc) {
+    private static void insertSourceMarkers(@NotNull Document mainDoc) {
         Element root = mainDoc.getDocumentElement();
         if (root != null) {
             File file = MergerXmlUtils.getFileFor(root);
@@ -1635,7 +1635,7 @@ public class ManifestMerger {
         }
     }
 
-    private static File insertSourceMarkers(@NonNull Node node, @Nullable File currentFile) {
+    private static File insertSourceMarkers(@NotNull Node node, @Nullable File currentFile) {
         for (int i = 0; i < node.getChildNodes().getLength(); i++) {
             Node child = node.getChildNodes().item(i);
             short nodeType = child.getNodeType();
@@ -1669,8 +1669,8 @@ public class ManifestMerger {
         return currentFile;
     }
 
-    private static int insertSourceMarker(@NonNull Node parent, @NonNull Node node,
-                                          @NonNull File file, boolean after) {
+    private static int insertSourceMarker(@NotNull Node parent, @NotNull Node node,
+                                          @NotNull File file, boolean after) {
         int insertCount = 0;
         Document doc = parent.getNodeType() ==
                 Node.DOCUMENT_NODE ? (Document) parent : parent.getOwnerDocument();

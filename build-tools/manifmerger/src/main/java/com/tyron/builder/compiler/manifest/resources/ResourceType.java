@@ -2,8 +2,8 @@ package com.tyron.builder.compiler.manifest.resources;
 
 import static com.google.common.base.MoreObjects.firstNonNull;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -66,15 +66,15 @@ public enum ResourceType {
         SYNTHETIC
     }
 
-    @NonNull private final String mName;
-    @NonNull private final Kind mKind;
-    @NonNull private final String mDisplayName;
-    @NonNull private final String[] mAlternateXmlNames;
+    @NotNull private final String mName;
+    @NotNull private final Kind mKind;
+    @NotNull private final String mDisplayName;
+    @NotNull private final String[] mAlternateXmlNames;
 
     ResourceType(
-            @NonNull String name,
-            @NonNull String displayName,
-            @NonNull String... alternateXmlNames) {
+            @NotNull String name,
+            @NotNull String displayName,
+            @NotNull String... alternateXmlNames) {
         mName = name;
         mKind = Kind.REAL;
         mDisplayName = displayName;
@@ -82,9 +82,9 @@ public enum ResourceType {
     }
 
     ResourceType(
-            @NonNull String name,
-            @NonNull String displayName,
-            @NonNull Kind kind) {
+            @NotNull String name,
+            @NotNull String displayName,
+            @NotNull Kind kind) {
         mName = name;
         mKind = kind;
         mDisplayName = displayName;
@@ -136,9 +136,9 @@ public enum ResourceType {
 
     @Nullable
     public static <T> ResourceType fromXmlTag(
-            @NonNull T tag,
-            @NonNull Function<T, String> nameFunction,
-            @NonNull BiFunction<? super T, ? super String, String> attributeFunction) {
+            @NotNull T tag,
+            @NotNull Function<T, String> nameFunction,
+            @NotNull BiFunction<? super T, ? super String, String> attributeFunction) {
         String tagName = nameFunction.apply(tag);
         switch (tagName) {
             case SdkConstants.TAG_EAT_COMMENT:
@@ -163,7 +163,7 @@ public enum ResourceType {
      *     "string" or "array".
      */
     @Nullable
-    public static ResourceType fromXmlValue(@NonNull String xmlValue) {
+    public static ResourceType fromXmlValue(@NotNull String xmlValue) {
         if (xmlValue.equals(SdkConstants.TAG_DECLARE_STYLEABLE)
                 || xmlValue.equals(STYLEABLE.mName)) {
             return null;
@@ -189,7 +189,7 @@ public enum ResourceType {
 
 
     @Nullable
-    public static ResourceType fromXmlTag(@NonNull Node domNode) {
+    public static ResourceType fromXmlTag(@NotNull Node domNode) {
         if (!(domNode instanceof Element)) {
             return null;
         }
@@ -201,12 +201,12 @@ public enum ResourceType {
                 Element::getAttribute);
     }
 
-    @NonNull
+    @NotNull
     public String getName() {
         return mName;
     }
 
-    @NonNull
+    @NotNull
     public String getDisplayName() {
         return mDisplayName;
     }

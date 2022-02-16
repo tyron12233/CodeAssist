@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler.manifest.configuration;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import com.tyron.builder.compiler.manifest.resources.LayoutDirection;
 import com.tyron.builder.compiler.manifest.resources.ResourceEnum;
@@ -61,7 +61,7 @@ public class LayoutDirectionQualifier extends EnumBasedResourceQualifier {
     }
 
     @Override
-    @NonNull
+    @NotNull
     public ResourceQualifier getNullQualifier() {
         return NULL_QUALIFIER;
     }

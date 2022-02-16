@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import com.tyron.builder.model.FileAndLine;
 import com.tyron.builder.log.ILogger;
@@ -16,10 +16,10 @@ public abstract class MergerLog {
      * @param sdkLog a non-null {@link ILogger}
      * @return A new IMergeLog
      */
-    public static IMergerLog wrapSdkLog(@NonNull final ILogger sdkLog) {
+    public static IMergerLog wrapSdkLog(@NotNull final ILogger sdkLog) {
         return new IMergerLog() {
             @Override
-            public void error(@NonNull Severity severity, @NonNull FileAndLine location, @NonNull String message, Object... msgParams) {
+            public void error(@NotNull Severity severity, @NotNull FileAndLine location, @NotNull String message, Object... msgParams) {
                 switch (severity) {
                     case INFO:
                         sdkLog.debug(message);
@@ -33,7 +33,7 @@ public abstract class MergerLog {
             }
 
             @Override
-            public void conflict(@NonNull Severity severity, @NonNull FileAndLine location1, @NonNull FileAndLine location2, @NonNull String message, Object... msgParams) {
+            public void conflict(@NotNull Severity severity, @NotNull FileAndLine location1, @NotNull FileAndLine location2, @NotNull String message, Object... msgParams) {
               //  switch (severity) {
                 //    case ERROR:
                         sdkLog.error(String.format(message, msgParams) + "\nlocation 1: " + location1 + "\n location 2: " + location2);

@@ -1,13 +1,13 @@
 package com.tyron.builder.compiler.manifest.configuration;
 
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * An object that is associated with a {@link FolderConfiguration}.
  */
 public interface Configurable {
     /** Returns the {@link FolderConfiguration} for this object. */
-    @NonNull
+    @NotNull
     FolderConfiguration getConfiguration();
 }

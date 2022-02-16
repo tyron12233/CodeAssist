@@ -1,8 +1,9 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import com.google.common.annotations.VisibleForTesting;
+
 
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
@@ -60,7 +61,7 @@ public class Actions {
      * Returns a {@link com.google.common.collect.ImmutableSet} of all the element's keys that have
      * at least one {@link NodeRecord}.
      */
-    @NonNull
+    @NotNull
     public Set<XmlNode.NodeKey> getNodeKeys() {
         return mRecords.keySet();
     }
@@ -69,7 +70,7 @@ public class Actions {
      * Returns an {@link ImmutableList} of {@link NodeRecord} for the element identified with the
      * passed key.
      */
-    @NonNull
+    @NotNull
     public ImmutableList<NodeRecord> getNodeRecords(XmlNode.NodeKey key) {
         return mRecords.containsKey(key)
                 ? mRecords.get(key).getNodeRecords()
@@ -80,7 +81,7 @@ public class Actions {
      * Returns a {@link ImmutableList} of all attributes names that have at least one record for
      * the element identified with the passed key.
      */
-    @NonNull
+    @NotNull
     public ImmutableList<XmlNode.NodeName> getRecordedAttributeNames(XmlNode.NodeKey nodeKey) {
         DecisionTreeRecord decisionTreeRecord = mRecords.get(nodeKey);
         if (decisionTreeRecord == null) {
@@ -93,7 +94,7 @@ public class Actions {
      * Returns the {@link com.google.common.collect.ImmutableList} of {@link AttributeRecord} for
      * the attribute identified by attributeName of the element identified by elementKey.
      */
-    @NonNull
+    @NotNull
     public ImmutableList<AttributeRecord> getAttributeRecords(XmlNode.NodeKey elementKey,
                                                               XmlNode.NodeName attributeName) {
 
@@ -175,15 +176,15 @@ public class Actions {
      */
     public abstract static class Record {
 
-        @NonNull protected final ActionType mActionType;
-        @NonNull protected final SourceFilePosition mActionLocation;
-        @NonNull protected final XmlNode.NodeKey mTargetId;
+        @NotNull protected final ActionType mActionType;
+        @NotNull protected final SourceFilePosition mActionLocation;
+        @NotNull protected final XmlNode.NodeKey mTargetId;
         @Nullable
         protected final String mReason;
 
-        private Record(@NonNull ActionType actionType,
-                       @NonNull SourceFilePosition actionLocation,
-                       @NonNull XmlNode.NodeKey targetId,
+        private Record(@NotNull ActionType actionType,
+                       @NotNull SourceFilePosition actionLocation,
+                       @NotNull XmlNode.NodeKey targetId,
                        @Nullable String reason) {
             mActionType = Preconditions.checkNotNull(actionType);
             mActionLocation = Preconditions.checkNotNull(actionLocation);
@@ -221,11 +222,11 @@ public class Actions {
 
         private final NodeOperationType mNodeOperationType;
 
-        NodeRecord(@NonNull ActionType actionType,
-                   @NonNull SourceFilePosition actionLocation,
-                   @NonNull XmlNode.NodeKey targetId,
+        NodeRecord(@NotNull ActionType actionType,
+                   @NotNull SourceFilePosition actionLocation,
+                   @NotNull XmlNode.NodeKey targetId,
                    @Nullable String reason,
-                   @NonNull NodeOperationType nodeOperationType) {
+                   @NotNull NodeOperationType nodeOperationType) {
             super(actionType, actionLocation, targetId, reason);
             this.mNodeOperationType = Preconditions.checkNotNull(nodeOperationType);
         }
@@ -248,9 +249,9 @@ public class Actions {
         private final AttributeOperationType mOperationType;
 
         AttributeRecord(
-                @NonNull ActionType actionType,
-                @NonNull SourceFilePosition actionLocation,
-                @NonNull XmlNode.NodeKey targetId,
+                @NotNull ActionType actionType,
+                @NotNull SourceFilePosition actionLocation,
+                @NotNull XmlNode.NodeKey targetId,
                 @Nullable String reason,
                 @Nullable AttributeOperationType operationType) {
             super(actionType, actionLocation, targetId, reason);

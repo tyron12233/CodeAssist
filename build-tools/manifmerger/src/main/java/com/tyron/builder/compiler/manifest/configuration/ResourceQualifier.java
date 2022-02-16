@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.configuration;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.Serializable;
 
@@ -101,7 +101,7 @@ public abstract class ResourceQualifier implements Comparable<ResourceQualifier>
      *                  folderConfig).
      */
     public boolean isBetterMatchThan(@Nullable ResourceQualifier compareTo,
-                                     @NonNull ResourceQualifier reference) {
+                                     @NotNull ResourceQualifier reference) {
         // the default is to always return false. This gives less overhead than always returning
         // true, as it would only compare same values anyway.
         return compareTo == null;
@@ -139,7 +139,7 @@ public abstract class ResourceQualifier implements Comparable<ResourceQualifier>
     public abstract int hashCode();
 
     @Override
-    public final int compareTo(@NonNull ResourceQualifier o) {
+    public final int compareTo(@NotNull ResourceQualifier o) {
         return toString().compareTo(o.toString());
     }
 

@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler.manifest;
 
-import androidx.annotation.NonNull;
+import org.jetbrains.annotations.NotNull;
 
 import com.tyron.builder.model.FileAndLine;
 
@@ -30,16 +30,16 @@ public interface IMergerLog {
     }
 
     public abstract void error (
-            @NonNull Severity severity,
-            @NonNull FileAndLine location,
-            @NonNull String message,
+            @NotNull Severity severity,
+            @NotNull FileAndLine location,
+            @NotNull String message,
             Object... msgParams);
 
     public abstract void conflict(
-            @NonNull Severity severity,
-            @NonNull FileAndLine location1,
-            @NonNull FileAndLine location2,
-            @NonNull String message,
+            @NotNull Severity severity,
+            @NotNull FileAndLine location1,
+            @NotNull FileAndLine location2,
+            @NotNull String message,
             Object... msgParams);
 
     public static final String MAIN_MANIFEST = "@main";

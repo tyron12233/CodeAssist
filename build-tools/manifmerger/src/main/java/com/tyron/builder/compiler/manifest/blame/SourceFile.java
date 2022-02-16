@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.blame;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.base.Objects;
 import java.io.File;
@@ -18,7 +18,7 @@ import com.google.errorprone.annotations.Immutable;
 @Immutable
 public final class SourceFile implements Serializable {
 
-    @NonNull
+    @NotNull
     public static final SourceFile UNKNOWN = new SourceFile();
 
     /** The absolute file path to the file, used for accessing the file contents. */
@@ -40,16 +40,16 @@ public final class SourceFile implements Serializable {
     @Nullable private final String mDescription;
 
     @SuppressWarnings("NullableProblems")
-    public SourceFile(@NonNull File sourceFile, @Nullable String description) {
+    public SourceFile(@NotNull File sourceFile, @Nullable String description) {
         mFilePath = sourceFile.getAbsolutePath();
         mDescription = description;
     }
 
-    public SourceFile(@SuppressWarnings("NullableProblems") @NonNull File sourceFile) {
+    public SourceFile(@SuppressWarnings("NullableProblems") @NotNull File sourceFile) {
         this(sourceFile, null);
     }
 
-    public SourceFile(@SuppressWarnings("NullableProblems") @NonNull String description) {
+    public SourceFile(@SuppressWarnings("NullableProblems") @NotNull String description) {
         mFilePath = null;
         mDescription = description;
     }
@@ -59,7 +59,7 @@ public final class SourceFile implements Serializable {
         mDescription = null;
     }
 
-    public void setOverrideSourcePath(@NonNull String value) {
+    public void setOverrideSourcePath(@NotNull String value) {
         mSourcePath = value;
     }
 
@@ -107,12 +107,12 @@ public final class SourceFile implements Serializable {
     }
 
     @Override
-    @NonNull
+    @NotNull
     public String toString() {
         return print(false /* shortFormat */);
     }
 
-    @NonNull
+    @NotNull
     public String print(boolean shortFormat) {
         String path;
         if (mSourcePath != null) {

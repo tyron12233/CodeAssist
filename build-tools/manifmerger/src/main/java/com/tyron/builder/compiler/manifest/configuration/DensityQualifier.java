@@ -1,7 +1,7 @@
 package com.tyron.builder.compiler.manifest.configuration;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.tyron.builder.compiler.manifest.resources.Density;
 import com.tyron.builder.compiler.manifest.resources.ResourceEnum;
@@ -34,7 +34,7 @@ public final class DensityQualifier extends EnumBasedResourceQualifier {
         this(Density.MEDIUM);
     }
 
-    public DensityQualifier(@NonNull Density value) {
+    public DensityQualifier(@NotNull Density value) {
         // value is marked as NonNull so that no usages from outside this method use a null value.
         mValue = value;
     }
@@ -117,7 +117,7 @@ public final class DensityQualifier extends EnumBasedResourceQualifier {
 
     @Override
     public boolean isBetterMatchThan(@Nullable ResourceQualifier compareTo,
-                                     @NonNull ResourceQualifier reference) {
+                                     @NotNull ResourceQualifier reference) {
         if (compareTo == null) {
             return true;
         }
