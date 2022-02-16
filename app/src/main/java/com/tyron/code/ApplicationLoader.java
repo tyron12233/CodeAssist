@@ -48,6 +48,7 @@ import com.tyron.language.java.JavaLanguage;
 import com.tyron.language.xml.XmlFileType;
 import com.tyron.language.xml.XmlLanguage;
 import com.tyron.selection.java.JavaExpandSelectionProvider;
+import com.tyron.selection.xml.XmlExpandSelectionProvider;
 
 public class ApplicationLoader extends Application {
     
@@ -88,6 +89,8 @@ public class ApplicationLoader extends Application {
         startupManager.addStartupActivity(() -> {
             ExpandSelectionProvider.registerProvider(JavaLanguage.INSTANCE,
                                                      new JavaExpandSelectionProvider());
+            ExpandSelectionProvider.registerProvider(XmlLanguage.INSTANCE,
+                                                     new XmlExpandSelectionProvider());
         });
         startupManager.addStartupActivity(() -> {
             CompletionEngine engine = CompletionEngine.getInstance();

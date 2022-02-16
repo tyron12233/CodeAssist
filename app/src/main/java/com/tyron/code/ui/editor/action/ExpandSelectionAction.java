@@ -47,12 +47,12 @@ public class ExpandSelectionAction extends AnAction {
             return;
         }
 
-        if (event.getData(CommonDataKeys.PROJECT) == null) {
+        Editor editor = event.getData(CommonDataKeys.EDITOR);
+        if (editor == null) {
             return;
         }
 
-        Editor editor = event.getData(CommonDataKeys.EDITOR);
-        if (editor == null) {
+        if (editor.getProject() == null) {
             return;
         }
 
@@ -60,7 +60,7 @@ public class ExpandSelectionAction extends AnAction {
         presentation.setVisible(true);
         presentation.setText(context.getString(R.string.expand_selection));
         presentation.setIcon(ResourcesCompat.getDrawable(context.getResources(),
-                R.drawable.ic_baseline_code_24, context.getTheme()));
+                R.drawable.ic_baseline_code_24, null));
     }
 
     @Override
