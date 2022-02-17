@@ -2,6 +2,8 @@ package com.tyron.code.event;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.lifecycle.DefaultLifecycleObserver;
+import androidx.lifecycle.LifecycleOwner;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,7 +25,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * listeners.
  * <p>
  * Note that the event type must be exact. That's to say, you need to use a terminal class instead
- * of using its parent classes. For instance, if you register a receiver with the event type {@link Event},
+ * of using its parent classes. For instance, if you register a receiver with the event type
+ * {@link Event},
  * no event will be sent to your receiver.
  *
  * @author Rosemoe
@@ -66,7 +69,8 @@ public final class EventManager {
      */
     public void setEnabled(boolean enabled) {
         if (parent == null && !enabled) {
-            throw new IllegalStateException("The event manager is set to be root, and can not be disabled");
+            throw new IllegalStateException(
+                    "The event manager is set to be root, and can not be disabled");
         }
         this.enabled = enabled;
     }
@@ -88,6 +92,7 @@ public final class EventManager {
 
     /**
      * Get root manager and dispatch the given event
+     *
      * @see #dispatchEvent(Event)
      */
     public <T extends Event> boolean dispatchEventFromRoot(@NonNull T event) {
@@ -119,15 +124,18 @@ public final class EventManager {
     @NonNull
     @SuppressWarnings("unchecked")
     <T extends Event> Receivers<T> getReceivers(@NonNull Class<T> type) {
-        lock.readLock().lock();
+        lock.readLock()
+                .lock();
         Receivers<T> result;
         try {
             result = receivers.get(type);
         } finally {
-            lock.readLock().unlock();
+            lock.readLock()
+                    .unlock();
         }
         if (result == null) {
-            lock.writeLock().lock();
+            lock.writeLock()
+                    .lock();
             try {
                 result = receivers.get(type);
                 if (result == null) {
@@ -135,7 +143,8 @@ public final class EventManager {
                     receivers.put(type, result);
                 }
             } finally {
-                lock.writeLock().unlock();
+                lock.writeLock()
+                        .unlock();
             }
         }
         return result;
@@ -145,35 +154,54 @@ public final class EventManager {
      * Register a receiver of the given event.
      *
      * @param eventType Event type to be received
-     * @param receiver Receiver of event
-     * @param <T> Event type
+     * @param receiver  Receiver of event
+     * @param <T>       Event type
      */
-    public <T extends Event> SubscriptionReceipt<T> subscribeEvent(@NonNull Class<T> eventType, @NonNull EventReceiver<T> receiver) {
+    public <T extends Event> SubscriptionReceipt<T> subscribeEvent(@NonNull Class<T> eventType,
+                                                                   @NonNull EventReceiver<T> receiver) {
         Receivers<T> receivers = getReceivers(eventType);
-        receivers.lock.writeLock().lock();
+        receivers.lock.writeLock()
+                .lock();
         try {
             List<EventReceiver<T>> list = receivers.receivers;
             if (list.contains(receiver)) {
-                throw new IllegalArgumentException("the receiver is already registered for this type");
+                throw new IllegalArgumentException(
+                        "the receiver is already registered for this type");
             }
             list.add(receiver);
         } finally {
-            receivers.lock.writeLock().unlock();
+            receivers.lock.writeLock()
+                    .unlock();
         }
         return new SubscriptionReceipt<>(eventType, receiver, this);
     }
 
+    public <T extends Event> void subscribeEvent(@NonNull LifecycleOwner lifecycleOwner,
+                                                                   @NonNull Class<T> eventType,
+                                                                   @NonNull EventReceiver<T> receiver) {
+        SubscriptionReceipt<T> receipt = subscribeEvent(eventType, receiver);
+        lifecycleOwner.getLifecycle().addObserver(new DefaultLifecycleObserver() {
+            @Override
+            public void onDestroy(@NonNull LifecycleOwner owner) {
+                receipt.unsubscribe();
+                lifecycleOwner.getLifecycle().removeObserver(this);
+            }
+        });
+    }
+
     /**
      * Dispatch the given event to its receivers registered in this manager.
+     *
      * @param event Event to dispatch
-     * @param <T> Event type
+     * @param <T>   Event type
      * @return Whether the event's intercept flag is set
      */
     @SuppressWarnings("unchecked")
     public <T extends Event> boolean dispatchEvent(@NonNull T event) {
         // Safe cast
-        Receivers<T> receivers = getReceivers((Class<T>)event.getClass());
-        receivers.lock.readLock().lock();
+        Receivers<T> receivers = getReceivers((Class<T>) event.getClass());
+        receivers.lock.readLock()
+                .lock();
         EventReceiver<T>[] receiverArr;
         int count;
         try {
@@ -181,12 +209,13 @@ public final class EventManager {
             receiverArr = obtainBuffer(count);
             receivers.receivers.toArray(receiverArr);
         } finally {
-            receivers.lock.readLock().unlock();
+            receivers.lock.readLock()
+                    .unlock();
         }
         List<EventReceiver<T>> unsubscribedReceivers = null;
         try {
             Unsubscribe unsubscribe = new Unsubscribe();
-            for (int i = 0;i < count && !event.isIntercepted();i++) {
+            for (int i = 0; i < count && !event.isIntercepted(); i++) {
                 EventReceiver<T> receiver = receiverArr[i];
                 receiver.onReceive(event, unsubscribe);
                 if (unsubscribe.isUnsubscribed()) {
@@ -199,16 +228,18 @@ public final class EventManager {
             }
         } finally {
             if (unsubscribedReceivers != null) {
-                receivers.lock.writeLock().lock();
+                receivers.lock.writeLock()
+                        .lock();
                 try {
                     receivers.receivers.removeAll(unsubscribedReceivers);
                 } finally {
-                    receivers.lock.writeLock().unlock();
+                    receivers.lock.writeLock()
+                            .unlock();
                 }
             }
             recycleBuffer(receiverArr);
         }
-        for (int i = 0;i < children.size() && !event.isIntercepted();i++) {
+        for (int i = 0; i < children.size() && !event.isIntercepted(); i++) {
             EventManager sub = null;
             try {
                 sub = children.get(i);
@@ -224,6 +255,7 @@ public final class EventManager {
 
     /**
      * Internal class for saving receivers of each type
+     *
      * @param <T> Event type
      */
     static class Receivers<T extends Event> {
@@ -240,7 +272,7 @@ public final class EventManager {
     private <V extends Event> EventReceiver<V>[] obtainBuffer(int size) {
         EventReceiver<V>[] res = null;
         synchronized (this) {
-            for (int i = 0;i < caches.length;i++) {
+            for (int i = 0; i < caches.length; i++) {
                 if (caches[i] != null && caches[i].length >= size) {
                     res = (EventReceiver<V>[]) caches[i];
                     caches[i] = null;
@@ -258,7 +290,7 @@ public final class EventManager {
         if (array == null) {
             return;
         }
-        for (int i = 0;i < caches.length;i++) {
+        for (int i = 0; i < caches.length; i++) {
             if (caches[i] == null) {
                 Arrays.fill(array, null);
                 caches[i] = array;

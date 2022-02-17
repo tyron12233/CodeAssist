@@ -96,7 +96,7 @@ public class TreeFileManagerFragment extends Fragment {
 
         EventManager eventManager = ApplicationLoader.getInstance()
                 .getEventManager();
-        eventManager.subscribeEvent(RefreshRootEvent.class, (event, unsubscribe) -> {
+        eventManager.subscribeEvent(getViewLifecycleOwner(), RefreshRootEvent.class, (event, unsubscribe) -> {
             File refreshRoot = event.getRoot();
             TreeNode<TreeFile> currentRoot = treeView.getRoot();
             if (currentRoot != null && refreshRoot.equals(currentRoot.getValue().getFile())) {
