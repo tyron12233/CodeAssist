@@ -241,7 +241,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         JavaModule javaModule = ((JavaModule) module);
 
         FloatingActionButton fab = requireView().findViewById(R.id.fab_add_dependency);
-        UiUtilsKt.addSystemWindowInsetToMargin(fab, false, false, true);
+        UiUtilsKt.addSystemWindowInsetToMargin(fab, false, false, false, true);
         fab.setOnClickListener(v -> {
             FragmentManager fm = getChildFragmentManager();
             if (fm.findFragmentByTag(AddDependencyDialogFragment.TAG) == null) {
