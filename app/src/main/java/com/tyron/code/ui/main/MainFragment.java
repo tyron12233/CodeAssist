@@ -292,6 +292,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             return;
         }
 
+        saveAll();
+
         mProject = project;
         mIndexServiceConnection.setProject(project);
 

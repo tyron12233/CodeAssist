@@ -45,7 +45,12 @@ public class IndexServiceConnection implements ServiceConnection {
     @Override
     public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
         IndexService.IndexBinder binder = (IndexService.IndexBinder) iBinder;
-        binder.index(mProject, new TaskListener(), mLogger);
+        try {
+            mProject.setCompiling(true);
+            binder.index(mProject, new TaskListener(), mLogger);
+        } finally {
+            mProject.setCompiling(false);
+        }
     }
 
     @Override
