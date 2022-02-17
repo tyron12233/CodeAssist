@@ -7,6 +7,7 @@ import androidx.annotation.Nullable;
 
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.listener.FileListener;
+import com.tyron.common.util.ThreadUtil;
 
 import org.apache.commons.io.FileUtils;
 
@@ -185,10 +186,17 @@ public class FileManagerImpl implements FileManager {
 
     @Override
     public void shutdown() {
-        mSnapshots.forEach((k, v) -> mService.execute(() -> {
+        saveContents();
+    }
+
+    @Override
+    public void saveContents() {
+        mService.execute(() -> mSnapshots.forEach((k, v) -> {
             try {
                 FileUtils.writeStringToFile(k,
-                        v.getContents(), StandardCharsets.UTF_8);
+                                            v.getContents(), StandardCharsets.UTF_8);
+                Instant instant = Instant.ofEpochMilli(k.lastModified());
+                ThreadUtil.runOnUiThread(() -> setLastModified(k, instant));
             } catch (IOException e) {
                 // ignored
             }

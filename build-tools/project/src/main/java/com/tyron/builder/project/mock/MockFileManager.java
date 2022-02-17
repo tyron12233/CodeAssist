@@ -101,4 +101,9 @@ public class MockFileManager implements FileManager {
     public void shutdown() {
         // no-op
     }
+
+    @Override
+    public void saveContents() {
+        // no-op
+    }
 }

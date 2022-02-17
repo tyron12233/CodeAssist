@@ -73,5 +73,5 @@ public interface FileManager {
      */
     void shutdown();
 
-
+    void saveContents();
 }

@@ -56,6 +56,7 @@ import java.io.File;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -315,6 +316,9 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             return;
         }
 
+        Collection<Module> modules = mProject.getModules();
+        modules.forEach(it -> it.getFileManager().saveContents());
+
         getChildFragmentManager().setFragmentResult(EditorContainerFragment.SAVE_ALL_KEY,
                                                     Bundle.EMPTY);
 
@@ -340,8 +344,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             return;
         }
 
-        mServiceConnection.setBuildType(type);
         saveAll();
+        mServiceConnection.setBuildType(type);
 
         mMainViewModel.setCurrentState(getString(R.string.compilation_state_compiling));
         mMainViewModel.setIndexing(true);
