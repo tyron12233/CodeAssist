@@ -32,6 +32,8 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.ui.file.event.RefreshRootEvent;
 import com.tyron.code.util.UiUtilsKt;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.fileeditor.api.FileEditorSavedState;
@@ -302,7 +304,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         mMainViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
 
-        mFileViewModel.refreshNode(project.getRootFile());
+        RefreshRootEvent event = new RefreshRootEvent(project.getRootFile());
+        ApplicationLoader.getInstance().getEventManager().dispatchEvent(event);
 
         Intent intent = new Intent(requireContext(), IndexService.class);
         requireActivity().startService(intent);

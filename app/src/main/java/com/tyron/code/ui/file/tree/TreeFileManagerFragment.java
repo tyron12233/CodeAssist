@@ -19,7 +19,13 @@ import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.event.EventManager;
+import com.tyron.code.event.EventReceiver;
+import com.tyron.code.event.SubscriptionReceipt;
+import com.tyron.code.event.Unsubscribe;
+import com.tyron.code.ui.file.event.RefreshRootEvent;
 import com.tyron.code.util.UiUtilsKt;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
@@ -82,21 +88,42 @@ public class TreeFileManagerFragment extends Fragment {
         SwipeRefreshLayout refreshLayout = new SwipeRefreshLayout(requireContext());
         refreshLayout.addView(root);
         refreshLayout.setOnRefreshListener(() -> {
-            ProgressManager.getInstance().runNonCancelableAsync(() -> {
-                if (!treeView.getAllNodes().isEmpty()) {
-                    TreeNode<TreeFile> node = treeView.getAllNodes().get(0);
-                    TreeUtil.updateNode(node);
-                    if (getActivity() != null) {
-                        requireActivity().runOnUiThread(() -> {
-                            refreshLayout.setRefreshing(false);
-                            treeView.refreshTreeView();
-                        });
-                    }
-                }
+            partialRefresh(() -> {
+                refreshLayout.setRefreshing(false);
+                treeView.refreshTreeView();
             });
         });
 
+        EventManager eventManager = ApplicationLoader.getInstance()
+                .getEventManager();
+        eventManager.subscribeEvent(RefreshRootEvent.class, (event, unsubscribe) -> {
+            File refreshRoot = event.getRoot();
+            TreeNode<TreeFile> currentRoot = treeView.getRoot();
+            if (currentRoot != null && refreshRoot.equals(currentRoot.getValue().getFile())) {
+                partialRefresh(() -> treeView.refreshTreeView());
+            } else {
+                ProgressManager.getInstance().runNonCancelableAsync(() -> {
+                    TreeNode<TreeFile> node = TreeNode.root(TreeUtil.getNodes(refreshRoot));
+                    treeView.refreshTreeView(node);
+                });
+            }
+        });
         return refreshLayout;
+    }
+
+    private void partialRefresh(Runnable callback) {
+        ProgressManager.getInstance().runNonCancelableAsync(() -> {
+            if (!treeView.getAllNodes().isEmpty()) {
+                TreeNode<TreeFile> node = treeView.getAllNodes().get(0);
+                TreeUtil.updateNode(node);
+                ProgressManager.getInstance().runLater(() -> {
+                    if (getActivity() == null) {
+                        return;
+                    }
+                    callback.run();
+                });
+            }
+        });
     }
 
     @Override
