@@ -52,6 +52,11 @@ public class ExpandSelectionAction extends AnAction {
             return;
         }
 
+        ExpandSelectionProvider provider = ExpandSelectionProvider.forEditor(editor);
+        if (provider == null) {
+            return;
+        }
+
         if (editor.getProject() == null) {
             return;
         }
