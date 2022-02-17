@@ -1,5 +1,6 @@
 package com.tyron.code.ui.editor.shortcuts.action;
 
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.editor.Caret;
@@ -17,6 +18,12 @@ public class TextInsertAction implements ShortcutAction {
     @Override
     public void apply(Editor editor, ShortcutItem item) {
         Caret cursor = editor.getCaret();
-        editor.insert(cursor.getStartLine(), cursor.getEndColumn(), item.label);
+
+        // temporary solution
+        if (editor instanceof CodeEditorView) {
+            ((CodeEditorView) editor).commitText(item.label);
+        } else {
+            editor.insert(cursor.getStartLine(), cursor.getEndColumn(), item.label);
+        }
     }
 }
