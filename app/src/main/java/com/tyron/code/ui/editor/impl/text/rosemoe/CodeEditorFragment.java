@@ -512,9 +512,11 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 mReading = false;
                 mEditor.setBackgroundAnalysisEnabled(true);
                 fileManager.openFileForSnapshot(mCurrentFile, result);
-                mEditor.setText(result);
-                mEditor.rerunAnalysis();
 
+                Bundle bundle = new Bundle();
+                bundle.putBoolean("loaded", true);
+                bundle.putBoolean("bg", true);
+                mEditor.setText(result, bundle);
                 if (savedInstanceState != null) {
                     restoreState(savedInstanceState);
                 }

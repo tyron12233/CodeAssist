@@ -240,6 +240,12 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
         if (editor == null) {
             return styles;
         }
+
+        boolean loaded = getExtraArguments().getBoolean("loaded", false);
+        if (!loaded) {
+            return styles;
+        }
+
         JavaTextTokenizer tokenizer = new JavaTextTokenizer(text);
         tokenizer.setCalculateLineColumn(false);
         Tokens token, previous = Tokens.UNKNOWN;

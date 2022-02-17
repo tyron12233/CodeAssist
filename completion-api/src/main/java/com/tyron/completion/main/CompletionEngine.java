@@ -64,6 +64,10 @@ public class CompletionEngine {
                                    int line,
                                    int column,
                                    long index) {
+        if (project.isCompiling()) {
+            return CompletionList.EMPTY;
+        }
+
         CompletionList list = new CompletionList();
         list.items = new ArrayList<>();
 

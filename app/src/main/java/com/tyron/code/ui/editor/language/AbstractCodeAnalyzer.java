@@ -146,9 +146,13 @@ public abstract class AbstractCodeAnalyzer<T> extends DiagnosticAnalyzeManager<T
 
     @Override
     protected Styles analyze(StringBuilder text, Delegate<T> delegate) {
+        Styles styles = new Styles();
+        boolean loaded = getExtraArguments().getBoolean("loaded", false);
+        if (!loaded) {
+            return styles;
+        }
         beforeAnalyze();
 
-        Styles styles = new Styles();
         MappedSpans.Builder result = new MappedSpans.Builder(1024);
 
         try {
