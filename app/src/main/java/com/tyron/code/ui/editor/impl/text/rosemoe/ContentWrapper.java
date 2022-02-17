@@ -7,6 +7,8 @@ import com.tyron.editor.Content;
 
 import java.util.stream.IntStream;
 
+import io.github.rosemoe.sora.text.CharPosition;
+
 public class ContentWrapper implements Content {
 
     private final io.github.rosemoe.sora.text.Content mContent;
@@ -81,6 +83,11 @@ public class ContentWrapper implements Content {
     }
 
     @Override
+    public int getLineCount() {
+        return mContent.getLineCount();
+    }
+
+    @Override
     public String getLineString(int line) {
         return mContent.getLineString(line);
     }
@@ -91,7 +98,24 @@ public class ContentWrapper implements Content {
     }
 
     @Override
+    public void insert(int index, CharSequence string) {
+        CharPosition startPos = mContent.getIndexer()
+                .getCharPosition(index);
+        insert(startPos.getLine(), startPos.getColumn(), string);
+    }
+
+    @Override
     public void delete(int start, int end) {
         mContent.delete(start, end);
+    }
+
+    @Override
+    public void replace(int start, int end, CharSequence text) {
+        CharPosition startPos = mContent.getIndexer()
+                .getCharPosition(start);
+        CharPosition endPos = mContent.getIndexer()
+                .getCharPosition(end);
+        mContent.replace(startPos.getLine(), startPos.getColumn(),
+                         endPos.getLine(), endPos.getColumn(), text);
     }
 }

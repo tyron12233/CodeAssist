@@ -25,6 +25,7 @@ import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.java.util.ErrorCodes;
 import com.tyron.completion.java.util.TreeUtil;
+import com.tyron.completion.progress.ProcessCanceledException;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.Editor;
 
@@ -174,10 +175,13 @@ public class JavaAnalyzer extends AbstractCodeAnalyzer<Object> {
                         }
                     });
                 } catch (Throwable e) {
+                    if (e instanceof ProcessCanceledException) {
+                        throw e;
+                    }
                     if (BuildConfig.DEBUG) {
                         Log.e(TAG, "Unable to get diagnostics", e);
                     }
-                    service.close();
+                    service.destroy();
                     ProgressManager.getInstance()
                             .runLater(() -> editor.setAnalyzing(false));
                 }
