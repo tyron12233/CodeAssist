@@ -104,7 +104,12 @@ public class TreeFileManagerFragment extends Fragment {
             } else {
                 ProgressManager.getInstance().runNonCancelableAsync(() -> {
                     TreeNode<TreeFile> node = TreeNode.root(TreeUtil.getNodes(refreshRoot));
-                    treeView.refreshTreeView(node);
+                    ProgressManager.getInstance().runLater(() -> {
+                        if (getActivity() == null) {
+                            return;
+                        }
+                        treeView.refreshTreeView(node);
+                    });
                 });
             }
         });
