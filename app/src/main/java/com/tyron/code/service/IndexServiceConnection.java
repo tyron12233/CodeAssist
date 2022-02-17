@@ -17,6 +17,7 @@ import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.project.Project;
 import com.tyron.code.ui.main.MainViewModel;
 
+import java.io.File;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
@@ -63,10 +64,13 @@ public class IndexServiceConnection implements ServiceConnection {
         String openedFilesString = settings.getString(ProjectSettings.SAVED_EDITOR_FILES, null);
         if (openedFilesString != null) {
             try {
-                Type type = new TypeToken<List<FileEditorSavedState>>(){}.getType();
-                List<FileEditorSavedState> savedStates = new Gson().fromJson(openedFilesString, type);
+                Type type = new TypeToken<List<FileEditorSavedState>>() {
+                }.getType();
+                List<FileEditorSavedState> savedStates =
+                        new Gson().fromJson(openedFilesString, type);
                 return savedStates.stream()
-                        .filter(it -> it.getFile().exists())
+                        .filter(it -> it.getFile()
+                                .exists())
                         .map(FileEditorManagerImpl.getInstance()::openFile)
                         .collect(Collectors.toList());
             } catch (Throwable e) {
@@ -90,14 +94,28 @@ public class IndexServiceConnection implements ServiceConnection {
             mMainViewModel.setIndexing(false);
             mMainViewModel.setCurrentState(null);
             if (success) {
-                Project currentProject = ProjectManager.getInstance().getCurrentProject();
+                Project currentProject = ProjectManager.getInstance()
+                        .getCurrentProject();
                 if (project.equals(currentProject)) {
-                    mMainViewModel.setToolbarTitle(project.getRootFile().getName());
-                    mMainViewModel.setFiles(getOpenedFiles(currentProject.getSettings()));
+                    mMainViewModel.setToolbarTitle(project.getRootFile()
+                                                           .getName());
+                    List<FileEditor> openedFiles = getOpenedFiles(currentProject.getSettings());
+
+                    List<FileEditor> value = mMainViewModel.getFiles()
+                            .getValue();
+                    if (value != null) {
+                        List<File> toClose = value.stream()
+                                .map(FileEditor::getFile)
+                                .filter(file -> openedFiles.stream()
+                                        .noneMatch(editor -> file.equals(editor.getFile())))
+                                .collect(Collectors.toList());
+                        toClose.forEach(FileEditorManagerImpl.getInstance()::closeFile);
+                    }
+                    mMainViewModel.setFiles(openedFiles);
                 }
             } else {
-                if (mMainViewModel.getBottomSheetState().getValue()
-                        != BottomSheetBehavior.STATE_EXPANDED) {
+                if (mMainViewModel.getBottomSheetState()
+                            .getValue() != BottomSheetBehavior.STATE_EXPANDED) {
                     mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HALF_EXPANDED);
                 }
                 mLogViewModel.e(LogViewModel.BUILD_LOG, message);

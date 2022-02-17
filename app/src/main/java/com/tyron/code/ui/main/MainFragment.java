@@ -286,7 +286,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         mMainViewModel.openFile(file);
     }
 
-    public void openProject(Project project) {
+    public void openProject(@NonNull Project project) {
         if (CompletionEngine.isIndexing()) {
             return;
         }
@@ -294,7 +294,9 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             return;
         }
 
-        saveAll();
+        if (project.equals(ProjectManager.getInstance().getCurrentProject())) {
+            saveAll();
+        }
 
         mProject = project;
         mIndexServiceConnection.setProject(project);

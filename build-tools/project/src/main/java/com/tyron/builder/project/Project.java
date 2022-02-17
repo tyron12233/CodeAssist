@@ -63,8 +63,9 @@ public class Project {
         mCompiling = compiling;
     }
 
-    public void open() throws IOException { ;
-        mMainModule.open();
+    public void open() throws IOException {
+        mSettings.refresh();
+        mMainModule.open();;
 
         graph.addNode(mMainModule);
         addEdges(graph, mMainModule);
