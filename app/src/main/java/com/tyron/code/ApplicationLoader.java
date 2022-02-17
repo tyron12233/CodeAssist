@@ -3,11 +3,9 @@ package com.tyron.code;
 import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.StrictMode;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.preference.PreferenceManager;
@@ -50,17 +48,30 @@ import com.tyron.language.xml.XmlLanguage;
 import com.tyron.selection.java.JavaExpandSelectionProvider;
 import com.tyron.selection.xml.XmlExpandSelectionProvider;
 
+import com.tyron.code.event.EventManager;
+
 public class ApplicationLoader extends Application {
-    
+
+    private static ApplicationLoader sInstance;
+
+    public static ApplicationLoader getInstance() {
+        return sInstance;
+    }
+
+    private EventManager mEventManager;
+
+    // no memory leaks since applicationContext is a singleton
     public static Context applicationContext;
-    public static Handler applicationHandler = new Handler(Looper.getMainLooper());
     
     @Override
     public void onCreate() {
         super.onCreate();
         setupTheme();
-        applicationContext = this;
 
+        mEventManager = new EventManager();
+
+        sInstance = this;
+        applicationContext = this;
         ApplicationProvider.initialize(applicationContext);
 
         CompletionModule.initialize(applicationContext);
@@ -77,6 +88,21 @@ public class ApplicationLoader extends Application {
                 .apply();
 
         runStartup();
+    }
+
+    /**
+     * Can be used to communicate within the application globally
+     * @return the EventManager
+     */
+    @NonNull
+    public EventManager getEventManager() {
+        return mEventManager;
+    }
+
+    private void setupTheme() {
+        ApplicationSettingsFragment.ThemeProvider provider = new ApplicationSettingsFragment.ThemeProvider(this);
+        int theme = provider.getThemeFromPreferences();
+        AppCompatDelegate.setDefaultNightMode(theme);
     }
 
     private void runStartup() {
@@ -141,12 +167,6 @@ public class ApplicationLoader extends Application {
             KotlinCompletionModule.registerActions(manager);
         });
         startupManager.startup();
-    }
-
-    private void setupTheme() {
-        ApplicationSettingsFragment.ThemeProvider provider = new ApplicationSettingsFragment.ThemeProvider(this);
-        int theme = provider.getThemeFromPreferences();
-        AppCompatDelegate.setDefaultNightMode(theme);
     }
 
     public static SharedPreferences getDefaultPreferences() {
