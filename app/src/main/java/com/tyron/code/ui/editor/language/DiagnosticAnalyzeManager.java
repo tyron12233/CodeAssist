@@ -40,4 +40,13 @@ public abstract class DiagnosticAnalyzeManager<T> extends SimpleAnalyzeManager<T
         mShouldAnalyzeInBg = extraArguments.getBoolean("bg", false);
         super.reset(content, extraArguments);
     }
+
+    @Override
+    public Bundle getExtraArguments() {
+        Bundle extraArguments = super.getExtraArguments();
+        if (extraArguments == null) {
+            extraArguments = new Bundle();
+        }
+        return extraArguments;
+    }
 }
