@@ -21,12 +21,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Logger;
 
 /**
  * Main entry point for the completions api.
  */
 public class CompletionEngine {
 
+    private final Logger logger = IdeLog.getCurrentLogger(this);
     private static CompletionEngine sInstance = null;
 
     public static CompletionEngine getInstance() {
@@ -90,8 +92,7 @@ public class CompletionEngine {
             CompletionList complete = provider.complete(parameters);
             list.items.addAll(complete.items);
         }
-
-        IdeLog.getLogger().info("Completions took " + Duration.between(now, Instant.now()).toMillis() + " ms");
+        logger.info("Completions took " + Duration.between(now, Instant.now()).toMillis() + " ms");
         return list;
     }
 
