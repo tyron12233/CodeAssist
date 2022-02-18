@@ -21,6 +21,7 @@ import com.google.common.collect.ListMultimap;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
@@ -73,6 +74,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Logger;
 
 import me.xdrop.fuzzywuzzy.FuzzySearch;
 
@@ -96,10 +98,11 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         if (!(params.getModule() instanceof AndroidModule)) {
             return CompletionList.EMPTY;
         }
-
         try {
             XmlRepository repository =
                     getRepository(params.getProject(), (AndroidModule) params.getModule());
+
+            repository.getRepository().updateFile(params.getFile());
 
             String contents = params.getContents();
 

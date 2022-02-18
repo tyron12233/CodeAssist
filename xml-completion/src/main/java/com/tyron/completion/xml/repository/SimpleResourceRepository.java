@@ -4,15 +4,18 @@ import android.content.res.Resources;
 import android.graphics.Color;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Multimap;
 import com.tyron.builder.compiler.manifest.configuration.Configurable;
 import com.tyron.builder.compiler.manifest.configuration.FolderConfiguration;
 import com.tyron.builder.compiler.manifest.resources.ResourceFolderType;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
+import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
 import com.tyron.completion.xml.repository.api.ResourceValue;
@@ -35,6 +38,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 public class SimpleResourceRepository implements Repository {
 
@@ -49,6 +53,8 @@ public class SimpleResourceRepository implements Repository {
     private final File mResDir;
     private final ResourceNamespace mNamespace;
     protected final ResourceTable mTable = new ResourceTable();
+    protected final Multimap<File, ResourceItem> mFileItems = ArrayListMultimap.create();
+
     private FolderConfiguration mConfiguration;
 
     public SimpleResourceRepository(File resDir, ResourceNamespace namespace) {
@@ -67,27 +73,64 @@ public class SimpleResourceRepository implements Repository {
         Collection<File> dirs = FileUtils.listFilesAndDirs(resDir, FalseFileFilter.INSTANCE,
                                                            TrueFileFilter.INSTANCE);
         for (File dir : dirs) {
-            ResourceFolderType folderType = ResourceFolderType.getFolderType(dir.getName());
-            if (folderType == null) {
-                continue;
-            }
-            ResourceParser parser = sParsers.get(folderType);
+
+            ResourceParser parser = getParser(dir);
             if (parser == null) {
-                continue;
+                return;
             }
 
             Collection<File> xmlFiles =
                     FileUtils.listFiles(dir, new SuffixFileFilter("xml"), FalseFileFilter.INSTANCE);
-
             for (File xmlFile : xmlFiles) {
-                List<ResourceValue> values = parser.parse(xmlFile, namespace, name);
-                for (ResourceValue value : values) {
-                    ListMultimap<String, ResourceItem> tableValue =
-                            mTable.getOrPutEmpty(value.getNamespace(), value.getResourceType());
-                    tableValue.put(value.getName(), new SimpleResourceItem(value, dir.getName()));
-                }
+                parseFile(parser, xmlFile, dir.getName(), namespace, name);
             }
         }
+    }
+
+    @Nullable
+    private ResourceParser getParser(@NonNull File directory) {
+        ResourceFolderType folderType = ResourceFolderType.getFolderType(directory.getName());
+        if (folderType == null) {
+            return null;
+        }
+        return sParsers.get(folderType);
+    }
+
+    private void parseFile(@NonNull ResourceParser parser,
+                           @NonNull File xmlFile,
+                           @NonNull String folderName,
+                           @NonNull ResourceNamespace namespace,
+                           @Nullable String libraryName) throws IOException {
+        List<ResourceValue> values = parser.parse(xmlFile, namespace, libraryName);
+        for (ResourceValue value : values) {
+            ListMultimap<String, ResourceItem> tableValue =
+                    mTable.getOrPutEmpty(value.getNamespace(), value.getResourceType());
+            SimpleResourceItem resourceItem = new SimpleResourceItem(value, folderName);
+            tableValue.put(value.getName(), resourceItem);
+
+            mFileItems.put(xmlFile, resourceItem);
+        }
+    }
+
+    @Override
+    public void updateFile(@NonNull File file) throws IOException {
+        Collection<ResourceItem> existingItems = mFileItems.get(file);
+        if (existingItems != null) {
+            existingItems.forEach(mTable::remove);
+        }
+
+        File parent = file.getParentFile();
+        if (parent == null) {
+            return;
+        }
+
+        ResourceParser parser = getParser(parent);
+        if (parser == null) {
+            // should not happen, but return just in case
+            return;
+        }
+
+        parseFile(parser, file, parent.getName(), mNamespace, null);
     }
 
     @NonNull
