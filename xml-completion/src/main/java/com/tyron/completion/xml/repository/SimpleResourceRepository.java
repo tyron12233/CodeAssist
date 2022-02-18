@@ -79,7 +79,7 @@ public class SimpleResourceRepository implements Repository {
 
             ResourceParser parser = getParser(dir);
             if (parser == null) {
-                return;
+                continue;
             }
 
             Collection<File> xmlFiles =
@@ -219,6 +219,12 @@ public class SimpleResourceRepository implements Repository {
     @Override
     public List<ResourceNamespace> getNamespaces() {
         return ImmutableList.copyOf(mTable.rowKeySet());
+    }
+
+    @NonNull
+    @Override
+    public List<ResourceType> getResourceTypes() {
+        return ImmutableList.copyOf(mTable.columnKeySet());
     }
 
     @NonNull
