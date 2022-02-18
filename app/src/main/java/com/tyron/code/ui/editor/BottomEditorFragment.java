@@ -87,14 +87,18 @@ public class BottomEditorFragment extends Fragment {
         new TabLayoutMediator(mTabLayout, mPager, (tab, position) -> {
             switch (position) {
                 case 0:
-                    tab.setText("Build Logs");
+                    tab.setText(R.string.tab_build_logs_title);
                     break;
                 default:
                 case 1:
-                    tab.setText("App Logs");
+                    tab.setText(R.string.tab_app_logs_title);
                     break;
                 case 2:
-                    tab.setText("Debug");
+                    tab.setText(R.string.tab_diagnostics_title);
+                    break;
+                case 3:
+                    tab.setText(R.string.tab_ide_logs_title);
+                    break;
             }
         }).attach();
 
@@ -199,12 +203,14 @@ public class BottomEditorFragment extends Fragment {
                     return AppLogFragment.newInstance(LogViewModel.APP_LOG);
                 case 2:
                     return AppLogFragment.newInstance(LogViewModel.DEBUG);
+                case 3:
+                    return AppLogFragment.newInstance(LogViewModel.IDE);
             }
         }
 
         @Override
         public int getItemCount() {
-            return 3;
+            return 4;
         }
     }
 }

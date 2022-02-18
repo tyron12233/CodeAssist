@@ -81,6 +81,30 @@ public class CompletionParameters {
         return mEditor;
     }
 
+    @Override
+    public String toString() {
+        return "CompletionParameters{" +
+               "mProject=" +
+               mProject +
+               ", mModule=" +
+               mModule +
+               ", mFile=" +
+               mFile +
+               '\'' +
+               ", mPrefix='" +
+               mPrefix +
+               '\'' +
+               ", mLine=" +
+               mLine +
+               ", mColumn=" +
+               mColumn +
+               ", mIndex=" +
+               mIndex +
+               ", mEditor=" +
+               mEditor +
+               '}';
+    }
+
     public static final class Builder {
 
         private Project project;

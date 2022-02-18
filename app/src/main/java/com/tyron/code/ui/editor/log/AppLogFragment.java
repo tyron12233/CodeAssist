@@ -22,9 +22,16 @@ import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.fileeditor.api.FileEditorManager;
 
 import java.util.List;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 public class AppLogFragment extends Fragment
         implements ProjectManager.OnProjectOpenListener {
+
+    /** Only used in IDE Logs **/
+    private Handler mHandler;
 
     public static AppLogFragment newInstance(int id) {
         AppLogFragment fragment = new AppLogFragment();

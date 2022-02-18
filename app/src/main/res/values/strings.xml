@@ -222,4 +222,10 @@
 
     <!-- Editor -->
     <string name="editor_error_file">An error has occurred while reading the file. Changes will not be saved.</string>
+
+    <!-- Bottom Editor Fragment -->
+    <string name="tab_build_logs_title">Build Logs</string>
+    <string name="tab_app_logs_title">App Logs</string>
+    <string name="tab_ide_logs_title">IDE Logs</string>
+    <string name="tab_diagnostics_title">Diagnostics</string>
 </resources>

@@ -35,6 +35,7 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.file.event.RefreshRootEvent;
 import com.tyron.code.util.UiUtilsKt;
+import com.tyron.common.logging.IdeLog;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.fileeditor.api.FileEditorSavedState;
 import com.tyron.code.ui.project.ProjectManager;
@@ -60,6 +61,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 public class MainFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
@@ -69,6 +74,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     public static final Key<CompileCallback> COMPILE_CALLBACK_KEY = Key.create("compileCallback");
     public static final Key<IndexCallback> INDEX_CALLBACK_KEY = Key.create("indexCallbackKey");
     public static final Key<MainViewModel> MAIN_VIEW_MODEL_KEY = Key.create("mainViewModel");
+
+    private Handler mHandler;
 
     public static MainFragment newInstance(@NonNull String projectPath) {
         Bundle bundle = new Bundle();
@@ -231,6 +238,31 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                         }
                     });
         }
+
+        mHandler = new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                Level level = record.getLevel();
+                if (Level.WARNING.equals(level)) {
+                    mLogViewModel.w(LogViewModel.IDE, record.getMessage());
+                } else if (Level.SEVERE.equals(level)) {
+                    mLogViewModel.e(LogViewModel.IDE, record.getMessage());
+                } else {
+                    mLogViewModel.d(LogViewModel.IDE, record.getMessage());
+                }
+            }
+
+            @Override
+            public void flush() {
+                mLogViewModel.clear(LogViewModel.IDE);
+            }
+
+            @Override
+            public void close() throws SecurityException {
+                mLogViewModel.clear(LogViewModel.IDE);
+            }
+        };
+        IdeLog.getLogger().addHandler(mHandler);
     }
 
     @Override
@@ -249,6 +281,15 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 
         if (mLogReceiver != null) {
             requireActivity().unregisterReceiver(mLogReceiver);
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+
+        if (mHandler != null) {
+            IdeLog.getLogger().removeHandler(mHandler);
         }
     }
 

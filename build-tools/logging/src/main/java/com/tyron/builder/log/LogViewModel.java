@@ -20,6 +20,7 @@ public class LogViewModel extends ViewModel {
     public static final int APP_LOG = totalCount++;
     public static final int BUILD_LOG = totalCount++;
     public static final int DEBUG = totalCount++;
+    public static final int IDE = totalCount++;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
