@@ -15,6 +15,7 @@ import com.tyron.builder.compiler.manifest.configuration.Configurable;
 import com.tyron.builder.compiler.manifest.configuration.FolderConfiguration;
 import com.tyron.builder.compiler.manifest.resources.ResourceFolderType;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
+import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
 import com.tyron.completion.xml.repository.api.ResourceValue;
@@ -29,6 +30,7 @@ import org.apache.commons.io.filefilter.TrueFileFilter;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -37,6 +39,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.logging.Logger;
 
 public class SimpleResourceRepository implements Repository {
 
@@ -47,6 +50,8 @@ public class SimpleResourceRepository implements Repository {
         parsers.put(ResourceFolderType.VALUES, new ValuesXmlParser());
         sParsers = parsers.build();
     }
+
+    private final Logger logger = IdeLog.getCurrentLogger(this);
 
     private final File mResDir;
     private final ResourceNamespace mNamespace;
@@ -80,7 +85,12 @@ public class SimpleResourceRepository implements Repository {
             Collection<File> xmlFiles =
                     FileUtils.listFiles(dir, new SuffixFileFilter("xml"), FalseFileFilter.INSTANCE);
             for (File xmlFile : xmlFiles) {
-                parseFile(parser, xmlFile, dir.getName(), namespace, name);
+                try {
+                    String contents = FileUtils.readFileToString(xmlFile, StandardCharsets.UTF_8);
+                    parseFile(parser, xmlFile, contents, dir.getName(), namespace, name);
+                } catch (IOException e) {
+                    logger.warning("Unable to parse " + xmlFile.getName() + ": " + e.getMessage());
+                }
             }
         }
     }
@@ -96,10 +106,11 @@ public class SimpleResourceRepository implements Repository {
 
     private void parseFile(@NonNull ResourceParser parser,
                            @NonNull File xmlFile,
+                           @NonNull String contents,
                            @NonNull String folderName,
                            @NonNull ResourceNamespace namespace,
                            @Nullable String libraryName) throws IOException {
-        List<ResourceValue> values = parser.parse(xmlFile, namespace, libraryName);
+        List<ResourceValue> values = parser.parse(contents, namespace, libraryName);
         for (ResourceValue value : values) {
             ListMultimap<String, ResourceItem> tableValue =
                     mTable.getOrPutEmpty(value.getNamespace(), value.getResourceType());
@@ -114,7 +125,9 @@ public class SimpleResourceRepository implements Repository {
     public void updateFile(@NonNull File file, @NonNull String contents) throws IOException {
         Collection<ResourceItem> existingItems = mFileItems.get(file);
         if (existingItems != null) {
-            existingItems.forEach(mTable::remove);
+            existingItems.stream()
+                    .filter(Objects::nonNull)
+                    .forEach(mTable::remove);
         }
 
         File parent = file.getParentFile();
@@ -128,7 +141,7 @@ public class SimpleResourceRepository implements Repository {
             return;
         }
 
-        parseFile(parser, file, parent.getName(), mNamespace, null);
+        parseFile(parser, file, contents, parent.getName(), mNamespace, null);
     }
 
     @NonNull
