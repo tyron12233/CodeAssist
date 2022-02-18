@@ -89,6 +89,9 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
                 return;
             }
 
+            ProgressManager.getInstance()
+                    .runLater(() -> editor.setAnalyzing(true));
+
             sDebouncer.cancel();
             sDebouncer.schedule(cancel -> {
                 AndroidModule mainModule = (AndroidModule) project.getMainModule();
@@ -103,7 +106,8 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
                         CompilerContainer container =
                                 service.compile(Collections.singletonList(sourceFileObject));
                         container.run(__ -> {
-
+                            ProgressManager.getInstance()
+                                    .runLater(() -> editor.setAnalyzing(false), 300);
                         });
                     });
                 } catch (IOException e) {
@@ -118,9 +122,6 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
         }
 
         List<DiagnosticWrapper> diagnosticWrappers = new ArrayList<>();
-
-        ProgressManager.getInstance()
-                .runLater(() -> editor.setAnalyzing(true));
 
         sDebouncer.cancel();
         sDebouncer.schedule(cancel -> {
@@ -158,8 +159,6 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
                             editor.setDiagnostics(diagnosticWrappers.stream()
                                                           .filter(it -> it.getLineNumber() > 0)
                                                           .collect(Collectors.toList()));
-                            ProgressManager.getInstance()
-                                    .runLater(() -> editor.setAnalyzing(false), 300);
                         });
             }
             return Unit.INSTANCE;
