@@ -1,7 +1,5 @@
 package com.tyron.completion.xml.task;
 
-import androidx.annotation.NonNull;
-
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Table;
@@ -10,18 +8,19 @@ import com.tyron.builder.compiler.symbol.SymbolLoader;
 import com.tyron.builder.compiler.symbol.SymbolWriter;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.builder.project.api.Module;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.repository.ResourceItem;
 import com.tyron.completion.xml.repository.ResourceRepository;
+import com.tyron.completion.xml.repository.api.AttrResourceValue;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
+import com.tyron.completion.xml.repository.api.ResourceUrl;
+import com.tyron.completion.xml.repository.api.StyleableResourceValue;
 
 import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -61,7 +60,7 @@ public class InjectResourcesTask {
 
         Table<String, String, SymbolLoader.SymbolEntry> symbols = HashBasedTable.create();
         for (ResourceType resourceType : resourceTypes) {
-            if (!resourceType.getCanBeReferenced()) {
+            if (!resourceType.getCanBeReferenced() && resourceType != ResourceType.STYLEABLE) {
                 continue;
             }
             ListMultimap<String, ResourceItem> resources =
@@ -71,11 +70,8 @@ public class InjectResourcesTask {
                 continue;
             }
             for (Map.Entry<String, ResourceItem> resourceItemEntry : resources.entries()) {
-                ResourceItem value = resourceItemEntry.getValue();
-                SymbolLoader.SymbolEntry entry =
-                        new SymbolLoader.SymbolEntry(value.getName(), getType(resourceType),
-                                                     String.valueOf(id));
-                symbols.put(resourceType.getName(), value.getName(), entry);
+                addResource(id, repository.getNamespace(), symbols, resourceType,
+                            resourceItemEntry);
                 id++;
             }
         }
@@ -86,8 +82,64 @@ public class InjectResourcesTask {
         return symbolWriter.getString();
     }
 
+    private void addResource(int id,
+                             ResourceNamespace namespace,
+                             Table<String, String, SymbolLoader.SymbolEntry> symbols,
+                             ResourceType resourceType,
+                             Map.Entry<String, ResourceItem> resourceItemEntry) {
+        if (resourceType == ResourceType.STYLEABLE) {
+            addStyleableResource(id, namespace, symbols, resourceItemEntry);
+            return;
+        }
+        ResourceItem value = resourceItemEntry.getValue();
+        String replacedName = convertName(value.getName());
+        SymbolLoader.SymbolEntry entry =
+                new SymbolLoader.SymbolEntry(replacedName, getType(resourceType),
+                                             String.valueOf(id));
+        symbols.put(resourceType.getName(), replacedName, entry);
+    }
+
+    private void addStyleableResource(int id,
+                                      ResourceNamespace namespace,
+                                      Table<String, String, SymbolLoader.SymbolEntry> symbols,
+                                      Map.Entry<String, ResourceItem> resourceItemEntry) {
+        ResourceItem value = resourceItemEntry.getValue();
+        if (!(value.getResourceValue() instanceof StyleableResourceValue)) {
+            return;
+        }
+        StyleableResourceValue styleable = ((StyleableResourceValue) value.getResourceValue());
+        String valueItem = "new int[" +
+                           styleable.getAllAttributes()
+                                   .size() +
+                           "];";
+        String replacedName = convertName(value.getName());
+        SymbolLoader.SymbolEntry entry =
+                new SymbolLoader.SymbolEntry(replacedName, "int[]", valueItem);
+        symbols.put(ResourceType.STYLEABLE.getName(), replacedName, entry);
+
+        for (AttrResourceValue attr : styleable.getAllAttributes()) {
+            String name = attr.getName();
+            if (name.isEmpty()) {
+                continue;
+            }
+
+            String replace = name.replace(':', '_');
+            String attrName = replacedName + (replace.isEmpty() ? "" : "_" + replace);
+            SymbolLoader.SymbolEntry attrEntry =
+                    new SymbolLoader.SymbolEntry(attrName, "int", "0");
+            symbols.put(ResourceType.STYLEABLE.getName(), attrName, attrEntry);
+        }
+    }
+
     private static String getType(ResourceType type) {
         return "int";
+    }
+
+    private static String convertName(String name) {
+        if (!name.contains(".")) {
+            return name;
+        }
+        return name.replace('.', '_');
     }
 
     public static File getOrCreateResourceClass(AndroidModule module) throws IOException {
