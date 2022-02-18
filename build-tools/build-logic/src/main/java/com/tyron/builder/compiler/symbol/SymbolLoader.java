@@ -41,12 +41,25 @@ public class SymbolLoader {
         }
     }
 
+    public SymbolLoader(List<SymbolEntry> entries) {
+        this(null, null);
+
+        mSymbols = HashBasedTable.create();
+        for (SymbolEntry entry : entries) {
+            mSymbols.put(entry.getType(), entry.getName(), entry);
+        }
+    }
+
     public SymbolLoader(File symbolFile, ILogger logger) {
         mSymbolFile = symbolFile;
         mLogger = logger;
     }
 
     public void load() throws IOException {
+        if (mSymbolFile == null) {
+            throw new IOException("Symbol file is null. load() should not be called when" +
+                                  "the symbols are injected at runtime.");
+        }
         List<String> lines = Files.readLines(mSymbolFile, Charsets.UTF_8);
 
         mSymbols = HashBasedTable.create();
@@ -73,10 +86,13 @@ public class SymbolLoader {
                 mSymbols.put(className, name, new SymbolEntry(name, type, value));
             }
         } catch (IndexOutOfBoundsException e) {
-            String s = String.format(Locale.ENGLISH, "File format error reading %s\tline %d: '%s'",
-                    mSymbolFile.getAbsolutePath(), lineIndex, line);
-            mLogger.error(s);
-            throw new IOException(s, e);
+            if (mLogger != null) {
+                String s =
+                        String.format(Locale.ENGLISH, "File format error reading %s\tline %d: '%s'",
+                                      mSymbolFile.getAbsolutePath(), lineIndex, line);
+                mLogger.error(s);
+                throw new IOException(s, e);
+            }
         }
     }
 
