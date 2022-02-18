@@ -221,7 +221,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
             DOMDocument document = DOMParser.getInstance()
                     .parse(getText().toString(), "", null);
             DOMNode nodeAt = document.findNodeAt(getCursor().getLeft());
-            if (!DOMUtils.isClosed(nodeAt)) {
+            if (!DOMUtils.isClosed(nodeAt) && nodeAt.getNodeName() != null) {
                 String insertText = full ? "</" + nodeAt.getNodeName() + ">" : ">";
                 commitText(insertText);
                 setSelection(getCursor().getLeftLine(),
