@@ -26,6 +26,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import kotlin.io.FilesKt;
+
 public class LayoutXmlParser implements ResourceParser {
 
     private static class Result {
@@ -58,8 +60,9 @@ public class LayoutXmlParser implements ResourceParser {
                                           String libraryName) {
         List<ResourceValue> values = new ArrayList<>();
         Result result = parseLayout(root, namespace, libraryName);
-        ResourceReference resourceReference =
-                new ResourceReference(namespace, ResourceType.LAYOUT, file.getName());
+        ResourceReference resourceReference = new ResourceReference(namespace, ResourceType.LAYOUT,
+                                                                    FilesKt.getNameWithoutExtension(
+                                                                            file));
         LayoutResourceValueImpl layoutValue =
                 new LayoutResourceValueImpl(resourceReference, null, libraryName,
                                             result.layoutInfo);
