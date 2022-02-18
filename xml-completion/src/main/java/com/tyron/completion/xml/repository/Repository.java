@@ -76,8 +76,17 @@ public interface Repository {
     @NonNull
     ResourceNamespace getNamespace();
 
+    /**
+     * Return all the namespaces stored in this repository
+     */
     @NonNull
     List<ResourceNamespace> getNamespaces();
+
+    /**
+     * Return all the resource types stored in this repository
+     */
+    @NonNull
+    List<ResourceType> getResourceTypes();
 
     ResourceValue getValue(ResourceReference reference);
 
