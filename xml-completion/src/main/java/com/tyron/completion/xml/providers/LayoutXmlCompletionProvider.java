@@ -100,7 +100,7 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
         }
         try {
             XmlRepository repository =
-                    getRepository(params.getProject(), (AndroidModule) params.getModule());
+                    XmlRepository.getRepository(params.getProject(), (AndroidModule) params.getModule());
 
             repository.getRepository().updateFile(params.getFile());
 
@@ -174,13 +174,5 @@ public class LayoutXmlCompletionProvider extends CompletionProvider {
                                                   resourceNamespace, namespace, builder);
         }
         return builder;
-    }
-
-    private XmlRepository getRepository(Project project, AndroidModule module) throws IOException {
-        XmlIndexProvider indexProvider = CompilerService.getInstance()
-                .getIndex(XmlIndexProvider.KEY);
-        XmlRepository repository = indexProvider.get(project, module);
-        repository.initialize(module);
-        return repository;
     }
 }

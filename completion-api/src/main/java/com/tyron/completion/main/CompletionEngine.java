@@ -90,7 +90,9 @@ public class CompletionEngine {
         List<CompletionProvider> providers = CompletionProvider.forParameters(parameters);
         for (CompletionProvider provider : providers) {
             CompletionList complete = provider.complete(parameters);
-            list.items.addAll(complete.items);
+            if (complete != null) {
+                list.items.addAll(complete.items);
+            }
         }
         logger.info("Completions took " + Duration.between(now, Instant.now()).toMillis() + " ms");
         return list;

@@ -21,9 +21,11 @@ import android.widget.TextView;
 import android.widget.ViewFlipper;
 import android.widget.ViewSwitcher;
 
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.util.Decompress;
+import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.Format;
@@ -320,5 +322,13 @@ public class XmlRepository {
 
     public ResourceRepository getRepository() {
         return mRepository;
+    }
+
+    public static XmlRepository getRepository(Project project, AndroidModule module) throws IOException {
+        XmlIndexProvider indexProvider = CompilerService.getInstance()
+                .getIndex(XmlIndexProvider.KEY);
+        XmlRepository repository = indexProvider.get(project, module);
+        repository.initialize(module);
+        return repository;
     }
 }
