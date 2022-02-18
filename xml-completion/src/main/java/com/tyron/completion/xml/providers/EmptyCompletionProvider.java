@@ -46,39 +46,5 @@ public class EmptyCompletionProvider extends CompletionProvider {
         XmlRepository repository = XmlRepository.getRepository(parameters.getProject(),
                                                                (AndroidModule) parameters.getModule());
         repository.getRepository().updateFile(file, parameters.getContents());
-        createSymbols(repository);
-    }
-
-    private void createSymbols(XmlRepository xmlRepository) throws IOException {
-        ResourceRepository repository = xmlRepository.getRepository();
-        List<ResourceType> resourceTypes =
-                repository.getResourceTypes();
-        int id = 0;
-
-        List<SymbolLoader.SymbolEntry> entries = new ArrayList<>();
-        for (ResourceType resourceType : resourceTypes) {
-            if (!resourceType.getCanBeReferenced()) {
-                continue;
-            }
-            ListMultimap<String, ResourceItem> resources =
-                    repository.getResources(repository.getNamespace(), resourceType);
-            if (resources.values().isEmpty()) {
-                continue;
-            }
-            for (Map.Entry<String, ResourceItem> resourceItemEntry : resources.entries()) {
-                ResourceItem value = resourceItemEntry.getValue();
-                SymbolLoader.SymbolEntry entry = new SymbolLoader.SymbolEntry(value.getName(),
-                                                                              resourceType.getName(),
-                                                                              String.valueOf(id));
-                entries.add(entry);
-                id++;
-            }
-        }
-
-        SymbolLoader loader = new SymbolLoader(entries);
-        SymbolWriter symbolWriter = new SymbolWriter(null, "com.tyron.code", loader, null);
-        symbolWriter.addSymbolsToWrite(loader);
-        IdeLog.getLogger().info("Writings symbols: \n" +
-                                symbolWriter.getString());
     }
 }

@@ -137,6 +137,6 @@ public class SymbolWriter {
                 FileUtils.writeStringToFile(file, contents, Charset.defaultCharset());
             }
         }
-        mProject.addJavaFile(file);
+        mProject.addResourceClass(file);
     }
 }

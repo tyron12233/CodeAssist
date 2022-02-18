@@ -3,6 +3,7 @@ package com.tyron.builder.project.impl;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
@@ -17,7 +18,9 @@ import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -26,11 +29,13 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
 
     private ManifestData mManifestData;
     private final Map<String, File> mKotlinFiles;
+    private Map<String, File> mResourceClasses;
 
     public AndroidModuleImpl(File root) {
         super(root);
 
         mKotlinFiles = new HashMap<>();
+        mResourceClasses = new HashMap<>(1);
     }
 
     @Override
@@ -65,13 +70,13 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         }
 
         // R.java files
-        File gen = new File(getBuildDirectory(), "gen");
-        if (gen.exists()) {
-            FileUtils.iterateFiles(gen,
-                    FileFilterUtils.suffixFileFilter(".java"),
-                    TrueFileFilter.INSTANCE
-            ).forEachRemaining(this::addJavaFile);
-        }
+//        File gen = new File(getBuildDirectory(), "gen");
+//        if (gen.exists()) {
+//            FileUtils.iterateFiles(gen,
+//                    FileFilterUtils.suffixFileFilter(".java"),
+//                    TrueFileFilter.INSTANCE
+//            ).forEachRemaining(this::addJavaFile);
+//        }
     }
 
     @Override
@@ -133,6 +138,16 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     @Override
     public int getMinSdk() {
         return getSettings().getInt(ModuleSettings.MIN_SDK_VERSION, 21);
+    }
+
+    @Override
+    public void addResourceClass(@NonNull File file) {
+        mResourceClasses.put(StringSearch.packageName(file), file);
+    }
+
+    @Override
+    public Map<String, File> getResourceClasses() {
+        return ImmutableMap.copyOf(mResourceClasses);
     }
 
     @NonNull

@@ -41,13 +41,10 @@ public class SymbolLoader {
         }
     }
 
-    public SymbolLoader(List<SymbolEntry> entries) {
+    public SymbolLoader(Table<String, String, SymbolEntry> symbols) {
         this(null, null);
 
-        mSymbols = HashBasedTable.create();
-        for (SymbolEntry entry : entries) {
-            mSymbols.put(entry.getType(), entry.getName(), entry);
-        }
+        mSymbols = symbols;
     }
 
     public SymbolLoader(File symbolFile, ILogger logger) {

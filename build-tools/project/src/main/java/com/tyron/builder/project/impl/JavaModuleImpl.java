@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.util.StringSearch;
@@ -31,6 +32,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     private final Map<String, File> mClassFiles;
     private final Map<String, File> mJavaFiles;
     private final Map<String, Library> mLibraryHashMap;
+    private final Map<String, File> mInjectedClassesMap;
     private final Set<File> mLibraries;
 
     public JavaModuleImpl(File root) {
@@ -38,6 +40,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
         mJavaFiles = new HashMap<>();
         mClassFiles = new HashMap<>();
         mLibraries = new HashSet<>();
+        mInjectedClassesMap = new HashMap<>();
         mLibraryHashMap = new HashMap<>();
     }
 
@@ -197,6 +200,16 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
         } catch (Throwable e) {
             throw new Error(e);
         }
+    }
+
+    @Override
+    public Map<String, File> getInjectedClasses() {
+        return ImmutableMap.copyOf(mInjectedClassesMap);
+    }
+
+    @Override
+    public void addInjectedClass(@NonNull File file) {
+        mInjectedClassesMap.put(StringSearch.packageName(file), file);
     }
 
     @Override

@@ -14,6 +14,7 @@ import com.tyron.common.util.StringSearch;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class MockAndroidModule extends MockJavaModule implements AndroidModule {
@@ -99,6 +100,16 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
         return mMinSdk;
     }
 
+    @Override
+    public Map<String, File> getResourceClasses() {
+        return null;
+    }
+
+    @Override
+    public void addResourceClass(@NonNull File file) {
+
+    }
+
     public void setMinSdk(int min) {
         mMinSdk = min;
     }
@@ -124,5 +135,15 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
     @Override
     public void addKotlinFile(File file) {
         mKotlinFiles.put(StringSearch.packageName(file), file);
+    }
+
+    @Override
+    public Map<String, File> getInjectedClasses() {
+        return null;
+    }
+
+    @Override
+    public void addInjectedClass(@NonNull File file) {
+
     }
 }

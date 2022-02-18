@@ -68,7 +68,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
             FileUtils.iterateFiles(genFolder,
                     FileFilterUtils.suffixFileFilter(".java"),
                     TrueFileFilter.INSTANCE
-            ).forEachRemaining(getModule()::addJavaFile);
+            ).forEachRemaining(getModule()::addResourceClass);
         }
     }
 

@@ -37,6 +37,9 @@ public abstract class DiagnosticAnalyzeManager<T> extends SimpleAnalyzeManager<T
 
     @Override
     public void reset(@NonNull ContentReference content, @NonNull Bundle extraArguments) {
+        if (extraArguments == null) {
+            extraArguments = new Bundle();
+        }
         mShouldAnalyzeInBg = extraArguments.getBoolean("bg", false);
         super.reset(content, extraArguments);
     }

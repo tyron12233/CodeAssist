@@ -79,4 +79,8 @@ public interface JavaModule extends Module {
      * This includes {@code java.lang} package and other classes
      */
     File getBootstrapJarFile();
+
+    Map<String, File> getInjectedClasses();
+
+    void addInjectedClass(@NonNull File file);
 }

@@ -22,8 +22,11 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -58,10 +61,9 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
             for (Module module : mProject.getModules()) {
                 found.addAll(list(module, packageName));
             }
-			Stream<JavaFileObject> stream = found
-                    .stream()
-					.map(this::asJavaFileObject);
-			return stream.collect(Collectors.toList());
+            Stream<JavaFileObject> stream = found.stream()
+                    .map(this::asJavaFileObject);
+            return stream.collect(Collectors.toList());
 		}
 		return super.list(location, packageName, kinds, recurse);
 	}
@@ -140,7 +142,10 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
 	    JavaModule javaModule = (JavaModule) module;
 
 	    List<File> list = new ArrayList<>();
-        for (String file : javaModule.getJavaFiles().keySet()) {
+        Map<String, File> toSearch = new HashMap<>(javaModule.getJavaFiles());
+        toSearch.putAll(javaModule.getInjectedClasses());
+
+        for (String file : toSearch.keySet()) {
             String name = file;
             if (file.endsWith(".")) {
                 name = file.substring(0, file.length() - 1);
@@ -149,7 +154,7 @@ public class SourceFileManager extends ForwardingJavaFileManager<StandardJavaFil
                 continue;
             }
             if (name.substring(0, name.lastIndexOf(".")).equals(packageName) || name.equals(packageName)) {
-                list.add(javaModule.getJavaFiles().get(file));
+                list.add(toSearch.get(file));
             }
         }
         return list;

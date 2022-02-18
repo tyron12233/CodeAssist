@@ -9,8 +9,10 @@ import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
@@ -24,6 +26,7 @@ import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.lexer.XMLLexer;
+import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStream;
@@ -38,6 +41,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Stack;
@@ -74,12 +78,38 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
 
     @Override
     public void analyzeInBackground(CharSequence contents) {
-        if (!mAnalyzerEnabled) {
-            return;
-        }
         Editor editor = mEditorReference.get();
         if (editor == null) {
             return;
+        }
+
+        if (!mAnalyzerEnabled) {
+            Project project = editor.getProject();
+            if (project == null) {
+                return;
+            }
+
+            sDebouncer.cancel();
+            sDebouncer.schedule(cancel -> {
+                AndroidModule mainModule = (AndroidModule) project.getMainModule();
+                InjectResourcesTask task = new InjectResourcesTask(project, mainModule);
+                try {
+                    task.inject(file -> {
+                        JavaCompilerProvider provider = CompilerService.getInstance()
+                                .getIndex(JavaCompilerProvider.KEY);
+                        JavaCompilerService service = provider.getCompiler(project, mainModule);
+                        SourceFileObject sourceFileObject =
+                                new SourceFileObject(file.toPath(), (JavaModule) null, Instant.now());
+                        CompilerContainer container =
+                                service.compile(Collections.singletonList(sourceFileObject));
+                        container.run(__ -> {
+
+                        });
+                    });
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } return Unit.INSTANCE;
+            }); return;
         }
 
         File currentFile = editor.getCurrentFile();
@@ -89,7 +119,8 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
 
         List<DiagnosticWrapper> diagnosticWrappers = new ArrayList<>();
 
-        ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(true));
+        ProgressManager.getInstance()
+                .runLater(() -> editor.setAnalyzing(true));
 
         sDebouncer.cancel();
         sDebouncer.schedule(cancel -> {
@@ -122,12 +153,14 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
             });
 
             if (!cancel.invoke()) {
-                ProgressManager.getInstance().runLater(() -> {
-                    editor.setDiagnostics(diagnosticWrappers.stream()
-                            .filter(it -> it.getLineNumber() > 0)
-                            .collect(Collectors.toList()));
-                    ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(false), 300);
-                });
+                ProgressManager.getInstance()
+                        .runLater(() -> {
+                            editor.setDiagnostics(diagnosticWrappers.stream()
+                                                          .filter(it -> it.getLineNumber() > 0)
+                                                          .collect(Collectors.toList()));
+                            ProgressManager.getInstance()
+                                    .runLater(() -> editor.setAnalyzing(false), 300);
+                        });
             }
             return Unit.INSTANCE;
         });
@@ -160,10 +193,12 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
                 return true;
             case XMLLexer.Name:
                 if (previous != null && previous.getType() == XMLLexer.SLASH) {
-                    colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
+                    colors.addIfNeeded(line, column,
+                                       TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
                     return true;
                 } else if (previous != null && previous.getType() == XMLLexer.OPEN) {
-                    colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
+                    colors.addIfNeeded(line, column,
+                                       TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
                     CodeBlock block = new CodeBlock();
                     block.startLine = previous.getLine() - 1;
                     block.startColumn = previous.getCharPositionInLine();
@@ -174,7 +209,7 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
                 if (attribute.contains(":")) {
                     colors.addIfNeeded(line, column, EditorColorScheme.ATTRIBUTE_NAME);
                     colors.addIfNeeded(line, column + attribute.indexOf(":"),
-                            EditorColorScheme.TEXT_NORMAL);
+                                       EditorColorScheme.TEXT_NORMAL);
                     return true;
                 }
                 colors.addIfNeeded(line, column, EditorColorScheme.IDENTIFIER_NAME);
@@ -193,12 +228,13 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
                         span.setUnderlineColor(color);
                         colors.add(line, span);
 
-                        Span middle = Span.obtain(column + text.length() - 1,
-                                EditorColorScheme.LITERAL);
+                        Span middle =
+                                Span.obtain(column + text.length() - 1, EditorColorScheme.LITERAL);
                         middle.setUnderlineColor(Color.TRANSPARENT);
                         colors.add(line, middle);
 
-                        Span end = Span.obtain(column + text.length(), TextStyle.makeStyle(EditorColorScheme.TEXT_NORMAL));
+                        Span end = Span.obtain(column + text.length(),
+                                               TextStyle.makeStyle(EditorColorScheme.TEXT_NORMAL));
                         end.setUnderlineColor(Color.TRANSPARENT);
                         colors.add(line, end);
                         break;
@@ -246,7 +282,8 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
                 // skip white spaces
                 return true;
             default:
-                colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.TEXT_NORMAL));
+                colors.addIfNeeded(line, column,
+                                   TextStyle.makeStyle(EditorColorScheme.TEXT_NORMAL));
                 return true;
         }
 
@@ -275,7 +312,8 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
         boolean isResource = ProjectUtils.isResourceXMLFile(file);
 
         if (isResource) {
-            Project project = ProjectManager.getInstance().getCurrentProject();
+            Project project = ProjectManager.getInstance()
+                    .getCurrentProject();
             if (project != null) {
                 Module module = project.getModule(file);
                 if (module instanceof AndroidModule) {
@@ -291,24 +329,30 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
         }
     }
 
-    private void doGenerate(Project project, AndroidModule module, File file,
-                            String contents, ILogger logger) throws IOException, CompilationFailedException {
+    private void doGenerate(Project project,
+                            AndroidModule module,
+                            File file,
+                            String contents,
+                            ILogger logger) throws IOException, CompilationFailedException {
         if (!file.canWrite() || !file.canRead()) {
             return;
         }
 
-        if (!module.getFileManager().isOpened(file)) {
+        if (!module.getFileManager()
+                .isOpened(file)) {
             Log.e("XMLAnalyzer", "File is not yet opened!");
             return;
         }
 
-        Optional<CharSequence> fileContent = module.getFileManager().getFileContent(file);
+        Optional<CharSequence> fileContent = module.getFileManager()
+                .getFileContent(file);
         if (!fileContent.isPresent()) {
             Log.e("XMLAnalyzer", "No snapshot for file found.");
             return;
         }
 
-        contents = fileContent.get().toString();
+        contents = fileContent.get()
+                .toString();
         FileUtils.writeStringToFile(file, contents, StandardCharsets.UTF_8);
         IncrementalAapt2Task task = new IncrementalAapt2Task(module, logger, false);
 
@@ -322,8 +366,8 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
         // work around to refresh R.java file
         File resourceClass = module.getJavaFile(module.getPackageName() + ".R");
         if (resourceClass != null) {
-            JavaCompilerProvider provider =
-                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
+            JavaCompilerProvider provider = CompilerService.getInstance()
+                    .getIndex(JavaCompilerProvider.KEY);
             JavaCompilerService service = provider.getCompiler(project, module);
 
             CompilerContainer container = service.compile(resourceClass.toPath());

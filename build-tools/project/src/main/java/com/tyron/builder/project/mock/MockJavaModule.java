@@ -135,6 +135,16 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
         return mBootstrapJarFile;
     }
 
+    @Override
+    public Map<String, File> getInjectedClasses() {
+        return null;
+    }
+
+    @Override
+    public void addInjectedClass(@NonNull File file) {
+
+    }
+
     public void setBootstrapFile(File file) {
         if (!file.exists()) {
             throw new IllegalArgumentException("Bootstrap jar file does not exist");

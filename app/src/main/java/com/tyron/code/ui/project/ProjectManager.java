@@ -10,6 +10,7 @@ import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.compiler.manifest.ManifestMergeTask;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
@@ -25,13 +26,16 @@ import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.completion.xml.XmlRepository;
+import com.tyron.completion.xml.task.InjectResourcesTask;
 
 import org.apache.commons.io.FileUtils;
 import org.eclipse.lemminx.dom.DOMParser;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
 
@@ -78,8 +82,9 @@ public class ProjectManager {
                             boolean downloadLibs,
                             TaskListener listener,
                             ILogger logger) {
-        ProgressManager.getInstance().runNonCancelableAsync(() ->
-                doOpenProject(project, downloadLibs, listener, logger));
+        ProgressManager.getInstance()
+                .runNonCancelableAsync(
+                        () -> doOpenProject(project, downloadLibs, listener, logger));
     }
 
     private void doOpenProject(Project project,
@@ -124,8 +129,10 @@ public class ProjectManager {
         if (module instanceof AndroidModule) {
             mListener.onTaskStarted("Generating resource files.");
 
-            ManifestMergeTask manifestMergeTask = new ManifestMergeTask((AndroidModule) module, logger);
-            IncrementalAapt2Task task = new IncrementalAapt2Task((AndroidModule) module, logger, false);
+            ManifestMergeTask manifestMergeTask =
+                    new ManifestMergeTask((AndroidModule) module, logger);
+            IncrementalAapt2Task task =
+                    new IncrementalAapt2Task((AndroidModule) module, logger, false);
             try {
                 manifestMergeTask.prepare(BuildType.DEBUG);
                 manifestMergeTask.run();
@@ -137,38 +144,54 @@ public class ProjectManager {
             }
         }
         if (module instanceof JavaModule) {
+            if (module instanceof AndroidModule) {
+                mListener.onTaskStarted("Indexing XML files.");
+
+                XmlIndexProvider index = CompilerService.getInstance()
+                        .getIndex(XmlIndexProvider.KEY);
+                index.clear();
+
+                XmlRepository xmlRepository = index.get(project, module);
+                try {
+                    xmlRepository.initialize((AndroidModule) module);
+                } catch (IOException e) {
+                    // ignored
+                }
+            }
+
             mListener.onTaskStarted("Indexing");
             try {
                 JavaCompilerProvider provider = CompilerService.getInstance()
                         .getIndex(JavaCompilerProvider.KEY);
-                provider.get(project, module);
+                JavaCompilerService service = provider.get(project, module);
+
+                if (module instanceof AndroidModule) {
+                    InjectResourcesTask injectTask =
+                            new InjectResourcesTask(project, (AndroidModule) module);
+                    injectTask.inject(file -> {
+                        if (service != null) {
+                            service.compile(Collections.singletonList(
+                                    new SourceFileObject(file.toPath(), (JavaModule) null,
+                                                         Instant.now())));
+                        }
+                    });
+                }
             } catch (Throwable e) {
-                String message = "Failure indexing project.\n" +
-                        Throwables.getStackTraceAsString(e);
+                String message =
+                        "Failure indexing project.\n" + Throwables.getStackTraceAsString(e);
                 mListener.onComplete(project, false, message);
-            }
-        }
-
-        if (module instanceof AndroidModule) {
-            mListener.onTaskStarted("Indexing XML files.");
-
-            XmlIndexProvider index = CompilerService.getInstance().getIndex(XmlIndexProvider.KEY);
-            index.clear();
-
-            XmlRepository xmlRepository = index.get(project, module);
-            try {
-                xmlRepository.initialize((AndroidModule) module);
-            } catch (IOException e) {
-                // ignored
             }
         }
 
         mListener.onComplete(project, true, "Index successful");
     }
 
-    private void downloadLibraries(JavaModule project, TaskListener listener, ILogger logger) throws IOException {
+    private void downloadLibraries(JavaModule project,
+                                   TaskListener listener,
+                                   ILogger logger) throws IOException {
         DependencyManager manager = new DependencyManager(project,
-                ApplicationLoader.applicationContext.getExternalFilesDir("cache"));
+                                                          ApplicationLoader.applicationContext.getExternalFilesDir(
+                                                                  "cache"));
         manager.resolve(project, listener, logger);
     }
 
@@ -182,7 +205,9 @@ public class ProjectManager {
         return mCurrentProject;
     }
 
-    public static File createFile(File directory, String name, CodeTemplate template) throws IOException {
+    public static File createFile(File directory,
+                                  String name,
+                                  CodeTemplate template) throws IOException {
         if (!directory.isDirectory()) {
             return null;
         }
@@ -203,7 +228,9 @@ public class ProjectManager {
     }
 
     @Nullable
-    public static File createClass(File directory, String className, CodeTemplate template) throws IOException {
+    public static File createClass(File directory,
+                                   String className,
+                                   CodeTemplate template) throws IOException {
         if (!directory.isDirectory()) {
             return null;
         }
