@@ -19,10 +19,11 @@ public interface ResourceParser {
                               @NonNull ResourceNamespace namespace,
                               @Nullable String libraryName) throws IOException {
         String contents = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
-        return parse(contents, namespace, libraryName);
+        return parse(file, contents, namespace, libraryName);
     }
 
-    List<ResourceValue> parse(@NonNull String contents,
+    List<ResourceValue> parse(@NonNull File file,
+                              @NonNull String contents,
                               @NonNull ResourceNamespace namespace,
                               @Nullable String libraryName) throws IOException;
 }

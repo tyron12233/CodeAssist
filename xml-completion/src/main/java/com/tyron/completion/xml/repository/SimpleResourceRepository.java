@@ -20,6 +20,7 @@ import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
 import com.tyron.completion.xml.repository.api.ResourceValue;
 import com.tyron.completion.xml.repository.api.StyleResourceValue;
+import com.tyron.completion.xml.repository.parser.LayoutXmlParser;
 import com.tyron.completion.xml.repository.parser.ResourceParser;
 import com.tyron.completion.xml.repository.parser.ValuesXmlParser;
 
@@ -48,6 +49,7 @@ public class SimpleResourceRepository implements Repository {
     static {
         ImmutableMap.Builder<ResourceFolderType, ResourceParser> parsers = ImmutableMap.builder();
         parsers.put(ResourceFolderType.VALUES, new ValuesXmlParser());
+        parsers.put(ResourceFolderType.LAYOUT, new LayoutXmlParser());
         sParsers = parsers.build();
     }
 
@@ -110,7 +112,7 @@ public class SimpleResourceRepository implements Repository {
                            @NonNull String folderName,
                            @NonNull ResourceNamespace namespace,
                            @Nullable String libraryName) throws IOException {
-        List<ResourceValue> values = parser.parse(contents, namespace, libraryName);
+        List<ResourceValue> values = parser.parse(xmlFile, contents, namespace, libraryName);
         for (ResourceValue value : values) {
             ListMultimap<String, ResourceItem> tableValue =
                     mTable.getOrPutEmpty(value.getNamespace(), value.getResourceType());

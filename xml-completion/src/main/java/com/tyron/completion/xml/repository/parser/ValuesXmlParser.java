@@ -26,6 +26,7 @@ import org.eclipse.lemminx.dom.DOMNode;
 import org.eclipse.lemminx.dom.DOMParser;
 import org.eclipse.lemminx.dom.DOMProcessingInstruction;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,7 +36,8 @@ import java.util.Set;
 public class ValuesXmlParser implements ResourceParser {
 
     @Override
-    public List<ResourceValue> parse(@NonNull String contents,
+    public List<ResourceValue> parse(@NonNull File file,
+                                     @NonNull String contents,
                                      @NonNull ResourceNamespace namespace,
                                      @Nullable String name) throws IOException {
         DOMDocument document = DOMParser.getInstance()
@@ -81,7 +83,8 @@ public class ValuesXmlParser implements ResourceParser {
 
     private ResourceValue parseType(ResourceType resourceType,
                                     DOMNode child,
-                                    ResourceNamespace namespace, String name) {
+                                    ResourceNamespace namespace,
+                                    String name) {
         switch (resourceType) {
             case COLOR:
                 return parseColor(child, namespace, name);
@@ -99,13 +102,29 @@ public class ValuesXmlParser implements ResourceParser {
                 return parseAttrResourceValue(child, namespace, name);
             case PUBLIC:
                 return parsePublic(child, namespace, name);
+            case ID:
+                return parseId(child, namespace, name);
             default:
                 return null;
         }
     }
 
     @Nullable
-    private ResourceValue parsePublic(DOMNode child, ResourceNamespace namespace, String libraryName) {
+    private ResourceValue parseId(DOMNode child, ResourceNamespace namespace, String libraryName) {
+        String name = child.getAttribute("name");
+        if (name == null) {
+            return null;
+        }
+
+        ResourceReference resourceReference =
+                new ResourceReference(namespace, ResourceType.ID, name);
+        return new ResourceValueImpl(resourceReference, null, libraryName);
+    }
+
+    @Nullable
+    private ResourceValue parsePublic(DOMNode child,
+                                      ResourceNamespace namespace,
+                                      String libraryName) {
         String type = child.getAttribute("type");
         if (type == null) {
             return null;
@@ -124,7 +143,9 @@ public class ValuesXmlParser implements ResourceParser {
     }
 
     @Nullable
-    private ResourceValue parseColor(DOMNode child, ResourceNamespace namespace, String libraryName) {
+    private ResourceValue parseColor(DOMNode child,
+                                     ResourceNamespace namespace,
+                                     String libraryName) {
         String name = child.getAttribute("name");
         if (name == null) {
             return null;
@@ -144,7 +165,9 @@ public class ValuesXmlParser implements ResourceParser {
     }
 
     @Nullable
-    private ResourceValue parseString(DOMNode node, ResourceNamespace namespace, String libraryName) {
+    private ResourceValue parseString(DOMNode node,
+                                      ResourceNamespace namespace,
+                                      String libraryName) {
         String name = node.getAttribute("name");
         if (name == null) {
             return null;
@@ -164,7 +187,9 @@ public class ValuesXmlParser implements ResourceParser {
     }
 
     @Nullable
-    private ResourceValue parseBoolean(DOMNode node, ResourceNamespace namespace, String libraryName) {
+    private ResourceValue parseBoolean(DOMNode node,
+                                       ResourceNamespace namespace,
+                                       String libraryName) {
         String name = node.getAttribute("name");
         if (name == null) {
             return null;
@@ -184,7 +209,9 @@ public class ValuesXmlParser implements ResourceParser {
     }
 
     @Nullable
-    private ResourceValue parseInteger(DOMNode node, ResourceNamespace namespace, String libraryName) {
+    private ResourceValue parseInteger(DOMNode node,
+                                       ResourceNamespace namespace,
+                                       String libraryName) {
         String name = node.getAttribute("name");
         if (name == null) {
             return null;
@@ -204,7 +231,9 @@ public class ValuesXmlParser implements ResourceParser {
     }
 
     @Nullable
-    private ResourceValue parseStyle(DOMNode node, ResourceNamespace namespace, String libraryName) {
+    private ResourceValue parseStyle(DOMNode node,
+                                     ResourceNamespace namespace,
+                                     String libraryName) {
         String name = node.getAttribute("name");
         if (name == null) {
             return null;
@@ -235,7 +264,9 @@ public class ValuesXmlParser implements ResourceParser {
     }
 
     @Nullable
-    private StyleItemResourceValue parseStyleItem(DOMNode node, ResourceNamespace namespace, String libraryName) {
+    private StyleItemResourceValue parseStyleItem(DOMNode node,
+                                                  ResourceNamespace namespace,
+                                                  String libraryName) {
         String attributeName = node.getAttribute("name");
         if (attributeName == null) {
             return null;
@@ -286,12 +317,15 @@ public class ValuesXmlParser implements ResourceParser {
     }
 
     @Nullable
-    private AttrResourceValue parseAttrResourceValue(DOMNode node, ResourceNamespace namespace, String libraryName) {
+    private AttrResourceValue parseAttrResourceValue(DOMNode node,
+                                                     ResourceNamespace namespace,
+                                                     String libraryName) {
         String name = node.getAttribute("name");
         if (name == null) {
             return null;
         }
-        AttrResourceValueImpl resourceValue = new AttrResourceValueImpl(namespace, name, libraryName);
+        AttrResourceValueImpl resourceValue =
+                new AttrResourceValueImpl(namespace, name, libraryName);
 
         String format = node.getAttribute("format");
         if (format != null) {

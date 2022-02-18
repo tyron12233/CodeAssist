@@ -57,6 +57,9 @@ public class EmptyCompletionProvider extends CompletionProvider {
 
         List<SymbolLoader.SymbolEntry> entries = new ArrayList<>();
         for (ResourceType resourceType : resourceTypes) {
+            if (!resourceType.getCanBeReferenced()) {
+                continue;
+            }
             ListMultimap<String, ResourceItem> resources =
                     repository.getResources(repository.getNamespace(), resourceType);
             if (resources.values().isEmpty()) {
