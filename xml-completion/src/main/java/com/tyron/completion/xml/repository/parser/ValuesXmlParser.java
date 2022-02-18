@@ -20,16 +20,13 @@ import com.tyron.completion.xml.repository.api.StyleResourceValueImpl;
 import com.tyron.completion.xml.repository.api.StyleableResourceValue;
 import com.tyron.completion.xml.repository.api.StyleableResourceValueImpl;
 
-import org.apache.commons.io.FileUtils;
 import org.eclipse.lemminx.dom.DOMComment;
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMNode;
 import org.eclipse.lemminx.dom.DOMParser;
 import org.eclipse.lemminx.dom.DOMProcessingInstruction;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -38,9 +35,9 @@ import java.util.Set;
 public class ValuesXmlParser implements ResourceParser {
 
     @Override
-    public List<ResourceValue> parse(@NonNull File file,
-                                     ResourceNamespace namespace, String name) throws IOException {
-        String contents = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
+    public List<ResourceValue> parse(@NonNull String contents,
+                                     @NonNull ResourceNamespace namespace,
+                                     @Nullable String name) throws IOException {
         DOMDocument document = DOMParser.getInstance()
                 .parse(contents, "", null);
         List<DOMNode> roots = document.getRoots();

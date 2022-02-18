@@ -89,5 +89,5 @@ public interface Repository {
 
     void initialize() throws IOException;
 
-    void updateFile(@NonNull File file) throws IOException;
+    void updateFile(@NonNull File file, @NonNull String contents) throws IOException;
 }

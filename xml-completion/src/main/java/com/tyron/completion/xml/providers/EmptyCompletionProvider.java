@@ -34,6 +34,6 @@ public class EmptyCompletionProvider extends CompletionProvider {
         File file = parameters.getFile();
         XmlRepository repository = XmlRepository.getRepository(parameters.getProject(),
                                                                (AndroidModule) parameters.getModule());
-        repository.getRepository().updateFile(file);
+        repository.getRepository().updateFile(file, parameters.getContents());
     }
 }

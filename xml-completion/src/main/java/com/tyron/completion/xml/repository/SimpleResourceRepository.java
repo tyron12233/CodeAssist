@@ -15,7 +15,6 @@ import com.tyron.builder.compiler.manifest.configuration.Configurable;
 import com.tyron.builder.compiler.manifest.configuration.FolderConfiguration;
 import com.tyron.builder.compiler.manifest.resources.ResourceFolderType;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
-import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
 import com.tyron.completion.xml.repository.api.ResourceValue;
@@ -38,7 +37,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 public class SimpleResourceRepository implements Repository {
 
@@ -113,7 +111,7 @@ public class SimpleResourceRepository implements Repository {
     }
 
     @Override
-    public void updateFile(@NonNull File file) throws IOException {
+    public void updateFile(@NonNull File file, @NonNull String contents) throws IOException {
         Collection<ResourceItem> existingItems = mFileItems.get(file);
         if (existingItems != null) {
             existingItems.forEach(mTable::remove);
