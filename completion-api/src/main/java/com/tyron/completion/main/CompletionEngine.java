@@ -4,6 +4,7 @@ import android.util.Log;
 
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
+import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.model.CompletionList;
@@ -90,7 +91,7 @@ public class CompletionEngine {
             list.items.addAll(complete.items);
         }
 
-        Log.d("CompletionEngine", "Completions took " + Duration.between(now, Instant.now()).toMillis() + " ms");
+        IdeLog.getLogger().info("Completions took " + Duration.between(now, Instant.now()).toMillis() + " ms");
         return list;
     }
 

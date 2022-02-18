@@ -1,5 +1,7 @@
 package com.tyron.completion;
 
+import android.annotation.SuppressLint;
+
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
@@ -36,6 +38,7 @@ public abstract class CompletionProvider {
 
     public abstract CompletionList complete(CompletionParameters parameters);
 
+    @SuppressLint("NewApi")
     public static ImmutableList<CompletionProvider> forParameters(@NotNull CompletionParameters parameters) {
         File file = parameters.getFile();
         LanguageFileType fileType = FileTypeManager.getInstance()
@@ -45,7 +48,12 @@ public abstract class CompletionProvider {
         }
         Collection<CompletionProvider> providers =
                 sRegisteredCompletionProviders.get(fileType.getLanguage());
-        return providers != null ? ImmutableList.copyOf(providers) : ImmutableList.of();
+        if (providers == null) {
+            return ImmutableList.of();
+        }
+        return providers.stream()
+                .filter(it -> it.accept(file))
+                .collect(ImmutableList.toImmutableList());
     }
 
     public static ImmutableList<CompletionProvider> forLanguage(@NotNull Language language) {
