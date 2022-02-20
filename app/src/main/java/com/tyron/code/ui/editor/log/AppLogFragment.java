@@ -16,6 +16,7 @@ import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
@@ -69,7 +70,16 @@ public class AppLogFragment extends Fragment
             if (diagnostic.getSource() != null) {
                 if (getContext() != null) {
                     FileEditorManager manager = FileEditorManagerImpl.getInstance();
-                    manager.openFile(requireContext(), diagnostic.getSource(), mMainViewModel::openFile);
+                    manager.openFile(requireContext(), diagnostic.getSource(), it -> {
+                        if (diagnostic.getLineNumber() > 0 && diagnostic.getColumnNumber() > 0) {
+                            Bundle bundle = new Bundle(it.getFragment()
+                                                               .getArguments());
+                            bundle.putInt(CodeEditorFragment.KEY_LINE, (int) diagnostic.getLineNumber());
+                            bundle.putInt(CodeEditorFragment.KEY_COLUMN, (int) diagnostic.getColumnNumber());
+                            it.getFragment()
+                                    .setArguments(bundle);
+                        }
+                    });
                 }
             }
         });

@@ -85,8 +85,39 @@ public class CodeEditorFragment extends Fragment implements Savable,
         SharedPreferences.OnSharedPreferenceChangeListener, FileListener,
         ProjectManager.OnProjectOpenListener {
 
+    public static final String KEY_LINE = "line";
+    public static final String KEY_COLUMN = "column";
+
+    public static CodeEditorFragment newInstance(File file) {
+        CodeEditorFragment fragment = new CodeEditorFragment();
+        Bundle args = new Bundle();
+        args.putString("path", file.getAbsolutePath());
+        fragment.setArguments(args);
+        return fragment;
+    }
+
+    /**
+     * Creates a new instance of the editor with the the cursor positioned at the given
+     * line and column
+     * @param file The file to be r ead
+     * @param line The 0-based line
+     * @param column The 0-based column
+     * @return The editor instance
+     */
+    public static CodeEditorFragment newInstance(File file, int line, int column) {
+        CodeEditorFragment fragment = new CodeEditorFragment();
+        Bundle args = new Bundle();
+        args.putInt(KEY_LINE, line);
+        args.putInt(KEY_COLUMN, column);
+        fragment.setArguments(args);
+        return fragment;
+    }
+
     private static final String NO_PROJECT_OPEN_STRING = "Cannot read file: No project is currently opened. The changes will not be saved.";
 
+    /**
+     * Keys for saved states
+     */
     private static final String EDITOR_LEFT_LINE_KEY = "line";
     private static final String EDITOR_LEFT_COLUMN_KEY = "column";
     private static final String EDITOR_RIGHT_LINE_KEY = "rightLine";
@@ -103,14 +134,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     private boolean mCanSave;
     private boolean mReading;
-
-    public static CodeEditorFragment newInstance(File file) {
-        CodeEditorFragment fragment = new CodeEditorFragment();
-        Bundle args = new Bundle();
-        args.putString("path", file.getAbsolutePath());
-        fragment.setArguments(args);
-        return fragment;
-    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -519,6 +542,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 mEditor.setText(result, bundle);
                 if (savedInstanceState != null) {
                     restoreState(savedInstanceState);
+                } else {
+                    int line = requireArguments().getInt(KEY_LINE, 0);
+                    int column = requireArguments().getInt(KEY_COLUMN, 0);
+                    setCursorPosition(line, column);
                 }
 
                 checkCanSave();

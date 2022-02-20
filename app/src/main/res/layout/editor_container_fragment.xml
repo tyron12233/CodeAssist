@@ -25,6 +25,7 @@
             app:tabIndicatorFullWidth="false"
             app:tabInlineLabel="true"
             app:tabMode="scrollable"
+            app:tabGravity="start"
             app:tabTextAppearance="@style/TabLayoutText" />
 
         <androidx.viewpager2.widget.ViewPager2
