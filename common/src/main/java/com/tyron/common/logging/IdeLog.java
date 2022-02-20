@@ -13,8 +13,11 @@ public class IdeLog {
 
     @NonNull
     public static Logger getCurrentLogger(@NonNull Object clazz) {
-        Logger logger = Logger.getLogger(clazz.getClass()
-                                                 .getSimpleName());
+        return getCurrentLogger(clazz.getClass());
+    }
+
+    public static Logger getCurrentLogger(@NonNull Class<?> clazz) {
+        Logger logger = Logger.getLogger(clazz.getName());
         if (logger.getParent() != getLogger()) {
             logger.setParent(getLogger());
         }
