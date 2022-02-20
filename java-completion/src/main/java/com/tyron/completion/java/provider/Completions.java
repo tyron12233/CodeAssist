@@ -19,6 +19,7 @@ import com.tyron.completion.java.compiler.ParseTask;
 import com.tyron.completion.java.patterns.JavacTreePattern;
 import com.tyron.completion.java.util.FileContentFixer;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.completion.progress.ProcessCanceledException;
 
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.openjdk.source.tree.CaseTree;
@@ -94,17 +95,28 @@ public class Completions {
 
         checkCanceled();
         CompilerContainer container = compiler.compile(Collections.singletonList(source));
-        return container.get(task -> {
-            TreePath path = new FindCurrentPath(task.task).scan(task.root(), cursor);
-            String modifiedPartial = partial;
-            if (path.getLeaf().getKind() == Tree.Kind.IMPORT) {
-                modifiedPartial = StringSearch.qualifiedPartialIdentifier(contents, (int) cursor);
-                if (modifiedPartial.endsWith(FileContentFixer.INJECTED_IDENT)) {
-                    modifiedPartial = modifiedPartial.substring(0, modifiedPartial.length() - FileContentFixer.INJECTED_IDENT.length());
+        try {
+            return container.get(task -> {
+                TreePath path = new FindCurrentPath(task.task).scan(task.root(), cursor);
+                String modifiedPartial = partial;
+                if (path.getLeaf()
+                            .getKind() == Tree.Kind.IMPORT) {
+                    modifiedPartial = StringSearch.qualifiedPartialIdentifier(contents, (int) cursor);
+                    if (modifiedPartial.endsWith(FileContentFixer.INJECTED_IDENT)) {
+                        modifiedPartial = modifiedPartial.substring(0, modifiedPartial.length() -
+                                                                       FileContentFixer.INJECTED_IDENT.length());
+                    }
                 }
+                return getCompletionList(task, path, modifiedPartial, endsWithParen);
+            });
+        } catch (Throwable e) {
+            if (e instanceof ProcessCanceledException) {
+                throw e;
             }
-            return getCompletionList(task, path, modifiedPartial, endsWithParen);
-        });
+
+            compiler.destroy();
+            return null;
+        }
     }
 
     private CompletionList.Builder getCompletionList(CompileTask task, TreePath path, String partial,

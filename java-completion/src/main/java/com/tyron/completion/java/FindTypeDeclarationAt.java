@@ -1,8 +1,11 @@
 package com.tyron.completion.java;
 
+import android.util.Pair;
+
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.NewClassTree;
+import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreeScanner;
@@ -12,7 +15,6 @@ public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
     private final SourcePositions pos;
     private final JavacTask task;
     private CompilationUnitTree root;
-    private long cursor;
 
     public FindTypeDeclarationAt(JavacTask task) {
         this.task = task;
@@ -22,7 +24,6 @@ public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
     @Override
     public ClassTree visitCompilationUnit(CompilationUnitTree t, Long find) {
         root = t;
-        cursor = find;
         return super.visitCompilationUnit(t, find);
     }
 
@@ -32,13 +33,8 @@ public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
         if (smaller != null) {
             return smaller;
         }
-        if (pos.getStartPosition(root, t) <= find && find < pos.getEndPosition(root, t)) {
-            ClassTree evenSmaller = new FindNewTypeDeclarationAt(task, root).scan(t, find);
-            if (evenSmaller != null) {
-                return evenSmaller;
-            } else {
-                return t;
-            }
+        if (isInside(t, Pair.create(find, find))) {
+            return t;
         }
         return null;
     }
@@ -47,5 +43,11 @@ public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
     public ClassTree reduce(ClassTree a, ClassTree b) {
         if (a != null) return a;
         return b;
+    }
+
+    private boolean isInside(Tree tree, Pair<Long, Long> find) {
+        long start = pos.getStartPosition(root, tree);
+        long end = pos.getEndPosition(root, tree);
+        return start <= find.first && find.second <= end;
     }
 }

@@ -3,6 +3,7 @@ package com.tyron.completion.java.rewrite;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.google.common.base.Strings;
 import com.tyron.builder.model.SourceFileObject;
+import com.tyron.completion.java.FindNewTypeDeclarationAt;
 import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.FindTypeDeclarationAt;
@@ -151,6 +152,9 @@ public class OverrideInheritedMethod implements JavaRewrite {
                 : compiler.parse(sourceFileObject);
         ClassTree parent = new FindTypeDeclarationAt(task.task).scan(task.root,
                 (long) insertPosition);
+        if (parent == null) {
+            parent = new FindNewTypeDeclarationAt(task.task, task.root).scan(task.root, (long) insertPosition);
+        }
         Position next = nextMember(task, parent);
         if (next != Position.NONE) {
             return next;

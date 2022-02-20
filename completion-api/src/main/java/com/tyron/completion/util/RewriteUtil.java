@@ -1,6 +1,7 @@
 package com.tyron.completion.util;
 
 import com.tyron.common.util.ThreadUtil;
+import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.Rewrite;
 import com.tyron.completion.model.TextEdit;
