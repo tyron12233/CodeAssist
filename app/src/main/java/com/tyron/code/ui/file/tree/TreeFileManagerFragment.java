@@ -11,6 +11,7 @@ import android.widget.PopupMenu;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.ThemeUtils;
+import androidx.core.view.ViewCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -78,6 +79,7 @@ public class TreeFileManagerFragment extends Fragment {
         root.setLayoutParams(
                 new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
+        ViewCompat.requestApplyInsets(root);
         UiUtilsKt.addSystemWindowInsetToPadding(root, false, true, false, true);
 
         treeView = new TreeView<>(

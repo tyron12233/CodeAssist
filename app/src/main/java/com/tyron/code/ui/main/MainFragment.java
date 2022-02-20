@@ -15,7 +15,12 @@ import android.view.ViewGroup;
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.widget.Toolbar;
+import androidx.appcompat.widget.ViewUtils;
 import androidx.core.view.GravityCompat;
+import androidx.core.view.OnApplyWindowInsetsListener;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.ViewKt;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -263,6 +268,25 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             }
         };
         IdeLog.getLogger().addHandler(mHandler);
+
+        // can be null on tablets
+        View navRoot = view.findViewById(R.id.nav_root);
+
+        ViewCompat.setOnApplyWindowInsetsListener(mRoot, (v, insets) -> {
+            if (navRoot != null) {
+                ViewCompat.dispatchApplyWindowInsets(navRoot, insets);
+            }
+            ViewGroup viewGroup = (ViewGroup) mRoot;
+            for (int i = 0; i < viewGroup.getChildCount(); i++) {
+                View child = viewGroup.getChildAt(i);
+                if (child == navRoot) {
+                    continue;
+                }
+
+                ViewCompat.dispatchApplyWindowInsets(child, insets);
+            }
+            return ViewCompat.onApplyWindowInsets(v, insets);
+        });
     }
 
     @Override
