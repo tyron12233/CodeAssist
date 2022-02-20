@@ -1,5 +1,6 @@
 package com.tyron.code.ui.editor.language.xml;
 
+import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.util.Log;
 
@@ -9,6 +10,9 @@ import com.google.common.base.Strings;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
+import com.tyron.code.ui.editor.language.textmate.BaseTextmateAnalyzer;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.editor.Editor;
@@ -23,6 +27,7 @@ import org.eclipse.lemminx.dom.parser.TokenType;
 import org.eclipse.lemminx.dom.parser.XMLScanner;
 
 import java.io.File;
+import java.io.InputStreamReader;
 import java.util.List;
 
 import io.github.rosemoe.sora.lang.Language;
@@ -34,6 +39,7 @@ import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.completion.SimpleCompletionItem;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
+import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.TextUtils;
@@ -44,12 +50,25 @@ public class LanguageXML implements Language {
 
     private final Editor mEditor;
 
-    private final XMLAnalyzer mAnalyzer;
+    private final BaseTextmateAnalyzer mAnalyzer;
 
-    public LanguageXML(Editor codeEditor) {
-        mEditor = codeEditor;
+    public LanguageXML(Editor editor) {
+        mEditor = editor;
 
-        mAnalyzer = new XMLAnalyzer(codeEditor);
+        try {
+            AssetManager assetManager = ApplicationLoader.applicationContext.getAssets();
+            mAnalyzer = new BaseTextmateAnalyzer(editor, "xml.tmLanguage.json",
+                                                 assetManager.open(
+                                                         "textmate/xml" +
+                                                         "/syntaxes/xml" +
+                                                         ".tmLanguage.json"),
+                                                 new InputStreamReader(
+                                                         assetManager.open(
+                                                                 "textmate/java/language-configuration.json")),
+                                                 ((TextMateColorScheme) ((CodeEditorView) editor).getColorScheme()).getRawTheme());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public boolean isAutoCompleteChar(char ch) {

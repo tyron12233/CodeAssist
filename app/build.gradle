@@ -28,6 +28,10 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+
+    packagingOptions {
+        resources.excludes += "license/*"
+    }
 }
 
 configurations.implementation {

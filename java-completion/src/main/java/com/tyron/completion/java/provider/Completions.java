@@ -76,8 +76,12 @@ public class Completions {
             StringBuilder pruned = new PruneMethodBodies(task.task).scan(task.root, index);
             int end = StringSearch.endOfLine(pruned, (int) index);
             pruned.insert(end, ';');
-            contents = new FileContentFixer(compiler.compiler.getCurrentContext())
-                    .fixFileContent(pruned);
+            if (compiler.compiler.getCurrentContext() != null) {
+                contents = new FileContentFixer(compiler.compiler.getCurrentContext()).fixFileContent(
+                        pruned);
+            } else {
+                contents = pruned.toString();
+            }
         } catch (IndexOutOfBoundsException e) {
             Log.w(TAG, "Unable to fix file content", e);
             return null;

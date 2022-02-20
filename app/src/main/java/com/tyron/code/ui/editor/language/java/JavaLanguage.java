@@ -1,5 +1,6 @@
 package com.tyron.code.ui.editor.language.java;
 
+import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.util.Log;
 
@@ -9,11 +10,17 @@ import com.google.common.collect.Range;
 import com.google.googlejavaformat.java.Formatter;
 import com.google.googlejavaformat.java.FormatterException;
 import com.google.googlejavaformat.java.JavaFormatterOptions;
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.code.ui.editor.language.CompletionItemWrapper;
+import com.tyron.code.ui.editor.language.textmate.BaseTextmateAnalyzer;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
 
+import org.jetbrains.kotlin.com.intellij.util.ExceptionUtil;
+
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collection;
 
@@ -26,6 +33,9 @@ import io.github.rosemoe.sora.lang.completion.CompletionHelper;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
+import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
+import io.github.rosemoe.sora.langs.textmate.analyzer.TextMateAnalyzer;
+import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.TextUtils;
@@ -35,13 +45,26 @@ import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class JavaLanguage implements Language {
 
-    private Editor mEditor;
+    private final Editor mEditor;
 
-    private final JavaAnalyzer mAnalyzer;
+    private final BaseTextmateAnalyzer mAnalyzer;
 
     public JavaLanguage(Editor editor) {
         mEditor = editor;
-        mAnalyzer = new JavaAnalyzer(editor);
+        try {
+            AssetManager assetManager = ApplicationLoader.applicationContext.getAssets();
+            mAnalyzer = new BaseTextmateAnalyzer(editor, "java.tmLanguage.json",
+                                                 assetManager.open(
+                                                         "textmate/java" +
+                                                         "/syntaxes/java" +
+                                                         ".tmLanguage.json"),
+                                                 new InputStreamReader(
+                                                         assetManager.open(
+                                                                 "textmate/java/language-configuration.json")),
+                                                 ((TextMateColorScheme) ((CodeEditorView) editor).getColorScheme()).getRawTheme());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public boolean isAutoCompleteChar(char p1) {
