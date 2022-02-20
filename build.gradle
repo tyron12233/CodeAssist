@@ -30,10 +30,12 @@ task clean(type: Delete) {
 }
 
 ext {
-    compileSdkVersion = 27
-    buildToolsVersion = '27.0.3'
-    targetSdkVersion = 27
-    minSdkVersion = 14
-    googleServiceVersion = "15.0.2"
-    supportLibVersion = "27.1.1"
+    compileSdkVersion = 32
+    buildToolsVersion = '30.0.2'
+    targetSdkVersion = 32
+    minSdkVersion = 26
+
+    applicationId = "com.tyron.code"
+    versionCode = 15
+    versionName = "0.2.7 ALPHA"
 }
