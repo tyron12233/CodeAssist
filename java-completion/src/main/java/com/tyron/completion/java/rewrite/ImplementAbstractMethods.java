@@ -1,5 +1,7 @@
 package com.tyron.completion.java.rewrite;
 
+import androidx.annotation.Nullable;
+
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.google.common.base.Strings;
 import com.tyron.completion.java.compiler.CompileTask;
@@ -100,7 +102,7 @@ public class ImplementAbstractMethods implements JavaRewrite {
         Set<String> typesToImport = new HashSet<>();
 
         TypeElement thisClass = elements.getTypeElement(mClassName);
-        ClassTree thisTree = getClassTree(task);
+        ClassTree thisTree = getClassTree(task, file);
         if (thisTree == null) {
             thisTree = trees.getTree(thisClass);
         }
@@ -166,13 +168,18 @@ public class ImplementAbstractMethods implements JavaRewrite {
         return Collections.singletonMap(file, edits.toArray(new TextEdit[0]));
     }
 
-    private ClassTree getClassTree(CompileTask task) {
+    @Nullable
+    private ClassTree getClassTree(CompileTask task, Path file) {
         ClassTree thisTree = null;
+        CompilationUnitTree root = task.root(file);
+        if (root == null) {
+            return null;
+        }
         if (mPosition != 0) {
-            thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), mPosition);
+            thisTree = new FindTypeDeclarationAt(task.task).scan(root, mPosition);
         }
         if (thisTree == null) {
-            thisTree = new FindNewTypeDeclarationAt(task.task, task.root()).scan(task.root(),
+            thisTree = new FindNewTypeDeclarationAt(task.task, root).scan(root,
                     mPosition);
         }
         return thisTree;
