@@ -5,6 +5,7 @@ import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 
+import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.BuildModule;
 
 import org.apache.bcel.Repository;
@@ -19,6 +20,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -27,6 +29,28 @@ import java.util.jar.JarFile;
  * appropriate constructors to be inflated in XML.
  */
 public class BytecodeScanner {
+
+    private static final Set<String> sIgnoredPaths;
+
+    static {
+        ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+        builder.add("android");
+        builder.add("android/util");
+        builder.add("android/os");
+        builder.add("android/os/health");
+        builder.add("android/os/strictmode");
+        builder.add("android/os/storage");
+        builder.add("android/graphics");
+        builder.add("android/graphics/drawable");
+        builder.add("android/graphics/fonts");
+        builder.add("android/graphics/pdf");
+        builder.add("android/graphics/text");
+        builder.add("android/system");
+        builder.add("android/content");
+        builder.add("android/content/res");
+        builder.add("android/content/pm");
+        sIgnoredPaths = builder.build();
+    }
 
     public static void loadJar(File jar) throws IOException {
         try (JarFile jarFile = new JarFile(jar)) {
@@ -89,11 +113,18 @@ public class BytecodeScanner {
                 Enumeration<JarEntry> entries = jarFile.entries();
                 while (entries.hasMoreElements()) {
                     JarEntry element = entries.nextElement();
-                    if (!element.getName().endsWith(".class")) {
+                    String name = element.getName();
+                    if (!name.endsWith(".class")) {
                         continue;
                     }
-                    ClassParser classParser = new ClassParser(androidJar.getAbsolutePath(),
-                            element.getName());
+                    String packagePath = name.substring(0, name.lastIndexOf('/'));
+                    if (sIgnoredPaths.contains(packagePath)) {
+                        continue;
+                    }
+                    if (packagePath.startsWith("java/")) {
+                        continue;
+                    }
+                    ClassParser classParser = new ClassParser(androidJar.getAbsolutePath(), name);
                     JavaClass parse = classParser.parse();
                     Repository.addClass(parse);
                 }

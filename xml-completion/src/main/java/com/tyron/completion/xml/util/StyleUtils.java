@@ -82,14 +82,21 @@ public class StyleUtils {
     }
 
     public static Set<String> getClasses(String... classNames) {
-        ImmutableSet.Builder<String> classes = ImmutableSet.builder();
+        Set<String> classes = new HashSet<>();
         for (String className : classNames) {
             Collection<String> strings = sViewStyleMap.get(className);
             if (strings != null) {
                 classes.addAll(strings);
+                for (String string : strings) {
+                    if (ImmutableSet.copyOf(classNames).contains(string)) {
+                        continue;
+                    }
+
+                    classes.addAll(getClasses(string));
+                }
             }
         }
-        return classes.build();
+        return classes;
     }
 
     public static void putStyles(JavaClass javaClass) {
