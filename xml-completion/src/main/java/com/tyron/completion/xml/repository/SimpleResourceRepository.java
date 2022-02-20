@@ -6,6 +6,7 @@ import android.graphics.Color;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.tools.r8.Resource;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -20,8 +21,10 @@ import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
 import com.tyron.completion.xml.repository.api.ResourceValue;
 import com.tyron.completion.xml.repository.api.StyleResourceValue;
+import com.tyron.completion.xml.repository.parser.DrawableXmlParser;
 import com.tyron.completion.xml.repository.parser.LayoutXmlParser;
 import com.tyron.completion.xml.repository.parser.ResourceParser;
+import com.tyron.completion.xml.repository.parser.TemporaryParser;
 import com.tyron.completion.xml.repository.parser.ValuesXmlParser;
 
 import org.apache.commons.io.FileUtils;
@@ -50,6 +53,14 @@ public class SimpleResourceRepository implements Repository {
         ImmutableMap.Builder<ResourceFolderType, ResourceParser> parsers = ImmutableMap.builder();
         parsers.put(ResourceFolderType.VALUES, new ValuesXmlParser());
         parsers.put(ResourceFolderType.LAYOUT, new LayoutXmlParser());
+        parsers.put(ResourceFolderType.MIPMAP, new TemporaryParser(ResourceType.MIPMAP));
+        parsers.put(ResourceFolderType.MENU, new TemporaryParser(ResourceType.MENU));
+        parsers.put(ResourceFolderType.XML, new TemporaryParser(ResourceType.XML));
+        parsers.put(ResourceFolderType.ANIMATOR, new TemporaryParser(ResourceType.ANIMATOR));
+        parsers.put(ResourceFolderType.INTERPOLATOR, new TemporaryParser(ResourceType.INTERPOLATOR));
+        parsers.put(ResourceFolderType.FONT, new TemporaryParser(ResourceType.FONT));
+        parsers.put(ResourceFolderType.DRAWABLE, new TemporaryParser(ResourceType.DRAWABLE));
+        parsers.put(ResourceFolderType.ANIM, new TemporaryParser(ResourceType.ANIM));
         sParsers = parsers.build();
     }
 
