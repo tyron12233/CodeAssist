@@ -339,6 +339,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             saveAll();
         }
 
+        IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
+
         mProject = project;
         mIndexServiceConnection.setProject(project);
 

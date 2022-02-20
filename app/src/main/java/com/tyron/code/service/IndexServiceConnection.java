@@ -60,7 +60,36 @@ public class IndexServiceConnection implements ServiceConnection {
         mMainViewModel.setCurrentState(null);
     }
 
-    private List<FileEditor> getOpenedFiles(ProjectSettings settings) {
+    private class TaskListener implements ProjectManager.TaskListener {
+
+        @Override
+        public void onTaskStarted(String message) {
+            mMainViewModel.setCurrentState(message);
+        }
+
+        @SuppressWarnings("ConstantConditions")
+        @Override
+        public void onComplete(Project project, boolean success, String message) {
+            mMainViewModel.setIndexing(false);
+            mMainViewModel.setCurrentState(null);
+            if (success) {
+                Project currentProject = ProjectManager.getInstance()
+                        .getCurrentProject();
+                if (project.equals(currentProject)) {
+                    mMainViewModel.setToolbarTitle(project.getRootFile()
+                                                           .getName());
+                }
+            } else {
+                if (mMainViewModel.getBottomSheetState()
+                            .getValue() != BottomSheetBehavior.STATE_EXPANDED) {
+                    mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                }
+                mLogViewModel.e(LogViewModel.BUILD_LOG, message);
+            }
+        }
+    }
+
+    public static List<FileEditor> getOpenedFiles(ProjectSettings settings) {
         String openedFilesString = settings.getString(ProjectSettings.SAVED_EDITOR_FILES, null);
         if (openedFilesString != null) {
             try {
@@ -81,45 +110,19 @@ public class IndexServiceConnection implements ServiceConnection {
         return new ArrayList<>();
     }
 
-    private class TaskListener implements ProjectManager.TaskListener {
+    public static void restoreFileEditors(Project currentProject, MainViewModel viewModel) {
+        List<FileEditor> openedFiles = getOpenedFiles(currentProject.getSettings());
 
-        @Override
-        public void onTaskStarted(String message) {
-            mMainViewModel.setCurrentState(message);
+        List<FileEditor> value = viewModel.getFiles()
+                .getValue();
+        if (value != null) {
+            List<File> toClose = value.stream()
+                    .map(FileEditor::getFile)
+                    .filter(file -> openedFiles.stream()
+                            .noneMatch(editor -> file.equals(editor.getFile())))
+                    .collect(Collectors.toList());
+            toClose.forEach(FileEditorManagerImpl.getInstance()::closeFile);
         }
-
-        @SuppressWarnings("ConstantConditions")
-        @Override
-        public void onComplete(Project project, boolean success, String message) {
-            mMainViewModel.setIndexing(false);
-            mMainViewModel.setCurrentState(null);
-            if (success) {
-                Project currentProject = ProjectManager.getInstance()
-                        .getCurrentProject();
-                if (project.equals(currentProject)) {
-                    mMainViewModel.setToolbarTitle(project.getRootFile()
-                                                           .getName());
-                    List<FileEditor> openedFiles = getOpenedFiles(currentProject.getSettings());
-
-                    List<FileEditor> value = mMainViewModel.getFiles()
-                            .getValue();
-                    if (value != null) {
-                        List<File> toClose = value.stream()
-                                .map(FileEditor::getFile)
-                                .filter(file -> openedFiles.stream()
-                                        .noneMatch(editor -> file.equals(editor.getFile())))
-                                .collect(Collectors.toList());
-                        toClose.forEach(FileEditorManagerImpl.getInstance()::closeFile);
-                    }
-                    mMainViewModel.setFiles(openedFiles);
-                }
-            } else {
-                if (mMainViewModel.getBottomSheetState()
-                            .getValue() != BottomSheetBehavior.STATE_EXPANDED) {
-                    mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HALF_EXPANDED);
-                }
-                mLogViewModel.e(LogViewModel.BUILD_LOG, message);
-            }
-        }
+        viewModel.setFiles(openedFiles);
     }
 }
