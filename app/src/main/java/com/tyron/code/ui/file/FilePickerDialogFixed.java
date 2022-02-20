@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.Button;
+import android.widget.TextView;
 
 import com.github.angads25.filepicker.controller.adapters.FileListAdapter;
 import com.github.angads25.filepicker.model.DialogProperties;
@@ -63,5 +64,14 @@ public class FilePickerDialogFixed extends FilePickerDialog {
         } catch (NoSuchFieldException | IllegalAccessException e) {
             Log.w("WizardFragment", "Unable to get declared field", e);
         }
+    }
+
+    /**
+     * Return the current path of the current directory
+     * @return the absolute path of the directory
+     */
+    public String getCurrentPath() {
+        TextView path = findViewById(com.github.angads25.filepicker.R.id.dir_path);
+        return String.valueOf(path.getText());
     }
 }

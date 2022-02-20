@@ -1,6 +1,7 @@
 package com.tyron.code.ui.project;
 
 import android.Manifest;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -64,6 +65,8 @@ public class ProjectManagerFragment extends Fragment {
     private ActivityResultLauncher<String[]> mPermissionLauncher;
     private final ActivityResultContracts.RequestMultiplePermissions mPermissionsContract =
             new ActivityResultContracts.RequestMultiplePermissions();
+
+    private String mPreviousPath;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -243,13 +246,18 @@ public class ProjectManagerFragment extends Fragment {
         DialogProperties properties = new DialogProperties();
         properties.selection_type = DialogConfigs.DIR_SELECT;
         properties.selection_mode = DialogConfigs.SINGLE_MODE;
-        properties.root = Environment.getExternalStorageDirectory();
+        if (mPreviousPath != null && new File(mPreviousPath).exists()) {
+            properties.root = new File(mPreviousPath);
+        } else {
+            properties.root = Environment.getExternalStorageDirectory();
+        }
         FilePickerDialogFixed dialogFixed = new FilePickerDialogFixed(requireContext(), properties);
         dialogFixed.setTitle(R.string.project_manager_save_location_title);
         dialogFixed.setDialogSelectionListener(files -> {
             setSavePath(files[0]);
             loadProjects();
         });
+        dialogFixed.setOnCancelListener(__ -> mPreviousPath = dialogFixed.getCurrentPath());
         dialogFixed.show();
     }
 
