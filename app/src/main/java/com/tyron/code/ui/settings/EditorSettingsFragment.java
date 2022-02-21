@@ -32,9 +32,16 @@ import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.SingleTextWatcher;
 import com.tyron.completion.progress.ProgressManager;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.File;
 import java.util.Objects;
 import java.util.concurrent.Future;
+
+import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
+import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
+import io.github.rosemoe.sora.textmate.core.internal.theme.reader.ThemeReader;
+import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
 
 public class EditorSettingsFragment extends PreferenceFragmentCompat {
 
@@ -92,10 +99,10 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
 
                 button.setOnClickListener(v -> {
                     File file = new File(editText.getText().toString());
-                    ListenableFuture<CodeAssistColorScheme> future = getColorScheme(file);
-                    Futures.addCallback(future, new FutureCallback<CodeAssistColorScheme>() {
+                    ListenableFuture<TextMateColorScheme> future = getColorScheme(file);
+                    Futures.addCallback(future, new FutureCallback<TextMateColorScheme>() {
                         @Override
-                        public void onSuccess(@Nullable CodeAssistColorScheme result) {
+                        public void onSuccess(@Nullable TextMateColorScheme result) {
                             pref.edit()
                                     .putString(SharedPreferenceKeys.SCHEME, file.getAbsolutePath())
                                     .apply();
@@ -121,8 +128,11 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
         });
     }
 
-    public static ListenableFuture<CodeAssistColorScheme> getColorScheme(@NonNull File file) {
-        return ProgressManager.getInstance().computeNonCancelableAsync(() ->
-                Futures.immediateFuture(CodeAssistColorScheme.fromFile(file)));
+    public static ListenableFuture<TextMateColorScheme> getColorScheme(@NonNull File file) {
+        return ProgressManager.getInstance().computeNonCancelableAsync(() -> {
+            IRawTheme rawTheme = ThemeReader.readThemeSync(file.getAbsolutePath(),
+                                                            FileUtils.openInputStream(file));
+            return Futures.immediateFuture(TextMateColorScheme.create(rawTheme));
+        });
     }
 }

@@ -1,6 +1,8 @@
 package com.tyron.code.ui.editor.impl.text.rosemoe;
 
 
+import static io.github.rosemoe.sora2.text.EditorUtil.setDefaultColorScheme;
+
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
@@ -254,65 +256,40 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         String schemePath = mPreferences.getString("scheme", null);
         setScheme(schemePath);
-        mEditor.setEditorLanguage(mLanguage = LanguageManager.getInstance()
-                .get(mEditor, mCurrentFile));
-
         return root;
     }
 
-    private void setScheme(@Nullable String path) {
-        if (path == null) {
-            setDefaultColorScheme();
-            return;
-        }
-
-        File schemeFile = new File(path);
-        if (!schemeFile.exists()) {
-            setDefaultColorScheme();
-            return;
-        }
-
-        ListenableFuture<CodeAssistColorScheme> future =
-                EditorSettingsFragment.getColorScheme(schemeFile);
-        Futures.addCallback(future, new FutureCallback<CodeAssistColorScheme>() {
-            @Override
-            public void onSuccess(@Nullable CodeAssistColorScheme result) {
-                if (result == null) {
-                    setDefaultColorScheme();
-                    return;
-                }
-                mEditor.setColorScheme(result);
-            }
-
-            @Override
-            public void onFailure(@NonNull Throwable t) {
-                setDefaultColorScheme();
-            }
-        }, ContextCompat.getMainExecutor(requireContext()));
+    private void initializeLanguage() {
+        mLanguage = LanguageManager.getInstance()
+                .get(mEditor, mCurrentFile);
+        mEditor.setEditorLanguage(mLanguage);
     }
 
-    private void setDefaultColorScheme() {
-        try {
-            AssetManager assets = requireContext().getAssets();
-            int uiMode = requireContext().getResources()
-                                 .getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-            IRawTheme rawTheme;
-            switch (uiMode) {
-                case Configuration.UI_MODE_NIGHT_YES:
-                    rawTheme = ThemeReader.readThemeSync("darcula.json",
-                                                         assets.open("textmate/darcula.json"));
-                    break;
-                default:
-                case Configuration.UI_MODE_NIGHT_NO:
-                    rawTheme = ThemeReader.readThemeSync("QuietLight.tmTheme", assets.open(
-                            "textmate/QuietLight.tmTheme"));
-            }
-            TextMateColorScheme colorScheme = TextMateColorScheme.create(rawTheme);
-            mEditor.setColorScheme(colorScheme);
-        } catch (Exception e) {
-            e.printStackTrace();
+    private void setScheme(@Nullable String path) {
+        if (path != null && new File(path).exists()) {
+            ListenableFuture<TextMateColorScheme> future =
+                    EditorSettingsFragment.getColorScheme(new File(path));
+            Futures.addCallback(future, new FutureCallback<TextMateColorScheme>() {
+                @Override
+                public void onSuccess(@Nullable TextMateColorScheme result) {
+                    if (result == null) {
+                        setDefaultColorScheme(mEditor);
+                    } else {
+                        mEditor.setColorScheme(result);
+                    }
+                    initializeLanguage();
+                }
+
+                @Override
+                public void onFailure(@NonNull Throwable t) {
+                    setDefaultColorScheme(mEditor);
+                    initializeLanguage();
+                }
+            }, ContextCompat.getMainExecutor(requireContext()));
+        } else {
+            setDefaultColorScheme(mEditor);
+            initializeLanguage();
         }
-//        mEditor.setColorScheme(new CompiledEditorScheme(requireContext()));
     }
 
     private void configure(DirectAccessProps props) {

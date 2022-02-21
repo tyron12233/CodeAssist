@@ -1,15 +1,46 @@
 package io.github.rosemoe.sora2.text;
 
+import android.content.Context;
+import android.content.res.AssetManager;
+import android.content.res.Configuration;
+
 import java.lang.reflect.Method;
 
 import io.github.rosemoe.sora.event.SelectionChangeEvent;
 import io.github.rosemoe.sora.lang.Language;
+import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.ContentLine;
 import io.github.rosemoe.sora.text.ICUUtils;
+import io.github.rosemoe.sora.textmate.core.internal.theme.reader.ThemeReader;
+import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
 import io.github.rosemoe.sora.util.IntPair;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class EditorUtil {
+
+    public static void setDefaultColorScheme(CodeEditor editor) {
+        try {
+            Context context = editor.getContext();
+            AssetManager assets = context.getAssets();
+            int uiMode = context.getResources()
+                                 .getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+            IRawTheme rawTheme;
+            switch (uiMode) {
+                case Configuration.UI_MODE_NIGHT_YES:
+                    rawTheme = ThemeReader.readThemeSync("darcula.json",
+                                                         assets.open("textmate/darcula.json"));
+                    break;
+                default:
+                case Configuration.UI_MODE_NIGHT_NO:
+                    rawTheme = ThemeReader.readThemeSync("QuietLight.tmTheme", assets.open(
+                            "textmate/QuietLight.tmTheme"));
+            }
+            TextMateColorScheme colorScheme = TextMateColorScheme.create(rawTheme);
+            editor.setColorScheme(colorScheme);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     public static int getFormatIndent(Language language, String line) {
         Class<? extends Language> aClass = language.getClass();
