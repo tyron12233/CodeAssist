@@ -246,10 +246,9 @@ public class ProjectManagerFragment extends Fragment {
         DialogProperties properties = new DialogProperties();
         properties.selection_type = DialogConfigs.DIR_SELECT;
         properties.selection_mode = DialogConfigs.SINGLE_MODE;
+        properties.root = Environment.getExternalStorageDirectory();
         if (mPreviousPath != null && new File(mPreviousPath).exists()) {
-            properties.root = new File(mPreviousPath);
-        } else {
-            properties.root = Environment.getExternalStorageDirectory();
+            properties.offset = new File(mPreviousPath);
         }
         FilePickerDialogFixed dialogFixed = new FilePickerDialogFixed(requireContext(), properties);
         dialogFixed.setTitle(R.string.project_manager_save_location_title);
