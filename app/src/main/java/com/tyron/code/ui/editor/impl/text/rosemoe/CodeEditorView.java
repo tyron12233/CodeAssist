@@ -1,6 +1,8 @@
 package com.tyron.code.ui.editor.impl.text.rosemoe;
 
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.util.AttributeSet;
 
 import androidx.annotation.NonNull;
@@ -15,6 +17,9 @@ import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
 import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
+import com.tyron.code.ui.editor.language.DiagnosticSpanMapUpdater;
+import com.tyron.code.ui.editor.language.HighlightUtil;
+import com.tyron.code.ui.editor.language.textmate.DiagnosticTextmateAnalyzer;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.progress.ProgressManager;
@@ -30,6 +35,7 @@ import org.eclipse.lemminx.dom.DOMParser;
 import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Set;
@@ -48,6 +54,16 @@ import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class CodeEditorView extends CodeEditor implements Editor {
 
+    private static final Field sFormatThreadField;
+
+    static {
+        try {
+            sFormatThreadField = CodeEditor.class.getDeclaredField("mFormatThread");
+            sFormatThreadField.setAccessible(true);
+        } catch (Throwable e) {
+            throw new Error(e);
+        }
+    }
     private final Set<Character> IGNORED_PAIR_ENDS = ImmutableSet.<Character>builder().add(')')
             .add(']')
             .add('"')
@@ -63,6 +79,8 @@ public class CodeEditorView extends CodeEditor implements Editor {
     private File mCurrentFile;
     private EditorViewModel mViewModel;
 
+    private final Paint mDiagnosticPaint;
+
     public CodeEditorView(Context context) {
         this(DataContext.wrap(context), null);
     }
@@ -77,6 +95,9 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     public CodeEditorView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(DataContext.wrap(context), attrs, defStyleAttr, defStyleRes);
+
+        mDiagnosticPaint = new Paint();
+        mDiagnosticPaint.setStrokeWidth(getDpUnit() * 2);
 
         init();
     }
@@ -131,13 +152,15 @@ public class CodeEditorView extends CodeEditor implements Editor {
         mDiagnostics = diagnostics;
 
         AnalyzeManager manager = getEditorLanguage().getAnalyzeManager();
-        if (manager instanceof DiagnosticAnalyzeManager) {
-            ((DiagnosticAnalyzeManager<?>) manager).setDiagnostics(this, mDiagnostics);
-            ((DiagnosticAnalyzeManager<?>) manager).rerunWithoutBg();
+        if (manager instanceof DiagnosticTextmateAnalyzer) {
+            ((DiagnosticTextmateAnalyzer) manager).setDiagnostics(this, diagnostics);
         }
+
         if (mDiagnosticsListener != null) {
             mDiagnosticsListener.accept(mDiagnostics);
         }
+
+        invalidate();
     }
 
     public void setDiagnosticsListener(Consumer<List<DiagnosticWrapper>> listener) {
@@ -338,6 +361,14 @@ public class CodeEditorView extends CodeEditor implements Editor {
         return CodeEditorView.super.formatCodeAsync();
     }
 
+    public boolean isFormatting() {
+        try {
+            return sFormatThreadField.get(this) != null;
+        } catch (IllegalAccessException e) {
+            return false;
+        }
+    }
+
     @Override
     public synchronized boolean formatCodeAsync(int start, int end) {
 //        CodeEditorView.super.formatCodeAsync();
@@ -371,11 +402,11 @@ public class CodeEditorView extends CodeEditor implements Editor {
             Project project = ProjectManager.getInstance()
                     .getCurrentProject();
 
-            if (analyzeManager instanceof DiagnosticAnalyzeManager) {
+            if (analyzeManager instanceof DiagnosticTextmateAnalyzer) {
                 if (isBackgroundAnalysisEnabled() && (project != null && !project.isCompiling())) {
-                    ((DiagnosticAnalyzeManager<?>) analyzeManager).rerunWithBg();
+                    ((DiagnosticTextmateAnalyzer) analyzeManager).rerunWithBg();
                 } else {
-                    ((DiagnosticAnalyzeManager<?>) analyzeManager).rerunWithoutBg();
+                    ((DiagnosticTextmateAnalyzer) analyzeManager).rerunWithoutBg();
                 }
             } else {
                 analyzeManager.rerun();
@@ -396,5 +427,108 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     public void setViewModel(EditorViewModel editorViewModel) {
         mViewModel = editorViewModel;
+    }
+
+    @Override
+    public void drawView(Canvas canvas) {
+        super.drawView(canvas);
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+
+        if (mDiagnostics == null || isFormatting()) {
+            return;
+        }
+        for (DiagnosticWrapper d : mDiagnostics) {
+            if (!DiagnosticSpanMapUpdater.isValid(d)) {
+                continue;
+            }
+            if (d.getStartPosition() > getText().length()) {
+                continue;
+            }
+            if (d.getEndPosition() > getText().length()) {
+                continue;
+            }
+
+            CharPosition startPosition = getCharPosition((int) d.getStartPosition());
+            CharPosition endPosition = getCharPosition((int) d.getEndPosition());
+
+            if (!isRowVisible(startPosition.getLine()) || !isRowVisible(endPosition.getLine())) {
+                continue;
+            }
+            setDiagnosticColor(d);
+            if (startPosition.getLine() == endPosition.getLine()) {
+                drawSingleLineDiagnostic(canvas, startPosition, endPosition);
+            } else {
+                drawMultiLineDiagnostic(canvas, startPosition, endPosition);
+            }
+        }
+    }
+
+    private void drawSingleLineDiagnostic(Canvas canvas, CharPosition startPosition, CharPosition endPosition) {
+        float startX = getCharOffsetX(startPosition.getLine(), startPosition.getColumn());
+        float startY = getCharOffsetY(startPosition.getLine(), startPosition.getColumn());
+        float endX = getCharOffsetX(endPosition.getLine(), endPosition.getColumn());
+        float endY = getCharOffsetY(endPosition.getLine(), endPosition.getColumn());
+
+        if (startPosition.getColumn() == endPosition.getColumn()) {
+            // expand a little bit further
+            endX += getDpUnit() * 2;
+        }
+        drawSquigglyLine(canvas, startX, startY, endX, endY);
+    }
+
+    private void drawMultiLineDiagnostic(Canvas canvas, CharPosition start, CharPosition end) {
+        for (int i = start.getLine(); i <= end.getLine(); i++) {
+            float startX;
+            float startY;
+            float endX;
+            float endY;
+
+            if (i == start.getLine()) {
+                startX = getCharOffsetX(i, start.getColumn());
+                startY = getCharOffsetY(i, start.getColumn());
+                int columns = getText().getColumnCount(i);
+                endX = getCharOffsetX(i, columns);
+                endY = getCharOffsetY(i, columns);
+            } else if (i == end.getLine()) {
+                startX = getCharOffsetX(i, 0);
+                startY = getCharOffsetY(i, 0);
+                endX = getCharOffsetX(i, end.getColumn());
+                endY = getCharOffsetY(i, end.getColumn());
+            } else {
+                startX = getCharOffsetX(i, 0);
+                startY = getCharOffsetY(i, 0);
+                int columns = getText().getColumnCount(i);
+                endX = getCharOffsetX(i, columns);
+                endY = getCharOffsetY(i, columns);
+            }
+
+            drawSquigglyLine(canvas, startX, startY, endX, endY);
+        }
+    }
+
+    private void drawSquigglyLine(Canvas canvas, float startX, float startY, float endX, float endY) {
+        float waveSize = getDpUnit() * 3;
+        float doubleWaveSize = waveSize * 2;
+        float width = endX - startX;
+        for (int i = (int) startX; i < startX + width; i += doubleWaveSize) {
+            canvas.drawLine(i, startY, i + waveSize, startY - waveSize, mDiagnosticPaint);
+            canvas.drawLine(i + waveSize, startY - waveSize, i + doubleWaveSize, startY, mDiagnosticPaint);
+        }
+    }
+
+    private void setDiagnosticColor(DiagnosticWrapper wrapper) {
+        EditorColorScheme color = getColorScheme();
+        switch (wrapper.getKind()) {
+            case ERROR:
+                mDiagnosticPaint.setColor(color.getColor(EditorColorScheme.PROBLEM_ERROR));
+                break;
+            case MANDATORY_WARNING:
+            case WARNING:
+                mDiagnosticPaint.setColor(color.getColor(EditorColorScheme.PROBLEM_WARNING));
+        }
     }
 }
