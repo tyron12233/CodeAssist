@@ -14,6 +14,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.MenuProvider;
+import androidx.core.view.ViewCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -174,6 +175,10 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         }
         Toolbar toolbar = view.findViewById(R.id.toolbar);
         toolbar.setOnMenuItemClickListener(menu -> getParentFragmentManager().popBackStackImmediate());
+
+        View fab = view.findViewById(R.id.fab_add_dependency);
+        UiUtilsKt.addSystemWindowInsetToMargin(fab, false, false, false, true);
+        ViewCompat.requestApplyInsets(fab);
     }
 
     @Override
@@ -241,7 +246,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         JavaModule javaModule = ((JavaModule) module);
 
         FloatingActionButton fab = requireView().findViewById(R.id.fab_add_dependency);
-        UiUtilsKt.addSystemWindowInsetToMargin(fab, false, false, false, true);
+
         fab.setOnClickListener(v -> {
             FragmentManager fm = getChildFragmentManager();
             if (fm.findFragmentByTag(AddDependencyDialogFragment.TAG) == null) {
