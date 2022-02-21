@@ -31,6 +31,7 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.material.transition.MaterialFade;
+import com.google.android.material.transition.MaterialFadeThrough;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.tyron.builder.project.Project;
 import com.tyron.code.R;
@@ -42,6 +43,7 @@ import com.tyron.code.ui.wizard.WizardFragment;
 import com.tyron.code.util.UiUtilsKt;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.common.SharedPreferenceKeys;
+import com.tyron.completion.progress.ProgressManager;
 
 import org.apache.commons.io.FileUtils;
 
@@ -107,7 +109,7 @@ public class ProjectManagerFragment extends Fragment {
         toolbar.inflateMenu(R.menu.project_list_fragment_menu);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // can't change project path on android R
-            toolbar.getMenu().removeItem(R.id.projects_path);
+//            toolbar.getMenu().removeItem(R.id.projects_path);
         }
         toolbar.setOnMenuItemClickListener(item -> {
             int id = item.getItemId();
@@ -146,8 +148,6 @@ public class ProjectManagerFragment extends Fragment {
         mRecyclerView = view.findViewById(R.id.projects_recycler);
         mRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         mRecyclerView.setAdapter(mAdapter);
-
-        checkSavePath();
     }
 
     private boolean inflateProjectMenus(View view, Project project) {
@@ -211,7 +211,7 @@ public class ProjectManagerFragment extends Fragment {
 
     private void checkSavePath() {
         String path = mPreferences.getString(SharedPreferenceKeys.PROJECT_SAVE_PATH, null);
-        if (path == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        if (path == null) {// && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             if (permissionsGranted()) {
                 showDirectorySelectDialog();
             } else if (shouldShowRequestPermissionRationale()) {
@@ -257,7 +257,7 @@ public class ProjectManagerFragment extends Fragment {
             setSavePath(files[0]);
             loadProjects();
         });
-        dialogFixed.setOnCancelListener(__ -> mPreviousPath = dialogFixed.getCurrentPath());
+        dialogFixed.setOnDismissListener(__ -> mPreviousPath = dialogFixed.getCurrentPath());
         dialogFixed.show();
     }
 
@@ -319,55 +319,63 @@ public class ProjectManagerFragment extends Fragment {
             if (getActivity() != null) {
                 requireActivity().runOnUiThread(() -> {
                     toggleLoading(false);
-                    mAdapter.submitList(projects);
-                    toggleNullProject(projects);
+                    ProgressManager.getInstance().runLater(() -> {
+                        mAdapter.submitList(projects);
+                        toggleNullProject(projects);
+                    }, 300);
                 });
             }
         });
     }
 
     private void toggleNullProject(List<Project> projects) {
-        if (getActivity() == null || isDetached()) {
-            return;
-        }
-        View view = getView();
-        if (view == null) {
-            return;
-        }
+        ProgressManager.getInstance().runLater(() -> {
+            if (getActivity() == null || isDetached()) {
+                return;
+            }
+            View view = getView();
+            if (view == null) {
+                return;
+            }
 
-        View recycler = view.findViewById(R.id.projects_recycler);
-        View empty = view.findViewById(R.id.empty_projects);
+            View recycler = view.findViewById(R.id.projects_recycler);
+            View empty = view.findViewById(R.id.empty_projects);
 
-        TransitionManager.beginDelayedTransition(
-                (ViewGroup) recycler.getParent(), new MaterialFade());
-        if (projects.size() == 0) {
-            recycler.setVisibility(View.GONE);
-            empty.setVisibility(View.VISIBLE);
-        } else {
-            recycler.setVisibility(View.VISIBLE);
-            empty.setVisibility(View.GONE);
-        }
+            TransitionManager.beginDelayedTransition(
+                    (ViewGroup) recycler.getParent(), new MaterialFade());
+            if (projects.size() == 0) {
+                recycler.setVisibility(View.GONE);
+                empty.setVisibility(View.VISIBLE);
+            } else {
+                recycler.setVisibility(View.VISIBLE);
+                empty.setVisibility(View.GONE);
+            }
+        }, 300);
     }
 
     private void toggleLoading(boolean show) {
-        if (getActivity() == null || isDetached()) {
-            return;
-        }
-        View view = getView();
-        if (view == null) {
-            return;
-        }
-        View recycler = view.findViewById(R.id.projects_recycler);
-        View empty = view.findViewById(R.id.empty_container);
+        ProgressManager.getInstance().runLater(() -> {
+            if (getActivity() == null || isDetached()) {
+                return;
+            }
+            View view = getView();
+            if (view == null) {
+                return;
+            }
+            View recycler = view.findViewById(R.id.projects_recycler);
+            View empty = view.findViewById(R.id.empty_container);
+            View empty_project = view.findViewById(R.id.empty_projects);
+            empty_project.setVisibility(View.GONE);
 
-        TransitionManager.beginDelayedTransition((ViewGroup) recycler.getParent(),
-                new MaterialFade());
-        if (show) {
-            recycler.setVisibility(View.GONE);
-            empty.setVisibility(View.VISIBLE);
-        } else {
-            recycler.setVisibility(View.VISIBLE);
-            empty.setVisibility(View.GONE);
-        }
+            TransitionManager.beginDelayedTransition((ViewGroup) recycler.getParent(),
+                                                     new MaterialFade());
+            if (show) {
+                recycler.setVisibility(View.GONE);
+                empty.setVisibility(View.VISIBLE);
+            } else {
+                recycler.setVisibility(View.VISIBLE);
+                empty.setVisibility(View.GONE);
+            }
+        }, 300);
     }
 }

@@ -49,6 +49,7 @@ public class FilePickerDialogFixed extends FilePickerDialog {
             Field mAdapterField = FilePickerDialog.class.getDeclaredField("mFileListAdapter");
             mAdapterField.setAccessible(true);
             FileListAdapter adapter = (FileListAdapter) mAdapterField.get(this);
+            assert adapter != null;
             adapter.setNotifyItemCheckedListener(() -> {
                 int size = MarkedItemList.getFileCount();
                 if (size == 0) {
