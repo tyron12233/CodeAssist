@@ -278,17 +278,22 @@ public class CodeEditorFragment extends Fragment implements Savable,
                         mEditor.setColorScheme(result);
                     }
                     initializeLanguage();
+                    ProjectManager.getInstance()
+                            .addOnProjectOpenListener(CodeEditorFragment.this);
                 }
 
                 @Override
                 public void onFailure(@NonNull Throwable t) {
                     setDefaultColorScheme(mEditor);
                     initializeLanguage();
+                    ProjectManager.getInstance()
+                            .addOnProjectOpenListener(CodeEditorFragment.this);
                 }
             }, ContextCompat.getMainExecutor(requireContext()));
         } else {
             setDefaultColorScheme(mEditor);
             initializeLanguage();
+            ProjectManager.getInstance().addOnProjectOpenListener(this);
         }
     }
 
@@ -336,15 +341,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-
-        Project project = ProjectManager.getInstance()
-                .getCurrentProject();
-        if (project != null) {
-            readFile(project, savedInstanceState);
-        } else {
-            ProjectManager.getInstance()
-                    .addOnProjectOpenListener(this);
-        }
 
         mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
             menu.clear();
