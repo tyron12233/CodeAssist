@@ -83,7 +83,7 @@
       "name": "Storage type",
       "scope": "storage,storage.type,storage.modifier,storage.arrow",
       "settings": {
-        "foreground": "#CC8242"
+        "foreground": "#fefefe"
       }
     },
     {

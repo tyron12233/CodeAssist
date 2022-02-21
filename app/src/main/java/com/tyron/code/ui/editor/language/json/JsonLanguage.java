@@ -1,6 +1,7 @@
 package com.tyron.code.ui.editor.language.json;
 
 import android.annotation.SuppressLint;
+import android.content.res.AssetManager;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
@@ -11,6 +12,9 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.google.gson.stream.JsonWriter;
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
+import com.tyron.code.ui.editor.language.textmate.BaseTextmateAnalyzer;
 import com.tyron.completion.java.rewrite.EditHelper;
 import com.tyron.editor.Editor;
 
@@ -18,6 +22,7 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
 import org.apache.commons.io.input.CharSequenceReader;
 
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
@@ -30,6 +35,7 @@ import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
 import io.github.rosemoe.sora.lang.styling.Styles;
+import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.TextUtils;
@@ -40,12 +46,25 @@ public class JsonLanguage implements Language {
 
     private final Editor mEditor;
 
-    private final JsonAnalyzer mAnalyzer;
+    private final BaseTextmateAnalyzer mAnalyzer;
 
     public JsonLanguage(Editor editor) {
         mEditor = editor;
 
-        mAnalyzer = new JsonAnalyzer();
+        try {
+            AssetManager assetManager = ApplicationLoader.applicationContext.getAssets();
+            mAnalyzer = new BaseTextmateAnalyzer(editor, "json.tmLanguage.json",
+                                                 assetManager.open(
+                                                         "textmate/json" +
+                                                         "/syntaxes/json" +
+                                                         ".tmLanguage.json"),
+                                                 new InputStreamReader(
+                                                         assetManager.open(
+                                                                 "textmate/json/language-configuration.json")),
+                                                 ((TextMateColorScheme) ((CodeEditorView) editor).getColorScheme()).getRawTheme());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @NonNull

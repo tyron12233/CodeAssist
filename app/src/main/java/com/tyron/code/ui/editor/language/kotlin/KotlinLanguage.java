@@ -1,16 +1,22 @@
 package com.tyron.code.ui.editor.language.kotlin;
 
+import android.content.res.AssetManager;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.code.ui.editor.language.CompletionItemWrapper;
+import com.tyron.code.ui.editor.language.textmate.BaseTextmateAnalyzer;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
+
+import java.io.InputStreamReader;
 
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
@@ -19,6 +25,7 @@ import io.github.rosemoe.sora.lang.completion.CompletionHelper;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
+import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.TextUtils;
@@ -28,11 +35,21 @@ import io.github.rosemoe.sora.widget.SymbolPairMatch;
 public class KotlinLanguage implements Language {
 
     private final Editor mEditor;
-    private final KotlinAnalyzer mAnalyzer;
+    private final BaseTextmateAnalyzer mAnalyzer;
 
     public KotlinLanguage(Editor editor) {
         mEditor = editor;
-        mAnalyzer = new KotlinAnalyzer(mEditor);
+        AssetManager assetManager = ApplicationLoader.applicationContext.getAssets();
+        try {
+            mAnalyzer = new BaseTextmateAnalyzer(editor, "kotlin.tmLanguage", assetManager.open(
+                    "textmate/kotlin/syntaxes/kotlin.tmLanguage"),
+                                                 new InputStreamReader(assetManager.open(
+                                                         "textmate/kotlin/language-configuration" +
+                                                         ".json")),
+                                                 ((TextMateColorScheme) ((CodeEditorView) editor).getColorScheme()).getRawTheme());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @NonNull
@@ -57,7 +74,8 @@ public class KotlinLanguage implements Language {
         }
         String prefix = CompletionHelper.computePrefix(content, position, this::isAutoCompleteChar);
         KotlinAutoCompleteProvider provider = new KotlinAutoCompleteProvider(mEditor);
-        CompletionList list = provider.getCompletionList(prefix, position.getLine(), position.getColumn());
+        CompletionList list =
+                provider.getCompletionList(prefix, position.getLine(), position.getColumn());
         if (list != null) {
             for (CompletionItem item : list.items) {
                 CompletionItemWrapper wrapper = new CompletionItemWrapper(item);
@@ -72,7 +90,8 @@ public class KotlinLanguage implements Language {
 
     @Override
     public int getIndentAdvance(@NonNull ContentReference content, int line, int column) {
-        String text = content.getLine(line).substring(0, column);
+        String text = content.getLine(line)
+                .substring(0, column);
         return getIndentAdvance(text);
     }
 
@@ -135,8 +154,8 @@ public class KotlinLanguage implements Language {
             int advanceBefore = getIndentAdvance(beforeText);
             int advanceAfter = getIndentAdvance(afterText);
             String text;
-            StringBuilder sb = new StringBuilder("\n")
-                    .append(TextUtils.createIndent(count + advanceBefore, tabSize, useTab()))
+            StringBuilder sb = new StringBuilder("\n").append(
+                    TextUtils.createIndent(count + advanceBefore, tabSize, useTab()))
                     .append('\n')
                     .append(text = TextUtils.createIndent(count + advanceAfter, tabSize, useTab()));
             int shiftLeft = text.length() + 1;
