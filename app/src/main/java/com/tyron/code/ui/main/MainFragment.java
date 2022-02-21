@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -360,7 +361,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         }
 
         if (project.equals(ProjectManager.getInstance().getCurrentProject())) {
-            saveAll();
+            saveAll(false);
         }
 
         IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
@@ -382,6 +383,10 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     }
 
     private void saveAll() {
+        saveAll(true);
+    }
+
+    private void saveAll(boolean async) {
         if (mProject == null) {
             return;
         }
@@ -407,9 +412,13 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             String itemString = new Gson().toJson(items.stream()
                                                           .map(FileEditorSavedState::new)
                                                           .collect(Collectors.toList()));
-            settings.edit()
-                    .putString(ProjectSettings.SAVED_EDITOR_FILES, itemString)
-                    .apply();
+            SharedPreferences.Editor editor = settings.edit()
+                    .putString(ProjectSettings.SAVED_EDITOR_FILES, itemString);
+            if (async) {
+                editor.apply();
+            } else {
+                editor.commit();
+            }
         }
     }
 
