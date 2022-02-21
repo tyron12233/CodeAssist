@@ -2,6 +2,8 @@ package com.tyron.code.ui.editor.language.textmate;
 
 import android.graphics.Color;
 
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
+import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.editor.Editor;
 
 import java.io.InputStream;

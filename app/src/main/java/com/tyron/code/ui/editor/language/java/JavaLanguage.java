@@ -51,20 +51,7 @@ public class JavaLanguage implements Language {
 
     public JavaLanguage(Editor editor) {
         mEditor = editor;
-        try {
-            AssetManager assetManager = ApplicationLoader.applicationContext.getAssets();
-            mAnalyzer = new BaseTextmateAnalyzer(editor, "java.tmLanguage.json",
-                                                 assetManager.open(
-                                                         "textmate/java" +
-                                                         "/syntaxes/java" +
-                                                         ".tmLanguage.json"),
-                                                 new InputStreamReader(
-                                                         assetManager.open(
-                                                                 "textmate/java/language-configuration.json")),
-                                                 ((TextMateColorScheme) ((CodeEditorView) editor).getColorScheme()).getRawTheme());
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        mAnalyzer = JavaAnalyzer.create(editor);
     }
 
     public boolean isAutoCompleteChar(char p1) {

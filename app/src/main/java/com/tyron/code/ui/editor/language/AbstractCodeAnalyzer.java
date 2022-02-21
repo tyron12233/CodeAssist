@@ -50,45 +50,11 @@ public abstract class AbstractCodeAnalyzer<T> extends DiagnosticAnalyzeManager<T
     @Override
     public void insert(CharPosition start, CharPosition end, CharSequence insertedContent) {
         rerunWithBg();
-
-        if (start.getLine() != end.getLine()) {
-            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineInsert(
-                    mDiagnostics,
-                    start.getLine(),
-                    start.getColumn(),
-                    end.getLine(),
-                    end.getColumn()
-            );
-        } else {
-            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineInsert(
-                    mDiagnostics,
-                    start.getLine(),
-                    start.getColumn(),
-                    end.getColumn()
-            );
-        }
     }
 
     @Override
     public void delete(CharPosition start, CharPosition end, CharSequence deletedContent) {
         rerunWithBg();
-
-        if (start.getLine() != end.getLine()) {
-            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineDelete(
-                    mDiagnostics,
-                    start.getLine(),
-                    start.getColumn(),
-                    end.getLine(),
-                    end.getColumn()
-            );
-        } else {
-            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineDelete(
-                    mDiagnostics,
-                    start.getLine(),
-                    start.getColumn(),
-                    end.getColumn()
-            );
-        }
     }
 
     @Override

@@ -149,4 +149,15 @@ public class HighlightUtil {
         }
     }
 
+    public static void clearDiagnostics(Styles styles) {
+        Spans spans = styles.getSpans();
+        Spans.Reader read = spans.read();
+        for (int i = 0; i < spans.getLineCount(); i++) {
+            List<Span> spansOnLine = new ArrayList<>(read.getSpansOnLine(i));
+            for (Span span : spansOnLine) {
+                span.problemFlags = 0;
+            }
+            spans.modify().setSpansOnLine(i, spansOnLine);
+        }
+    }
 }
