@@ -9,6 +9,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
@@ -411,6 +412,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
     }
 
     private void showPopupMenu(LongPressEvent event) {
+        MotionEvent e = event.getCausingEvent();
         Cursor cursor = mEditor.getCursor();
         if (cursor.isSelected()) {
             int index = mEditor.getCharIndex(event.getLine(), event.getColumn());
@@ -428,9 +430,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         DataContext dataContext = createDataContext();
         ActionManager.getInstance()
                 .fillMenu(dataContext, popupMenu.getMenu(), ActionPlaces.EDITOR, true, false);
-        popupMenu.show((int) event.getX(), (int) event.getY() +
-                                           event.getEditor()
-                                                   .getRowHeight());
+        popupMenu.show((int) e.getX(), (int) e.getY());
         popupMenu.setOnDismissListener(d -> mDragToOpenListener = null);
         mDragToOpenListener = popupMenu.getDragToOpenListener();
     }

@@ -22,6 +22,7 @@ public class CoordinatePopupMenu extends PopupMenu {
             throw new Error(e);
         }
     }
+
     public CoordinatePopupMenu(@NonNull Context context, @NonNull View anchor) {
         super(context, anchor);
     }
@@ -41,6 +42,20 @@ public class CoordinatePopupMenu extends PopupMenu {
     @Override
     public void show() {
         super.show();
+    }
+
+    /**
+     * Does nothing.
+     * This is to prevent unknown callers from dismissing the popup menu, use
+     * {@link #dismissPopup()} instead
+     */
+    @Override
+    public void dismiss() {
+        // do nothing
+    }
+
+    public void dismissPopup() {
+        super.dismiss();
     }
 
     public void show(int x, int y) {
