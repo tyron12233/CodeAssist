@@ -3,6 +3,7 @@ package com.tyron.code.ui.editor.impl.text.rosemoe;
 
 import static io.github.rosemoe.sora2.text.EditorUtil.setDefaultColorScheme;
 
+import android.annotation.SuppressLint;
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
@@ -17,6 +18,10 @@ import android.view.inputmethod.EditorInfo;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.view.menu.MenuBuilder;
+import androidx.appcompat.view.menu.MenuPopupHelper;
+import androidx.appcompat.widget.ForwardingListener;
+import androidx.appcompat.widget.PopupMenu;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
@@ -58,6 +63,8 @@ import com.tyron.code.ui.layoutEditor.LayoutEditorFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.ui.settings.EditorSettingsFragment;
+import com.tyron.code.util.CoordinatePopupMenu;
+import com.tyron.code.util.PopupMenuHelper;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.java.provider.CompletionEngine;
@@ -71,9 +78,11 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
+import io.github.rosemoe.sora.event.ClickEvent;
 import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.LongPressEvent;
 import io.github.rosemoe.sora.lang.Language;
@@ -142,6 +151,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     private boolean mCanSave;
     private boolean mReading;
+
+    private View.OnTouchListener mDragToOpenListener;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -293,7 +304,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
         } else {
             setDefaultColorScheme(mEditor);
             initializeLanguage();
-            ProjectManager.getInstance().addOnProjectOpenListener(this);
+            ProjectManager.getInstance()
+                    .addOnProjectOpenListener(this);
         }
     }
 
@@ -338,46 +350,24 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
+    @SuppressLint("RestrictedApi")
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
         mEditor.setOnCreateContextMenuListener((menu, view1, contextMenuInfo) -> {
             menu.clear();
-
-            Project currentProject = ProjectManager.getInstance()
-                    .getCurrentProject();
-
-            DataContext dataContext = DataContextUtils.getDataContext(view1);
-            dataContext.putData(CommonDataKeys.PROJECT, currentProject);
-            dataContext.putData(CommonDataKeys.ACTIVITY, requireActivity());
-            dataContext.putData(CommonDataKeys.FILE_EDITOR_KEY,
-                                mMainViewModel.getCurrentFileEditor());
-            dataContext.putData(CommonDataKeys.FILE, mCurrentFile);
-            dataContext.putData(CommonDataKeys.EDITOR, mEditor);
-
-            if (currentProject != null && mLanguage instanceof JavaLanguage) {
-                JavaDataContextUtil.addEditorKeys(dataContext, currentProject, mCurrentFile,
-                                                  mEditor.getCursor()
-                                                          .getLeft());
+        });
+        // noinspection ClickableViewAccessibility
+        mEditor.setOnTouchListener((view12, motionEvent) -> {
+            if (mDragToOpenListener instanceof ForwardingListener) {
+                PopupMenuHelper.setForwarding((ForwardingListener) mDragToOpenListener);
+                // noinspection RestrictedApi
+                ((ForwardingListener) mDragToOpenListener).onTouch(view12, motionEvent);
             }
-
-            DiagnosticWrapper diagnosticWrapper =
-                    DiagnosticUtil.getDiagnosticWrapper(mEditor.getDiagnostics(),
-                                                        mEditor.getCursor()
-                                                                .getLeft());
-            if (diagnosticWrapper == null && mLanguage instanceof LanguageXML) {
-                diagnosticWrapper = DiagnosticUtil.getXmlDiagnosticWrapper(mEditor.getDiagnostics(),
-                                                                           mEditor.getCursor()
-                                                                                   .getLeftLine());
-            }
-            dataContext.putData(CommonDataKeys.DIAGNOSTIC, diagnosticWrapper);
-
-            ActionManager.getInstance()
-                    .fillMenu(dataContext, menu, ActionPlaces.EDITOR, true, false);
+            return false;
         });
         mEditor.subscribeEvent(LongPressEvent.class, (event, unsubscribe) -> {
-            MotionEvent e = event.getCausingEvent();
             updateFile(mEditor.getText());
             // wait for the cursor to move
             ProgressManager.getInstance()
@@ -395,8 +385,23 @@ public class CodeEditorFragment extends Fragment implements Savable,
                                 EditorUtil.selectWord(mEditor, event.getLine(), event.getColumn());
                             }
                         }
-                        mEditor.showContextMenu(e.getX(), e.getY());
+                        CoordinatePopupMenu popupMenu =
+                                new CoordinatePopupMenu(requireContext(), mEditor);
+                        DataContext dataContext = createDataContext();
+                        ActionManager.getInstance()
+                                .fillMenu(dataContext, popupMenu.getMenu(), ActionPlaces.EDITOR,
+                                          true, false);
+                        popupMenu.show((int) event.getX(), (int) event.getY() +
+                                                           event.getEditor()
+                                                                   .getRowHeight());
+                        popupMenu.setOnDismissListener(d -> mDragToOpenListener = null);
+                        mDragToOpenListener = popupMenu.getDragToOpenListener();
                     });
+        });
+        mEditor.subscribeEvent(ClickEvent.class, (event, unsubscribe) -> {
+            if (mEditor.getCursor().isSelected()) {
+                event.intercept();
+            }
         });
         mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
             if (event.getAction() == ContentChangeEvent.ACTION_SET_NEW_TEXT) {
@@ -736,5 +741,34 @@ public class CodeEditorFragment extends Fragment implements Savable,
         if (mEditor != null && !mReading) {
             mEditor.rerunAnalysis();
         }
+    }
+
+    private DataContext createDataContext() {
+        Project currentProject = ProjectManager.getInstance()
+                .getCurrentProject();
+
+        DataContext dataContext = DataContextUtils.getDataContext(mEditor);
+        dataContext.putData(CommonDataKeys.PROJECT, currentProject);
+        dataContext.putData(CommonDataKeys.ACTIVITY, requireActivity());
+        dataContext.putData(CommonDataKeys.FILE_EDITOR_KEY, mMainViewModel.getCurrentFileEditor());
+        dataContext.putData(CommonDataKeys.FILE, mCurrentFile);
+        dataContext.putData(CommonDataKeys.EDITOR, mEditor);
+
+        if (currentProject != null && mLanguage instanceof JavaLanguage) {
+            JavaDataContextUtil.addEditorKeys(dataContext, currentProject, mCurrentFile,
+                                              mEditor.getCursor()
+                                                      .getLeft());
+        }
+
+        DiagnosticWrapper diagnosticWrapper =
+                DiagnosticUtil.getDiagnosticWrapper(mEditor.getDiagnostics(), mEditor.getCursor()
+                        .getLeft());
+        if (diagnosticWrapper == null && mLanguage instanceof LanguageXML) {
+            diagnosticWrapper = DiagnosticUtil.getXmlDiagnosticWrapper(mEditor.getDiagnostics(),
+                                                                       mEditor.getCursor()
+                                                                               .getLeftLine());
+        }
+        dataContext.putData(CommonDataKeys.DIAGNOSTIC, diagnosticWrapper);
+        return dataContext;
     }
 }
