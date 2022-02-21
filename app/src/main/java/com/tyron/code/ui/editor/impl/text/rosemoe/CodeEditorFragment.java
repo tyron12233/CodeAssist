@@ -5,26 +5,21 @@ import static io.github.rosemoe.sora2.text.EditorUtil.setDefaultColorScheme;
 
 import android.annotation.SuppressLint;
 import android.content.SharedPreferences;
-import android.content.res.AssetManager;
-import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.view.menu.MenuBuilder;
-import androidx.appcompat.view.menu.MenuPopupHelper;
 import androidx.appcompat.widget.ForwardingListener;
-import androidx.appcompat.widget.PopupMenu;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
@@ -56,7 +51,6 @@ import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
-import com.tyron.code.ui.editor.scheme.CodeAssistColorScheme;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.layoutEditor.LayoutEditorFragment;
@@ -78,7 +72,6 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
@@ -89,8 +82,6 @@ import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.Cursor;
-import io.github.rosemoe.sora.textmate.core.internal.theme.reader.ThemeReader;
-import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
 import io.github.rosemoe.sora.widget.DirectAccessProps;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora2.text.EditorUtil;
@@ -372,43 +363,27 @@ public class CodeEditorFragment extends Fragment implements Savable,
             // wait for the cursor to move
             ProgressManager.getInstance()
                     .runLater(() -> {
-                        Cursor cursor = mEditor.getCursor();
-                        if (cursor.isSelected()) {
-                            int index = mEditor.getCharIndex(event.getLine(), event.getColumn());
-                            int cursorLeft = cursor.getLeft();
-                            int cursorRight = cursor.getRight();
-                            char c = mEditor.getText()
-                                    .charAt(index);
-                            if (Character.isWhitespace(c)) {
-                                mEditor.setSelection(event.getLine(), event.getColumn());
-                            } else if (index < cursorLeft || index > cursorRight) {
-                                EditorUtil.selectWord(mEditor, event.getLine(), event.getColumn());
-                            }
-                        }
-                        CoordinatePopupMenu popupMenu =
-                                new CoordinatePopupMenu(requireContext(), mEditor);
-                        DataContext dataContext = createDataContext();
-                        ActionManager.getInstance()
-                                .fillMenu(dataContext, popupMenu.getMenu(), ActionPlaces.EDITOR,
-                                          true, false);
-                        popupMenu.show((int) event.getX(), (int) event.getY() +
-                                                           event.getEditor()
-                                                                   .getRowHeight());
-                        popupMenu.setOnDismissListener(d -> mDragToOpenListener = null);
-                        mDragToOpenListener = popupMenu.getDragToOpenListener();
+                        showPopupMenu(event);
                     });
         });
         mEditor.subscribeEvent(ClickEvent.class, (event, unsubscribe) -> {
-            if (mEditor.getCursor().isSelected()) {
-                event.intercept();
+            Cursor cursor = mEditor.getCursor();
+            if (mEditor.getCursor()
+                    .isSelected()) {
+                int index = mEditor.getCharIndex(event.getLine(), event.getColumn());
+                int cursorLeft = cursor.getLeft();
+                int cursorRight = cursor.getRight();
+                if (index >= cursorLeft && index <= cursorRight) {
+                    mEditor.showSoftInput();
+                    event.intercept();
+                }
             }
         });
         mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
             if (event.getAction() == ContentChangeEvent.ACTION_SET_NEW_TEXT) {
                 return;
             }
-            updateFile(event.getEditor()
-                               .getText());
+            updateFile(event.getEditor().getText());
         });
 
         LogViewModel logViewModel =
@@ -420,21 +395,44 @@ public class CodeEditorFragment extends Fragment implements Savable,
             ProgressManager.getInstance()
                     .runLater(() -> logViewModel.updateLogs(LogViewModel.DEBUG, diagnostics));
         });
+        FragmentManager fragmentManager = getChildFragmentManager();
+        fragmentManager.setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
+                                                  getViewLifecycleOwner(),
+                                                  ((requestKey, result) -> {
+                                                      String xml = result.getString("text",
+                                                                                    mEditor.getText()
+                                                                                            .toString());
+                                                      xml = XmlPrettyPrinter.prettyPrint(xml,
+                                                                                         XmlFormatPreferences.defaults(),
+                                                                                         XmlFormatStyle.LAYOUT,
+                                                                                         "\n");
+                                                      mEditor.setText(xml);
+                                                  }));
+    }
 
-        getChildFragmentManager().setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
-                                                            getViewLifecycleOwner(),
-                                                            ((requestKey, result) -> {
-                                                                String xml =
-                                                                        result.getString("text",
-                                                                                         mEditor.getText()
-                                                                                                 .toString());
-                                                                xml = XmlPrettyPrinter.prettyPrint(
-                                                                        xml,
-                                                                        XmlFormatPreferences.defaults(),
-                                                                        XmlFormatStyle.LAYOUT,
-                                                                        "\n");
-                                                                mEditor.setText(xml);
-                                                            }));
+    private void showPopupMenu(LongPressEvent event) {
+        Cursor cursor = mEditor.getCursor();
+        if (cursor.isSelected()) {
+            int index = mEditor.getCharIndex(event.getLine(), event.getColumn());
+            int cursorLeft = cursor.getLeft();
+            int cursorRight = cursor.getRight();
+            char c = mEditor.getText()
+                    .charAt(index);
+            if (Character.isWhitespace(c)) {
+                mEditor.setSelection(event.getLine(), event.getColumn());
+            } else if (index < cursorLeft || index > cursorRight) {
+                EditorUtil.selectWord(mEditor, event.getLine(), event.getColumn());
+            }
+        }
+        CoordinatePopupMenu popupMenu = new CoordinatePopupMenu(requireContext(), mEditor);
+        DataContext dataContext = createDataContext();
+        ActionManager.getInstance()
+                .fillMenu(dataContext, popupMenu.getMenu(), ActionPlaces.EDITOR, true, false);
+        popupMenu.show((int) event.getX(), (int) event.getY() +
+                                           event.getEditor()
+                                                   .getRowHeight());
+        popupMenu.setOnDismissListener(d -> mDragToOpenListener = null);
+        mDragToOpenListener = popupMenu.getDragToOpenListener();
     }
 
     @Override
