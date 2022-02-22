@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -425,11 +426,12 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 EditorUtil.selectWord(mEditor, event.getLine(), event.getColumn());
             }
         }
-        CoordinatePopupMenu popupMenu = new CoordinatePopupMenu(requireContext(), mEditor);
+        CoordinatePopupMenu popupMenu = new CoordinatePopupMenu(requireContext(), mEditor,
+                                                                Gravity.BOTTOM);
         DataContext dataContext = createDataContext();
         ActionManager.getInstance()
                 .fillMenu(dataContext, popupMenu.getMenu(), ActionPlaces.EDITOR, true, false);
-        popupMenu.show((int) e.getX(), (int) e.getY());
+        popupMenu.show((int) e.getX(), ((int) e.getY()) - AndroidUtilities.dp(24));
         popupMenu.setOnDismissListener(d -> mDragToOpenListener = null);
         mDragToOpenListener = popupMenu.getDragToOpenListener();
     }
