@@ -122,7 +122,7 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
                             .getRawData();
 
                     codeBlock.startColumn =
-                            IndentRange.computeStartColumn(chars, length, editor.getTabCount());
+                            IndentRange.computeStartColumn(chars, length, editor.useTab() ? 1 : editor.getTabCount());
                     codeBlock.endColumn = codeBlock.startColumn;
                     blocks.add(codeBlock);
                 }
