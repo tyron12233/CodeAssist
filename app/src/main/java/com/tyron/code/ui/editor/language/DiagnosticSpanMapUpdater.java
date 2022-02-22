@@ -15,19 +15,13 @@ public class DiagnosticSpanMapUpdater {
                                                           ContentReference ref,
                                                           CharPosition start,
                                                           CharPosition end) {
-        Content reference = ref.getReference();
-        Indexer indexer = reference.getIndexer();
         int length = end.index - start.index;
         for (DiagnosticWrapper diagnostic : diagnostics) {
             if (!isValid(diagnostic)) {
                 continue;
             }
-            CharPosition startPosition =
-                    indexer.getCharPosition((int) diagnostic.getStartPosition());
-            CharPosition endPosition = indexer.getCharPosition((int) diagnostic.getEndPosition());
-
             // diagnostic is located before the insertion index, its not included
-            if (endPosition.index <= end.index) {
+            if (diagnostic.getEndPosition() <= end.index) {
                 continue;
             }
             diagnostic.setStartPosition(diagnostic.getStartPosition() + length);
@@ -39,20 +33,15 @@ public class DiagnosticSpanMapUpdater {
                                                           ContentReference ref,
                                                           CharPosition start,
                                                           CharPosition end) {
-        Content reference = ref.getReference();
-        Indexer indexer = reference.getIndexer();
         int length = end.index - start.index;
         for (DiagnosticWrapper diagnostic : diagnostics) {
             if (!isValid(diagnostic)) {
                 continue;
             }
-            CharPosition startPosition =
-                    indexer.getCharPosition((int) diagnostic.getStartPosition());
-            CharPosition endPosition = indexer.getCharPosition((int) diagnostic.getEndPosition());
-            if (startPosition.index > start.index) {
+            if (diagnostic.getStartPosition() > start.index) {
                 diagnostic.setStartPosition(diagnostic.getStartPosition() - length);
             }
-            if (endPosition.index > end.index) {
+            if (diagnostic.getEndPosition() > end.index) {
                 diagnostic.setEndPosition(diagnostic.getEndPosition() - length);
             }
         }
