@@ -12,6 +12,34 @@
       }
     },
     {
+      "name": "Package declaration",
+      "scope": "storage.modifier.package",
+      "settings": {
+        "foreground": "#CCCCCC"
+      }
+    },
+    {
+      "name": "Import declaration",
+      "scope": "storage.modifier.import",
+      "settings": {
+        "foreground": "#CCCCCC"
+      }
+    },
+    {
+      "name": "Class names (Identifiers starting with uppercase)",
+      "scope": "storage.type.java",
+      "settings": {
+        "foreground": "#CCCCCC"
+      }
+    },
+    {
+      "name": "Annotation",
+      "scope": "storage.type.annotation",
+      "settings": {
+        "foreground": "#BBB529"
+      }
+    },
+    {
       "name": "Comment",
       "scope": "comment",
       "settings": {
@@ -72,6 +100,13 @@
       "scope": "keyword,keyword.operator.new,keyword.operator.delete,keyword.operator.static,keyword.operator.this,keyword.operator.expression",
       "settings": {
         "foreground": "#CC8242"
+      }
+    },
+    {
+      "name": "Method return type",
+      "scope": "meta.method.return-type",
+      "settings": {
+        "foreground": "#A9B7C6"
       }
     },
     {

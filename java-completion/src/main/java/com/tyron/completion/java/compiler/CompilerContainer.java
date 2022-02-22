@@ -97,6 +97,7 @@ public class CompilerContainer {
     void initialize(Runnable runnable) {
         synchronized (mLock) {
             assertIsNotReader();
+            waitForWriter();
             waitForReaders();
             try {
                 mIsWriting = true;
