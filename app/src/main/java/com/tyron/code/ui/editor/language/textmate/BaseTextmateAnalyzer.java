@@ -120,30 +120,37 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
 
     @Override
     public LineTokenizeResult<StackElement, Span> tokenizeLine(CharSequence lineC, StackElement state) {
-        String line = lineC.toString();
-        ArrayList<Span> tokens = new ArrayList<>();
-        ITokenizeLineResult2 lineTokens = grammar.tokenizeLine2(line, state);
-        int tokensLength = lineTokens.getTokens().length / 2;
-        for (int i = 0; i < tokensLength; i++) {
-            int startIndex = lineTokens.getTokens()[2 * i];
-            if (i == 0 && startIndex != 0) {
-                tokens.add(Span.obtain(0, EditorColorScheme.TEXT_NORMAL));
-            }
-            int metadata = lineTokens.getTokens()[2 * i + 1];
-            int foreground = StackElementMetadata.getForeground(metadata);
-            int fontStyle = StackElementMetadata.getFontStyle(metadata);
-            Span span = Span.obtain(startIndex, TextStyle.makeStyle(foreground + 255, 0, (fontStyle & FontStyle.Bold) != 0, (fontStyle & FontStyle.Italic) != 0, false));
-
-            if ((fontStyle & FontStyle.Underline) != 0) {
-                String color = theme.getColor(foreground);
-                if (color != null) {
-                    span.underlineColor = Color.parseColor(color);
+        try {
+            String line = lineC.toString();
+            ArrayList<Span> tokens = new ArrayList<>();
+            ITokenizeLineResult2 lineTokens = grammar.tokenizeLine2(line, state);
+            int tokensLength = lineTokens.getTokens().length / 2;
+            for (int i = 0; i < tokensLength; i++) {
+                int startIndex = lineTokens.getTokens()[2 * i];
+                if (i == 0 && startIndex != 0) {
+                    tokens.add(Span.obtain(0, EditorColorScheme.TEXT_NORMAL));
                 }
-            }
+                int metadata = lineTokens.getTokens()[2 * i + 1];
+                int foreground = StackElementMetadata.getForeground(metadata);
+                int fontStyle = StackElementMetadata.getFontStyle(metadata);
+                Span span = Span.obtain(startIndex, TextStyle.makeStyle(foreground + 255, 0,
+                                                                        (fontStyle & FontStyle.Bold) != 0,
+                                                                        (fontStyle & FontStyle.Italic) != 0,
+                                                                        false));
 
-            tokens.add(span);
+                if ((fontStyle & FontStyle.Underline) != 0) {
+                    String color = theme.getColor(foreground);
+                    if (color != null) {
+                        span.underlineColor = Color.parseColor(color);
+                    }
+                }
+
+                tokens.add(span);
+            }
+            return new LineTokenizeResult<>(lineTokens.getRuleStack(), null, tokens);
+        } catch (Throwable e) {
+            return new LineTokenizeResult<>(state, null,  Collections.emptyList());
         }
-        return new LineTokenizeResult<>(lineTokens.getRuleStack(), null, tokens);
     }
 
     @Override

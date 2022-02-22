@@ -6,7 +6,9 @@
         "background": "#242424",
         "foreground": "#cccccc",
         "lineHighlight": "#2B2B2B",
-        "selection": "#214283"
+        "selection": "#214283",
+        "completionWindowBackground": "#1F1A1B",
+        "completionWindowStroke": "#555555"
       }
     },
     {
