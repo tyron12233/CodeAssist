@@ -82,6 +82,7 @@ import io.github.rosemoe.sora.event.ClickEvent;
 import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.LongPressEvent;
 import io.github.rosemoe.sora.lang.Language;
+import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.Cursor;
@@ -221,7 +222,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         mEditor = root.findViewById(R.id.code_editor);
         mEditor.setBackgroundAnalysisEnabled(false);
-        mEditor.setText(NO_PROJECT_OPEN_STRING);
         configure(mEditor.getProps());
         mEditor.setTextSize(
                 Integer.parseInt(mPreferences.getString(SharedPreferenceKeys.FONT_SIZE, "12")));
@@ -258,7 +258,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
                                  EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         }
         mPreferences.registerOnSharedPreferenceChangeListener(this);
-
         String schemePath = mPreferences.getString("scheme", null);
         setScheme(schemePath);
         return root;
@@ -609,7 +608,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 } else {
                     int line = requireArguments().getInt(KEY_LINE, 0);
                     int column = requireArguments().getInt(KEY_COLUMN, 0);
-                    setCursorPosition(line, column);
+                    Content text = mEditor.getText();
+                    if (line < text.getLineCount() && column < text.getColumnCount(line)) {
+                        setCursorPosition(line, column);
+                    }
                 }
 
                 checkCanSave();
