@@ -109,7 +109,7 @@ public class ProjectManagerFragment extends Fragment {
         toolbar.inflateMenu(R.menu.project_list_fragment_menu);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // can't change project path on android R
-//            toolbar.getMenu().removeItem(R.id.projects_path);
+            toolbar.getMenu().removeItem(R.id.projects_path);
         }
         toolbar.setOnMenuItemClickListener(item -> {
             int id = item.getItemId();
@@ -211,7 +211,7 @@ public class ProjectManagerFragment extends Fragment {
 
     private void checkSavePath() {
         String path = mPreferences.getString(SharedPreferenceKeys.PROJECT_SAVE_PATH, null);
-        if (path == null) {// && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        if (path == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             if (permissionsGranted()) {
                 showDirectorySelectDialog();
             } else if (shouldShowRequestPermissionRationale()) {
