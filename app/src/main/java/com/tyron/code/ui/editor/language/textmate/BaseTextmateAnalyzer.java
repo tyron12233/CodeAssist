@@ -50,13 +50,18 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
     private final Editor editor;
     private final ILanguageConfiguration configuration;
 
-    public BaseTextmateAnalyzer(Editor editor, String grammarName, InputStream grammarIns, Reader languageConfiguration, IRawTheme theme) throws Exception {
+    public BaseTextmateAnalyzer(Editor editor,
+                                String grammarName,
+                                InputStream grammarIns,
+                                Reader languageConfiguration,
+                                IRawTheme theme) throws Exception {
         registry.setTheme(theme);
         this.editor = editor;
         this.theme = Theme.createFromRawTheme(theme);
         this.grammar = registry.loadGrammarFromPathSync(grammarName, grammarIns);
         if (languageConfiguration != null) {
-            LanguageConfigurator languageConfigurator = new LanguageConfigurator(languageConfiguration);
+            LanguageConfigurator languageConfigurator =
+                    new LanguageConfigurator(languageConfiguration);
             configuration = languageConfigurator.getLanguageConfiguration();
         } else {
             configuration = null;
@@ -86,14 +91,21 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
         return list;
     }
 
-    public void analyzeCodeBlocks( Content model, List<CodeBlock> blocks, CodeBlockAnalyzeDelegate delegate) {
+    public void analyzeCodeBlocks(Content model,
+                                  List<CodeBlock> blocks,
+                                  CodeBlockAnalyzeDelegate delegate) {
         if (configuration == null) {
             return;
         }
         Folding folding = configuration.getFolding();
-        if (folding == null) return;
+        if (folding == null) {
+            return;
+        }
         try {
-            FoldingRegions foldingRegions = IndentRange.computeRanges(model, editor.getTabCount(), folding.getOffSide(), folding, MAX_FOLDING_REGIONS_FOR_INDENT_LIMIT, delegate);
+            FoldingRegions foldingRegions =
+                    IndentRange.computeRanges(model, editor.getTabCount(), folding.getOffSide(),
+                                              folding, MAX_FOLDING_REGIONS_FOR_INDENT_LIMIT,
+                                              delegate);
             for (int i = 0; i < foldingRegions.length() && delegate.isNotCancelled(); i++) {
                 int startLine = foldingRegions.getStartLineNumber(i);
                 int endLine = foldingRegions.getEndLineNumber(i);
@@ -103,11 +115,14 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
                     codeBlock.startLine = startLine;
                     codeBlock.endLine = endLine;
 
-                    // It's safe here to use raw data because the Content is only held by this thread
+                    // It's safe here to use raw data because the Content is only held by this
+                    // thread
                     int length = model.getColumnCount(startLine);
-                    char[] chars = model.getLine(startLine).getRawData();
+                    char[] chars = model.getLine(startLine)
+                            .getRawData();
 
-                    codeBlock.startColumn = IndentRange.computeStartColumn(chars, length, editor.getTabCount());
+                    codeBlock.startColumn =
+                            IndentRange.computeStartColumn(chars, length, editor.getTabCount());
                     codeBlock.endColumn = codeBlock.startColumn;
                     blocks.add(codeBlock);
                 }
@@ -119,38 +134,36 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
     }
 
     @Override
-    public LineTokenizeResult<StackElement, Span> tokenizeLine(CharSequence lineC, StackElement state) {
-        try {
-            String line = lineC.toString();
-            ArrayList<Span> tokens = new ArrayList<>();
-            ITokenizeLineResult2 lineTokens = grammar.tokenizeLine2(line, state);
-            int tokensLength = lineTokens.getTokens().length / 2;
-            for (int i = 0; i < tokensLength; i++) {
-                int startIndex = lineTokens.getTokens()[2 * i];
-                if (i == 0 && startIndex != 0) {
-                    tokens.add(Span.obtain(0, EditorColorScheme.TEXT_NORMAL));
-                }
-                int metadata = lineTokens.getTokens()[2 * i + 1];
-                int foreground = StackElementMetadata.getForeground(metadata);
-                int fontStyle = StackElementMetadata.getFontStyle(metadata);
-                Span span = Span.obtain(startIndex, TextStyle.makeStyle(foreground + 255, 0,
-                                                                        (fontStyle & FontStyle.Bold) != 0,
-                                                                        (fontStyle & FontStyle.Italic) != 0,
-                                                                        false));
-
-                if ((fontStyle & FontStyle.Underline) != 0) {
-                    String color = theme.getColor(foreground);
-                    if (color != null) {
-                        span.underlineColor = Color.parseColor(color);
-                    }
-                }
-
-                tokens.add(span);
+    public LineTokenizeResult<StackElement, Span> tokenizeLine(CharSequence lineC,
+                                                               StackElement state) {
+        String line = lineC.toString();
+        ArrayList<Span> tokens = new ArrayList<>();
+        ITokenizeLineResult2 lineTokens = grammar.tokenizeLine2(line, state);
+        int tokensLength = lineTokens.getTokens().length / 2;
+        for (int i = 0; i < tokensLength; i++) {
+            int startIndex = lineTokens.getTokens()[2 * i];
+            if (i == 0 && startIndex != 0) {
+                tokens.add(Span.obtain(0, EditorColorScheme.TEXT_NORMAL));
             }
-            return new LineTokenizeResult<>(lineTokens.getRuleStack(), null, tokens);
-        } catch (Throwable e) {
-            return new LineTokenizeResult<>(state, null,  Collections.emptyList());
+            int metadata = lineTokens.getTokens()[2 * i + 1];
+            int foreground = StackElementMetadata.getForeground(metadata);
+            int fontStyle = StackElementMetadata.getFontStyle(metadata);
+            Span span = Span.obtain(startIndex, TextStyle.makeStyle(foreground + 255, 0,
+                                                                    (fontStyle & FontStyle.Bold) !=
+                                                                    0, (fontStyle &
+                                                                        FontStyle.Italic) != 0,
+                                                                    false));
+
+            if ((fontStyle & FontStyle.Underline) != 0) {
+                String color = theme.getColor(foreground);
+                if (color != null) {
+                    span.underlineColor = Color.parseColor(color);
+                }
+            }
+
+            tokens.add(span);
         }
+        return new LineTokenizeResult<>(lineTokens.getRuleStack(), null, tokens);
     }
 
     @Override

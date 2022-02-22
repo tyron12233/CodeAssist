@@ -248,15 +248,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     }
                 });
         mEditor.setViewModel(viewModel);
-
-        if (mPreferences.getBoolean(SharedPreferenceKeys.KEYBOARD_ENABLE_SUGGESTIONS, false)) {
-            mEditor.setInputType(EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
-        } else {
-            mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS |
-                                 EditorInfo.TYPE_CLASS_TEXT |
-                                 EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
-                                 EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-        }
+        mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS |
+                             EditorInfo.TYPE_CLASS_TEXT |
+                             EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
+                             EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         mPreferences.registerOnSharedPreferenceChangeListener(this);
         String schemePath = mPreferences.getString("scheme", null);
         setScheme(schemePath);
@@ -318,17 +313,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
         switch (key) {
             case SharedPreferenceKeys.FONT_SIZE:
                 mEditor.setTextSize(Integer.parseInt(pref.getString(key, "14")));
-                break;
-            case SharedPreferenceKeys.KEYBOARD_ENABLE_SUGGESTIONS:
-                if (pref.getBoolean(key, false)) {
-                    mEditor.setInputType(
-                            EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
-                } else {
-                    mEditor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS |
-                                         EditorInfo.TYPE_CLASS_TEXT |
-                                         EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
-                                         EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-                }
                 break;
             case SharedPreferenceKeys.EDITOR_WORDWRAP:
                 mEditor.setWordwrap(pref.getBoolean(key, false));

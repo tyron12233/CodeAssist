@@ -97,17 +97,4 @@
             app:title="@string/editor_scheme_title"
             app:summary="@string/editor_scheme_desc"/>
     </PreferenceCategory>
-
-    <PreferenceCategory
-        app:iconSpaceReserved="false"
-        android:title="Keyboard">
-
-        <SwitchPreference
-            android:defaultValue="false"
-            android:iconSpaceReserved="false"
-            android:key="keyboard_enable_suggestions"
-            app:iconSpaceReserved="false"
-            android:title="@string/keyboard_enable_suggestions_description" />
-
-    </PreferenceCategory>
 </PreferenceScreen>
