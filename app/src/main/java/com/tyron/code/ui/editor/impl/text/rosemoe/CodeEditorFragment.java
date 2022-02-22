@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentResultListener;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
@@ -384,7 +385,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
             if (event.getAction() == ContentChangeEvent.ACTION_SET_NEW_TEXT) {
                 return;
             }
-            updateFile(event.getEditor().getText());
+            updateFile(event.getEditor()
+                               .getText());
         });
 
         LogViewModel logViewModel =
@@ -397,18 +399,15 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     .runLater(() -> logViewModel.updateLogs(LogViewModel.DEBUG, diagnostics));
         });
         FragmentManager fragmentManager = getChildFragmentManager();
+        FragmentResultListener listener = ((requestKey, result) -> {
+            String xml = result.getString("text", mEditor.getText()
+                    .toString());
+            xml = XmlPrettyPrinter.prettyPrint(xml, XmlFormatPreferences.defaults(),
+                                               XmlFormatStyle.LAYOUT, "\n");
+            mEditor.setText(xml);
+        });
         fragmentManager.setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
-                                                  getViewLifecycleOwner(),
-                                                  ((requestKey, result) -> {
-                                                      String xml = result.getString("text",
-                                                                                    mEditor.getText()
-                                                                                            .toString());
-                                                      xml = XmlPrettyPrinter.prettyPrint(xml,
-                                                                                         XmlFormatPreferences.defaults(),
-                                                                                         XmlFormatStyle.LAYOUT,
-                                                                                         "\n");
-                                                      mEditor.setText(xml);
-                                                  }));
+                                                  getViewLifecycleOwner(), listener);
     }
 
     private void showPopupMenu(LongPressEvent event) {
@@ -587,8 +586,12 @@ public class CodeEditorFragment extends Fragment implements Savable,
         Futures.addCallback(future, new FutureCallback<String>() {
             @Override
             public void onSuccess(@Nullable String result) {
-                mCanSave = true;
                 mReading = false;
+                if (getContext() == null) {
+                    mCanSave = false;
+                    return;
+                }
+                mCanSave = true;
                 mEditor.setBackgroundAnalysisEnabled(true);
                 fileManager.openFileForSnapshot(mCurrentFile, result);
 
@@ -611,7 +614,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
             public void onFailure(Throwable t) {
                 mCanSave = false;
                 mReading = false;
-                checkCanSave();
+                if (getContext() != null) {
+                    checkCanSave();
+                }
             }
         }, ContextCompat.getMainExecutor(requireContext()));
     }
