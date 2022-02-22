@@ -432,8 +432,11 @@ public class CodeEditorFragment extends Fragment implements Savable,
         ActionManager.getInstance()
                 .fillMenu(dataContext, popupMenu.getMenu(), ActionPlaces.EDITOR, true, false);
         popupMenu.show((int) e.getX(), ((int) e.getY()) - AndroidUtilities.dp(24));
-        popupMenu.setOnDismissListener(d -> mDragToOpenListener = null);
-        mDragToOpenListener = popupMenu.getDragToOpenListener();
+
+        ProgressManager.getInstance().runLater(() -> {
+            popupMenu.setOnDismissListener(d -> mDragToOpenListener = null);
+            mDragToOpenListener = popupMenu.getDragToOpenListener();
+        }, 300);
     }
 
     @Override
