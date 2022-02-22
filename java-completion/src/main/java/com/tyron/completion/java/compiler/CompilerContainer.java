@@ -9,7 +9,12 @@ import com.tyron.completion.java.BuildConfig;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import kotlin.jvm.functions.Function1;
 
@@ -35,23 +40,12 @@ public class CompilerContainer {
     @GuardedBy("mLock")
     private volatile CompileTask mCompileTask;
 
-    private final Object mLock = new Object();
-    private final List<Thread> mReaders = Collections.synchronizedList(new ArrayList<>());
-
+    private final ReadWriteLock mLock = new ReentrantReadWriteLock();
+    private final Lock mReadLock = mLock.readLock();
+    private final Lock mWriteLock = mLock.writeLock();
 
     public CompilerContainer() {
 
-    }
-
-    private void closeIfEmpty() {
-        if (mReaders.isEmpty()) {
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, Thread.currentThread().getName() + " has closed the compile task.");
-            }
-            if (mCompileTask != null) {
-                mCompileTask.close();
-            }
-        }
     }
 
     /**
@@ -60,33 +54,20 @@ public class CompilerContainer {
      * are synchronized
      */
     public void run(Consumer<CompileTask> consumer) {
-        waitForWriter();
-        mReaders.add(Thread.currentThread());
+        mReadLock.lock();
         try {
             consumer.accept(mCompileTask);
         } finally {
-            mReaders.remove(Thread.currentThread());
+            mReadLock.unlock();
         }
     }
 
-    public <T> T get(Function1<CompileTask, T> fun) {
-        waitForWriter();
-        mReaders.add(Thread.currentThread());
+    public <T> T get(Function<CompileTask, T> fun) {
+        mReadLock.lock();
         try {
-            return fun.invoke(mCompileTask);
+            return fun.apply(mCompileTask);
         } finally {
-            mReaders.remove(Thread.currentThread());
-        }
-    }
-
-    public <T> T getWithLock(Function1<CompileTask, T> fun) {
-        waitForWriter();
-        waitForReaders();
-        try {
-            mReaders.add(Thread.currentThread());
-            return fun.invoke(mCompileTask);
-        } finally {
-            mReaders.remove(Thread.currentThread());
+            mReadLock.unlock();
         }
     }
 
@@ -94,56 +75,12 @@ public class CompilerContainer {
         return mIsWriting;
     }
 
-    void initialize(Runnable runnable) {
-        synchronized (mLock) {
-            assertIsNotReader();
-            waitForWriter();
-            waitForReaders();
-            try {
-                mIsWriting = true;
-                runnable.run();
-            } finally {
-                mIsWriting = false;
-            }
+    void initialize(Supplier<CompileTask> supplier) {
+        mWriteLock.lock();
+        try {
+            mCompileTask = supplier.get();
+        } finally {
+            mWriteLock.unlock();
         }
-    }
-
-    private void waitForReaders() {
-        if (!mReaders.isEmpty()) {
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, Thread.currentThread().getName() + " is waiting for readers:" +
-                           mReaders);
-            }
-        }
-        while (true) {
-            if (mReaders.isEmpty()) {
-                closeIfEmpty();
-                return;
-            }
-        }
-    }
-
-    private void waitForWriter() {
-        if (mIsWriting) {
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, Thread.currentThread().getName() + " is waiting for writer");
-            }
-        }
-        while (true) {
-            if (!mIsWriting) {
-                return;
-            }
-        }
-    }
-
-    private void assertIsNotReader() {
-        if (mReaders.contains(Thread.currentThread())) {
-            throw new RuntimeException("Cannot compile inside a container.");
-        }
-    }
-
-
-    void setCompileTask(CompileTask task) {
-        mCompileTask = task;
     }
 }
