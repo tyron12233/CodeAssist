@@ -49,7 +49,7 @@
     <string name="wizard_language">语言</string>
     <string name="wizard_minimum_sdk">支持设备的最低版本</string>
     <string name="wizard_create">创建</string>
-    <string name="wizard_previous">前一个</string>
+    <string name="wizard_previous">返回</string>
     <string name="wizard_scoped_storage_info">由于Android 11的存储限制，你只能在内部存储上保存文件。</string>
     <string name="wizard_file_not_writable">目录不可写，请选择其他位置</string>
     <string name="wizard_path_exceeds">位置路径超过240个字符。</string>
