@@ -77,6 +77,9 @@ public class CompilerContainer {
 
     void initialize(Supplier<CompileTask> supplier) {
         mWriteLock.lock();
+        if (mCompileTask != null) {
+            mCompileTask.close();
+        }
         try {
             mCompileTask = supplier.get();
         } finally {
