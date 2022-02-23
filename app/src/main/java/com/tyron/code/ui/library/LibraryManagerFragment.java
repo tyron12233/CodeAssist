@@ -101,6 +101,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.library_manager_fragment, container, false);
+        view.setClickable(true);
 
         mAdapter = new LibraryManagerAdapter();
 
