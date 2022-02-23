@@ -221,7 +221,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         String schemeValue = ApplicationLoader.getDefaultPreferences()
                 .getString(SharedPreferenceKeys.SCHEME, null);
-        if (schemeValue != null && new File(schemeValue).exists()) {
+        if (schemeValue != null &&
+            new File(schemeValue).exists() &&
+            ThemeRepository.getColorScheme(schemeValue) != null) {
             TextMateColorScheme scheme = ThemeRepository.getColorScheme(schemeValue);
             if (scheme != null) {
                 mEditor.setColorScheme(scheme);
