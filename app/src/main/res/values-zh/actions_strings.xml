@@ -2,7 +2,7 @@
 <resources>
 
     <!-- Text Actions -->
-    <string name="文本操作">Text Actions</string>
+    <string name="text_actions">文本操作</string>
     <string name="expand_selection">扩大选择</string>
     <string name="copied_to_clipoard">文本已复制到剪贴板</string>
 
