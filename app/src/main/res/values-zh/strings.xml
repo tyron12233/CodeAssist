@@ -118,7 +118,7 @@
     <string name="font_size_message">设置编辑器字体大小</string>
     <string name="font_size_summary">设置编辑器的字体大小</string>
     <string name="keyboard_settings_title">键盘</string>
-    <string name="keyboard_enable_suggestions_description">启用文本输入预判</string>
+    <string name="keyboard_enable_suggestions_description">启用输入文本联想</string>
     <string name="settings_build_run_title">构建 &amp; 运行</string>
     <string name="settings_build_run_desc">配置构建和运行环境</string>
     <string name="run_title">运行</string>
