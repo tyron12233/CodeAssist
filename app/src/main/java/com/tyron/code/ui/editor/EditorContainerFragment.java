@@ -136,7 +136,6 @@ public class EditorContainerFragment extends Fragment implements FileListener,
                                                                                                       Bundle.EMPTY));
             }
         });
-
         new TabLayoutMediator(mTabLayout, mPager, true, false, this::updateTab).attach();
 
         View persistentSheet = root.findViewById(R.id.persistent_sheet);
@@ -154,12 +153,10 @@ public class EditorContainerFragment extends Fragment implements FileListener,
                 if (isAdded()) {
                     Bundle bundle = new Bundle();
                     bundle.putFloat("offset", slideOffset);
-                    getParentFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY, bundle);
+                    getChildFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY, bundle);
                 }
             }
         });
-
-        new TabLayoutMediator(mTabLayout, mPager, true, false, this::updateTab).attach();
         mBehavior.setHalfExpandedRatio(0.3f);
         mBehavior.setFitToContents(false);
 
