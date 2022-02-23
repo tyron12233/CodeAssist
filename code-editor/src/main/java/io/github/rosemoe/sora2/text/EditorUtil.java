@@ -19,21 +19,35 @@ import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class EditorUtil {
 
+    public static boolean isDarkMode(Context context) {
+        int uiMode = context.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        return uiMode == Configuration.UI_MODE_NIGHT_YES;
+    }
+
     public static TextMateColorScheme getDefaultColorScheme(Context context) {
         try {
+            boolean darkMode = isDarkMode(context);
+            if (darkMode) {
+                return getDefaultColorScheme(context, false);
+            } else {
+                return getDefaultColorScheme(context, true);
+            }
+        } catch (Exception e) {
+            // should not happen, the bundled theme should always work.
+            throw new Error(e);
+        }
+    }
+
+    public static TextMateColorScheme getDefaultColorScheme(Context context, boolean light) {
+        try {
             AssetManager assets = context.getAssets();
-            int uiMode = context.getResources()
-                                 .getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
             IRawTheme rawTheme;
-            switch (uiMode) {
-                case Configuration.UI_MODE_NIGHT_YES:
-                    rawTheme = ThemeReader.readThemeSync("darcula.json",
-                                                         assets.open("textmate/darcula.json"));
-                    break;
-                default:
-                case Configuration.UI_MODE_NIGHT_NO:
-                    rawTheme = ThemeReader.readThemeSync("QuietLight.tmTheme", assets.open(
-                            "textmate/QuietLight.tmTheme"));
+            if (light) {
+                rawTheme = ThemeReader.readThemeSync("QuietLight.tmTheme", assets.open(
+                        "textmate/QuietLight.tmTheme"));
+            } else {
+                rawTheme = ThemeReader.readThemeSync("darcula.json",
+                                                     assets.open("textmate/darcula.json"));
             }
             return TextMateColorScheme.create(rawTheme);
         } catch (Exception e) {

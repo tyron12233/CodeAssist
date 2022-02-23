@@ -7,6 +7,7 @@ import android.annotation.SuppressLint;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.util.Pair;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -52,9 +53,11 @@ import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.ui.settings.EditorSettingsFragment;
+import com.tyron.code.ui.theme.ThemeRepository;
 import com.tyron.code.util.CoordinatePopupMenu;
 import com.tyron.code.util.PopupMenuHelper;
 import com.tyron.common.SharedPreferenceKeys;
+import com.tyron.common.logging.IdeLog;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.JavaDataContextUtil;
@@ -67,13 +70,17 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.logging.Logger;
 
 import io.github.rosemoe.sora.event.ClickEvent;
 import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.LongPressEvent;
 import io.github.rosemoe.sora.lang.Language;
+import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
+import io.github.rosemoe.sora.langs.textmate.analyzer.TextMateAnalyzer;
 import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.Content;
+import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.widget.DirectAccessProps;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
@@ -181,13 +188,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @NonNull
     private ListenableFuture<TextMateColorScheme> getScheme(@Nullable String path) {
         if (path != null && new File(path).exists()) {
-            ListenableFuture<TextMateColorScheme> colorScheme =
-                    EditorSettingsFragment.getColorScheme(new File(path));
-            return Futures.catching(colorScheme, Throwable.class,
-                                    (ex) -> getDefaultColorScheme(requireContext()),
-                                    ContextCompat.getMainExecutor(requireContext()));
+            return EditorSettingsFragment.getColorScheme(new File(path));
         } else {
-            return Futures.immediateFuture(getDefaultColorScheme(requireContext()));
+            return Futures.immediateFailedFuture(new Throwable());
         }
     }
 
@@ -214,31 +217,52 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         postConfigureEditor();
 
-        ListenableFuture<TextMateColorScheme> scheme = getScheme(
-                ApplicationLoader.getDefaultPreferences()
-                        .getString(SharedPreferenceKeys.SCHEME, null));
-        Futures.addCallback(scheme, new FutureCallback<TextMateColorScheme>() {
-            @Override
-            public void onSuccess(@Nullable TextMateColorScheme result) {
-                if (getContext() == null) {
-                    return;
-                }
-                assert result != null;
-                mEditor.setColorScheme(result);
+        String schemeValue = ApplicationLoader.getDefaultPreferences()
+                .getString(SharedPreferenceKeys.SCHEME, null);
+        if (schemeValue != null && new File(schemeValue).exists()) {
+            TextMateColorScheme scheme = ThemeRepository.getColorScheme(schemeValue);
+            if (scheme != null) {
+                mEditor.setColorScheme(scheme);
                 initializeLanguage();
                 mEditor.openFile(mCurrentFile);
-                ProgressManager.getInstance().runLater(() -> {
-                    ProjectManager.getInstance().addOnProjectOpenListener(CodeEditorFragment.this);
-                }, 300);
+                ProjectManager.getInstance().addOnProjectOpenListener(CodeEditorFragment.this);
             }
+        } else {
+            ListenableFuture<TextMateColorScheme> scheme = getScheme(schemeValue);
+            Futures.addCallback(scheme, new FutureCallback<TextMateColorScheme>() {
+                @Override
+                public void onSuccess(@Nullable TextMateColorScheme result) {
+                    if (getContext() == null) {
+                        return;
+                    }
+                    assert result != null;
+                    ThemeRepository.putColorScheme(schemeValue, result);
+                    mEditor.setColorScheme(result);
 
-            @Override
-            public void onFailure(@NonNull Throwable t) {
-                // the getScheme() method should always default to the built-in
-                // color schemes
-                throw new Error(t);
-            }
-        }, ContextCompat.getMainExecutor(requireContext()));
+                    initializeLanguage();
+                    mEditor.openFile(mCurrentFile);
+                    ProjectManager.getInstance().addOnProjectOpenListener(CodeEditorFragment.this);
+                }
+
+                @Override
+                public void onFailure(@NonNull Throwable t) {
+                    if (getContext() == null) {
+                        return;
+                    }
+                    String key = EditorUtil.isDarkMode(
+                            requireContext()) ? ThemeRepository.DEFAULT_NIGHT : ThemeRepository.DEFAULT_LIGHT;
+                    TextMateColorScheme scheme = ThemeRepository.getColorScheme(key);
+                    if (scheme == null) {
+                        scheme = getDefaultColorScheme(requireContext());
+                        ThemeRepository.putColorScheme(key, scheme);
+                    }
+                    mEditor.setColorScheme(scheme);
+                    initializeLanguage();
+                    mEditor.openFile(mCurrentFile);
+                    ProjectManager.getInstance().addOnProjectOpenListener(CodeEditorFragment.this);
+                }
+            }, ContextCompat.getMainExecutor(requireContext()));
+        }
     }
 
     private void initializeLanguage() {
@@ -384,7 +408,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        mEditor.setEditorLanguage(null);
 
         Project currentProject = ProjectManager.getInstance().getCurrentProject();
         if (currentProject != null) {
@@ -393,7 +416,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 module.getFileManager().removeSnapshotListener(this);
             }
         }
-
         ProjectManager.getInstance().removeOnProjectOpenListener(this);
     }
 

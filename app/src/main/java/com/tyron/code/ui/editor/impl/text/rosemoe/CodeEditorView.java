@@ -480,7 +480,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
             float startY;
             float endX;
             float endY;
-
             if (i == start.getLine()) {
                 startX = getCharOffsetX(i, start.getColumn());
                 startY = getCharOffsetY(i, start.getColumn());

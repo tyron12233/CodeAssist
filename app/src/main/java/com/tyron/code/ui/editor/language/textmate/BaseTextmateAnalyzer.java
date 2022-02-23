@@ -12,6 +12,8 @@ import java.util.Collections;
 import java.util.List;
 
 import io.github.rosemoe.sora.lang.analysis.AsyncIncrementalAnalyzeManager;
+import io.github.rosemoe.sora.lang.analysis.IncrementalAnalyzeManager;
+import io.github.rosemoe.sora.lang.analysis.UIThreadIncrementalAnalyzeManager;
 import io.github.rosemoe.sora.lang.styling.CodeBlock;
 import io.github.rosemoe.sora.lang.styling.Span;
 import io.github.rosemoe.sora.lang.styling.TextStyle;
@@ -148,11 +150,9 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
             int metadata = lineTokens.getTokens()[2 * i + 1];
             int foreground = StackElementMetadata.getForeground(metadata);
             int fontStyle = StackElementMetadata.getFontStyle(metadata);
-            Span span = Span.obtain(startIndex, TextStyle.makeStyle(foreground + 255, 0,
-                                                                    (fontStyle & FontStyle.Bold) !=
-                                                                    0, (fontStyle &
-                                                                        FontStyle.Italic) != 0,
-                                                                    false));
+            Span span = Span.obtain(startIndex, TextStyle
+                    .makeStyle(foreground + 255, 0, (fontStyle & FontStyle.Bold) != 0,
+                               (fontStyle & FontStyle.Italic) != 0, false));
 
             if ((fontStyle & FontStyle.Underline) != 0) {
                 String color = theme.getColor(foreground);
