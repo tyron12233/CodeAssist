@@ -313,6 +313,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
             return false;
         });
         mEditor.subscribeEvent(LongPressEvent.class, (event, unsubscribe) -> {
+            event.intercept();
+
             updateFile(mEditor.getText());
             // wait for the cursor to move
             ProgressManager.getInstance().runLater(() -> {
@@ -410,6 +412,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
             } else if (index < cursorLeft || index > cursorRight) {
                 EditorUtil.selectWord(mEditor, event.getLine(), event.getColumn());
             }
+        } else {
+            EditorUtil.selectWord(mEditor, event.getLine(), event.getColumn());
         }
         CoordinatePopupMenu popupMenu =
                 new CoordinatePopupMenu(requireContext(), mEditor, Gravity.BOTTOM);
