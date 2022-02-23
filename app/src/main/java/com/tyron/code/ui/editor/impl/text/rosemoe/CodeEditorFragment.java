@@ -152,20 +152,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         mCurrentFile = new File(requireArguments().getString("path", ""));
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
-
-        Thread.UncaughtExceptionHandler previousHandler =
-                Thread.getDefaultUncaughtExceptionHandler();
-        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
-            Log.d("Uncaught exception handler", "Saving " + mCurrentFile + " before crashing.");
-            save(true);
-            if (previousHandler != null) {
-                previousHandler.uncaughtException(thread, throwable);
-            }
-        });
-
         mSavedInstanceState = savedInstanceState;
     }
 
