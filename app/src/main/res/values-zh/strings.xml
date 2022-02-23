@@ -44,7 +44,7 @@
     <string name="wizard_empty_templates">模板是空的 :(</string>
     <string name="wizard_loading">加载模板</string>
     <string name="wizard_app_name">应用名称</string>
-    <string name="wizard_package_name">包名</string>
+    <string name="wizard_package_name">应用包名</string>
     <string name="wizard_save_location">保存的位置</string>
     <string name="wizard_language">语言</string>
     <string name="wizard_minimum_sdk">支持设备的最低版本</string>
@@ -62,8 +62,8 @@
     <string name="wizard_select_min_sdk">选择最低SDK版本</string>
     <string name="wizard_select_save_location">选择保存位置</string>
 
-    <string name="menu_open_project">打开模块</string>
-    <string name="menu_create_project">创建模块</string>
+    <string name="menu_open_project">打开项目</string>
+    <string name="menu_create_project">创建项目</string>
     <string name="menu_run">运行</string>
     <string name="menu_refresh">刷新</string>
     <string name="menu_library_manager">库管理器</string>
