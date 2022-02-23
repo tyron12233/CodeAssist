@@ -380,6 +380,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                         if (mLanguage.getAnalyzeManager() instanceof BaseTextmateAnalyzer) {
                             ((BaseTextmateAnalyzer) mLanguage.getAnalyzeManager())
                                     .updateTheme(result.getRawTheme());
+                            mLanguage.getAnalyzeManager().rerun();
                         }
                     }
 
@@ -389,6 +390,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                             return;
                         }
                         mEditor.setColorScheme(getDefaultColorScheme(requireContext()));
+                        mLanguage.getAnalyzeManager().rerun();
                     }
                 }, ContextCompat.getMainExecutor(requireContext()));
                 break;
