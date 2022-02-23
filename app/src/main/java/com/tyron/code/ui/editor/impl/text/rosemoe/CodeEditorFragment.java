@@ -202,6 +202,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         super.onViewCreated(view, savedInstanceState);
 
         mEditor = view.findViewById(R.id.code_editor);
+        mEditor.setEditable(false);
         configureEditor(mEditor);
 
         View topView = view.findViewById(R.id.top_view);
@@ -324,7 +325,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 int index = mEditor.getCharIndex(event.getLine(), event.getColumn());
                 int cursorLeft = cursor.getLeft();
                 int cursorRight = cursor.getRight();
-                if (index >= cursorLeft && index <= cursorRight) {
+                if (!EditorUtil.isWhitespace(mEditor.getText().charAt(index) + "")
+                    && index >= cursorLeft && index <= cursorRight) {
                     mEditor.showSoftInput();
                     event.intercept();
                 }
@@ -572,6 +574,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     }
                 }
 
+                mEditor.setEditable(true);
+
                 checkCanSave();
             }
 
@@ -622,6 +626,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
         Module module = project.getModule(mCurrentFile);
         if (module != null) {
+            if (!module.getFileManager().isOpened(mCurrentFile)) {
+                return;
+            }
             module.getFileManager().setSnapshotContent(mCurrentFile, contents.toString(), this);
         }
     }
