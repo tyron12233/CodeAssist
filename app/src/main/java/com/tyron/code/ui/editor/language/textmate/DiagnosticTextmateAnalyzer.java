@@ -84,14 +84,9 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
     }
 
     @Override
-    public List<Span> generateSpansForLine(LineTokenizeResult<StackElement, Span> tokens) {
-        return super.generateSpansForLine(tokens);
-    }
-
-    @Override
     public void analyzeCodeBlocks(Content model,
                                   List<CodeBlock> blocks,
-                                  CodeBlockAnalyzeDelegate delegate) {
+                                  Delegate<StackElement> delegate) {
         super.analyzeCodeBlocks(model, blocks, delegate);
 
         if (getExtraArguments().getBoolean("bg", false)) {

@@ -47,6 +47,7 @@ import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
+import com.tyron.code.ui.editor.language.textmate.BaseTextmateAnalyzer;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
@@ -82,6 +83,7 @@ import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.Cursor;
+import io.github.rosemoe.sora.textmate.core.internal.grammar.Grammar;
 import io.github.rosemoe.sora.widget.DirectAccessProps;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
@@ -250,7 +252,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
                         return;
                     }
                     String key = EditorUtil.isDarkMode(
-                            requireContext()) ? ThemeRepository.DEFAULT_NIGHT : ThemeRepository.DEFAULT_LIGHT;
+                            requireContext()) ? ThemeRepository.DEFAULT_NIGHT :
+                            ThemeRepository.DEFAULT_LIGHT;
                     TextMateColorScheme scheme = ThemeRepository.getColorScheme(key);
                     if (scheme == null) {
                         scheme = getDefaultColorScheme(requireContext());
@@ -367,6 +370,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     public void onSuccess(@Nullable TextMateColorScheme result) {
                         assert result != null;
                         mEditor.setColorScheme(result);
+                        if (mLanguage.getAnalyzeManager() instanceof BaseTextmateAnalyzer) {
+                            ((BaseTextmateAnalyzer) mLanguage.getAnalyzeManager())
+                                    .updateTheme(result.getRawTheme());
+                        }
                     }
 
                     @Override

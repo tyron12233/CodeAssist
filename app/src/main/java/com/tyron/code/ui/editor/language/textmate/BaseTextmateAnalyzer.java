@@ -1,6 +1,9 @@
 package com.tyron.code.ui.editor.language.textmate;
 
 import android.graphics.Color;
+import android.os.Bundle;
+
+import androidx.annotation.NonNull;
 
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.code.ui.editor.language.HighlightUtil;
@@ -13,14 +16,18 @@ import java.util.List;
 
 import io.github.rosemoe.sora.lang.analysis.AsyncIncrementalAnalyzeManager;
 import io.github.rosemoe.sora.lang.analysis.IncrementalAnalyzeManager;
+import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager;
 import io.github.rosemoe.sora.lang.analysis.UIThreadIncrementalAnalyzeManager;
 import io.github.rosemoe.sora.lang.styling.CodeBlock;
+import io.github.rosemoe.sora.lang.styling.MappedSpans;
 import io.github.rosemoe.sora.lang.styling.Span;
+import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.lang.styling.TextStyle;
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
 import io.github.rosemoe.sora.langs.textmate.folding.FoldingRegions;
 import io.github.rosemoe.sora.langs.textmate.folding.IndentRange;
 import io.github.rosemoe.sora.text.Content;
+import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.textmate.core.grammar.IGrammar;
 import io.github.rosemoe.sora.textmate.core.grammar.ITokenizeLineResult2;
 import io.github.rosemoe.sora.textmate.core.grammar.StackElement;
@@ -39,7 +46,7 @@ import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 /**
  * A text mate analyzer which does not use a TextMateLanguage
  */
-public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackElement, Span> {
+public class BaseTextmateAnalyzer extends SimpleAnalyzeManager<StackElement> {
 
     /**
      * Maximum for code block count
@@ -51,6 +58,7 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
     private Theme theme;
     private final Editor editor;
     private final ILanguageConfiguration configuration;
+    private Bundle mExtraArguments;
 
     public BaseTextmateAnalyzer(Editor editor,
                                 String grammarName,
@@ -70,32 +78,16 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
         }
     }
 
-    @Override
-    public StackElement getInitialState() {
-        return null;
-    }
-
-    @Override
-    public boolean stateEquals(StackElement state, StackElement another) {
-        if (state == null && another == null) {
-            return true;
-        }
-        if (state != null && another != null) {
-            return state.equals(another);
-        }
-        return false;
-    }
-
-    @Override
-    public List<CodeBlock> computeBlocks(Content text, CodeBlockAnalyzeDelegate delegate) {
-        java.util.ArrayList<CodeBlock> list = new java.util.ArrayList<CodeBlock>();
-        analyzeCodeBlocks(text, list, delegate);
-        return list;
-    }
-
+//    @Override
+//    public List<CodeBlock> computeBlocks(Content text, CodeBlockAnalyzeDelegate delegate) {
+//        java.util.ArrayList<CodeBlock> list = new java.util.ArrayList<CodeBlock>();
+//        analyzeCodeBlocks(text, list, delegate);
+//        return list;
+//    }
+//
     public void analyzeCodeBlocks(Content model,
                                   List<CodeBlock> blocks,
-                                  CodeBlockAnalyzeDelegate delegate) {
+                                  Delegate<StackElement> delegate) {
         if (configuration == null) {
             return;
         }
@@ -105,10 +97,10 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
         }
         try {
             FoldingRegions foldingRegions =
-                    IndentRange.computeRanges(model, editor.getTabCount(), folding.getOffSide(),
+                    CodeBlockUtils.computeRanges(model, editor.getTabCount(), folding.getOffSide(),
                                               folding, MAX_FOLDING_REGIONS_FOR_INDENT_LIMIT,
                                               delegate);
-            for (int i = 0; i < foldingRegions.length() && delegate.isNotCancelled(); i++) {
+            for (int i = 0; i < foldingRegions.length() && !delegate.isCancelled(); i++) {
                 int startLine = foldingRegions.getStartLineNumber(i);
                 int endLine = foldingRegions.getEndLineNumber(i);
                 if (startLine != endLine) {
@@ -135,9 +127,8 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
         }
     }
 
-    @Override
-    public LineTokenizeResult<StackElement, Span> tokenizeLine(CharSequence lineC,
-                                                               StackElement state) {
+    public IncrementalAnalyzeManager.LineTokenizeResult<StackElement, Span> tokenizeLine(CharSequence lineC,
+                                                                                         StackElement state) {
         String line = lineC.toString();
         ArrayList<Span> tokens = new ArrayList<>();
         ITokenizeLineResult2 lineTokens = grammar.tokenizeLine2(line, state);
@@ -163,12 +154,55 @@ public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackEl
 
             tokens.add(span);
         }
-        return new LineTokenizeResult<>(lineTokens.getRuleStack(), null, tokens);
+        return new IncrementalAnalyzeManager.LineTokenizeResult<>(lineTokens.getRuleStack(), null, tokens);
     }
 
     @Override
-    public List<Span> generateSpansForLine(LineTokenizeResult<StackElement, Span> tokens) {
-        return null;
+    public void reset(@NonNull ContentReference content, @NonNull Bundle extraArguments) {
+        mExtraArguments = extraArguments;
+        super.reset(content, extraArguments);
+    }
+
+    public Bundle getExtraArguments() {
+        return mExtraArguments;
+    }
+
+    @Override
+    protected Styles analyze(StringBuilder text, Delegate<StackElement> delegate) {
+        Content model = new Content(text);
+        Styles styles = new Styles();
+        MappedSpans.Builder builder = new MappedSpans.Builder();
+        try {
+            boolean first = true;
+            StackElement ruleStack = null;
+            for (int lineCount = 0; lineCount < model.getLineCount(); lineCount++) {
+                if (delegate.isCancelled()) {
+                    break;
+                }
+                String line = model.getLine(lineCount) + "\n";
+                if (first) {
+                    builder.addNormalIfNull();
+                    first = false;
+                }
+                IncrementalAnalyzeManager.LineTokenizeResult<StackElement, Span>
+                        result = tokenizeLine(line, ruleStack);
+                for (Span span : result.spans) {
+                    builder.add(lineCount, span);
+                }
+
+                ruleStack = result.state;
+            }
+
+            analyzeCodeBlocks(model, styles.blocks, delegate);
+
+            builder.determine(model.getLineCount() - 1);
+            styles.spans = builder.build();
+            styles.finishBuilding();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return styles;
     }
 
     public void updateTheme(IRawTheme theme) {
