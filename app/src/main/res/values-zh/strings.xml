@@ -218,7 +218,7 @@
     <string name="menu_close_all">关闭所有</string>
 
     <!-- Editor -->
-    <string name="editor_error_file">读取文件时发生错误，更改将不会被保存。</string>
+    <string name="editor_error_file">读取文件时发生错误，更改将不会被保存</string>
 
      <!-- Bottom Editor Fragment -->
     <string name="tab_build_logs_title">构建日志</string>
