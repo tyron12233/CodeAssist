@@ -65,7 +65,7 @@
     <string name="menu_open_project">打开模块</string>
     <string name="menu_create_project">创建模块</string>
     <string name="menu_run">运行</string>
-    <string name="menu_refresh">刷新</string>
+    <string name="menu_refresh">重新载入</string>
     <string name="menu_library_manager">库管理器</string>
     <string name="menu_format">格式化</string>
     <string name="menu_settings">设置</string>
@@ -102,6 +102,8 @@
     <string name="settings_kotlin_completions_desc">这个功能还处于实验阶段，可能会比较慢，
 需要一个配置高的设备。
     </string>
+    <string name="settings_case_insensitive_match_title">不区分类名首字母大小写</string>
+    <string name="settings_case_insensitive_match_desc">建议使用小写前缀的类名</string>
     <string name="code_editor_error_highlight">错误高亮显示</string>
 
     <string name="editor_settings_title">代码编辑器设置</string>
@@ -151,6 +153,7 @@
     <string name="community">社区</string>
     <string name="rate_us">评价我们</string>
 
+
     <!-- file manager menu -->
     <string name="error">错误</string>
     <string name="error_resource_name_restriction">资源名必须只包含小写的a-z、0-9或下划线。</string>
@@ -163,7 +166,7 @@
 
     <string name="success">成功</string>
     <string name="delete_success">删除成功。</string>
-    <string name="dialog_confirm_delete">您确定要删除%1$s吗?</string>
+    <string name="dialog_confirm_delete">您确定要删除吗?</string>
     <string name="dialog_delete">删除</string>
     <string name="menu_preview_layout">布局预览</string>
     <string name="action_menu_build_release">构建发布版本APK</string>
@@ -180,11 +183,8 @@
     <string name="project_manager_rationale_title">存储权限</string>
     <string name="project_manager_button_allow">允许</string>
     <string name="project_manager_button_use_internal">使用内部存储</string>
-    <string name="project_manager_permission_rationale">应用需要存储权限
-        以保存在卸载时不会被删除的模块文件
-        或者你可以选择将模块文件保存到应用程序的内部存储中。</string>
-    <string name="project_manager_android11_notice">项目将被保存到应用程序的内部存储目录。
-        在卸载应用程序之前备份模块。</string>
+    <string name="project_manager_permission_rationale">应用程序需要存储权限才能保存卸载应用程序时模块文件不会被删除，或者你可以选择将模块文件保存到应用程序的内部存储中。</string>
+    <string name="project_manager_android11_notice">项目将被保存到应用程序的内部存储目录，请在卸载应用程序之前备份模块。</string>
     <string name="project_manager_projects">项目</string>
     <string name="project_manager_empty">项目是空的</string>`
     <string name="project_manager_create_project">创建模块</string>
@@ -203,8 +203,8 @@
     <string name="library_manager_title">%1s 库</string>
     <string name="group_id">组ID</string>
     <string name="artifact_id">工件ID</string>
-    <string name="version_name">版本名称</string>
-    <string name="menu_display_dependencies">List dependencies</string>
+    <string name="version_name">版本</string>
+    <string name="menu_display_dependencies">显示依赖关系</string>
     <string name="attributes_editor">属性编辑器</string>
     <string name="attribute_value">属性值</string>
     <string name="menu_add_libs_gradle">从 build.gradle 添加库</string>
@@ -219,4 +219,11 @@
 
     <!-- Editor -->
     <string name="editor_error_file">读取文件时发生错误，更改将不会被保存。</string>
+
+     <!-- Bottom Editor Fragment -->
+    <string name="tab_build_logs_title">构建日志</string>
+    <string name="tab_app_logs_title">应用程序日志</string>
+    <string name="tab_ide_logs_title">IDE日志</string>
+    <string name="tab_diagnostics_title">诊断</string>
 </resources>
+
