@@ -151,6 +151,9 @@ public class JavaCompilerService implements CompilerProvider {
             if (cachedCompile != null && !cachedCompile.closed) {
                 cachedCompile.close();
             }
+            if (cachedCompile != null) {
+                cachedCompile.borrow.close();
+            }
             if (needsCompile(sources)) {
                 loadCompile(sources);
             } else {
