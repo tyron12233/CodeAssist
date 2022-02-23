@@ -36,6 +36,6 @@ ext {
     minSdkVersion = 26
 
     applicationId = "com.tyron.code"
-    versionCode = 15
-    versionName = "0.2.7 ALPHA"
+    versionCode = 16
+    versionName = "0.2.8 ALPHA"
 }
