@@ -58,7 +58,6 @@ public class BaseTextmateAnalyzer extends SimpleAnalyzeManager<StackElement> {
     private Theme theme;
     private final Editor editor;
     private final ILanguageConfiguration configuration;
-    private Bundle mExtraArguments;
 
     public BaseTextmateAnalyzer(Editor editor,
                                 String grammarName,
@@ -159,12 +158,10 @@ public class BaseTextmateAnalyzer extends SimpleAnalyzeManager<StackElement> {
 
     @Override
     public void reset(@NonNull ContentReference content, @NonNull Bundle extraArguments) {
-        mExtraArguments = extraArguments;
+        if (!extraArguments.getBoolean("loaded", false)) {
+            return;
+        }
         super.reset(content, extraArguments);
-    }
-
-    public Bundle getExtraArguments() {
-        return mExtraArguments;
     }
 
     @Override
