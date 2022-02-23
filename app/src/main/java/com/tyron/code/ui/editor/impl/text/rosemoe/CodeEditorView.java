@@ -17,6 +17,7 @@ import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
 import com.tyron.code.ui.editor.language.DiagnosticSpanMapUpdater;
+import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.code.ui.editor.language.textmate.DiagnosticTextmateAnalyzer;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.project.ProjectManager;
@@ -47,6 +48,9 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorTextActionWindow;
+import io.github.rosemoe.sora.widget.layout.Layout;
+import io.github.rosemoe.sora.widget.layout.Row;
+import io.github.rosemoe.sora.widget.layout.RowIterator;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora2.text.EditorUtil;
 
@@ -428,79 +432,13 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     protected void onDraw(Canvas canvas) {
+        if (getStyles() != null) {
+            HighlightUtil.clearDiagnostics(getStyles());
+        }
+        if (mDiagnostics != null && !isFormatting()) {
+            HighlightUtil.markDiagnostics(this, mDiagnostics, getStyles());
+        }
         super.onDraw(canvas);
-
-        if (mDiagnostics == null || isFormatting()) {
-            return;
-        }
-        for (DiagnosticWrapper d : mDiagnostics) {
-            if (!DiagnosticSpanMapUpdater.isValid(d)) {
-                continue;
-            }
-            if (d.getStartPosition() > getText().length()) {
-                continue;
-            }
-            if (d.getEndPosition() > getText().length()) {
-                continue;
-            }
-
-            CharPosition startPosition = getCharPosition((int) d.getStartPosition());
-            CharPosition endPosition = getCharPosition((int) d.getEndPosition());
-
-            if (!isRowVisible(startPosition.getLine()) || !isRowVisible(endPosition.getLine())) {
-                continue;
-            }
-            setDiagnosticColor(d);
-            if (startPosition.getLine() == endPosition.getLine()) {
-                drawSingleLineDiagnostic(canvas, startPosition, endPosition);
-            } else {
-                drawMultiLineDiagnostic(canvas, startPosition, endPosition);
-            }
-        }
-    }
-
-    private void drawSingleLineDiagnostic(Canvas canvas,
-                                          CharPosition startPosition,
-                                          CharPosition endPosition) {
-        float startX = getCharOffsetX(startPosition.getLine(), startPosition.getColumn());
-        float startY = getCharOffsetY(startPosition.getLine(), startPosition.getColumn());
-        float endX = getCharOffsetX(endPosition.getLine(), endPosition.getColumn());
-        float endY = getCharOffsetY(endPosition.getLine(), endPosition.getColumn());
-
-        if (startPosition.getColumn() == endPosition.getColumn()) {
-            // expand a little bit further
-            endX += getDpUnit() * 2;
-        }
-        drawSquigglyLine(canvas, startX, startY, endX, endY);
-    }
-
-    private void drawMultiLineDiagnostic(Canvas canvas, CharPosition start, CharPosition end) {
-        for (int i = start.getLine(); i <= end.getLine(); i++) {
-            float startX;
-            float startY;
-            float endX;
-            float endY;
-            if (i == start.getLine()) {
-                startX = getCharOffsetX(i, start.getColumn());
-                startY = getCharOffsetY(i, start.getColumn());
-                int columns = getText().getColumnCount(i);
-                endX = getCharOffsetX(i, columns);
-                endY = getCharOffsetY(i, columns);
-            } else if (i == end.getLine()) {
-                startX = getCharOffsetX(i, 0);
-                startY = getCharOffsetY(i, 0);
-                endX = getCharOffsetX(i, end.getColumn());
-                endY = getCharOffsetY(i, end.getColumn());
-            } else {
-                startX = getCharOffsetX(i, 0);
-                startY = getCharOffsetY(i, 0);
-                int columns = getText().getColumnCount(i);
-                endX = getCharOffsetX(i, columns);
-                endY = getCharOffsetY(i, columns);
-            }
-
-            drawSquigglyLine(canvas, startX, startY, endX, endY);
-        }
     }
 
     private void drawSquigglyLine(Canvas canvas,
