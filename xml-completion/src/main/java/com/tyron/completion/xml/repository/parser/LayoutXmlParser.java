@@ -138,7 +138,11 @@ public class LayoutXmlParser implements ResourceParser {
         if (name.isEmpty()) {
             return null;
         }
-        ResourceReference reference = new ResourceReference(namespace, ResourceType.ID, name);
-        return new ResourceValueImpl(reference, null, libraryName);
+        try {
+            ResourceReference reference = new ResourceReference(namespace, ResourceType.ID, name);
+            return new ResourceValueImpl(reference, null, libraryName);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }
