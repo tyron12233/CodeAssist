@@ -372,6 +372,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 Futures.addCallback(scheme, new FutureCallback<TextMateColorScheme>() {
                     @Override
                     public void onSuccess(@Nullable TextMateColorScheme result) {
+                        if (getContext() == null) {
+                            return;
+                        }
                         assert result != null;
                         mEditor.setColorScheme(result);
                         if (mLanguage.getAnalyzeManager() instanceof BaseTextmateAnalyzer) {
@@ -382,7 +385,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
                     @Override
                     public void onFailure(@NonNull Throwable t) {
-                        throw new Error(t);
+                        if (getContext() == null) {
+                            return;
+                        }
+                        mEditor.setColorScheme(getDefaultColorScheme(requireContext()));
                     }
                 }, ContextCompat.getMainExecutor(requireContext()));
                 break;
