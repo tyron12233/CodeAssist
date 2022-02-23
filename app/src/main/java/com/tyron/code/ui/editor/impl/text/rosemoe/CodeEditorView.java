@@ -16,9 +16,7 @@ import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
-import com.tyron.code.ui.editor.language.DiagnosticAnalyzeManager;
 import com.tyron.code.ui.editor.language.DiagnosticSpanMapUpdater;
-import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.code.ui.editor.language.textmate.DiagnosticTextmateAnalyzer;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.project.ProjectManager;
@@ -64,13 +62,10 @@ public class CodeEditorView extends CodeEditor implements Editor {
             throw new Error(e);
         }
     }
-    private final Set<Character> IGNORED_PAIR_ENDS = ImmutableSet.<Character>builder().add(')')
-            .add(']')
-            .add('"')
-            .add('>')
-            .add('\'')
-            .add(';')
-            .build();
+
+    private final Set<Character> IGNORED_PAIR_ENDS =
+            ImmutableSet.<Character>builder().add(')').add(']').add('"').add('>').add('\'').add(';')
+                    .build();
 
     private boolean mIsBackgroundAnalysisEnabled;
 
@@ -105,8 +100,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
     @Nullable
     @Override
     public Project getProject() {
-        return ProjectManager.getInstance()
-                .getCurrentProject();
+        return ProjectManager.getInstance().getCurrentProject();
     }
 
     @Override
@@ -179,8 +173,8 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     public CharPosition getCharPosition(int index) {
-        io.github.rosemoe.sora.text.CharPosition charPosition = getText().getIndexer()
-                .getCharPosition(index);
+        io.github.rosemoe.sora.text.CharPosition charPosition =
+                getText().getIndexer().getCharPosition(index);
         return new CharPosition(charPosition.line, charPosition.column);
     }
 
@@ -241,8 +235,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
             }
             boolean full = c == '>';
 
-            DOMDocument document = DOMParser.getInstance()
-                    .parse(getText().toString(), "", null);
+            DOMDocument document = DOMParser.getInstance().parse(getText().toString(), "", null);
             DOMNode nodeAt = document.findNodeAt(getCursor().getLeft());
             if (!DOMUtils.isClosed(nodeAt) && nodeAt.getNodeName() != null) {
                 String insertText = full ? "</" + nodeAt.getNodeName() + ">" : ">";
@@ -399,8 +392,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
         //noinspection ConstantConditions
         if (getEditorLanguage() != null) {
             AnalyzeManager analyzeManager = getEditorLanguage().getAnalyzeManager();
-            Project project = ProjectManager.getInstance()
-                    .getCurrentProject();
+            Project project = ProjectManager.getInstance().getCurrentProject();
 
             if (analyzeManager instanceof DiagnosticTextmateAnalyzer) {
                 if (isBackgroundAnalysisEnabled() && (project != null && !project.isCompiling())) {
@@ -467,7 +459,9 @@ public class CodeEditorView extends CodeEditor implements Editor {
         }
     }
 
-    private void drawSingleLineDiagnostic(Canvas canvas, CharPosition startPosition, CharPosition endPosition) {
+    private void drawSingleLineDiagnostic(Canvas canvas,
+                                          CharPosition startPosition,
+                                          CharPosition endPosition) {
         float startX = getCharOffsetX(startPosition.getLine(), startPosition.getColumn());
         float startY = getCharOffsetY(startPosition.getLine(), startPosition.getColumn());
         float endX = getCharOffsetX(endPosition.getLine(), endPosition.getColumn());
@@ -510,13 +504,18 @@ public class CodeEditorView extends CodeEditor implements Editor {
         }
     }
 
-    private void drawSquigglyLine(Canvas canvas, float startX, float startY, float endX, float endY) {
+    private void drawSquigglyLine(Canvas canvas,
+                                  float startX,
+                                  float startY,
+                                  float endX,
+                                  float endY) {
         float waveSize = getDpUnit() * 3;
         float doubleWaveSize = waveSize * 2;
         float width = endX - startX;
         for (int i = (int) startX; i < startX + width; i += doubleWaveSize) {
             canvas.drawLine(i, startY, i + waveSize, startY - waveSize, mDiagnosticPaint);
-            canvas.drawLine(i + waveSize, startY - waveSize, i + doubleWaveSize, startY, mDiagnosticPaint);
+            canvas.drawLine(i + waveSize, startY - waveSize, i + doubleWaveSize, startY,
+                            mDiagnosticPaint);
         }
     }
 

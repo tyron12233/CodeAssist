@@ -154,6 +154,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
                 if (isAdded()) {
                     Bundle bundle = new Bundle();
                     bundle.putFloat("offset", slideOffset);
+                    getParentFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY, bundle);
                 }
             }
         });

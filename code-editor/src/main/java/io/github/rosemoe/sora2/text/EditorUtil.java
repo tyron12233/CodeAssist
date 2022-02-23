@@ -15,12 +15,12 @@ import io.github.rosemoe.sora.textmate.core.internal.theme.reader.ThemeReader;
 import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
 import io.github.rosemoe.sora.util.IntPair;
 import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class EditorUtil {
 
-    public static void setDefaultColorScheme(CodeEditor editor) {
+    public static TextMateColorScheme getDefaultColorScheme(Context context) {
         try {
-            Context context = editor.getContext();
             AssetManager assets = context.getAssets();
             int uiMode = context.getResources()
                                  .getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
@@ -35,10 +35,10 @@ public class EditorUtil {
                     rawTheme = ThemeReader.readThemeSync("QuietLight.tmTheme", assets.open(
                             "textmate/QuietLight.tmTheme"));
             }
-            TextMateColorScheme colorScheme = TextMateColorScheme.create(rawTheme);
-            editor.setColorScheme(colorScheme);
+            return TextMateColorScheme.create(rawTheme);
         } catch (Exception e) {
-            e.printStackTrace();
+            // should not happen, the bundled theme should always work.
+            throw new Error(e);
         }
     }
 
