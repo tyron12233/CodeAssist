@@ -549,6 +549,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     mCanSave = false;
                     return;
                 }
+                if (mLanguage == null) {
+                    return;
+                }
                 mCanSave = true;
                 mEditor.setBackgroundAnalysisEnabled(true);
                 fileManager.openFileForSnapshot(mCurrentFile, result);
@@ -557,7 +560,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 bundle.putBoolean("loaded", true);
                 bundle.putBoolean("bg", true);
                 mEditor.setText(result, bundle);
-                mLanguage.getAnalyzeManager().rerun();
 
                 if (savedInstanceState != null) {
                     restoreState(savedInstanceState);

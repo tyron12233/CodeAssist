@@ -506,6 +506,14 @@
       "settings": {
         "foreground": "#FFC66D"
       }
+    },
+
+    {
+      "name": "XML Namespace prefix",
+      "scope": "entity.name.tag.namesapce.xml",
+      "settings": {
+        "foreground": "#9876AA"
+      }
     }
   ]
 }
