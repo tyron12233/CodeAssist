@@ -100,7 +100,7 @@
 
     <PreferenceCategory
         app:iconSpaceReserved="false"
-        android:title="Keyboard">
+        android:title="@string/keyboard_settings_title">
 
         <SwitchPreference
             android:defaultValue="false"
