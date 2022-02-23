@@ -161,18 +161,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
 
-        if (mCanSave && !mReading) {
-            if (ProjectManager.getInstance()
-                        .getCurrentProject() != null) {
-                ProjectManager.getInstance()
-                        .getCurrentProject()
-                        .getModule(mCurrentFile)
-                        .getFileManager()
-                        .setSnapshotContent(mCurrentFile, mEditor.getText()
-                                .toString(), false);
-            }
-        }
-
         Cursor cursor = mEditor.getCursor();
         outState.putInt(EDITOR_LEFT_LINE_KEY, cursor.getLeftLine());
         outState.putInt(EDITOR_LEFT_COLUMN_KEY, cursor.getLeftColumn());
@@ -183,10 +171,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @Override
     public void onResume() {
         super.onResume();
-
-        if (!CompletionEngine.isIndexing()) {
-            analyze();
-        }
 
         if (BottomSheetBehavior.STATE_HIDDEN ==
             mMainViewModel.getBottomSheetState()

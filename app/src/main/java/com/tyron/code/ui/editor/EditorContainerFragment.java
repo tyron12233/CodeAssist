@@ -34,6 +34,7 @@ import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.fileeditor.api.FileEditorManager;
 
@@ -130,12 +131,13 @@ public class EditorContainerFragment extends Fragment implements FileListener,
             public void onTabSelected(TabLayout.Tab p1) {
                 updateTab(p1, p1.getPosition());
                 mMainViewModel.setCurrentPosition(p1.getPosition(), false);
-                getParentFragmentManager().setFragmentResult(MainFragment.REFRESH_TOOLBAR_KEY,
-                                                             Bundle.EMPTY);
+
+                ProgressManager.getInstance().runLater(() -> getParentFragmentManager().setFragmentResult(MainFragment.REFRESH_TOOLBAR_KEY,
+                                                                                                      Bundle.EMPTY));
             }
         });
 
-        new TabLayoutMediator(mTabLayout, mPager, true, true, this::updateTab).attach();
+        new TabLayoutMediator(mTabLayout, mPager, true, false, this::updateTab).attach();
 
         View persistentSheet = root.findViewById(R.id.persistent_sheet);
         mBehavior = BottomSheetBehavior.from(persistentSheet);
@@ -152,11 +154,11 @@ public class EditorContainerFragment extends Fragment implements FileListener,
                 if (isAdded()) {
                     Bundle bundle = new Bundle();
                     bundle.putFloat("offset", slideOffset);
-                    getChildFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY,
-                                                                bundle);
                 }
             }
         });
+
+        new TabLayoutMediator(mTabLayout, mPager, true, false, this::updateTab).attach();
         mBehavior.setHalfExpandedRatio(0.3f);
         mBehavior.setFitToContents(false);
 
