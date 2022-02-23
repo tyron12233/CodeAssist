@@ -432,7 +432,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (getStyles() != null) {
+        if (getStyles() != null && getStyles().spans != null) {
             HighlightUtil.clearDiagnostics(getStyles());
         }
         if (mDiagnostics != null && !isFormatting()) {
