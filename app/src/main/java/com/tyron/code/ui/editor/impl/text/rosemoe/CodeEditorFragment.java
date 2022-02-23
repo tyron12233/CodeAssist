@@ -74,6 +74,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 
 import io.github.rosemoe.sora.event.ClickEvent;
@@ -203,6 +204,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+        mCanSave = false;
 
         mEditor = view.findViewById(R.id.code_editor);
         mEditor.setEditable(false);
@@ -233,7 +235,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 mEditor.setColorScheme(scheme);
                 initializeLanguage();
                 mEditor.openFile(mCurrentFile);
-                ProjectManager.getInstance().addOnProjectOpenListener(CodeEditorFragment.this);
+                readOrWait();
             }
         } else {
             ListenableFuture<TextMateColorScheme> scheme = getScheme(schemeValue);
@@ -249,7 +251,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
                     initializeLanguage();
                     mEditor.openFile(mCurrentFile);
-                    ProjectManager.getInstance().addOnProjectOpenListener(CodeEditorFragment.this);
+                    readOrWait();
                 }
 
                 @Override
@@ -268,7 +270,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     mEditor.setColorScheme(scheme);
                     initializeLanguage();
                     mEditor.openFile(mCurrentFile);
-                    ProjectManager.getInstance().addOnProjectOpenListener(CodeEditorFragment.this);
+                    readOrWait();
                 }
             }, ContextCompat.getMainExecutor(requireContext()));
         }
@@ -334,8 +336,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 int index = mEditor.getCharIndex(event.getLine(), event.getColumn());
                 int cursorLeft = cursor.getLeft();
                 int cursorRight = cursor.getRight();
-                if (!EditorUtil.isWhitespace(mEditor.getText().charAt(index) + "")
-                    && index >= cursorLeft && index <= cursorRight) {
+                if (!EditorUtil.isWhitespace(mEditor.getText().charAt(index) + "") &&
+                    index >= cursorLeft &&
+                    index <= cursorRight) {
                     mEditor.showSoftInput();
                     event.intercept();
                 }
@@ -541,12 +544,22 @@ public class CodeEditorFragment extends Fragment implements Savable,
         readFile(project, mSavedInstanceState);
     }
 
+    private void readOrWait() {
+        if (ProjectManager.getInstance().getCurrentProject() != null) {
+            readFile(ProjectManager.getInstance().getCurrentProject(), mSavedInstanceState);
+        } else {
+            ProjectManager.getInstance().addOnProjectOpenListener(this);
+        }
+    }
+
     private ListenableFuture<String> readFile() {
-        return ProgressManager.getInstance().computeNonCancelableAsync(() -> Futures
-                .immediateFuture(FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8)));
+        return Futures.submitAsync(() -> Futures
+                                           .immediateFuture(FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8)),
+                                   Executors.newSingleThreadExecutor());
     }
 
     private void readFile(@NonNull Project currentProject, @Nullable Bundle savedInstanceState) {
+        mCanSave = false;
         Module module = currentProject.getModule(mCurrentFile);
         FileManager fileManager = module.getFileManager();
         fileManager.addSnapshotListener(this);
