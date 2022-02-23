@@ -48,7 +48,10 @@ import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.language.LanguageManager;
 import com.tyron.code.ui.editor.language.java.JavaLanguage;
 import com.tyron.code.ui.editor.language.textmate.BaseTextmateAnalyzer;
+import com.tyron.code.ui.editor.language.textmate.EmptyTextMateLanguage;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
+import com.tyron.code.ui.editor.scheme.CodeAssistColorScheme;
+import com.tyron.code.ui.editor.scheme.CompiledEditorScheme;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
 import com.tyron.code.ui.main.MainViewModel;
@@ -273,10 +276,14 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     private void initializeLanguage() {
         mLanguage = LanguageManager.getInstance().get(mEditor, mCurrentFile);
+        if (mLanguage == null) {
+            mLanguage = new EmptyTextMateLanguage();
+        }
         mEditor.setEditorLanguage(mLanguage);
     }
 
     private void configureEditor(@NonNull CodeEditorView editor) {
+        editor.setColorScheme(new CompiledEditorScheme(requireContext()));
         editor.setBackgroundAnalysisEnabled(false);
         editor.setTypefaceText(
                 ResourcesCompat.getFont(requireContext(), R.font.jetbrains_mono_regular));
