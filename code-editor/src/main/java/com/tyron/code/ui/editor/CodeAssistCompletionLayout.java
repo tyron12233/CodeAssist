@@ -35,6 +35,9 @@ public class CodeAssistCompletionLayout extends DefaultCompletionLayout {
                         .next();
                 ThemeRaw setting = (ThemeRaw) rawThemeSetting.getSetting();
                 Object background = setting.get(KEY_COMPLETION_WINDOW_BACKGROUND);
+                if (background == null) {
+                    background = setting.get("background");
+                }
                 if (background != null) {
                     colorScheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_BG,
                                          getColor((String) background));
