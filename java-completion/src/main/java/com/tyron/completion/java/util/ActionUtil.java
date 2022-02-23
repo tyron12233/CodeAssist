@@ -483,7 +483,7 @@ public class ActionUtil {
         if ("<clinit>".equals(methodName)) {
             return null;
         }
-        return Character.toLowerCase(methodName.charAt(0)) + methodName.substring(1);
+        return guessNameFromTypeName(methodName);
     }
 
     /**
