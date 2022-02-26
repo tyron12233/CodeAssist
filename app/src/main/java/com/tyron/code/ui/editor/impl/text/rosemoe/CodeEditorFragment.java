@@ -541,7 +541,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     @Override
     public void onProjectOpen(Project project) {
-        readFile(project, mSavedInstanceState);
+        ProgressManager.getInstance().runLater(() -> readFile(project, mSavedInstanceState));
     }
 
     private void readOrWait() {
