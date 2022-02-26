@@ -290,10 +290,6 @@ public class ValuesXmlParser implements ResourceParser {
             return null;
         }
 
-        if ("ViewGroup_Layout".equals(name)) {
-            System.out.println(name);
-        }
-
         StyleableResourceValueImpl resourceValue =
                 new StyleableResourceValueImpl(namespace, name, null, null);
 

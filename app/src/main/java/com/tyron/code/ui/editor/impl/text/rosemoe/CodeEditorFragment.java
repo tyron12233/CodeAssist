@@ -7,7 +7,6 @@ import android.annotation.SuppressLint;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.util.Pair;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -50,7 +49,6 @@ import com.tyron.code.ui.editor.language.java.JavaLanguage;
 import com.tyron.code.ui.editor.language.textmate.BaseTextmateAnalyzer;
 import com.tyron.code.ui.editor.language.textmate.EmptyTextMateLanguage;
 import com.tyron.code.ui.editor.language.xml.LanguageXML;
-import com.tyron.code.ui.editor.scheme.CodeAssistColorScheme;
 import com.tyron.code.ui.editor.scheme.CompiledEditorScheme;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
@@ -61,7 +59,6 @@ import com.tyron.code.ui.theme.ThemeRepository;
 import com.tyron.code.util.CoordinatePopupMenu;
 import com.tyron.code.util.PopupMenuHelper;
 import com.tyron.common.SharedPreferenceKeys;
-import com.tyron.common.logging.IdeLog;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.JavaDataContextUtil;
@@ -75,24 +72,18 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.concurrent.Executors;
-import java.util.logging.Logger;
 
 import io.github.rosemoe.sora.event.ClickEvent;
 import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.LongPressEvent;
 import io.github.rosemoe.sora.lang.Language;
-import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
-import io.github.rosemoe.sora.langs.textmate.analyzer.TextMateAnalyzer;
 import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.Content;
-import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.Cursor;
-import io.github.rosemoe.sora.textmate.core.internal.grammar.Grammar;
 import io.github.rosemoe.sora.widget.DirectAccessProps;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora2.text.EditorUtil;
-import javaslang.concurrent.Future;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class CodeEditorFragment extends Fragment implements Savable,
@@ -553,9 +544,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
     }
 
     private ListenableFuture<String> readFile() {
-        return Futures.submitAsync(() -> Futures
-                                           .immediateFuture(FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8)),
-                                   Executors.newSingleThreadExecutor());
+        return Futures.submitAsync(() -> {
+            String contents = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
+            return Futures.immediateFuture(contents);
+        }, Executors.newSingleThreadExecutor());
     }
 
     private void readFile(@NonNull Project currentProject, @Nullable Bundle savedInstanceState) {
