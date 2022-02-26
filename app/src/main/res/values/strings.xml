@@ -6,8 +6,8 @@
     <item name="paste" type="string">Paste</item>
     <item name="copy" type="string">Copy</item>
     <item name="selectAll" formatted="true" type="string">Select All</item>
-    <item name="saveToProject" translatable="false" type="string">Project</item>
-    <item name="cut" type="string" translatable="false">Cut</item>
+    <item name="saveToProject" type="string">Project</item>
+    <item name="cut" type="string">Cut</item>
     <item name="last" type="string">Last</item>
     <item name="next" type="string">Next</item>
     <item name="replace" type="string">Replace</item>
@@ -16,7 +16,7 @@
     <item name="cancel" type="string">Cancel</item>
     <item name="text_to_search" type="string">Text to search</item>
 
-    <item name="more" translatable="false" type="string">More</item>
+    <item name="more" type="string">More</item>
 
     <!-- Preference Titles -->
     <string name="messages_header">Messages</string>
@@ -72,7 +72,7 @@
 
     <!-- preferences -->
     <string name="settings_title_application">Application</string>
-    <string name="settings_desc_application">General application preferences.</string>
+    <string name="settings_desc_application">General application preferences</string>
     <string name="settings_title_editor">Editor</string>
     <string name="settings_desc_editor">Configure the editor</string>
     <string name="title_activity_settings">Settings</string>
