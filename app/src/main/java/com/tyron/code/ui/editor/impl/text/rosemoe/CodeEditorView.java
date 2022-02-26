@@ -152,6 +152,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
         AnalyzeManager manager = getEditorLanguage().getAnalyzeManager();
         if (manager instanceof DiagnosticTextmateAnalyzer) {
             ((DiagnosticTextmateAnalyzer) manager).setDiagnostics(this, diagnostics);
+            ((DiagnosticTextmateAnalyzer) manager).rerunWithoutBg();
         }
 
         if (mDiagnosticsListener != null) {
@@ -432,12 +433,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (getStyles() != null && getStyles().spans != null) {
-            HighlightUtil.clearDiagnostics(getStyles());
-        }
-        if (mDiagnostics != null && !isFormatting()) {
-            HighlightUtil.markDiagnostics(this, mDiagnostics, getStyles());
-        }
         super.onDraw(canvas);
     }
 
