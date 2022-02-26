@@ -71,7 +71,7 @@
 
     <!-- preferences -->
 	<string name="settings_title_application">Aplicación</string>
-    <string name="settings_desc_application">Ajustes generales de la aplicación.</string>
+    <string name="settings_desc_application">Ajustes generales de la aplicación</string>
     <string name="settings_title_editor">Editor</string>
 	<string name="settings_desc_editor">Configurar el editor</string>
     <string name="title_activity_settings">Ajustes</string>
