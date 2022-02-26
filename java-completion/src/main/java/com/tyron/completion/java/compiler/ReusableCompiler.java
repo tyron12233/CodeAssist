@@ -68,7 +68,7 @@ public class ReusableCompiler {
 
     private final List<String> currentOptions = new ArrayList<>();
     private ReusableContext currentContext;
-    private boolean checkedOut;
+    private volatile boolean checkedOut;
 
     /**
      * Creates a new task as if by JavaCompiler and runs the provided worker with it. The

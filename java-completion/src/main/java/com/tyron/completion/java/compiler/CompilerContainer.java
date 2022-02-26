@@ -38,9 +38,9 @@ public class CompilerContainer {
     private volatile boolean mIsWriting;
 
     @GuardedBy("mLock")
-    private volatile CompileTask mCompileTask;
+    private CompileTask mCompileTask;
 
-    private final ReadWriteLock mLock = new ReentrantReadWriteLock();
+    private final ReadWriteLock mLock = new ReentrantReadWriteLock(true);
     private final Lock mReadLock = mLock.readLock();
     private final Lock mWriteLock = mLock.writeLock();
 
@@ -58,6 +58,9 @@ public class CompilerContainer {
         try {
             consumer.accept(mCompileTask);
         } finally {
+            if (mCompileTask != null) {
+                mCompileTask.close();
+            }
             mReadLock.unlock();
         }
     }
@@ -67,6 +70,9 @@ public class CompilerContainer {
         try {
             return fun.apply(mCompileTask);
         } finally {
+            if (mCompileTask != null) {
+                mCompileTask.close();
+            }
             mReadLock.unlock();
         }
     }
@@ -77,12 +83,15 @@ public class CompilerContainer {
 
     void initialize(Supplier<CompileTask> supplier) {
         mWriteLock.lock();
+        mIsWriting = true;
+
         if (mCompileTask != null) {
             mCompileTask.close();
         }
         try {
             mCompileTask = supplier.get();
         } finally {
+            mIsWriting = false;
             mWriteLock.unlock();
         }
     }
