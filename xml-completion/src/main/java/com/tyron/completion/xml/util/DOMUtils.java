@@ -9,10 +9,12 @@ import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
+import org.eclipse.lemminx.dom.DOMProcessingInstruction;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class DOMUtils {
 
@@ -43,7 +45,7 @@ public class DOMUtils {
         return prefix;
     }
 
-    public static String getPrefix(DOMAttr attr) {
+    public static String getPrefix(@NonNull DOMAttr attr) {
         String name = attr.getName();
         if (!name.contains(":")) {
             return name;
@@ -52,7 +54,7 @@ public class DOMUtils {
     }
 
     @Nullable
-    public static DOMElement getRootElement(DOMDocument document) {
+    public static DOMElement getRootElement(@NonNull DOMDocument document) {
         List<DOMNode> roots = document.getRoots();
         for (DOMNode root : roots) {
             if (root instanceof DOMElement) {
@@ -60,6 +62,14 @@ public class DOMUtils {
             }
         }
         return null;
+    }
+
+    @NonNull
+    public static List<DOMNode> getRootElements(@NonNull DOMDocument document) {
+        List<DOMNode> roots = document.getRoots();
+        return roots.stream()
+                .filter(it -> !(it instanceof DOMProcessingInstruction))
+                .collect(Collectors.toList());
     }
 
     public static ResourceNamespace.Resolver getNamespaceResolver(DOMDocument document) {

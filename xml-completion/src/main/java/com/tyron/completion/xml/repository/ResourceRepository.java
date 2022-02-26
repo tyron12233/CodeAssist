@@ -3,6 +3,7 @@ package com.tyron.completion.xml.repository;
 import android.content.res.Resources;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
@@ -19,6 +20,8 @@ import java.util.List;
 
 public class ResourceRepository extends SimpleResourceRepository {
 
+    private static boolean sInitializeAndroidRepo = true;
+
     private final AndroidModule mModule;
     private final AndroidResourceRepository mAndroidRepository;
 
@@ -29,9 +32,16 @@ public class ResourceRepository extends SimpleResourceRepository {
         mAndroidRepository = AndroidResourceRepository.getInstance();
     }
 
+    @VisibleForTesting
+    public static void setInitializeAndroidRepo(boolean value) {
+        sInitializeAndroidRepo = value;
+    }
+
     @Override
     public void initialize() throws IOException {
-        mAndroidRepository.initialize();
+        if (sInitializeAndroidRepo) {
+            mAndroidRepository.initialize();
+        }
 
         File resDir = mModule.getAndroidResourcesDirectory();
         parse(resDir, getNamespace(), null);
