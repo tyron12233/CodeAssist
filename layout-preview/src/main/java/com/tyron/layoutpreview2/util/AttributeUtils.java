@@ -1,5 +1,7 @@
 package com.tyron.layoutpreview2.util;
 
+import android.view.View;
+
 import androidx.annotation.NonNull;
 
 import com.tyron.completion.xml.repository.Repository;
@@ -7,8 +9,23 @@ import com.tyron.completion.xml.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.repository.api.ResourceReference;
 import com.tyron.completion.xml.repository.api.ResourceUrl;
 import com.tyron.completion.xml.repository.api.ResourceValue;
+import com.tyron.completion.xml.util.DOMUtils;
+import com.tyron.layoutpreview2.EditorContext;
+
+import org.eclipse.lemminx.dom.DOMAttr;
 
 public class AttributeUtils {
+
+    public static String resolve(View view, DOMAttr attr) {
+        EditorContext context = EditorContext.getEditorContext(view.getContext());
+        final ResourceNamespace documentNs = DOMUtils.getNamespace(attr.getOwnerDocument());
+        if (documentNs == null) {
+            return attr.getValue();
+        }
+        final ResourceNamespace.Resolver resolver =
+                DOMUtils.getNamespaceResolver(attr.getOwnerDocument());
+        return resolve(attr.getValue(), documentNs, resolver, context.getRepository());
+    }
 
     /**
      * Recursively resolve this reference value
@@ -20,10 +37,10 @@ public class AttributeUtils {
      * @param repository The repository of the current module
      * @return The resolved string
      */
-    public static String resolveString(String value,
-                                       @NonNull ResourceNamespace contextNamespace,
-                                       @NonNull ResourceNamespace.Resolver resolver,
-                                       @NonNull Repository repository) {
+    public static String resolve(String value,
+                                 @NonNull ResourceNamespace contextNamespace,
+                                 @NonNull ResourceNamespace.Resolver resolver,
+                                 @NonNull Repository repository) {
         final ResourceUrl parse = ResourceUrl.parse(value);
         if (parse == null) {
             return value;
@@ -39,6 +56,6 @@ public class AttributeUtils {
             return value;
         }
 
-        return resolveString(resolvedValue.getValue(), contextNamespace, resolver, repository);
+        return resolve(resolvedValue.getValue(), contextNamespace, resolver, repository);
     }
 }

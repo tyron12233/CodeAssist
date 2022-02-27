@@ -26,11 +26,13 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 import java.io.File;
 import java.io.IOException;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(manifest = "src/main/AndroidManifest.xml", sdk = 26, resourceDir = "src/main/res")
 public class TestLayoutInflater {
 
     @Language("XML")
@@ -38,7 +40,7 @@ public class TestLayoutInflater {
                                               "    xmlns:android=\"http://schemas.android" +
                                               ".com/apk/res/android\"\n" +
                                               "    android:layout_width=\"match_parent\"\n" +
-                                              "    android:layout_height=\"match_parent\">\n" +
+                                              "    android:layout_height=\"100dp\">\n" +
                                               "    \n" + "    <TextView\n" + "    \n" +
                                               "   android:layout_height=\"wrap_content\"\n" +
                                               "     " +

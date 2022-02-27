@@ -8,9 +8,6 @@ import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Table;
 import com.tyron.completion.xml.repository.Repository;
 import com.tyron.completion.xml.repository.api.ResourceNamespace;
-import com.tyron.completion.xml.repository.api.ResourceReference;
-import com.tyron.completion.xml.repository.api.ResourceUrl;
-import com.tyron.completion.xml.repository.api.ResourceValue;
 import com.tyron.completion.xml.util.DOMUtils;
 import com.tyron.layoutpreview2.EditorContext;
 import com.tyron.layoutpreview2.util.AttributeUtils;
@@ -32,6 +29,12 @@ public abstract class BaseAttributeApplier implements AttributeApplier {
             mTable = HashBasedTable.create();
 
     public abstract void registerAttributeProcessors();
+
+    public void registerAttributeProcessor(ResourceNamespace namespace,
+                                           String name,
+                                           AttributeConsumer<View, DOMAttr> value) {
+        registerAttributeProcessor(namespace, name, View.class, value);
+    }
 
     public <T extends View> void registerAttributeProcessor(ResourceNamespace namespace,
                                                             String name,
@@ -55,7 +58,7 @@ public abstract class BaseAttributeApplier implements AttributeApplier {
             String attributeValue = attribute.getValue();
             if (attributeValue != null && documentNs != null) {
                 String resolvedValue = AttributeUtils
-                        .resolveString(attributeValue, documentNs, resolver, repository);
+                        .resolve(attributeValue, documentNs, resolver, repository);
                 //noinspection unchecked
                 value.apply((T) view, resolvedValue);
                 return;

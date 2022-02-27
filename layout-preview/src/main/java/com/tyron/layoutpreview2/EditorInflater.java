@@ -12,6 +12,7 @@ import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.xml.repository.Repository;
 import com.tyron.completion.xml.util.DOMUtils;
 import com.tyron.layoutpreview2.manager.ViewManagerImpl;
+import com.tyron.layoutpreview2.util.ViewGroupUtils;
 import com.tyron.layoutpreview2.view.EditorView;
 
 import org.eclipse.lemminx.dom.DOMAttr;
@@ -72,13 +73,21 @@ public class EditorInflater {
             throw new UnsupportedOperationException("Merge not yet supported.");
         } else {
             // the root view that is found from xml
-            final View temp = createViewFromTag(rootView, rootElement, inflaterContext);
+            final EditorView tempEditorView = createViewFromTag(rootView, rootElement, inflaterContext);
+
+            final View temp = tempEditorView.getAsView();
+
+            ViewGroup.LayoutParams params = null;
+            if (rootView != null) {
+                params = ViewGroupUtils.generateDefaultLayoutParams(rootView);
+                if (!attachToRoot) {
+                    temp.setLayoutParams(params);
+                }
+            }
 
             rInflateChildren(rootElement, temp, false);
-            
-            if (rootView != null && attachToRoot) {
-                rootView.addView(temp);
-            }
+
+            tempEditorView.getViewManager().updateAttributes(rootElement.getAttributeNodes());
 
             if (rootView == null || !attachToRoot) {
                 result = temp;
@@ -115,20 +124,22 @@ public class EditorInflater {
             } else if (SdkConstants.VIEW_MERGE.equals(tag)) {
                 throw new UnsupportedOperationException("TODO");
             } else {
-                final View view = createViewFromTag(parent, element, context);
+                final EditorView view = createViewFromTag(parent, element, context);
                 final ViewGroup viewGroup = (ViewGroup) parent;
-//                final ViewGroup.LayoutParams params = mAttributeApplier.generateLayoutParams(viewGroup, attrs);
-                rInflateChildren(element, view, true);
-                viewGroup.addView(view);
+                final ViewGroup.LayoutParams params = ViewGroupUtils.generateDefaultLayoutParams(viewGroup);
+                rInflateChildren(element, view.getAsView(), true);
+                viewGroup.addView(view.getAsView(), params);
+
+                view.getViewManager().updateAttributes(element.getAttributeNodes());
             }
         }
     }
 
 
-    public View createViewFromTag(@Nullable View parent,
+    public EditorView createViewFromTag(@Nullable View parent,
                                   @NonNull DOMElement element,
                                   @NonNull Context context) {
-        return createViewFromTag(parent, element, context, false).getAsView();
+        return createViewFromTag(parent, element, context, false);
     }
 
     public EditorView createViewFromTag(@Nullable View parent,
@@ -222,7 +233,6 @@ public class EditorInflater {
             if (view instanceof EditorView) {
                 final ViewManagerImpl viewManager = new ViewManagerImpl(view);
                 ((EditorView) view).setViewManager(viewManager);
-                viewManager.updateAttributes(attrs);
             } else {
                 throw new UnsupportedOperationException("TODO: Wrap unknown views");
             }
