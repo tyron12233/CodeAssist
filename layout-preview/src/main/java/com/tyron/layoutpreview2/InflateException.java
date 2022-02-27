@@ -1,5 +1,8 @@
 package com.tyron.layoutpreview2;
 
+/**
+ * Thrown when there's an error inflating the view.
+ */
 public class InflateException extends RuntimeException {
 
     public InflateException() {

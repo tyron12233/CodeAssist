@@ -3,12 +3,21 @@ package com.tyron.layoutpreview2;
 import android.content.Context;
 import android.view.View;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.tyron.completion.xml.repository.Repository;
+import com.tyron.layoutpreview2.view.EditorView;
 
 import org.eclipse.lemminx.dom.DOMAttr;
 
 import java.util.List;
 
+/**
+ * LayoutInflater subclass that substitutes tags from xml with their android framework equivalent
+ *
+ * e.g LinearLayout to android.widget.LinearLayout
+ */
 public class PhoneLayoutInflater extends EditorInflater {
 
     private static final String[] sClassPrefixList = {
@@ -16,15 +25,19 @@ public class PhoneLayoutInflater extends EditorInflater {
             "android.webkit."
     };
 
-    public PhoneLayoutInflater(Context context, Repository repository) {
-        super(context, repository);
+    private final EditorContext mContext;
+
+    public PhoneLayoutInflater(EditorContext context) {
+        super(context);
+
+        mContext = context;
     }
 
     @Override
-    protected View onCreateView(String name, List<DOMAttr> attrs) throws ClassNotFoundException {
+    protected EditorView onCreateView(String name, List<DOMAttr> attrs) throws ClassNotFoundException {
         for (String prefix : sClassPrefixList) {
             try {
-                View view = createView(name, prefix, attrs);
+                EditorView view = createView(name, prefix, attrs);
                 if (view != null) {
                     return view;
                 }
@@ -35,5 +48,11 @@ public class PhoneLayoutInflater extends EditorInflater {
         }
 
         return super.onCreateView(name, attrs);
+    }
+
+    @Nullable
+    @Override
+    protected String replaceFqn(@NonNull String fqn) {
+        return mContext.getMapping(fqn);
     }
 }

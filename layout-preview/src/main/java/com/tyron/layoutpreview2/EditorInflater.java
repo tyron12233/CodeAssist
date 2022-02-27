@@ -11,6 +11,8 @@ import com.tyron.builder.compiler.manifest.SdkConstants;
 import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.xml.repository.Repository;
 import com.tyron.completion.xml.util.DOMUtils;
+import com.tyron.layoutpreview2.manager.ViewManagerImpl;
+import com.tyron.layoutpreview2.view.EditorView;
 
 import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;
@@ -36,12 +38,10 @@ public class EditorInflater {
 
     final Object[] mConstructorArgs = new Object[2];
 
-    private final Repository mRepository;
-    private final Context mContext;
+    private final EditorContext mContext;
 
-    public EditorInflater(Context context, Repository repository) {
+    public EditorInflater(EditorContext context) {
         mContext = context;
-        mRepository = repository;
     }
 
     public View inflate(@NonNull DOMDocument document,
@@ -56,7 +56,7 @@ public class EditorInflater {
         }
 
         final Context inflaterContext = mContext;
-        Context lastContext = (Context) mConstructorArgs[0];
+        EditorContext lastContext = (EditorContext) mConstructorArgs[0];
         mConstructorArgs[0] = inflaterContext;
         View result = rootView;
 
@@ -128,13 +128,13 @@ public class EditorInflater {
     public View createViewFromTag(@Nullable View parent,
                                   @NonNull DOMElement element,
                                   @NonNull Context context) {
-        return createViewFromTag(parent, element, context, false);
+        return createViewFromTag(parent, element, context, false).getAsView();
     }
 
-    public View createViewFromTag(@Nullable View parent,
-                                  @NonNull DOMElement element,
-                                  @NonNull Context context,
-                                  boolean ignoreThemeAttr) {
+    public EditorView createViewFromTag(@Nullable View parent,
+                                        @NonNull DOMElement element,
+                                        @NonNull Context context,
+                                        boolean ignoreThemeAttr) {
         List<DOMAttr> attrs = element.getAttributeNodes();
         String name = element.getTagName();
         if (SdkConstants.VIEW_TAG.equals(name)) {
@@ -146,7 +146,7 @@ public class EditorInflater {
         }
 
         try {
-            View view;
+            EditorView view;
             final Object lastContext = mConstructorArgs[0];
             mConstructorArgs[0] = context;
             try {
@@ -166,7 +166,7 @@ public class EditorInflater {
         }
     }
 
-    protected View onCreateView(String name, List<DOMAttr> attrs) throws ClassNotFoundException {
+    protected EditorView onCreateView(String name, List<DOMAttr> attrs) throws ClassNotFoundException {
         return createView(name, "android.view.", attrs);
     }
 
@@ -181,13 +181,13 @@ public class EditorInflater {
      * @param attrs  An AttributeSet of attributes to apply to the View.
      * @return View The View created.
      */
-    protected View onCreateView(View parent,
+    protected EditorView onCreateView(View parent,
                                 String name,
                                 List<DOMAttr> attrs) throws ClassNotFoundException {
         return onCreateView(name, attrs);
     }
 
-    protected final View createView(@NonNull String name,
+    protected final EditorView createView(@NonNull String name,
                                     String prefix,
                                     List<DOMAttr> attrs) throws ClassNotFoundException,
             InflateException {
@@ -198,18 +198,17 @@ public class EditorInflater {
         }
 
         Class<? extends View> clazz = null;
+        String fqn = prefix != null ? (prefix + name) : name;
+        String replaced = replaceFqn(fqn);
+        if (replaced != null) {
+            fqn = replaced;
+        }
+
         try {
             if (constructor == null) {
                 // Class not found in the cache, see if it's real, and try to add it
-                clazz = mContext.getClassLoader().loadClass(prefix != null ? (prefix + name) : name)
+                clazz = mContext.getClassLoader().loadClass(fqn)
                         .asSubclass(View.class);
-
-//                if (mFilter != null && clazz != null) {
-//                    boolean allowed = mFilter.onLoadClass(clazz);
-//                    if (!allowed) {
-//                        failNotAllowed(name, prefix, attrs);
-//                    }
-//                }
                 constructor = clazz.getConstructor(mConstructorSignature);
                 constructor.setAccessible(true);
                 sConstructorMap.put(name, constructor);
@@ -219,15 +218,23 @@ public class EditorInflater {
             args[1] = attrs;
 
             final View view = constructor.newInstance((Context) args[0]);
-            return view;
+
+            if (view instanceof EditorView) {
+                final ViewManagerImpl viewManager = new ViewManagerImpl(view);
+                ((EditorView) view).setViewManager(viewManager);
+                viewManager.updateAttributes(attrs);
+            } else {
+                throw new UnsupportedOperationException("TODO: Wrap unknown views");
+            }
+            return ((EditorView) view);
         } catch (NoSuchMethodException e) {
             throw new InflateException(
-                    "Error inflating class " + (prefix != null ? (prefix + name) : name), e);
+                    "Error inflating class " + (fqn), e);
 
         } catch (ClassCastException e) {
             // If loaded class is not a View subclass
             final InflateException ie = new InflateException(
-                    "Class is not a View " + (prefix != null ? (prefix + name) : name), e);
+                    "Class is not a View " + (fqn), e);
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
         } catch (ClassNotFoundException e) {
@@ -239,6 +246,11 @@ public class EditorInflater {
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
         }
+    }
+
+    @Nullable
+    protected String replaceFqn(@NonNull String fqn) {
+        return null;
     }
 
     private static final ClassLoader BOOT_CLASS_LOADER = EditorInflater.class.getClassLoader();

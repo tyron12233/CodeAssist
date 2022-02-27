@@ -11,6 +11,13 @@ import com.tyron.common.ApplicationProvider;
 import com.tyron.common.TestUtil;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.repository.ResourceRepository;
+import com.tyron.completion.xml.repository.api.ResourceNamespace;
+import com.tyron.completion.xml.util.DOMUtils;
+import com.tyron.layoutpreview2.attr.impl.TextViewAttributeApplier;
+import com.tyron.layoutpreview2.attr.impl.ViewAttributeApplier;
+import com.tyron.layoutpreview2.view.impl.AndroidViewImpl;
+import com.tyron.layoutpreview2.view.impl.EditorLinearLayout;
+import com.tyron.layoutpreview2.view.impl.EditorTextView;
 
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMParser;
@@ -36,7 +43,7 @@ public class TestLayoutInflater {
                                               "   android:layout_height=\"wrap_content\"\n" +
                                               "     " +
                                               "   android:layout_width=\"match_parent\"" +
-                                              " \n" + "        android:text=\"Hello world!\"/>\n" +
+                                              " \n" + "        android:text=\"@string/app_name\"/>\n" +
                                               "</LinearLayout>";
 
     private EditorInflater mInflater;
@@ -58,13 +65,30 @@ public class TestLayoutInflater {
         XmlRepository repository = new XmlRepository();
         repository.initialize(module);
 
-        mInflater = new PhoneLayoutInflater(ApplicationProvider.getApplicationContext(),
-                                       repository.getRepository());
+        EditorContext context = new EditorContext(ApplicationProvider.getApplicationContext());
+        context.setRepository(repository.getRepository());
+        registerEditorViews(context);
+        registerAttributeAppliers(context);
+
+        mInflater = new PhoneLayoutInflater(context);
+    }
+
+    private void registerEditorViews(EditorContext context) {
+        context.registerMapping(View.class, AndroidViewImpl.class);
+        context.registerMapping(LinearLayout.class, EditorLinearLayout.class);
+        context.registerMapping(TextView.class, EditorTextView.class);
+    }
+
+    private void registerAttributeAppliers(EditorContext context) {
+        context.registerAttributeApplier(new ViewAttributeApplier());
+        context.registerAttributeApplier(new TextViewAttributeApplier());
     }
 
     @Test
     public void testInflate() {
         DOMDocument document = DOMParser.getInstance().parse(TEST_LAYOUT, "", null);
+        DOMUtils.setNamespace(document, ResourceNamespace.fromPackageName("com.tyron.test"));
+        
         View inflate = mInflater.inflate(document, null, false);
         assert inflate instanceof LinearLayout;
 
