@@ -13,12 +13,19 @@ import org.eclipse.lemminx.dom.DOMProcessingInstruction;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.WeakHashMap;
 import java.util.stream.Collectors;
 
 public class DOMUtils {
 
     private static final String RESOLVER_KEY = "uriResolver";
+    private static final String NAMESPACE_KEY = "namespace";
+
+    private static final WeakHashMap<DOMNode, Map<String, Object>> sUserDataHolder = new WeakHashMap<>();
 
     public static String lookupPrefix(DOMAttr attr) {
         return lookupPrefix(attr, getPrefix(attr));
@@ -77,7 +84,7 @@ public class DOMUtils {
         if (rootElement == null) {
             return ResourceNamespace.Resolver.EMPTY_RESOLVER;
         }
-        Object userData = rootElement.getUserData(RESOLVER_KEY);
+        Object userData = getUserData(rootElement, RESOLVER_KEY);
         if (userData instanceof ResourceNamespace.Resolver) {
             return (ResourceNamespace.Resolver) userData;
         }
@@ -100,7 +107,7 @@ public class DOMUtils {
                 return null;
             }
         };
-        rootElement.setUserData(RESOLVER_KEY, resolver, null);
+        putUserData(rootElement, RESOLVER_KEY, resolver);
         return resolver;
     }
 
@@ -115,5 +122,31 @@ public class DOMUtils {
             }
         }
         return nodeAt.isClosed();
+    }
+
+    public static Object getUserData(DOMNode node, String key) {
+        final Map<String, Object> map = sUserDataHolder.get(node);
+        if (map == null) {
+            return null;
+        }
+        return map.get(key);
+    }
+
+    public static void putUserData(@NonNull DOMNode node, @NonNull String key, Object value) {
+        sUserDataHolder.computeIfAbsent(node, it -> new HashMap<>());
+        Objects.requireNonNull(sUserDataHolder.get(node)).put(key, value);
+    }
+
+    public static void setNamespace(DOMDocument document, ResourceNamespace namespace) {
+        putUserData(document, NAMESPACE_KEY, namespace);
+    }
+
+    @Nullable
+    public static ResourceNamespace getNamespace(DOMDocument document) {
+        final Object userData = getUserData(document, NAMESPACE_KEY);
+        if (userData instanceof ResourceNamespace) {
+            return ((ResourceNamespace) userData);
+        }
+        return null;
     }
 }
