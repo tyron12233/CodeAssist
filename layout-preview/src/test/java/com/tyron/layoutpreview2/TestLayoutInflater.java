@@ -88,7 +88,7 @@ public class TestLayoutInflater {
     public void testInflate() {
         DOMDocument document = DOMParser.getInstance().parse(TEST_LAYOUT, "", null);
         DOMUtils.setNamespace(document, ResourceNamespace.fromPackageName("com.tyron.test"));
-        
+
         View inflate = mInflater.inflate(document, null, false);
         assert inflate instanceof LinearLayout;
 
@@ -97,5 +97,8 @@ public class TestLayoutInflater {
 
         View child = root.getChildAt(0);
         assert child instanceof TextView;
+
+        TextView textView = ((TextView) child);
+        assert "TEST".equals(textView.getText().toString()) : textView.getText().toString();
     }
 }

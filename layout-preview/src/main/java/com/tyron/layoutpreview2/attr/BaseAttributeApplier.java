@@ -13,6 +13,7 @@ import com.tyron.completion.xml.repository.api.ResourceUrl;
 import com.tyron.completion.xml.repository.api.ResourceValue;
 import com.tyron.completion.xml.util.DOMUtils;
 import com.tyron.layoutpreview2.EditorContext;
+import com.tyron.layoutpreview2.util.AttributeUtils;
 
 import org.eclipse.lemminx.dom.DOMAttr;
 
@@ -53,20 +54,11 @@ public abstract class BaseAttributeApplier implements AttributeApplier {
                     DOMUtils.getNamespace(attribute.getOwnerDocument());
             String attributeValue = attribute.getValue();
             if (attributeValue != null && documentNs != null) {
-                if (attributeValue.startsWith("@string/")) {
-                    final ResourceUrl parse = ResourceUrl.parse(attributeValue);
-                    if (parse != null) {
-                        final ResourceReference resolve = parse.resolve(documentNs, resolver);
-                        if (resolve != null) {
-                            final ResourceValue resolvedValue = repository.getValue(resolve);
-                            if (resolvedValue != null) {
-                                //noinspection unchecked
-                                value.apply((T) view, resolvedValue.getValue());
-                            }
-                            return;
-                        }
-                    }
-                }
+                String resolvedValue = AttributeUtils
+                        .resolveString(attributeValue, documentNs, resolver, repository);
+                //noinspection unchecked
+                value.apply((T) view, resolvedValue);
+                return;
             }
 
             //noinspection unchecked
