@@ -131,7 +131,7 @@ public class OverrideInheritedMethodsAction extends AnAction {
         }
 
         SourceFileObject sourceFileObject =
-                new SourceFileObject(file.toPath(), (JavaModule) module);
+                new SourceFileObject(file.toPath(), (JavaModule) module, Instant.now());
         ListenableFuture<List<MethodPtr>> future = ProgressManager.getInstance()
                 .computeNonCancelableAsync(() -> {
                     List<MethodPtr> pointers =
@@ -209,6 +209,7 @@ public class OverrideInheritedMethodsAction extends AnAction {
                                                                   ptr.erasedParameterTypes,
                                                                   sourceFileObject, editor.getCaret()
                                                                           .getStart());
+
                 RewriteUtil.performRewrite(editor, file, compiler, rewrite);
             }
         });

@@ -90,4 +90,11 @@ public class CompilerContainer {
             mWriteLock.unlock();
         }
     }
+
+    /**
+     * Used when the task is cached.
+     */
+    void setCompileTask(CompileTask task) {
+        mCompileTask = task;
+    }
 }

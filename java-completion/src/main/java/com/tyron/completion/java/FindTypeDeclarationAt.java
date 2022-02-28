@@ -4,12 +4,15 @@ import android.util.Pair;
 
 import org.openjdk.source.tree.ClassTree;
 import org.openjdk.source.tree.CompilationUnitTree;
+import org.openjdk.source.tree.ErroneousTree;
 import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.JavacTask;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreeScanner;
 import org.openjdk.source.util.Trees;
+
+import java.util.List;
 
 public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
     private final SourcePositions pos;
@@ -35,6 +38,21 @@ public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
         }
         if (isInside(t, Pair.create(find, find))) {
             return t;
+        }
+        return null;
+    }
+
+
+    @Override
+    public ClassTree visitErroneous(ErroneousTree tree, Long find) {
+        final List<? extends Tree> errorTrees = tree.getErrorTrees();
+        if (errorTrees != null) {
+            for (Tree errorTree : errorTrees) {
+                final ClassTree scan = scan(errorTree, find);
+                if (scan != null) {
+                    return scan;
+                }
+            }
         }
         return null;
     }
