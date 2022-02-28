@@ -487,7 +487,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         if (indexing == null) {
             indexing = true;
         }
-        if (indexing) {
+        if (!indexing) {
             context.putData(CommonDataKeys.PROJECT, ProjectManager.getInstance().getCurrentProject());
         }
         context.putData(CommonDataKeys.ACTIVITY, getActivity());
