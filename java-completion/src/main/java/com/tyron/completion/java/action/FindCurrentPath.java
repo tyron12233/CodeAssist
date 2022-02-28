@@ -12,6 +12,7 @@ import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.ImportTree;
 import org.openjdk.source.tree.LambdaExpressionTree;
 import org.openjdk.source.tree.LiteralTree;
+import org.openjdk.source.tree.MemberReferenceTree;
 import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.MethodTree;
@@ -111,6 +112,20 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
     @Override
     public TreePath visitMemberSelect(MemberSelectTree t, Pair<Long, Long> find) {
         TreePath smaller = super.visitMemberSelect(t, find);
+        if (smaller != null) {
+            return smaller;
+        }
+
+        if (isInside(t, find)) {
+            return getCurrentPath();
+        }
+
+        return null;
+    }
+
+    @Override
+    public TreePath visitMemberReference(MemberReferenceTree t, Pair<Long, Long> find) {
+        TreePath smaller = super.visitMemberReference(t, find);
         if (smaller != null) {
             return smaller;
         }

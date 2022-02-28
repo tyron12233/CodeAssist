@@ -55,7 +55,7 @@ public class JavaCompilerService implements CompilerProvider {
     private JavaModule mCurrentModule;
     public final Set<File> classPath, docPath;
     public final Set<String> addExports;
-    public final ReusableCompiler compiler = new ReusableCompiler();
+    public ReusableCompiler compiler = new ReusableCompiler();
     private final Docs docs;
 
     private final CompilerContainer mContainer = new CompilerContainer();
@@ -463,7 +463,16 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
     public void destroy() {
+        close();
+        if (cachedCompile != null) {
+            final ReusableCompiler.Borrow borrow = cachedCompile.borrow;
+            if (borrow != null) {
+                borrow.close();
+            }
+        }
         cachedCompile = null;
+
+        compiler = new ReusableCompiler();
     }
 
     @NonNull

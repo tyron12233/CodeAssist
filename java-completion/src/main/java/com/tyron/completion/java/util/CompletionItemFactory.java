@@ -173,7 +173,7 @@ public class CompletionItemFactory {
             item.cursorOffset = item.commitText.length() -
                     ((methodRef || endsWithParen) ? 0 : 1);
         }
-        item.setInsertHandler(new MethodInsertHandler(first, item));
+        item.setInsertHandler(new MethodInsertHandler(first, item, !methodRef));
         item.addFilterText(first.getSimpleName().toString());
         return item;
     }
