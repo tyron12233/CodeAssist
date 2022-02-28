@@ -201,8 +201,12 @@ public class ActionUtil {
         TreePath parent = path.getParentPath();
         TreePath grandParent = parent.getParentPath();
 
-        if (path.getLeaf() instanceof MethodInvocationTree) {
+        if (path.getLeaf() instanceof ExpressionStatementTree) {
             return path;
+        }
+
+        if (path.getLeaf() instanceof MethodInvocationTree) {
+            return findSurroundingPath(parent);
         }
 
         if (path.getLeaf() instanceof MemberSelectTree) {
