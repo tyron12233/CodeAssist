@@ -131,6 +131,9 @@ public class LayoutXmlParser implements ResourceParser {
     private ResourceValue parseIdValue(String value,
                                        ResourceNamespace namespace,
                                        String libraryName) {
+        if (value == null) {
+            return null;
+        }
         if (!value.startsWith(SdkConstants.NEW_ID_PREFIX)) {
             return null;
         }
