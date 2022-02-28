@@ -471,7 +471,7 @@ public class JavaCompilerService implements CompilerProvider {
             }
         }
         cachedCompile = null;
-
+        cachedModified.clear();
         compiler = new ReusableCompiler();
     }
 
