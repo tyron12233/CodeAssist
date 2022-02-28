@@ -22,23 +22,30 @@ import java.util.List;
 import java.util.StringJoiner;
 
 /**
- * Converts the given Element directly into String without converting first through {@link com.github.javaparser.JavaParser}
+ * Converts the given Element directly into String without converting first through
+ * {@link com.github.javaparser.JavaParser}
  */
 public class PrintHelper {
 
     /**
-     * Prints a given method into a String, adds {@code throws UnsupportedOperationException} to the method body
-     * if the source is null, it will get the parameter names from the class file which will be {@code arg1, arg2, arg3}
+     * Prints a given method into a String, adds {@code throws UnsupportedOperationException} to
+     * the method body
+     * if the source is null, it will get the parameter names from the class file which will be
+     * {@code arg1, arg2, arg3}
+     * <p>
+     * Not to be confused with
+     * {@link EditHelper#printMethod(ExecutableElement, ExecutableType, MethodTree)}
+     * This does not convert the method into a
+     * {@link com.github.javaparser.ast.body.MethodDeclaration}
      *
-     * Not to be confused with {@link EditHelper#printMethod(ExecutableElement, ExecutableType, MethodTree)}
-     * This does not convert the method into a {@link com.github.javaparser.ast.body.MethodDeclaration}
-     *
-     * @param method method to print
+     * @param method            method to print
      * @param parameterizedType type parameters of this method
-     * @param source the source method, in which the parameter names are fetched
+     * @param source            the source method, in which the parameter names are fetched
      * @return a string that represents the method
      */
-    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, MethodTree source) {
+    public static String printMethod(ExecutableElement method,
+                                     ExecutableType parameterizedType,
+                                     MethodTree source) {
         StringBuilder buf = new StringBuilder();
         buf.append("@Override\n");
         if (method.getModifiers().contains(Modifier.PUBLIC)) {
@@ -62,7 +69,9 @@ public class PrintHelper {
         return buf.toString();
     }
 
-    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, ExecutableElement source) {
+    public static String printMethod(ExecutableElement method,
+                                     ExecutableType parameterizedType,
+                                     ExecutableElement source) {
         StringBuilder buf = new StringBuilder();
         buf.append("@Override\n");
         if (method.getModifiers().contains(Modifier.PUBLIC)) {
@@ -127,7 +136,8 @@ public class PrintHelper {
             DeclaredType declared = (DeclaredType) type;
             if (declared instanceof Type.ClassType) {
                 Type.ClassType classType = (Type.ClassType) declared;
-                if (classType.all_interfaces_field != null && !classType.all_interfaces_field.isEmpty()) {
+                if (classType.all_interfaces_field != null &&
+                    !classType.all_interfaces_field.isEmpty()) {
                     Type next = classType.all_interfaces_field.get(0);
                     declared = (DeclaredType) next;
                 }
@@ -144,6 +154,12 @@ public class PrintHelper {
             } else {
                 return arrayType.toString();
             }
+        } else if (type instanceof Type.TypeVar) {
+            Type.TypeVar typeVar = ((Type.TypeVar) type);
+            if (typeVar.isCaptured()) {
+                return "? extends " + printType(typeVar.getUpperBound(), fqn);
+            }
+            return typeVar.toString();
         } else {
             if (fqn) {
                 return type.toString();

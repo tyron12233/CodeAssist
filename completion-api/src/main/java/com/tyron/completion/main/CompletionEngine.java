@@ -2,6 +2,7 @@ package com.tyron.completion.main;
 
 import android.util.Log;
 
+import com.google.common.base.Throwables;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 import com.tyron.common.logging.IdeLog;
@@ -85,16 +86,26 @@ public class CompletionEngine {
                 .setColumn(column)
                 .setIndex(index)
                 .build();
-
-        Instant now = Instant.now();
         List<CompletionProvider> providers = CompletionProvider.forParameters(parameters);
         for (CompletionProvider provider : providers) {
-            CompletionList complete = provider.complete(parameters);
-            if (complete != null) {
-                list.items.addAll(complete.items);
+            try {
+                CompletionList complete = provider.complete(parameters);
+                if (complete != null) {
+                    list.items.addAll(complete.items);
+                }
+            } catch (Throwable e) {
+                if (e instanceof ProcessCanceledException) {
+                    throw e;
+                }
+
+                String message = "Failed to complete: \n" +
+                                 "index: " + index + "\n" +
+                                 "prefix: " + prefix + "\n" +
+                                 "File: " + file.getName() + "\n" +
+                                 "Stack trace: " + Throwables.getStackTraceAsString(e);
+                logger.severe(message);
             }
         }
-        logger.info("Completions took " + Duration.between(now, Instant.now()).toMillis() + " ms");
         return list;
     }
 

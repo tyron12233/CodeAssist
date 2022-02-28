@@ -119,7 +119,7 @@ public class Completions {
             }
 
             compiler.destroy();
-            return null;
+            throw e;
         }
     }
 

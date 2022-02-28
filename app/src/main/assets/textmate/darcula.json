@@ -3,7 +3,7 @@
   "settings": [
     {
       "settings": {
-        "background": "#242424",
+        "background": "#1F1A1B",
         "foreground": "#cccccc",
         "lineHighlight": "#2B2B2B",
         "selection": "#214283",
@@ -505,6 +505,14 @@
       ],
       "settings": {
         "foreground": "#FFC66D"
+      }
+    },
+
+    {
+      "name": "XML Namespace prefix",
+      "scope": "entity.name.tag.namesapce.xml",
+      "settings": {
+        "foreground": "#9876AA"
       }
     }
   ]

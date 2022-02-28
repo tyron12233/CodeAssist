@@ -25,6 +25,7 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
     private int mMinSdk = 21;
 
     private ManifestData mManifestData;
+    private String mPackageName;
 
     private File mAndroidResourcesDir;
 
@@ -73,8 +74,17 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
         return new File(getRootFile(), "src/main/assets");
     }
 
+
+    public void setPackageName(@NonNull String name) {
+        mPackageName = name;
+    }
+
     @Override
     public String getPackageName() {
+        if (mPackageName != null) {
+            return mPackageName;
+        }
+
         if (mManifestData == null) {
             throw new IllegalStateException("Project is not yet opened");
         }

@@ -19,6 +19,7 @@ import com.tyron.completion.xml.repository.api.StyleItemResourceValueImpl;
 import com.tyron.completion.xml.repository.api.StyleResourceValueImpl;
 import com.tyron.completion.xml.repository.api.StyleableResourceValue;
 import com.tyron.completion.xml.repository.api.StyleableResourceValueImpl;
+import com.tyron.completion.xml.util.DOMUtils;
 
 import org.eclipse.lemminx.dom.DOMComment;
 import org.eclipse.lemminx.dom.DOMDocument;
@@ -40,8 +41,9 @@ public class ValuesXmlParser implements ResourceParser {
                                      @NonNull String contents,
                                      @NonNull ResourceNamespace namespace,
                                      @Nullable String name) throws IOException {
-        DOMDocument document = DOMParser.getInstance()
-                .parse(contents, "", null);
+        DOMDocument document =
+                DOMParser.getInstance().parse(contents, file.toURI().toString(), null);
+        DOMUtils.setNamespace(document, namespace);
         List<DOMNode> roots = document.getRoots();
         for (DOMNode root : roots) {
             if (root instanceof DOMProcessingInstruction) {
@@ -290,10 +292,6 @@ public class ValuesXmlParser implements ResourceParser {
             return null;
         }
 
-        if ("ViewGroup_Layout".equals(name)) {
-            System.out.println(name);
-        }
-
         StyleableResourceValueImpl resourceValue =
                 new StyleableResourceValueImpl(namespace, name, null, null);
 
@@ -372,21 +370,15 @@ public class ValuesXmlParser implements ResourceParser {
             }
         }
 
-        if (hasEnum &&
-            !resourceValue.getFormats()
-                    .contains(AttributeFormat.ENUM)) {
+        if (hasEnum && !resourceValue.getFormats().contains(AttributeFormat.ENUM)) {
             ImmutableSet<AttributeFormat> build =
                     ImmutableSet.<AttributeFormat>builder().addAll(resourceValue.getFormats())
-                            .add(AttributeFormat.ENUM)
-                            .build();
+                            .add(AttributeFormat.ENUM).build();
             resourceValue.setFormats(build);
-        } else if (hasFlag &&
-                   !resourceValue.getFormats()
-                           .contains(AttributeFormat.FLAGS)) {
+        } else if (hasFlag && !resourceValue.getFormats().contains(AttributeFormat.FLAGS)) {
             ImmutableSet<AttributeFormat> build =
                     ImmutableSet.<AttributeFormat>builder().addAll(resourceValue.getFormats())
-                            .add(AttributeFormat.FLAGS)
-                            .build();
+                            .add(AttributeFormat.FLAGS).build();
             resourceValue.setFormats(build);
         }
         return resourceValue;

@@ -32,7 +32,7 @@ public class ProgressManager {
         getInstance().doCheckCanceled();
     }
 
-    private final ExecutorService mPool = Executors.newFixedThreadPool(8);
+    private final ExecutorService mPool = Executors.newFixedThreadPool(32);
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
 
     private final Map<Thread, ProgressIndicator> mThreadToIndicator;

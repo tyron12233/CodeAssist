@@ -25,6 +25,7 @@ import org.openjdk.javax.lang.model.type.ErrorType;
 import org.openjdk.javax.lang.model.type.ExecutableType;
 import org.openjdk.javax.lang.model.type.TypeKind;
 import org.openjdk.javax.lang.model.type.TypeMirror;
+import org.openjdk.source.tree.ErroneousTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.Tree;
@@ -33,6 +34,7 @@ import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
 import java.io.File;
+import java.util.List;
 
 public class IntroduceLocalVariableAction extends AnAction {
 
@@ -97,6 +99,13 @@ public class IntroduceLocalVariableAction extends AnAction {
     }
 
     private JavaRewrite performInternal(CompileTask task, TreePath path, File file) {
+        if (path.getLeaf().getKind() == Tree.Kind.ERRONEOUS) {
+            ErroneousTree leaf = (ErroneousTree) path.getLeaf();
+            List<? extends Tree> errorTrees = leaf.getErrorTrees();
+            if (errorTrees != null && !errorTrees.isEmpty()) {
+                path = new TreePath(path.getParentPath(), errorTrees.get(0));
+            }
+        }
         Trees trees = Trees.instance(task.task);
         Element element = trees.getElement(path);
 

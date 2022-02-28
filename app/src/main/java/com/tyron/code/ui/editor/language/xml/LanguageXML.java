@@ -57,7 +57,7 @@ public class LanguageXML implements Language {
 
         try {
             AssetManager assetManager = ApplicationLoader.applicationContext.getAssets();
-            mAnalyzer = new BaseTextmateAnalyzer(editor, "xml.tmLanguage.json",
+            mAnalyzer = new XMLAnalyzer(editor, "xml.tmLanguage.json",
                                                  assetManager.open(
                                                          "textmate/xml" +
                                                          "/syntaxes/xml" +

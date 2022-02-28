@@ -15,30 +15,44 @@ import io.github.rosemoe.sora.textmate.core.internal.theme.reader.ThemeReader;
 import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
 import io.github.rosemoe.sora.util.IntPair;
 import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class EditorUtil {
 
-    public static void setDefaultColorScheme(CodeEditor editor) {
+    public static boolean isDarkMode(Context context) {
+        int uiMode = context.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        return uiMode == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    public static TextMateColorScheme getDefaultColorScheme(Context context) {
         try {
-            Context context = editor.getContext();
-            AssetManager assets = context.getAssets();
-            int uiMode = context.getResources()
-                                 .getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-            IRawTheme rawTheme;
-            switch (uiMode) {
-                case Configuration.UI_MODE_NIGHT_YES:
-                    rawTheme = ThemeReader.readThemeSync("darcula.json",
-                                                         assets.open("textmate/darcula.json"));
-                    break;
-                default:
-                case Configuration.UI_MODE_NIGHT_NO:
-                    rawTheme = ThemeReader.readThemeSync("QuietLight.tmTheme", assets.open(
-                            "textmate/QuietLight.tmTheme"));
+            boolean darkMode = isDarkMode(context);
+            if (darkMode) {
+                return getDefaultColorScheme(context, false);
+            } else {
+                return getDefaultColorScheme(context, true);
             }
-            TextMateColorScheme colorScheme = TextMateColorScheme.create(rawTheme);
-            editor.setColorScheme(colorScheme);
         } catch (Exception e) {
-            e.printStackTrace();
+            // should not happen, the bundled theme should always work.
+            throw new Error(e);
+        }
+    }
+
+    public static TextMateColorScheme getDefaultColorScheme(Context context, boolean light) {
+        try {
+            AssetManager assets = context.getAssets();
+            IRawTheme rawTheme;
+            if (light) {
+                rawTheme = ThemeReader.readThemeSync("QuietLight.tmTheme", assets.open(
+                        "textmate/QuietLight.tmTheme"));
+            } else {
+                rawTheme = ThemeReader.readThemeSync("darcula.json",
+                                                     assets.open("textmate/darcula.json"));
+            }
+            return TextMateColorScheme.create(rawTheme);
+        } catch (Exception e) {
+            // should not happen, the bundled theme should always work.
+            throw new Error(e);
         }
     }
 

@@ -17,6 +17,8 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
 import com.tyron.code.ui.editor.language.HighlightUtil;
+import com.tyron.code.ui.editor.language.textmate.BaseTextmateAnalyzer;
+import com.tyron.code.ui.editor.language.textmate.DiagnosticTextmateAnalyzer;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.util.Debouncer;
@@ -36,6 +38,8 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.Reader;
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -53,27 +57,26 @@ import io.github.rosemoe.sora.lang.styling.MappedSpans;
 import io.github.rosemoe.sora.lang.styling.Span;
 import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.lang.styling.TextStyle;
+import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import kotlin.Unit;
 
-public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
+public class XMLAnalyzer extends DiagnosticTextmateAnalyzer {
 
     private boolean mAnalyzerEnabled = false;
 
     private static final Debouncer sDebouncer = new Debouncer(Duration.ofMillis(900L));
 
     private final WeakReference<Editor> mEditorReference;
-    private final Stack<CodeBlock> mBlockLine = new Stack<>();
-    private int mMaxSwitch = 1;
-    private int mCurrSwitch = 0;
 
-    public XMLAnalyzer(Editor codeEditor) {
-        mEditorReference = new WeakReference<>(codeEditor);
-    }
+    public XMLAnalyzer(Editor editor,
+                       String grammarName,
+                       InputStream grammarIns,
+                       Reader languageConfiguration,
+                       IRawTheme theme) throws Exception {
+        super(editor, grammarName, grammarIns, languageConfiguration, theme);
 
-    @Override
-    public Lexer getLexer(CharStream input) {
-        return new XMLLexer(input);
+        mEditorReference = new WeakReference<>(editor);
     }
 
     @Override
@@ -164,143 +167,6 @@ public class XMLAnalyzer extends AbstractCodeAnalyzer<Object> {
             return Unit.INSTANCE;
         });
 
-    }
-
-    @Override
-    public void setup() {
-        putColor(EditorColorScheme.COMMENT, XMLLexer.COMMENT);
-        putColor(EditorColorScheme.HTML_TAG, XMLLexer.Name);
-    }
-
-    @Override
-    protected void beforeAnalyze() {
-        mBlockLine.clear();
-        mMaxSwitch = 1;
-        mCurrSwitch = 0;
-    }
-
-    @Override
-    public boolean onNextToken(Token token, Styles styles, MappedSpans.Builder colors) {
-        int line = token.getLine() - 1;
-        int column = token.getCharPositionInLine();
-
-        Token previous = getPreviousToken();
-
-        switch (token.getType()) {
-            case XMLLexer.COMMENT:
-                colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.COMMENT));
-                return true;
-            case XMLLexer.Name:
-                if (previous != null && previous.getType() == XMLLexer.SLASH) {
-                    colors.addIfNeeded(line, column,
-                                       TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
-                    return true;
-                } else if (previous != null && previous.getType() == XMLLexer.OPEN) {
-                    colors.addIfNeeded(line, column,
-                                       TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
-                    CodeBlock block = new CodeBlock();
-                    block.startLine = previous.getLine() - 1;
-                    block.startColumn = previous.getCharPositionInLine();
-                    mBlockLine.push(block);
-                    return true;
-                }
-                String attribute = token.getText();
-                if (attribute.contains(":")) {
-                    colors.addIfNeeded(line, column, EditorColorScheme.ATTRIBUTE_NAME);
-                    colors.addIfNeeded(line, column + attribute.indexOf(":"),
-                                       EditorColorScheme.TEXT_NORMAL);
-                    return true;
-                }
-                colors.addIfNeeded(line, column, EditorColorScheme.IDENTIFIER_NAME);
-                return true;
-            case XMLLexer.EQUALS:
-                colors.addIfNeeded(line, column, EditorColorScheme.OPERATOR);
-                return true;
-            case XMLLexer.STRING:
-                String text = token.getText();
-                if (text.startsWith("\"#")) {
-                    try {
-                        int color = Color.parseColor(text.substring(1, text.length() - 1));
-                        colors.addIfNeeded(line, column, EditorColorScheme.LITERAL);
-
-                        Span span = Span.obtain(column + 1, EditorColorScheme.LITERAL);
-                        span.setUnderlineColor(color);
-                        colors.add(line, span);
-
-                        Span middle =
-                                Span.obtain(column + text.length() - 1, EditorColorScheme.LITERAL);
-                        middle.setUnderlineColor(Color.TRANSPARENT);
-                        colors.add(line, middle);
-
-                        Span end = Span.obtain(column + text.length(),
-                                               TextStyle.makeStyle(EditorColorScheme.TEXT_NORMAL));
-                        end.setUnderlineColor(Color.TRANSPARENT);
-                        colors.add(line, end);
-                        break;
-                    } catch (Exception ignore) {
-                    }
-                }
-                colors.addIfNeeded(line, column, EditorColorScheme.LITERAL);
-                return true;
-            case XMLLexer.SLASH_CLOSE:
-                colors.addIfNeeded(line, column, EditorColorScheme.HTML_TAG);
-                if (!mBlockLine.isEmpty()) {
-                    CodeBlock block = mBlockLine.pop();
-                    block.endLine = line;
-                    block.endColumn = column;
-                    if (block.startLine != block.endLine) {
-                        if (previous != null && previous.getLine() == token.getLine()) {
-                            block.toBottomOfEndLine = true;
-                        }
-                        styles.addCodeBlock(block);
-                    }
-                }
-                return true;
-            case XMLLexer.SLASH:
-                colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
-                if (previous != null && previous.getType() == XMLLexer.OPEN) {
-                    if (!mBlockLine.isEmpty()) {
-                        CodeBlock block = mBlockLine.pop();
-                        block.endLine = previous.getLine() - 1;
-                        block.endColumn = previous.getCharPositionInLine();
-                        if (block.startLine != block.endLine) {
-                            if (previous.getLine() == token.getLine()) {
-                                block.toBottomOfEndLine = true;
-                            }
-                            styles.addCodeBlock(block);
-                        }
-                    }
-                }
-                return true;
-            case XMLLexer.OPEN:
-            case XMLLexer.CLOSE:
-                colors.addIfNeeded(line, column, TextStyle.makeStyle(EditorColorScheme.HTML_TAG));
-                return true;
-            case XMLLexer.SEA_WS:
-            case XMLLexer.S:
-                // skip white spaces
-                return true;
-            default:
-                colors.addIfNeeded(line, column,
-                                   TextStyle.makeStyle(EditorColorScheme.TEXT_NORMAL));
-                return true;
-        }
-
-        return false;
-    }
-
-    @Override
-    protected void afterAnalyze(CharSequence content, Styles styles, MappedSpans.Builder colors) {
-        if (mBlockLine.isEmpty()) {
-            if (mCurrSwitch > mMaxSwitch) {
-                mMaxSwitch = mCurrSwitch;
-            }
-        }
-        styles.setSuppressSwitch(mMaxSwitch + 10);
-
-        for (DiagnosticWrapper d : mDiagnostics) {
-            HighlightUtil.setErrorSpan(styles, d.getStartLine());
-        }
     }
 
     private final Handler handler = new Handler();

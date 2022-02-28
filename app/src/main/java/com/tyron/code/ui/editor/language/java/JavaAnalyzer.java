@@ -12,10 +12,6 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
-import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
-import com.tyron.code.ui.editor.language.HighlightUtil;
-import com.tyron.code.ui.editor.language.kotlin.KotlinLexer;
-import com.tyron.code.ui.editor.language.textmate.BaseTextmateAnalyzer;
 import com.tyron.code.ui.editor.language.textmate.DiagnosticTextmateAnalyzer;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
@@ -25,21 +21,15 @@ import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
-import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.java.util.ErrorCodes;
 import com.tyron.completion.java.util.TreeUtil;
 import com.tyron.completion.progress.ProcessCanceledException;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.Editor;
 
-import org.antlr.v4.runtime.CharStream;
-import org.antlr.v4.runtime.Lexer;
-import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.BlockTree;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
@@ -54,46 +44,39 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Field;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Stack;
 import java.util.stream.Collectors;
 
-import io.github.rosemoe.editor.langs.java.JavaTextTokenizer;
-import io.github.rosemoe.editor.langs.java.Tokens;
-import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager;
-import io.github.rosemoe.sora.lang.styling.CodeBlock;
-import io.github.rosemoe.sora.lang.styling.MappedSpans;
-import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
-import io.github.rosemoe.sora.text.LineNumberCalculator;
 import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
-import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
 
 public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
 
+    private static final String GRAMMAR_NAME = "java.tmLanguage.json";
+    private static final String LANGUAGE_PATH = "textmate/java/syntaxes/java.tmLanguage.json";
+    private static final String CONFIG_PATH = "textmate/java/language-configuration.json";
+
     public static JavaAnalyzer create(Editor editor) {
-        try  {
-        AssetManager assetManager = ApplicationLoader.applicationContext.getAssets();
-        return new JavaAnalyzer(editor, "java.tmLanguage.json",
-                         assetManager.open(
-                                 "textmate/java" +
-                                 "/syntaxes/java" +
-                                 ".tmLanguage.json"),
-                         new InputStreamReader(
-                                 assetManager.open(
-                                         "textmate/java/language-configuration.json")),
-                         ((TextMateColorScheme) ((CodeEditorView) editor).getColorScheme()).getRawTheme());
+        try {
+            AssetManager assetManager = ApplicationLoader.applicationContext.getAssets();
+
+            try (InputStreamReader config = new InputStreamReader(assetManager.open(CONFIG_PATH))) {
+                return new JavaAnalyzer(editor, GRAMMAR_NAME,
+                                        assetManager.open(LANGUAGE_PATH), config,
+                                        ((TextMateColorScheme) ((CodeEditorView) editor)
+                                                .getColorScheme()).getRawTheme());
+            }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
+
     private static final Debouncer sDebouncer = new Debouncer(Duration.ofMillis(700));
     private static final String TAG = JavaAnalyzer.class.getSimpleName();
 
@@ -123,8 +106,7 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
     }
 
     private JavaCompilerService getCompiler(Editor editor) {
-        Project project = ProjectManager.getInstance()
-                .getCurrentProject();
+        Project project = ProjectManager.getInstance().getCurrentProject();
         if (project == null) {
             return null;
         }
@@ -133,8 +115,8 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
         }
         Module module = project.getModule(editor.getCurrentFile());
         if (module instanceof JavaModule) {
-            JavaCompilerProvider provider = CompilerService.getInstance()
-                    .getIndex(JavaCompilerProvider.KEY);
+            JavaCompilerProvider provider =
+                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
             if (provider != null) {
                 return provider.getCompiler(project, (JavaModule) module);
             }
@@ -160,24 +142,24 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
                 if (currentFile == null) {
                     return;
                 }
-                Module module = ProjectManager.getInstance().getCurrentProject().getModule(currentFile);
+                Module module =
+                        ProjectManager.getInstance().getCurrentProject().getModule(currentFile);
                 if (!module.getFileManager().isOpened(currentFile)) {
                     return;
                 }
                 try {
-                    ProgressManager.getInstance()
-                            .runLater(() -> editor.setAnalyzing(true));
-                    SourceFileObject sourceFileObject = new SourceFileObject(currentFile
-                                                                                     .toPath(),
-                                                                             contents.toString(),
-                                                                             Instant.now());
-                    CompilerContainer container = service.compile(Collections.singletonList(sourceFileObject));
+                    ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(true));
+                    SourceFileObject sourceFileObject =
+                            new SourceFileObject(currentFile.toPath(), contents.toString(),
+                                                 Instant.now());
+                    CompilerContainer container =
+                            service.compile(Collections.singletonList(sourceFileObject));
                     container.run(task -> {
                         if (!cancel.invoke()) {
-                            List<DiagnosticWrapper> collect = task.diagnostics.stream()
-                                    .map(d -> modifyDiagnostic(task, d))
-                                    .peek(it -> ProgressManager.checkCanceled())
-                                    .collect(Collectors.toList());
+                            List<DiagnosticWrapper> collect =
+                                    task.diagnostics.stream().map(d -> modifyDiagnostic(task, d))
+                                            .peek(it -> ProgressManager.checkCanceled())
+                                            .collect(Collectors.toList());
                             editor.setDiagnostics(collect);
 
                             ProgressManager.getInstance()
@@ -192,21 +174,22 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
                         Log.e(TAG, "Unable to get diagnostics", e);
                     }
                     service.destroy();
-                    ProgressManager.getInstance()
-                            .runLater(() -> editor.setAnalyzing(false));
+                    ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(false));
                 }
             }
         }
     }
 
-    private DiagnosticWrapper modifyDiagnostic(CompileTask task, Diagnostic<? extends JavaFileObject> diagnostic) {
+    private DiagnosticWrapper modifyDiagnostic(CompileTask task,
+                                               Diagnostic<? extends JavaFileObject> diagnostic) {
         DiagnosticWrapper wrapped = new DiagnosticWrapper(diagnostic);
 
         if (diagnostic instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
             Trees trees = Trees.instance(task.task);
             SourcePositions positions = trees.getSourcePositions();
 
-            JCDiagnostic jcDiagnostic = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) diagnostic).d;
+            JCDiagnostic jcDiagnostic =
+                    ((ClientCodeWrapper.DiagnosticSourceUnwrapper) diagnostic).d;
             JCDiagnostic.DiagnosticPosition diagnosticPosition =
                     jcDiagnostic.getDiagnosticPosition();
             JCTree tree = diagnosticPosition.getTree();
@@ -227,8 +210,7 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
                         }
                         break;
                     case ErrorCodes.DEPRECATED:
-                        if (treePath.getLeaf()
-                                    .getKind() == Tree.Kind.METHOD) {
+                        if (treePath.getLeaf().getKind() == Tree.Kind.METHOD) {
                             MethodTree methodTree = (MethodTree) treePath.getLeaf();
                             if (methodTree.getBody() != null) {
                                 start = positions.getStartPosition(task.root(), methodTree);

@@ -3,19 +3,25 @@ package com.tyron.code.ui.editor.language.textmate;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import com.flipkart.android.proteus.value.Style;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.code.ui.editor.language.DiagnosticSpanMapUpdater;
+import com.tyron.code.ui.editor.language.HighlightUtil;
 import com.tyron.editor.Editor;
 
 import java.io.InputStream;
 import java.io.Reader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
+import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
+import io.github.rosemoe.sora.lang.analysis.StyleReceiver;
 import io.github.rosemoe.sora.lang.styling.CodeBlock;
-import io.github.rosemoe.sora.lang.styling.Span;
+import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.ContentReference;
@@ -25,9 +31,11 @@ import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
 public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
 
     protected List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
-
     private boolean mShouldAnalyzeInBg;
     private ContentReference ref;
+
+
+    private final Consumer<Styles> mStyleModifier;
 
     public DiagnosticTextmateAnalyzer(Editor editor,
                                       String grammarName,
@@ -35,30 +43,37 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
                                       Reader languageConfiguration,
                                       IRawTheme theme) throws Exception {
         super(editor, grammarName, grammarIns, languageConfiguration, theme);
+
+        mStyleModifier = styles -> {
+            HighlightUtil.clearDiagnostics(styles);
+            HighlightUtil.markDiagnostics(editor, mDiagnostics, styles);
+        };
     }
 
-    public void setDiagnostics(CodeEditorView codeEditorView, @NonNull List<DiagnosticWrapper> diagnostics) {
+    public void setDiagnostics(CodeEditorView codeEditorView,
+                               @NonNull List<DiagnosticWrapper> diagnostics) {
         mDiagnostics = diagnostics;
     }
-    
+
+    @Override
+    public void setReceiver(@Nullable StyleReceiver receiver) {
+        if (receiver != null) {
+            super.setReceiver(new StyleReceiverInterceptor(receiver, mStyleModifier));
+        } else {
+            super.setReceiver(receiver);
+        }
+    }
+
     @Override
     public void insert(CharPosition start, CharPosition end, CharSequence insertedText) {
         super.insert(start, end, insertedText);
 
         if (start.getLine() != end.getLine()) {
-            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineInsert(
-                    mDiagnostics,
-                    ref,
-                    start,
-                    end
-            );
+            DiagnosticSpanMapUpdater
+                    .shiftDiagnosticsOnMultiLineInsert(mDiagnostics, ref, start, end);
         } else {
-            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineInsert(
-                    mDiagnostics,
-                    ref,
-                    start,
-                    end
-            );
+            DiagnosticSpanMapUpdater
+                    .shiftDiagnosticsOnSingleLineInsert(mDiagnostics, ref, start, end);
         }
     }
 
@@ -67,31 +82,18 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         super.delete(start, end, deletedText);
 
         if (start.getLine() != end.getLine()) {
-            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineDelete(
-                    mDiagnostics,
-                    ref,
-                    start,
-                    end
-            );
+            DiagnosticSpanMapUpdater
+                    .shiftDiagnosticsOnMultiLineDelete(mDiagnostics, ref, start, end);
         } else {
-            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineDelete(
-                    mDiagnostics,
-                    ref,
-                    start,
-                    end
-            );
+            DiagnosticSpanMapUpdater
+                    .shiftDiagnosticsOnSingleLineDelete(mDiagnostics, ref, start, end);
         }
-    }
-
-    @Override
-    public List<Span> generateSpansForLine(LineTokenizeResult<StackElement, Span> tokens) {
-        return super.generateSpansForLine(tokens);
     }
 
     @Override
     public void analyzeCodeBlocks(Content model,
                                   List<CodeBlock> blocks,
-                                  CodeBlockAnalyzeDelegate delegate) {
+                                  Delegate<StackElement> delegate) {
         super.analyzeCodeBlocks(model, blocks, delegate);
 
         if (getExtraArguments().getBoolean("bg", false)) {
@@ -105,6 +107,8 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
 
     @Override
     public void reset(@NonNull ContentReference content, @NonNull Bundle extraArguments) {
+        // it CAN be null.
+        //noinspection ConstantConditions
         if (extraArguments == null) {
             extraArguments = new Bundle();
         }
@@ -132,5 +136,22 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         super.rerun();
 
         analyzeInBackground(ref);
+    }
+
+    public static class StyleReceiverInterceptor implements StyleReceiver {
+
+        private final StyleReceiver mReceiver;
+        private final Consumer<Styles> mConsumer;
+
+        public StyleReceiverInterceptor(@NonNull StyleReceiver base, @NonNull Consumer<Styles> consumer) {
+            mReceiver = base;
+            mConsumer = consumer;
+        }
+
+        @Override
+        public void setStyles(AnalyzeManager sourceManager, Styles styles) {
+            mConsumer.accept(styles);
+            mReceiver.setStyles(sourceManager, styles);
+        }
     }
 }

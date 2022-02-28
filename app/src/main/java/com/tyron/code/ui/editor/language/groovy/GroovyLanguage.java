@@ -23,7 +23,7 @@ public class GroovyLanguage implements Language {
 
     public GroovyLanguage(Editor editor) {
         mEditor = editor;
-        mAnalyzer = new GroovyAnalyzer(editor);
+        mAnalyzer = GroovyAnalyzer.create(editor);
     }
 
     @NonNull

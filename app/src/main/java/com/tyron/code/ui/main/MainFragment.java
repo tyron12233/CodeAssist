@@ -362,6 +362,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 
         if (project.equals(ProjectManager.getInstance().getCurrentProject())) {
             saveAll(false);
+            project.getSettings().refresh();
         }
 
         IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
