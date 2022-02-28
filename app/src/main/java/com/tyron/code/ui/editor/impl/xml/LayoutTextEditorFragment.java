@@ -1,10 +1,12 @@
 package com.tyron.code.ui.editor.impl.xml;
 
 import android.os.Bundle;
+import android.util.Pair;
 import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.os.BundleKt;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentResultListener;
 
@@ -41,7 +43,10 @@ public class LayoutTextEditorFragment extends CodeEditorFragment {
                     .toString());
             xml = XmlPrettyPrinter.prettyPrint(xml, XmlFormatPreferences.defaults(),
                                                XmlFormatStyle.LAYOUT, "\n");
-            getEditor().setText(xml);
+            Bundle bundle = new Bundle();
+            bundle.putBoolean("loaded", true);
+            bundle.putBoolean("bg", true);
+            getEditor().setText(xml, bundle);
         });
         fragmentManager.setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
                                                   getViewLifecycleOwner(), listener);
