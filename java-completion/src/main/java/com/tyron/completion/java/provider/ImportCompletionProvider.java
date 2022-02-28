@@ -63,7 +63,12 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
                 if (isClass) {
                     builder.addItem(importClassItem(className));
                 } else {
-                    builder.addItem(packageItem(segment));
+                    final CompletionItem item = packageItem(segment);
+                    item.addFilterText(segment);
+                    if (path.contains(".")) {
+                        item.addFilterText(path.substring(0, path.lastIndexOf('.')) + "." + segment);
+                    }
+                    builder.addItem(item);
                 }
             }
         }

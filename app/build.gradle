@@ -20,6 +20,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_1_8
     }
 
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+        }
+
+        unitTests.all {
+            systemProperty 'robolectric.enabledSdks', '26'
+        }
+    }
+
     buildTypes {
         release {
             signingConfig signingConfigs.debug
@@ -113,9 +123,11 @@ dependencies {
     // testing
     testImplementation 'junit:junit:4.13.2'
     testImplementation "com.google.truth:truth:1.1.3"
-    testImplementation "org.robolectric:robolectric:4.2.1"
-    testImplementation 'androidx.test:core:1.4.0'
     testImplementation 'org.mockito:mockito-core:1.10.19'
+    testImplementation "org.robolectric:robolectric:4.7.3"
+    debugImplementation 'androidx.test:core:1.4.0'
+    debugImplementation 'androidx.fragment:fragment-testing:1.4.1'
+
     androidTestImplementation 'com.google.truth:truth:1.1.3'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
