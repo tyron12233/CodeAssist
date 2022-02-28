@@ -1,6 +1,5 @@
 package com.tyron.code.ui.settings;
 
-import android.app.Dialog;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -18,16 +17,12 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.transition.MaterialSharedAxis;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.gson.GsonBuilder;
-import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.ui.editor.scheme.CodeAssistColorScheme;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.SingleTextWatcher;
 import com.tyron.completion.progress.ProgressManager;
@@ -36,12 +31,11 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.util.Objects;
-import java.util.concurrent.Future;
 
-import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
 import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.textmate.core.internal.theme.reader.ThemeReader;
 import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
+import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class EditorSettingsFragment extends PreferenceFragmentCompat {
 
@@ -132,7 +126,7 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
         return ProgressManager.getInstance().computeNonCancelableAsync(() -> {
             IRawTheme rawTheme = ThemeReader.readThemeSync(file.getAbsolutePath(),
                                                             FileUtils.openInputStream(file));
-            return Futures.immediateFuture(TextMateColorScheme.create(rawTheme));
+            return Futures.immediateFuture(EditorUtil.createTheme(rawTheme));
         });
     }
 }
