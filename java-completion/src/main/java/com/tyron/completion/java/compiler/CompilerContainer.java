@@ -35,12 +35,12 @@ public class CompilerContainer {
 
     private static final String TAG = CompilerContainer.class.getSimpleName();
 
-    private volatile boolean mIsWriting;
+    private boolean mIsWriting;
 
     @GuardedBy("mLock")
     private CompileTask mCompileTask;
 
-    private final ReadWriteLock mLock = new ReentrantReadWriteLock(true);
+    private final ReentrantReadWriteLock mLock = new ReentrantReadWriteLock(true);
     private final Lock mReadLock = mLock.readLock();
     private final Lock mWriteLock = mLock.writeLock();
 
@@ -58,9 +58,6 @@ public class CompilerContainer {
         try {
             consumer.accept(mCompileTask);
         } finally {
-            if (mCompileTask != null) {
-                mCompileTask.close();
-            }
             mReadLock.unlock();
         }
     }
@@ -70,9 +67,6 @@ public class CompilerContainer {
         try {
             return fun.apply(mCompileTask);
         } finally {
-            if (mCompileTask != null) {
-                mCompileTask.close();
-            }
             mReadLock.unlock();
         }
     }
@@ -88,6 +82,7 @@ public class CompilerContainer {
         if (mCompileTask != null) {
             mCompileTask.close();
         }
+
         try {
             mCompileTask = supplier.get();
         } finally {

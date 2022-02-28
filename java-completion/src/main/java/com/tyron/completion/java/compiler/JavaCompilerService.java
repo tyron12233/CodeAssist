@@ -148,9 +148,6 @@ public class JavaCompilerService implements CompilerProvider {
         mContainer.initialize(() -> {
             // this lambda is synchronized
             // and is guaranteed to be the only one writing
-            if (cachedCompile != null && !cachedCompile.closed) {
-                cachedCompile.close();
-            }
             if (cachedCompile != null) {
                 cachedCompile.borrow.close();
             }
