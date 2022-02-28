@@ -40,11 +40,6 @@ public abstract class ExceptionsQuickFix extends AnAction {
             return;
         }
 
-        TreePath surroundingPath = ActionUtil.findSurroundingPath(currentPath);
-        if (surroundingPath == null) {
-            return;
-        }
-
         Editor editor = event.getData(CommonDataKeys.EDITOR);
         if (editor == null) {
             return;
@@ -54,7 +49,5 @@ public abstract class ExceptionsQuickFix extends AnAction {
     }
 
     @Override
-    public void actionPerformed(@NonNull AnActionEvent e) {
-
-    }
+    public abstract void actionPerformed(@NonNull AnActionEvent e);
 }

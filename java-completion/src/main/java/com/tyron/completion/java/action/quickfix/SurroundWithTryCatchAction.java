@@ -66,11 +66,11 @@ public class SurroundWithTryCatchAction extends ExceptionsQuickFix {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        Editor editor = e.getData(CommonDataKeys.EDITOR);
-        File file = e.getData(CommonDataKeys.FILE);
-        JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
-        Diagnostic<?> diagnostic = e.getData(CommonDataKeys.DIAGNOSTIC);
-        TreePath currentPath = e.getData(CommonJavaContextKeys.CURRENT_PATH);
+        Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
+        File file = e.getRequiredData(CommonDataKeys.FILE);
+        JavaCompilerService compiler = e.getRequiredData(CommonJavaContextKeys.COMPILER);
+        Diagnostic<?> diagnostic = e.getRequiredData(CommonDataKeys.DIAGNOSTIC);
+        TreePath currentPath = e.getRequiredData(CommonJavaContextKeys.CURRENT_PATH);
         TreePath surroundingPath = ActionUtil.findSurroundingPath(currentPath);
         String exceptionName =
                 DiagnosticUtil.extractExceptionName(diagnostic.getMessage(Locale.ENGLISH));
