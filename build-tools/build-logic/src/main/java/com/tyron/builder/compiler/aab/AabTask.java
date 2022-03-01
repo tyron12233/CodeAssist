@@ -114,8 +114,8 @@ public class AabTask extends Task<AndroidModule> {
             copyLibraries();
        
             aab();
-            buildApks();
-            extractApks();
+           // buildApks();
+          //  extractApks();
         } catch (SignedJarBuilder.IZipEntryFilter.ZipAbortException e) {
             String message = e.getMessage();
             if (e instanceof DuplicateFileException) {
