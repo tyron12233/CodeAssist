@@ -30,7 +30,7 @@ public class BundleTool {
         commands.add("--modules=" + mApkInputPath);
         commands.add("--output=" + mApkOutputPath);
 	
-        BundleTool.main(commands.toArray(new String[0]));
+        com.android.tools.build.bundletool.BundleToolMain.main(commands.toArray(new String[0]));
     }
 	public void apk() throws Exception {
 		commands.add("build-apks");
@@ -41,7 +41,7 @@ public class BundleTool {
 
 		
 
-        BundleTool.main(commands.toArray(new String[0]));
+        com.android.tools.build.bundletool.BundleToolMain.main(commands.toArray(new String[0]));
     }
 	
 
