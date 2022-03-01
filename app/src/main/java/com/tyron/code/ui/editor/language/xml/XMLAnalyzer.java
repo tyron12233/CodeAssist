@@ -1,6 +1,5 @@
 package com.tyron.code.ui.editor.language.xml;
 
-import android.graphics.Color;
 import android.os.Handler;
 import android.util.Log;
 
@@ -9,15 +8,10 @@ import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.BuildConfig;
-import com.tyron.code.ui.editor.language.AbstractCodeAnalyzer;
-import com.tyron.code.ui.editor.language.HighlightUtil;
-import com.tyron.code.ui.editor.language.textmate.BaseTextmateAnalyzer;
 import com.tyron.code.ui.editor.language.textmate.DiagnosticTextmateAnalyzer;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.ProjectUtils;
@@ -27,13 +21,9 @@ import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.progress.ProgressManager;
-import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.editor.Editor;
 
-import org.antlr.v4.runtime.CharStream;
-import org.antlr.v4.runtime.Lexer;
-import org.antlr.v4.runtime.Token;
 import org.apache.commons.io.FileUtils;
 
 import java.io.File;
@@ -43,22 +33,12 @@ import java.io.Reader;
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.Stack;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
-import io.github.rosemoe.sora.lang.styling.CodeBlock;
-import io.github.rosemoe.sora.lang.styling.MappedSpans;
-import io.github.rosemoe.sora.lang.styling.Span;
-import io.github.rosemoe.sora.lang.styling.Styles;
-import io.github.rosemoe.sora.lang.styling.TextStyle;
 import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
-import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import kotlin.Unit;
 
 public class XMLAnalyzer extends DiagnosticTextmateAnalyzer {
@@ -92,31 +72,20 @@ public class XMLAnalyzer extends DiagnosticTextmateAnalyzer {
                 return;
             }
 
-            ProgressManager.getInstance()
-                    .runLater(() -> editor.setAnalyzing(true));
+            ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(true));
 
             sDebouncer.cancel();
             sDebouncer.schedule(cancel -> {
                 AndroidModule mainModule = (AndroidModule) project.getMainModule();
-                InjectResourcesTask task = new InjectResourcesTask(project, mainModule);
                 try {
-                    task.inject(file -> {
-                        JavaCompilerProvider provider = CompilerService.getInstance()
-                                .getIndex(JavaCompilerProvider.KEY);
-                        JavaCompilerService service = provider.getCompiler(project, mainModule);
-                        SourceFileObject sourceFileObject =
-                                new SourceFileObject(file.toPath(), (JavaModule) null, Instant.now());
-                        CompilerContainer container =
-                                service.compile(Collections.singletonList(sourceFileObject));
-                        container.run(__ -> {
-                            ProgressManager.getInstance()
-                                    .runLater(() -> editor.setAnalyzing(false), 300);
-                        });
-                    });
+                    InjectResourcesTask.inject(project, mainModule);
+                    ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(false), 300);
                 } catch (IOException e) {
                     e.printStackTrace();
-                } return Unit.INSTANCE;
-            }); return;
+                }
+                return Unit.INSTANCE;
+            });
+            return;
         }
 
         File currentFile = editor.getCurrentFile();
@@ -157,12 +126,11 @@ public class XMLAnalyzer extends DiagnosticTextmateAnalyzer {
             });
 
             if (!cancel.invoke()) {
-                ProgressManager.getInstance()
-                        .runLater(() -> {
-                            editor.setDiagnostics(diagnosticWrappers.stream()
-                                                          .filter(it -> it.getLineNumber() > 0)
-                                                          .collect(Collectors.toList()));
-                        });
+                ProgressManager.getInstance().runLater(() -> {
+                    editor.setDiagnostics(
+                            diagnosticWrappers.stream().filter(it -> it.getLineNumber() > 0)
+                                    .collect(Collectors.toList()));
+                });
             }
             return Unit.INSTANCE;
         });
@@ -177,8 +145,7 @@ public class XMLAnalyzer extends DiagnosticTextmateAnalyzer {
         boolean isResource = ProjectUtils.isResourceXMLFile(file);
 
         if (isResource) {
-            Project project = ProjectManager.getInstance()
-                    .getCurrentProject();
+            Project project = ProjectManager.getInstance().getCurrentProject();
             if (project != null) {
                 Module module = project.getModule(file);
                 if (module instanceof AndroidModule) {
@@ -203,21 +170,18 @@ public class XMLAnalyzer extends DiagnosticTextmateAnalyzer {
             return;
         }
 
-        if (!module.getFileManager()
-                .isOpened(file)) {
+        if (!module.getFileManager().isOpened(file)) {
             Log.e("XMLAnalyzer", "File is not yet opened!");
             return;
         }
 
-        Optional<CharSequence> fileContent = module.getFileManager()
-                .getFileContent(file);
+        Optional<CharSequence> fileContent = module.getFileManager().getFileContent(file);
         if (!fileContent.isPresent()) {
             Log.e("XMLAnalyzer", "No snapshot for file found.");
             return;
         }
 
-        contents = fileContent.get()
-                .toString();
+        contents = fileContent.get().toString();
         FileUtils.writeStringToFile(file, contents, StandardCharsets.UTF_8);
         IncrementalAapt2Task task = new IncrementalAapt2Task(module, logger, false);
 
@@ -231,8 +195,8 @@ public class XMLAnalyzer extends DiagnosticTextmateAnalyzer {
         // work around to refresh R.java file
         File resourceClass = module.getJavaFile(module.getPackageName() + ".R");
         if (resourceClass != null) {
-            JavaCompilerProvider provider = CompilerService.getInstance()
-                    .getIndex(JavaCompilerProvider.KEY);
+            JavaCompilerProvider provider =
+                    CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
             JavaCompilerService service = provider.getCompiler(project, module);
 
             CompilerContainer container = service.compile(resourceClass.toPath());

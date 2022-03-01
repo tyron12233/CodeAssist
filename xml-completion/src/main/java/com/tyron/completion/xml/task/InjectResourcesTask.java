@@ -1,5 +1,7 @@
 package com.tyron.completion.xml.task;
 
+import androidx.annotation.NonNull;
+
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Table;
@@ -7,8 +9,13 @@ import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.builder.compiler.symbol.SymbolLoader;
 import com.tyron.builder.compiler.symbol.SymbolWriter;
+import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.JavaModule;
+import com.tyron.completion.java.JavaCompilerProvider;
+import com.tyron.completion.java.compiler.CompilerContainer;
+import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.repository.ResourceItem;
 import com.tyron.completion.xml.repository.ResourceRepository;
@@ -22,7 +29,9 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -36,6 +45,19 @@ import java.util.stream.Collectors;
  */
 public class InjectResourcesTask {
 
+    public static void inject(@NonNull Project project, @NonNull AndroidModule module) throws IOException {
+        JavaCompilerService service = JavaCompilerProvider.get(project, module);
+        if (service == null) {
+            return;
+        }
+
+        InjectResourcesTask task = new InjectResourcesTask(project, module);
+        task.inject(resourceFile -> {
+            SourceFileObject sourceFileObject =
+                    new SourceFileObject(resourceFile.toPath(), (JavaModule) null, Instant.now());
+            service.compile(Collections.singletonList(sourceFileObject));
+        });
+    }
     private final AndroidModule mModule;
     private final Project mProject;
 
