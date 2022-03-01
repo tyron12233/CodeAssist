@@ -11,6 +11,7 @@ import com.tyron.builder.compiler.dex.D8Task;
 import com.tyron.builder.compiler.dex.DexDiagnosticHandler;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.cache.CacheHolder;
 import com.tyron.common.util.Cache;
@@ -25,8 +26,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class IncrementalD8Task extends Task<AndroidModule> {
@@ -68,8 +67,10 @@ public class IncrementalD8Task extends Task<AndroidModule> {
         mOutputPath = output.toPath();
 
         mFilesToCompile = new ArrayList<>();
-        mClassFiles = new ArrayList<>(D8Task.getClassFiles(new File(getModule().getBuildDirectory(), "bin/java/classes")));
-        mClassFiles.addAll(D8Task.getClassFiles(new File(getModule().getBuildDirectory(), "bin/kotlin/classes")));
+        mClassFiles = new ArrayList<>(D8Task.getClassFiles(
+                new File(getModule().getBuildDirectory(), "bin/java/classes")));
+        mClassFiles.addAll(D8Task.getClassFiles(
+                new File(getModule().getBuildDirectory(), "bin/kotlin/classes")));
         for (Cache.Key<String> key : new HashSet<>(mDexCache.getKeys())) {
             if (!mFilesToCompile.contains(key.file)) {
                 File file = mDexCache.get(key.file, "dex").iterator().next();
@@ -102,15 +103,12 @@ public class IncrementalD8Task extends Task<AndroidModule> {
     private void doRelease() throws CompilationFailedException {
         try {
             ensureDexedLibraries();
-            D8Command command = D8Command.builder(diagnosticsHandler)
-                    .addClasspathFiles(getModule().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
-                    .addProgramFiles(mFilesToCompile)
-                    .addLibraryFiles(getLibraryFiles())
-                    .setMinApiLevel(getModule().getMinSdk())
-                    .setMode(CompilationMode.RELEASE)
-                    .setIntermediate(true)
-                    .setOutput(mOutputPath, OutputMode.DexFilePerClassFile)
-                    .build();
+            D8Command command = D8Command.builder(diagnosticsHandler).addClasspathFiles(
+                    getModule().getLibraries().stream().map(File::toPath)
+                            .collect(Collectors.toList())).addProgramFiles(mFilesToCompile)
+                    .addLibraryFiles(getLibraryFiles()).setMinApiLevel(getModule().getMinSdk())
+                    .setMode(CompilationMode.RELEASE).setIntermediate(true)
+                    .setOutput(mOutputPath, OutputMode.DexFilePerClassFile).build();
             D8.run(command);
             for (Path file : mFilesToCompile) {
                 mDexCache.load(file, "dex", Collections.singletonList(getDexFile(file.toFile())));
@@ -126,15 +124,12 @@ public class IncrementalD8Task extends Task<AndroidModule> {
         try {
             ensureDexedLibraries();
 
-            D8Command command = D8Command.builder(diagnosticsHandler)
-                    .addClasspathFiles(getModule().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
-                    .addProgramFiles(mFilesToCompile)
-                    .addLibraryFiles(getLibraryFiles())
-                    .setMinApiLevel(getModule().getMinSdk())
-                    .setMode(CompilationMode.DEBUG)
-                    .setIntermediate(true)
-                    .setOutput(mOutputPath, OutputMode.DexFilePerClassFile)
-                    .build();
+            D8Command command = D8Command.builder(diagnosticsHandler).addClasspathFiles(
+                    getModule().getLibraries().stream().map(File::toPath)
+                            .collect(Collectors.toList())).addProgramFiles(mFilesToCompile)
+                    .addLibraryFiles(getLibraryFiles()).setMinApiLevel(getModule().getMinSdk())
+                    .setMode(CompilationMode.DEBUG).setIntermediate(true)
+                    .setOutput(mOutputPath, OutputMode.DexFilePerClassFile).build();
             D8.run(command);
 
             for (Path file : mFilesToCompile) {
@@ -143,8 +138,9 @@ public class IncrementalD8Task extends Task<AndroidModule> {
 
             D8Command.Builder builder = D8Command.builder(diagnosticsHandler)
                     .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
-                    .addLibraryFiles(getLibraryFiles())
-                    .addClasspathFiles(getModule().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
+                    .addLibraryFiles(getLibraryFiles()).addClasspathFiles(
+                            getModule().getLibraries().stream().map(File::toPath)
+                                    .collect(Collectors.toList()))
                     .setMinApiLevel(getModule().getMinSdk());
 
             File output = new File(getModule().getBuildDirectory(), "bin");
@@ -159,15 +155,12 @@ public class IncrementalD8Task extends Task<AndroidModule> {
 
     private void mergeRelease() throws com.android.tools.r8.CompilationFailedException {
         File output = new File(getModule().getBuildDirectory(), "bin");
-        D8Command command = D8Command.builder(diagnosticsHandler)
-                .addClasspathFiles(getModule().getLibraries().stream().map(File::toPath)
-                        .collect(Collectors.toList()))
+        D8Command command = D8Command.builder(diagnosticsHandler).addClasspathFiles(
+                getModule().getLibraries().stream().map(File::toPath).collect(Collectors.toList()))
                 .addLibraryFiles(getLibraryFiles())
                 .addProgramFiles(getAllDexFiles(mOutputPath.toFile()))
-                .addProgramFiles(getLibraryDexes())
-                .setMinApiLevel(getModule().getMinSdk())
-                .setMode(CompilationMode.RELEASE)
-                .setOutput(output.toPath(), OutputMode.DexIndexed)
+                .addProgramFiles(getLibraryDexes()).setMinApiLevel(getModule().getMinSdk())
+                .setMode(CompilationMode.RELEASE).setOutput(output.toPath(), OutputMode.DexIndexed)
                 .build();
         D8.run(command);
     }
@@ -179,8 +172,8 @@ public class IncrementalD8Task extends Task<AndroidModule> {
             if (parent != null) {
                 File[] dexFiles = parent.listFiles(file1 -> file1.getName().endsWith(".dex"));
                 if (dexFiles != null) {
-                    dexes.addAll(Arrays.stream(dexFiles).map(File::toPath)
-                            .collect(Collectors.toList()));
+                    dexes.addAll(
+                            Arrays.stream(dexFiles).map(File::toPath).collect(Collectors.toList()));
                 }
             }
         }
@@ -190,10 +183,9 @@ public class IncrementalD8Task extends Task<AndroidModule> {
 
     private File getDexFile(File file) {
         File output = new File(getModule().getBuildDirectory(), "bin/classes/");
-        String packageName = file.getAbsolutePath()
-                .replace(output.getAbsolutePath(), "")
-                .substring(1)
-                .replace(".class", ".dex");
+        String packageName =
+                file.getAbsolutePath().replace(output.getAbsolutePath(), "").substring(1)
+                        .replace(".class", ".dex");
 
         File intermediate = new File(getModule().getBuildDirectory(), "intermediate/classes");
         File file1 = new File(intermediate, packageName);
@@ -224,16 +216,25 @@ public class IncrementalD8Task extends Task<AndroidModule> {
                     continue;
                 }
                 if (lib.exists()) {
-                    getLogger().debug("Dexing jar " + parentFile.getName());
-                    D8Command command = D8Command.builder(diagnosticsHandler)
-                            .addLibraryFiles(getLibraryFiles())
-                            .addClasspathFiles(libraries.stream().map(File::toPath)
-                                    .collect(Collectors.toList()))
-                            .setMinApiLevel(getModule().getMinSdk())
-                            .addProgramFiles(lib.toPath())
-                            .setMode(CompilationMode.RELEASE)
-                            .setOutput(lib.getParentFile().toPath(), OutputMode.DexIndexed)
-                            .build();
+                    String message;
+                    Library library = getModule().getLibrary(parentFile.getName());
+                    if (library != null) {
+                        boolean declared = library.getDeclaration() != null;
+                        message = "Dexing library " +
+                                  (declared ? library.getDeclaration() : library.getSourceFile()
+                                          .getName());
+                    } else {
+                        message = "Dexing jar " + parentFile.getName();
+                    }
+                    getLogger().debug(message);
+                    D8Command command =
+                            D8Command.builder(diagnosticsHandler).addLibraryFiles(getLibraryFiles())
+                                    .addClasspathFiles(libraries.stream().map(File::toPath)
+                                                               .collect(Collectors.toList()))
+                                    .setMinApiLevel(getModule().getMinSdk())
+                                    .addProgramFiles(lib.toPath()).setMode(CompilationMode.RELEASE)
+                                    .setOutput(lib.getParentFile().toPath(), OutputMode.DexIndexed)
+                                    .build();
                     D8.run(command);
                 }
             }
@@ -256,8 +257,8 @@ public class IncrementalD8Task extends Task<AndroidModule> {
         File parent = dexFile.getParentFile();
         String name = dexFile.getName().replace(ext, "");
         if (parent != null) {
-            File[] children = parent.listFiles((c) -> c.getName().endsWith(ext) &&
-                    c.getName().contains("$"));
+            File[] children =
+                    parent.listFiles((c) -> c.getName().endsWith(ext) && c.getName().contains("$"));
             if (children != null) {
                 for (File child : children) {
                     if (child.getName().startsWith(name)) {
