@@ -91,8 +91,6 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
     private static final String TAG = JavaAnalyzer.class.getSimpleName();
 
     private final WeakReference<Editor> mEditorReference;
-    private List<DiagnosticWrapper> mDiagnostics;
-    private final List<DiagnosticWrapper> mPreviousDiagnostics = new ArrayList<>();
     private final SharedPreferences mPreferences;
 
     public JavaAnalyzer(Editor editor,
@@ -158,6 +156,9 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
                     return;
                 }
                 try {
+                    if (service.getCachedContainer().isWriting()) {
+                        return;
+                    }
                     ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(true));
                     SourceFileObject sourceFileObject =
                             new SourceFileObject(currentFile.toPath(), contents.toString(),

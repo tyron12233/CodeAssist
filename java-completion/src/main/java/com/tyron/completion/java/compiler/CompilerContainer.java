@@ -9,6 +9,7 @@ import com.tyron.completion.java.BuildConfig;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -43,6 +44,8 @@ public class CompilerContainer {
     private final ReentrantReadWriteLock mLock = new ReentrantReadWriteLock(true);
     private final Lock mReadLock = mLock.readLock();
     private final Lock mWriteLock = mLock.writeLock();
+
+    private final Condition mWriteCondition = mWriteLock.newCondition();
 
     public CompilerContainer() {
 
@@ -87,6 +90,7 @@ public class CompilerContainer {
             mCompileTask = supplier.get();
         } finally {
             mIsWriting = false;
+            mWriteCondition.signal();
             mWriteLock.unlock();
         }
     }
@@ -96,5 +100,9 @@ public class CompilerContainer {
      */
     void setCompileTask(CompileTask task) {
         mCompileTask = task;
+    }
+
+    Condition getWriteCondition() {
+        return mWriteCondition;
     }
 }

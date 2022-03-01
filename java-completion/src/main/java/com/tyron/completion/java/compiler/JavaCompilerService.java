@@ -156,8 +156,10 @@ public class JavaCompilerService implements CompilerProvider {
                 return new CompileTask(cachedCompile);
             });
         } else {
-            Log.d("JavaCompilerService", "Using cached compile");
-            mContainer.setCompileTask(new CompileTask(cachedCompile));
+            mContainer.initialize(() -> {
+                Log.d("JavaCompilerService", "Using cached compile");
+                return new CompileTask(cachedCompile);
+            });
         }
         return mContainer;
     }
