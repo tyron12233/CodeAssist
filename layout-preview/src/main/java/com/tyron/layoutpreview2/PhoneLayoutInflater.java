@@ -3,7 +3,7 @@ package com.tyron.layoutpreview2;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.completion.xml.repository.Repository;
+import com.tyron.xml.completion.repository.Repository;
 import com.tyron.layoutpreview2.view.EditorView;
 
 import org.eclipse.lemminx.dom.DOMAttr;

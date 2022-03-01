@@ -11,6 +11,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ListMultimap;
 import com.tyron.builder.compiler.manifest.configuration.FolderConfiguration;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
+import com.tyron.xml.completion.repository.NotFoundException;
 import com.tyron.xml.completion.repository.ResourceItem;
 import com.tyron.xml.completion.repository.ResourceRepository;
 import com.tyron.xml.completion.repository.api.AttrResourceValue;
@@ -175,14 +176,14 @@ public class AttributeProcessingUtil {
             value = repository.getValue(
                     ResourceReference.styleable(ResourceNamespace.ANDROID, name));
             return value;
-        } catch (Resources.NotFoundException ignored) {
+        } catch (NotFoundException ignored) {
 
         }
 
         try {
             value = repository.getValue(ResourceReference.styleable(namespace, name));
             return value;
-        } catch (Resources.NotFoundException ignored) {
+        } catch (NotFoundException ignored) {
 
         }
 
@@ -190,7 +191,7 @@ public class AttributeProcessingUtil {
             try {
                 value = repository.getValue(ResourceReference.styleable(ns, name));
                 return value;
-            } catch (Resources.NotFoundException ignored) {
+            } catch (NotFoundException ignored) {
 
             }
         }
@@ -207,7 +208,7 @@ public class AttributeProcessingUtil {
             try {
                 return (AttrResourceValue) repository.getValue(
                         ResourceReference.attr(value.getNamespace(), value.getName()));
-            } catch (Resources.NotFoundException ignored) {
+            } catch (NotFoundException ignored) {
                 return null;
             }
         }

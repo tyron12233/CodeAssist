@@ -1,13 +1,11 @@
 package com.tyron.xml.completion.repository;
 
-import android.content.res.Resources;
-
 import org.jetbrains.annotations.NotNull;
 
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
-import com.tyron.completion.xml.XmlRepository;
+import com.tyron.common.ApplicationProvider;
+import com.tyron.common.util.Decompress;
 import com.tyron.xml.completion.repository.api.ResourceNamespace;
 import com.tyron.xml.completion.repository.api.ResourceReference;
 import com.tyron.xml.completion.repository.api.ResourceValue;
@@ -25,7 +23,7 @@ public class AndroidResourceRepository extends SimpleResourceRepository {
 
     public static AndroidResourceRepository getInstance() {
         if (sInstance == null) {
-            File file = XmlRepository.getOrExtractFiles();
+            File file = getOrExtractFiles();
             File parent = file.getParentFile();
             assert parent != null;
             File resDir = parent.getParentFile();
@@ -79,5 +77,19 @@ public class AndroidResourceRepository extends SimpleResourceRepository {
     public ListMultimap<String, ResourceItem> getResources(@NotNull ResourceNamespace namespace,
                                                            @NotNull ResourceType resourceType) {
         return mTable.getOrPutEmpty(namespace, resourceType);
+    }
+
+    public static File getOrExtractFiles() {
+        File filesDir = ApplicationProvider.getApplicationContext().getFilesDir();
+        File check = new File(filesDir,
+                              "sources/android-31/data/res/values/attrs.xml");
+        if (check.exists()) {
+            return check;
+        }
+        File dest = new File(filesDir, "sources");
+        Decompress.unzipFromAssets(ApplicationProvider.getApplicationContext(),
+                                   "android-xml.zip",
+                                   dest.getAbsolutePath());
+        return check;
     }
 }

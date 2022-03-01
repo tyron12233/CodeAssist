@@ -306,20 +306,6 @@ public class XmlRepository {
         }
     }
 
-    public static File getOrExtractFiles() {
-        File filesDir = ApplicationProvider.getApplicationContext().getFilesDir();
-        File check = new File(filesDir,
-                "sources/android-31/data/res/values/attrs.xml");
-        if (check.exists()) {
-            return check;
-        }
-        File dest = new File(filesDir, "sources");
-        Decompress.unzipFromAssets(ApplicationProvider.getApplicationContext(),
-                "android-xml.zip",
-                dest.getAbsolutePath());
-        return check;
-    }
-
     public ResourceRepository getRepository() {
         return mRepository;
     }

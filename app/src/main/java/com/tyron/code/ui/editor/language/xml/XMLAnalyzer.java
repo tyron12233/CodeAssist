@@ -183,7 +183,7 @@ public class XMLAnalyzer extends DiagnosticTextmateAnalyzer {
 
         contents = fileContent.get().toString();
         FileUtils.writeStringToFile(file, contents, StandardCharsets.UTF_8);
-        IncrementalAapt2Task task = new IncrementalAapt2Task(module, logger, false);
+        IncrementalAapt2Task task = new IncrementalAapt2Task(project, module, logger, false);
 
         try {
             task.prepare(BuildType.DEBUG);

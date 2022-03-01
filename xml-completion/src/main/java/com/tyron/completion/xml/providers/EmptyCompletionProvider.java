@@ -5,8 +5,6 @@ import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.xml.XmlRepository;
-import com.tyron.completion.xml.repository.ResourceItem;
-import com.tyron.xml.completion.repository.ResourceRepository;
 
 import java.io.File;
 import java.io.IOException;

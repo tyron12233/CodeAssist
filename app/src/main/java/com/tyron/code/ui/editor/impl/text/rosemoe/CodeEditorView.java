@@ -22,7 +22,7 @@ import com.tyron.code.ui.editor.language.xml.LanguageXML;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.model.XmlCompletionType;
-import com.tyron.completion.xml.util.DOMUtils;
+import com.tyron.xml.completion.util.DOMUtils;
 import com.tyron.completion.xml.util.XmlUtils;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;

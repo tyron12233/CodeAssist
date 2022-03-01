@@ -12,10 +12,12 @@ import java.io.IOException;
  */
 public abstract class Task<T extends Module> {
 
+    private final Project mProject;
     private final T mModule;
     private final ILogger mLogger;
 
     public Task(Project project, T module, ILogger logger) {
+        mProject = project;
         mModule = module;
         mLogger = logger;
     }
@@ -27,8 +29,11 @@ public abstract class Task<T extends Module> {
         return mLogger;
     }
 
+    protected Project getProject() {
+        return mProject;
+    }
     /**
-     * @return the Project that this task belongs to
+     * @return the Module that this task belongs to
      */
     protected T getModule() {
         return mModule;

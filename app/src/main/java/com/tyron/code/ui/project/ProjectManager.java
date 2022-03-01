@@ -29,7 +29,6 @@ import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.task.InjectResourcesTask;
 
 import org.apache.commons.io.FileUtils;
-import org.eclipse.lemminx.dom.DOMParser;
 
 import java.io.File;
 import java.io.IOException;
@@ -130,9 +129,9 @@ public class ProjectManager {
             mListener.onTaskStarted("Generating resource files.");
 
             ManifestMergeTask manifestMergeTask =
-                    new ManifestMergeTask((AndroidModule) module, logger);
+                    new ManifestMergeTask(project, (AndroidModule) module, logger);
             IncrementalAapt2Task task =
-                    new IncrementalAapt2Task((AndroidModule) module, logger, false);
+                    new IncrementalAapt2Task(project, (AndroidModule) module, logger, false);
             try {
                 manifestMergeTask.prepare(BuildType.DEBUG);
                 manifestMergeTask.run();

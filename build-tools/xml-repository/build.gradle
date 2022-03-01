@@ -13,4 +13,7 @@ dependencies {
 
     api files('libs/org.eclipse.lemminx-0.11.0-uber.jar')
     implementation project(path: ':build-tools:project')
+
+    compileOnly project(path: ':android-stubs')
+    compileOnly project(path: ':build-tools:kotlinc')
 }

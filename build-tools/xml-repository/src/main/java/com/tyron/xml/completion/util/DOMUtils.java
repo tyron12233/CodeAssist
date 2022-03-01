@@ -1,8 +1,5 @@
 package com.tyron.xml.completion.util;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
 import com.tyron.xml.completion.repository.api.ResourceNamespace;
 
 import org.eclipse.lemminx.dom.DOMAttr;
@@ -10,6 +7,8 @@ import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
 import org.eclipse.lemminx.dom.DOMProcessingInstruction;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.List;
@@ -50,7 +49,7 @@ public class DOMUtils {
         return prefix;
     }
 
-    public static String getPrefix(@NonNull DOMAttr attr) {
+    public static String getPrefix(@NotNull DOMAttr attr) {
         String name = attr.getName();
         if (!name.contains(":")) {
             return name;
@@ -59,7 +58,7 @@ public class DOMUtils {
     }
 
     @Nullable
-    public static DOMElement getRootElement(@NonNull DOMDocument document) {
+    public static DOMElement getRootElement(@NotNull DOMDocument document) {
         List<DOMNode> roots = document.getRoots();
         for (DOMNode root : roots) {
             if (root instanceof DOMElement) {
@@ -69,8 +68,8 @@ public class DOMUtils {
         return null;
     }
 
-    @NonNull
-    public static List<DOMNode> getRootElements(@NonNull DOMDocument document) {
+    @NotNull
+    public static List<DOMNode> getRootElements(@NotNull DOMDocument document) {
         List<DOMNode> roots = document.getRoots();
         return roots.stream()
                 .filter(it -> !(it instanceof DOMProcessingInstruction))
@@ -91,13 +90,13 @@ public class DOMUtils {
 
             @Nullable
             @Override
-            public String uriToPrefix(@NonNull String namespaceUri) {
+            public String uriToPrefix(@NotNull String namespaceUri) {
                 return rootElement.getPrefix(namespaceUri);
             }
 
             @Nullable
             @Override
-            public String prefixToUri(@NonNull String namespacePrefix) {
+            public String prefixToUri(@NotNull String namespacePrefix) {
                 DOMAttr xmlns = rootElement.getAttributeNode("xmlns", namespacePrefix);
                 if (xmlns != null) {
                     return xmlns.getValue();
@@ -130,7 +129,7 @@ public class DOMUtils {
         return map.get(key);
     }
 
-    public static void putUserData(@NonNull DOMNode node, @NonNull String key, Object value) {
+    public static void putUserData(@NotNull DOMNode node, @NotNull String key, Object value) {
         sUserDataHolder.computeIfAbsent(node, it -> new HashMap<>());
         Objects.requireNonNull(sUserDataHolder.get(node)).put(key, value);
     }

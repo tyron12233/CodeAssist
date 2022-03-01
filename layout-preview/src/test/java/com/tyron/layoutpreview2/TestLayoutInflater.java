@@ -11,7 +11,7 @@ import com.tyron.common.TestUtil;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.xml.completion.repository.ResourceRepository;
 import com.tyron.xml.completion.repository.api.ResourceNamespace;
-import com.tyron.completion.xml.util.DOMUtils;
+import com.tyron.xml.completion.util.DOMUtils;
 import com.tyron.layoutpreview2.attr.impl.TextViewAttributeApplier;
 import com.tyron.layoutpreview2.attr.impl.ViewAttributeApplier;
 import com.tyron.layoutpreview2.view.impl.AndroidViewImpl;

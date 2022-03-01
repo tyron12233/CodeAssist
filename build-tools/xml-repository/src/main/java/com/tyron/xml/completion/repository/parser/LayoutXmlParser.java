@@ -13,7 +13,7 @@ import com.tyron.xml.completion.repository.api.ResourceNamespace;
 import com.tyron.xml.completion.repository.api.ResourceReference;
 import com.tyron.xml.completion.repository.api.ResourceValue;
 import com.tyron.xml.completion.repository.api.ResourceValueImpl;
-import com.tyron.completion.xml.util.DOMUtils;
+import com.tyron.xml.completion.util.DOMUtils;
 
 import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;
