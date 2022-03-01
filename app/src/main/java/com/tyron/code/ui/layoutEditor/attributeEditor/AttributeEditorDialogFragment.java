@@ -22,11 +22,16 @@ import com.tyron.code.R;
 import com.tyron.code.ui.layoutEditor.dom.FakeDomElement;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.xml.completion.repository.api.AttrResourceValue;
 import com.tyron.xml.completion.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.util.AttributeProcessingUtil;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.completion.xml.XmlRepository;
+
+import org.eclipse.lemminx.commons.TextDocument;
+import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.dom.DOMElement;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -161,19 +166,31 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
             fakeParent.setTagName(mParentTag);
             fakeDomElement.setParent(fakeParent);
 
+            String attributeName = attribute.getFirst();
+            if (attributeName.contains(":")) {
+                // strip the namespace prefix
+                attributeName = attributeName.substring(attributeName.indexOf(':') + 1);
+            }
+
             AttrResourceValue attr =
                     AttributeProcessingUtil.getLayoutAttributeFromNode(
                             xmlRepository.getRepository(), fakeDomElement,
-                            attribute.getFirst(),
+                            attributeName,
                             ResourceNamespace.RES_AUTO);
 
             List<String> values = new ArrayList<>();
+            if (attr != null) {
+                values.addAll(attr.getAttributeValues().keySet());
+            }
+
             ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
                     android.R.layout.simple_list_item_1, values);
-            editText.setThreshold(1);
-            editText.showDropDown();
-            editText.setAdapter(adapter);
 
+            ProgressManager.getInstance().runLater(() -> {
+                editText.setThreshold(1);
+                editText.showDropDown();
+                editText.setAdapter(adapter);
+            }, 300);
         }
 
         editText.setText(attribute.getSecond(), false);
