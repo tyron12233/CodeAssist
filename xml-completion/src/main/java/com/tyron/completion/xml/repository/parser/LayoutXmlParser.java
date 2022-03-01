@@ -24,6 +24,7 @@ import org.eclipse.lemminx.dom.DOMProcessingInstruction;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import kotlin.io.FilesKt;
@@ -41,6 +42,10 @@ public class LayoutXmlParser implements ResourceParser {
                                      @NonNull String contents,
                                      @NonNull ResourceNamespace namespace,
                                      @Nullable String libraryName) throws IOException {
+        if (!"xml".equals(FilesKt.getExtension(file))) {
+            return Collections.emptyList();
+        }
+
         DOMDocument document = DOMParser.getInstance()
                 .parse(contents, "", null);
         List<DOMNode> roots = document.getRoots();

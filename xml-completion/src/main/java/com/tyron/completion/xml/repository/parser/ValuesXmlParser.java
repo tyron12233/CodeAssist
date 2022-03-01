@@ -34,6 +34,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import kotlin.io.FilesKt;
+
 public class ValuesXmlParser implements ResourceParser {
 
     @Override
@@ -41,6 +43,10 @@ public class ValuesXmlParser implements ResourceParser {
                                      @NonNull String contents,
                                      @NonNull ResourceNamespace namespace,
                                      @Nullable String name) throws IOException {
+        if (!"xml".equals(FilesKt.getExtension(file))) {
+            return Collections.emptyList();
+        }
+
         DOMDocument document =
                 DOMParser.getInstance().parse(contents, file.toURI().toString(), null);
         DOMUtils.setNamespace(document, namespace);

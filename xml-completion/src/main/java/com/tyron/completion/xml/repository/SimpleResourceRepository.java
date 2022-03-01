@@ -96,7 +96,7 @@ public class SimpleResourceRepository implements Repository {
             }
 
             Collection<File> xmlFiles =
-                    FileUtils.listFiles(dir, new SuffixFileFilter("xml"), FalseFileFilter.INSTANCE);
+                    FileUtils.listFiles(dir, TrueFileFilter.INSTANCE, FalseFileFilter.INSTANCE);
             for (File xmlFile : xmlFiles) {
                 try {
                     String contents = FileUtils.readFileToString(xmlFile, StandardCharsets.UTF_8);
