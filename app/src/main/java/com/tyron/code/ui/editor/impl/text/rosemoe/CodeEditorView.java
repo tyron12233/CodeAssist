@@ -204,11 +204,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     public void insert(int line, int column, String string) {
-        if (line == getCursor().getLeftLine() && column == getCursor().getLeftColumn()) {
-            commitText(string, true);
-        } else {
-            getText().insert(line, column, string);
-        }
+        getText().insert(line, column, string);
     }
 
     @Override
