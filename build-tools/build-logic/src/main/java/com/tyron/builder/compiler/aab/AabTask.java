@@ -51,6 +51,7 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
+import com.tyron.builder.compiler.BundleTool;
 
 public class AabTask extends Task<AndroidModule> {
 
@@ -71,7 +72,9 @@ public class AabTask extends Task<AndroidModule> {
     public String getName() {
         return TAG;
     }
-
+	private File mInputApk;
+    private File mOutputApk;
+	
     @Override
     public void prepare(BuildType type) throws IOException {
         mBinDir = new File(getModule().getBuildDirectory(), "/bin");
@@ -90,7 +93,17 @@ public class AabTask extends Task<AndroidModule> {
         if (!dex.exists() && !dex.mkdirs()) {
             throw new IOException("Failed to create resource output directory");
         }
+		mInputApk = new File(mBinDir.getAbsolutePath() + "/Base-Module.zip");
+        mOutputApk = new File(mBinDir.getAbsolutePath() + "/module.aab");
 
+        if (!mInputApk.exists()) {
+            mInputApk = new File(mBinDir.getAbsolutePath() + "/Base-Module.zip");
+        }
+
+        if (!mInputApk.exists()) {
+            throw new IOException("Unable to find generated apk file.");
+        }
+		
         mAddedFiles.clear();
     }
 
@@ -103,10 +116,10 @@ public class AabTask extends Task<AndroidModule> {
             copyDexFiles();
             baseZip();
             copyLibraries();
-            budletool();
+       
             aab();
-            buildApks();
-            extractApks();
+         //   buildApks();
+        //    extractApks();
         } catch (SignedJarBuilder.IZipEntryFilter.ZipAbortException e) {
             String message = e.getMessage();
             if (e instanceof DuplicateFileException) {
@@ -171,7 +184,7 @@ public class AabTask extends Task<AndroidModule> {
 
     private void buildApks() throws CompilationFailedException {
         getLogger().debug("Building Apks");
-        List<String> args = new ArrayList<>();
+       /* List<String> args = new ArrayList<>();
         args.add("dalvikvm");
         args.add("-Xcompiler-option");
         args.add("--compiler-filter=speed");
@@ -191,27 +204,25 @@ public class AabTask extends Task<AndroidModule> {
         executor.setCommands(args);
         if (!executor.execute().isEmpty()) {
             throw new CompilationFailedException(executor.getLog());
+        }*/
+		BundleTool signer = new BundleTool(mInputApk.getAbsolutePath(),
+										   mOutputApk.getAbsolutePath(), BundleTool.Mode.TEST);
+
+        try {
+            signer.apk();
+        } catch (Exception e) {
+            throw new CompilationFailedException(e);
         }
+		
+		
     }
 
-    private void budletool() throws IOException {
-        getLogger().debug("Preparing Bundletool");
-
-        File bundletool = new File(BuildModule.getContext().getFilesDir(), "bundletool.jar");
-        if (!bundletool.exists()) {
-            InputStream input = BuildModule.getContext()
-                    .getAssets().open("bundletool.jar");
-            OutputStream output = new FileOutputStream(
-                    new File(BuildModule.getContext().getFilesDir(), "bundletool.jar"));
-            IOUtils.copy(input, output);
-        }
-    }
 
 
     private void aab() throws CompilationFailedException {
         getLogger().debug("Generating AAB.");
 
-        List<String> args = new ArrayList<>();
+     /*   List<String> args = new ArrayList<>();
         args.add("dalvikvm");
         args.add("-Xcompiler-option");
         args.add("--compiler-filter=speed");
@@ -228,7 +239,17 @@ public class AabTask extends Task<AndroidModule> {
         executor.setCommands(args);
         if (!executor.execute().isEmpty()) {
             throw new CompilationFailedException(executor.getLog());
+        }*/
+		BundleTool signer = new BundleTool(mInputApk.getAbsolutePath(),
+										 mOutputApk.getAbsolutePath(), BundleTool.Mode.TEST);
+
+        try {
+            signer.aab();
+        } catch (Exception e) {
+            throw new CompilationFailedException(e);
         }
+		
+		
     }
 
 
