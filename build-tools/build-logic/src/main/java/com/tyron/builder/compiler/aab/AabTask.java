@@ -74,6 +74,7 @@ public class AabTask extends Task<AndroidModule> {
     }
 	private File mInputApk;
     private File mOutputApk;
+	private File mOutputApks;
 	
     @Override
     public void prepare(BuildType type) throws IOException {
@@ -95,7 +96,8 @@ public class AabTask extends Task<AndroidModule> {
         }
 		mInputApk = new File(mBinDir.getAbsolutePath() + "/Base-Module.zip");
         mOutputApk = new File(mBinDir.getAbsolutePath() + "/module.aab");
-
+		mOutputApks = new File(mBinDir.getAbsolutePath() + "/App.apks");
+		
         if (!mInputApk.exists()) {
             mInputApk = new File(mBinDir.getAbsolutePath() + "/Base-Module.zip");
         }
@@ -118,8 +120,8 @@ public class AabTask extends Task<AndroidModule> {
             copyLibraries();
        
             aab();
-         //   buildApks();
-        //    extractApks();
+            buildApks();
+            extractApks();
         } catch (SignedJarBuilder.IZipEntryFilter.ZipAbortException e) {
             String message = e.getMessage();
             if (e instanceof DuplicateFileException) {
@@ -205,8 +207,8 @@ public class AabTask extends Task<AndroidModule> {
         if (!executor.execute().isEmpty()) {
             throw new CompilationFailedException(executor.getLog());
         }*/
-		BundleTool signer = new BundleTool(mInputApk.getAbsolutePath(),
-										   mOutputApk.getAbsolutePath(), BundleTool.Mode.TEST);
+		BundleTool signer = new BundleTool(mOutputApk.getAbsolutePath(),
+										   mOutputApks.getAbsolutePath(), BundleTool.Mode.TEST);
 
         try {
             signer.apk();
