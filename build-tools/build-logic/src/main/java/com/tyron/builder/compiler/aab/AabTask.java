@@ -98,13 +98,7 @@ public class AabTask extends Task<AndroidModule> {
         mOutputApk = new File(mBinDir.getAbsolutePath() + "/module.aab");
 		mOutputApks = new File(mBinDir.getAbsolutePath() + "/App.apks");
 		
-        if (!mInputApk.exists()) {
-            mInputApk = new File(mBinDir.getAbsolutePath() + "/Base-Module.zip");
-        }
-
-        if (!mInputApk.exists()) {
-            throw new IOException("Unable to find generated apk file.");
-        }
+        
 		
         mAddedFiles.clear();
     }
