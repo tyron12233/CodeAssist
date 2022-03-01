@@ -131,7 +131,10 @@ public class DOMUtils {
 
     public static void putUserData(@NotNull DOMNode node, @NotNull String key, Object value) {
         sUserDataHolder.computeIfAbsent(node, it -> new HashMap<>());
-        Objects.requireNonNull(sUserDataHolder.get(node)).put(key, value);
+        Map<String, Object> map = sUserDataHolder.get(node);
+        if (map != null) {
+            map.put(key, value);
+        }
     }
 
     public static void setNamespace(DOMDocument document, ResourceNamespace namespace) {

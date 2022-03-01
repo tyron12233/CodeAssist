@@ -12,14 +12,17 @@ import com.tyron.xml.completion.repository.ResourceItem;
 import com.tyron.xml.completion.repository.api.ResourceNamespace;
 import com.tyron.xml.completion.repository.api.ResourceReference;
 
+import org.apache.commons.io.FileUtils;
 import org.eclipse.lemminx.commons.TextDocument;
 import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMElement;
+import org.intellij.lang.annotations.Language;
 
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -30,9 +33,12 @@ public class CrashlyticsTask extends Task<AndroidModule> {
     private static final String TAG = CrashlyticsTask.class.getSimpleName();
 
     private static final String LEGACY_MAPPING_FILE_ID_RESOURCE_NAME =
-            "com.crashlytics.android.build_id";
+            "com_crashlytics_android_build_id";
     private static final String CORE_CLASS =
             "com.google.firebase.crashlytics.internal.common.CrashlyticsCore";
+    private static final String CRASHLYTICS_RESOURCE_FILE = "code_assist_crashlytics__.xml";
+    private static final CharSequence CRASHLYTICS_BUILD_ID = "code_assist_crashlytics_task_0282";
+    private static final String XML_REPOSITORY_CLASS = "com.tyron.completion.xml.XmlRepository";
 
     private boolean mContainsCrashlytics;
 
@@ -47,8 +53,7 @@ public class CrashlyticsTask extends Task<AndroidModule> {
 
     @Override
     public void prepare(BuildType type) throws IOException {
-        File javaFile = getModule().getJavaFile(CORE_CLASS);
-        mContainsCrashlytics = javaFile.exists();
+        mContainsCrashlytics = getModule().getAllClasses().contains(CORE_CLASS);
     }
 
     @Override
@@ -64,7 +69,7 @@ public class CrashlyticsTask extends Task<AndroidModule> {
         }
 
         ResourceNamespace namespace = repository.getNamespace();
-        ResourceReference resourceReference = new ResourceReference(namespace, ResourceType.BOOL,
+        ResourceReference resourceReference = new ResourceReference(namespace, ResourceType.STRING,
                                                                     LEGACY_MAPPING_FILE_ID_RESOURCE_NAME);
         List<ResourceItem> resources = repository.getResources(resourceReference);
         if (!resources.isEmpty()) {
@@ -75,31 +80,22 @@ public class CrashlyticsTask extends Task<AndroidModule> {
         if (!valuesDir.exists() && !valuesDir.mkdirs()) {
             throw new IOException("Unable to create values directory");
         }
-        File resFile = new File(valuesDir, "code_assist_crashlytics__");
+        File resFile = new File(valuesDir, CRASHLYTICS_RESOURCE_FILE);
         if (!resFile.exists() && !resFile.createNewFile()) {
             throw new IOException("Unable to create crashlytics resource file");
         }
 
-        TextDocument textDocument = new TextDocument("", resFile.toURI().toString());
+        @Language("XML") String contents =
+                "<resources>\n" + "    <string name=\"$name\">$value</string>\n" + "</resources>";
+        contents = contents.replace("$name", LEGACY_MAPPING_FILE_ID_RESOURCE_NAME);
+        contents = contents.replace("$value", CRASHLYTICS_BUILD_ID);
 
-        DOMDocument document = new DOMDocument(textDocument, null);
-
-        DOMAttr attribute = document.createAttribute(LEGACY_MAPPING_FILE_ID_RESOURCE_NAME);
-        attribute.setValue("code_assist_crashlytics_0282");
-
-        DOMElement bool = document.createElement("bool");
-        bool.addChild(attribute);
-
-        DOMElement root = document.createElement("resources");
-        root.addChild(bool);
-
-        document.addChild(root);
-        System.out.println(document.getText());
+        FileUtils.writeStringToFile(resFile, contents, StandardCharsets.UTF_8);
     }
 
     public static Repository getRepository(Project project, AndroidModule module) {
         try {
-            Class<?> clazz = Class.forName("com.tyron.completion.xml.XmlRepository");
+            Class<?> clazz = Class.forName(XML_REPOSITORY_CLASS);
             Method method =
                     clazz.getDeclaredMethod("getRepository", Project.class, AndroidModule.class);
             Object invoke = method.invoke(null, project, module);
