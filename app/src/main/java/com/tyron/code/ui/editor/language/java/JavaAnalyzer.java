@@ -2,6 +2,7 @@ package com.tyron.code.ui.editor.language.java;
 
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
+import android.os.Looper;
 import android.util.Log;
 
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -49,6 +50,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 
 import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
@@ -77,7 +80,14 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
         }
     }
 
-    private static final Debouncer sDebouncer = new Debouncer(Duration.ofMillis(700));
+    private static final Debouncer sDebouncer = new Debouncer(Duration.ofMillis(700), Executors.newScheduledThreadPool(
+            1, new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable runnable) {
+                    ThreadGroup threadGroup = Looper.getMainLooper().getThread().getThreadGroup();
+                    return new Thread(threadGroup, runnable, TAG);
+                }
+            }));
     private static final String TAG = JavaAnalyzer.class.getSimpleName();
 
     private final WeakReference<Editor> mEditorReference;

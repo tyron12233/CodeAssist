@@ -1,6 +1,7 @@
 package com.tyron.code.ui.editor.language.xml;
 
 import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import com.tyron.builder.compiler.BuildType;
@@ -36,6 +37,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 
 import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
@@ -45,7 +48,14 @@ public class XMLAnalyzer extends DiagnosticTextmateAnalyzer {
 
     private boolean mAnalyzerEnabled = false;
 
-    private static final Debouncer sDebouncer = new Debouncer(Duration.ofMillis(900L));
+    private static final Debouncer sDebouncer = new Debouncer(Duration.ofMillis(900L), Executors.newScheduledThreadPool(
+            1, new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable runnable) {
+                    ThreadGroup threadGroup = Looper.getMainLooper().getThread().getThreadGroup();
+                    return new Thread(threadGroup, runnable, "XmlAnalyzer");
+                }
+            }));
 
     private final WeakReference<Editor> mEditorReference;
 
