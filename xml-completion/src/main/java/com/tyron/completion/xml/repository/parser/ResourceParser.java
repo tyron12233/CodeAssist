@@ -23,7 +23,7 @@ public interface ResourceParser {
     }
 
     List<ResourceValue> parse(@NonNull File file,
-                              @NonNull String contents,
+                              @Nullable String contents,
                               @NonNull ResourceNamespace namespace,
                               @Nullable String libraryName) throws IOException;
 }

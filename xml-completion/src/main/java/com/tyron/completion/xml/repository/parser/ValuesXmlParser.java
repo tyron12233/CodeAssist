@@ -40,10 +40,10 @@ public class ValuesXmlParser implements ResourceParser {
 
     @Override
     public List<ResourceValue> parse(@NonNull File file,
-                                     @NonNull String contents,
+                                     @Nullable String contents,
                                      @NonNull ResourceNamespace namespace,
                                      @Nullable String name) throws IOException {
-        if (!"xml".equals(FilesKt.getExtension(file))) {
+        if (!"xml".equals(FilesKt.getExtension(file)) || contents == null) {
             return Collections.emptyList();
         }
 

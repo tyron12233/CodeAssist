@@ -3,6 +3,7 @@ package com.tyron.completion.xml.task;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Table;
+import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.builder.compiler.symbol.SymbolLoader;
 import com.tyron.builder.compiler.symbol.SymbolWriter;
@@ -21,9 +22,11 @@ import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * Used to create fake R.java files from the project resources for it to
@@ -43,6 +46,9 @@ public class InjectResourcesTask {
 
     public void inject(Consumer<File> consumer) throws IOException {
         XmlRepository xmlRepository = XmlRepository.getRepository(mProject, mModule);
+
+        updateSymbols(xmlRepository);
+
         String classContents = createSymbols(xmlRepository);
 
         File classFile = getOrCreateResourceClass(mModule);
@@ -51,6 +57,21 @@ public class InjectResourcesTask {
         mModule.addInjectedClass(classFile);
 
         consumer.accept(classFile);
+    }
+
+    private void updateSymbols(XmlRepository xmlRepository) throws IOException {
+        Map<String, List<File>> files = IncrementalAapt2Task
+                .getFiles(mModule, IncrementalAapt2Task.getOutputDirectory(mModule));
+        List<File> allFiles = files.values().stream().flatMap(Collection::stream)
+                .collect(Collectors.toList());
+        allFiles.forEach(it -> {
+            ResourceRepository repository = xmlRepository.getRepository();
+            try {
+                repository.updateFile(it, null);
+            } catch (IOException e) {
+                // ignored
+            }
+        });
     }
 
     private String createSymbols(XmlRepository xmlRepository) throws IOException {

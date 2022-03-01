@@ -1,6 +1,7 @@
 package com.tyron.completion.xml.repository;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.common.collect.ListMultimap;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
@@ -98,5 +99,5 @@ public interface Repository {
 
     void initialize() throws IOException;
 
-    void updateFile(@NonNull File file, @NonNull String contents) throws IOException;
+    void updateFile(@NonNull File file, @Nullable String contents) throws IOException;
 }

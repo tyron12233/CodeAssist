@@ -119,7 +119,7 @@ public class SimpleResourceRepository implements Repository {
 
     private void parseFile(@NonNull ResourceParser parser,
                            @NonNull File xmlFile,
-                           @NonNull String contents,
+                           @Nullable String contents,
                            @NonNull String folderName,
                            @NonNull ResourceNamespace namespace,
                            @Nullable String libraryName) throws IOException {
@@ -135,7 +135,7 @@ public class SimpleResourceRepository implements Repository {
     }
 
     @Override
-    public void updateFile(@NonNull File file, @NonNull String contents) throws IOException {
+    public void updateFile(@NonNull File file, @Nullable String contents) throws IOException {
         Collection<ResourceItem> existingItems = mFileItems.get(file);
         if (existingItems != null) {
             existingItems.stream()

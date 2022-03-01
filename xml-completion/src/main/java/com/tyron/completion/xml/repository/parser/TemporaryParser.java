@@ -29,7 +29,7 @@ public class TemporaryParser implements ResourceParser {
 
     @Override
     public List<ResourceValue> parse(@NonNull File file,
-                                     @NonNull String contents,
+                                     @Nullable String contents,
                                      @NonNull ResourceNamespace namespace,
                                      @Nullable String libraryName) throws IOException {
         // temporary parser so drawables would get generated to R.java
