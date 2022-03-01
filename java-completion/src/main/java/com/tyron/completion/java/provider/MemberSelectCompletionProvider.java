@@ -49,8 +49,14 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
         MemberSelectTree select = (MemberSelectTree) path.getLeaf();
         path = new TreePath(path, select.getExpression());
         Trees trees = Trees.instance(task.task);
-        Element element = trees.getElement(path);
+        Element element;
+        try {
+            element = trees.getElement(path);
+        } catch (Throwable t) {
+            element = null;
+        }
         boolean isStatic = element instanceof TypeElement;
+
         Scope scope = trees.getScope(path);
         TypeMirror type = trees.getTypeMirror(path);
 
