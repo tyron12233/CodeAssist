@@ -48,6 +48,7 @@ public class InjectResourcesTask {
     public static void inject(@NonNull Project project) throws IOException {
         inject(project, (AndroidModule) project.getMainModule());
     }
+
     public static void inject(@NonNull Project project, @NonNull AndroidModule module) throws IOException {
         JavaCompilerService service = JavaCompilerProvider.get(project, module);
         if (service == null) {
