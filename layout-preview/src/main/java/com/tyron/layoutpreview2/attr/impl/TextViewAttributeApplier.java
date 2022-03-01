@@ -5,7 +5,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
 import com.tyron.layoutpreview2.attr.BaseAttributeApplier;
 
 public class TextViewAttributeApplier extends BaseAttributeApplier {

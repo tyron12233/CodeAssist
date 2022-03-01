@@ -42,7 +42,7 @@ public class PackageTask extends Task<AndroidModule> {
     private BuildType mBuildType;
 
     public PackageTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     @Override

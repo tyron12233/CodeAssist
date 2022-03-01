@@ -48,7 +48,7 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
     private static final String GOOGLE_CRASH_REPORTING_API_KEY = "google_crash_reporting_api_key";
 
     public GenerateFirebaseConfigTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     @Override

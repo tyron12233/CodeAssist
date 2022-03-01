@@ -1,8 +1,5 @@
 package com.tyron.layoutpreview2;
 
-import android.content.Context;
-import android.view.View;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 

@@ -3,7 +3,6 @@ package com.tyron.completion.xml.util;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.common.collect.ListMultimap;
 import com.tyron.builder.compiler.manifest.configuration.Configurable;
 import com.tyron.builder.compiler.manifest.configuration.FolderConfiguration;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
@@ -14,16 +13,15 @@ import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.insert.ValueInsertHandler;
-import com.tyron.completion.xml.repository.Repository;
-import com.tyron.completion.xml.repository.ResourceItem;
-import com.tyron.completion.xml.repository.ResourceRepository;
-import com.tyron.completion.xml.repository.api.AttrResourceValue;
-import com.tyron.completion.xml.repository.api.AttributeFormat;
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
-import com.tyron.completion.xml.repository.api.ResourceUrl;
-import com.tyron.completion.xml.repository.api.ResourceValue;
-import com.tyron.completion.xml.repository.api.StyleResourceValue;
-import com.tyron.completion.xml.repository.api.StyleableResourceValue;
+import com.tyron.xml.completion.repository.Repository;
+import com.tyron.xml.completion.repository.ResourceItem;
+import com.tyron.xml.completion.repository.ResourceRepository;
+import com.tyron.xml.completion.repository.api.AttrResourceValue;
+import com.tyron.xml.completion.repository.api.AttributeFormat;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
+import com.tyron.xml.completion.repository.api.ResourceValue;
+import com.tyron.xml.completion.repository.api.StyleableResourceValue;
+import com.tyron.xml.completion.util.DOMUtils;
 
 import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMElement;
@@ -32,11 +30,8 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class AttributeValueUtils {
 

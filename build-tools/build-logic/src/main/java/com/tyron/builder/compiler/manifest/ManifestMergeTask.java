@@ -28,7 +28,7 @@ public class ManifestMergeTask extends Task<AndroidModule> {
     private String mPackageName;
 
     public ManifestMergeTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     @Override

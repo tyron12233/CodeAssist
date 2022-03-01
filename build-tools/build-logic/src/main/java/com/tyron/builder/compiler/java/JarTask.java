@@ -17,7 +17,7 @@ public class JarTask extends Task<JavaModule> {
     private static final String TAG = JarTask.class.getSimpleName();
 
     public JarTask(JavaModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     @Override

@@ -18,7 +18,7 @@ public class SignTask extends Task<AndroidModule> {
     private File mOutputApk;
 
     public SignTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     @Override

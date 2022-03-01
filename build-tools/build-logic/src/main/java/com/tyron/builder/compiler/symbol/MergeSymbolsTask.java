@@ -35,7 +35,7 @@ public class MergeSymbolsTask extends Task<AndroidModule> {
     private File mFullResourceFile;
 
     public MergeSymbolsTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     @Override

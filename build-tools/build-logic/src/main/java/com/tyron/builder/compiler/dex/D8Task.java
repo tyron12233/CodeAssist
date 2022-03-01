@@ -27,7 +27,7 @@ public class D8Task extends Task<JavaModule> {
 	private static final String TAG = D8Task.class.getSimpleName();
 
 	public D8Task(JavaModule project, ILogger logger) {
-		super(project, logger);
+		super(project, project, logger);
 	}
 
 	@Override

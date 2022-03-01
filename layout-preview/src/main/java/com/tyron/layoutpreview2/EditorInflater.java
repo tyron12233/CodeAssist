@@ -19,7 +19,6 @@ import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
-import org.w3c.dom.Node;
 
 import java.lang.reflect.Constructor;
 import java.util.HashMap;

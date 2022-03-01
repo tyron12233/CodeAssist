@@ -3,9 +3,6 @@ package com.tyron.builder.compiler.aab;
 import static com.android.sdklib.build.ApkBuilder.checkFileForPackaging;
 import static com.android.sdklib.build.ApkBuilder.checkFolderForPackaging;
 
-import android.util.Log;
-
-import com.android.sdklib.build.ApkBuilder;
 import com.android.sdklib.build.DuplicateFileException;
 import com.android.sdklib.internal.build.SignedJarBuilder;
 import com.tyron.builder.BuildModule;
@@ -22,14 +19,12 @@ import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import net.lingala.zip4j.model.ZipParameters;
 import net.lingala.zip4j.model.enums.CompressionLevel;
-import net.lingala.zip4j.util.Zip4jUtil;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -46,8 +41,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
-import java.util.jar.JarOutputStream;
-import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -55,7 +48,7 @@ import java.util.zip.ZipOutputStream;
 public class AabTask extends Task<AndroidModule> {
 
     public AabTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     private static final String TAG = "AabTask";

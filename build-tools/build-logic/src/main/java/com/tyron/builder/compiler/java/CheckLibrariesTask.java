@@ -37,7 +37,7 @@ import java.util.zip.ZipFile;
 public class CheckLibrariesTask extends Task<JavaModule> {
 
     public CheckLibrariesTask(JavaModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     @Override

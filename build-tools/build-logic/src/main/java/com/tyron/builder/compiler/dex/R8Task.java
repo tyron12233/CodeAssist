@@ -24,7 +24,7 @@ public class R8Task extends Task<AndroidModule> {
     private static final String TAG = R8Task.class.getSimpleName();
 
     public R8Task(AndroidModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     @Override

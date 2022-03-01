@@ -14,15 +14,13 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.completion.java.JavaCompilerProvider;
-import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.xml.XmlRepository;
-import com.tyron.completion.xml.repository.ResourceItem;
-import com.tyron.completion.xml.repository.ResourceRepository;
-import com.tyron.completion.xml.repository.api.AttrResourceValue;
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
-import com.tyron.completion.xml.repository.api.ResourceUrl;
-import com.tyron.completion.xml.repository.api.StyleableResourceValue;
+import com.tyron.xml.completion.repository.ResourceItem;
+import com.tyron.xml.completion.repository.ResourceRepository;
+import com.tyron.xml.completion.repository.api.AttrResourceValue;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
+import com.tyron.xml.completion.repository.api.StyleableResourceValue;
 
 import org.apache.commons.io.FileUtils;
 

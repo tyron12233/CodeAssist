@@ -45,7 +45,7 @@ public class IncrementalD8Task extends Task<AndroidModule> {
     private BuildType mBuildType;
 
     public IncrementalD8Task(AndroidModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
 

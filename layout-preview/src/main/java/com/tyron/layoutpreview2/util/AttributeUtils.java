@@ -5,10 +5,10 @@ import android.view.View;
 import androidx.annotation.NonNull;
 
 import com.tyron.completion.xml.repository.Repository;
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
-import com.tyron.completion.xml.repository.api.ResourceReference;
-import com.tyron.completion.xml.repository.api.ResourceUrl;
-import com.tyron.completion.xml.repository.api.ResourceValue;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
+import com.tyron.xml.completion.repository.api.ResourceReference;
+import com.tyron.xml.completion.repository.api.ResourceUrl;
+import com.tyron.xml.completion.repository.api.ResourceValue;
 import com.tyron.completion.xml.util.DOMUtils;
 import com.tyron.layoutpreview2.EditorContext;
 

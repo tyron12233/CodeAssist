@@ -37,7 +37,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
     public IncrementalAapt2Task(AndroidModule project,
                                 ILogger logger,
                                 boolean generateProtoFormat) {
-        super(project, logger);
+        super(project, project, logger);
         mGenerateProtoFormat = generateProtoFormat;
     }
 

@@ -22,22 +22,15 @@ import com.tyron.code.R;
 import com.tyron.code.ui.layoutEditor.dom.FakeDomElement;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.xml.repository.api.AttrResourceValue;
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
+import com.tyron.xml.completion.repository.api.AttrResourceValue;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.util.AttributeProcessingUtil;
-import com.tyron.completion.xml.util.AttributeValueUtils;
-import com.tyron.completion.xml.util.StyleUtils;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.completion.xml.XmlRepository;
-import com.tyron.completion.xml.model.AttributeInfo;
-import com.tyron.completion.xml.model.DeclareStyleable;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import kotlin.Pair;
 

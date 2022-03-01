@@ -11,18 +11,17 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ListMultimap;
 import com.tyron.builder.compiler.manifest.configuration.FolderConfiguration;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
-import com.tyron.completion.xml.repository.ResourceItem;
-import com.tyron.completion.xml.repository.ResourceRepository;
-import com.tyron.completion.xml.repository.api.AttrResourceValue;
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
-import com.tyron.completion.xml.repository.api.ResourceReference;
-import com.tyron.completion.xml.repository.api.ResourceValue;
-import com.tyron.completion.xml.repository.api.StyleableResourceValue;
+import com.tyron.xml.completion.repository.ResourceItem;
+import com.tyron.xml.completion.repository.ResourceRepository;
+import com.tyron.xml.completion.repository.api.AttrResourceValue;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
+import com.tyron.xml.completion.repository.api.ResourceReference;
+import com.tyron.xml.completion.repository.api.ResourceValue;
+import com.tyron.xml.completion.repository.api.StyleableResourceValue;
 
 import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;

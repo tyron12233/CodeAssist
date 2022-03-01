@@ -1,10 +1,8 @@
 package com.tyron.completion.xml.insert;
 
 import com.tyron.completion.model.CompletionItem;
-import com.tyron.completion.xml.model.AttributeInfo;
-import com.tyron.completion.xml.model.Format;
-import com.tyron.completion.xml.repository.api.AttrResourceValue;
-import com.tyron.completion.xml.repository.api.AttributeFormat;
+import com.tyron.xml.completion.repository.api.AttrResourceValue;
+import com.tyron.xml.completion.repository.api.AttributeFormat;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
 

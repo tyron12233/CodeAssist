@@ -45,7 +45,7 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
     private final MessageCollector mCollector = new Collector();
 
     public IncrementalKotlinCompiler(AndroidModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     @Override

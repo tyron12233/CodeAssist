@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 public class JavaD8Task extends Task<JavaModule> {
 
     public JavaD8Task(JavaModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     @Override

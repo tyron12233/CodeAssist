@@ -29,7 +29,7 @@ import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.Format;
-import com.tyron.completion.xml.repository.ResourceRepository;
+import com.tyron.xml.completion.repository.ResourceRepository;
 import com.tyron.completion.xml.util.StyleUtils;
 
 import org.apache.bcel.Repository;

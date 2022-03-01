@@ -5,15 +5,10 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 
-import com.flipkart.android.proteus.parser.ParseHelper;
 import com.flipkart.android.proteus.value.Dimension;
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
-import com.tyron.layoutpreview2.attr.AttributeApplier;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
 import com.tyron.layoutpreview2.attr.BaseAttributeApplier;
 import com.tyron.layoutpreview2.util.AttributeUtils;
-import com.tyron.layoutpreview2.util.ViewGroupUtils;
-
-import org.eclipse.lemminx.dom.DOMAttr;
 
 public class ViewAttributeApplier extends BaseAttributeApplier {
     @Override

@@ -40,7 +40,7 @@ public class JavaTask extends Task<JavaModule> {
     private List<File> mCompiledFiles;
 
     public JavaTask(JavaModule project, ILogger logger) {
-        super(project, logger);
+        super(project, project, logger);
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.tyron.builder.compiler;
 
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.exception.CompilationFailedException;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 
 import java.io.IOException;
@@ -11,11 +12,11 @@ import java.io.IOException;
  */
 public abstract class Task<T extends Module> {
 
-    private final T mProject;
+    private final T mModule;
     private final ILogger mLogger;
 
-    public Task(T project, ILogger logger) {
-        mProject = project;
+    public Task(Project project, T module, ILogger logger) {
+        mModule = module;
         mLogger = logger;
     }
 
@@ -30,7 +31,7 @@ public abstract class Task<T extends Module> {
      * @return the Project that this task belongs to
      */
     protected T getModule() {
-        return mProject;
+        return mModule;
     }
 
     /**
