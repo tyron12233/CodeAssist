@@ -275,9 +275,9 @@ public class CompilerService extends Service {
     private Builder<? extends Module> getBuilderForProject(Module module, BuildType type) {
         if (module instanceof AndroidModule) {
             if (type == BuildType.AAB) {
-                return new AndroidAppBundleBuilder((AndroidModule) module, logger);
+                return new AndroidAppBundleBuilder(mProject, (AndroidModule) module, logger);
             }
-            return new AndroidAppBuilder((AndroidModule) module, logger);
+            return new AndroidAppBuilder(mProject, (AndroidModule) module, logger);
         }
         return null;
     }

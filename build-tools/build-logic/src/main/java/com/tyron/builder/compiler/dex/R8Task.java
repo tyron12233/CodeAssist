@@ -9,6 +9,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 
 import java.io.File;
@@ -23,8 +24,8 @@ public class R8Task extends Task<AndroidModule> {
 
     private static final String TAG = R8Task.class.getSimpleName();
 
-    public R8Task(AndroidModule project, ILogger logger) {
-        super(project, project, logger);
+    public R8Task(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

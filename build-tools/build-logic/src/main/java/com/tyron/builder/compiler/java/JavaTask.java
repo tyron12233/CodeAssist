@@ -14,6 +14,8 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 
 import org.openjdk.javax.tools.Diagnostic;
@@ -39,8 +41,8 @@ public class JavaTask extends Task<JavaModule> {
 
     private List<File> mCompiledFiles;
 
-    public JavaTask(JavaModule project, ILogger logger) {
-        super(project, project, logger);
+    public JavaTask(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

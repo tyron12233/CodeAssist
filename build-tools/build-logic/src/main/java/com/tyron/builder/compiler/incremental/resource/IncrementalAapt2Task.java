@@ -10,6 +10,7 @@ import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.log.LogUtils;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 
@@ -34,10 +35,11 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
 
     private final boolean mGenerateProtoFormat;
 
-    public IncrementalAapt2Task(AndroidModule project,
+    public IncrementalAapt2Task(Project project,
+                                AndroidModule module,
                                 ILogger logger,
                                 boolean generateProtoFormat) {
-        super(project, project, logger);
+        super(project, module, logger);
         mGenerateProtoFormat = generateProtoFormat;
     }
 

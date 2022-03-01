@@ -12,6 +12,7 @@ import com.tyron.builder.compiler.dex.DexDiagnosticHandler;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Library;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.cache.CacheHolder;
 import com.tyron.common.util.Cache;
@@ -44,8 +45,8 @@ public class IncrementalD8Task extends Task<AndroidModule> {
 
     private BuildType mBuildType;
 
-    public IncrementalD8Task(AndroidModule project, ILogger logger) {
-        super(project, project, logger);
+    public IncrementalD8Task(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
 

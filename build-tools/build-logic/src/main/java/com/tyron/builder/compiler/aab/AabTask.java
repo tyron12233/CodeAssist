@@ -11,6 +11,7 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.manifest.SdkConstants;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.BinaryExecutor;
 import com.tyron.common.util.Decompress;
@@ -47,8 +48,8 @@ import java.util.zip.ZipOutputStream;
 
 public class AabTask extends Task<AndroidModule> {
 
-    public AabTask(AndroidModule project, ILogger logger) {
-        super(project, project, logger);
+    public AabTask(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     private static final String TAG = "AabTask";

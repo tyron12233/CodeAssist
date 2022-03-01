@@ -10,6 +10,7 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 
 import org.jetbrains.annotations.NotNull;
@@ -44,8 +45,8 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
 
     private final MessageCollector mCollector = new Collector();
 
-    public IncrementalKotlinCompiler(AndroidModule project, ILogger logger) {
-        super(project, project, logger);
+    public IncrementalKotlinCompiler(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

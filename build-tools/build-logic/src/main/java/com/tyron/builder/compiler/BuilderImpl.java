@@ -3,10 +3,12 @@ package com.tyron.builder.compiler;
 import android.os.Handler;
 import android.os.Looper;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 
 import java.io.IOException;
@@ -16,16 +18,24 @@ import java.util.List;
 public abstract class BuilderImpl<T extends Module> implements Builder<T> {
 
     private final Handler mMainHandler;
-    private final T mProject;
+    private final Project mProject;
+    private final T mModule;
     private final ILogger mLogger;
     private final List<Task<? super T>> mTasksRan;
     private TaskListener mTaskListener;
 
-    public BuilderImpl(T project, ILogger logger) {
+    public BuilderImpl(Project project, T module, ILogger logger) {
         mProject = project;
+        mModule = module;
         mLogger = logger;
         mMainHandler = new Handler(Looper.getMainLooper());
         mTasksRan = new ArrayList<>();
+    }
+
+    @NonNull
+    @Override
+    public Project getProject() {
+        return mProject;
     }
 
     @Override
@@ -35,7 +45,7 @@ public abstract class BuilderImpl<T extends Module> implements Builder<T> {
 
     @Override
     public T getModule() {
-        return mProject;
+        return mModule;
     }
 
     protected void updateProgress(String name, String message, int progress) {

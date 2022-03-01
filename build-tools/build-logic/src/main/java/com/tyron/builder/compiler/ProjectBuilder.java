@@ -36,7 +36,7 @@ public class ProjectBuilder {
                     .getString(ModuleSettings.MODULE_TYPE, "android_app");
             switch (Objects.requireNonNull(moduleType)) {
                 case "library":
-                    builder = new JarBuilder((JavaModule) module, mLogger);
+                    builder = new JarBuilder(mProject, (JavaModule) module, mLogger);
                     break;
                 default:
                 case "android_app":
@@ -47,9 +47,9 @@ public class ProjectBuilder {
                                                              " does not have a package name.");
                     }
                     if (type == BuildType.AAB) {
-                        builder = new AndroidAppBundleBuilder(androidModule, mLogger);
+                        builder = new AndroidAppBundleBuilder(mProject, androidModule, mLogger);
                     } else {
-                        builder = new AndroidAppBuilder(androidModule, mLogger);
+                        builder = new AndroidAppBuilder(mProject, androidModule, mLogger);
                     }
                     break;
             }
