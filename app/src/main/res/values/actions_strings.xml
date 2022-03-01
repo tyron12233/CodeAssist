@@ -14,6 +14,7 @@
     <string name="directory_name">Directory name</string>
     <string name="file_name">File name</string>
     <string name="menu_new">New</string>
+    <string name="menu_import">Import</string>
     <string name="menu_refactor">Refactor</string>
     <string name="menu_new_layout">New layout</string>
 

@@ -3,6 +3,7 @@ package com.tyron.code;
 import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -20,6 +21,7 @@ import com.tyron.code.ui.editor.action.DiagnosticInfoAction;
 import com.tyron.code.ui.editor.action.PreviewLayoutAction;
 import com.tyron.code.ui.editor.action.text.TextActionGroup;
 import com.tyron.code.ui.file.action.NewFileActionGroup;
+import com.tyron.code.ui.file.action.ImportFileActionGroup;
 import com.tyron.code.ui.file.action.file.DeleteFileAction;
 import com.tyron.code.ui.main.action.compile.CompileActionGroup;
 import com.tyron.code.ui.main.action.debug.DebugActionGroup;
@@ -159,6 +161,9 @@ public class ApplicationLoader extends Application {
             // file manager actions
             manager.registerAction(NewFileActionGroup.ID, new NewFileActionGroup());
             manager.registerAction(DeleteFileAction.ID, new DeleteFileAction());
+            if(Build.VERSION.SDK_INT<Build.VERSION_CODES.R) {
+                manager.registerAction(ImportFileActionGroup.ID,new ImportFileActionGroup());
+            }
 
             // java actions
             CompletionModule.registerActions(manager);
