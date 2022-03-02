@@ -9,13 +9,7 @@ import com.tyron.completion.java.BuildConfig;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 import kotlin.jvm.functions.Function1;
 
@@ -36,19 +30,28 @@ public class CompilerContainer {
 
     private static final String TAG = CompilerContainer.class.getSimpleName();
 
-    private boolean mIsWriting;
+    private volatile boolean mIsWriting;
 
     @GuardedBy("mLock")
-    private CompileTask mCompileTask;
+    private volatile CompileTask mCompileTask;
 
-    private final ReentrantReadWriteLock mLock = new ReentrantReadWriteLock(true);
-    private final Lock mReadLock = mLock.readLock();
-    private final Lock mWriteLock = mLock.writeLock();
+    private final Object mLock = new Object();
+    private final List<Thread> mReaders = Collections.synchronizedList(new ArrayList<>());
 
-    private final Condition mWriteCondition = mWriteLock.newCondition();
 
     public CompilerContainer() {
 
+    }
+
+    private void closeIfEmpty() {
+        if (mReaders.isEmpty()) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, Thread.currentThread().getName() + " has closed the compile task.");
+            }
+            if (mCompileTask != null) {
+                mCompileTask.close();
+            }
+        }
     }
 
     /**
@@ -57,20 +60,33 @@ public class CompilerContainer {
      * are synchronized
      */
     public void run(Consumer<CompileTask> consumer) {
-        mReadLock.lock();
+        waitForWriter();
+        mReaders.add(Thread.currentThread());
         try {
             consumer.accept(mCompileTask);
         } finally {
-            mReadLock.unlock();
+            mReaders.remove(Thread.currentThread());
         }
     }
 
-    public <T> T get(Function<CompileTask, T> fun) {
-        mReadLock.lock();
+    public <T> T get(Function1<CompileTask, T> fun) {
+        waitForWriter();
+        mReaders.add(Thread.currentThread());
         try {
-            return fun.apply(mCompileTask);
+            return fun.invoke(mCompileTask);
         } finally {
-            mReadLock.unlock();
+            mReaders.remove(Thread.currentThread());
+        }
+    }
+
+    public <T> T getWithLock(Function1<CompileTask, T> fun) {
+        waitForWriter();
+        waitForReaders();
+        try {
+            mReaders.add(Thread.currentThread());
+            return fun.invoke(mCompileTask);
+        } finally {
+            mReaders.remove(Thread.currentThread());
         }
     }
 
@@ -78,31 +94,55 @@ public class CompilerContainer {
         return mIsWriting;
     }
 
-    void initialize(Supplier<CompileTask> supplier) {
-        mWriteLock.lock();
-        mIsWriting = true;
-
-        if (mCompileTask != null) {
-            mCompileTask.close();
-        }
-
-        try {
-            mCompileTask = supplier.get();
-        } finally {
-            mIsWriting = false;
-            mWriteCondition.signal();
-            mWriteLock.unlock();
+    void initialize(Runnable runnable) {
+        synchronized (mLock) {
+            assertIsNotReader();
+            waitForReaders();
+            try {
+                mIsWriting = true;
+                runnable.run();
+            } finally {
+                mIsWriting = false;
+            }
         }
     }
 
-    /**
-     * Used when the task is cached.
-     */
+    private void waitForReaders() {
+        if (!mReaders.isEmpty()) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, Thread.currentThread().getName() + " is waiting for readers:" +
+                           mReaders);
+            }
+        }
+        while (true) {
+            if (mReaders.isEmpty()) {
+                closeIfEmpty();
+                return;
+            }
+        }
+    }
+
+    private void waitForWriter() {
+        if (mIsWriting) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, Thread.currentThread().getName() + " is waiting for writer");
+            }
+        }
+        while (true) {
+            if (!mIsWriting) {
+                return;
+            }
+        }
+    }
+
+    private void assertIsNotReader() {
+        if (mReaders.contains(Thread.currentThread())) {
+            throw new RuntimeException("Cannot compile inside a container.");
+        }
+    }
+
+
     void setCompileTask(CompileTask task) {
         mCompileTask = task;
-    }
-
-    Condition getWriteCondition() {
-        return mWriteCondition;
     }
 }

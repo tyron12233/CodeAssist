@@ -28,6 +28,7 @@ import com.tyron.completion.progress.ProcessCanceledException;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.Editor;
 
+import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.BlockTree;
@@ -45,6 +46,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -54,6 +56,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 
+import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager;
 import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
 import kotlin.Unit;
@@ -236,5 +239,42 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
             }
         }
         return wrapped;
+    }
+
+    /**
+     * CodeAssist changed: do not interrupt the thread when destroying this analyzer, as it will
+     * also destroy the cache.
+     */
+    @Override
+    public void destroy() {
+        setToNull("ref");
+        setToNull("extraArguments");
+        setToNull("data");
+
+        Field thread = ReflectionUtil.getDeclaredField(SimpleAnalyzeManager.class, "thread");
+        if (thread != null) {
+            thread.setAccessible(true);
+            try {
+                Thread o = (Thread) thread.get(this);
+                ProgressManager.getInstance().cancelThread(o);
+
+                thread.set(this, null);
+            } catch (Throwable e) {
+                throw new Error(e);
+            }
+        }
+    }
+
+    private void setToNull(String fieldName) {
+        Field declaredField =
+                ReflectionUtil.getDeclaredField(SimpleAnalyzeManager.class, fieldName);
+        if (declaredField != null) {
+            declaredField.setAccessible(true);
+            try {
+                declaredField.set(this, null);
+            } catch (IllegalAccessException e) {
+                throw new Error(e);
+            }
+        }
     }
 }
