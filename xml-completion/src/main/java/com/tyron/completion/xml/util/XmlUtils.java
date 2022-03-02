@@ -263,6 +263,10 @@ public class XmlUtils {
             int start = token.getStartIndex();
             int end = token.getStopIndex();
 
+            if (token.getType() == Token.EOF) {
+                break;
+            }
+
             if (start <= index && index <= end) {
                 return token.getType() == XMLLexer.STRING;
             }
