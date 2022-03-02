@@ -56,7 +56,7 @@ public class InjectResourcesTask {
         InjectResourcesTask task = new InjectResourcesTask(project, module);
         task.inject(resourceFile -> {
             SourceFileObject sourceFileObject =
-                    new SourceFileObject(resourceFile.toPath(), (JavaModule) null, Instant.now());
+                    new SourceFileObject(resourceFile.toPath(), module, Instant.now());
             service.compile(Collections.singletonList(sourceFileObject));
         });
     }

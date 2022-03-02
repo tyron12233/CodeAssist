@@ -165,15 +165,7 @@ public class ProjectManager {
                 JavaCompilerService service = provider.get(project, module);
 
                 if (module instanceof AndroidModule) {
-                    InjectResourcesTask injectTask =
-                            new InjectResourcesTask(project, (AndroidModule) module);
-                    injectTask.inject(file -> {
-                        if (service != null) {
-                            service.compile(Collections.singletonList(
-                                    new SourceFileObject(file.toPath(), (JavaModule) null,
-                                                         Instant.now())));
-                        }
-                    });
+                    InjectResourcesTask.inject(project, (AndroidModule) module);
                 }
             } catch (Throwable e) {
                 String message =

@@ -77,13 +77,6 @@ public class BaseTextmateAnalyzer extends SimpleAnalyzeManager<StackElement> {
         }
     }
 
-//    @Override
-//    public List<CodeBlock> computeBlocks(Content text, CodeBlockAnalyzeDelegate delegate) {
-//        java.util.ArrayList<CodeBlock> list = new java.util.ArrayList<CodeBlock>();
-//        analyzeCodeBlocks(text, list, delegate);
-//        return list;
-//    }
-//
     public void analyzeCodeBlocks(Content model,
                                   List<CodeBlock> blocks,
                                   Delegate<StackElement> delegate) {

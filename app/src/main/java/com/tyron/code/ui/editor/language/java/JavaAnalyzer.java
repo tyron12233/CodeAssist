@@ -173,6 +173,7 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
                             List<DiagnosticWrapper> collect =
                                     task.diagnostics.stream().map(d -> modifyDiagnostic(task, d))
                                             .peek(it -> ProgressManager.checkCanceled())
+                                            .filter(d -> currentFile.equals(d.getSource()))
                                             .collect(Collectors.toList());
                             editor.setDiagnostics(collect);
 
@@ -210,6 +211,9 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
 
             if (tree != null) {
                 TreePath treePath = trees.getPath(task.root(), tree);
+                if (treePath == null) {
+                    return wrapped;
+                }
                 String code = jcDiagnostic.getCode();
 
                 long start = diagnostic.getStartPosition();
@@ -239,42 +243,5 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
             }
         }
         return wrapped;
-    }
-
-    /**
-     * CodeAssist changed: do not interrupt the thread when destroying this analyzer, as it will
-     * also destroy the cache.
-     */
-    @Override
-    public void destroy() {
-        setToNull("ref");
-        setToNull("extraArguments");
-        setToNull("data");
-
-        Field thread = ReflectionUtil.getDeclaredField(SimpleAnalyzeManager.class, "thread");
-        if (thread != null) {
-            thread.setAccessible(true);
-            try {
-                Thread o = (Thread) thread.get(this);
-                ProgressManager.getInstance().cancelThread(o);
-
-                thread.set(this, null);
-            } catch (Throwable e) {
-                throw new Error(e);
-            }
-        }
-    }
-
-    private void setToNull(String fieldName) {
-        Field declaredField =
-                ReflectionUtil.getDeclaredField(SimpleAnalyzeManager.class, fieldName);
-        if (declaredField != null) {
-            declaredField.setAccessible(true);
-            try {
-                declaredField.set(this, null);
-            } catch (IllegalAccessException e) {
-                throw new Error(e);
-            }
-        }
     }
 }

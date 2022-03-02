@@ -21,6 +21,7 @@ import java.util.function.Consumer;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.analysis.StyleReceiver;
 import io.github.rosemoe.sora.lang.styling.CodeBlock;
+import io.github.rosemoe.sora.lang.styling.MappedSpans;
 import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Content;
@@ -45,6 +46,9 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         super(editor, grammarName, grammarIns, languageConfiguration, theme);
 
         mStyleModifier = styles -> {
+            if (styles == null) {
+                return;
+            }
             HighlightUtil.clearDiagnostics(styles);
             HighlightUtil.markDiagnostics(editor, mDiagnostics, styles);
         };
@@ -87,21 +91,6 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         } else {
             DiagnosticSpanMapUpdater
                     .shiftDiagnosticsOnSingleLineDelete(mDiagnostics, ref, start, end);
-        }
-    }
-
-    @Override
-    public void analyzeCodeBlocks(Content model,
-                                  List<CodeBlock> blocks,
-                                  Delegate<StackElement> delegate) {
-        super.analyzeCodeBlocks(model, blocks, delegate);
-
-        if (getExtraArguments().getBoolean("bg", false)) {
-            if (!mShouldAnalyzeInBg) {
-                mShouldAnalyzeInBg = true;
-                return;
-            }
-            analyzeInBackground(model);
         }
     }
 

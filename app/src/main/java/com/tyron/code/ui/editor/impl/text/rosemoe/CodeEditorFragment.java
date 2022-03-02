@@ -168,8 +168,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @Override
     public void onResume() {
         super.onResume();
-
-        analyze();
     }
 
     public void hideEditorWindows() {
