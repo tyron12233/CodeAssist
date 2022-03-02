@@ -12,6 +12,7 @@ import com.github.angads25.filepicker.view.FilePickerDialog;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.action.FileAction;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
@@ -58,14 +59,19 @@ public class ImportFileAction extends FileAction {
 
         FilePickerDialog dialog = new FilePickerDialog(fragment.requireContext(), properties);
         dialog.setDialogSelectionListener(files -> {
-            for(String file : files) {
+            ProgressManager.getInstance().runNonCancelableAsync(() -> {
+              for(String file : files) {
                 try {
                     FileUtils.copyFileToDirectory(new File(file),currentDir);
                 } catch (IOException ioException) {
                     Log.e(ID,ioException.toString());
                 }
-            }
-            refreshTreeView(currentNode, fragment.getTreeView());
+              }
+              ProgressManager.getInstance().runLater(() -> {
+                refreshTreeView(currentNode, fragment.getTreeView());
+              });
+              
+            });
         });
         dialog.show();
 
