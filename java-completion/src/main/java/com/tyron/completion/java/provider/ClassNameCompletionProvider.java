@@ -85,6 +85,7 @@ public class ClassNameCompletionProvider extends BaseCompletionProvider {
                 continue;
             }
             CompletionItem item = classItem(className);
+            item.data = className;
             item.setInsertHandler(new ClassImportInsertHandler(compiler, new File(
                     root.getSourceFile()
                             .toUri()), item));

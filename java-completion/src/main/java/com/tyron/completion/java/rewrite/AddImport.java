@@ -53,6 +53,15 @@ public class AddImport implements JavaRewrite {
         if (ActionUtil.hasImport(task.root, className)) {
             return Collections.emptyMap();
         }
+
+        String packageName = className;
+        if (className.contains(".")) {
+            packageName = className.substring(0, className.lastIndexOf('.'));
+        }
+        if (packageName.equals(String.valueOf(task.root.getPackageName()))) {
+            return Collections.emptyMap();
+        }
+
         Position point = insertPosition(task);
 
         String text = "import " + className + ";\n";
