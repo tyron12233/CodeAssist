@@ -79,6 +79,7 @@ public class CompilerContainer {
 
     void initialize(Runnable runnable) {
         semaphore.acquireUninterruptibly();
+        mIsWriting = true;
         try {
             // ensure that compile task is closed
             if (mCompileTask != null) {
@@ -86,6 +87,7 @@ public class CompilerContainer {
             }
             runnable.run();
         } finally {
+            mIsWriting = false;
             semaphore.release();
         }
     }

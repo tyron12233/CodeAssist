@@ -1,5 +1,6 @@
 package com.tyron.completion.java.provider;
 
+import static com.tyron.completion.java.util.CompletionItemFactory.classItem;
 import static com.tyron.completion.java.util.CompletionItemFactory.item;
 import static com.tyron.completion.java.util.CompletionItemFactory.method;
 import static com.tyron.completion.java.util.CompletionItemFactory.overridableMethod;
@@ -15,14 +16,18 @@ import org.openjdk.javax.lang.model.element.Element;
 import org.openjdk.javax.lang.model.element.ElementKind;
 import org.openjdk.javax.lang.model.element.ExecutableElement;
 import org.openjdk.javax.lang.model.type.ExecutableType;
+import org.openjdk.source.tree.ClassTree;
+import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.Scope;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import me.xdrop.fuzzywuzzy.FuzzySearch;
 
@@ -88,6 +93,20 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
                 } else {
                     item.setSortText(JavaSortCategory.ACCESSIBLE_SYMBOL.toString());
                 }
+                builder.addItem(item);
+            }
+        }
+
+        CompilationUnitTree root = task.root();
+        if (root != null) {
+            List<? extends Tree> typeDecls = root.getTypeDecls();
+            List<ClassTree> classTrees = typeDecls.stream()
+                    .filter(it -> it instanceof ClassTree)
+                    .map(it -> (ClassTree) it)
+                    .collect(Collectors.toList());
+            for (ClassTree classTree : classTrees) {
+                CompletionItem item = classItem(classTree.getSimpleName().toString());
+                item.setSortText(JavaSortCategory.ACCESSIBLE_SYMBOL.toString());
                 builder.addItem(item);
             }
         }

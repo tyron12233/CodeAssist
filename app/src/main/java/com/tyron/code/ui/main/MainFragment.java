@@ -42,6 +42,7 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.file.event.RefreshRootEvent;
 import com.tyron.code.util.UiUtilsKt;
 import com.tyron.common.logging.IdeLog;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.fileeditor.api.FileEditorSavedState;
 import com.tyron.code.ui.project.ProjectManager;
@@ -230,6 +231,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                 .observe(getViewLifecycleOwner(), indexing -> {
                     mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
                     CompletionEngine.setIndexing(indexing);
+                    refreshToolbar();
                 });
         mMainViewModel.getCurrentState()
                 .observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
@@ -325,6 +327,13 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 
         saveAll();
         mServiceConnection.setShouldShowNotification(true);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+
+        refreshToolbar();
     }
 
     @Override
@@ -479,6 +488,13 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                 mLogReceiver = null;
             }
         }
+
+        ProgressManager.getInstance().runLater(() -> {
+            if (getContext() == null) {
+                return;
+            }
+            refreshToolbar();
+        });
     }
 
     private void injectData(DataContext context) {

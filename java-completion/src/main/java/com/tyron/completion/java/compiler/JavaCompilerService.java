@@ -185,7 +185,7 @@ public class JavaCompilerService implements CompilerProvider {
     // TODO: This doesn't list all the public types
     @Override
     public Set<String> publicTopLevelTypes() {
-        Set<String> classes = new HashSet<>(mCurrentModule.getAllClasses());
+        Set<String> classes = new HashSet<>();
         for (Module module : mProject.getDependencies(mCurrentModule)) {
             if (module instanceof JavaModule) {
                 classes.addAll(((JavaModule) module).getAllClasses());

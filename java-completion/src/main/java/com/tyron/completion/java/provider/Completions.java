@@ -98,6 +98,9 @@ public class Completions {
         boolean endsWithParen = endsWithParen(contents, (int) cursor);
 
         checkCanceled();
+        if (compiler.getCachedContainer().isWriting()) {
+            return null;
+        }
         CompilerContainer container = compiler.compile(Collections.singletonList(source));
         try {
             return container.get(task -> {

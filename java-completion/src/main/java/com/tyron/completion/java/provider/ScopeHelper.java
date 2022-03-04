@@ -29,7 +29,7 @@ public class ScopeHelper {
 
         // CodeAssist changed: allow top level scopes, but not imports they are handled in
         // ImportCompletionProvider
-        return scopes;
+        return scopes.subList(0, scopes.size() - 2);
     }
 
     public static List<Element> scopeMembers(CompileTask task, Scope inner, Predicate<CharSequence> filter) {
