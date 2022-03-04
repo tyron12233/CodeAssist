@@ -18,6 +18,7 @@ import com.tyron.xml.completion.repository.api.ResourceReference;
 import com.tyron.xml.completion.repository.api.ResourceValue;
 import com.tyron.xml.completion.repository.api.StyleResourceValue;
 import com.tyron.xml.completion.repository.parser.LayoutXmlParser;
+import com.tyron.xml.completion.repository.parser.MenuParser;
 import com.tyron.xml.completion.repository.parser.ResourceParser;
 import com.tyron.xml.completion.repository.parser.TemporaryParser;
 import com.tyron.xml.completion.repository.parser.ValuesXmlParser;
@@ -51,7 +52,7 @@ public class SimpleResourceRepository implements Repository {
         parsers.put(ResourceFolderType.VALUES, new ValuesXmlParser());
         parsers.put(ResourceFolderType.LAYOUT, new LayoutXmlParser());
         parsers.put(ResourceFolderType.MIPMAP, new TemporaryParser(ResourceType.MIPMAP));
-        parsers.put(ResourceFolderType.MENU, new TemporaryParser(ResourceType.MENU));
+        parsers.put(ResourceFolderType.MENU, new MenuParser());
         parsers.put(ResourceFolderType.XML, new TemporaryParser(ResourceType.XML));
         parsers.put(ResourceFolderType.ANIMATOR, new TemporaryParser(ResourceType.ANIMATOR));
         parsers.put(ResourceFolderType.INTERPOLATOR, new TemporaryParser(ResourceType.INTERPOLATOR));

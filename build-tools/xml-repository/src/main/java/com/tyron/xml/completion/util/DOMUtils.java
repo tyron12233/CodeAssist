@@ -10,6 +10,7 @@ import org.eclipse.lemminx.dom.DOMProcessingInstruction;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,23 @@ public class DOMUtils {
     private static final String NAMESPACE_KEY = "namespace";
 
     private static final WeakHashMap<DOMNode, Map<String, Object>> sUserDataHolder = new WeakHashMap<>();
+
+    public static List<DOMElement> findElementsWithTagName(DOMElement element, String tagName) {
+        List<DOMElement> elements = new ArrayList<>();
+        List<DOMNode> children = element.getChildren();
+        for (DOMNode child : children) {
+            if (!(child instanceof DOMElement)) {
+                continue;
+            }
+
+            if (tagName.equals(((DOMElement) child).getTagName())) {
+                elements.add((DOMElement) child);
+            }
+
+            elements.addAll(findElementsWithTagName((DOMElement) child, tagName));
+        }
+        return elements;
+    }
 
     public static String lookupPrefix(DOMAttr attr) {
         return lookupPrefix(attr, getPrefix(attr));

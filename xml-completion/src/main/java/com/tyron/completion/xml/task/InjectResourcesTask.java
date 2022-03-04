@@ -12,6 +12,7 @@ import com.tyron.builder.compiler.symbol.SymbolWriter;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.compiler.JavaCompilerService;
@@ -32,6 +33,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -91,7 +93,17 @@ public class InjectResourcesTask {
         allFiles.forEach(it -> {
             ResourceRepository repository = xmlRepository.getRepository();
             try {
-                repository.updateFile(it, null);
+                FileManager fileManager = mModule.getFileManager();
+                CharSequence contents = null;
+                if (fileManager.isOpened(it)) {
+                    Optional<CharSequence> fileContent = fileManager.getFileContent(it);
+                    if (fileContent.isPresent()) {
+                        contents = fileContent.get();
+                    }
+                } else {
+                    contents = FileUtils.readFileToString(it, StandardCharsets.UTF_8);
+                }
+                repository.updateFile(it, contents.toString());
             } catch (IOException e) {
                 // ignored
             }
