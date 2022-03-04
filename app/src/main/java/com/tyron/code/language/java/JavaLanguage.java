@@ -11,7 +11,7 @@ import com.google.googlejavaformat.java.FormatterException;
 import com.google.googlejavaformat.java.JavaFormatterOptions;
 import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.EditorFormatter;
-import com.tyron.code.language.textmate.BaseTextmateAnalyzer;
+import com.tyron.code.analyzer.BaseTextmateAnalyzer;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;

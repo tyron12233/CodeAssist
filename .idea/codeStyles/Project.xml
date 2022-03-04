@@ -15,6 +15,7 @@
       <option name="ASSIGNMENT_WRAP" value="1" />
       <option name="IF_BRACE_FORCE" value="3" />
       <option name="WRAP_LONG_LINES" value="true" />
+      <option name="ENUM_CONSTANTS_WRAP" value="2" />
     </codeStyleSettings>
     <codeStyleSettings language="XML">
       <option name="FORCE_REARRANGE_MODE" value="1" />

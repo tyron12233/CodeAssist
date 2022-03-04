@@ -46,7 +46,7 @@ import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.code.language.java.JavaLanguage;
-import com.tyron.code.language.textmate.BaseTextmateAnalyzer;
+import com.tyron.code.analyzer.BaseTextmateAnalyzer;
 import com.tyron.code.language.textmate.EmptyTextMateLanguage;
 import com.tyron.code.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.scheme.CompiledEditorScheme;

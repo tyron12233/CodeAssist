@@ -13,7 +13,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.BuildConfig;
-import com.tyron.code.language.textmate.DiagnosticTextmateAnalyzer;
+import com.tyron.code.analyzer.DiagnosticTextmateAnalyzer;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.util.Debouncer;

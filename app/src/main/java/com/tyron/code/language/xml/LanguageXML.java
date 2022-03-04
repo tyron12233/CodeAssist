@@ -10,7 +10,7 @@ import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
-import com.tyron.code.language.textmate.BaseTextmateAnalyzer;
+import com.tyron.code.analyzer.BaseTextmateAnalyzer;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.editor.Editor;

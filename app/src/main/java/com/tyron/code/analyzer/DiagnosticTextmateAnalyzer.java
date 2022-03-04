@@ -1,4 +1,4 @@
-package com.tyron.code.language.textmate;
+package com.tyron.code.analyzer;
 
 import android.os.Bundle;
 
@@ -32,7 +32,7 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
     protected List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
     private boolean mShouldAnalyzeInBg;
     private ContentReference ref;
-
+    private Editor mEditor;
 
     private final Consumer<Styles> mStyleModifier;
 
@@ -42,11 +42,13 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
                                       Reader languageConfiguration,
                                       IRawTheme theme) throws Exception {
         super(editor, grammarName, grammarIns, languageConfiguration, theme);
+        mEditor = editor;
+        mStyleModifier = this::modifyStyles;
+    }
 
-        mStyleModifier = styles -> {
-            HighlightUtil.clearDiagnostics(styles);
-            HighlightUtil.markDiagnostics(editor, mDiagnostics, styles);
-        };
+    protected void modifyStyles(Styles styles) {
+        HighlightUtil.clearDiagnostics(styles);
+        HighlightUtil.markDiagnostics(mEditor, mDiagnostics, styles);
     }
 
     public void setDiagnostics(CodeEditorView codeEditorView,
@@ -59,7 +61,7 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         if (receiver != null) {
             super.setReceiver(new StyleReceiverInterceptor(receiver, mStyleModifier));
         } else {
-            super.setReceiver(receiver);
+            super.setReceiver(null);
         }
     }
 

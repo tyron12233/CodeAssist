@@ -1,10 +1,11 @@
-package com.tyron.code.language.textmate;
+package com.tyron.code.analyzer;
 
 import android.graphics.Color;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.code.language.textmate.CodeBlockUtils;
 import com.tyron.editor.Editor;
 
 import java.io.InputStream;
@@ -83,8 +84,8 @@ public class BaseTextmateAnalyzer extends SimpleAnalyzeManager<StackElement> {
         try {
             FoldingRegions foldingRegions =
                     CodeBlockUtils.computeRanges(model, editor.getTabCount(), folding.getOffSide(),
-                                              folding, MAX_FOLDING_REGIONS_FOR_INDENT_LIMIT,
-                                              delegate);
+                                                 folding, MAX_FOLDING_REGIONS_FOR_INDENT_LIMIT,
+                                                 delegate);
             for (int i = 0; i < foldingRegions.length() && !delegate.isCancelled(); i++) {
                 int startLine = foldingRegions.getStartLineNumber(i);
                 int endLine = foldingRegions.getEndLineNumber(i);
@@ -191,5 +192,9 @@ public class BaseTextmateAnalyzer extends SimpleAnalyzeManager<StackElement> {
     public void updateTheme(IRawTheme theme) {
         registry.setTheme(theme);
         this.theme = Theme.createFromRawTheme(theme);
+    }
+
+    protected Theme getTheme() {
+        return theme;
     }
 }

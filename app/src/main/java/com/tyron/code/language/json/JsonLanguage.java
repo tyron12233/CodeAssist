@@ -12,7 +12,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.stream.JsonWriter;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
-import com.tyron.code.language.textmate.BaseTextmateAnalyzer;
+import com.tyron.code.analyzer.BaseTextmateAnalyzer;
 import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStreams;

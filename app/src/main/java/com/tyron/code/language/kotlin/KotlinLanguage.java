@@ -8,7 +8,7 @@ import androidx.annotation.NonNull;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.code.language.CompletionItemWrapper;
-import com.tyron.code.language.textmate.BaseTextmateAnalyzer;
+import com.tyron.code.analyzer.BaseTextmateAnalyzer;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
