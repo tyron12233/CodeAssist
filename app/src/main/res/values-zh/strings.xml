@@ -67,7 +67,7 @@
     <string name="menu_run">运行</string>
     <string name="menu_refresh">重新载入</string>
     <string name="menu_library_manager">库管理器</string>
-    <string name="menu_format">格式化</string>
+    <string name="menu_format">代码对齐</string>
     <string name="menu_settings">设置</string>
 
     <!-- preferences -->
