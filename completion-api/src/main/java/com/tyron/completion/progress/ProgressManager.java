@@ -11,6 +11,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -38,7 +39,7 @@ public class ProgressManager {
     private final Map<Thread, ProgressIndicator> mThreadToIndicator;
 
     public ProgressManager() {
-        mThreadToIndicator = new HashMap<>();
+        mThreadToIndicator = new WeakHashMap<>();
     }
 
     /**

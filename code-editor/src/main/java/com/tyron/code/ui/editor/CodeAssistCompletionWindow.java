@@ -101,7 +101,9 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
 
     @Override
     public void cancelCompletion() {
-        ProgressManager.getInstance().cancelThread(mThread);
+        if (mThread != null) {
+            ProgressManager.getInstance().cancelThread(mThread);
+        }
         super.cancelCompletion();
     }
 
