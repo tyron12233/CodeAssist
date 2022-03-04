@@ -1,6 +1,6 @@
 package com.tyron.layoutpreview2;
 
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
 
 public interface Attribute {
 

@@ -29,7 +29,7 @@ import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.Format;
-import com.tyron.completion.xml.repository.ResourceRepository;
+import com.tyron.xml.completion.repository.ResourceRepository;
 import com.tyron.completion.xml.util.StyleUtils;
 
 import org.apache.bcel.Repository;
@@ -304,20 +304,6 @@ public class XmlRepository {
                     break;
             }
         }
-    }
-
-    public static File getOrExtractFiles() {
-        File filesDir = ApplicationProvider.getApplicationContext().getFilesDir();
-        File check = new File(filesDir,
-                "sources/android-31/data/res/values/attrs.xml");
-        if (check.exists()) {
-            return check;
-        }
-        File dest = new File(filesDir, "sources");
-        Decompress.unzipFromAssets(ApplicationProvider.getApplicationContext(),
-                "android-xml.zip",
-                dest.getAbsolutePath());
-        return check;
     }
 
     public ResourceRepository getRepository() {

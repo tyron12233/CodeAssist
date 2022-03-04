@@ -1,9 +1,11 @@
 package com.tyron.builder.compiler;
 
 import androidx.annotation.MainThread;
+import androidx.annotation.NonNull;
 
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 
 import java.io.IOException;
@@ -17,6 +19,9 @@ public interface Builder<T extends Module> {
     }
 
     void setTaskListener(TaskListener taskListener);
+
+    @NonNull
+    Project getProject();
 
     T getModule();
 

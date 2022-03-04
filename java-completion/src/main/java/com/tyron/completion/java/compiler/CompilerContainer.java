@@ -9,12 +9,8 @@ import com.tyron.completion.java.BuildConfig;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.Semaphore;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 import kotlin.jvm.functions.Function1;
 
@@ -37,12 +33,9 @@ public class CompilerContainer {
 
     private volatile boolean mIsWriting;
 
-    @GuardedBy("mLock")
-    private CompileTask mCompileTask;
+    private Semaphore semaphore = new Semaphore(1);
 
-    private final ReadWriteLock mLock = new ReentrantReadWriteLock(true);
-    private final Lock mReadLock = mLock.readLock();
-    private final Lock mWriteLock = mLock.writeLock();
+    private CompileTask mCompileTask;
 
     public CompilerContainer() {
 
@@ -54,26 +47,29 @@ public class CompilerContainer {
      * are synchronized
      */
     public void run(Consumer<CompileTask> consumer) {
-        mReadLock.lock();
+        semaphore.acquireUninterruptibly();
         try {
             consumer.accept(mCompileTask);
         } finally {
-            if (mCompileTask != null) {
-                mCompileTask.close();
-            }
-            mReadLock.unlock();
+            semaphore.release();
         }
     }
 
-    public <T> T get(Function<CompileTask, T> fun) {
-        mReadLock.lock();
+    public <T> T get(Function1<CompileTask, T> fun) {
+        semaphore.acquireUninterruptibly();
         try {
-            return fun.apply(mCompileTask);
+            return fun.invoke(mCompileTask);
         } finally {
-            if (mCompileTask != null) {
-                mCompileTask.close();
-            }
-            mReadLock.unlock();
+            semaphore.release();
+        }
+    }
+
+    public <T> T getWithLock(Function1<CompileTask, T> fun) {
+        semaphore.acquireUninterruptibly();
+        try {
+            return fun.invoke(mCompileTask);
+        } finally {
+            semaphore.release();
         }
     }
 
@@ -81,18 +77,20 @@ public class CompilerContainer {
         return mIsWriting;
     }
 
-    void initialize(Supplier<CompileTask> supplier) {
-        mWriteLock.lock();
-        mIsWriting = true;
-
-        if (mCompileTask != null) {
-            mCompileTask.close();
-        }
+    void initialize(Runnable runnable) {
+        semaphore.acquireUninterruptibly();
         try {
-            mCompileTask = supplier.get();
+            // ensure that compile task is closed
+            if (mCompileTask != null) {
+                mCompileTask.close();
+            }
+            runnable.run();
         } finally {
-            mIsWriting = false;
-            mWriteLock.unlock();
+            semaphore.release();
         }
+    }
+
+    void setCompileTask(CompileTask task) {
+        mCompileTask = task;
     }
 }

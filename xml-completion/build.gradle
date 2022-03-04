@@ -30,12 +30,11 @@ dependencies {
     implementation project(path: ':actions-api')
     implementation project(path: ':editor-api')
 
-    implementation 'androidx.appcompat:appcompat:1.4.0'
-    implementation 'com.google.android.material:material:1.4.0'
+    implementation 'androidx.appcompat:appcompat:1.4.1'
+    implementation 'com.google.android.material:material:1.5.0'
 
     // bytecode analysis
     implementation 'org.apache.bcel:bcel:6.5.0'
-    // lexers
     implementation 'org.antlr:antlr4-runtime:4.9.2'
     implementation 'org.jsoup:jsoup:1.14.3'
 
@@ -43,10 +42,12 @@ dependencies {
     implementation project(path: ':completion-api')
     implementation project(path: ':common')
     implementation project(path: ':java-completion')
+    compileOnly project(path: ':build-tools:javac')
 
     implementation project(path: ':build-tools:project')
     implementation project(path: ':build-tools:manifmerger')
-    api files('libs\\org.eclipse.lemminx-0.11.0-uber.jar')
+    implementation project(path: ':build-tools:xml-repository')
+
     testImplementation 'junit:junit:4.+'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'

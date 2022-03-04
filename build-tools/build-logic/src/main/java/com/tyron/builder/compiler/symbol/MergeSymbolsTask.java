@@ -9,6 +9,7 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.resource.AAPT2Compiler;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.cache.CacheHolder;
 import com.tyron.common.util.Cache;
@@ -34,8 +35,8 @@ public class MergeSymbolsTask extends Task<AndroidModule> {
     private File mSymbolOutputDir;
     private File mFullResourceFile;
 
-    public MergeSymbolsTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+    public MergeSymbolsTask(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

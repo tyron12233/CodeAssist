@@ -59,8 +59,10 @@ import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.EnhancedForLoopTree;
 import org.openjdk.source.tree.ExpressionStatementTree;
 import org.openjdk.source.tree.ForLoopTree;
+import org.openjdk.source.tree.IdentifierTree;
 import org.openjdk.source.tree.IfTree;
 import org.openjdk.source.tree.ImportTree;
+import org.openjdk.source.tree.MemberSelectTree;
 import org.openjdk.source.tree.MethodInvocationTree;
 import org.openjdk.source.tree.NewClassTree;
 import org.openjdk.source.tree.ParenthesizedTree;
@@ -198,6 +200,22 @@ public class ActionUtil {
     public static TreePath findSurroundingPath(TreePath path) {
         TreePath parent = path.getParentPath();
         TreePath grandParent = parent.getParentPath();
+
+        if (path.getLeaf() instanceof ExpressionStatementTree) {
+            return path;
+        }
+
+        if (path.getLeaf() instanceof MethodInvocationTree) {
+            return findSurroundingPath(parent);
+        }
+
+        if (path.getLeaf() instanceof MemberSelectTree) {
+            return findSurroundingPath(parent);
+        }
+
+        if (path.getLeaf() instanceof IdentifierTree) {
+            return findSurroundingPath(parent);
+        }
 
         if (parent.getLeaf() instanceof JCTree.JCVariableDecl) {
             return parent;

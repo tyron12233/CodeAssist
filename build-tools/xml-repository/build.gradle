@@ -1,0 +1,19 @@
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+dependencies {
+    implementation project(path: ':common')
+    implementation project(path: ':build-tools:manifmerger')
+
+    api files('libs/org.eclipse.lemminx-0.11.0-uber.jar')
+    implementation project(path: ':build-tools:project')
+
+    compileOnly project(path: ':android-stubs')
+    compileOnly project(path: ':build-tools:kotlinc')
+}

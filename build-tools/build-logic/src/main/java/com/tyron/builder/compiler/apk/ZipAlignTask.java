@@ -2,12 +2,12 @@ package com.tyron.builder.compiler.apk;
 
 import android.content.Context;
 
-import com.tyron.builder.BuildModule;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.util.BinaryExecutor;
@@ -25,8 +25,8 @@ public class ZipAlignTask extends Task<AndroidModule> {
 
     private File mApkFile;
 
-    public ZipAlignTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+    public ZipAlignTask(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

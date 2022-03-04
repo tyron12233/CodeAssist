@@ -16,13 +16,14 @@ import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
-import com.tyron.code.ui.editor.language.DiagnosticSpanMapUpdater;
-import com.tyron.code.ui.editor.language.HighlightUtil;
-import com.tyron.code.ui.editor.language.textmate.DiagnosticTextmateAnalyzer;
-import com.tyron.code.ui.editor.language.xml.LanguageXML;
+import com.tyron.code.language.EditorFormatter;
+import com.tyron.code.analyzer.DiagnosticTextmateAnalyzer;
+import com.tyron.code.language.xml.LanguageXML;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.progress.ProgressManager;
-import com.tyron.completion.xml.util.DOMUtils;
+import com.tyron.completion.xml.model.XmlCompletionType;
+import com.tyron.xml.completion.util.DOMUtils;
+import com.tyron.completion.xml.util.XmlUtils;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
@@ -48,9 +49,6 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorTextActionWindow;
-import io.github.rosemoe.sora.widget.layout.Layout;
-import io.github.rosemoe.sora.widget.layout.Row;
-import io.github.rosemoe.sora.widget.layout.RowIterator;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora2.text.EditorUtil;
 
@@ -243,6 +241,10 @@ public class CodeEditorView extends CodeEditor implements Editor {
             DOMDocument document = DOMParser.getInstance().parse(getText().toString(), "", null);
             DOMNode nodeAt = document.findNodeAt(getCursor().getLeft());
             if (!DOMUtils.isClosed(nodeAt) && nodeAt.getNodeName() != null) {
+                if (XmlUtils.getCompletionType(document, getCursor().getLeft()) ==
+                    XmlCompletionType.ATTRIBUTE_VALUE) {
+                    return;
+                }
                 String insertText = full ? "</" + nodeAt.getNodeName() + ">" : ">";
                 commitText(insertText);
                 setSelection(getCursor().getLeftLine(),
@@ -354,11 +356,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
         getText().endBatchEdit();
     }
 
-    @Override
-    public synchronized boolean formatCodeAsync() {
-        return CodeEditorView.super.formatCodeAsync();
-    }
-
     public boolean isFormatting() {
         try {
             return sFormatThreadField.get(this) != null;
@@ -368,9 +365,25 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
+    public synchronized boolean formatCodeAsync() {
+        return CodeEditorView.super.formatCodeAsync();
+    }
+
+
+    @Override
     public synchronized boolean formatCodeAsync(int start, int end) {
-//        CodeEditorView.super.formatCodeAsync();
-//        return CodeEditorView.super.formatCodeAsync(start, end);
+        if (isFormatting()) {
+            return false;
+        }
+        if (getEditorLanguage() instanceof EditorFormatter) {
+            ProgressManager.getInstance().runNonCancelableAsync(() -> {
+                CharSequence originalText = getText();
+                final CharSequence formatted =
+                        ((EditorFormatter) getEditorLanguage()).format(originalText, start, end);
+                super.onFormatSucceed(originalText, formatted);
+            });
+            return true;
+        }
         return false;
     }
 

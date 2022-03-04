@@ -6,9 +6,9 @@ import androidx.annotation.NonNull;
 
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Table;
-import com.tyron.completion.xml.repository.Repository;
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
-import com.tyron.completion.xml.util.DOMUtils;
+import com.tyron.xml.completion.repository.Repository;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
+import com.tyron.xml.completion.util.DOMUtils;
 import com.tyron.layoutpreview2.EditorContext;
 import com.tyron.layoutpreview2.util.AttributeUtils;
 

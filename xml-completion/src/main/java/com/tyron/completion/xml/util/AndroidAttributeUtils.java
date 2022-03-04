@@ -13,10 +13,11 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
 import com.tyron.completion.xml.insert.AttributeInsertHandler;
-import com.tyron.completion.xml.repository.ResourceRepository;
-import com.tyron.completion.xml.repository.api.AttrResourceValue;
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
-import com.tyron.completion.xml.repository.api.ResourceReference;
+import com.tyron.xml.completion.repository.ResourceRepository;
+import com.tyron.xml.completion.repository.api.AttrResourceValue;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
+import com.tyron.xml.completion.repository.api.ResourceReference;
+import com.tyron.xml.completion.util.DOMUtils;
 
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMElement;

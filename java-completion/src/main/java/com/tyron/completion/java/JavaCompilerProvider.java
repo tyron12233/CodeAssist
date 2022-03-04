@@ -1,15 +1,14 @@
 package com.tyron.completion.java;
 
-import com.tyron.builder.BuildModule;
-import com.tyron.builder.compiler.dex.D8Task;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.completion.index.CompilerProvider;
+import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.compiler.JavaCompilerService;
-
-import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,10 +17,21 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> {
     public static final String KEY = JavaCompilerProvider.class.getSimpleName();
+
+    @Nullable
+    public static JavaCompilerService get(@NonNull Project project,
+                                                  @NonNull JavaModule module) {
+        Object index = CompilerService.getInstance().getIndex(KEY);
+        if (!(index instanceof JavaCompilerProvider)) {
+            return null;
+        }
+
+        JavaCompilerProvider provider = ((JavaCompilerProvider) index);
+        return provider.getCompiler(project, module);
+    }
 
     private volatile JavaCompilerService mProvider;
     private final Set<File> mCachedPaths;
@@ -54,8 +64,7 @@ public class JavaCompilerProvider extends CompilerProvider<JavaCompilerService> 
 
         for (Module dependency : dependencies) {
             if (dependency instanceof JavaModule) {
-                paths.addAll(((JavaModule) dependency).getJavaFiles()
-                                     .values());
+                paths.addAll(((JavaModule) dependency).getJavaFiles().values());
                 paths.addAll(((JavaModule) dependency).getLibraries());
                 paths.addAll(((JavaModule) dependency).getInjectedClasses().values());
             }

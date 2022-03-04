@@ -24,7 +24,7 @@ public class AndroidAppKotlinBuilderTest extends AndroidAppBuilderTestBase {
                 "com/tyron/test/KotlinClass.kt"));
         mProject.open();
 
-        AndroidAppBuilder builder = new AndroidAppBuilder(mProject, ILogger.STD_OUT);
+        AndroidAppBuilder builder = new AndroidAppBuilder(null, mProject, ILogger.STD_OUT);
         builder.build(BuildType.RELEASE);
 
         assertThat(builder.getTasksRan().stream()

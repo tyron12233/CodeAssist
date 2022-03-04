@@ -6,6 +6,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 
 import org.apache.commons.io.FileUtils;
@@ -47,8 +48,8 @@ public class GenerateFirebaseConfigTask extends Task<AndroidModule> {
     private static final String GOOGLE_APP_ID = "google_app_id";
     private static final String GOOGLE_CRASH_REPORTING_API_KEY = "google_crash_reporting_api_key";
 
-    public GenerateFirebaseConfigTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+    public GenerateFirebaseConfigTask(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

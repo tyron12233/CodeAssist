@@ -141,9 +141,10 @@ public class ReusableCompiler {
                 method.invoke(task);
             } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
                 throw new RuntimeException(e);
+            } finally {
+                checkedOut = false;
+                closed = true;
             }
-            checkedOut = false;
-            closed = true;
         }
     }
 

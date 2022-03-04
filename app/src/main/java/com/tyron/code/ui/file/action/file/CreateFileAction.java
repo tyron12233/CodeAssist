@@ -15,6 +15,8 @@ import com.google.android.material.textfield.TextInputLayout;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
+import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.ui.treeview.TreeNode;
 import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.action.ActionContext;
@@ -75,6 +77,12 @@ public class CreateFileAction extends FileAction {
                 } else {
                     refreshTreeView(context);
                     dialog.dismiss();
+
+                    try {
+                        InjectResourcesTask.inject(ProjectManager.getInstance().getCurrentProject());
+                    } catch (IOException e) {
+                        // ignored
+                    }
                 }
             });
             editText.addTextChangedListener(new SingleTextWatcher() {

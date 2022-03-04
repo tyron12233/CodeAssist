@@ -16,12 +16,12 @@ import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.model.XmlCompletionType;
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
 import com.tyron.completion.xml.util.AndroidAttributeUtils;
 import com.tyron.completion.xml.util.AndroidResourcesUtils;
 import com.tyron.completion.xml.util.AndroidXmlTagUtils;
 import com.tyron.completion.xml.util.AttributeValueUtils;
-import com.tyron.completion.xml.util.DOMUtils;
+import com.tyron.xml.completion.util.DOMUtils;
 import com.tyron.completion.xml.util.XmlUtils;
 
 import org.eclipse.lemminx.dom.DOMAttr;

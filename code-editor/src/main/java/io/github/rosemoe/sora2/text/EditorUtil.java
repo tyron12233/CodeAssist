@@ -3,21 +3,82 @@ package io.github.rosemoe.sora2.text;
 import android.content.Context;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
+import android.graphics.Color;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.lang.reflect.Method;
+import java.util.Collection;
 
 import io.github.rosemoe.sora.event.SelectionChangeEvent;
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.ContentLine;
 import io.github.rosemoe.sora.text.ICUUtils;
+import io.github.rosemoe.sora.textmate.core.internal.theme.ThemeRaw;
 import io.github.rosemoe.sora.textmate.core.internal.theme.reader.ThemeReader;
 import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
+import io.github.rosemoe.sora.textmate.core.theme.IRawThemeSetting;
 import io.github.rosemoe.sora.util.IntPair;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class EditorUtil {
+
+    public static final String KEY_BACKGROUND = "background";
+    public static final String KEY_BLOCK_LINE = "blockLineColor";
+    public static final String KEY_CURRENT_BLOCK_LINE = "currentBlockLineColor";
+    public static final String KEY_COMPLETION_WINDOW_BACKGROUND = "completionWindowBackground";
+    public static final String KEY_COMPLETION_WINDOW_STROKE = "completionWindowStroke";
+
+    @NonNull
+    public static TextMateColorScheme createTheme(IRawTheme rawTheme) {
+        TextMateColorScheme scheme = TextMateColorScheme.create(rawTheme);
+        Collection<IRawThemeSetting> settings = rawTheme.getSettings();
+        if (settings != null && settings.size() >= 1) {
+            ThemeRaw setting = (ThemeRaw) settings.iterator().next();
+            setting = (ThemeRaw) setting.getSetting();
+
+            Object blockLine = setting.get(KEY_BLOCK_LINE);
+            scheme.setColor(EditorColorScheme.BLOCK_LINE, getColor(blockLine));
+
+            Object currBlockLine = setting.get(KEY_CURRENT_BLOCK_LINE);
+            if (currBlockLine == null) {
+                currBlockLine = blockLine;
+            }
+            scheme.setColor(EditorColorScheme.BLOCK_LINE_CURRENT, getColor(currBlockLine));
+
+            Object completionWindowBackground = setting.get(KEY_COMPLETION_WINDOW_BACKGROUND);
+            if (completionWindowBackground == null) {
+                completionWindowBackground = setting.get(KEY_BACKGROUND);
+            }
+            scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_BG,
+                            getColor(completionWindowBackground));
+
+            Object completionStroke = setting.get(KEY_COMPLETION_WINDOW_STROKE);
+            scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_CORNER,
+                            getColor(completionStroke, Color.TRANSPARENT));
+        }
+        return scheme;
+    }
+
+
+    private static int getColor(@Nullable Object color) {
+        return getColor(color, Color.WHITE);
+    }
+
+    private static int getColor(@Nullable Object color, @ColorInt int def) {
+        if (!(color instanceof String)) {
+            return def;
+        }
+        try {
+            return Color.parseColor((String) color);
+        } catch (IllegalArgumentException e) {
+            return def;
+        }
+    }
 
     public static boolean isDarkMode(Context context) {
         int uiMode = context.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
@@ -49,7 +110,7 @@ public class EditorUtil {
                 rawTheme = ThemeReader.readThemeSync("darcula.json",
                                                      assets.open("textmate/darcula.json"));
             }
-            return TextMateColorScheme.create(rawTheme);
+            return createTheme(rawTheme);
         } catch (Exception e) {
             // should not happen, the bundled theme should always work.
             throw new Error(e);

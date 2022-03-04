@@ -164,6 +164,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         getChildFragmentManager().setFragmentResultListener(REFRESH_TOOLBAR_KEY,
                                                             getViewLifecycleOwner(),
                                                             (key, __) -> refreshToolbar());
+
         refreshToolbar();
 
         if (savedInstanceState != null) {
@@ -481,8 +482,14 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     }
 
     private void injectData(DataContext context) {
-        context.putData(CommonDataKeys.PROJECT, ProjectManager.getInstance()
-                .getCurrentProject());
+        Boolean indexing = mMainViewModel.isIndexing().getValue();
+        // to please lint
+        if (indexing == null) {
+            indexing = true;
+        }
+        if (!indexing) {
+            context.putData(CommonDataKeys.PROJECT, ProjectManager.getInstance().getCurrentProject());
+        }
         context.putData(CommonDataKeys.ACTIVITY, getActivity());
         context.putData(MAIN_VIEW_MODEL_KEY, mMainViewModel);
         context.putData(COMPILE_CALLBACK_KEY, mCompileCallback);

@@ -9,8 +9,8 @@ import androidx.annotation.Nullable;
 
 import com.tyron.builder.compiler.manifest.SdkConstants;
 import com.tyron.common.logging.IdeLog;
-import com.tyron.completion.xml.repository.Repository;
-import com.tyron.completion.xml.util.DOMUtils;
+import com.tyron.xml.completion.repository.Repository;
+import com.tyron.xml.completion.util.DOMUtils;
 import com.tyron.layoutpreview2.manager.ViewManagerImpl;
 import com.tyron.layoutpreview2.util.ViewGroupUtils;
 import com.tyron.layoutpreview2.view.EditorView;
@@ -19,7 +19,6 @@ import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
-import org.w3c.dom.Node;
 
 import java.lang.reflect.Constructor;
 import java.util.HashMap;

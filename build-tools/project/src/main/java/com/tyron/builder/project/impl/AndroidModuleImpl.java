@@ -142,7 +142,17 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
 
     @Override
     public void addResourceClass(@NonNull File file) {
-        mResourceClasses.put(StringSearch.packageName(file), file);
+        if (!file.getName().endsWith(".java")) {
+            return;
+        }
+        String packageName = StringSearch.packageName(file);
+        String className;
+        if (packageName == null) {
+            className = file.getName().replace(".java", "");
+        } else {
+            className = packageName + "." + file.getName().replace(".java", "");
+        }
+        mResourceClasses.put(className, file);
     }
 
     @Override

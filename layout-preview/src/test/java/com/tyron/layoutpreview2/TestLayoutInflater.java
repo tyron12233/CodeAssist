@@ -1,7 +1,6 @@
 package com.tyron.layoutpreview2;
 
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -10,9 +9,9 @@ import com.tyron.builder.project.mock.MockFileManager;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.TestUtil;
 import com.tyron.completion.xml.XmlRepository;
-import com.tyron.completion.xml.repository.ResourceRepository;
-import com.tyron.completion.xml.repository.api.ResourceNamespace;
-import com.tyron.completion.xml.util.DOMUtils;
+import com.tyron.xml.completion.repository.ResourceRepository;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
+import com.tyron.xml.completion.util.DOMUtils;
 import com.tyron.layoutpreview2.attr.impl.TextViewAttributeApplier;
 import com.tyron.layoutpreview2.attr.impl.ViewAttributeApplier;
 import com.tyron.layoutpreview2.view.impl.AndroidViewImpl;

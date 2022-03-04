@@ -73,6 +73,9 @@
         <entry key="..\:/Users/bounc/AndroidStudioProjects/CodeAssist/app/src/main/res/xml/editor_preferences.xml" value="0.4" />
         <entry key="..\:/Users/bounc/AndroidStudioProjects/CodeAssist/code-editor/src/main/res/layout/completion_result_item.xml" value="0.20833333333333334" />
         <entry key="..\:/Users/bounc/AppData/Local/Android/Sdk/platforms/android-32/data/res/layout/test_list_item.xml" value="0.1" />
+        <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/drawable/ic_baseline_code_24.xml" value="0.152" />
+        <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/drawable/ic_baseline_edit_24.xml" value="0.152" />
+        <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/drawable/round_content_copy_20.xml" value="0.152" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/drawable/round_select_all_20.xml" value="0.25" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/drawable/tab_indicator.xml" value="0.2595" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/bottom_editor_fragment.xml" value="0.25416666666666665" />
@@ -84,6 +87,7 @@
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/project_manager_fragment.xml" value="0.23487179487179488" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/settings_activity.xml" value="0.1" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/layout/wizard_templates.xml" value="0.25416666666666665" />
+        <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/menu/file_manager_menu.xml" value="0.264" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/app/src/main/res/xml/editor_preferences.xml" value="0.23854166666666668" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/code-editor/src/main/res/font-v26/mono_font.xml" value="0.22447916666666667" />
         <entry key="..\:/Users/bounc/StudioProjects/CodeAssist/code-editor/src/main/res/font/mono_font.xml" value="0.22447916666666667" />

@@ -15,17 +15,23 @@ import java.util.function.Predicate;
 
 public class MethodInsertHandler extends DefaultInsertHandler {
 
+    private boolean includeParen;
     private final ExecutableElement method;
 
-    public MethodInsertHandler(ExecutableElement method, boolean endsWithParen, CompletionItem item) {
+    public MethodInsertHandler(ExecutableElement method, boolean includeParen, CompletionItem item) {
         super(CompletionUtils.JAVA_PREDICATE, item);
         this.method = method;
+        this.includeParen = includeParen;
     }
 
     public MethodInsertHandler(ExecutableElement method, CompletionItem item) {
         this(method, false, item);
-
     }
+
+    public MethodInsertHandler(ExecutableElement method, CompletionItem item, boolean includeParen) {
+        this(method, includeParen , item);
+    }
+
     @Override
     public void handleInsert(Editor editor) {
         deletePrefix(editor);
@@ -40,7 +46,7 @@ public class MethodInsertHandler extends DefaultInsertHandler {
             } else if (commitText.endsWith("();")) {
                 commitText = commitText.substring(0, commitText.length() - 3);
             }
-        } else {
+        } else if (includeParen) {
             commitText += "()";
         }
         boolean insertSemi = shouldInsertSemiColon() && isEndOfLine;

@@ -20,7 +20,7 @@ public class AndroidAppBuilderTest extends AndroidAppBuilderTestBase {
                 "com/tyron/test/MainActivity.java"));
         mProject.open();
 
-        AndroidAppBuilder builder = new AndroidAppBuilder(mProject, ILogger.STD_OUT);
+        AndroidAppBuilder builder = new AndroidAppBuilder(null, mProject, ILogger.STD_OUT);
         builder.build(BuildType.RELEASE);
 
         File signedApk = new File(mProject.getBuildDirectory(), "bin/signed.apk");

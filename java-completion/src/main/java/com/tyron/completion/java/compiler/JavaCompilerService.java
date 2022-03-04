@@ -55,7 +55,7 @@ public class JavaCompilerService implements CompilerProvider {
     private JavaModule mCurrentModule;
     public final Set<File> classPath, docPath;
     public final Set<String> addExports;
-    public final ReusableCompiler compiler = new ReusableCompiler();
+    public ReusableCompiler compiler = new ReusableCompiler();
     private final Docs docs;
 
     private final CompilerContainer mContainer = new CompilerContainer();
@@ -146,20 +146,11 @@ public class JavaCompilerService implements CompilerProvider {
      */
     private CompilerContainer compileBatch(Collection<? extends JavaFileObject> sources) {
         mContainer.initialize(() -> {
-            // this lambda is synchronized
-            // and is guaranteed to be the only one writing
-            if (cachedCompile != null && !cachedCompile.closed) {
-                cachedCompile.close();
-            }
-            if (cachedCompile != null) {
-                cachedCompile.borrow.close();
-            }
             if (needsCompile(sources)) {
                 loadCompile(sources);
-            } else {
-                Log.d("JavaCompilerService", "Using cached compile");
             }
-            return new CompileTask(cachedCompile);
+            CompileTask task = new CompileTask(cachedCompile);
+            mContainer.setCompileTask(task);
         });
         return mContainer;
     }
@@ -465,7 +456,16 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
     public void destroy() {
+        close();
+        if (cachedCompile != null) {
+            final ReusableCompiler.Borrow borrow = cachedCompile.borrow;
+            if (borrow != null) {
+                borrow.close();
+            }
+        }
         cachedCompile = null;
+        cachedModified.clear();
+        compiler = new ReusableCompiler();
     }
 
     @NonNull

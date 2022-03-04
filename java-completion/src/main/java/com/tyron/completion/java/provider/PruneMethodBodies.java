@@ -1,6 +1,7 @@
 package com.tyron.completion.java.provider;
 
 
+import org.openjdk.source.tree.BlockTree;
 import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.util.JavacTask;
@@ -34,20 +35,19 @@ public class PruneMethodBodies extends TreeScanner<StringBuilder, Long> {
     }
 
     @Override
-    public StringBuilder visitMethod(MethodTree t, Long find) {
+    public StringBuilder visitBlock(BlockTree blockTree, Long find) {
         SourcePositions pos = Trees.instance(task).getSourcePositions();
-        if (t.getBody() == null) return buf;
-            long start = pos.getStartPosition(root, t.getBody());
-            long end = pos.getEndPosition(root, t.getBody());
-            if (!(start <= find && find < end)) {
-                for (int i = (int) start + 1; i < end - 1; i++) {
-                    if (!Character.isWhitespace(buf.charAt(i))) {
-                        buf.setCharAt(i, ' ');
-                    }
+        long start = pos.getStartPosition(root, blockTree);
+        long end = pos.getEndPosition(root, blockTree);
+        if (!(start <= find && find < end)) {
+            for (int i = (int) start + 1; i < end - 1; i++) {
+                if (!Character.isWhitespace(buf.charAt(i))) {
+                    buf.setCharAt(i, ' ');
                 }
-                return buf;
             }
-        super.visitMethod(t, find);
+            return buf;
+        }
+        super.visitBlock(blockTree, find);
         return buf;
     }
 
