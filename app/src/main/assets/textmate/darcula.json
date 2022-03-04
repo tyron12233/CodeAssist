@@ -112,6 +112,13 @@
       }
     },
     {
+      "name": "Method call identifier",
+      "scope": "meta.method-call",
+      "settings": {
+        "foreground": "#A9B7C6"
+      }
+    },
+    {
       "name": "Types, Class Types",
       "scope": "entity.name.type,meta.return.type,meta.type.annotation,meta.type.parameters,support.type.primitive",
       "settings": {
@@ -150,7 +157,7 @@
       "name": "Function Argument",
       "scope": "variable.parameter, operator.rest.parameters",
       "settings": {
-        "foreground": "#CCCCCC"
+        "foreground": "#A9B7C6"
       }
     },
     {
@@ -158,6 +165,20 @@
       "scope": "variable.property,variable.other.property,variable.other.object.property,variable.object.property,support.variable.property",
       "settings": {
         "foreground": "#9E7BB0"
+      }
+    },
+    {
+      "name": "Variable name",
+      "scope": "entity.name.variable",
+      "settings": {
+        "foreground": "#A9B7C6"
+      }
+    },
+    {
+      "name": "CONSTANT",
+      "scope": "variable.other.constant",
+      "settings": {
+        "foreground": "#9876AA"
       }
     },
     {
@@ -276,7 +297,7 @@
       "name": "Class Name",
       "scope": "entity.name.type.class",
       "settings": {
-        "foreground": "#CCCCCC"
+        "foreground": "#A9B7C6"
       }
     },
     {

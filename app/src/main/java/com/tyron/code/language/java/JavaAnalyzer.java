@@ -12,8 +12,10 @@ import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.BuildConfig;
+import com.tyron.code.analyzer.DiagnosticTextmateAnalyzer;
+import com.tyron.code.analyzer.SemanticAnalyzeManager;
+import com.tyron.code.analyzer.semantic.SemanticToken;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
-import com.tyron.code.language.textmate.DiagnosticTextmateAnalyzer;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.Debouncer;
@@ -26,11 +28,13 @@ import com.tyron.completion.java.util.ErrorCodes;
 import com.tyron.completion.java.util.TreeUtil;
 import com.tyron.completion.progress.ProcessCanceledException;
 import com.tyron.completion.progress.ProgressManager;
+import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
 
 import org.openjdk.javax.tools.Diagnostic;
 import org.openjdk.javax.tools.JavaFileObject;
 import org.openjdk.source.tree.BlockTree;
+import org.openjdk.source.tree.CompilationUnitTree;
 import org.openjdk.source.tree.MethodTree;
 import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
@@ -47,18 +51,28 @@ import java.io.Reader;
 import java.lang.ref.WeakReference;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 
+import io.github.rosemoe.sora.lang.styling.MappedSpans;
+import io.github.rosemoe.sora.lang.styling.Styles;
+import io.github.rosemoe.sora.lang.styling.TextStyle;
 import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
+import io.github.rosemoe.sora.textmate.core.grammar.StackElement;
+import io.github.rosemoe.sora.textmate.core.theme.FontStyle;
 import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
+import io.github.rosemoe.sora.textmate.core.theme.ThemeTrieElementRule;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
 
-public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
+public class JavaAnalyzer extends SemanticAnalyzeManager {
 
     private static final String GRAMMAR_NAME = "java.tmLanguage.json";
     private static final String LANGUAGE_PATH = "textmate/java/syntaxes/java.tmLanguage.json";
@@ -69,18 +83,17 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
             AssetManager assetManager = ApplicationLoader.applicationContext.getAssets();
 
             try (InputStreamReader config = new InputStreamReader(assetManager.open(CONFIG_PATH))) {
-                return new JavaAnalyzer(editor, GRAMMAR_NAME,
-                                        assetManager.open(LANGUAGE_PATH), config,
-                                        ((TextMateColorScheme) ((CodeEditorView) editor)
-                                                .getColorScheme()).getRawTheme());
+                return new JavaAnalyzer(editor, GRAMMAR_NAME, assetManager.open(LANGUAGE_PATH),
+                                        config, ((TextMateColorScheme) ((CodeEditorView) editor)
+                        .getColorScheme()).getRawTheme());
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static final Debouncer sDebouncer = new Debouncer(Duration.ofMillis(700), Executors.newScheduledThreadPool(
-            1, new ThreadFactory() {
+    private static final Debouncer sDebouncer = new Debouncer(Duration.ofMillis(700), Executors
+            .newScheduledThreadPool(1, new ThreadFactory() {
                 @Override
                 public Thread newThread(Runnable runnable) {
                     ThreadGroup threadGroup = Looper.getMainLooper().getThread().getThreadGroup();
@@ -101,6 +114,26 @@ public class JavaAnalyzer extends DiagnosticTextmateAnalyzer {
 
         mEditorReference = new WeakReference<>(editor);
         mPreferences = ApplicationLoader.getDefaultPreferences();
+    }
+
+    @Override
+    public List<SemanticToken> analyzeSpansAsync(CharSequence contents) {
+        Editor editor = mEditorReference.get();
+        JavaCompilerService compiler = getCompiler(editor);
+        if (compiler == null) {
+            return null;
+        }
+
+        File currentFile = editor.getCurrentFile();
+        SourceFileObject object = new SourceFileObject(currentFile.toPath(), contents.toString(), Instant.now());
+        CompilerContainer container = compiler.compile(Collections.singletonList(object));
+
+        return container.get(task -> {
+            JavaSemanticHighlighter highlighter = new JavaSemanticHighlighter(task.task);
+            CompilationUnitTree root = task.root(currentFile);
+            highlighter.scan(root, true);
+            return highlighter.getTokens();
+        });
     }
 
     @Override

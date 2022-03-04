@@ -32,7 +32,7 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
     protected List<DiagnosticWrapper> mDiagnostics = new ArrayList<>();
     private boolean mShouldAnalyzeInBg;
     private ContentReference ref;
-    private Editor mEditor;
+    protected Editor mEditor;
 
     private final Consumer<Styles> mStyleModifier;
 
