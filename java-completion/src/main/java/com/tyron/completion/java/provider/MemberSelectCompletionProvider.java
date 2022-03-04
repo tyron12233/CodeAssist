@@ -48,7 +48,7 @@ public class MemberSelectCompletionProvider extends BaseCompletionProvider {
 
         MemberSelectTree select = (MemberSelectTree) path.getLeaf();
         path = new TreePath(path, select.getExpression());
-        Trees trees = Trees.instance(task.task);
+        Trees trees = task.getTrees();
         Element element;
         try {
             element = trees.getElement(path);
