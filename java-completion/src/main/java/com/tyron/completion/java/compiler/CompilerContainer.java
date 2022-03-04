@@ -73,7 +73,7 @@ public class CompilerContainer {
         }
     }
 
-    public boolean isWriting() {
+    public synchronized boolean isWriting() {
         return mIsWriting;
     }
 
