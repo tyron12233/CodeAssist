@@ -5,7 +5,6 @@ import static com.android.sdklib.build.ApkBuilder.checkFolderForPackaging;
 
 import com.android.sdklib.build.DuplicateFileException;
 import com.android.sdklib.internal.build.SignedJarBuilder;
-import com.tyron.builder.BuildModule;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.manifest.SdkConstants;
@@ -22,14 +21,12 @@ import net.lingala.zip4j.model.ZipParameters;
 import net.lingala.zip4j.model.enums.CompressionLevel;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -196,7 +193,7 @@ public class AabTask extends Task<AndroidModule> {
             throw new CompilationFailedException(executor.getLog());
         }*/
 		BundleTool signer = new BundleTool(mOutputApk.getAbsolutePath(),
-										   mOutputApks.getAbsolutePath(), BundleTool.Mode.TEST);
+										   mOutputApks.getAbsolutePath());
 
         try {
             signer.apk();
@@ -231,7 +228,7 @@ public class AabTask extends Task<AndroidModule> {
             throw new CompilationFailedException(executor.getLog());
         }*/
 		BundleTool signer = new BundleTool(mInputApk.getAbsolutePath(),
-										 mOutputApk.getAbsolutePath(), BundleTool.Mode.TEST);
+										 mOutputApk.getAbsolutePath());
 
         try {
             signer.aab();
