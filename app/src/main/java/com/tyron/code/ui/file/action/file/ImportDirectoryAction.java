@@ -2,7 +2,6 @@ package com.tyron.code.ui.file.action.file;
 
 import android.content.Context;
 import android.os.Environment;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -12,12 +11,13 @@ import com.github.angads25.filepicker.view.FilePickerDialog;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
-import com.tyron.completion.progress.ProgressManager;
 import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.action.FileAction;
 import com.tyron.code.ui.file.tree.TreeFileManagerFragment;
 import com.tyron.code.ui.file.tree.TreeUtil;
 import com.tyron.code.ui.file.tree.model.TreeFile;
+import com.tyron.common.util.AndroidUtilities;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
 import com.tyron.ui.treeview.TreeView;
 
@@ -48,7 +48,8 @@ public class ImportDirectoryAction extends FileAction {
     @SuppressWarnings("ConstantConditions")
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        TreeFileManagerFragment fragment = (TreeFileManagerFragment) e.getData(CommonDataKeys.FRAGMENT);
+        TreeFileManagerFragment fragment =
+                (TreeFileManagerFragment) e.getData(CommonDataKeys.FRAGMENT);
         File currentDir = e.getData(CommonDataKeys.FILE);
         TreeNode<TreeFile> currentNode = e.getData(CommonFileKeys.TREE_NODE);
 
@@ -61,19 +62,28 @@ public class ImportDirectoryAction extends FileAction {
         FilePickerDialog dialog = new FilePickerDialog(fragment.requireContext(), properties);
         dialog.setDialogSelectionListener(files -> {
             ProgressManager.getInstance().runNonCancelableAsync(() -> {
-              String file = files[0];
-              try {
-                FileUtils.copyDirectoryToDirectory(new File(file), currentDir);
-              } catch (IOException ioException) {
-                Log.e(ID, ioException.toString());
-              }
+                String file = files[0];
+                try {
+                    FileUtils.copyDirectoryToDirectory(new File(file), currentDir);
+                } catch (IOException ioException) {
+                    ProgressManager.getInstance().runLater(() -> {
+                        if (fragment.isDetached() || fragment.getContext() == null) {
+                            return;
+                        }
+                        AndroidUtilities.showSimpleAlert(e.getDataContext(), R.string.error,
+                                                         ioException.getLocalizedMessage());
+                    });
+                }
 
-              ProgressManager.getInstance().runLater(() -> {
-                refreshTreeView(currentNode, fragment.getTreeView());
-              });
-              
+                ProgressManager.getInstance().runLater(() -> {
+                    if (fragment.isDetached() || fragment.getContext() == null) {
+                        return;
+                    }
+                    refreshTreeView(currentNode, fragment.getTreeView());
+                });
+
             });
-            
+
         });
         dialog.show();
 

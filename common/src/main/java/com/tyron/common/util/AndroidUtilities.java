@@ -13,6 +13,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
@@ -120,6 +121,10 @@ public class AndroidUtilities {
 
 	public static void showSimpleAlert(Context context, @StringRes int title, @StringRes int message) {
 		showSimpleAlert(context, context.getString(title), context.getString(message));
+	}
+
+	public static void showSimpleAlert(@NonNull Context context, @StringRes int title, String message) {
+		showSimpleAlert(context, context.getString(title), message);
 	}
 
 	public static void showSimpleAlert(Context context, String title, String message) {
