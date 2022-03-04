@@ -66,13 +66,13 @@
     <string name="menu_create_project">Criar módulo</string>
     <string name="menu_run">Compilar</string>
     <string name="menu_refresh">Atualizar módulo</string>
-    <string name="menu_library_manager">Administrador de bibliotecas</string>
-    <string name="menu_format">Formato</string>
+    <string name="menu_library_manager">Gerenciar bibliotecas</string>
+    <string name="menu_format">Formatar</string>
     <string name="menu_settings">Configurações</string>
 
     <!-- preferences -->
-    <string name="settings_title_application">Aplicação</string>
-    <string name="settings_desc_application">Preferências gerais da aplicação.</string>
+    <string name="settings_title_application">Aplicativo</string>
+    <string name="settings_desc_application">Preferências gerais do aplicativo.</string>
     <string name="settings_title_editor">Editor</string>
     <string name="settings_desc_editor">Configurar o editor</string>
     <string name="title_activity_settings">Configurações</string>
@@ -96,9 +96,9 @@
     
 
     <!-- Editor settings -->
-    <string name="code_engine_title">Motor de autocompletar</string>
-    <string name="settings_code_completions">Habilitar autocompletador de códigos</string>
-    <string name="settings_kotlin_completions">Habilitar autocompletador de códigos para Kotlin</string>
+    <string name="code_engine_title">Mecanismo de autocompletar</string>
+    <string name="settings_code_completions">Habilitar autocomplemento de códigos</string>
+    <string name="settings_kotlin_completions">Habilitar autocomplemento de códigos para Kotlin</string>
     <string name="settings_kotlin_completions_desc">Esse recurso ainda é experimental e pode ser lento.
         Requer um dispositivo poderoso.
     </string>
@@ -108,7 +108,7 @@
 
     <string name="editor_settings_title">Configurações do editor de código</string>
     <string name="editor_settings_wordwrap">Modo de quebra de palavras</string>
-    <string name="editor_delete_whitespaces">Eliminação automática do espaço em branco</string>
+    <string name="editor_delete_whitespaces">Eliminação automática de espaços em branco</string>
     <string name="save">Salvar</string>
     <string name="defaultString">Padrão</string>
     <string name="editor_scheme_title">Esquema de cores do editor</string>
@@ -123,7 +123,7 @@
     <string name="settings_build_run_desc">Definir configurações de compilação e execução</string>
     <string name="run_title">Executar</string>
     <string name="settings_install_apk_title">Solicitação para instalação APK</string>
-    <string name="settings_install_desc">Mostrar a Solicitação de instalação do APK após a compilação bem-sucedida.</string>
+    <string name="settings_install_desc">Mostrar uma solicitação de instalação do APK após a compilação bem-sucedida.</string>
     <string-array name="java_versions" translatable="false">
         <item>1</item>
         <item>2</item>
@@ -165,7 +165,7 @@
 
     <string name="success">Sucesso</string>
     <string name="delete_success">Eliminado com sucesso.</string>
-    <string name="dialog_confirm_delete">Você tem certeza de que quer apagar %1$s?</string>
+    <string name="dialog_confirm_delete">Você tem certeza de que quer excluir %1$s?</string>
     <string name="dialog_delete">Excluir</string>
     <string name="menu_preview_layout">Pré-visualização de Layout</string>
     <string name="action_menu_build_release">Construir APK de atualização</string>
@@ -182,7 +182,7 @@
     <string name="project_manager_rationale_title">Permissões de armazenamento</string>
     <string name="project_manager_button_allow">Permitir</string>
     <string name="project_manager_button_use_internal">Usar armazenamento interno</string>
-    <string name="project_manager_permission_rationale">A aplicação necessita de permissões de armazenamento a fim de salvar arquivos de módulos que não serão apagados quando você desinstalar o app. 
+    <string name="project_manager_permission_rationale">O aplicativo necessita de permissões de armazenamento a fim de salvar arquivos de módulos que não serão apagados quando você desinstalar o app. 
     Alternativamente, você pode optar por salvar os arquivos do módulo no armazenamento interno do aplicativo.</string>
     <string name="project_manager_android11_notice">Os projetos serão salvos no diretório de armazenamento interno do aplicativo.
     Faça o backup de seus módulos antes de desinstalar o aplicativo.</string>
