@@ -71,10 +71,11 @@ public class CompilerContainer {
         } finally {
             semaphore.release();
         }
+
     }
 
     public synchronized boolean isWriting() {
-        return mIsWriting;
+        return mIsWriting || semaphore.hasQueuedThreads();
     }
 
     void initialize(Runnable runnable) {
