@@ -440,11 +440,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
-    public void drawView(Canvas canvas) {
-        super.drawView(canvas);
-    }
-
-    @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
     }
