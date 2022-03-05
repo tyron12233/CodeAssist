@@ -110,7 +110,7 @@ public class IntroduceLocalVariableAction extends AnAction {
                 path = new TreePath(path.getParentPath(), errorTrees.get(0));
             }
         }
-        Trees trees = Trees.instance(task.task);
+        Trees trees = task.getTrees();
         Element element = trees.getElement(path);
 
         if (element == null) {

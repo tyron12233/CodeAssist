@@ -46,7 +46,7 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
 
     public static void addCompletionItems(CompileTask task, TreePath path, String partial,
                                           boolean endsWithParen, CompletionList.Builder builder) {
-        Trees trees = Trees.instance(task.task);
+        Trees trees = task.getTrees();
         Scope scope = trees.getScope(path);
 
         Predicate<CharSequence> filter = p1 -> {
