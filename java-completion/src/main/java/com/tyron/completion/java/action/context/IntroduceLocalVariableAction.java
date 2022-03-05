@@ -1,5 +1,8 @@
 package com.tyron.completion.java.action.context;
 
+import android.app.Activity;
+import android.content.Context;
+
 import androidx.annotation.NonNull;
 
 import com.tyron.actions.ActionPlaces;
@@ -32,6 +35,7 @@ import org.openjdk.source.tree.Tree;
 import org.openjdk.source.util.SourcePositions;
 import org.openjdk.source.util.TreePath;
 import org.openjdk.source.util.Trees;
+import org.openjdk.tools.javac.code.Type;
 
 import java.io.File;
 import java.util.List;
@@ -123,6 +127,11 @@ public class IntroduceLocalVariableAction extends AnAction {
         }
 
         if (typeMirror != null) {
+            if (typeMirror.getKind() == TypeKind.TYPEVAR) {
+                if (((Type.TypeVar) typeMirror).isCaptured()) {
+                    typeMirror = ((Type.TypeVar) typeMirror).getUpperBound();
+                }
+            }
             if (typeMirror.getKind() == TypeKind.DECLARED) {
                 // use the new class as starting point
                 TreePath parentOfType = TreeUtil.findParentOfType(path, NewClassTree.class);
