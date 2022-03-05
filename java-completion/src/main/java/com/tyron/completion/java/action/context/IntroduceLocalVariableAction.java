@@ -132,13 +132,6 @@ public class IntroduceLocalVariableAction extends AnAction {
                     typeMirror = ((Type.TypeVar) typeMirror).getUpperBound();
                 }
             }
-            if (typeMirror.getKind() == TypeKind.DECLARED) {
-                // use the new class as starting point
-                TreePath parentOfType = TreeUtil.findParentOfType(path, NewClassTree.class);
-                if (parentOfType != null) {
-                    path = parentOfType;
-                }
-            }
             if (typeMirror.getKind() == TypeKind.EXECUTABLE) {
                 // use the return type of the method
                 typeMirror = ((ExecutableType) typeMirror).getReturnType();
