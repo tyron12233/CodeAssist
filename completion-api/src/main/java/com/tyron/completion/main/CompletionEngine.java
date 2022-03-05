@@ -68,7 +68,7 @@ public class CompletionEngine {
                                    int line,
                                    int column,
                                    long index) {
-        if (project.isCompiling()) {
+        if (project.isCompiling() || project.isIndexing()) {
             return CompletionList.EMPTY;
         }
 

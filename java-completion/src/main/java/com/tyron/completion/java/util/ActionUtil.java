@@ -141,11 +141,6 @@ public class ActionUtil {
                 return null;
             }
 
-            TreePath decl = TreeUtil.findParentOfType(path, JCTree.JCVariableDecl.class);
-            if (decl != null) {
-                return null;
-            }
-
             if (parent.getLeaf().getKind() == EXPRESSION_STATEMENT) {
                 return path;
             }
