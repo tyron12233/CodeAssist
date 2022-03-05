@@ -1,5 +1,7 @@
 package com.tyron.completion.progress;
 
+import android.app.ProgressDialog;
+import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -66,6 +68,17 @@ public class ProgressManager {
                 mThreadToIndicator.remove(currentThread);
             }
         });
+    }
+
+    public void runAsync(Context uiContext,
+                         Runnable runnable,
+                         ProgressIndicator indicator) {
+        ProgressDialog dialog = new ProgressDialog(uiContext);
+        dialog.show();
+
+        runAsync(runnable, i -> {
+            dialog.dismiss();
+        }, indicator);
     }
 
     /**
