@@ -166,6 +166,7 @@
     <string name="dialog_confirm_delete">Bist du sicher %1$s zu löschen?</string>
     <string name="dialog_delete">Lösche</string>
     <string name="menu_preview_layout">Layout-Vorschau</string>
+
     <string name="action_menu_build_release">Erstelle Release APK</string>
     <string name="action_menu_build_debug">Erstelle Debug APK</string>
     <string name="action_menu_build_aab">Erstelle AAB</string>
