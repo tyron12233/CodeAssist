@@ -11,6 +11,7 @@ import com.tyron.resolver.parser.PomParser;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.SuffixFileFilter;
 import org.apache.commons.io.filefilter.TrueFileFilter;
+import org.xml.sax.SAXException;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.File;
@@ -65,13 +66,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
             String contents;
             try {
                 contents = CharStreams.toString(new InputStreamReader(is));
-                Pom parsed = new PomParser().parse(contents);
+                Pom parsed = new PomParser(this).parse(contents);
                 parsed.setGroupId(names[0]);
                 parsed.setArtifactId(names[1]);
                 parsed.setVersionName(names[2]);
                 pomFiles.add(parsed);
                 return parsed;
-            } catch (IOException | XmlPullParserException e) {
+            } catch (IOException | XmlPullParserException | SAXException e) {
                 // ignored
             }
         }
@@ -208,13 +209,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
             // save pom files for later
             while (pomFiles.hasNext()) {
                 File pom = pomFiles.next();
-                PomParser parser = new PomParser();
+                PomParser parser = new PomParser(this);
                 try {
                     Pom parsed = parser.parse(pom);
                     this.pomFiles.add(parsed);
-                } catch (XmlPullParserException | IOException e) {
+                } catch (XmlPullParserException | IOException | SAXException e) {
                     // ignored
                     // TODO: should the file be deleted if its corrupt?
+                    e.printStackTrace();
                 }
             }
         }

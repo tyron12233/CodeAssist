@@ -1,12 +1,15 @@
 package com.tyron.resolver.model;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.common.collect.ImmutableList;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class Pom {
@@ -20,6 +23,11 @@ public class Pom {
 
     private List<Dependency> dependencies;
     private List<Dependency> excludes;
+
+    private final Map<String, String> properties = new HashMap<>();
+    private Pom parent;
+
+    private List<Dependency> managedDependencies;
 
     public Pom() {
 
@@ -140,5 +148,34 @@ public class Pom {
             this.excludes = new ArrayList<>();
         }
         this.excludes.addAll(excludes);
+    }
+
+    public void addProperty(String key, String value) {
+        properties.put(key, value);
+    }
+
+    @Nullable
+    public String getProperty(String key) {
+        return properties.get(key);
+    }
+
+    @Nullable
+    public Pom getParent() {
+        return parent;
+    }
+
+    public void setParent(Pom parent) {
+        this.parent = parent;
+    }
+
+    public List<Dependency> getManagedDependencies() {
+        if (managedDependencies == null) {
+            managedDependencies = new ArrayList<>();
+        }
+        return managedDependencies;
+    }
+
+    public void setManagedDependencies(List<Dependency> dependencies) {
+        managedDependencies = dependencies;
     }
 }
