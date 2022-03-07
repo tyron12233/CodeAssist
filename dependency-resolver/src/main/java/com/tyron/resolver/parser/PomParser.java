@@ -214,6 +214,7 @@ public class PomParser {
                         }
 
                         dependency.setVersionName(managedDependency.getVersionName());
+                        dependency.setScope(managedDependency.getScope());
                         found = true;
                         break outer;
                     }
@@ -225,6 +226,32 @@ public class PomParser {
                 }
             } else {
                 dependency.setVersionName(getTextContent(versionList.item(0)));
+            }
+
+            NodeList exclusion = dependencyElement.getElementsByTagName("exclusions");
+            if (exclusion.getLength() > 0) {
+                Element exclusionsElement = (Element) exclusion.item(0);
+                NodeList exclusionElementList = exclusionsElement.getElementsByTagName("exclusion");
+
+                for (int j = 0; j < exclusionElementList.getLength(); j++) {
+                    Element exclusionElement = (Element) exclusionElementList.item(j);
+
+                    Dependency exclusionDependency = new Dependency();
+
+                    NodeList groupId = exclusionElement.getElementsByTagName("groupId");
+                    if (groupId.getLength() < 1) {
+                        continue;
+                    }
+                    exclusionDependency.setGroupId(getTextContent(groupId.item(0)));
+
+                    NodeList artifactId = exclusionElement.getElementsByTagName("artifactId");
+                    if (artifactId.getLength() < 1) {
+                        continue;
+                    }
+                    exclusionDependency.setArtifactId(getTextContent(artifactId.item(0)));
+
+                    dependency.addExclude(exclusionDependency);
+                }
             }
 
             dependencies.add(dependency);
