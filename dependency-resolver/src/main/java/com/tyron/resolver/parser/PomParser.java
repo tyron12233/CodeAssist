@@ -164,7 +164,7 @@ public class PomParser {
         Map<String, String> properties = new HashMap<>();
         NodeList propertyTags = propertyElement.getChildNodes();
         for (int i = 0; i < propertyTags.getLength(); i++) {
-            if ( propertyTags.item(i).getNodeType() != Node.ELEMENT_NODE) {
+            if (propertyTags.item(i).getNodeType() != Node.ELEMENT_NODE) {
                 continue;
             }
             Element property  = (Element) propertyTags.item(i);
@@ -194,30 +194,33 @@ public class PomParser {
             }
             dependency.setArtifactId(artifactIdList.item(0).getTextContent());
 
-            NodeList versionList = dependencyElement.getElementsByTagName("version");
-            if (versionList.getLength() < 1) {
-                if (parent == null) {
-                    continue;
-                }
-
-                List<Dependency> managedDependencies = parent.getManagedDependencies();
-                for (Dependency managedDependency : managedDependencies) {
-                    if (!managedDependency.getGroupId().equals(dependency.getGroupId())) {
-                        continue;
-                    }
-                    if (!managedDependency.getArtifactId().equals(dependency.getArtifactId())) {
-                        continue;
-                    }
-
-                    dependencies.add(managedDependency);
-                }
-                continue;
-            }
-            dependency.setVersionName(getTextContent(versionList.item(0)));
-
             NodeList scopeList = dependencyElement.getElementsByTagName("scope");
             if (scopeList.getLength() > 0) {
                 dependency.setScope(getTextContent(scopeList.item(0)));
+            }
+
+            NodeList versionList = dependencyElement.getElementsByTagName("version");
+            if (versionList.getLength() < 1) {
+                Pom current = parent;
+                outer: while (current != null) {
+                    List<Dependency> managedDependencies = current.getManagedDependencies();
+                    for (Dependency managedDependency : managedDependencies) {
+                        if (!managedDependency.getGroupId().equals(dependency.getGroupId())) {
+                            continue;
+                        }
+                        if (!managedDependency.getArtifactId().equals(dependency.getArtifactId())) {
+                            continue;
+                        }
+
+                        dependency.setVersionName(managedDependency.getVersionName());
+                        break outer;
+                    }
+                    current = current.getParent();
+                }
+
+                continue;
+            } else {
+                dependency.setVersionName(getTextContent(versionList.item(0)));
             }
 
             dependencies.add(dependency);
