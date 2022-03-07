@@ -40,6 +40,7 @@ public class DependencyResolver {
             if (mListener != null) {
                 mListener.onResolve("Getting POM: " + dependency);
             }
+
             Pom pom = repository.getPom(dependency.toString());
             if (pom != null) {
                 pom.setExcludes(dependency.getExcludes());

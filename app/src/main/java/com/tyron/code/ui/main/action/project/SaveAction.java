@@ -13,6 +13,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
+import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.completion.progress.ProgressManager;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class SaveAction extends AnAction {
 
@@ -62,7 +64,11 @@ public class SaveAction extends AnAction {
         if (editors == null) {
             return;
         }
-        List<File> filesToSave = editors.stream()
+
+        Stream<FileEditor> validEditors = editors.stream()
+                        .filter(it -> it.getFragment() instanceof Savable)
+                        .filter(it -> ((Savable) it.getFragment()).canSave());
+        List<File> filesToSave = validEditors
                 .map(FileEditor::getFile)
                 .collect(Collectors.toList());
 
