@@ -202,6 +202,7 @@ public class PomParser {
             NodeList versionList = dependencyElement.getElementsByTagName("version");
             if (versionList.getLength() < 1) {
                 Pom current = parent;
+                boolean found = false;
                 outer: while (current != null) {
                     List<Dependency> managedDependencies = current.getManagedDependencies();
                     for (Dependency managedDependency : managedDependencies) {
@@ -213,12 +214,15 @@ public class PomParser {
                         }
 
                         dependency.setVersionName(managedDependency.getVersionName());
+                        found = true;
                         break outer;
                     }
                     current = current.getParent();
                 }
 
-                continue;
+                if (!found) {
+                    continue;
+                }
             } else {
                 dependency.setVersionName(getTextContent(versionList.item(0)));
             }
