@@ -59,6 +59,7 @@ import com.tyron.code.ui.theme.ThemeRepository;
 import com.tyron.code.util.CoordinatePopupMenu;
 import com.tyron.code.util.PopupMenuHelper;
 import com.tyron.common.SharedPreferenceKeys;
+import com.tyron.common.logging.IdeLog;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.JavaDataContextUtil;
@@ -72,6 +73,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.concurrent.Executors;
+import java.util.logging.Logger;
 
 import io.github.rosemoe.sora.event.ClickEvent;
 import io.github.rosemoe.sora.event.ContentChangeEvent;
@@ -80,6 +82,7 @@ import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.Cursor;
+import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.DirectAccessProps;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
@@ -128,6 +131,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
     private static final String EDITOR_LEFT_COLUMN_KEY = "column";
     private static final String EDITOR_RIGHT_LINE_KEY = "rightLine";
     private static final String EDITOR_RIGHT_COLUMN_KEY = "rightColumn";
+
+    private static final Logger sLogger = IdeLog.getCurrentLogger(CodeEditorFragment.class);
 
     private CodeEditorView mEditor;
 
@@ -276,6 +281,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
     }
 
     private void configureEditor(@NonNull CodeEditorView editor) {
+        // do not allow the user to edit, since at the time this is called
+        // the contents may still be loading.
+        editor.setEditable(false);
         editor.setColorScheme(new CompiledEditorScheme(requireContext()));
         editor.setBackgroundAnalysisEnabled(false);
         editor.setTypefaceText(
@@ -493,6 +501,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @Override
     public void onSnapshotChanged(File file, CharSequence contents) {
         if (mCurrentFile.equals(file)) {
+            if (mReading || mCanSave) {
+                //
+            }
             if (mEditor != null) {
                 if (!mEditor.getText().toString().contentEquals(contents)) {
                     Cursor cursor = mEditor.getCursor();
@@ -585,6 +596,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 }
                 mCanSave = true;
                 mEditor.setBackgroundAnalysisEnabled(true);
+                mEditor.setEditable(true);
                 fileManager.openFileForSnapshot(mCurrentFile, result);
 
                 Bundle bundle = new Bundle();
@@ -602,9 +614,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
                         setCursorPosition(line, column);
                     }
                 }
-
-                mEditor.setEditable(true);
-
                 checkCanSave();
             }
 
