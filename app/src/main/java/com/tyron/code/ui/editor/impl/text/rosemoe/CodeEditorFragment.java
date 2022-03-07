@@ -521,6 +521,11 @@ public class CodeEditorFragment extends Fragment implements Savable,
     }
 
     @Override
+    public boolean canSave() {
+        return mCanSave && !mReading;
+    }
+
+    @Override
     public void save(boolean toDisk) {
         if (!mCanSave || mReading) {
             return;
