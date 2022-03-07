@@ -4,8 +4,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.action.FindMethodDeclarationAt;
+import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
 
@@ -75,12 +75,17 @@ public class DiagnosticUtil {
         @Override
         public String toString() {
             return "MethodPtr{" +
-                    "className='" + className +
-                    '\'' + ", methodName='" + methodName +
-                    '\'' + ", erasedParameterTypes=" +
-                    Arrays.toString(erasedParameterTypes) +
-                    ", method=" + method +
-                    '}';
+                   "className='" +
+                   className +
+                   '\'' +
+                   ", methodName='" +
+                   methodName +
+                   '\'' +
+                   ", erasedParameterTypes=" +
+                   Arrays.toString(erasedParameterTypes) +
+                   ", method=" +
+                   method +
+                   '}';
         }
     }
 
@@ -92,11 +97,14 @@ public class DiagnosticUtil {
      * @return null if no diagnostic is found
      */
     @Nullable
-    public static Diagnostic<? extends JavaFileObject> getDiagnostic(CompileTask task, long cursor) {
-       return getDiagnostic(task.diagnostics, cursor);
+    public static Diagnostic<? extends JavaFileObject> getDiagnostic(CompileTask task,
+                                                                     long cursor) {
+        return getDiagnostic(task.diagnostics, cursor);
     }
 
-    public static Diagnostic<? extends JavaFileObject> getDiagnostic(List<Diagnostic<? extends JavaFileObject>> diagnostics, long cursor) {
+    public static Diagnostic<? extends JavaFileObject> getDiagnostic(List<Diagnostic<?
+            extends JavaFileObject>> diagnostics,
+                                                                     long cursor) {
         for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics) {
             if (diagnostic.getStartPosition() <= cursor && cursor < diagnostic.getEndPosition()) {
                 return diagnostic;
@@ -105,21 +113,55 @@ public class DiagnosticUtil {
         return null;
     }
 
-    @Nullable
-    public static DiagnosticWrapper getDiagnosticWrapper(List<DiagnosticWrapper> diagnostics, long cursor) {
+    public static DiagnosticWrapper getDiagnosticWrapper(List<DiagnosticWrapper> diagnostics,
+                                                         long start,
+                                                         long end) {
         if (diagnostics == null) {
             return null;
         }
+        DiagnosticWrapper current = null;
         for (DiagnosticWrapper diagnostic : diagnostics) {
-            if (diagnostic.getStartPosition() <= cursor && cursor < diagnostic.getEndPosition()) {
+            if (diagnostic.getStartPosition() <= start && end <= diagnostic.getEndPosition()) {
+                if (current == null ||
+                    diagnostic.getStartPosition() < current.getStartPosition() &&
+                    diagnostic.getEndPosition() > current.getEndPosition()) {
+                    current = diagnostic;
+                }
+            }
+        }
+
+        if (current != null) {
+            return current;
+        }
+
+        // fallback to start and end separately
+        current = getDiagnosticWrapper(diagnostics, start);
+        if (current != null) {
+            return current;
+        }
+
+        return getDiagnosticWrapper(diagnostics, end);
+    }
+
+    @Nullable
+    public static DiagnosticWrapper getDiagnosticWrapper(List<DiagnosticWrapper> diagnostics,
+                                                         long cursor) {
+        if (diagnostics == null) {
+            return null;
+        }
+
+        for (DiagnosticWrapper diagnostic : diagnostics) {
+            if (diagnostic.getStartPosition() <= cursor && cursor <= diagnostic.getEndPosition()) {
                 return diagnostic;
             }
         }
+
         return null;
     }
 
     @Nullable
-    public static DiagnosticWrapper getXmlDiagnosticWrapper(List<DiagnosticWrapper> diagnostics, int line) {
+    public static DiagnosticWrapper getXmlDiagnosticWrapper(List<DiagnosticWrapper> diagnostics,
+                                                            int line) {
         if (diagnostics == null) {
             return null;
         }
@@ -132,10 +174,13 @@ public class DiagnosticUtil {
     }
 
     @Nullable
-    public static ClientCodeWrapper.DiagnosticSourceUnwrapper getDiagnosticSourceUnwrapper(Diagnostic<?> diagnostic) {
+    public static ClientCodeWrapper.DiagnosticSourceUnwrapper getDiagnosticSourceUnwrapper(
+            Diagnostic<?> diagnostic) {
         if (diagnostic instanceof DiagnosticWrapper) {
-            if (((DiagnosticWrapper) diagnostic).getExtra() instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
-                return (ClientCodeWrapper.DiagnosticSourceUnwrapper) ((DiagnosticWrapper) diagnostic).getExtra();
+            if (((DiagnosticWrapper) diagnostic)
+                    .getExtra() instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {
+                return (ClientCodeWrapper.DiagnosticSourceUnwrapper) ((DiagnosticWrapper) diagnostic)
+                        .getExtra();
             }
         }
         if (diagnostic instanceof ClientCodeWrapper.DiagnosticSourceUnwrapper) {

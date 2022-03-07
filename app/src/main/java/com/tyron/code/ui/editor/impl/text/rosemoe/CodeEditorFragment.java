@@ -770,7 +770,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
 
         DiagnosticWrapper diagnosticWrapper = DiagnosticUtil
-                .getDiagnosticWrapper(mEditor.getDiagnostics(), mEditor.getCursor().getLeft());
+                .getDiagnosticWrapper(mEditor.getDiagnostics(),
+                                      mEditor.getCursor().getLeft(),
+                                      mEditor.getCursor().getRight());
         if (diagnosticWrapper == null && mLanguage instanceof LanguageXML) {
             diagnosticWrapper = DiagnosticUtil.getXmlDiagnosticWrapper(mEditor.getDiagnostics(),
                                                                        mEditor.getCursor()
