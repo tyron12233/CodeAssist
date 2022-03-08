@@ -22,6 +22,8 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -30,6 +32,8 @@ import java.util.jar.JarFile;
  * appropriate constructors to be inflated in XML.
  */
 public class BytecodeScanner {
+
+    private static final Predicate<String> CLASS_NAME_FILTER = s -> s.endsWith(".class");
 
     private static final Set<String> sIgnoredPaths;
 
@@ -55,16 +59,14 @@ public class BytecodeScanner {
 
     public static void loadJar(File jar) throws IOException {
         try (JarFile jarFile = new JarFile(jar)) {
-            Enumeration<JarEntry> entries = jarFile.entries();
-            while (entries.hasMoreElements()) {
-                JarEntry element = entries.nextElement();
-                if (!element.getName().endsWith(".class")) {
-                    continue;
-                }
+            iterateClasses(jarFile, element -> {
                 ClassParser classParser = new ClassParser(jar.getAbsolutePath(), element.getName());
-                JavaClass parse = classParser.parse();
-                Repository.addClass(parse);
-            }
+                try {
+                    Repository.addClass(classParser.parse());
+                } catch (IOException e) {
+                    // ignored, keep parsing other classes
+                }
+            });
         }
     }
 
@@ -72,18 +74,17 @@ public class BytecodeScanner {
         String path = file.getAbsolutePath();
         List<JavaClass> viewClasses = new ArrayList<>();
         try (JarFile jarFile = new JarFile(file)) {
-            Enumeration<JarEntry> entries = jarFile.entries();
-            while (entries.hasMoreElements()) {
-                JarEntry element = entries.nextElement();
-                if (!element.getName().endsWith(".class")) {
-                    continue;
-                }
+            iterateClasses(jarFile, element -> {
                 ClassParser classParser = new ClassParser(path, element.getName());
-                JavaClass parse = classParser.parse();
-                if (isViewClass(parse)) {
-                    viewClasses.add(parse);
+                try {
+                    JavaClass parse = classParser.parse();
+                    if (isViewClass(parse)) {
+                        viewClasses.add(parse);
+                    }
+                } catch (IOException e) {
+                    // ignored, continue parsing other classes
                 }
-            }
+            });
         }
         return viewClasses;
     }
@@ -111,24 +112,23 @@ public class BytecodeScanner {
         File androidJar = BuildModule.getAndroidJar();
         if (androidJar != null && androidJar.exists()) {
             try (JarFile jarFile = new JarFile(androidJar)) {
-                Enumeration<JarEntry> entries = jarFile.entries();
-                while (entries.hasMoreElements()) {
-                    JarEntry element = entries.nextElement();
+                iterateClasses(jarFile, element -> {
                     String name = element.getName();
-                    if (!name.endsWith(".class")) {
-                        continue;
-                    }
                     String packagePath = name.substring(0, name.lastIndexOf('/'));
                     if (sIgnoredPaths.contains(packagePath)) {
-                        continue;
+                        return;
                     }
                     if (packagePath.startsWith("java/")) {
-                        continue;
+                        return;
                     }
                     ClassParser classParser = new ClassParser(androidJar.getAbsolutePath(), name);
-                    JavaClass parse = classParser.parse();
-                    Repository.addClass(parse);
-                }
+                    try {
+                        Repository.addClass(classParser.parse());
+                    } catch (IOException e) {
+                        // ignored, keep parsing other classes
+                    }
+
+                });
             } catch (IOException e) {
                 // ignored
             }
@@ -177,5 +177,19 @@ public class BytecodeScanner {
             }
         }
         return false;
+    }
+
+    public static void iterateClasses(JarFile jarFile, Consumer<JarEntry> consumer) {
+        iterate(jarFile, CLASS_NAME_FILTER, consumer);
+    }
+
+    public static void iterate(JarFile jarFile, Predicate<String> nameFilter, Consumer<JarEntry> consumer) {
+        Enumeration<JarEntry> entries = jarFile.entries();
+        while (entries.hasMoreElements()) {
+            JarEntry entry = entries.nextElement();
+            if (nameFilter.test(entry.getName())) {
+                consumer.accept(entry);
+            }
+        }
     }
 }
