@@ -1,27 +1,28 @@
 package com.tyron.completion.xml;
 
 import android.content.Context;
-import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.BuildModule;
+import com.tyron.completion.xml.util.PartialClassParser;
 
 import org.apache.bcel.Repository;
-import org.apache.bcel.classfile.ClassParser;
 import org.apache.bcel.classfile.JavaClass;
 import org.apache.bcel.classfile.Method;
 import org.apache.bcel.generic.Type;
-import org.jetbrains.org.objectweb.asm.ClassReader;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -30,6 +31,8 @@ import java.util.jar.JarFile;
  * appropriate constructors to be inflated in XML.
  */
 public class BytecodeScanner {
+
+    private static final Predicate<String> CLASS_NAME_FILTER = s -> s.endsWith(".class");
 
     private static final Set<String> sIgnoredPaths;
 
@@ -55,52 +58,41 @@ public class BytecodeScanner {
 
     public static void loadJar(File jar) throws IOException {
         try (JarFile jarFile = new JarFile(jar)) {
-            Enumeration<JarEntry> entries = jarFile.entries();
-            while (entries.hasMoreElements()) {
-                JarEntry element = entries.nextElement();
-                if (!element.getName().endsWith(".class")) {
-                    continue;
+            iterateClasses(jarFile, element -> {
+                PartialClassParser classParser =
+                        new PartialClassParser(jar.getAbsolutePath(), element.getName());
+                try {
+                    Repository.addClass(classParser.parse());
+                } catch (IOException e) {
+                    // ignored, keep parsing other classes
                 }
-                ClassParser classParser = new ClassParser(jar.getAbsolutePath(), element.getName());
-                JavaClass parse = classParser.parse();
-                Repository.addClass(parse);
-            }
+            });
         }
     }
 
     public static List<JavaClass> scan(File file) throws IOException {
-        String path = file.getAbsolutePath();
         List<JavaClass> viewClasses = new ArrayList<>();
         try (JarFile jarFile = new JarFile(file)) {
-            Enumeration<JarEntry> entries = jarFile.entries();
-            while (entries.hasMoreElements()) {
-                JarEntry element = entries.nextElement();
-                if (!element.getName().endsWith(".class")) {
-                    continue;
+            iterateClasses(jarFile, element -> {
+                String fqn = element.getName().replace('/', '.')
+                        .substring(0, element.getName().length() - ".class".length());
+                try {
+                    JavaClass javaClass = Repository.lookupClass(fqn);
+                    if (isViewClass(javaClass)) {
+                        viewClasses.add(javaClass);
+                    }
+                } catch (ClassNotFoundException e) {
+                    // should not happen, the class should already be loaded here.
                 }
-                ClassParser classParser = new ClassParser(path, element.getName());
-                JavaClass parse = classParser.parse();
-                if (isViewClass(parse)) {
-                    viewClasses.add(parse);
-                }
-            }
+            });
         }
         return viewClasses;
     }
 
     public static boolean isViewGroup(JavaClass javaClass) {
-        JavaClass[] superClasses;
-        try {
-            superClasses = javaClass.getSuperClasses();
-        } catch (ClassNotFoundException e) {
-            return false;
-        }
-        for (JavaClass superClass : superClasses) {
-            if (ViewGroup.class.getName().equals(superClass.getClassName())) {
-                return true;
-            }
-        }
-        return false;
+        JavaClass[] superClasses = getSuperClasses(javaClass);
+        return Arrays.stream(superClasses)
+                .anyMatch(it -> ViewGroup.class.getName().equals(it.getClassName()));
     }
 
     public static void scanBootstrapIfNeeded() {
@@ -111,24 +103,24 @@ public class BytecodeScanner {
         File androidJar = BuildModule.getAndroidJar();
         if (androidJar != null && androidJar.exists()) {
             try (JarFile jarFile = new JarFile(androidJar)) {
-                Enumeration<JarEntry> entries = jarFile.entries();
-                while (entries.hasMoreElements()) {
-                    JarEntry element = entries.nextElement();
+                iterateClasses(jarFile, element -> {
                     String name = element.getName();
-                    if (!name.endsWith(".class")) {
-                        continue;
-                    }
                     String packagePath = name.substring(0, name.lastIndexOf('/'));
                     if (sIgnoredPaths.contains(packagePath)) {
-                        continue;
+                        return;
                     }
                     if (packagePath.startsWith("java/")) {
-                        continue;
+                        return;
                     }
-                    ClassParser classParser = new ClassParser(androidJar.getAbsolutePath(), name);
-                    JavaClass parse = classParser.parse();
-                    Repository.addClass(parse);
-                }
+                    PartialClassParser classParser =
+                            new PartialClassParser(androidJar.getAbsolutePath(), name);
+                    try {
+                        Repository.addClass(classParser.parse());
+                    } catch (IOException e) {
+                        // ignored, keep parsing other classes
+                    }
+
+                });
             } catch (IOException e) {
                 // ignored
             }
@@ -145,20 +137,34 @@ public class BytecodeScanner {
     }
 
     private static boolean isViewClass(JavaClass javaClass) {
-        try {
-            JavaClass[] superClasses = javaClass.getSuperClasses();
-            for (JavaClass superClass : superClasses) {
-                if (View.class.getName().equals(superClass.getClassName())) {
-                    Method[] methods = javaClass.getMethods();
-                    if (containsViewConstructors(methods)) {
-                        return true;
-                    }
-                }
+        JavaClass[] superClasses = getSuperClasses(javaClass);
+        return Arrays.stream(superClasses)
+                .anyMatch(it -> View.class.getName().equals(it.getClassName()));
+    }
+
+    /**
+     * Get the array of java classes even if the root class does not exist
+     *
+     * @param javaClass The java class
+     * @return array of super classes
+     */
+    public static JavaClass[] getSuperClasses(JavaClass javaClass) {
+        List<JavaClass> superClasses = new ArrayList<>();
+        JavaClass current = javaClass;
+        while (current != null && current.getSuperclassName() != null) {
+            JavaClass lookupClass;
+            try {
+                lookupClass = Repository.lookupClass(current.getSuperclassName());
+            } catch (ClassNotFoundException e) {
+                lookupClass = null;
             }
-            return false;
-        } catch (ClassNotFoundException e) {
-            return false;
+
+            if (lookupClass != null) {
+                superClasses.add(lookupClass);
+            }
+            current = lookupClass;
         }
+        return superClasses.toArray(new JavaClass[0]);
     }
 
     private static boolean containsViewConstructors(Method[] methods) {
@@ -177,5 +183,21 @@ public class BytecodeScanner {
             }
         }
         return false;
+    }
+
+    public static void iterateClasses(JarFile jarFile, Consumer<JarEntry> consumer) {
+        iterate(jarFile, CLASS_NAME_FILTER, consumer);
+    }
+
+    public static void iterate(JarFile jarFile,
+                               Predicate<String> nameFilter,
+                               Consumer<JarEntry> consumer) {
+        Enumeration<JarEntry> entries = jarFile.entries();
+        while (entries.hasMoreElements()) {
+            JarEntry entry = entries.nextElement();
+            if (nameFilter.test(entry.getName())) {
+                consumer.accept(entry);
+            }
+        }
     }
 }

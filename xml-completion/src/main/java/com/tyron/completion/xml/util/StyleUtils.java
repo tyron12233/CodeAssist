@@ -34,6 +34,7 @@ import com.tyron.completion.xml.model.DeclareStyleable;
 
 import org.apache.bcel.classfile.JavaClass;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -100,18 +101,17 @@ public class StyleUtils {
     }
 
     public static void putStyles(JavaClass javaClass) {
-        try {
-            JavaClass[] superClasses = javaClass.getSuperClasses();
-            for (JavaClass superClass : superClasses) {
-                if (Object.class.getName().equals(superClass.getClassName())) {
-                    continue;
-                }
-                String simpleName = getSimpleName(superClass.getClassName());
-                sViewStyleMap.put(javaClass.getClassName(), simpleName);
+        JavaClass[] superClasses = BytecodeScanner.getSuperClasses(javaClass);
+        String viewSimpleName = getSimpleName(javaClass.getClassName());
+        for (JavaClass superClass : superClasses) {
+            if (Object.class.getName().equals(superClass.getClassName())) {
+                continue;
             }
-        } catch (ClassNotFoundException e) {
-            // ignored
+            String simpleName = getSimpleName(superClass.getClassName());
+            sViewStyleMap.put(viewSimpleName, simpleName);
         }
+
+        sViewStyleMap.put(viewSimpleName, viewSimpleName);
 
         if (BytecodeScanner.isViewGroup(javaClass)) {
             putLayoutParams(javaClass);
@@ -120,23 +120,13 @@ public class StyleUtils {
 
     public static void putLayoutParams(JavaClass javaClass) {
         ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-        try {
-            JavaClass[] superClasses = javaClass.getSuperClasses();
-            for (JavaClass superClass : superClasses) {
-                if (Object.class.getName().equals(superClass.getClassName())) {
-                    continue;
-                }
-
-                if (View.class.getName().equals(superClass.getClassName())) {
-                    continue;
-                }
-
-                builder.add(getSimpleName(superClass.getClassName()) + "_Layout");
-            }
-            sLayoutParamsMap.put(getSimpleName(javaClass.getClassName()) + "_Layout", builder.build());
-        } catch (ClassNotFoundException e) {
-            // ignored
-        }
+        JavaClass[] superClasses = BytecodeScanner.getSuperClasses(javaClass);
+        Arrays.stream(superClasses)
+                .map(JavaClass::getClassName)
+                .filter(it -> !Object.class.getName().equals(it))
+                .filter(it -> !View.class.getName().equals(it))
+                .forEach(it -> builder.add(getSimpleName(it) + "_Layout"));
+        sLayoutParamsMap.put(getSimpleName(javaClass.getClassName()) + "_Layout", builder.build());
     }
 
     public static void putLayoutParams(@NonNull Class<? extends ViewGroup> viewGroup) {
@@ -171,7 +161,6 @@ public class StyleUtils {
             sViewStyleMap.put(view.getSimpleName(), current.getSimpleName());
             current = current.getSuperclass();
         }
-
     }
 
     /**

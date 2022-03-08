@@ -130,6 +130,12 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         return extraArguments;
     }
 
+    @Override
+    public void destroy() {
+        mEditor = null;
+        super.destroy();
+    }
+
     public abstract void analyzeInBackground(CharSequence contents);
 
     public void rerunWithoutBg() {

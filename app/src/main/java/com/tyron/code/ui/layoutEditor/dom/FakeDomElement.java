@@ -1,6 +1,7 @@
 package com.tyron.code.ui.layoutEditor.dom;
 
 import org.eclipse.lemminx.dom.DOMElement;
+import org.eclipse.lemminx.dom.DOMNode;
 
 public class FakeDomElement extends DOMElement {
 
@@ -23,6 +24,16 @@ public class FakeDomElement extends DOMElement {
 
     public DOMElement getParent() {
         return parent;
+    }
+
+    @Override
+    public DOMElement getParentElement() {
+        return getParent();
+    }
+
+    @Override
+    public DOMNode getParentNode() {
+        return getParent();
     }
 
     public void setParent(DOMElement parent) {
