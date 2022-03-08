@@ -231,7 +231,7 @@ public class ClassParser {
    * @throws  IOException
    * @throws  ClassFormatException
    */
-  private final void readClassInfo() throws IOException, ClassFormatException
+  protected final void readClassInfo() throws IOException, ClassFormatException
   {
     access_flags = file.readUnsignedShort();
 
@@ -253,7 +253,7 @@ public class ClassParser {
    * @throws  IOException
    * @throws  ClassFormatException
    */
-  private final void readConstantPool() throws IOException, ClassFormatException
+  protected final void readConstantPool() throws IOException, ClassFormatException
   {
     constant_pool = new ConstantPool(file);
   }
