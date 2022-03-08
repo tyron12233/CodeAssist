@@ -129,36 +129,16 @@ public class JavaLanguage implements Language, EditorFormatter {
 
     @Override
     public CharSequence format(CharSequence p1) {
-        try {
-            JavaFormatterOptions options =
-                    JavaFormatterOptions.builder()
-                            .style(JavaFormatterOptions.Style.AOSP)
-                            .build();
-            Formatter formatter = new Formatter(options);
-            return formatter.formatSourceAndFixImports(p1.toString());
-        } catch (FormatterException e) {
-            Log.e("JavaFormatter", e.getMessage());
-            return p1;
-        }
+        return format(p1, 0, p1.length());
     }
 
     @NonNull
     @Override
     public CharSequence format(@NonNull CharSequence contents, int start, int end) {
-        JavaFormatterOptions options =
-                JavaFormatterOptions.builder()
-                        .style(JavaFormatterOptions.Style.AOSP)
-                        .build();
-        Formatter formatter = new Formatter(options);
-        Range<Integer> range = Range.closed(start, end);
-        Collection<Range<Integer>> ranges = new ArrayList<>();
-        ranges.add(range);
-        try {
-            return formatter.formatSource(contents.toString(), ranges);
-        } catch (FormatterException e) {
-            Log.d("Formatter", "Unable to format file", e);
-            return contents;
-        }
+        return com.tyron.eclipse.formatter.Formatter.format(contents.toString(),
+                                                     getTabWidth(),
+                                                     start,
+                                                     end - start);
     }
 
     @Override

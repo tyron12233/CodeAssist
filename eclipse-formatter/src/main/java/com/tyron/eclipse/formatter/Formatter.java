@@ -21,9 +21,21 @@ public class Formatter {
      * @return Formatted java source
      */
     public static String format(String source, int indentLevel) {
+        return format(source, indentLevel, 0, source.length());
+    }
+
+    /**
+     * Formats the given source at the given range with the default java convention settings
+     * @param source The java source contents
+     * @param indentLevel The indent level for new line
+     * @param start the start index
+     * @param length the length of the source to format
+     * @return Formatted java source
+     */
+    public static String format(String source, int indentLevel, int start, int length) {
         DefaultCodeFormatterOptions options =
                 DefaultCodeFormatterOptions.getJavaConventionsSettings();
-        return format(source, indentLevel, 0, source.length(), options);
+        return format(source, indentLevel, start, length, options);
     }
 
     /**
