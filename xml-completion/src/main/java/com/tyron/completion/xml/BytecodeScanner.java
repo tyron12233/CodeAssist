@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.BuildModule;
+import com.tyron.completion.xml.util.PartialClassParser;
 
 import org.apache.bcel.Repository;
 import org.apache.bcel.classfile.ClassParser;
@@ -60,7 +61,7 @@ public class BytecodeScanner {
     public static void loadJar(File jar) throws IOException {
         try (JarFile jarFile = new JarFile(jar)) {
             iterateClasses(jarFile, element -> {
-                ClassParser classParser = new ClassParser(jar.getAbsolutePath(), element.getName());
+                PartialClassParser classParser = new PartialClassParser(jar.getAbsolutePath(), element.getName());
                 try {
                     Repository.addClass(classParser.parse());
                 } catch (IOException e) {
@@ -71,18 +72,18 @@ public class BytecodeScanner {
     }
 
     public static List<JavaClass> scan(File file) throws IOException {
-        String path = file.getAbsolutePath();
         List<JavaClass> viewClasses = new ArrayList<>();
         try (JarFile jarFile = new JarFile(file)) {
             iterateClasses(jarFile, element -> {
-                ClassParser classParser = new ClassParser(path, element.getName());
+                String fqn = element.getName().replace('/', '.')
+                        .substring(0, element.getName().length() - ".class".length());
                 try {
-                    JavaClass parse = classParser.parse();
-                    if (isViewClass(parse)) {
-                        viewClasses.add(parse);
+                    JavaClass javaClass = Repository.lookupClass(fqn);
+                    if (isViewClass(javaClass)) {
+                        viewClasses.add(javaClass);
                     }
-                } catch (IOException e) {
-                    // ignored, continue parsing other classes
+                } catch (ClassNotFoundException e) {
+                    // should not happen, the class should already be loaded here.
                 }
             });
         }
@@ -121,7 +122,7 @@ public class BytecodeScanner {
                     if (packagePath.startsWith("java/")) {
                         return;
                     }
-                    ClassParser classParser = new ClassParser(androidJar.getAbsolutePath(), name);
+                    PartialClassParser classParser = new PartialClassParser(androidJar.getAbsolutePath(), name);
                     try {
                         Repository.addClass(classParser.parse());
                     } catch (IOException e) {
@@ -145,20 +146,37 @@ public class BytecodeScanner {
     }
 
     private static boolean isViewClass(JavaClass javaClass) {
-        try {
-            JavaClass[] superClasses = javaClass.getSuperClasses();
-            for (JavaClass superClass : superClasses) {
-                if (View.class.getName().equals(superClass.getClassName())) {
-                    Method[] methods = javaClass.getMethods();
-                    if (containsViewConstructors(methods)) {
-                        return true;
-                    }
-                }
+        JavaClass[] superClasses = getSuperClasses(javaClass);
+        for (JavaClass superClass : superClasses) {
+            if (View.class.getName().equals(superClass.getClassName())) {
+                return true;
             }
-            return false;
-        } catch (ClassNotFoundException e) {
-            return false;
         }
+        return false;
+    }
+
+    /**
+     * Get the array of java classes even if the root class does not exist
+     * @param javaClass The java class
+     * @return array of super classes
+     */
+    private static JavaClass[] getSuperClasses(JavaClass javaClass) {
+        List<JavaClass> superClasses = new ArrayList<>();
+        JavaClass current = javaClass;
+        while (current != null && current.getSuperclassName() != null) {
+            JavaClass lookupClass;
+            try {
+                lookupClass = Repository.lookupClass(current.getSuperclassName());
+            } catch (ClassNotFoundException e) {
+                lookupClass = null;
+            }
+
+            if (lookupClass != null) {
+                superClasses.add(lookupClass);
+            }
+            current = lookupClass;
+        }
+        return superClasses.toArray(new JavaClass[0]);
     }
 
     private static boolean containsViewConstructors(Method[] methods) {
