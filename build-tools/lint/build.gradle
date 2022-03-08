@@ -36,4 +36,5 @@ dependencies {
     implementation project(path: ':common')
     implementation project(path: ':build-tools:build-logic')
     implementation project(path: ':build-tools:javac')
+    implementation project(path: ':build-tools:eclipse-standalone')
 }
