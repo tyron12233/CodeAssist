@@ -102,13 +102,16 @@ public class StyleUtils {
 
     public static void putStyles(JavaClass javaClass) {
         JavaClass[] superClasses = BytecodeScanner.getSuperClasses(javaClass);
+        String viewSimpleName = getSimpleName(javaClass.getClassName());
         for (JavaClass superClass : superClasses) {
             if (Object.class.getName().equals(superClass.getClassName())) {
                 continue;
             }
             String simpleName = getSimpleName(superClass.getClassName());
-            sViewStyleMap.put(javaClass.getClassName(), simpleName);
+            sViewStyleMap.put(viewSimpleName, simpleName);
         }
+
+        sViewStyleMap.put(viewSimpleName, viewSimpleName);
 
         if (BytecodeScanner.isViewGroup(javaClass)) {
             putLayoutParams(javaClass);
