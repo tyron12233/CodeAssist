@@ -136,6 +136,7 @@ public class Completions {
                 if (INSIDE_PARAMETERIZED.accepts(path.getLeaf(), context)) {
                     new ClassNameCompletionProvider(compiler)
                             .complete(builder, task, path, partial, endsWithParen);
+                    break;
                 } else if (SWITCH_CONSTANT.accepts(path.getLeaf(), context)) {
                     new SwitchConstantCompletionProvider(compiler)
                             .complete(builder, task, path, partial, endsWithParen);
