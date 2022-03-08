@@ -136,7 +136,6 @@ public class JavaLanguage implements Language, EditorFormatter {
     @Override
     public CharSequence format(@NonNull CharSequence contents, int start, int end) {
         return com.tyron.eclipse.formatter.Formatter.format(contents.toString(),
-                                                     getTabWidth(),
                                                      start,
                                                      end - start);
     }

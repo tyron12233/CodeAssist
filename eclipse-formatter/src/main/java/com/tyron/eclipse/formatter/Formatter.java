@@ -17,24 +17,28 @@ public class Formatter {
      * Returns the original string if the source cannot be formatted.
      *
      * @param source      The java source
-     * @param indentLevel The number of indents per line
+     * @param indentLevel The number of indents at the start of each line
      * @return Formatted java source
      */
     public static String format(String source, int indentLevel) {
         return format(source, indentLevel, 0, source.length());
     }
 
+    public static String format(String source, int start, int length) {
+        return format(source, 0, start, length);
+    }
+
     /**
-     * Formats the given source at the given range with the default java convention settings
+     * Formats the given source at the given range with the default eclipse java convention settings
      * @param source The java source contents
-     * @param indentLevel The indent level for new line
+     * @param indentLevel The number of indents at the start of each line
      * @param start the start index
      * @param length the length of the source to format
      * @return Formatted java source
      */
     public static String format(String source, int indentLevel, int start, int length) {
         DefaultCodeFormatterOptions options =
-                DefaultCodeFormatterOptions.getJavaConventionsSettings();
+                DefaultCodeFormatterOptions.getEclipseDefaultSettings();
         return format(source, indentLevel, start, length, options);
     }
 
@@ -42,7 +46,7 @@ public class Formatter {
      * Formats the given source at the specified start and end index.
      *
      * @param source  The java source
-     * @param indentLevel The number of indents on a new line
+     * @param indentLevel The number of indents at the start of each line
      * @param start   The start index
      * @param length  The length of the source to format
      * @param options The formatting options
@@ -55,7 +59,7 @@ public class Formatter {
                                 DefaultCodeFormatterOptions options) {
         DefaultCodeFormatter formatter = new DefaultCodeFormatter(options);
         TextEdit format = formatter
-                .format(DefaultCodeFormatter.K_UNKNOWN, source, start, length, indentLevel, "\n");
+                .format(DefaultCodeFormatter.K_COMPILATION_UNIT, source, start, length, indentLevel, "\n");
 
         IDocument document = new Document(source);
         try {
