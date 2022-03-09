@@ -108,6 +108,7 @@ public class ProjectManager {
         }
 
         try {
+            mCurrentProject.setIndexing(true);
             mCurrentProject.index();
         } catch (IOException exception) {
             logger.warning("Failed to open project: " + exception.getMessage());
@@ -174,6 +175,7 @@ public class ProjectManager {
             }
         }
 
+        mCurrentProject.setIndexing(false);
         mListener.onComplete(project, true, "Index successful");
     }
 

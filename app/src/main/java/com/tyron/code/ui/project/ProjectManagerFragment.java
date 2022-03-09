@@ -119,7 +119,6 @@ public class ProjectManagerFragment extends Fragment {
             int id = item.getItemId();
 
             if (id == R.id.projects_path) {
-                setSavePath(null);
                 checkSavePath();
                 return true;
             }

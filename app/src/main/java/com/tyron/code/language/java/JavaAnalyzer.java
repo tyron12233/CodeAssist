@@ -150,7 +150,7 @@ public class JavaAnalyzer extends SemanticAnalyzeManager {
         if (project == null) {
             return null;
         }
-        if (project.isCompiling()) {
+        if (project.isCompiling() || project.isIndexing()) {
             return null;
         }
         Module module = project.getModule(editor.getCurrentFile());

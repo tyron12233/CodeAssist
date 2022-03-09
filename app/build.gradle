@@ -40,6 +40,13 @@ android {
 
     packagingOptions {
         resources.excludes += "license/*"
+
+        exclude "plugin.properties"
+        exclude "plugin.xml"
+        exclude "about.html"
+        exclude ".api_description"
+        exclude "about_files/*"
+        exclude "META-INF/eclipse.inf"
     }
 }
 
@@ -118,6 +125,7 @@ dependencies {
 
     implementation 'androidx.preference:preference:1.2.0'
     implementation 'com.github.TutorialsAndroid:crashx:v6.0.19'
+    implementation project(path: ':eclipse-formatter')
 
     //debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.7'
 

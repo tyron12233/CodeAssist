@@ -12,6 +12,7 @@ import com.google.common.collect.ImmutableSet;
 import com.tyron.actions.DataContext;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
+import com.tyron.code.language.HighlightUtil;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
@@ -43,6 +44,7 @@ import java.util.function.Consumer;
 
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
+import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -150,14 +152,18 @@ public class CodeEditorView extends CodeEditor implements Editor {
         AnalyzeManager manager = getEditorLanguage().getAnalyzeManager();
         if (manager instanceof DiagnosticTextmateAnalyzer) {
             ((DiagnosticTextmateAnalyzer) manager).setDiagnostics(this, diagnostics);
-            ((DiagnosticTextmateAnalyzer) manager).rerunWithoutBg();
         }
 
         if (mDiagnosticsListener != null) {
             mDiagnosticsListener.accept(mDiagnostics);
         }
 
-        invalidate();
+        Styles styles = getStyles();
+        if (styles != null) {
+            HighlightUtil.clearDiagnostics(styles);
+            HighlightUtil.markDiagnostics(this, diagnostics, styles);
+            setStyles(manager, styles);
+        }
     }
 
     public void setDiagnosticsListener(Consumer<List<DiagnosticWrapper>> listener) {
@@ -437,11 +443,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     public void setViewModel(EditorViewModel editorViewModel) {
         mViewModel = editorViewModel;
-    }
-
-    @Override
-    public void drawView(Canvas canvas) {
-        super.drawView(canvas);
     }
 
     @Override

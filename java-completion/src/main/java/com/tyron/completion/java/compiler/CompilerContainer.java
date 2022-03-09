@@ -5,6 +5,7 @@ import android.util.Log;
 import androidx.annotation.GuardedBy;
 
 import com.tyron.completion.java.BuildConfig;
+import com.tyron.completion.progress.ProcessCanceledException;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,7 +48,11 @@ public class CompilerContainer {
      * are synchronized
      */
     public void run(Consumer<CompileTask> consumer) {
-        semaphore.acquireUninterruptibly();
+        try {
+            semaphore.acquire();
+        } catch (InterruptedException e) {
+            throw new ProcessCanceledException(e);
+        }
         try {
             consumer.accept(mCompileTask);
         } finally {

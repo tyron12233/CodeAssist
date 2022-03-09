@@ -36,11 +36,6 @@ public abstract class SemanticAnalyzeManager extends DiagnosticTextmateAnalyzer 
     public abstract List<SemanticToken> analyzeSpansAsync(CharSequence contents);
 
     @Override
-    protected Styles analyze(StringBuilder text, Delegate<StackElement> delegate) {
-        return super.analyze(text, delegate);
-    }
-
-    @Override
     public void insert(io.github.rosemoe.sora.text.CharPosition start,
                        io.github.rosemoe.sora.text.CharPosition end,
                        CharSequence insertedText) {

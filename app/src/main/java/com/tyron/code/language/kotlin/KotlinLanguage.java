@@ -35,21 +35,12 @@ import io.github.rosemoe.sora.widget.SymbolPairMatch;
 public class KotlinLanguage implements Language {
 
     private final Editor mEditor;
-    private final BaseTextmateAnalyzer mAnalyzer;
+    private final KotlinAnalyzer mAnalyzer;
 
     public KotlinLanguage(Editor editor) {
         mEditor = editor;
         AssetManager assetManager = ApplicationLoader.applicationContext.getAssets();
-        try {
-            mAnalyzer = new BaseTextmateAnalyzer(editor, "kotlin.tmLanguage", assetManager.open(
-                    "textmate/kotlin/syntaxes/kotlin.tmLanguage"),
-                                                 new InputStreamReader(assetManager.open(
-                                                         "textmate/kotlin/language-configuration" +
-                                                         ".json")),
-                                                 ((TextMateColorScheme) ((CodeEditorView) editor).getColorScheme()).getRawTheme());
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        mAnalyzer = KotlinAnalyzer.create(editor);
     }
 
     @NonNull

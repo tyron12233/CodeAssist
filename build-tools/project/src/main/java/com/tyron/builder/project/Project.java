@@ -42,6 +42,7 @@ public class Project {
     private final ProjectSettings mSettings;
 
     private volatile boolean mCompiling;
+    private volatile boolean mIndexing;
 
     MutableGraph<Module> graph = GraphBuilder
             .directed()
@@ -61,6 +62,14 @@ public class Project {
 
     public void setCompiling(boolean compiling) {
         mCompiling = compiling;
+    }
+
+    public void setIndexing(boolean indexing) {
+        mIndexing = indexing;
+    }
+
+    public boolean isIndexing() {
+        return mIndexing;
     }
 
     public void open() throws IOException {
@@ -152,5 +161,4 @@ public class Project {
             }
         }
     }
-
 }

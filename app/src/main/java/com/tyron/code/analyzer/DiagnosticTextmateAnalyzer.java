@@ -47,6 +47,9 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
     }
 
     protected void modifyStyles(Styles styles) {
+        if (styles == null) {
+            return;
+        }
         HighlightUtil.clearDiagnostics(styles);
         HighlightUtil.markDiagnostics(mEditor, mDiagnostics, styles);
     }
@@ -69,6 +72,14 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
     public void insert(CharPosition start, CharPosition end, CharSequence insertedText) {
         super.insert(start, end, insertedText);
 
+        if (getExtraArguments().getBoolean("bg", false)) {
+            if (!mShouldAnalyzeInBg) {
+                mShouldAnalyzeInBg = true;
+            } else {
+                analyzeInBackground(ref.getReference());
+            }
+        }
+
         if (start.getLine() != end.getLine()) {
             DiagnosticSpanMapUpdater
                     .shiftDiagnosticsOnMultiLineInsert(mDiagnostics, ref, start, end);
@@ -82,6 +93,14 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
     public void delete(CharPosition start, CharPosition end, CharSequence deletedText) {
         super.delete(start, end, deletedText);
 
+        if (getExtraArguments().getBoolean("bg", false)) {
+            if (!mShouldAnalyzeInBg) {
+                mShouldAnalyzeInBg = true;
+            } else {
+                analyzeInBackground(ref.getReference());
+            }
+        }
+
         if (start.getLine() != end.getLine()) {
             DiagnosticSpanMapUpdater
                     .shiftDiagnosticsOnMultiLineDelete(mDiagnostics, ref, start, end);
@@ -89,25 +108,6 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
             DiagnosticSpanMapUpdater
                     .shiftDiagnosticsOnSingleLineDelete(mDiagnostics, ref, start, end);
         }
-    }
-
-    @Override
-    public void analyzeCodeBlocks(Content model,
-                                  List<CodeBlock> blocks,
-                                  Delegate<StackElement> delegate) {
-        super.analyzeCodeBlocks(model, blocks, delegate);
-    }
-
-    @Override
-    protected Styles analyze(StringBuilder text, Delegate<StackElement> delegate) {
-        if (getExtraArguments().getBoolean("bg", false)) {
-            if (!mShouldAnalyzeInBg) {
-                mShouldAnalyzeInBg = true;
-            } else {
-                analyzeInBackground(text);
-            }
-        }
-        return super.analyze(text, delegate);
     }
 
     @Override
@@ -130,6 +130,12 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         return extraArguments;
     }
 
+    @Override
+    public void destroy() {
+        mEditor = null;
+        super.destroy();
+    }
+
     public abstract void analyzeInBackground(CharSequence contents);
 
     public void rerunWithoutBg() {
@@ -140,7 +146,7 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
     public void rerunWithBg() {
         super.rerun();
 
-        analyzeInBackground(ref);
+        analyzeInBackground(ref.getReference());
     }
 
     public static class StyleReceiverInterceptor implements StyleReceiver {

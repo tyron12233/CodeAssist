@@ -5,6 +5,7 @@ import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.code.language.textmate.BaseIncrementalAnalyzeManager;
 import com.tyron.code.language.textmate.CodeBlockUtils;
 import com.tyron.editor.Editor;
 
@@ -19,6 +20,7 @@ import io.github.rosemoe.sora.lang.styling.MappedSpans;
 import io.github.rosemoe.sora.lang.styling.Span;
 import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.lang.styling.TextStyle;
+import io.github.rosemoe.sora.langs.textmate.analyzer.TextMateAnalyzer;
 import io.github.rosemoe.sora.langs.textmate.folding.FoldingRegions;
 import io.github.rosemoe.sora.langs.textmate.folding.IndentRange;
 import io.github.rosemoe.sora.text.Content;
@@ -40,7 +42,7 @@ import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 /**
  * A text mate analyzer which does not use a TextMateLanguage
  */
-public class BaseTextmateAnalyzer extends SimpleAnalyzeManager<StackElement> {
+public class BaseTextmateAnalyzer extends BaseIncrementalAnalyzeManager<StackElement, Span> {
 
     /**
      * Maximum for code block count
@@ -73,7 +75,7 @@ public class BaseTextmateAnalyzer extends SimpleAnalyzeManager<StackElement> {
 
     public void analyzeCodeBlocks(Content model,
                                   List<CodeBlock> blocks,
-                                  Delegate<StackElement> delegate) {
+                                  CodeBlockAnalyzeDelegate delegate) {
         if (configuration == null) {
             return;
         }
@@ -113,8 +115,24 @@ public class BaseTextmateAnalyzer extends SimpleAnalyzeManager<StackElement> {
         }
     }
 
-    public IncrementalAnalyzeManager.LineTokenizeResult<StackElement, Span> tokenizeLine(CharSequence lineC,
-                                                                                         StackElement state) {
+    @Override
+    public StackElement getInitialState() {
+        return null;
+    }
+
+    @Override
+    public boolean stateEquals(StackElement state, StackElement another) {
+        if (state == null && another == null) {
+            return true;
+        }
+        if (state != null && another != null) {
+            return state.equals(another);
+        }
+        return false;
+    }
+
+    @Override
+    public Result<StackElement, Span> tokenizeLine(CharSequence lineC, StackElement state) {
         String line = lineC.toString();
         ArrayList<Span> tokens = new ArrayList<>();
         ITokenizeLineResult2 lineTokens = grammar.tokenizeLine2(line, state);
@@ -140,7 +158,19 @@ public class BaseTextmateAnalyzer extends SimpleAnalyzeManager<StackElement> {
 
             tokens.add(span);
         }
-        return new IncrementalAnalyzeManager.LineTokenizeResult<>(lineTokens.getRuleStack(), null, tokens);
+        return new Result<>(lineTokens.getRuleStack(), null, tokens);
+    }
+
+    @Override
+    public List<Span> generateSpansForLine(LineTokenizeResult<StackElement, Span> tokens) {
+        return null;
+    }
+
+    @Override
+    public List<CodeBlock> computeBlocks(Content text, CodeBlockAnalyzeDelegate delegate) {
+        List<CodeBlock> list = new java.util.ArrayList<>();
+        analyzeCodeBlocks(text, list, delegate);
+        return list;
     }
 
     @Override
@@ -149,44 +179,6 @@ public class BaseTextmateAnalyzer extends SimpleAnalyzeManager<StackElement> {
             return;
         }
         super.reset(content, extraArguments);
-    }
-
-    @Override
-    protected Styles analyze(StringBuilder text, Delegate<StackElement> delegate) {
-        Content model = new Content(text);
-        Styles styles = new Styles();
-        MappedSpans.Builder builder = new MappedSpans.Builder();
-        try {
-            boolean first = true;
-            StackElement ruleStack = null;
-            for (int lineCount = 0; lineCount < model.getLineCount(); lineCount++) {
-                if (delegate.isCancelled()) {
-                    break;
-                }
-                String line = model.getLine(lineCount) + "\n";
-                if (first) {
-                    builder.addNormalIfNull();
-                    first = false;
-                }
-                IncrementalAnalyzeManager.LineTokenizeResult<StackElement, Span>
-                        result = tokenizeLine(line, ruleStack);
-                for (Span span : result.spans) {
-                    builder.add(lineCount, span);
-                }
-
-                ruleStack = result.state;
-            }
-
-            analyzeCodeBlocks(model, styles.blocks, delegate);
-
-            builder.determine(model.getLineCount() - 1);
-            styles.spans = builder.build();
-            styles.finishBuilding();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        return styles;
     }
 
     public void updateTheme(IRawTheme theme) {

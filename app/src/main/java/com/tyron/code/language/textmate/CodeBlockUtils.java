@@ -17,7 +17,7 @@ import io.github.rosemoe.sora.textmate.languageconfiguration.internal.supports.F
 public class CodeBlockUtils {
 
     @SuppressWarnings("rawtype")
-    public static FoldingRegions computeRanges(Content model, int tabSize , boolean offSide, Folding markers, int foldingRangesLimit, SimpleAnalyzeManager.Delegate delegate) throws Exception {
+    public static FoldingRegions computeRanges(Content model, int tabSize , boolean offSide, Folding markers, int foldingRangesLimit, BaseIncrementalAnalyzeManager.CodeBlockAnalyzeDelegate delegate) throws Exception {
 
         RangesCollector result = new RangesCollector(foldingRangesLimit, tabSize);
 
