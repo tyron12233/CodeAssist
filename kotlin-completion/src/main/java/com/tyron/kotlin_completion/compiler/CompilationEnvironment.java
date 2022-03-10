@@ -1,5 +1,9 @@
 package com.tyron.kotlin_completion.compiler;
 
+import com.tyron.builder.project.api.KotlinModule;
+import com.tyron.kotlin.completion.core.model.KotlinEnvironment;
+import com.tyron.kotlin.completion.core.resolve.InjectionKt;
+
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys;
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector;
@@ -39,17 +43,16 @@ public class CompilationEnvironment implements Closeable {
     private final Set<Path> mClassPath;
 
     private final Disposable mDisposable = Disposer.newDisposable();
-    private final KotlinCoreEnvironment mEnvironment;
+    private final KotlinEnvironment mEnvironment;
     private final KtPsiFactory mParser;
 
-    public CompilationEnvironment(Set<Path> javaSourcePath, Set<Path> classPath) {
+    public CompilationEnvironment(KotlinModule module, Set<Path> javaSourcePath, Set<Path> classPath) {
         mJavaSourcePath = javaSourcePath;
         mClassPath = classPath;
 
         UtilKt.setIdeaIoUseFallback();
 
-        mEnvironment = KotlinCoreEnvironment.createForProduction(mDisposable,
-                getConfiguration(), EnvironmentConfigFiles.JVM_CONFIG_FILES);
+        mEnvironment = KotlinEnvironment.getEnvironment(module);
         mParser = new KtPsiFactory(mEnvironment.getProject());
     }
 
@@ -73,7 +76,7 @@ public class CompilationEnvironment implements Closeable {
     }
 
     public Pair<ComponentProvider, BindingTraceContext> createContainer(Collection<KtFile> sourcePath) {
-        return CompilerKt.createContainer(mEnvironment, sourcePath);
+        return null;
     }
 
     public void updateConfiguration(CompilerConfiguration config) {
@@ -100,7 +103,7 @@ public class CompilationEnvironment implements Closeable {
         return mParser;
     }
 
-    public KotlinCoreEnvironment getEnvironment() {
+    public KotlinEnvironment getEnvironment() {
         return mEnvironment;
     }
 }
