@@ -1,5 +1,7 @@
 package com.tyron.completion.psi.scope;
 
+import com.tyron.completion.psi.util.CompletionUtilCoreImpl;
+
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Comparing;
@@ -72,8 +74,7 @@ public final class CompletionElement{
                                   myQualifierText);
         }
         if (myElement instanceof PsiVariable) {
-//            return CompletionUtilCoreImpl.getOriginalOrSelf((PsiElement)myElement);
-            throw new UnsupportedOperationException("TODO");
+            return CompletionUtilCoreImpl.getOriginalOrSelf((PsiElement)myElement);
         }
 
         return null;
