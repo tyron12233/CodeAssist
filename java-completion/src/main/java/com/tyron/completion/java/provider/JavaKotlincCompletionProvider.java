@@ -5,7 +5,11 @@ import androidx.annotation.NonNull;
 import com.tyron.completion.java.util.CompletionItemFactory;
 import com.tyron.completion.java.util.JavaCompletionUtil;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.completion.psi.scope.CompletionElement;
+import com.tyron.completion.psi.scope.JavaCompletionProcessor;
 
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.com.intellij.openapi.util.Condition;
 import org.jetbrains.kotlin.com.intellij.psi.LambdaUtil;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiExpression;
@@ -17,6 +21,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiParameter;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiType;
 import org.jetbrains.kotlin.com.intellij.psi.PsiWildcardType;
+import org.jetbrains.kotlin.com.intellij.psi.filters.ElementFilter;
 import org.jetbrains.kotlin.com.intellij.psi.impl.source.resolve.SymbolCollectingProcessor;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTypesUtil;
 import org.jetbrains.kotlin.com.intellij.util.containers.MostlySingularMultiMap;
@@ -77,18 +82,21 @@ public class JavaKotlincCompletionProvider {
             }
         }
 
-        SymbolCollectingProcessor processor = new SymbolCollectingProcessor();
+        JavaCompletionProcessor.Options options = JavaCompletionProcessor.Options.DEFAULT_OPTIONS;
+        JavaCompletionProcessor processor = new JavaCompletionProcessor(position, new ElementFilter() {
+            @Override
+            public boolean isAcceptable(Object o, @Nullable PsiElement psiElement) {
+                return true;
+            }
+
+            @Override
+            public boolean isClassAcceptable(Class aClass) {
+                return true;
+            }
+        }, options, Condition.TRUE);
         parentRef.processVariants(processor);
-        MostlySingularMultiMap<String, SymbolCollectingProcessor.ResultWithContext> results =
-                processor.getResults();
-        results.processAllValues(result -> {
-            String name = result.getElement().getName();
-            // TODO: customize completion item based on its PSI type
-            builder.addItem(CompletionItemFactory.item(name));
-            // continue processing all results
-            // TODO: Stop when MAX_COMPLETION_LIST is reached
-            return true;
-        });
+        Iterable<CompletionElement> results = processor.getResults();
+        System.out.println(results);
     }
 
     private void addIdentifierVariants(PsiElement elementAt, CompletionList.Builder builder) {
