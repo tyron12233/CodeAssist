@@ -6,15 +6,31 @@ import android.util.Log;
 
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.KotlinModule;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.provider.Completions;
+import com.tyron.completion.java.provider.JavaKotlincCompletionProvider;
+import com.tyron.completion.java.util.CompletionItemFactory;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.progress.ProcessCanceledException;
+import com.tyron.kotlin.completion.core.model.KotlinEnvironment;
+
+import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
+import org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFileFactory;
+import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
+import org.jetbrains.kotlin.com.intellij.psi.impl.source.resolve.SymbolCollectingProcessor;
+import org.jetbrains.kotlin.com.intellij.psi.scope.util.PsiScopesUtil;
+import org.jetbrains.kotlin.com.intellij.util.Processor;
+import org.jetbrains.kotlin.com.intellij.util.containers.MostlySingularMultiMap;
 
 import java.io.File;
 import java.util.Comparator;
@@ -52,7 +68,7 @@ public class JavaCompletionProvider extends CompletionProvider {
             }
         }
 
-        CompletionList.Builder complete = complete(params.getProject(), (JavaModule) params.getModule(),
+        CompletionList.Builder complete = completeWithKotlinc(params.getProject(), (JavaModule) params.getModule(),
                 params.getFile(), params.getContents(), params.getIndex());
         if (complete == null) {
             return CompletionList.EMPTY;
@@ -68,6 +84,29 @@ public class JavaCompletionProvider extends CompletionProvider {
                 params.getColumn(), newPrefix, list);
         return list;
     }
+
+    public CompletionList.Builder completeWithKotlinc(
+            Project project, JavaModule module, File file, String contents, long cursor) {
+        if (!(module instanceof KotlinModule)) {
+            // should not happen as all android modules are kotlin module
+            throw new RuntimeException("Not a kotlin module");
+        }
+        KotlinModule kotlinModule = ((KotlinModule) module);
+        KotlinCoreEnvironment environment = KotlinEnvironment.getEnvironment(kotlinModule);
+        org.jetbrains.kotlin.com.intellij.openapi.project.Project jetProject =
+                environment.getProject();
+        PsiFileFactory psiFactory = PsiFileFactory.getInstance(jetProject);
+        PsiFile psiFile = psiFactory.createFileFromText(JavaLanguage.INSTANCE, contents);
+        PsiElement elementAt = psiFile.findElementAt((int) (cursor - 1));
+        assert elementAt != null;
+
+        CompletionList.Builder builder = new CompletionList.Builder(elementAt.getText());
+        JavaKotlincCompletionProvider provider =
+                new JavaKotlincCompletionProvider();
+        provider.fillCompletionVariants(elementAt, builder);
+        return builder;
+    }
+
 
     public CompletionList.Builder complete(
             Project project, JavaModule module, File file, String contents, long cursor) {
