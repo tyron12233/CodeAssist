@@ -41,7 +41,7 @@ public class CompilerClassPath implements Closeable {
         mClassPath = project.getLibraries().stream().map(file -> new ClassPathEntry(file.toPath(), null)).collect(Collectors.toSet());
         mClassPath.add(new ClassPathEntry(CompletionModule.getAndroidJar().toPath(), null));
 
-        compiler = new Compiler(mJavaSourcePath, mClassPath.stream().map(ClassPathEntry::getCompiledJar).collect(Collectors.toSet()));
+        compiler = new Compiler(project, mJavaSourcePath, mClassPath.stream().map(ClassPathEntry::getCompiledJar).collect(Collectors.toSet()));
         //compiler.updateConfiguration(mConfiguration);
     }
 
@@ -70,7 +70,7 @@ public class CompilerClassPath implements Closeable {
 
         if (refreshCompiler) {
             compiler.close();
-            compiler = new Compiler(mJavaSourcePath, mClassPath.stream().map(ClassPathEntry::getCompiledJar).collect(Collectors.toSet()));
+            compiler = new Compiler(mProject, mJavaSourcePath, mClassPath.stream().map(ClassPathEntry::getCompiledJar).collect(Collectors.toSet()));
             updateCompilerConfiguration();
         }
 

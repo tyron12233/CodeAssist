@@ -8,6 +8,7 @@ import org.jetbrains.kotlin.analyzer.AnalysisResult
 import org.jetbrains.kotlin.builtins.jvm.JvmBuiltIns
 import org.jetbrains.kotlin.builtins.jvm.JvmBuiltInsPackageFragmentProvider
 import org.jetbrains.kotlin.cli.jvm.compiler.CliBindingTrace
+import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
@@ -43,22 +44,28 @@ data class AnalysisResultWithProvider(val analysisResult: AnalysisResult, val co
 
 object CodeAssistAnalyzerFacadeForJVM {
     fun analyzeSources(
-        environment: KotlinEnvironment,
+        environment: KotlinCoreEnvironment,
         filesToAnalyze: Collection<KtFile>
     ): AnalysisResultWithProvider {
+        val allFiles = LinkedHashSet(filesToAnalyze)
+        return analyzeSources(environment, allFiles, filesToAnalyze);
+    }
+
+    fun analyzeSources(environment: KotlinCoreEnvironment,
+                       allFiles: Collection<KtFile>,
+                         filesToAnalyze: Collection<KtFile>): AnalysisResultWithProvider {
         val filesSet = filesToAnalyze.toSet()
         if (filesSet.size != filesToAnalyze.size) {
 //            KotlinLogger.logWarning("Analyzed files have duplicates")
         }
 
-        val allFiles = LinkedHashSet<KtFile>(filesSet)
-        val addedFiles = filesSet.mapNotNull { getPath(it) }.toSet()
+        val javaProject = KotlinEnvironment.getJavaProject(environment.project)
 
         return analyzeKotlin(
             filesToAnalyze = filesSet,
             allFiles = allFiles,
             environment = environment,
-            javaProject = environment.module,
+            javaProject = javaProject,
 //            jvmTarget = environment.compilerProperties.jvmTarget
         )
     }
@@ -66,17 +73,41 @@ object CodeAssistAnalyzerFacadeForJVM {
     private fun analyzeKotlin(
         filesToAnalyze: Collection<KtFile>,
         allFiles: Collection<KtFile>,
-        environment: KotlinCommonEnvironment,
+        environment: KotlinCoreEnvironment,
         javaProject: KotlinModule?,
         jvmTarget: JvmTarget = JvmTarget.DEFAULT
     ): AnalysisResultWithProvider {
+        val trace = CliBindingTrace()
+        val moduleContext = createModuleContext(environment.project, environment.configuration, true)
+        val container = createContainer(trace, moduleContext, filesToAnalyze, allFiles, environment, javaProject, jvmTarget)
+
+        try {
+            container.get<LazyTopDownAnalyzer>().analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, filesToAnalyze)
+        } catch (e: KotlinFrontEndException) {
+//          Editor will break if we do not catch this exception
+//          and will not be able to save content without reopening it.
+//          In IDEA this exception throws only in CLI
+//            KotlinLogger.logError(e)
+        }
+
+        return AnalysisResultWithProvider(
+            AnalysisResult.success(trace.bindingContext, moduleContext.module),
+            container)
+    }
+
+    fun createContainer(
+        trace: CliBindingTrace,
+        moduleContext: MutableModuleContext,
+        filesToAnalyze: Collection<KtFile>,
+                        allFiles: Collection<KtFile>,
+                        environment: KotlinCoreEnvironment,
+                        javaProject: KotlinModule?,
+                        jvmTarget: JvmTarget = JvmTarget.DEFAULT): ComponentProvider {
         val project = environment.project
-        val moduleContext = createModuleContext(project, environment.configuration, true)
         val storageManager = moduleContext.storageManager
         val module = moduleContext.module
 
         val providerFactory = FileBasedDeclarationProviderFactory(moduleContext.storageManager, allFiles)
-        val trace = CliBindingTrace()
 
         val sourceScope = TopDownAnalyzerFacadeForJVM.newModuleSearchScope(project, filesToAnalyze)
         val moduleClassResolver = TopDownAnalyzerFacadeForJVM.SourceOrBinaryModuleClassResolver(sourceScope)
@@ -157,23 +188,13 @@ object CodeAssistAnalyzerFacadeForJVM {
             "test"
         ))
 
-        try {
-            container.get<LazyTopDownAnalyzer>().analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, filesToAnalyze)
-        } catch (e: KotlinFrontEndException) {
-//          Editor will break if we do not catch this exception
-//          and will not be able to save content without reopening it.
-//          In IDEA this exception throws only in CLI
-//            KotlinLogger.logError(e)
-        }
-
-        return AnalysisResultWithProvider(
-            AnalysisResult.success(trace.bindingContext, module),
-            container)
+        return container
     }
 
     private fun getPath(jetFile: KtFile): String? = jetFile.virtualFile?.path
 
-    private fun createModuleContext(
+    @JvmStatic
+    fun createModuleContext(
         project: Project,
         configuration: CompilerConfiguration,
         createBuiltInsFromModule: Boolean

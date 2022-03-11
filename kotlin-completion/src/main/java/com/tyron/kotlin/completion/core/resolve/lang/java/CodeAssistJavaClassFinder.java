@@ -36,9 +36,9 @@ public class CodeAssistJavaClassFinder extends AbstractJavaClassFinder {
                            KotlinCodeAnalyzer codeAnalyzer,
                            LanguageVersionSettings languageVersionSettings,
                            JvmTarget jvmTarget) {
-        MockProject project = KotlinEnvironment.getEnvironment(module).getProject();
+        Project project = KotlinEnvironment.getEnvironment(module).getProject();
         setProjectInstance(project);
-        impl.setScope(GlobalSearchScope.EMPTY_SCOPE);
+        impl.setScope(GlobalSearchScope.allScope(project));
         impl.initialize(trace, codeAnalyzer, languageVersionSettings, jvmTarget);
     }
 

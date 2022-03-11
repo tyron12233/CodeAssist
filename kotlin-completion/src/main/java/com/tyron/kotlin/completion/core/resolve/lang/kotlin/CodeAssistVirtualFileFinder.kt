@@ -26,8 +26,8 @@ class CodeAssistVirtualFileFinder(
     private val scope: GlobalSearchScope
 ): VirtualFileFinder() {
 
-    private val index: JvmDependenciesIndex
-        get() = KotlinEnvironment.getEnvironment(javaProject).index
+//    private val index: JvmDependenciesIndex
+//        get() = KotlinEnvironment.getEnvironment(javaProject)
 
     override fun findMetadata(classId: ClassId): InputStream? {
         assert(!classId.isNestedClass) { "Nested classes are not supported here: $classId" }
@@ -42,27 +42,29 @@ class CodeAssistVirtualFileFinder(
     }
 
     override fun hasMetadataPackage(fqName: FqName): Boolean {
-        var found = false
-
-        val index = KotlinEnvironment.getEnvironment(javaProject).index
-
-        index.traverseDirectoriesInPackage(fqName, continueSearch = { dir, _ ->
-            found = found or dir.children.any { it.extension == MetadataPackageFragment.METADATA_FILE_EXTENSION }
-            !found
-        })
-        return found
+//        var found = false
+//
+//        val index = KotlinEnvironment.getEnvironment(javaProject).index
+//
+//        index.traverseDirectoriesInPackage(fqName, continueSearch = { dir, _ ->
+//            found = found or dir.children.any { it.extension == MetadataPackageFragment.METADATA_FILE_EXTENSION }
+//            !found
+//        })
+//        return found
+        return false
     }
 
     override fun findBuiltInsData(packageFqName: FqName): InputStream? {
-        val fileName = BuiltInSerializerProtocol.getBuiltInsFileName(packageFqName)
-
-        // "<builtins-metadata>" is just a made-up name
-        // JvmDependenciesIndex requires the ClassId of the class which we're searching for, to cache the last request+result
-        val classId = ClassId(packageFqName, Name.special("<builtins-metadata>"))
-
-        return index.findClass(classId, acceptedRootTypes = JavaRoot.OnlyBinary) { dir, _ ->
-            dir.findChild(fileName)?.check(VirtualFile::isValid)
-        }?.check { it in scope && it.isValid }?.inputStream
+//        val fileName = BuiltInSerializerProtocol.getBuiltInsFileName(packageFqName)
+//
+//        // "<builtins-metadata>" is just a made-up name
+//        // JvmDependenciesIndex requires the ClassId of the class which we're searching for, to cache the last request+result
+//        val classId = ClassId(packageFqName, Name.special("<builtins-metadata>"))
+//
+//        return index.findClass(classId, acceptedRootTypes = JavaRoot.OnlyBinary) { dir, _ ->
+//            dir.findChild(fileName)?.check(VirtualFile::isValid)
+//        }?.check { it in scope && it.isValid }?.inputStream
+        return null
     }
 
     override fun findVirtualFileWithHeader(classId: ClassId): VirtualFile? {
@@ -98,9 +100,10 @@ class CodeAssistVirtualFileFinder(
     }
 
     private fun findBinaryClass(classId: ClassId, fileName: String): VirtualFile? =
-        index.findClass(classId, acceptedRootTypes = JavaRoot.OnlyBinary) { dir, rootType ->
-            dir.findChild(fileName)?.check(VirtualFile::isValid)
-        }?.check { it in scope }
+//        index.findClass(classId, acceptedRootTypes = JavaRoot.OnlyBinary) { dir, rootType ->
+//            dir.findChild(fileName)?.check(VirtualFile::isValid)
+//        }?.check { it in scope }
+        TODO()
 
     override fun findKotlinClassOrContent(javaClass: JavaClass): KotlinClassFinder.Result? {
         return null

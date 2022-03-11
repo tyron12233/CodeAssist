@@ -2,6 +2,7 @@ package com.tyron.kotlin.completion.core.model
 
 import com.tyron.kotlin.completion.core.resolve.AnalysisResultWithProvider
 import com.tyron.kotlin.completion.core.resolve.CodeAssistAnalyzerFacadeForJVM
+import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.psi.KtFile
 
 
@@ -25,10 +26,10 @@ object KotlinAnalysisFileCache {
         lastAnalysedFileCache = null
     }
 
-    private fun resolve(file: KtFile, environment: KotlinCommonEnvironment): AnalysisResultWithProvider {
+    private fun resolve(file: KtFile, environment: KotlinCoreEnvironment): AnalysisResultWithProvider {
         return when (environment) {
 //            is KotlinScriptEnvironment -> EclipseAnalyzerFacadeForJVM.analyzeScript(environment, file)
-            is KotlinEnvironment -> CodeAssistAnalyzerFacadeForJVM.analyzeSources(environment, listOf(file))
+            is KotlinCoreEnvironment -> CodeAssistAnalyzerFacadeForJVM.analyzeSources(environment, listOf(file))
             else -> throw IllegalArgumentException("Could not analyze file with environment: $environment")
         }
     }

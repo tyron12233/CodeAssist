@@ -1,8 +1,10 @@
 package com.tyron.kotlin.completion.core.model
 
+import com.tyron.kotlin.completion.core.resolve.KotlinSourceIndex
 import org.jetbrains.kotlin.asJava.KotlinAsJavaSupport
 import org.jetbrains.kotlin.asJava.LightClassGenerationSupport
 import org.jetbrains.kotlin.asJava.finder.JavaElementFinder
+import org.jetbrains.kotlin.cli.common.CliModuleVisibilityManagerImpl
 import org.jetbrains.kotlin.cli.common.environment.setIdeaIoUseFallback
 import org.jetbrains.kotlin.cli.jvm.compiler.*
 import org.jetbrains.kotlin.cli.jvm.index.JavaRoot
@@ -11,6 +13,8 @@ import org.jetbrains.kotlin.cli.jvm.index.SingleJavaFileRootsIndex
 import org.jetbrains.kotlin.codegen.extensions.ClassBuilderInterceptorExtension
 import org.jetbrains.kotlin.codegen.extensions.ExpressionCodegenExtension
 import org.jetbrains.kotlin.com.intellij.codeInsight.ContainerProvider
+import org.jetbrains.kotlin.com.intellij.codeInsight.ExternalAnnotationsManager
+import org.jetbrains.kotlin.com.intellij.codeInsight.InferredAnnotationsManager
 import org.jetbrains.kotlin.com.intellij.codeInsight.runner.JavaMainMethodProvider
 import org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment
 import org.jetbrains.kotlin.com.intellij.core.CoreJavaFileManager
@@ -24,6 +28,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionPointName
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.Extensions
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionsArea
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.PlainTextFileType
+import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.kotlin.com.intellij.psi.JavaModuleSystem
 import org.jetbrains.kotlin.com.intellij.psi.PsiElementFinder
@@ -40,6 +45,8 @@ import org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages
 import org.jetbrains.kotlin.extensions.DeclarationAttributeAltererExtension
 import org.jetbrains.kotlin.extensions.StorageComponentContainerContributor
 import org.jetbrains.kotlin.idea.KotlinFileType
+import org.jetbrains.kotlin.load.kotlin.KotlinBinaryClassCache
+import org.jetbrains.kotlin.load.kotlin.ModuleVisibilityManager
 import org.jetbrains.kotlin.parsing.KotlinParserDefinition
 import org.jetbrains.kotlin.resolve.CodeAnalyzerInitializer
 import org.jetbrains.kotlin.resolve.ModuleAnnotationsResolver
@@ -52,7 +59,6 @@ import java.io.File
 import kotlin.reflect.KClass
 
 abstract class KotlinCommonEnvironment(disposable: Disposable) {
-    val kotlinCoreApplicationEnvironment: KotlinCoreApplicationEnvironment
     val project: MockProject
 
     val projectEnvironment: JavaCoreProjectEnvironment
@@ -62,8 +68,6 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
 
     init {
         setIdeaIoUseFallback()
-
-        kotlinCoreApplicationEnvironment = createKotlinCoreApplicationEnvironment(disposable)
 
         projectEnvironment = object : JavaCoreProjectEnvironment(disposable, kotlinCoreApplicationEnvironment) {
             override fun preregisterServices() {
@@ -85,12 +89,18 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
         StorageComponentContainerContributor.registerExtensionPoint(project)
 
         with(project) {
+            registerService(ModuleVisibilityManager::class.java, CliModuleVisibilityManagerImpl(true))
+
             registerService(
                 CoreJavaFileManager::class.java,
                 ServiceManager.getService(project, JavaFileManager::class.java) as CoreJavaFileManager
             )
 
             registerService(ModuleAnnotationsResolver::class.java, CliModuleAnnotationsResolver())
+            registerService(KotlinSourceIndex::class.java, KotlinSourceIndex())
+            registerService(ExternalAnnotationsManager::class.java, MockExternalAnnotationsManager())
+            registerService(InferredAnnotationsManager::class.java, MockInferredAnnotationsManager())
+
             // todo: code style manager
 
             val traceHolder = CliTraceHolder().also {
@@ -110,7 +120,7 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
                     JvmDependenciesDynamicCompoundIndex(),
                     arrayListOf(),
                     SingleJavaFileRootsIndex(arrayListOf()),
-                    false
+                    true
                 )
 
             val area = this.extensionArea
@@ -148,7 +158,7 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
 
     protected fun addToClassPath(path: File, rootType: JavaRoot.RootType? = null) {
         if (path.isFile) {
-            val jarFile = kotlinCoreApplicationEnvironment.jarFileSystem.findFileByPath(path.absolutePath)
+            val jarFile = kotlinCoreApplicationEnvironment.jarFileSystem.findFileByPath("$path!/")
                 ?: return
 
             projectEnvironment.addJarToClassPath(path)
@@ -165,6 +175,12 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
             roots.add(JavaRoot(root, type))
         }
     }
+
+    companion object {
+        val kotlinCoreApplicationEnvironment: KotlinCoreApplicationEnvironment by lazy {
+            createKotlinCoreApplicationEnvironment(Disposer.newDisposable("Root Disposable"))
+        }
+    }
 }
 
 private fun createKotlinCoreApplicationEnvironment(disposable: Disposable): KotlinCoreApplicationEnvironment =
@@ -177,6 +193,7 @@ private fun createKotlinCoreApplicationEnvironment(disposable: Disposable): Kotl
         registerParserDefinition(KotlinParserDefinition())
 
         // TODO: register other services
+        application.registerService(KotlinBinaryClassCache::class.java, KotlinBinaryClassCache())
     }
 
 private fun registerProjectExtensionPoints(area: ExtensionsArea) {

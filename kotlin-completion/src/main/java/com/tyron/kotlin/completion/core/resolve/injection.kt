@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.context.ModuleContext
 import org.jetbrains.kotlin.frontend.di.configureModule
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.load.java.InternalFlexibleTypeTransformer
+import org.jetbrains.kotlin.load.java.JavaClassFinderImpl
 import org.jetbrains.kotlin.load.java.JavaClassesTracker
 import org.jetbrains.kotlin.load.java.components.JavaPropertyInitializerEvaluatorImpl
 import org.jetbrains.kotlin.load.java.components.JavaSourceElementFactoryImpl
@@ -83,7 +84,7 @@ fun createContainerForLazyResolveWithJava(
     )
     configureJavaTopDownAnalysis(moduleContentScope, moduleContext.project, lookupTracker, languageVersionSettings)
 
-    useImpl<CodeAssistJavaClassFinder>()
+    useImpl<JavaClassFinderImpl>()
     useImpl<CodeAssistTraceBasedJavaResolverCache>()
     useImpl<JavaSourceElementFactoryImpl>()
 
@@ -108,11 +109,12 @@ fun createContainerForLazyResolveWithJava(
 
     useInstance(JavaResolverSettings.create(
         isReleaseCoroutines = languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines),
-        false,
-    true,
-    false))
+        true,
+        typeEnhancementImprovementsInStrictMode = true,
+        ignoreNullabilityForErasedValueParameters = false
+    ))
 }.apply {
-    get<CodeAssistJavaClassFinder>().initialize(bindingTrace, get(), languageVersionSettings, jvmTarget)
+    get<JavaClassFinderImpl>().initialize(bindingTrace, get(), languageVersionSettings, jvmTarget)
 }
 
 fun createContainerForTopDownAnalyzerForJvm(

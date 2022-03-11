@@ -19,6 +19,7 @@ import com.tyron.kotlin.completion.core.resolve.AnalysisResultWithProvider;
 import com.tyron.kotlin.completion.core.resolve.KotlinAnalyzer;
 import com.tyron.kotlin_completion.CompletionEngine;
 
+import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.com.intellij.openapi.components.ServiceManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
@@ -34,7 +35,7 @@ public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
     private final Editor mEditor;
     private final SharedPreferences mPreferences;
 
-    private KotlinEnvironment environment;
+    private KotlinCoreEnvironment environment;
 
     public KotlinAutoCompleteProvider(Editor editor) {
         mEditor = editor;
@@ -72,33 +73,22 @@ public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
             environment = KotlinEnvironment.getEnvironment((KotlinModule) currentModule);
         }
 
-        PsiManager psiManager = PsiManager.getInstance(environment.getProject());
-        PsiFile file = psiManager.findFile(
-                Objects.requireNonNull(environment.getVirtualFile(mEditor.getCurrentFile())));
-        assert file != null;
-        AnalysisResultWithProvider analysisResultWithProvider =
-                KotlinAnalyzer.INSTANCE.analyzeFile((KtFile) file);
+        if (mEditor.getCurrentFile() == null) {
+            return null;
+        }
 
-        System.out.println(analysisResultWithProvider);
+        CompletionEngine engine = CompletionEngine.getInstance((AndroidModule) currentModule);
 
-        return null;
+        if (engine.isIndexing()) {
+            return null;
+        }
 
-//        if (mEditor.getCurrentFile() == null) {
-//            return null;
-//        }
-//
-//        CompletionEngine engine = CompletionEngine.getInstance((AndroidModule) currentModule);
-//
-//        if (engine.isIndexing()) {
-//            return null;
-//        }
-//
-//        // waiting for code editor to support async code completions
-//        return engine.complete(mEditor.getCurrentFile(),
-//                String.valueOf(mEditor.getContent()),
-//                prefix,
-//                line,
-//                column,
-//                mEditor.getCaret().getStart());
+        // waiting for code editor to support async code completions
+        return engine.complete(mEditor.getCurrentFile(),
+                String.valueOf(mEditor.getContent()),
+                prefix,
+                line,
+                column,
+                mEditor.getCaret().getStart());
     }
 }

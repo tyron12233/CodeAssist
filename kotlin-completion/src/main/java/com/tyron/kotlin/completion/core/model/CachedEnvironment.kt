@@ -1,11 +1,12 @@
 package com.tyron.kotlin.completion.core.model
 
+import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.ZipHandler
 import java.util.concurrent.ConcurrentHashMap
 
-class CachedEnvironment<T: Any, E : KotlinCommonEnvironment> {
+class CachedEnvironment<T: Any, E : KotlinCoreEnvironment> {
     private val environmentLock = Any()
 
     private val environmentCache = ConcurrentHashMap<T, E>()

@@ -81,7 +81,7 @@ public class KotlinAnalyzer extends DiagnosticTextmateAnalyzer {
 
                                     ProgressManager.getInstance().runLater(() -> mEditor.setAnalyzing(false), 300);
                                 });
-                    }, 1500);
+                    }, 900);
                 }
             }
         }

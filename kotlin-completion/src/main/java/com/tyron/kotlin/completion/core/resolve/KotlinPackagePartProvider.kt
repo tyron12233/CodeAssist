@@ -1,6 +1,7 @@
 package com.tyron.kotlin.completion.core.resolve
 
 import com.tyron.kotlin.completion.core.model.KotlinCommonEnvironment
+import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
 import org.jetbrains.kotlin.load.kotlin.PackagePartProvider
@@ -11,15 +12,13 @@ import org.jetbrains.kotlin.resolve.CompilerDeserializationConfiguration
 import org.jetbrains.kotlin.utils.SmartList
 import org.jetbrains.kotlin.serialization.deserialization.ClassData
 import java.io.EOFException
+import java.io.File
 
-class KotlinPackagePartProvider(private val environment: KotlinCommonEnvironment) : PackagePartProvider {
+class KotlinPackagePartProvider(private val environment: KotlinCoreEnvironment) : PackagePartProvider {
     private data class ModuleMappingInfo(val root: VirtualFile, val mapping: ModuleMapping, val name: String)
 
     private val notLoadedRoots by lazy(LazyThreadSafetyMode.NONE) {
-        environment.getRoots()
-            .map { it.file }
-            .filter { it.findChild("META-INF") != null }
-            .toMutableList()
+        mutableListOf<VirtualFile>()
     }
 
     private val loadedModules: MutableList<ModuleMappingInfo> = SmartList()
