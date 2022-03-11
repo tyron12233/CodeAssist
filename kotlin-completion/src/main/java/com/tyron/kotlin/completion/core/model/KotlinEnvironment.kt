@@ -17,6 +17,8 @@ import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoots
 import org.jetbrains.kotlin.cli.jvm.index.JvmDependenciesIndexImpl
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
+import org.jetbrains.kotlin.com.intellij.psi.PsiNameHelper
+import org.jetbrains.kotlin.com.intellij.psi.impl.PsiNameHelperImpl
 import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.config.CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS
 import org.jetbrains.kotlin.config.CommonConfigurationKeys.MODULE_NAME
@@ -83,6 +85,8 @@ class KotlinEnvironment private constructor(val module: KotlinModule, disposable
         val finderFactory = CodeAssistVirtualFileFinderFactory(module)
         project.registerService(VirtualFileFinderFactory::class.java, finderFactory)
         project.registerService(MetadataFinderFactory::class.java, finderFactory)
+        project.registerService(PsiNameHelper::class.java, PsiNameHelperImpl.getInstance())
+
 //        project.registerService(KotlinLightClassManager::class.java, KotlinLightClassManager(javaProject.project))
     }
 

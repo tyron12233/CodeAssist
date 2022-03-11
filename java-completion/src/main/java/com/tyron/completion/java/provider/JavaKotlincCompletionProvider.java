@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 
 import com.tyron.completion.java.util.CompletionItemFactory;
 import com.tyron.completion.java.util.JavaCompletionUtil;
+import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.psi.scope.CompletionElement;
 import com.tyron.completion.psi.scope.JavaCompletionProcessor;
@@ -17,6 +18,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiIdentifier;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaCodeReferenceElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiLambdaExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiLambdaParameterType;
+import org.jetbrains.kotlin.com.intellij.psi.PsiNamedElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiParameter;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiType;
@@ -96,7 +98,11 @@ public class JavaKotlincCompletionProvider {
         }, options, Condition.TRUE);
         parentRef.processVariants(processor);
         Iterable<CompletionElement> results = processor.getResults();
-        System.out.println(results);
+        results.forEach(result -> {
+            CompletionItem item = CompletionItemFactory.forPsiElement(
+                    (PsiNamedElement) result.getElement());
+            builder.addItem(item);
+        });
     }
 
     private void addIdentifierVariants(PsiElement elementAt, CompletionList.Builder builder) {

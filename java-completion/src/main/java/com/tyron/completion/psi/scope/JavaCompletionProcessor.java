@@ -44,6 +44,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiType;
 import org.jetbrains.kotlin.com.intellij.psi.PsiVariable;
 import org.jetbrains.kotlin.com.intellij.psi.ResolveState;
 import org.jetbrains.kotlin.com.intellij.psi.filters.ElementFilter;
+import org.jetbrains.kotlin.com.intellij.psi.impl.PsiNameHelperImpl;
 import org.jetbrains.kotlin.com.intellij.psi.impl.light.LightMethodBuilder;
 import org.jetbrains.kotlin.com.intellij.psi.impl.source.resolve.JavaResolveUtil;
 import org.jetbrains.kotlin.com.intellij.psi.impl.source.resolve.graphInference.FunctionalInterfaceParameterizationUtil;
@@ -186,8 +187,7 @@ public class JavaCompletionProcessor implements PsiScopeProcessor, ElementClassH
             return true;
         }
 
-        if (element instanceof PsiMember && !PsiNameHelper
-                .getInstance(element.getProject()).isIdentifier(((PsiMember)element).getName())) {
+        if (element instanceof PsiMember && !PsiNameHelperImpl.getInstance().isIdentifier(((PsiMember)element).getName())) {
             // The member could be defined in another JVM language where its name is not a legal name in Java.
             // In this case, just skip such the member. We cannot legally reference it from Java source.
             return true;
