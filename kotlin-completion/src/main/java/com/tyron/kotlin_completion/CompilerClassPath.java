@@ -1,7 +1,7 @@
 package com.tyron.kotlin_completion;
 
+import com.tyron.builder.BuildModule;
 import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.completion.java.CompletionModule;
 import com.tyron.kotlin_completion.classpath.ClassPathEntry;
 import com.tyron.kotlin_completion.classpath.DefaultClassPathResolver;
 import com.tyron.kotlin_completion.compiler.Compiler;
@@ -39,9 +39,9 @@ public class CompilerClassPath implements Closeable {
         mJavaSourcePath.addAll(project.getJavaFiles().values().stream().map(File::toPath).collect(Collectors.toSet()));
         mJavaSourcePath.addAll(project.getResourceClasses().values().stream().map(File::toPath).collect(Collectors.toList()));
         mClassPath = project.getLibraries().stream().map(file -> new ClassPathEntry(file.toPath(), null)).collect(Collectors.toSet());
-        mClassPath.add(new ClassPathEntry(CompletionModule.getAndroidJar().toPath(), null));
+        mClassPath.add(new ClassPathEntry(BuildModule.getAndroidJar().toPath(), null));
 
-        compiler = new Compiler(mJavaSourcePath, mClassPath.stream().map(ClassPathEntry::getCompiledJar).collect(Collectors.toSet()));
+        compiler = new Compiler(project, mJavaSourcePath, mClassPath.stream().map(ClassPathEntry::getCompiledJar).collect(Collectors.toSet()));
         //compiler.updateConfiguration(mConfiguration);
     }
 
@@ -70,7 +70,7 @@ public class CompilerClassPath implements Closeable {
 
         if (refreshCompiler) {
             compiler.close();
-            compiler = new Compiler(mJavaSourcePath, mClassPath.stream().map(ClassPathEntry::getCompiledJar).collect(Collectors.toSet()));
+            compiler = new Compiler(mProject, mJavaSourcePath, mClassPath.stream().map(ClassPathEntry::getCompiledJar).collect(Collectors.toSet()));
             updateCompilerConfiguration();
         }
 
