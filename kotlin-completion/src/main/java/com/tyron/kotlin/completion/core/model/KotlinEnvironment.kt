@@ -11,11 +11,11 @@ import org.jetbrains.kotlin.cli.common.messages.MessageCollector.Companion.NONE
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.config.addJavaSourceRoot
-import org.jetbrains.kotlin.cli.jvm.config.addJavaSourceRoots
 import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoot
-import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoots
 import org.jetbrains.kotlin.cli.jvm.index.JvmDependenciesIndexImpl
+import org.jetbrains.kotlin.com.intellij.mock.MockProject
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable
+import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.com.intellij.psi.PsiNameHelper
 import org.jetbrains.kotlin.com.intellij.psi.impl.PsiNameHelperImpl
@@ -26,8 +26,6 @@ import org.jetbrains.kotlin.config.LanguageVersion.Companion.LATEST_STABLE
 import org.jetbrains.kotlin.load.kotlin.MetadataFinderFactory
 import org.jetbrains.kotlin.load.kotlin.VirtualFileFinderFactory
 import java.io.File
-import java.nio.file.Path
-import java.util.function.Function
 import java.util.stream.Collectors
 
 fun getEnvironment(module: KotlinModule): KotlinCoreEnvironment {
@@ -45,16 +43,11 @@ class KotlinEnvironment private constructor(val module: KotlinModule, disposable
     val index by lazy { JvmDependenciesIndexImpl(getRoots().toList()) }
 
     init {
-        registerProjectDependenServices(module)
         configureClasspath(module)
 
         with(project) {
             registerService(FacadeCache::class.java, FacadeCache(project))
         }
-
-//        registerCompilerPlugins()
-
-//        cachedEnvironment.putEnvironment(module, this)
     }
 
     private fun configureClasspath(kotlinModule: KotlinModule) {
@@ -81,23 +74,20 @@ class KotlinEnvironment private constructor(val module: KotlinModule, disposable
         }
     }
 
-    private fun registerProjectDependenServices(module: KotlinModule) {
-        val finderFactory = CodeAssistVirtualFileFinderFactory(module)
-        project.registerService(VirtualFileFinderFactory::class.java, finderFactory)
-        project.registerService(MetadataFinderFactory::class.java, finderFactory)
-        project.registerService(PsiNameHelper::class.java, PsiNameHelperImpl.getInstance())
-
-//        project.registerService(KotlinLightClassManager::class.java, KotlinLightClassManager(javaProject.project))
-    }
-
     companion object {
         private val cachedEnvironment = CachedEnvironment<KotlinModule, KotlinCoreEnvironment>()
         private val environmentCreation = { module: KotlinModule ->
-            KotlinCoreEnvironment.createForProduction(
+            val environment = KotlinCoreEnvironment.createForProduction(
                 Disposer.newDisposable("Project Env ${module.name}"),
                 getConfiguration(module),
                 EnvironmentConfigFiles.JVM_CONFIG_FILES
             )
+            registerProjectDependentServices(module, environment.project as MockProject)
+            environment
+        }
+
+        private fun registerProjectDependentServices(module: KotlinModule, project: MockProject) {
+            project.registerService(PsiNameHelper::class.java, PsiNameHelperImpl(project))
         }
 
         @JvmStatic
