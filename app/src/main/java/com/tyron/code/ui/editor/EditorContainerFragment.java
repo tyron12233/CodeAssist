@@ -34,6 +34,7 @@ import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.common.util.UniqueNameBuilder;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.fileeditor.api.FileEditorManager;
@@ -170,17 +171,35 @@ public class EditorContainerFragment extends Fragment implements FileListener,
     }
 
     private void updateTab(TabLayout.Tab tab, int pos) {
-        FileEditor currentEditor = Objects.requireNonNull(mMainViewModel.getFiles()
-                                                                  .getValue())
-                .get(pos);
+        FileEditor currentEditor =
+                Objects.requireNonNull(mMainViewModel.getFiles().getValue()).get(pos);
         File current = currentEditor.getFile();
 
-        String text = current != null ? current.getName() : "Unknown";
+        String text = current != null ? getUniqueTabTitle(current) : "Unknown";
         if (currentEditor.isModified()) {
             text = "*" + text;
         }
 
         tab.setText(text);
+    }
+
+    private String getUniqueTabTitle(@NonNull File currentFile) {
+        int sameFileNameCount = 0;
+        UniqueNameBuilder<File> builder = new UniqueNameBuilder<>("", "/");
+
+        for (FileEditor fileEditor : Objects.requireNonNull(mMainViewModel.getFiles().getValue())) {
+            File openFile = fileEditor.getFile();
+            if (openFile.getName().equals(currentFile.getName())) {
+                sameFileNameCount++;
+            }
+            builder.addPath(openFile, openFile.getPath());
+        }
+
+        if (sameFileNameCount > 1) {
+            return builder.getShortPath(currentFile);
+        } else {
+            return currentFile.getName();
+        }
     }
 
     @Override
