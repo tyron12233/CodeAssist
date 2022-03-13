@@ -6,6 +6,7 @@ include ':build-tools:build-logic'
 include ':build-tools:builder-api'
 include ':build-tools:kotlinc'
 include ':build-tools:lint'
+include ':build-tools:viewbinding'
 
 include ':actions-api'
 include ':editor-api'
