@@ -34,11 +34,7 @@ import com.google.common.base.Strings;
 import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
-import org.apache.commons.io.FileUtils;
 import org.mozilla.universalchardet.UniversalDetector;
-import org.w3c.dom.Document;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 import java.io.File;
@@ -50,14 +46,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
 
 /**
  * Gets the list of XML files and creates a list of
@@ -87,7 +77,7 @@ public final class LayoutFileParser {
         try {
             Scope.enter((FileScopeProvider) () -> originalFilePath);
             final String encoding = findEncoding(inputFile);
-            stripFile(inputFile, outputFile, encoding, originalFileLookup);
+            // stripFile(inputFile, outputFile, encoding, originalFileLookup); todo: implement data binding
             return parseOriginalXml(
                 RelativizableFile.fromAbsoluteFile(originalFile, input.getBaseDir()),
                 pkg, encoding, isViewBindingEnabled, isDataBindingEnabled);
@@ -437,7 +427,7 @@ public final class LayoutFileParser {
     }
 */
 
-    private static void stripFile(File xml, File out, String encoding,
+    /*private static void stripFile(File xml, File out, String encoding,
             LayoutXmlProcessor.OriginalFileLookup originalFileLookup)
             throws ParserConfigurationException, IOException, SAXException,
             XPathExpressionException {
@@ -462,20 +452,20 @@ public final class LayoutFileParser {
         } else if (!xml.equals(out)){
             FileUtils.copyFile(xml, out);
         }
-    }
+    }*/
 
-    private static boolean isBindingLayout(Document doc, XPath xPath)
+    /*private static boolean isBindingLayout(Document doc, XPath xPath)
             throws XPathExpressionException {
         return !get(doc, xPath, XPATH_BINDING_LAYOUT).isEmpty();
-    }
+    }*/
 
-    private static List<Node> get(Document doc, XPath xPath, String pattern)
+    /*private static List<Node> get(Document doc, XPath xPath, String pattern)
             throws XPathExpressionException {
         final XPathExpression expr = xPath.compile(pattern);
         return toList((NodeList) expr.evaluate(doc, XPathConstants.NODESET));
-    }
+    }*/
 
-    private static List<Node> toList(NodeList nodeList) {
+    /*private static List<Node> toList(NodeList nodeList) {
         List<Node> result = new ArrayList<>();
         for (int i = 0; i < nodeList.getLength(); i++) {
             result.add(nodeList.item(i));
@@ -492,7 +482,7 @@ public final class LayoutFileParser {
                     xml.getAbsolutePath(), output.getAbsolutePath());
             FileUtils.writeStringToFile(output, res, encoding);
         }
-    }
+    }*/
 
     private static String findEncoding(File f) throws IOException {
         try (FileInputStream fin = new FileInputStream(f)) {
