@@ -96,7 +96,7 @@ public class ResourceBundle implements Serializable {
         mAppPackage = appPackage;
         viewDataBindingClass = useAndroidX
                 ? "androidx.databinding.ViewDataBinding"
-                : "com.tyron.viewbinding.ViewDataBinding";
+                : "android.databinding.ViewDataBinding";
     }
 
     public void addLayoutBundle(@NonNull LayoutFileBundle bundle, boolean fromSource) {
