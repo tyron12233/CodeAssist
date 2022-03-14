@@ -18,6 +18,7 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.util.ProjectUtils;
+import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerProvider;
@@ -35,11 +36,17 @@ import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.logging.Logger;
+
+import kotlin.collections.CollectionsKt;
 
 public class ProjectManager {
+
+    private static final Logger LOG = IdeLog.getCurrentLogger(ProjectManager.class);
 
     public interface TaskListener {
         void onTaskStarted(String message);
@@ -144,6 +151,7 @@ public class ProjectManager {
                 logger.warning("Unable to generate resource classes " + e.getMessage());
             }
         }
+
         if (module instanceof JavaModule) {
             if (module instanceof AndroidModule) {
                 mListener.onTaskStarted("Indexing XML files.");
@@ -156,7 +164,10 @@ public class ProjectManager {
                 try {
                     xmlRepository.initialize((AndroidModule) module);
                 } catch (IOException e) {
-                    // ignored
+                    String message = "Unable to initialize resource repository. " +
+                                     "Resource code completion might be incomplete or unavailable. \n" +
+                                     "Reason: " + e.getMessage();
+                    LOG.warning(message);
                 }
             }
 
@@ -169,6 +180,13 @@ public class ProjectManager {
                 if (module instanceof AndroidModule) {
                     InjectResourcesTask.inject(project, (AndroidModule) module);
                     InjectViewBindingTask.inject(project, (AndroidModule) module);
+                }
+
+                JavaModule javaModule = ((JavaModule) module);
+                Collection<File> files = javaModule.getJavaFiles().values();
+                File first = CollectionsKt.firstOrNull(files);
+                if (first != null) {
+                    service.compile(first.toPath());
                 }
             } catch (Throwable e) {
                 String message =
