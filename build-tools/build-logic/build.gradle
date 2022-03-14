@@ -18,7 +18,7 @@ dependencies {
     implementation project(path: ':build-tools:logging')
     implementation project(path: ':build-tools:manifmerger')
     implementation project(path: ':build-tools:project')
-    implementation project(path: ':build-tools:viewbinding')
+    implementation project(path: ':build-tools:viewbinding-lib')
 
     // javac
     implementation project(path: ':build-tools:javac')
