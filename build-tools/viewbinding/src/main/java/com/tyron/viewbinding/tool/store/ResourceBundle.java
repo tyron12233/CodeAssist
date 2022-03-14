@@ -1,6 +1,5 @@
 package com.tyron.viewbinding.tool.store;
 
-//import com.tyron.viewbinding.tool.DataBindingBuilder;
 import com.tyron.viewbinding.tool.processing.ErrorMessages;
 import com.tyron.viewbinding.tool.processing.Scope;
 import com.tyron.viewbinding.tool.processing.ScopedException;
@@ -15,10 +14,6 @@ import com.android.annotations.Nullable;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Marshaller;
-import javax.xml.bind.Unmarshaller;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
@@ -26,9 +21,7 @@ import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlElementWrapper;
 import javax.xml.bind.annotation.XmlRootElement;
 import java.io.File;
-import java.io.InputStream;
 import java.io.Serializable;
-import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -122,7 +115,7 @@ public class ResourceBundle implements Serializable {
         bundles.add(bundle);
     }
 
-    public void addDependencyLayouts(GenClassInfoLog genClassInfoLog) {
+    /*public void addDependencyLayouts(GenClassInfoLog genClassInfoLog) {
         genClassInfoLog.mappings().forEach(
                 (key, value) -> mDependencyBinders.put(key,
                     new IncludedLayout.Builder()
@@ -130,7 +123,7 @@ public class ResourceBundle implements Serializable {
                         .modulePackage(value.getModulePackage())
                         .interfaceQName(value.getQName())
                     .build()));
-    }
+    }*/
 
     /**
      * @deprecated Use {@link #getAllLayoutFileBundlesInSource()} which contains
@@ -171,7 +164,6 @@ public class ResourceBundle implements Serializable {
      */
 
     /*
-    todo: is this needed?
     public static GenClassInfoLog loadClassInfoFromFolder(File folder) throws IOException {
         GenClassInfoLog merged = new GenClassInfoLog();
         // blaze might pass a zip instead of a folder
@@ -844,10 +836,10 @@ public class ResourceBundle implements Serializable {
             return getFilePath();
         }
 
-        private static final Marshaller sMarshaller;
-        private static final Unmarshaller sUnmarshaller;
+        /*private static final Marshaller sMarshaller;
+        private static final Unmarshaller sUnmarshaller;*/
 
-        static {
+        /*static {
             try {
                 JAXBContext context = jaxbContext(LayoutFileBundle.class);
                 sMarshaller = context.createMarshaller();
@@ -856,8 +848,8 @@ public class ResourceBundle implements Serializable {
             } catch (JAXBException e) {
                 throw new RuntimeException("Cannot create the xml marshaller", e);
             }
-        }
-
+        }*/
+/*
         private static JAXBContext jaxbContext(Class<?> clazz) throws JAXBException {
             try {
                 return (JAXBContext)
@@ -869,9 +861,9 @@ public class ResourceBundle implements Serializable {
             } catch (ReflectiveOperationException e) {
                 throw new LinkageError(e.getMessage(), e);
             }
-        }
+        }*/
 
-        public String toXML() throws JAXBException {
+        /*public String toXML() throws JAXBException {
             StringWriter writer = new StringWriter();
             synchronized (sMarshaller) {
                 sMarshaller.marshal(this, writer);
@@ -884,7 +876,7 @@ public class ResourceBundle implements Serializable {
             synchronized (sUnmarshaller) {
                 return (LayoutFileBundle) sUnmarshaller.unmarshal(inputStream);
             }
-        }
+        }*/
 
         public String createTag() {
             return getDirectory() + "/" + getFileName();
