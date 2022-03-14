@@ -18,10 +18,10 @@ import com.squareup.javapoet.CodeBlock
 import com.squareup.javapoet.NameAllocator
 import com.squareup.javapoet.ParameterSpec
 import com.squareup.javapoet.TypeName.BOOLEAN
-import javax.lang.model.element.Modifier.FINAL
-import javax.lang.model.element.Modifier.PRIVATE
-import javax.lang.model.element.Modifier.PUBLIC
-import javax.lang.model.element.Modifier.STATIC
+import org.openjdk.javax.lang.model.element.Modifier.FINAL
+import org.openjdk.javax.lang.model.element.Modifier.PRIVATE
+import org.openjdk.javax.lang.model.element.Modifier.PUBLIC
+import org.openjdk.javax.lang.model.element.Modifier.STATIC
 
 fun ViewBinder.toJavaFile(useLegacyAnnotations: Boolean = false) =
     JavaFileGenerator(this, useLegacyAnnotations).create()
