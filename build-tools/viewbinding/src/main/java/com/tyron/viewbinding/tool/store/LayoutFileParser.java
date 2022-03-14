@@ -62,7 +62,7 @@ public final class LayoutFileParser {
 
     @Nullable
     public static ResourceBundle.LayoutFileBundle parseXml(@NonNull final RelativizableFile input,
-            @NonNull final File outputFile, @NonNull final String pkg,
+            /*@NonNull*/ final File outputFile, @NonNull final String pkg,
             @NonNull final LayoutXmlProcessor.OriginalFileLookup originalFileLookup,
             boolean isViewBindingEnabled, boolean isDataBindingEnabled)
             throws ParserConfigurationException, IOException, SAXException,

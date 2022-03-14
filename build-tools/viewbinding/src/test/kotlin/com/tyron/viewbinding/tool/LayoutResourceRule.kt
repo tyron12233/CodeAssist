@@ -47,7 +47,7 @@ class LayoutResourceRule(
             val strippedFile = File(strippedResDir, file.toRelativeString(realResDir))
             val bundle = LayoutFileParser.parseXml(
                 RelativizableFile.fromAbsoluteFile(file),
-                strippedFile,
+                null/*strippedFile*/,
                 appPackage,
                 { null },
                 viewBindingEnabled,
