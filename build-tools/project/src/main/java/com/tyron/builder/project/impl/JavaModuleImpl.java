@@ -86,6 +86,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
         Set<String> classes = new HashSet<>();
         classes.addAll(mJavaFiles.keySet());
         classes.addAll(mClassFiles.keySet());
+        classes.addAll(mInjectedClassesMap.keySet());
         return classes;
     }
 
