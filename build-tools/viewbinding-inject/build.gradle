@@ -38,5 +38,6 @@ dependencies {
     implementation project(path: ':java-completion')
     compileOnly project(path: ':build-tools:javac')
 
+    implementation project(path: ':build-tools:logging')
     implementation project(path: ':build-tools:project')
 }

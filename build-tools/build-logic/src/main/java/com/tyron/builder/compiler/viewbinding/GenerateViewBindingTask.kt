@@ -20,31 +20,28 @@ import java.io.File
 import java.lang.IllegalStateException
 
 class GenerateViewBindingTask(
-    project: Project?,
-    module: AndroidModule?,
-    logger: ILogger?
+    project: Project,
+    module: AndroidModule,
+    logger: ILogger
 ) : Task<AndroidModule>(project, module, logger) {
 
-    /**
-     * [module name]/build/[VIEW_BINDING_GEN_DIR]
-     */
-    private lateinit var bindingDir: File
+    private lateinit var outputDirectory: File
 
-    /**
-     * [module name]/build/[VIEW_BINDING_GEN_DIR]/[com/package/name]
-     */
-    private lateinit var bindingClassesOutput: File
-
-    override fun getName(): String {
-        return TAG
-    }
+    override fun getName() = TAG
 
     override fun prepare(type: BuildType?) {
-        bindingDir = File(module.buildDirectory, VIEW_BINDING_GEN_DIR)
-        bindingDir.deleteRecursively() // todo: incremental?
+        outputDirectory = File(module.buildDirectory, VIEW_BINDING_GEN_DIR)
+        doPrepare()
+    }
 
-        bindingClassesOutput = File(bindingDir, module.packageName.replace(".", "/"))
-        bindingClassesOutput.mkdirs()
+    fun prepareWithOutputDir(outputDir: File) {
+        outputDirectory = outputDir
+        doPrepare()
+    }
+
+    private fun doPrepare() {
+        outputDirectory.deleteRecursively() // todo: incremental?
+        outputDirectory.mkdirs()
     }
 
     override fun run() {
@@ -107,7 +104,7 @@ class GenerateViewBindingTask(
     }
 
     private fun writeClasses(resourceBundle: ResourceBundle) {
-        val writer = GradleFileWriter(bindingClassesOutput.absolutePath)
+        val writer = GradleFileWriter(outputDirectory.absolutePath)
 
         val layoutBindings = resourceBundle.allLayoutFileBundlesInSource
             .groupBy(ResourceBundle.LayoutFileBundle::getFileName)

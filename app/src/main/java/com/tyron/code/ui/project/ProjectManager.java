@@ -27,6 +27,7 @@ import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.completion.xml.task.InjectResourcesTask;
+import com.tyron.viewbinding.task.InjectViewBindingTask;
 
 import org.apache.commons.io.FileUtils;
 
@@ -167,6 +168,7 @@ public class ProjectManager {
 
                 if (module instanceof AndroidModule) {
                     InjectResourcesTask.inject(project, (AndroidModule) module);
+                    InjectViewBindingTask.inject(project, (AndroidModule) module);
                 }
             } catch (Throwable e) {
                 String message =
