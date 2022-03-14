@@ -1,4 +1,3 @@
-// Generated from XMLParser.g4 by ANTLR 4.5.3
 package com.tyron.viewbinding.parser;
 
 import org.antlr.v4.runtime.ParserRuleContext;

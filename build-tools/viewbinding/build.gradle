@@ -16,7 +16,7 @@ dependencies {
     testImplementation 'com.google.testing.compile:compile-testing:0.19'
 
     implementation project(path: ':common')
-    implementation 'org.antlr:antlr4-runtime:4.5.3'
+    implementation 'org.antlr:antlr4-runtime:4.9.2'
     implementation 'com.github.albfernandez:juniversalchardet:2.4.0'
     implementation 'com.android.tools:annotations:24.5.0'
     api project(path: ':javapoet')

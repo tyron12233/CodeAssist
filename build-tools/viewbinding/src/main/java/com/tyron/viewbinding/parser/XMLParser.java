@@ -1,14 +1,17 @@
-// Generated from XMLParser.g4 by ANTLR 4.5.3
 package com.tyron.viewbinding.parser;
+
 import org.antlr.v4.runtime.atn.*;
 import org.antlr.v4.runtime.dfa.DFA;
 import org.antlr.v4.runtime.*;
+import org.antlr.v4.runtime.misc.*;
 import org.antlr.v4.runtime.tree.*;
 import java.util.List;
+import java.util.Iterator;
+import java.util.ArrayList;
 
 @SuppressWarnings({"all", "warnings", "unchecked", "unused", "cast"})
 public class XMLParser extends Parser {
-	static { RuntimeMetaData.checkVersion("4.5.3", RuntimeMetaData.VERSION); }
+	static { RuntimeMetaData.checkVersion("4.9.2", RuntimeMetaData.VERSION); }
 
 	protected static final DFA[] _decisionToDFA;
 	protected static final PredictionContextCache _sharedContextCache =
@@ -20,20 +23,29 @@ public class XMLParser extends Parser {
 	public static final int
 		RULE_document = 0, RULE_prolog = 1, RULE_content = 2, RULE_element = 3, 
 		RULE_reference = 4, RULE_attribute = 5, RULE_chardata = 6, RULE_misc = 7;
-	public static final String[] ruleNames = {
-		"document", "prolog", "content", "element", "reference", "attribute", 
-		"chardata", "misc"
-	};
+	private static String[] makeRuleNames() {
+		return new String[] {
+			"document", "prolog", "content", "element", "reference", "attribute", 
+			"chardata", "misc"
+		};
+	}
+	public static final String[] ruleNames = makeRuleNames();
 
-	private static final String[] _LITERAL_NAMES = {
-		null, null, null, null, null, null, null, "'<'", null, null, "'>'", null, 
-		"'/>'", "'/'", "'='"
-	};
-	private static final String[] _SYMBOLIC_NAMES = {
-		null, "COMMENT", "CDATA", "DTD", "EntityRef", "CharRef", "SEA_WS", "OPEN", 
-		"XMLDeclOpen", "TEXT", "CLOSE", "SPECIAL_CLOSE", "SLASH_CLOSE", "SLASH", 
-		"EQUALS", "STRING", "Name", "S", "PI"
-	};
+	private static String[] makeLiteralNames() {
+		return new String[] {
+			null, null, null, null, null, null, null, "'<'", null, null, "'>'", null, 
+			"'/>'", "'/'", "'='"
+		};
+	}
+	private static final String[] _LITERAL_NAMES = makeLiteralNames();
+	private static String[] makeSymbolicNames() {
+		return new String[] {
+			null, "COMMENT", "CDATA", "DTD", "EntityRef", "CharRef", "SEA_WS", "OPEN", 
+			"XMLDeclOpen", "TEXT", "CLOSE", "SPECIAL_CLOSE", "SLASH_CLOSE", "SLASH", 
+			"EQUALS", "STRING", "Name", "S", "PI"
+		};
+	}
+	private static final String[] _SYMBOLIC_NAMES = makeSymbolicNames();
 	public static final Vocabulary VOCABULARY = new VocabularyImpl(_LITERAL_NAMES, _SYMBOLIC_NAMES);
 
 	/**
@@ -83,6 +95,7 @@ public class XMLParser extends Parser {
 		super(input);
 		_interp = new ParserATNSimulator(this,_ATN,_decisionToDFA,_sharedContextCache);
 	}
+
 	public static class DocumentContext extends ParserRuleContext {
 		public ElementContext element() {
 			return getRuleContext(ElementContext.class,0);
@@ -123,6 +136,7 @@ public class XMLParser extends Parser {
 			enterOuterAlt(_localctx, 1);
 			{
 			setState(17);
+			_errHandler.sync(this);
 			_la = _input.LA(1);
 			if (_la==XMLDeclOpen) {
 				{
@@ -299,6 +313,7 @@ public class XMLParser extends Parser {
 			enterOuterAlt(_localctx, 1);
 			{
 			setState(42);
+			_errHandler.sync(this);
 			_la = _input.LA(1);
 			if (_la==SEA_WS || _la==TEXT) {
 				{
@@ -310,11 +325,12 @@ public class XMLParser extends Parser {
 			setState(56);
 			_errHandler.sync(this);
 			_alt = getInterpreter().adaptivePredict(_input,7,_ctx);
-			while ( _alt!=2 && _alt!= ATN.INVALID_ALT_NUMBER ) {
+			while ( _alt!=2 && _alt!=org.antlr.v4.runtime.atn.ATN.INVALID_ALT_NUMBER ) {
 				if ( _alt==1 ) {
 					{
 					{
 					setState(49);
+					_errHandler.sync(this);
 					switch (_input.LA(1)) {
 					case OPEN:
 						{
@@ -351,6 +367,7 @@ public class XMLParser extends Parser {
 						throw new NoViableAltException(this);
 					}
 					setState(52);
+					_errHandler.sync(this);
 					_la = _input.LA(1);
 					if (_la==SEA_WS || _la==TEXT) {
 						{
@@ -381,9 +398,18 @@ public class XMLParser extends Parser {
 
 	public static class ElementContext extends ParserRuleContext {
 		public Token elmName;
+		public List<TerminalNode> OPEN() { return getTokens(XMLParser.OPEN); }
+		public TerminalNode OPEN(int i) {
+			return getToken(XMLParser.OPEN, i);
+		}
+		public List<TerminalNode> CLOSE() { return getTokens(XMLParser.CLOSE); }
+		public TerminalNode CLOSE(int i) {
+			return getToken(XMLParser.CLOSE, i);
+		}
 		public ContentContext content() {
 			return getRuleContext(ContentContext.class,0);
 		}
+		public TerminalNode SLASH() { return getToken(XMLParser.SLASH, 0); }
 		public List<TerminalNode> Name() { return getTokens(XMLParser.Name); }
 		public TerminalNode Name(int i) {
 			return getToken(XMLParser.Name, i);
@@ -394,6 +420,7 @@ public class XMLParser extends Parser {
 		public AttributeContext attribute(int i) {
 			return getRuleContext(AttributeContext.class,i);
 		}
+		public TerminalNode SLASH_CLOSE() { return getToken(XMLParser.SLASH_CLOSE, 0); }
 		public ElementContext(ParserRuleContext parent, int invokingState) {
 			super(parent, invokingState);
 		}
@@ -527,7 +554,10 @@ public class XMLParser extends Parser {
 			_la = _input.LA(1);
 			if ( !(_la==EntityRef || _la==CharRef) ) {
 			_errHandler.recoverInline(this);
-			} else {
+			}
+			else {
+				if ( _input.LA(1)==Token.EOF ) matchedEOF = true;
+				_errHandler.reportMatch(this);
 				consume();
 			}
 			}
@@ -546,6 +576,7 @@ public class XMLParser extends Parser {
 	public static class AttributeContext extends ParserRuleContext {
 		public Token attrName;
 		public Token attrValue;
+		public TerminalNode EQUALS() { return getToken(XMLParser.EQUALS, 0); }
 		public TerminalNode Name() { return getToken(XMLParser.Name, 0); }
 		public TerminalNode STRING() { return getToken(XMLParser.STRING, 0); }
 		public AttributeContext(ParserRuleContext parent, int invokingState) {
@@ -625,7 +656,10 @@ public class XMLParser extends Parser {
 			_la = _input.LA(1);
 			if ( !(_la==SEA_WS || _la==TEXT) ) {
 			_errHandler.recoverInline(this);
-			} else {
+			}
+			else {
+				if ( _input.LA(1)==Token.EOF ) matchedEOF = true;
+				_errHandler.reportMatch(this);
 				consume();
 			}
 			}
@@ -675,7 +709,10 @@ public class XMLParser extends Parser {
 			_la = _input.LA(1);
 			if ( !((((_la) & ~0x3f) == 0 && ((1L << _la) & ((1L << COMMENT) | (1L << SEA_WS) | (1L << PI))) != 0)) ) {
 			_errHandler.recoverInline(this);
-			} else {
+			}
+			else {
+				if ( _input.LA(1)==Token.EOF ) matchedEOF = true;
+				_errHandler.reportMatch(this);
 				consume();
 			}
 			}
@@ -692,18 +729,18 @@ public class XMLParser extends Parser {
 	}
 
 	public static final String _serializedATN =
-		"\3\u0430\ud6d1\u8206\uad2d\u4417\uaef1\u8d80\uaadd\3\24b\4\2\t\2\4\3\t"+
+		"\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3\24b\4\2\t\2\4\3\t"+
 		"\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t\7\4\b\t\b\4\t\t\t\3\2\5\2\24\n\2\3\2"+
 		"\7\2\27\n\2\f\2\16\2\32\13\2\3\2\3\2\7\2\36\n\2\f\2\16\2!\13\2\3\3\3\3"+
 		"\7\3%\n\3\f\3\16\3(\13\3\3\3\3\3\3\4\5\4-\n\4\3\4\3\4\3\4\3\4\3\4\5\4"+
 		"\64\n\4\3\4\5\4\67\n\4\7\49\n\4\f\4\16\4<\13\4\3\5\3\5\3\5\7\5A\n\5\f"+
 		"\5\16\5D\13\5\3\5\3\5\3\5\3\5\3\5\3\5\3\5\3\5\3\5\3\5\7\5P\n\5\f\5\16"+
 		"\5S\13\5\3\5\5\5V\n\5\3\6\3\6\3\7\3\7\3\7\3\7\3\b\3\b\3\t\3\t\3\t\2\2"+
-		"\n\2\4\6\b\n\f\16\20\2\5\3\2\6\7\4\2\b\b\13\13\5\2\3\3\b\b\24\24g\2\23"+
-		"\3\2\2\2\4\"\3\2\2\2\6,\3\2\2\2\bU\3\2\2\2\nW\3\2\2\2\fY\3\2\2\2\16]\3"+
-		"\2\2\2\20_\3\2\2\2\22\24\5\4\3\2\23\22\3\2\2\2\23\24\3\2\2\2\24\30\3\2"+
-		"\2\2\25\27\5\20\t\2\26\25\3\2\2\2\27\32\3\2\2\2\30\26\3\2\2\2\30\31\3"+
-		"\2\2\2\31\33\3\2\2\2\32\30\3\2\2\2\33\37\5\b\5\2\34\36\5\20\t\2\35\34"+
+		"\n\2\4\6\b\n\f\16\20\2\5\3\2\6\7\4\2\b\b\13\13\5\2\3\3\b\b\24\24\2g\2"+
+		"\23\3\2\2\2\4\"\3\2\2\2\6,\3\2\2\2\bU\3\2\2\2\nW\3\2\2\2\fY\3\2\2\2\16"+
+		"]\3\2\2\2\20_\3\2\2\2\22\24\5\4\3\2\23\22\3\2\2\2\23\24\3\2\2\2\24\30"+
+		"\3\2\2\2\25\27\5\20\t\2\26\25\3\2\2\2\27\32\3\2\2\2\30\26\3\2\2\2\30\31"+
+		"\3\2\2\2\31\33\3\2\2\2\32\30\3\2\2\2\33\37\5\b\5\2\34\36\5\20\t\2\35\34"+
 		"\3\2\2\2\36!\3\2\2\2\37\35\3\2\2\2\37 \3\2\2\2 \3\3\2\2\2!\37\3\2\2\2"+
 		"\"&\7\n\2\2#%\5\f\7\2$#\3\2\2\2%(\3\2\2\2&$\3\2\2\2&\'\3\2\2\2\')\3\2"+
 		"\2\2(&\3\2\2\2)*\7\r\2\2*\5\3\2\2\2+-\5\16\b\2,+\3\2\2\2,-\3\2\2\2-:\3"+
