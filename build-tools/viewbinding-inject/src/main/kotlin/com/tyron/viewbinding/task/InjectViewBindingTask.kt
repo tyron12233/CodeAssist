@@ -3,6 +3,7 @@ package com.tyron.viewbinding.task
 import com.tyron.builder.compiler.viewbinding.GenerateViewBindingTask
 import com.tyron.builder.compiler.viewbinding.GenerateViewBindingTask.Companion.VIEW_BINDING_GEN_DIR
 import com.tyron.builder.log.ILogger
+import com.tyron.builder.model.ModuleSettings
 import com.tyron.builder.model.SourceFileObject
 import com.tyron.builder.project.Project
 import com.tyron.builder.project.api.AndroidModule
@@ -22,7 +23,7 @@ class InjectViewBindingTask private constructor(
 ) {
 
     private fun doInject(consumer: (List<File>) -> Unit) {
-        val genTask = GenerateViewBindingTask(project, module, ILogger.EMPTY)
+        val genTask = GenerateViewBindingTask(project, module, ILogger.EMPTY, false)
         val outputDir = File(module.buildDirectory, "injected/${VIEW_BINDING_GEN_DIR}")
 
         try {
@@ -43,6 +44,10 @@ class InjectViewBindingTask private constructor(
     companion object {
         @JvmStatic
         fun inject(project: Project, module: AndroidModule) {
+            if (!module.settings.getBoolean(ModuleSettings.VIEW_BINDING_ENABLED, false)) {
+                return
+            }
+
             val service = JavaCompilerProvider.get(project, module) ?: return
 
             val task = InjectViewBindingTask(project, module)

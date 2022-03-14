@@ -35,7 +35,7 @@ public class AndroidAppBundleBuilder extends BuilderImpl<AndroidModule> {
         tasks.add(new GenerateFirebaseConfigTask(getProject(), getModule(), getLogger()));
         tasks.add(new CrashlyticsTask(getProject(), getModule(), getLogger()));
         tasks.add(new IncrementalAapt2Task(getProject(), getModule(), getLogger(), true));
-        tasks.add(new GenerateViewBindingTask(getProject(), getModule(), getLogger()));
+        tasks.add(new GenerateViewBindingTask(getProject(), getModule(), getLogger(), true));
         tasks.add(new MergeSymbolsTask(getProject(), getModule(), getLogger()));
         tasks.add(new IncrementalKotlinCompiler(getProject(), getModule(), getLogger()));
         tasks.add(new IncrementalJavaTask(getProject(), getModule(), getLogger()));

@@ -23,10 +23,15 @@ import java.io.File
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 
+/**
+ * @param addToClasspath true if the generated binding classes
+ * should be added to the module classpath for compilation
+ */
 class GenerateViewBindingTask(
     project: Project,
     module: AndroidModule,
-    logger: ILogger
+    logger: ILogger,
+    val addToClasspath: Boolean,
 ) : Task<AndroidModule>(project, module, logger) {
 
     private lateinit var outputDirectory: File
@@ -67,17 +72,20 @@ class GenerateViewBindingTask(
 
     private fun doRun() {
         // generate binding classes from layouts
-        val resourceBundle = generateClasses()
+        val resourceBundle = generateClassesToBundle()
 
         // write classes to output dir
-        writeClasses(resourceBundle)
+        writeClassesToDisk(resourceBundle)
 
         // data binding will eat some errors to be able to report them later on. This is a good
         // time to report them after the processing is done.
         Scope.assertNoError()
+
+        // add classes to module classpath
+        addToClasspath()
     }
 
-    private fun generateClasses(): ResourceBundle {
+    private fun generateClassesToBundle(): ResourceBundle {
         // it doesn't matter what we pass to the 2nd argument, we won't be using data binding anyways
         val resourceBundle = ResourceBundle(module.packageName, true)
         val resDir = module.androidResourcesDirectory
@@ -92,7 +100,7 @@ class GenerateViewBindingTask(
             val bundle = LayoutFileParser.parseXml(
                 RelativizableFile.fromAbsoluteFile(file),
                 module.packageName,
-                getUpToDateFileContent(file),
+                getUpToDateFileContent(module, file),
                 true
             )
             if (bundle != null) {
@@ -100,29 +108,10 @@ class GenerateViewBindingTask(
             }
         }
         resourceBundle.validateAndRegisterErrors()
-
         return resourceBundle
     }
 
-    private fun getUpToDateFileContent(file: File): String? {
-        try {
-            val fileManager = module.fileManager
-            if (fileManager.isOpened(file)) {
-                val fileContent = fileManager.getFileContent(file)
-                if (fileContent.isPresent) {
-                    return fileContent.get().toString()
-                }
-            }
-        } catch (ignored: IOException) {}
-
-        try {
-            return FileUtils.readFileToString(file, StandardCharsets.UTF_8)
-        } catch (ignored: IOException) {}
-
-        return null
-    }
-
-    private fun writeClasses(resourceBundle: ResourceBundle) {
+    private fun writeClassesToDisk(resourceBundle: ResourceBundle) {
         val writer = GradleFileWriter(outputDirectory.absolutePath)
 
         val layoutBindings = resourceBundle.allLayoutFileBundlesInSource
@@ -137,14 +126,39 @@ class GenerateViewBindingTask(
                 // the user must use the newer view binding library (androidx)
                 useLegacyAnnotations = false
             )
-
             writer.writeToFile(javaFile)
+        }
+    }
+
+    private fun addToClasspath() {
+        if (addToClasspath) {
+            outputDirectory.walkTopDown().filter {
+                it.isFile && it.name.endsWith(".java")
+            }.forEach(module::addResourceClass)
         }
     }
 
     companion object {
         const val TAG = "GenerateViewBindingTask"
         const val VIEW_BINDING_GEN_DIR = "view_binding"
+
+        private fun getUpToDateFileContent(module: AndroidModule, file: File): String? {
+            try {
+                val fileManager = module.fileManager
+                if (fileManager.isOpened(file)) {
+                    val fileContent = fileManager.getFileContent(file)
+                    if (fileContent.isPresent) {
+                        return fileContent.get().toString()
+                    }
+                }
+            } catch (ignored: IOException) {}
+
+            try {
+                return FileUtils.readFileToString(file, StandardCharsets.UTF_8)
+            } catch (ignored: IOException) {}
+
+            return null
+        }
     }
 
 }
