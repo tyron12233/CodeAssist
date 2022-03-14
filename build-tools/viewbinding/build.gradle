@@ -19,7 +19,8 @@ dependencies {
     implementation 'org.antlr:antlr4-runtime:4.5.3'
     implementation 'com.github.albfernandez:juniversalchardet:2.4.0'
     implementation 'com.android.tools:annotations:24.5.0'
-    implementation 'com.squareup:javapoet:1.10.0'
+    api project(path: ':javapoet')
+    implementation project(path: ":build-tools:javac")
 
     // jaxb
     implementation 'javax.xml.bind:jaxb-api:2.3.0'

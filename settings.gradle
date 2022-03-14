@@ -25,6 +25,7 @@ include ':code-editor'
 include ':dependency-resolver'
 include ':android-stubs'
 include ':treeview'
+include ':javapoet'
 
 include ':kotlin-completion'
 include ':java-completion'
