@@ -66,13 +66,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
         if (!javaFile.getName().endsWith(".java")) {
             return;
         }
-        String packageName = StringSearch.packageName(javaFile);
-        String className;
-        if (packageName == null) {
-            className = javaFile.getName().replace(".java", "");
-        } else {
-            className = packageName + "." + javaFile.getName().replace(".java", "");
-        }
+        String className = getFullyQualifiedName(javaFile);
         mJavaFiles.put(className, javaFile);
     }
 
@@ -208,8 +202,24 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public void addInjectedClass(@NonNull File file) {
-        mInjectedClassesMap.put(StringSearch.packageName(file), file);
+    public void addInjectedClass(@NonNull File javaFile) {
+        if (!javaFile.getName().endsWith(".java")) {
+            return;
+        }
+
+        String className = getFullyQualifiedName(javaFile);
+        mInjectedClassesMap.put(className, javaFile);
+    }
+
+    private static String getFullyQualifiedName(@NonNull File javaFile) {
+        String packageName = StringSearch.packageName(javaFile);
+        String className;
+        if (packageName == null) {
+            className = javaFile.getName().replace(".java", "");
+        } else {
+            className = packageName + "." + javaFile.getName().replace(".java", "");
+        }
+        return className;
     }
 
     @Override
