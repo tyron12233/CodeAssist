@@ -15,9 +15,13 @@ import com.tyron.viewbinding.tool.store.LayoutFileParser
 import com.tyron.viewbinding.tool.store.ResourceBundle
 import com.tyron.viewbinding.tool.util.LoggedErrorException
 import com.tyron.viewbinding.tool.util.RelativizableFile
-import com.tyron.viewbinding.tool.writer.*
+import com.tyron.viewbinding.tool.writer.BaseLayoutModel
+import com.tyron.viewbinding.tool.writer.toJavaFile
+import com.tyron.viewbinding.tool.writer.toViewBinder
+import org.apache.commons.io.FileUtils
 import java.io.File
-import java.lang.IllegalStateException
+import java.io.IOException
+import java.nio.charset.StandardCharsets
 
 class GenerateViewBindingTask(
     project: Project,
@@ -85,14 +89,11 @@ class GenerateViewBindingTask(
 
             applicable
         }.forEach { file ->
-            // 2nd argument is for stripping the file of data binding syntax, not needed for view binding
             val bundle = LayoutFileParser.parseXml(
                 RelativizableFile.fromAbsoluteFile(file),
-                null,
                 module.packageName,
-                { null },
-                true,
-                false
+                getUpToDateFileContent(file),
+                true
             )
             if (bundle != null) {
                 resourceBundle.addLayoutBundle(bundle, true)
@@ -101,6 +102,24 @@ class GenerateViewBindingTask(
         resourceBundle.validateAndRegisterErrors()
 
         return resourceBundle
+    }
+
+    private fun getUpToDateFileContent(file: File): String? {
+        try {
+            val fileManager = module.fileManager
+            if (fileManager.isOpened(file)) {
+                val fileContent = fileManager.getFileContent(file)
+                if (fileContent.isPresent) {
+                    return fileContent.get().toString()
+                }
+            }
+        } catch (ignored: IOException) {}
+
+        try {
+            return FileUtils.readFileToString(file, StandardCharsets.UTF_8)
+        } catch (ignored: IOException) {}
+
+        return null
     }
 
     private fun writeClasses(resourceBundle: ResourceBundle) {

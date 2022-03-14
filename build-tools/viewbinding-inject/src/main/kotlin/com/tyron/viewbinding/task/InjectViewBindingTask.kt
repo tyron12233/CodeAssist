@@ -29,10 +29,11 @@ class InjectViewBindingTask private constructor(
             genTask.prepareWithOutputDir(outputDir)
             genTask.run()
 
-            val sources = outputDir.listFiles()?.filter {
+            val sources = outputDir.walkTopDown().filter {
                 it.isFile && it.name.endsWith(".java")
-            } ?: listOf()
+            }.toList()
 
+            // inject classes
             sources.forEach(module::addInjectedClass)
 
             consumer.invoke(sources)
