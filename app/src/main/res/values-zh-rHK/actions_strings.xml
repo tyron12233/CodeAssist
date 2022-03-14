@@ -14,6 +14,7 @@
     <string name="directory_name">文件夾名稱</string>
     <string name="file_name">文件名稱</string>
     <string name="menu_new">新建</string>
+    <string name="menu_import">導入</string>
     <string name="menu_refactor">重構</string>
     <string name="menu_new_layout">新建佈局</string>
 
