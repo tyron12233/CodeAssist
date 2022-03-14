@@ -13,13 +13,16 @@
 
 package com.tyron.viewbinding.tool.store;
 
+import com.android.annotations.NonNull;
+import com.android.annotations.Nullable;
+import com.google.common.base.Strings;
 import com.tyron.viewbinding.parser.XMLLexer;
 import com.tyron.viewbinding.parser.XMLParser;
 import com.tyron.viewbinding.parser.XMLParserBaseVisitor;
-import com.tyron.viewbinding.tool.LayoutXmlProcessor;
 import com.tyron.viewbinding.tool.processing.ErrorMessages;
 import com.tyron.viewbinding.tool.processing.Scope;
 import com.tyron.viewbinding.tool.processing.scopes.FileScopeProvider;
+import com.tyron.viewbinding.tool.store.ResourceBundle.LayoutFileBundle;
 import com.tyron.viewbinding.tool.util.L;
 import com.tyron.viewbinding.tool.util.ParserHelper;
 import com.tyron.viewbinding.tool.util.Preconditions;
@@ -27,66 +30,58 @@ import com.tyron.viewbinding.tool.util.RelativizableFile;
 import com.tyron.viewbinding.tool.util.StringUtils;
 import com.tyron.viewbinding.tool.util.XmlEditor;
 
-import com.android.annotations.NonNull;
-import com.android.annotations.Nullable;
-import com.google.common.base.Strings;
-
 import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.mozilla.universalchardet.UniversalDetector;
-import org.xml.sax.SAXException;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.xpath.XPathExpressionException;
-
 /**
  * Gets the list of XML files and creates a list of
  * {@link com.tyron.viewbinding.tool.store.ResourceBundle} that can be persistent or converted to
  * LayoutBinder.
+ *
+ * CodeAssist note: Commented out/force-disabled Data Binding logic.
+ * Also re-wrote [parseXml] and [parseOriginalXml] to allow for parsing directly
+ * from an XML string.
  */
 public final class LayoutFileParser {
 
-    private static final String XPATH_BINDING_LAYOUT = "/layout";
+    // private static final String XPATH_BINDING_LAYOUT = "/layout";
 
     private static final String LAYOUT_PREFIX = "@layout/";
 
     @Nullable
-    public static ResourceBundle.LayoutFileBundle parseXml(@NonNull final RelativizableFile input,
-            /*@NonNull*/ final File outputFile, @NonNull final String pkg,
-            @NonNull final LayoutXmlProcessor.OriginalFileLookup originalFileLookup,
-            boolean isViewBindingEnabled, boolean isDataBindingEnabled)
-            throws ParserConfigurationException, IOException, SAXException,
-            XPathExpressionException {
+    public static LayoutFileBundle parseXml(@NonNull final RelativizableFile input,
+                                            @NonNull final String pkg,
+                                            @Nullable final String xmlContent,
+                                            boolean isViewBindingEnabled) throws IOException {
         File inputFile = input.getAbsoluteFile();
-        File originalFile = originalFileLookup.getOriginalFileFor(inputFile);
-        if (originalFile == null) {
-            // if we can't find the original file, assume the input is the original file.
-            originalFile = inputFile;
-        }
-        final String originalFilePath = originalFile.getAbsolutePath();
+
         try {
-            Scope.enter((FileScopeProvider) () -> originalFilePath);
+            Scope.enter((FileScopeProvider) inputFile::getAbsolutePath);
             final String encoding = findEncoding(inputFile);
-            // stripFile(inputFile, outputFile, encoding, originalFileLookup); todo: implement data binding
+
+            // stripFile(inputFile, outputFile, encoding, originalFileLookup);
             return parseOriginalXml(
-                RelativizableFile.fromAbsoluteFile(originalFile, input.getBaseDir()),
-                pkg, encoding, isViewBindingEnabled, isDataBindingEnabled);
+                    RelativizableFile.fromAbsoluteFile(inputFile, input.getBaseDir()), pkg,
+                    encoding, isViewBindingEnabled, xmlContent);
         } finally {
             Scope.exit();
         }
     }
-/*
 
+/*
     public static boolean stripSingleLayoutFile(File layoutFile, File outputFile)
             throws IOException {
         String encoding = findEncoding(layoutFile);
@@ -100,21 +95,31 @@ public final class LayoutFileParser {
         return false;
     }
 */
-    // todo: implement data binding
     private static final boolean DATA_BINDING_IMPLEMENTED = false;
     public static final String DATA_BINDING_NOT_IMPLEMENTED_MESSAGE = "Data Binding is not supported";
 
-    private static ResourceBundle.LayoutFileBundle parseOriginalXml(
+    private static Reader getReader(@Nullable final String optionalFileContents,
+                                    @NonNull File original,
+                                    @NonNull final String encoding)
+            throws IOException {
+        if (optionalFileContents != null) {
+            return new StringReader(optionalFileContents);
+        } else {
+            FileInputStream fin = new FileInputStream(original);
+            return new InputStreamReader(fin, encoding);
+        }
+    }
+
+    private static LayoutFileBundle parseOriginalXml(
             @NonNull final RelativizableFile originalFile, @NonNull final String pkg,
             @NonNull final String encoding, boolean isViewBindingEnabled,
-            boolean isDataBindingEnabled)
+            @Nullable final String optionalFileContents) // CodeAssist added
             throws IOException {
         File original = originalFile.getAbsoluteFile();
         try {
             Scope.enter((FileScopeProvider) original::getAbsolutePath);
             final String xmlNoExtension = ParserHelper.stripExtension(original.getName());
-            FileInputStream fin = new FileInputStream(original);
-            InputStreamReader reader = new InputStreamReader(fin, encoding);
+            Reader reader = getReader(optionalFileContents, original, encoding);
             ANTLRInputStream inputStream = new ANTLRInputStream(reader);
             XMLLexer lexer = new XMLLexer(inputStream);
             CommonTokenStream tokenStream = new CommonTokenStream(lexer);
@@ -123,7 +128,7 @@ public final class LayoutFileParser {
             XMLParser.ElementContext root = expr.element();
             boolean isBindingData = "layout".equals(root.elmName.getText());
 
-            XMLParser.ElementContext data;
+            // XMLParser.ElementContext data;
             XMLParser.ElementContext rootView;
             if (isBindingData) {
                 if (!DATA_BINDING_IMPLEMENTED) {
@@ -142,7 +147,7 @@ public final class LayoutFileParser {
                     L.d("Ignoring %s for view binding", originalFile);
                     return null;
                 }
-                data = null;
+                // data = null;
                 rootView = root;
             } else {
                 return null;
@@ -156,13 +161,13 @@ public final class LayoutFileParser {
 
             String rootViewType = getViewName(rootView);
             String rootViewId = attributeMap(rootView).get("android:id");
-            ResourceBundle.LayoutFileBundle bundle =
-                new ResourceBundle.LayoutFileBundle(
+            LayoutFileBundle bundle =
+                new LayoutFileBundle(
                     originalFile, xmlNoExtension, original.getParentFile().getName(), pkg,
                     isMerge, isBindingData, rootViewType, rootViewId);
 
             final String newTag = original.getParentFile().getName() + '/' + xmlNoExtension;
-           // parseData(original, data, bundle); todo: data binding
+           // parseData(original, data, bundle);
             parseExpressions(newTag, rootView, isMerge, bundle);
 
             return bundle;
@@ -182,7 +187,7 @@ public final class LayoutFileParser {
     }
 
     private static void parseExpressions(String newTag, final XMLParser.ElementContext rootView,
-            final boolean isMerge, ResourceBundle.LayoutFileBundle bundle) {
+            final boolean isMerge, LayoutFileBundle bundle) {
         final List<XMLParser.ElementContext> bindingElements = new ArrayList<>();
         final List<XMLParser.ElementContext> otherElementsWithIds = new ArrayList<>();
         rootView.accept(new XMLParserBaseVisitor<Void>() {
@@ -438,7 +443,7 @@ public final class LayoutFileParser {
         XPath xPath = xPathFactory.newXPath();
         File actualFile = originalFileLookup == null ? null
                 : originalFileLookup.getOriginalFileFor(xml);
-        // TODO get rid of original file lookup
+        // TO-DO get rid of original file lookup
         if (actualFile == null) {
             actualFile = xml;
         }
