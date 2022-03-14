@@ -582,6 +582,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         FileManager fileManager = module.getFileManager();
         fileManager.addSnapshotListener(this);
 
+        // the file is already opened, so no need to load it.
         if (fileManager.isOpened(mCurrentFile)) {
             Optional<CharSequence> contents = fileManager.getFileContent(mCurrentFile);
             if (contents.isPresent()) {
