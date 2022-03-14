@@ -22,6 +22,7 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.lifecycle.ViewModelStoreOwner;
 
+import com.android.tools.r8.graph.V;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -34,6 +35,7 @@ import com.tyron.actions.util.DataContextUtils;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.listener.FileListener;
@@ -65,12 +67,26 @@ import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.JavaDataContextUtil;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.CharPosition;
+import com.tyron.kotlin_completion.CompletionEngine;
 
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.kotlin.backend.common.psi.PsiSourceManager;
+import org.jetbrains.kotlin.com.intellij.openapi.components.ServiceManager;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentEvent;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.event.DocumentEventImpl;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
+import org.jetbrains.kotlin.com.intellij.psi.AbstractFileViewProvider;
+import org.jetbrains.kotlin.com.intellij.psi.FileViewProvider;
+import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
+import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
+import org.jetbrains.kotlin.com.intellij.util.DocumentEventUtil;
+import org.jetbrains.kotlin.com.intellij.util.FileContentUtilCore;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.logging.Logger;
@@ -544,6 +560,14 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 try {
                     FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(),
                                                 StandardCharsets.UTF_8);
+
+                    CoreLocalFileSystem fileSystem = ServiceManager.getService(CoreLocalFileSystem.class);
+                    VirtualFile file = fileSystem.findFileByIoFile(mCurrentFile);
+
+                    if (file != null) {
+                        file.refresh(false, true);
+                        FileContentUtilCore.reparseFiles(file);
+                    }
                 } catch (IOException e) {
                     // ignored
                 }

@@ -2,16 +2,20 @@ package com.tyron.completion.java.provider;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.completion.java.util.CompletionItemFactory;
 import com.tyron.completion.java.util.JavaCompletionUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.completion.psi.completion.JavaKeywordCompletion;
 import com.tyron.completion.psi.scope.CompletionElement;
 import com.tyron.completion.psi.scope.JavaCompletionProcessor;
 
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Condition;
+import org.jetbrains.kotlin.com.intellij.psi.JavaPsiFacade;
 import org.jetbrains.kotlin.com.intellij.psi.LambdaUtil;
+import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiIdentifier;
@@ -24,27 +28,45 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiType;
 import org.jetbrains.kotlin.com.intellij.psi.PsiWildcardType;
 import org.jetbrains.kotlin.com.intellij.psi.filters.ElementFilter;
+import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.JavaFileManager;
 import org.jetbrains.kotlin.com.intellij.psi.impl.source.resolve.SymbolCollectingProcessor;
+import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTypesUtil;
 import org.jetbrains.kotlin.com.intellij.util.containers.MostlySingularMultiMap;
+
+import java.util.Set;
 
 /**
  * Computes completion candidates using PSI from the kotlin compiler.
  */
 public class JavaKotlincCompletionProvider {
 
+    private final JavaModule mJavaModule;
+
+    public JavaKotlincCompletionProvider(JavaModule module) {
+        mJavaModule = module;
+    }
+
     public void fillCompletionVariants(@NonNull PsiElement elementAt,
                                        @NonNull CompletionList.Builder builder) {
         PsiElement parent = elementAt.getParent();
 
         if (elementAt instanceof PsiIdentifier) {
+            new JavaKeywordCompletion(elementAt, builder);
+
             addIdentifierVariants(elementAt, builder);
+
+            addClassNames(elementAt, builder);
 
             if (parent instanceof PsiJavaCodeReferenceElement) {
                 PsiJavaCodeReferenceElement parentRef = (PsiJavaCodeReferenceElement) parent;
                 completeReference(elementAt, parentRef, builder);
             }
         }
+    }
+
+    private void addClassNames(PsiElement elementAt, CompletionList.Builder builder) {
+
     }
 
     private void completeReference(PsiElement position,
