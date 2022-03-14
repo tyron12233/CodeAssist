@@ -109,6 +109,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
         SharedPreferences.OnSharedPreferenceChangeListener, FileListener,
         ProjectManager.OnProjectOpenListener {
 
+    private static final Logger LOG = IdeLog.getCurrentLogger(CodeEditorFragment.class);
+
     public static final String KEY_LINE = "line";
     public static final String KEY_COLUMN = "column";
     public static final String KEY_PATH = "path";
@@ -489,22 +491,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         hideEditorWindows();
 
-        if (mCanSave && !mReading) {
-            if (ProjectManager.getInstance().getCurrentProject() != null) {
-                ProjectManager.getInstance().getCurrentProject().getModule(mCurrentFile)
-                        .getFileManager()
-                        .setSnapshotContent(mCurrentFile, mEditor.getText().toString(), false);
-            } else {
-                ProgressManager.getInstance().runNonCancelableAsync(() -> {
-                    try {
-                        FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(),
-                                                    StandardCharsets.UTF_8);
-                    } catch (IOException e) {
-                        // ignored
-                    }
-                });
-            }
-        }
+        save(true);
     }
 
     @Override
@@ -547,6 +534,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
             return;
         }
 
+        // don't save if the file has been deleted externally but its still opened in the editor,
         if (!mCurrentFile.exists()) {
             return;
         }
@@ -560,16 +548,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 try {
                     FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(),
                                                 StandardCharsets.UTF_8);
-
-                    CoreLocalFileSystem fileSystem = ServiceManager.getService(CoreLocalFileSystem.class);
-                    VirtualFile file = fileSystem.findFileByIoFile(mCurrentFile);
-
-                    if (file != null) {
-                        file.refresh(false, true);
-                        FileContentUtilCore.reparseFiles(file);
-                    }
                 } catch (IOException e) {
-                    // ignored
+                    LOG.severe("Unable to save file: " + mCurrentFile.getAbsolutePath() + "\n" +
+                               "Reason: " + e.getMessage());
                 }
             });
         }
@@ -653,6 +634,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 if (getContext() != null) {
                     checkCanSave();
                 }
+
+                LOG.severe("Unable to read current file: " + mCurrentFile + "\n" +
+                           "Reason: " + t.getMessage());
             }
         }, ContextCompat.getMainExecutor(requireContext()));
     }
