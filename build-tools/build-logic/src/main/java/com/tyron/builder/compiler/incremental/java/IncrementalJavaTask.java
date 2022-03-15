@@ -102,10 +102,10 @@ public class IncrementalJavaTask extends Task<JavaModule> {
             switch (diagnostic.getKind()) {
                 case ERROR:
                     mHasErrors = true;
-                    getLogger().error(diagnostic.getMessage(Locale.getDefault()));
+                    getLogger().error(new DiagnosticWrapper(diagnostic));
                     break;
                 case WARNING:
-                    getLogger().warning(diagnostic.getMessage(Locale.getDefault()));
+                    getLogger().warning(new DiagnosticWrapper(diagnostic));
             }
         };
 
