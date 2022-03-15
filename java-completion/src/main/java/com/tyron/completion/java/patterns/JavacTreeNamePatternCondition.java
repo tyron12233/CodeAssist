@@ -9,12 +9,12 @@ import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
 import org.jetbrains.kotlin.com.intellij.patterns.PatternConditionPlus;
 import org.jetbrains.kotlin.com.intellij.util.PairProcessor;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.source.tree.ExpressionTree;
-import org.openjdk.source.tree.MemberSelectTree;
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.tree.Tree;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.Tree;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;

@@ -17,15 +17,15 @@ import org.jetbrains.kotlin.com.intellij.patterns.PatternCondition;
 import org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns;
 import org.jetbrains.kotlin.com.intellij.patterns.StringPattern;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.util.Elements;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.util.Elements;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 public class ClassTreePattern extends JavacTreeMemberPattern<ClassTree, ClassTreePattern>  {
 

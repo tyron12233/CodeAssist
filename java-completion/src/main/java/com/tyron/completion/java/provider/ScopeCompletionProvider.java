@@ -12,16 +12,16 @@ import com.tyron.completion.java.util.ElementUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.Scope;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.type.ExecutableType;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.Scope;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 import java.util.Collections;
 import java.util.List;

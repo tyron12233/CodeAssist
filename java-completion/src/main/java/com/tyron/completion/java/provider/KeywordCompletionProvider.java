@@ -10,11 +10,11 @@ import com.tyron.completion.java.insert.KeywordInsertHandler;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.TreePath;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.TreePath;
 
 import java.util.Arrays;
 import java.util.HashSet;

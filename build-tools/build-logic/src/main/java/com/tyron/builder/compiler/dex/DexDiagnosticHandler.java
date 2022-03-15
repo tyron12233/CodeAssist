@@ -74,13 +74,13 @@ public class DexDiagnosticHandler implements DiagnosticsHandler {
         }
         switch (level) {
             case WARNING:
-                wrapper.setKind(org.openjdk.javax.tools.Diagnostic.Kind.WARNING);
+                wrapper.setKind(javax.tools.Diagnostic.Kind.WARNING);
                 break;
             case ERROR:
-                wrapper.setKind(org.openjdk.javax.tools.Diagnostic.Kind.ERROR);
+                wrapper.setKind(javax.tools.Diagnostic.Kind.ERROR);
                 break;
             case INFO:
-                wrapper.setKind(org.openjdk.javax.tools.Diagnostic.Kind.NOTE);
+                wrapper.setKind(javax.tools.Diagnostic.Kind.NOTE);
                 break;
         }
         return wrapper;

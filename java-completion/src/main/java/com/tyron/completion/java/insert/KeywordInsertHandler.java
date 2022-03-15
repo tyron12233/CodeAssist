@@ -8,12 +8,12 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.source.tree.BlockTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import com.sun.source.tree.BlockTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 public class KeywordInsertHandler extends DefaultInsertHandler {
 

@@ -23,11 +23,11 @@ import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.LiteralTree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.tools.JavaFileObject;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.LiteralTree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;

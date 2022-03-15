@@ -2,8 +2,8 @@ package com.tyron.builder.model;
 
 import android.view.View;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
 
 import java.io.File;
 import java.util.Locale;

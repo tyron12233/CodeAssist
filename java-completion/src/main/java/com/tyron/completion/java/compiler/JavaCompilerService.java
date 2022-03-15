@@ -17,12 +17,12 @@ import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.Docs;
 import com.tyron.completion.java.FindTypeDeclarations;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.StandardLocation;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.tools.javac.file.PathFileObject;
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticListener;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardLocation;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.tools.javac.file.PathFileObject;
 
 import java.io.File;
 import java.io.IOException;

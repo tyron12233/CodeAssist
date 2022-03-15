@@ -16,13 +16,13 @@ import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.common.util.ThreadUtil;
 import com.tyron.editor.Editor;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.source.tree.CatchTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.TryTree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.tools.javac.tree.EndPosTable;
-import org.openjdk.tools.javac.tree.JCTree;
+import javax.tools.Diagnostic;
+import com.sun.source.tree.CatchTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.TryTree;
+import com.sun.source.util.TreePath;
+import com.sun.tools.javac.tree.EndPosTable;
+import com.sun.tools.javac.tree.JCTree;
 
 import java.io.File;
 import java.util.Locale;

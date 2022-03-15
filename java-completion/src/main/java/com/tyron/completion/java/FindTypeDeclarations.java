@@ -1,8 +1,8 @@
 package com.tyron.completion.java;
 
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.util.TreeScanner;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.TreeScanner;
 
 import java.util.ArrayList;
 import java.util.List;

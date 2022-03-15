@@ -2,10 +2,10 @@ package com.tyron.code.language.java;
 
 import com.tyron.code.analyzer.semantic.TokenType;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.VariableElement;
-import org.openjdk.tools.javac.code.Symbol;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.VariableElement;
+import com.sun.tools.javac.code.Symbol;
 
 public class JavaTokenTypes {
 

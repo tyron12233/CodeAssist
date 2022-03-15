@@ -2,15 +2,15 @@ package com.tyron.completion.java;
 
 import android.util.Pair;
 
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.ErroneousTree;
-import org.openjdk.source.tree.NewClassTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.TreeScanner;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ErroneousTree;
+import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreeScanner;
+import com.sun.source.util.Trees;
 
 import java.util.List;
 

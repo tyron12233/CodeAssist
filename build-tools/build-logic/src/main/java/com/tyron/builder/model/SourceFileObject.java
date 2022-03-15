@@ -8,8 +8,8 @@ import com.google.common.base.Strings;
 import com.tyron.builder.project.api.JavaModule;
 
 import org.apache.commons.io.FileUtils;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.SimpleJavaFileObject;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
 
 import java.io.IOException;
 import java.net.URI;

@@ -15,12 +15,12 @@ import com.tyron.lint.api.JavaVoidVisitor;
 import com.tyron.lint.api.Scope;
 import com.tyron.lint.api.Severity;
 
-import org.openjdk.source.tree.ExpressionTree;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.MemberSelectTree;
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.util.TreeScanner;
-import org.openjdk.tools.javac.tree.JCTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.util.TreeScanner;
+import com.sun.tools.javac.tree.JCTree;
 
 import java.util.Arrays;
 import java.util.List;
