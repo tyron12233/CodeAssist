@@ -16,4 +16,6 @@ dependencies {
     // user data holder
     implementation project(path: ':build-tools:kotlinc')
     compileOnly project(path: ':android-stubs')
+
+    testImplementation 'junit:junit:4.13.2'
 }
