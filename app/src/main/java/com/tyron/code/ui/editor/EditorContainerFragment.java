@@ -334,25 +334,22 @@ public class EditorContainerFragment extends Fragment implements FileListener,
         updateTab(tab, found);
     }
 
-    private boolean requestedToRefreshTabs = false;
-
+    @SuppressLint("NotifyDataSetChanged")
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
         switch (key) {
             case SharedPreferenceKeys.EDITOR_TAB_UNIQUE_FILE_NAME:
-                requestedToRefreshTabs = true;
+                if (mAdapter != null) {
+                    mAdapter.notifyDataSetChanged();
+                }
                 break;
         }
     }
 
-    @SuppressLint("NotifyDataSetChanged")
     @Override
-    public void onResume() {
-        super.onResume();
+    public void onDestroy() {
+        super.onDestroy();
 
-        if (requestedToRefreshTabs) {
-            requestedToRefreshTabs = false;
-            mAdapter.notifyDataSetChanged();
-        }
+        ApplicationLoader.getDefaultPreferences().unregisterOnSharedPreferenceChangeListener(this);
     }
 }
