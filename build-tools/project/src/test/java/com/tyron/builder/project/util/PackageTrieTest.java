@@ -36,4 +36,15 @@ public class PackageTrieTest {
         List<String> matchingPackages = trie.getMatchingPackages("some.deep.trie");
         assert matchingPackages.size() == 7;
     }
+
+    @Test
+    public void testRemove() {
+        PackageTrie trie = new PackageTrie();
+        trie.add("a.b");
+        trie.add("a.b.c");
+        trie.remove("a.b.c");
+
+        List<String> packages = trie.getMatchingPackages("a");
+        assert packages.size() == 1;
+    }
 }

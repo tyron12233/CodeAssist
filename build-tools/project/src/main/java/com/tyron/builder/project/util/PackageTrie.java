@@ -43,6 +43,44 @@ public class PackageTrie {
         current.isLeaf = true;
     }
 
+    public void remove(@NonNull String fqn) {
+        remove(fqn, true);
+    }
+
+    /**
+     * Remove the package to the index
+     *
+     * If leafOnly is false, passing "java" to the package name will remove all the packages
+     * starting with that package. e.g all java.lang, java.util packages
+     *
+     * If leafOnly is true, only leaf nodes matching the leaf of the specified name will be deleted.
+     * The leaf of the package name is the last word after its dot.
+     *
+     * @param fqn The package name
+     * @param leafOnly Whether to delete the leaf only
+     */
+    public void remove(@NonNull String fqn, boolean leafOnly) {
+        String[] parts = getParts(fqn);
+        Node current = mRoot;
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            boolean isLeaf = i == parts.length - 1;
+
+            if (current == null) {
+                break;
+            }
+            if (current.getChildren() == null) {
+                current = null;
+            } else {
+                Node next = current.getChildren().get(part);
+                if (next != null && (isLeaf || !leafOnly)) {
+                    current.getChildren().remove(next.getValue());
+                }
+                current = next;
+            }
+        }
+    }
+
     public List<String> getMatchingPackages(String packageQuery) {
         List<String> result = new ArrayList<>();
         StringBuilder currentPackage = new StringBuilder();
@@ -135,6 +173,11 @@ public class PackageTrie {
 
         public String getValue() {
             return mValue;
+        }
+
+        @Override
+        public String toString() {
+            return "Node{" + "isLeaf=" + isLeaf + ", mValue='" + mValue + '\'' + '}';
         }
     }
 }
