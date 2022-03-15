@@ -85,7 +85,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
             className = packageName + "." + javaFile.getName().replace(".java", "");
         }
         mJavaFiles.put(className, javaFile);
-        mClassIndex.remove(className);
+        mClassIndex.add(className);
     }
 
     @Override
@@ -150,7 +150,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
                         .substring(0, entry.getName().length() - ".class".length());
 
                 mClassFiles.put(packageName, file);
-                mClassIndex.remove(packageName);
+                mClassIndex.add(packageName);
             }
         }
     }

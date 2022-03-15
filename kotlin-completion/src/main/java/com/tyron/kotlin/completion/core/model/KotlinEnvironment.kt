@@ -223,5 +223,10 @@ private fun getConfiguration(module: KotlinModule): CompilerConfiguration {
 
         module.libraries.forEach(configuration::addJvmClasspathRoot)
     }
+
+    if (module is AndroidModule) {
+        configuration.addJavaSourceRoot(File("${module.buildDirectory}/injected"))
+    }
+
     return configuration
 }
