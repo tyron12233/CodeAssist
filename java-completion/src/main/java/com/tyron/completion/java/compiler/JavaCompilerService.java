@@ -10,18 +10,19 @@ import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.builder.project.util.PackageTrie;
 import com.tyron.common.util.Cache;
 import com.tyron.common.util.StringSearch;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.Docs;
 import com.tyron.completion.java.FindTypeDeclarations;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.StandardLocation;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.tools.javac.file.PathFileObject;
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticListener;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardLocation;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.tools.javac.file.PathFileObject;
 
 import java.io.File;
 import java.io.IOException;
@@ -192,6 +193,35 @@ public class JavaCompilerService implements CompilerProvider {
             }
         }
         return classes;
+    }
+
+    public Set<String> findClasses(String packageName) {
+        Set<String> classes = new HashSet<>();
+        for (Module module : mProject.getDependencies(mCurrentModule)) {
+            if (module instanceof JavaModule) {
+                PackageTrie classIndex = ((JavaModule) module).getClassIndex();
+                classes.addAll(classIndex.getMatchingPackages(packageName));
+            }
+        }
+        return classes;
+    }
+
+    /**
+     * For suggesting the first import typed where the package names are not yet correct
+     */
+    public Set<String> getTopLevelNonLeafPackages(Predicate<String> filter) {
+        Set<String> packages = new HashSet<>();
+        for (Module module : mProject.getDependencies(mCurrentModule)) {
+            if (module instanceof JavaModule) {
+                PackageTrie classIndex = ((JavaModule) module).getClassIndex();
+                for (String node : classIndex.getTopLevelNonLeafNodes()) {
+                    if (filter.test(node)) {
+                        packages.add(node);
+                    }
+                }
+            }
+        }
+        return packages;
     }
 
     @Override

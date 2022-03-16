@@ -1,8 +1,8 @@
 package com.tyron.completion.java.util;
 
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.util.TreePathScanner;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.TreePathScanner;
 
 /**
  * Visits the {@link CompilationUnitTree} and builds up the fully qualified name

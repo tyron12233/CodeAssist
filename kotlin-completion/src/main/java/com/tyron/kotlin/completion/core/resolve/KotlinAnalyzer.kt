@@ -42,6 +42,6 @@ object KotlinAnalyzer {
     private fun analyzeFiles(kotlinEnvironment: KotlinCoreEnvironment,
                              allFiles: Collection<KtFile>,
                              filesToAnalyze: Collection<KtFile>): AnalysisResultWithProvider {
-        return CodeAssistAnalyzerFacadeForJVM.analyzeSources(kotlinEnvironment, filesToAnalyze)
+        return CodeAssistAnalyzerFacadeForJVM.analyzeSources(kotlinEnvironment, allFiles, filesToAnalyze)
     }
 }

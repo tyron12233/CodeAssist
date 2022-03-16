@@ -7,6 +7,7 @@ import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.impl.ModuleImpl;
+import com.tyron.builder.project.util.PackageTrie;
 import com.tyron.common.util.StringSearch;
 
 import org.jetbrains.annotations.NotNull;
@@ -94,6 +95,12 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
     @Override
     public Set<String> getAllClasses() {
         return Collections.emptySet();
+    }
+
+    @NonNull
+    @Override
+    public PackageTrie getClassIndex() {
+        return new PackageTrie();
     }
 
     @NonNull

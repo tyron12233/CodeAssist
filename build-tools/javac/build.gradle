@@ -12,4 +12,7 @@ dependencies {
     api 'com.github.marschall:zipfilesystem-standalone:1.0.1'
 
     api files('libs/javac-new.jar')
+    api files('libs/nb-javac-17.0.0.0-api.jar')
+    api files('libs/nb-javac-17.0.0.0.jar')
+    implementation files('libs/jrt-fs.jar')
 }

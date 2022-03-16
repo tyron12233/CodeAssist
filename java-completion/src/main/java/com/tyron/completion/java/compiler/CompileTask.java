@@ -3,8 +3,8 @@ package com.tyron.completion.java.compiler;
 import android.annotation.SuppressLint;
 import android.net.Uri;
 
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.util.JavacTask;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.JavacTask;
 
 
 import java.io.File;
@@ -12,9 +12,9 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.util.List;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.source.util.Trees;
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
+import com.sun.source.util.Trees;
 
 public class CompileTask implements AutoCloseable {
 

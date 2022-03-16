@@ -20,11 +20,11 @@ import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
 import com.tyron.editor.selection.ExpandSelectionProvider;
 
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 import java.io.File;
 import java.time.Instant;

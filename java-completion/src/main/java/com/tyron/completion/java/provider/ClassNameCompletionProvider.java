@@ -16,8 +16,8 @@ import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.util.TreePath;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.TreePath;
 
 import java.io.File;
 import java.util.HashSet;

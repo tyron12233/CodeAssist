@@ -18,12 +18,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.googlejavaformat.java.Formatter;
 import java.io.IOException;
-import org.openjdk.javax.annotation.processing.Filer;
-import org.openjdk.javax.annotation.processing.Messager;
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.tools.FileObject;
-import org.openjdk.javax.tools.JavaFileManager;
-import org.openjdk.javax.tools.JavaFileObject;
+import javax.annotation.processing.Filer;
+import javax.annotation.processing.Messager;
+import javax.lang.model.element.Element;
+import javax.tools.FileObject;
+import javax.tools.JavaFileManager;
+import javax.tools.JavaFileObject;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**

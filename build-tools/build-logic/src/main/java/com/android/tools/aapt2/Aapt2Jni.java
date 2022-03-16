@@ -6,7 +6,7 @@ import com.tyron.builder.BuildModule;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.common.util.BinaryExecutor;
 
-import org.openjdk.javax.tools.Diagnostic;
+import javax.tools.Diagnostic;
 
 import java.io.File;
 import java.util.ArrayList;
