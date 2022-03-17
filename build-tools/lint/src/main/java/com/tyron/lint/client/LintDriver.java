@@ -13,14 +13,14 @@ import com.tyron.lint.api.Scope;
 import com.tyron.lint.api.Severity;
 import com.tyron.lint.api.TextFormat;
 
-import org.openjdk.source.tree.AnnotationTree;
-import org.openjdk.source.tree.ExpressionTree;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.LiteralTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.ModifiersTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.TreePath;
+import com.sun.source.tree.AnnotationTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.LiteralTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.ModifiersTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.TreePath;
 
 import java.util.EnumSet;
 import java.util.List;

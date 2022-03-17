@@ -8,15 +8,15 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
 import org.jetbrains.kotlin.com.intellij.patterns.InitialPatternCondition;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.VariableElement;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.VariableTree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.VariableElement;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.VariableTree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 public class JavacFieldPattern<T extends Tree> extends JavacTreeMemberPattern<T, JavacFieldPattern<T>> {
 

@@ -1,13 +1,13 @@
 package com.tyron.completion.java.provider;
 
 
-import org.openjdk.source.tree.BlockTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.TreeScanner;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.BlockTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreeScanner;
+import com.sun.source.util.Trees;
 
 import java.io.IOException;
 

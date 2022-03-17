@@ -1,8 +1,8 @@
 package com.tyron.completion.java.rewrite;
 
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.Trees;
 
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.util.ActionUtil;
@@ -17,7 +17,7 @@ import java.util.Map;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
-import org.openjdk.source.tree.ImportTree;
+import com.sun.source.tree.ImportTree;
 
 import java.io.File;
 

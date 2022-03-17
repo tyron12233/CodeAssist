@@ -6,17 +6,17 @@ import static com.tyron.completion.java.rewrite.EditHelper.printThrows;
 
 import com.tyron.completion.java.rewrite.EditHelper;
 
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.Name;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.type.ArrayType;
-import org.openjdk.javax.lang.model.type.DeclaredType;
-import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.tools.javac.code.Type;
-import org.openjdk.tools.javac.tree.TreeInfo;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.Name;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.ArrayType;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.ExecutableType;
+import javax.lang.model.type.TypeMirror;
+import com.sun.source.tree.MethodTree;
+import com.sun.tools.javac.code.Type;
+import com.sun.tools.javac.tree.TreeInfo;
 
 import java.util.List;
 import java.util.StringJoiner;

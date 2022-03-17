@@ -14,8 +14,9 @@
     <string name="directory_name">資料夾名稱</string>
     <string name="file_name">檔名稱</string>
     <string name="menu_new">新建</string>
+    <string name="menu_import">導入</string>
     <string name="menu_refactor">重構</string>
     <string name="menu_new_layout">新建佈局</string>
-
-    <string name="error_file_creation">無法建立檔案</string>
+    
+    <string name="error_file_creation">無法創建文件</string>
 </resources>

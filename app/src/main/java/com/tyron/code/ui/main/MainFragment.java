@@ -60,7 +60,7 @@ import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.completion.java.provider.CompletionEngine;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
-import org.openjdk.javax.tools.Diagnostic;
+import javax.tools.Diagnostic;
 
 import java.io.File;
 import java.time.Duration;

@@ -8,8 +8,8 @@ import com.tyron.completion.util.CompletionUtils;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
 
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.type.TypeKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.type.TypeKind;
 
 import java.util.function.Predicate;
 

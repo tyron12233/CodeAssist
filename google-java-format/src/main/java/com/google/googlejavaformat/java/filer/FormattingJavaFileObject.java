@@ -22,10 +22,10 @@ import com.google.googlejavaformat.java.Formatter;
 import com.google.googlejavaformat.java.FormatterException;
 import java.io.IOException;
 import java.io.Writer;
-import org.openjdk.javax.annotation.processing.Messager;
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.ForwardingJavaFileObject;
-import org.openjdk.javax.tools.JavaFileObject;
+import javax.annotation.processing.Messager;
+import javax.tools.Diagnostic;
+import javax.tools.ForwardingJavaFileObject;
+import javax.tools.JavaFileObject;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** A {@link JavaFileObject} decorator which {@linkplain Formatter formats} source code. */

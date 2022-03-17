@@ -32,6 +32,7 @@ dependencies {
     implementation project(path: ':actions-api')
     implementation project(path: ':editor-api')
     implementation project(path: ':treeview')
+    implementation project(path: ':kotlin-completion')
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation "com.google.truth:truth:1.1.3"

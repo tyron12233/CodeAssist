@@ -213,7 +213,12 @@ public class SourcePath {
 
     public BindingContext compileFiles(Collection<File> all) {
         Set<SourceFile> sources = all.stream().map(o -> files.get(o.toURI())).collect(Collectors.toSet());
-        Set<SourceFile> allChanged = sources.stream().filter(it -> !it.content.equals(it.compiledFile.getText()))
+        Set<SourceFile> allChanged = sources.stream().filter(it -> {
+            if (it.compiledFile == null) {
+                return true;
+            }
+            return !it.content.equals(it.compiledFile.getText());
+        })
                 .collect(Collectors.toSet());
         BindingContext sourcesContext = compileAndUpdate(allChanged);
         return UtilKt.util(sourcesContext, sources, allChanged);

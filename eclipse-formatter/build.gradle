@@ -4,6 +4,7 @@ plugins {
 
 dependencies {
     implementation project (path: ':build-tools:eclipse-standalone')
+    testImplementation 'junit:junit:4.13.2'
 }
 
 java {

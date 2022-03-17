@@ -7,6 +7,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.util.PackageTrie;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
@@ -35,6 +36,9 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     private final Map<String, File> mInjectedClassesMap;
     private final Set<File> mLibraries;
 
+    // the index of all the class files in this module
+    private final PackageTrie mClassIndex = new PackageTrie();
+
     public JavaModuleImpl(File root) {
         super(root);
         mJavaFiles = new HashMap<>();
@@ -42,6 +46,12 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
         mLibraries = new HashSet<>();
         mInjectedClassesMap = new HashMap<>();
         mLibraryHashMap = new HashMap<>();
+    }
+
+    @NonNull
+    @Override
+    public PackageTrie getClassIndex() {
+        return mClassIndex;
     }
 
     @NonNull
@@ -59,6 +69,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     @Override
     public void removeJavaFile(@NonNull String packageName) {
         mJavaFiles.remove(packageName);
+        mClassIndex.remove(packageName);
     }
 
     @Override
@@ -74,6 +85,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
             className = packageName + "." + javaFile.getName().replace(".java", "");
         }
         mJavaFiles.put(className, javaFile);
+        mClassIndex.add(className);
     }
 
     @Override
@@ -138,6 +150,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
                         .substring(0, entry.getName().length() - ".class".length());
 
                 mClassFiles.put(packageName, file);
+                mClassIndex.add(packageName);
             }
         }
     }

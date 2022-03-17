@@ -53,7 +53,7 @@ import com.tyron.common.util.SingleTextWatcher;
 import com.tyron.completion.progress.ProgressManager;
 
 import org.apache.commons.io.FileUtils;
-import org.openjdk.javax.lang.model.SourceVersion;
+import javax.lang.model.SourceVersion;
 
 import java.io.File;
 import java.io.IOException;

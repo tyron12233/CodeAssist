@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.builder.model.Library;
+import com.tyron.builder.project.util.PackageTrie;
 
 import java.io.File;
 import java.util.List;
@@ -44,8 +45,14 @@ public interface JavaModule extends Module {
     /**
      * @return The fully qualified name of all classes in this projects including its
      * libraries
+     *
+     * @deprecated Use {@link JavaModule#getClassIndex()} instead for faster queries
      */
+    @Deprecated
     Set<String> getAllClasses();
+
+    @NonNull
+    PackageTrie getClassIndex();
 
     /**
      * @return The resources directory of the project. Note that

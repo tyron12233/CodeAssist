@@ -4,7 +4,7 @@ import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.model.CompletionList;
 
-import org.openjdk.source.util.TreePath;
+import com.sun.source.util.TreePath;
 
 public abstract class BaseCompletionProvider {
 

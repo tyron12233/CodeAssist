@@ -11,9 +11,9 @@ import org.jetbrains.kotlin.com.intellij.patterns.InitialPatternCondition;
 import org.jetbrains.kotlin.com.intellij.patterns.PatternCondition;
 import org.jetbrains.kotlin.com.intellij.util.PairProcessor;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.Tree;
+import javax.lang.model.element.Element;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.Tree;
 
 public class JavacTreeMemberPattern<T extends Tree, Self extends JavacTreeMemberPattern<T, Self>> extends JavacTreePattern<T, Self> implements JavacElementPattern {
 

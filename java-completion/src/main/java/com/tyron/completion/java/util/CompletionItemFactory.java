@@ -4,6 +4,8 @@ import static com.tyron.completion.java.util.ElementUtil.simpleClassName;
 import static com.tyron.completion.java.util.ElementUtil.simpleType;
 import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
+import androidx.annotation.NonNull;
+
 import com.tyron.completion.DefaultInsertHandler;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.insert.MethodInsertHandler;
@@ -11,23 +13,55 @@ import com.tyron.completion.java.provider.JavaSortCategory;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;
 
+import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
+import org.jetbrains.kotlin.com.intellij.psi.PsiNamedElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiParameter;
+import org.jetbrains.kotlin.com.intellij.psi.PsiParameterList;
+import org.jetbrains.kotlin.com.intellij.psi.PsiType;
 import org.openjdk.javax.annotation.processing.Completion;
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.type.DeclaredType;
-import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.javax.lang.model.util.Types;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.ExecutableType;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class CompletionItemFactory {
+
+    /**
+     * Creates a completion item from a java psi element
+     * @param element The psi element
+     * @return the completion item instance
+     */
+    public static CompletionItem forPsiElement(PsiNamedElement element) {
+        if (element instanceof PsiMethod) {
+            return forPsiMethod(((PsiMethod) element));
+        }
+        return item(element.getName());
+    }
+
+    public static CompletionItem forPsiMethod(PsiMethod psiMethod) {
+        CompletionItem item = new CompletionItem();
+        item.label = getMethodLabel(psiMethod);
+        item.detail = psiMethod.getReturnType().getPresentableText();
+        item.commitText = psiMethod.getName();
+        item.cursorOffset = item.commitText.length();
+        item.iconKind = DrawableKind.Method;
+        return item;
+    }
+
+
+
 
     public static CompletionItem packageSnippet(Path file) {
         String name = "com.tyron.test";
@@ -113,6 +147,19 @@ public class CompletionItemFactory {
         }
 
         return " throws " + types;
+    }
+
+    public static String getMethodLabel(@NonNull PsiMethod psiMethod) {
+        String name = psiMethod.getName();
+        String parameters = "";
+        if (psiMethod.hasParameters()) {
+            PsiParameterList parameterList = psiMethod.getParameterList();
+            parameters = Arrays.stream(parameterList.getParameters())
+                    .map(PsiParameter::getType)
+                    .map(PsiType::getPresentableText)
+                    .collect(Collectors.joining(", "));
+        }
+        return name + "(" + parameters + ")";
     }
 
     public static String getMethodLabel(ExecutableElement element, ExecutableType type) {

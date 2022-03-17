@@ -12,7 +12,7 @@ import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.Presentation;
 import com.tyron.kotlin_completion.CompiledFile;
 
-import org.openjdk.javax.tools.Diagnostic;
+import javax.tools.Diagnostic;
 
 public abstract class QuickFix extends AnAction {
 

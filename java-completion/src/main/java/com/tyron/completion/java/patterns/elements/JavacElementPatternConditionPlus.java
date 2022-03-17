@@ -5,7 +5,7 @@ import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
 import org.jetbrains.kotlin.com.intellij.patterns.PatternConditionPlus;
 import org.jetbrains.kotlin.com.intellij.util.PairProcessor;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
-import org.openjdk.javax.lang.model.element.Element;
+import javax.lang.model.element.Element;
 
 public abstract class JavacElementPatternConditionPlus<Target, Value> extends PatternConditionPlus<Target, Value> implements JavacElementPattern {
 
