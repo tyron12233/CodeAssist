@@ -150,8 +150,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     private static final String EDITOR_RIGHT_LINE_KEY = "rightLine";
     private static final String EDITOR_RIGHT_COLUMN_KEY = "rightColumn";
 
-    private static final Logger sLogger = IdeLog.getCurrentLogger(CodeEditorFragment.class);
-
     private CodeEditorView mEditor;
 
     private Language mLanguage;
@@ -445,6 +443,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
+    /**
+     * Show the popup menu with the actions api
+     */
     private void showPopupMenu(LongPressEvent event) {
         MotionEvent e = event.getCausingEvent();
         CoordinatePopupMenu popupMenu =
@@ -454,6 +455,9 @@ public class CodeEditorFragment extends Fragment implements Savable,
                 .fillMenu(dataContext, popupMenu.getMenu(), ActionPlaces.EDITOR, true, false);
         popupMenu.show((int) e.getX(), ((int) e.getY()) - AndroidUtilities.dp(24));
 
+        // we don't want to enable the drag to open listener right away,
+        // this may cause the buttons to be clicked right away
+        // so wait for a few ms
         ProgressManager.getInstance().runLater(() -> {
             popupMenu.setOnDismissListener(d -> mDragToOpenListener = null);
             mDragToOpenListener = popupMenu.getDragToOpenListener();
@@ -504,9 +508,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
     @Override
     public void onSnapshotChanged(File file, CharSequence contents) {
         if (mCurrentFile.equals(file)) {
-            if (mReading || mCanSave) {
-                //
-            }
             if (mEditor != null) {
                 if (!mEditor.getText().toString().contentEquals(contents)) {
                     Cursor cursor = mEditor.getCursor();
@@ -561,6 +562,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
         ProgressManager.getInstance().runLater(() -> readFile(project, mSavedInstanceState));
     }
 
+    /**
+     * Read the file immediately if there is a project open. If not, wait for the project
+     * to be opened first.
+     */
     private void readOrWait() {
         if (ProjectManager.getInstance().getCurrentProject() != null) {
             readFile(ProjectManager.getInstance().getCurrentProject(), mSavedInstanceState);
@@ -763,6 +768,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
         }
     }
 
+    /**
+     * Create the data context specific to this fragment for use with the actions API.
+     * @return the data context.
+     */
     private DataContext createDataContext() {
         Project currentProject = ProjectManager.getInstance().getCurrentProject();
 
