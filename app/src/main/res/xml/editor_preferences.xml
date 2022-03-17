@@ -106,6 +106,7 @@
             app:iconSpaceReserved="false"
             app:defaultValue="true"
             app:title="@string/editor_tab_unique_file_name"
+            app:summary="@string/editor_tab_unique_file_name_summary"
             app:key="editor_tab_unique_file_name" />
 
     </PreferenceCategory>

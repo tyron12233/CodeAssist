@@ -143,6 +143,7 @@
     <string name="completion_java_source_version_title">Source version</string>
     <string name="editor_tabs_settings_title">Editor Tabs</string>
     <string name="editor_tab_unique_file_name">Show directory for non-unique file names</string>
+    <string name="editor_tab_unique_file_name_summary">Makes displayed file names unique by showing parent folders if files with identical file names are opened.</string>
 
     <!-- about page -->
     <string name="settings_about_us_title">About Us</string>

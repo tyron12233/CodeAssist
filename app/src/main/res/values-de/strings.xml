@@ -139,6 +139,7 @@
     <string name="completion_settings_java_title">Java</string>
     <string name="completion_java_target_version_title">Zielversion</string>
     <string name="completion_java_source_version_title">Quellversion</string>
+    <string name="editor_tab_unique_file_name_summary">Vermeidet verwirrende gleiche Titel durch Anzeigen von Elternverzeichnissen im Dateinamen.</string>
 
     <!-- about page -->
     <string name="settings_about_us_title">Über uns</string>
