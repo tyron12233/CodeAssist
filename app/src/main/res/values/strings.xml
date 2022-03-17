@@ -157,7 +157,7 @@
 
     <!-- file manager menu -->
     <string name="error">Error</string>
-    <string name="error_resource_name_restriction">Resource names must only contain lowercase a–z, 0–9 or an underscore.</string>
+    <string name="error_resource_name_restriction">Resource names must only contain lowercase letters (a–z), digits (0–9), and underscores.</string>
     <string name="item_project">Project</string>
     <string name="dialog_create_class_title">Create a class</string>
     <string name="create_class_dialog_class_name">Class name</string>
