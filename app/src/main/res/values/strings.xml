@@ -141,6 +141,8 @@
     <string name="completion_settings_java_title">Java</string>
     <string name="completion_java_target_version_title">Target version</string>
     <string name="completion_java_source_version_title">Source version</string>
+    <string name="editor_tabs_settings_title">Editor Tabs</string>
+    <string name="editor_tab_unique_file_name">Show directory for non-unique file names</string>
 
     <!-- about page -->
     <string name="settings_about_us_title">About Us</string>
