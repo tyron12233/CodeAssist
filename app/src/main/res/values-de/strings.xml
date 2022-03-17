@@ -116,7 +116,9 @@
     <string name="completion_settings_kotlin_title">Kotlin</string>
     <string name="completion_settings_java_title">Java</string>
     <string name="completion_java_target_version_title">Zielversion</string>
-    <string name="completion_java_source_version_title">Quellversion</string>
+    <string name="completion_java_source_version_title">Quellcode-Version</string>
+    <string name="editor_tabs_settings_title">Editor-Panele</string>
+    <string name="editor_tab_unique_file_name">Gleiche Panel-Titel vermeiden</string>
 
     <!-- about page -->
     <string name="settings_about_us_title">Über uns</string>
