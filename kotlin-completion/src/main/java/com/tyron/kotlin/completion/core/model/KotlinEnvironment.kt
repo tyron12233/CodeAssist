@@ -18,6 +18,8 @@ import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.compiler.toAbstractProjectEnvironment
 import org.jetbrains.kotlin.cli.jvm.config.addJavaSourceRoot
 import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoot
+import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoots
+import org.jetbrains.kotlin.cli.jvm.config.addJvmSdkRoots
 import org.jetbrains.kotlin.cli.jvm.index.JvmDependenciesIndexImpl
 import org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment
 import org.jetbrains.kotlin.com.intellij.mock.MockProject
@@ -216,12 +218,11 @@ private fun getConfiguration(module: KotlinModule): CompilerConfiguration {
     configuration.put(JVMConfigurationKeys.USE_PSI_CLASS_FILES_READING, true)
     configuration.put(JVMConfigurationKeys.NO_JDK, true)
 
-    configuration.addJvmClasspathRoot(BuildModule.getAndroidJar())
+    configuration.addJvmSdkRoots(listOf(BuildModule.getAndroidJar()))
 
     if (module is JavaModule) {
         configuration.addJavaSourceRoot(module.javaDirectory)
-
-        module.libraries.forEach(configuration::addJvmClasspathRoot)
+        configuration.addJvmClasspathRoots(module.libraries)
     }
 
     if (module is AndroidModule) {
