@@ -125,7 +125,8 @@ public class CompilerService extends Service {
                 .setContentTitle(getString(R.string.app_name)).setSmallIcon(R.drawable.ic_stat_code)
                 .setContentText("Preparing").setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setOngoing(true)
-                .setProgress(100, 0, true).build();
+                .setProgress(100, 0, true)
+                .build();
     }
 
     private void updateNotification(String title, String message, int progress) {
