@@ -7,7 +7,7 @@ import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Editor;
 
-import org.openjdk.javax.tools.Diagnostic;
+import javax.tools.Diagnostic;
 
 import java.util.ArrayList;
 import java.util.List;

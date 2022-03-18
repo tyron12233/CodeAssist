@@ -10,8 +10,8 @@ import com.tyron.completion.java.action.CommonJavaContextKeys;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.editor.Editor;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.source.util.TreePath;
+import javax.tools.Diagnostic;
+import com.sun.source.util.TreePath;
 
 public abstract class ExceptionsQuickFix extends AnAction {
 

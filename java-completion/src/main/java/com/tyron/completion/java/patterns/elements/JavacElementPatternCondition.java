@@ -5,7 +5,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.patterns.PatternCondition;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
-import org.openjdk.javax.lang.model.element.Element;
+import javax.lang.model.element.Element;
 
 public abstract class JavacElementPatternCondition<T> extends PatternCondition<T> implements JavacElementPattern{
     public JavacElementPatternCondition(@Nullable @NonNls String debugMethodName) {

@@ -97,4 +97,18 @@
             app:title="@string/editor_scheme_title"
             app:summary="@string/editor_scheme_desc"/>
     </PreferenceCategory>
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        android:title="@string/editor_tabs_settings_title">
+
+        <SwitchPreference
+            app:iconSpaceReserved="false"
+            app:defaultValue="true"
+            app:title="@string/editor_tab_unique_file_name"
+            app:summary="@string/editor_tab_unique_file_name_summary"
+            app:key="editor_tab_unique_file_name" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

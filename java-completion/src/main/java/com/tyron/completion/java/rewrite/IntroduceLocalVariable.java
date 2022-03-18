@@ -6,9 +6,9 @@ import static com.tyron.completion.java.util.ActionUtil.getVariableName;
 import com.github.javaparser.ast.type.Type;
 import com.google.common.collect.ImmutableMap;
 
-import org.openjdk.source.tree.Scope;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.Scope;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.CompilerContainer;
@@ -30,8 +30,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.type.TypeMirror;
+import javax.lang.model.element.Element;
+import javax.lang.model.type.TypeMirror;
 
 public class IntroduceLocalVariable implements JavaRewrite {
 

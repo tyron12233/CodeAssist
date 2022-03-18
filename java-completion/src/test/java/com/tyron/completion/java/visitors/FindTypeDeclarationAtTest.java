@@ -7,7 +7,7 @@ import com.tyron.completion.java.compiler.Parser;
 import org.intellij.lang.annotations.Language;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.openjdk.source.tree.ClassTree;
+import com.sun.source.tree.ClassTree;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 

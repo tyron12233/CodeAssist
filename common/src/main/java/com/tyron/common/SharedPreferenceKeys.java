@@ -18,4 +18,5 @@ public class SharedPreferenceKeys {
     public static final String JAVA_CODE_COMPLETION = "code_editor_completion";
     public static final String SCHEME = "scheme";
     public static final String THEME = "theme";
+    public static final String EDITOR_TAB_UNIQUE_FILE_NAME = "editor_tab_unique_file_name";
 }

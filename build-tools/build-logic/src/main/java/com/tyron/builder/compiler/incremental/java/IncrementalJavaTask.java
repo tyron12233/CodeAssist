@@ -2,10 +2,12 @@ package com.tyron.builder.compiler.incremental.java;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.tools.javac.api.JavacTool;
+import com.sun.source.util.JavacTask;
+import com.sun.tools.javac.api.JavacTool;
+import com.sun.tools.javac.file.JavacFileManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
+import com.tyron.builder.compiler.incremental.kotlin.IncrementalKotlinCompiler;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -31,11 +33,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.SimpleJavaFileObject;
-import org.openjdk.javax.tools.StandardJavaFileManager;
-import org.openjdk.javax.tools.StandardLocation;
+import javax.tools.DiagnosticListener;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
+import javax.tools.StandardLocation;
 
 public class IncrementalJavaTask extends Task<JavaModule> {
 
@@ -111,11 +112,16 @@ public class IncrementalJavaTask extends Task<JavaModule> {
 
         JavacTool tool = JavacTool.create();
 
-        StandardJavaFileManager standardJavaFileManager =
+        JavacFileManager standardJavaFileManager =
                 tool.getStandardFileManager(diagnosticCollector, Locale.getDefault(),
                         Charset.defaultCharset());
+        standardJavaFileManager.setSymbolFileEnabled(false);
+
         List<File> classpath = new ArrayList<>(getModule().getLibraries());
         classpath.add(mOutputDir);
+
+        File kotlinOutputDir = new File(getModule().getBuildDirectory(), "bin/kotlin/classes");
+        classpath.add(kotlinOutputDir);
 
         try {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT,
@@ -139,8 +145,13 @@ public class IncrementalJavaTask extends Task<JavaModule> {
             });
         }
 
+        List<String> options = new ArrayList<>();
+        options.add("-source");
+        options.add("1.8");
+        options.add("-target");
+        options.add("1.8");
         JavacTask task = tool.getTask(null, standardJavaFileManager, diagnosticCollector,
-                Collections.emptyList(), null, javaFileObjects);
+                options, null, javaFileObjects);
 
         HashMap<String, List<File>> compiledFiles = new HashMap<>();
         try {

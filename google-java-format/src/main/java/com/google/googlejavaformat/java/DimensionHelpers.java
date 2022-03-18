@@ -15,11 +15,11 @@
 package com.google.googlejavaformat.java;
 
 import com.google.common.collect.ImmutableList;
-import org.openjdk.source.tree.AnnotatedTypeTree;
-import org.openjdk.source.tree.AnnotationTree;
-import org.openjdk.source.tree.ArrayTypeTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.tools.javac.tree.JCTree;
+import com.sun.source.tree.AnnotatedTypeTree;
+import com.sun.source.tree.AnnotationTree;
+import com.sun.source.tree.ArrayTypeTree;
+import com.sun.source.tree.Tree;
+import com.sun.tools.javac.tree.JCTree;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;

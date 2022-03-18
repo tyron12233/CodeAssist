@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -23,6 +24,7 @@ import io.github.rosemoe.sora.lang.styling.Spans;
 import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Content;
+import io.github.rosemoe.sora.text.ContentLine;
 import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.util.IntPair;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
@@ -56,8 +58,7 @@ public abstract class BaseIncrementalAnalyzeManager<S, T> implements Incremental
     public void insert(CharPosition start, CharPosition end, CharSequence insertedText) {
         if (thread != null) {
             increaseRunCount();
-            thread.handler.sendMessage(thread.handler.obtainMessage(MSG_MOD, new TextModification(
-                    IntPair.pack(start.line, start.column), IntPair.pack(end.line, end.column), insertedText)));
+            thread.handler.sendMessage(thread.handler.obtainMessage(MSG_MOD, new TextModification(IntPair.pack(start.line, start.column), IntPair.pack(end.line, end.column), insertedText)));
             sendUpdate(thread.styles);
         }
     }
@@ -76,7 +77,10 @@ public abstract class BaseIncrementalAnalyzeManager<S, T> implements Incremental
         if (thread != null) {
             thread.callback = () -> { throw new CancelledException(); };
             if (thread.isAlive()) {
-                thread.handler.sendMessage(Message.obtain(thread.handler, MSG_EXIT));
+                final Handler handler = thread.handler;
+                if (handler != null) {
+                    handler.sendMessage(Message.obtain(thread.handler, MSG_EXIT));
+                }
                 thread.abort = true;
             }
         }
@@ -89,7 +93,6 @@ public abstract class BaseIncrementalAnalyzeManager<S, T> implements Incremental
         sendUpdate(null);
     }
 
-    @Override
     public abstract Result<S, T> tokenizeLine(CharSequence line, S state);
 
     @Override
@@ -201,10 +204,11 @@ public abstract class BaseIncrementalAnalyzeManager<S, T> implements Incremental
             styles = new Styles(spans = new LockedSpans());
             S state = getInitialState();
             Spans.Modifier mdf = spans.modify();
-            for (int i = 0;i < ref.getLineCount();i++) {
-                Result<S, T> result = tokenizeLine(ref.getLine(i), state);
+            for (int i = 0;i < shadowed.getLineCount();i++) {
+                ContentLine line = shadowed.getLine(i);
+                Result<S, T> result = tokenizeLine(line, state);
                 state = result.state;
-                List<Span> spans = result.spans!= null ? result. spans :generateSpansForLine(result);
+                List<Span> spans = result.spans != null ? result. spans :generateSpansForLine(result);
                 states.add(result.clearSpans());
                 mdf.addLineAt(i, spans);
             }
@@ -300,7 +304,7 @@ public abstract class BaseIncrementalAnalyzeManager<S, T> implements Incremental
                                 break;
                         }
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        Log.w("AsyncAnalysis", "Thread " + Thread.currentThread().getName() + " failed", e);
                     }
                 }
 
@@ -426,7 +430,7 @@ public abstract class BaseIncrementalAnalyzeManager<S, T> implements Incremental
 
             @Override
             public List<Span> getSpansOnLine(int line) {
-                List<Span> spans = new ArrayList<>();
+                ArrayList<Span> spans = new ArrayList<>();
                 boolean locked = false;
                 try {
                     locked = lock.tryLock(1, TimeUnit.MILLISECONDS);
@@ -466,7 +470,7 @@ public abstract class BaseIncrementalAnalyzeManager<S, T> implements Incremental
                 lock.lock();
                 try {
                     while (lines.size() <= line) {
-                        List<Span> list = new ArrayList<>();
+                        ArrayList<Span> list = new ArrayList<>();
                         list.add(Span.obtain(0, EditorColorScheme.TEXT_NORMAL));
                         lines.add(new LockedSpans.Line(list));
                     }
@@ -521,25 +525,23 @@ public abstract class BaseIncrementalAnalyzeManager<S, T> implements Incremental
         }
     }
 
-    public static class Result<V, T> extends LineTokenizeResult<V, T> {
+    public static class Result<S_, T_> extends LineTokenizeResult<S_, T_> {
 
-        public Result(@NonNull V state, @Nullable List<T> tokens) {
+        public Result(@NonNull S_ state, @Nullable List<T_> tokens) {
             super(state, tokens);
         }
 
-        public Result(@NonNull V state, @Nullable List<T> tokens, @Nullable List<Span> spans) {
+        public Result(@NonNull S_ state, @Nullable List<T_> tokens, @Nullable List<Span> spans) {
             super(state, tokens, spans);
         }
 
         @Override
-        public Result<V, T> clearSpans() {
+        public Result<S_, T_> clearSpans() {
             super.clearSpans();
             return this;
         }
     }
 
     private static class CancelledException extends RuntimeException {}
-
-
 }
 

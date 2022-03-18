@@ -18,14 +18,14 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethodCallExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiNewExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.ExpressionTree;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.MemberSelectTree;
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.Trees;
 
 import java.io.File;
 

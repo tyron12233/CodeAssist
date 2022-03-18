@@ -67,7 +67,7 @@
     <string name="menu_refresh">Atualizar as dependências</string>
     <string name="menu_library_manager">Gerenciar as dependências</string>
     <string name="menu_format">Formatar</string>
-    <string name="menu_settings">Configuração</string>
+    <string name="menu_settings">Configurações</string>
 
     <!-- preferences -->
     <string name="settings_title_application">Aplicativo</string>
@@ -118,7 +118,7 @@
     <string name="font_size_summary">Especifique o tamanho padrão da fonte do editor</string>
     <string name="keyboard_settings_title">Teclado</string>
     <string name="keyboard_enable_suggestions_description">Ativar sugestões do teclado</string>
-    <string name="settings_build_run_title">Compilar &amp; Abrir</string>
+    <string name="settings_build_run_title">Compilar &amp; Instalar</string>
     <string name="settings_build_run_desc">Definir configurações de compilação e execução</string>
     <string name="run_title">Run</string>
     <string name="settings_install_apk_title">Diálogo de instalação do APK</string>
@@ -169,7 +169,7 @@
     <string name="menu_preview_layout">Prévia do layout</string>
     <string name="action_menu_build_release">Compilar para APK (Final)</string>
     <string name="action_menu_build_debug">Compilar para APK (Depuração)</string>
-    <string name="action_menu_build_aab">Compilar para AAB</string>
+    <string name="action_menu_build_aab">Compilar para AAB (Bundle)</string>
 
     <string name="project_manager_alpha_notice_title">Aviso do desenvolvimento Alpha</string>
     <string name="project_manager_alpha_notice">CodeAssist ainda está em alpha,
@@ -198,7 +198,7 @@
     <!-- Compiler Service -->
     <string name="compilation_state_compiling">Compilando</string>
     <string name="compilation_button_install">INSTALAR</string>
-    <string name="compilation_result_success">Compilação terminou com sucesso</string>
+    <string name="compilation_result_success">Compilação foi concluída com sucesso</string>
     <string name="compilation_result_failed">Compilação falhou</string>
 
     <!-- Library manager -->
@@ -210,6 +210,11 @@
     <string name="attributes_editor">Editor de Atributos</string>
     <string name="attribute_value">Valor do atributo</string>
     <string name="menu_add_libs_gradle">Adicionar as bibilotecas do build.gradle</string>
+
+    <!-- Layout Editor -->
+    <string name="error_no_project_opened">Nenhum projeto está aberto.</string>
+    <string name="dialog_confirm_save_title">Salvar como XML</string>
+    <string name="dialog_confirm_save_msg">Você deseja salvar o layout?</string>
 
     <!-- File Editor Manager -->
     <string name="file_editor_selection_title">Qual editor você gostaria de abrir?</string>

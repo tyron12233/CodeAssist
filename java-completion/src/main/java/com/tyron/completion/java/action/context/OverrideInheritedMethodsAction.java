@@ -52,16 +52,16 @@ import com.tyron.ui.treeview.base.BaseNodeViewBinder;
 import com.tyron.ui.treeview.base.BaseNodeViewFactory;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.util.Elements;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.ExecutableType;
+import javax.lang.model.util.Elements;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 import java.io.File;
 import java.time.Instant;

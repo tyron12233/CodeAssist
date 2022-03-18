@@ -14,8 +14,8 @@ import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.model.CompletionList;
 
-import org.openjdk.source.tree.CaseTree;
-import org.openjdk.source.util.TreePath;
+import com.sun.source.tree.CaseTree;
+import com.sun.source.util.TreePath;
 
 public class IdentifierCompletionProvider extends BaseCompletionProvider {
 

@@ -23,16 +23,16 @@ import com.google.googlejavaformat.OpsBuilder;
 import com.google.googlejavaformat.OpsBuilder.BlankLineWanted;
 import com.google.googlejavaformat.java.JavaInputAstVisitor;
 
-import org.openjdk.javax.lang.model.element.Name;
-import org.openjdk.source.tree.AnnotationTree;
-import org.openjdk.source.tree.CaseTree;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.InstanceOfTree;
-import org.openjdk.source.tree.ModifiersTree;
-import org.openjdk.source.tree.ModuleTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.tools.javac.tree.JCTree.JCVariableDecl;
+import javax.lang.model.element.Name;
+import com.sun.source.tree.AnnotationTree;
+import com.sun.source.tree.CaseTree;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.InstanceOfTree;
+import com.sun.source.tree.ModifiersTree;
+import com.sun.source.tree.ModuleTree;
+import com.sun.source.tree.Tree;
+import com.sun.tools.javac.tree.JCTree.JCVariableDecl;
 
 import java.lang.reflect.Method;
 import java.util.Collections;

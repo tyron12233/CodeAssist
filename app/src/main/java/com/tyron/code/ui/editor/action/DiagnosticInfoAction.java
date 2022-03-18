@@ -10,7 +10,7 @@ import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.Presentation;
 
-import org.openjdk.javax.tools.Diagnostic;
+import javax.tools.Diagnostic;
 
 import java.util.Locale;
 

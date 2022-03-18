@@ -7,10 +7,10 @@ import com.tyron.completion.java.util.CompletionItemFactory;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import javax.lang.model.type.TypeMirror;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 import java.util.List;
 

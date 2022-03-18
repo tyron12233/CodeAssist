@@ -7,12 +7,12 @@ import com.tyron.completion.java.provider.FindHelper;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.LineMap;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.ExecutableElement;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.LineMap;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.Trees;
 
 import java.nio.file.Path;
 import java.util.Map;

@@ -1,5 +1,7 @@
 package com.tyron.code.ui.editor;
 
+import android.annotation.SuppressLint;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -26,6 +28,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.listener.FileListener;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.adapter.PageAdapter;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
@@ -34,6 +37,8 @@ import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.common.SharedPreferenceKeys;
+import com.tyron.common.util.UniqueNameBuilder;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.fileeditor.api.FileEditorManager;
@@ -43,7 +48,7 @@ import java.util.List;
 import java.util.Objects;
 
 public class EditorContainerFragment extends Fragment implements FileListener,
-        ProjectManager.OnProjectOpenListener {
+        ProjectManager.OnProjectOpenListener, SharedPreferences.OnSharedPreferenceChangeListener {
 
     public static final String SAVE_ALL_KEY = "saveAllEditors";
     public static final String PREVIEW_KEY = "previewEditor";
@@ -57,6 +62,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
     private MainViewModel mMainViewModel;
 
     private FileEditorManager mFileEditorManager;
+    private SharedPreferences pref;
 
     private final OnBackPressedCallback mOnBackPressedCallback = new OnBackPressedCallback(false) {
         @Override
@@ -69,6 +75,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        pref = ApplicationLoader.getDefaultPreferences();
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         requireActivity().getOnBackPressedDispatcher()
                 .addCallback(this, mOnBackPressedCallback);
@@ -170,17 +177,39 @@ public class EditorContainerFragment extends Fragment implements FileListener,
     }
 
     private void updateTab(TabLayout.Tab tab, int pos) {
-        FileEditor currentEditor = Objects.requireNonNull(mMainViewModel.getFiles()
-                                                                  .getValue())
-                .get(pos);
+        FileEditor currentEditor =
+                Objects.requireNonNull(mMainViewModel.getFiles().getValue()).get(pos);
         File current = currentEditor.getFile();
 
-        String text = current != null ? current.getName() : "Unknown";
+        String text = current != null ? getUniqueTabTitle(current) : "Unknown";
         if (currentEditor.isModified()) {
             text = "*" + text;
         }
 
         tab.setText(text);
+    }
+
+    private String getUniqueTabTitle(@NonNull File currentFile) {
+        if (!pref.getBoolean(SharedPreferenceKeys.EDITOR_TAB_UNIQUE_FILE_NAME, true)) {
+            return currentFile.getName();
+        }
+
+        int sameFileNameCount = 0;
+        UniqueNameBuilder<File> builder = new UniqueNameBuilder<>("", "/");
+
+        for (FileEditor fileEditor : Objects.requireNonNull(mMainViewModel.getFiles().getValue())) {
+            File openFile = fileEditor.getFile();
+            if (openFile.getName().equals(currentFile.getName())) {
+                sameFileNameCount++;
+            }
+            builder.addPath(openFile, openFile.getPath());
+        }
+
+        if (sameFileNameCount > 1) {
+            return builder.getShortPath(currentFile);
+        } else {
+            return currentFile.getName();
+        }
     }
 
     @Override
@@ -193,6 +222,8 @@ public class EditorContainerFragment extends Fragment implements FileListener,
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        ApplicationLoader.getDefaultPreferences().registerOnSharedPreferenceChangeListener(this);
+
         mMainViewModel.getFiles()
                 .observe(getViewLifecycleOwner(), files -> {
                     mAdapter.submitList(files);
@@ -301,5 +332,24 @@ public class EditorContainerFragment extends Fragment implements FileListener,
             return;
         }
         updateTab(tab, found);
+    }
+
+    @SuppressLint("NotifyDataSetChanged")
+    @Override
+    public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
+        switch (key) {
+            case SharedPreferenceKeys.EDITOR_TAB_UNIQUE_FILE_NAME:
+                if (mAdapter != null) {
+                    mAdapter.notifyDataSetChanged();
+                }
+                break;
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+        ApplicationLoader.getDefaultPreferences().unregisterOnSharedPreferenceChangeListener(this);
     }
 }

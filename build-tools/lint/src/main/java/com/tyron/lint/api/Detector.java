@@ -3,8 +3,8 @@ package com.tyron.lint.api;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.tree.Tree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.Tree;
 
 import java.util.List;
 

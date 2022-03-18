@@ -1,8 +1,8 @@
 package com.tyron.code.analyzer.semantic;
 
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.TreePathScanner;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.TreePathScanner;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
