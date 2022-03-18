@@ -8,6 +8,7 @@ import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
+import com.tyron.builder.project.api.FileManager;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.file.tree.TreeUtil;
 import com.tyron.completion.progress.ProgressManager;
@@ -88,15 +89,16 @@ public class DeleteFileAction extends FileAction {
     private boolean deleteFiles(TreeNode<TreeFile> currentNode, TreeFileManagerFragment fragment) {
         File currentFile = currentNode.getContent().getFile();
         FilesKt.walk(currentFile, FileWalkDirection.TOP_DOWN).iterator().forEachRemaining(file -> {
+            Module module = ProjectManager.getInstance()
+                    .getCurrentProject()
+                    .getModule(file);
+
             if (file.getName().endsWith(".java")) {
                 // todo: add .kt and .xml checks
 
                 ProgressManager.getInstance().runLater(() ->
                         fragment.getMainViewModel().removeFile(file));
 
-                Module module = ProjectManager.getInstance()
-                        .getCurrentProject()
-                        .getModule(file);
                 if (module instanceof JavaModule) {
                     String packageName = StringSearch.packageName(file);
                     if (packageName != null) {
@@ -106,6 +108,13 @@ public class DeleteFileAction extends FileAction {
                     ((JavaModule) module).removeJavaFile(packageName);
                 }
             }
+
+            ProgressManager.getInstance().runLater(() -> {
+                FileManager fileManager = module.getFileManager();
+                if (fileManager.isOpened(file)) {
+                    fileManager.closeFileForSnapshot(file);
+                }
+            });
         });
         try {
             FileUtils.forceDelete(currentFile);
