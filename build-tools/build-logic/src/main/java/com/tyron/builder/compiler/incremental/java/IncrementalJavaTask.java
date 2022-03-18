@@ -7,6 +7,7 @@ import com.sun.tools.javac.api.JavacTool;
 import com.sun.tools.javac.file.JavacFileManager;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
+import com.tyron.builder.compiler.incremental.kotlin.IncrementalKotlinCompiler;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -118,6 +119,9 @@ public class IncrementalJavaTask extends Task<JavaModule> {
 
         List<File> classpath = new ArrayList<>(getModule().getLibraries());
         classpath.add(mOutputDir);
+
+        File kotlinOutputDir = new File(getModule().getBuildDirectory(), "bin/kotlin/classes");
+        classpath.add(kotlinOutputDir);
 
         try {
             standardJavaFileManager.setLocation(StandardLocation.CLASS_OUTPUT,
