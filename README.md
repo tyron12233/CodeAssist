@@ -66,6 +66,10 @@ Russian-language (русскоязычный) chat in Telegram: https://t.me/cod
 
 
 
+Portuguese-language (Brazil & Portugal) chat in Telegram: https://t.me/codeassist_brazil
+
+
+
 ## Building - Android Studio
 
 Clone this repository to your local device and then open it on Android Studio.
