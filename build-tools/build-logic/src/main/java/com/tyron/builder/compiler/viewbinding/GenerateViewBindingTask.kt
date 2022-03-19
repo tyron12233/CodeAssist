@@ -28,10 +28,10 @@ import java.nio.charset.StandardCharsets
  * should be added to the module classpath for compilation
  */
 class GenerateViewBindingTask(
-    project: Project,
+    project: Project?,
     module: AndroidModule,
     logger: ILogger,
-    val addToClasspath: Boolean,
+    private val addToClasspath: Boolean,
 ) : Task<AndroidModule>(project, module, logger) {
 
     private lateinit var outputDirectory: File
