@@ -1,9 +1,6 @@
 package com.tyron.builder.compiler.incremental.resource;
 
-import androidx.annotation.VisibleForTesting;
-
 import com.android.tools.aapt2.Aapt2Jni;
-import com.tyron.builder.BuildModule;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
@@ -523,27 +520,5 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
             }
         }
         return file;
-    }
-
-    private static File sAapt2Binary;
-
-    @VisibleForTesting
-    public static void setAapt2Binary(File file) {
-        sAapt2Binary = file;
-    }
-
-    private static File getBinary() throws IOException {
-        if (sAapt2Binary != null) {
-            return sAapt2Binary;
-        }
-
-        File check = new File(BuildModule.getContext().getApplicationInfo().nativeLibraryDir,
-                              "libaapt2.so");
-        if (check.exists()) {
-            sAapt2Binary = check;
-            return check;
-        }
-
-        throw new IOException("AAPT2 Binary not found");
     }
 }
