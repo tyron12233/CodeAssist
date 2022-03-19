@@ -249,6 +249,10 @@ public class LayoutEditorFragment extends Fragment implements ProjectManager.OnP
                 }
             }
         });
+
+if(java.util.Locale.getDefault().getDisplayLanguage().equals("Arabic")) {
+getWindow().getDecorView().setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+}
         return root;
     }
 
