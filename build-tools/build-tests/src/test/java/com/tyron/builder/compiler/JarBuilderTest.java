@@ -39,7 +39,7 @@ public class JarBuilderTest {
         mJavaModule.addJavaFile(new File(mJavaModule.getRootFile(), "src/main/java/Test.java"));
         mJavaModule.open();
 
-        JarBuilder builder = new JarBuilder(mJavaModule, ILogger.STD_OUT);
+        JarBuilder builder = new JarBuilder(null, mJavaModule, ILogger.STD_OUT);
         builder.build(BuildType.RELEASE);
 
         File jarFile = new File(mJavaModule.getBuildDirectory(), "bin/classes.jar");
