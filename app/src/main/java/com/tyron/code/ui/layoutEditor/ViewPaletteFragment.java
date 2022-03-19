@@ -38,7 +38,9 @@ public class ViewPaletteFragment extends Fragment {
         RecyclerView listView = root.findViewById(R.id.palette_recyclerview);
         listView.setLayoutManager(new LinearLayoutManager(requireContext()));
         listView.setAdapter(mAdapter);
-
+if(java.util.Locale.getDefault().getDisplayLanguage().equals("Arabic")) {
+getWindow().getDecorView().setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+}
         return root;
     }
 
