@@ -1,6 +1,6 @@
 package com.tyron.builder.compiler;
 
-import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
+import com.android.tools.aapt2.Aapt2Jni;
 import com.tyron.builder.project.mock.MockAndroidModule;
 import com.tyron.builder.project.mock.MockFileManager;
 import com.tyron.common.TestUtil;
@@ -33,7 +33,7 @@ public class AndroidAppBuilderTestBase {
             aapt2 = new File(mResourcesDir, "aapt2/libaapt2.so");
             assert aapt2.setExecutable(true);
         }
-        IncrementalAapt2Task.setAapt2Binary(aapt2);
+        Aapt2Jni.setAapt2Binary(aapt2);
 
         ApkSigner.setTestCertFile(new File(mResourcesDir, "apksigner/testkey.x509.pem"));
         ApkSigner.setTestKeyFile(new File(mResourcesDir, "apksigner/testkey.pk8"));
