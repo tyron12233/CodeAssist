@@ -204,6 +204,7 @@ public class CompilerService extends Service {
 
         try {
             ProjectBuilder projectBuilder = new ProjectBuilder(project, logger);
+            projectBuilder.setTaskListener(this::updateNotification);
             projectBuilder.build(type);
         } catch (Throwable e) {
             String message;

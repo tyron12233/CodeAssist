@@ -1,5 +1,7 @@
 package com.tyron.builder.compiler;
 
+import androidx.annotation.NonNull;
+
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.ModuleSettings;
@@ -17,11 +19,16 @@ public class ProjectBuilder {
     private final List<Module> mModules;
     private final Project mProject;
     private final ILogger mLogger;
+    private Builder.TaskListener mTaskListener;
 
     public ProjectBuilder(Project project, ILogger logger) throws IOException {
         mProject = project;
         mLogger = logger;
         mModules = project.getBuildOrder();
+    }
+
+    public void setTaskListener(@NonNull Builder.TaskListener listener) {
+        mTaskListener = listener;
     }
 
     public void build(BuildType type) throws IOException, CompilationFailedException {
@@ -53,7 +60,7 @@ public class ProjectBuilder {
                     }
                     break;
             }
-
+            builder.setTaskListener(mTaskListener);
             builder.build(type);
         }
     }
