@@ -112,7 +112,7 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
 
     @Override
     public Map<String, File> getResourceClasses() {
-        return null;
+        return new HashMap<>();
     }
 
     @Override
