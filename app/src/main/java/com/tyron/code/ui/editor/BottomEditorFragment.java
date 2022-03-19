@@ -39,6 +39,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.Locale;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class BottomEditorFragment extends Fragment {
@@ -74,7 +75,7 @@ public class BottomEditorFragment extends Fragment {
 
         mFilesViewModel = new ViewModelProvider(requireActivity())
                 .get(MainViewModel.class);
-if(java.util.Locale.getDefault().getDisplayLanguage().equals("Arabic")) {
+if(Locale.getDefault().getDisplayLanguage().equals("Arabic")) {
 getWindow().getDecorView().setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 }
 
