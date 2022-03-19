@@ -2,21 +2,21 @@
 <resources>
 
     <!-- Text Actions -->
-    <string name="text_actions">نصوص الاوامر</string>
-    <string name="expand_selection">تمديد التحديد</string>
-    <string name="copied_to_clipoard">تم نسخ النص إلى الحافظة</string>
+    <string name="text_actions">Text Actions</string>
+    <string name="expand_selection">Expand Selection</string>
+    <string name="copied_to_clipoard">Text has been copied to clipboard.</string>
 
     <!-- File Actions -->
-    <string name="menu_action_new_java_class">ملف كلاس جافا </string>
-    <string name="menu_action_new_kotlin_class">ملف كلاس كوتلن</string>
-    <string name="menu_action_new_directory">مجلد</string>
-    <string name="menu_action_new_file">ملف</string>
-    <string name="directory_name">اسم المجلد</string>
-    <string name="file_name">اسم الملف</string>
-    <string name="menu_new">جديد</string>
-    <string name="menu_import">استيراد</string>
+    <string name="menu_action_new_java_class">Java class </string>
+    <string name="menu_action_new_kotlin_class">Kotlin class</string>
+    <string name="menu_action_new_directory">Directory</string>
+    <string name="menu_action_new_file">File</string>
+    <string name="directory_name">Directory name</string>
+    <string name="file_name">File name</string>
+    <string name="menu_new">New</string>
+    <string name="menu_import">Import</string>
     <string name="menu_refactor">Refactor</string>
-    <string name="menu_new_layout">واجهة جديدة</string>
+    <string name="menu_new_layout">New layout</string>
 
-    <string name="error_file_creation">فشل صنع ملف</string>
+    <string name="error_file_creation">Unable to create file.</string>
 </resources>
