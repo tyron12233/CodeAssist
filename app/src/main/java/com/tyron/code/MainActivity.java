@@ -9,6 +9,8 @@ import androidx.core.view.WindowCompat;
 
 import com.tyron.code.ui.project.ProjectManagerFragment;
 
+import java.util.Locale;
+
 public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -22,6 +24,9 @@ public class MainActivity extends AppCompatActivity {
                              ProjectManagerFragment.TAG)
                     .commit();
         }
+if(Locale.getDefault().getDisplayLanguage()) {
+getWindow().getDecorView().setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+}
     }
 
     @Override
