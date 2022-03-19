@@ -10,6 +10,7 @@ import androidx.core.view.WindowCompat;
 import com.tyron.code.ui.project.ProjectManagerFragment;
 
 import java.util.Locale;
+import android.view.View;
 
 public class MainActivity extends AppCompatActivity {
     @Override
