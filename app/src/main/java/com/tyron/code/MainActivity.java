@@ -24,7 +24,7 @@ public class MainActivity extends AppCompatActivity {
                              ProjectManagerFragment.TAG)
                     .commit();
         }
-if(Locale.getDefault().getDisplayLanguage()) {
+if(Locale.getDefault().getDisplayLanguage().equals("Arabic")) {
 getWindow().getDecorView().setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 }
     }
