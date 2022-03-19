@@ -58,6 +58,7 @@ public class R8Task extends Task<AndroidModule> {
     public void run() throws IOException, CompilationFailedException {
         try {
             File output = new File(getModule().getBuildDirectory(), "bin");
+            File mappingOutput = new File(output, "proguard-mapping.txt");
             R8Command.Builder command = R8Command.builder(new DexDiagnosticHandler(getLogger(), getModule()))
                     .addProgramFiles(getModule().getLibraries().stream().map(File::toPath)
                                              .collect(Collectors.toList()))
@@ -70,7 +71,7 @@ public class R8Task extends Task<AndroidModule> {
                     .addProguardConfigurationFiles(getProguardRules())
                     .setMinApiLevel(getModule().getMinSdk())
                     .setMode(CompilationMode.RELEASE)
-                    .setProguardMapOutputPath(output.toPath())
+                    .setProguardMapOutputPath(mappingOutput.toPath())
                     .setOutput(output.toPath(), OutputMode.DexIndexed);
             R8.run(command.build());
         } catch (com.android.tools.r8.CompilationFailedException e) {
