@@ -146,6 +146,9 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
         mIndexServiceConnection = new IndexServiceConnection(mMainViewModel, mLogViewModel);
         mServiceConnection = new CompilerServiceConnection(mMainViewModel, mLogViewModel);
+if(java.util.Locale.getDefault().getDisplayLanguage().equals("Arabic")) {
+getWindow().getDecorView().setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+}
     }
 
     @Override
