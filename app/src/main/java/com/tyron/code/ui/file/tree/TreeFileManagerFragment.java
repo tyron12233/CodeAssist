@@ -85,7 +85,7 @@ public class TreeFileManagerFragment extends Fragment {
         ViewCompat.requestApplyInsets(view);
         UiUtilsKt.addSystemWindowInsetToPadding(view, false, true, false, true);
 
-        SwipeRefreshLayout refreshLayout = new SwipeRefreshLayout(requireContext());
+        SwipeRefreshLayout refreshLayout = view.findViewById(R.id.refreshLayout);
         refreshLayout.setOnRefreshListener(() -> partialRefresh(() -> {
             refreshLayout.setRefreshing(false);
             treeView.refreshTreeView();
