@@ -17,8 +17,6 @@ import androidx.fragment.app.Fragment
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
-import org.eclipse.jgit.api.Git
-
 import java.io.File
 
 import de.prinova.git.usecases.*
@@ -33,7 +31,7 @@ lateinit var gitCreateBranchButton : Button
 lateinit var gitMergeBranchButton : Button
 lateinit var gitDeleteBranchButton : Button
 lateinit var arrayAdapter: ArrayAdapter<String>
-lateinit var git: Git
+lateinit var git: Gitter
 
 class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	

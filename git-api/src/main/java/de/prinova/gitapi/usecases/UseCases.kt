@@ -22,13 +22,13 @@ typealias LogList = List<RevCommit>
 	filePath.initializeRepo(commiter)
 */
 
-internal fun String.initializeRepo (commiter: Author): Git =
+fun String.initializeRepo (commiter: Author): Gitter =
 	createRepo()
 	.createGit()
 	.addProjectFiles()
 	.commiting(commiter, "Initial commit")
 
-internal fun String.openGit(): Git =
+fun String.openGit(): Gitter =
 	openRepo()
 	.createGit()
 	
@@ -44,14 +44,14 @@ private fun String.createRepo (): Repository =
 		create()
 	}
 	
-private fun Repository.createGit(): Git = Git(this)
+private fun Repository.createGit(): Gitter = Gitter(Git(this))
 
-internal fun Git.addProjectFiles(): Git = 
+fun Gitter.addProjectFiles(): Gitter = 
 	apply {
-		add().addFilepattern(".").call()
+		git.add().addFilepattern(".").call()
 	}
 
-internal fun Git.commiting(commiter: Author, msg: String): Git = apply {
+fun Gitter.commiting(commiter: Author, msg: String): Gitter = apply {
 	runBlocking {
 		launch(Dispatchers.Default) {
 			commit(commiter, msg)
@@ -59,8 +59,8 @@ internal fun Git.commiting(commiter: Author, msg: String): Git = apply {
 	}
 }
 
-private fun Git.commit(person: Author, msg: String): Git = apply { 
-	commit()
+private fun Gitter.commit(person: Author, msg: String): Gitter = apply { 
+	git.commit()
 	.setCommitter(person.of())
 	.setAuthor(person.of())
 	.setMessage(msg)
@@ -68,12 +68,12 @@ private fun Git.commit(person: Author, msg: String): Git = apply {
 	.call()
 }
 
-internal fun Git.getLog(): String = 
+fun Gitter.getLog(): String = 
 	getLogList()
 	.formatLog()
 	
-private fun Git.getLogList(): LogList =
-	log()
+private fun Gitter.getLogList(): LogList =
+	git.log()
 	.call()	
 	.toList()
 
@@ -86,39 +86,39 @@ private fun LogList.formatLog(): String =
 		"\t${type}\n${name}\n${time}\n\n${msg}\n"
 	}.joinToString("\n")	
 	
-internal fun Git.createBranch(branch: String): Git = apply {
+fun Gitter.createBranch(branch: String): Gitter = apply {
 	runBlocking {
 		launch(Dispatchers.Default) {
-			branchCreate()
+			git.branchCreate()
 			.setName(branch)
 			.call()
 		}
 	}
 }
 	
-internal fun Git.getBranch(): String = 
-	getRepository()
+fun Gitter.getBranch(): String = 
+	git.getRepository()
 	.getBranch()
 
-internal fun Git.getBranchList(): List<String> =
-	branchList()
+fun Gitter.getBranchList(): List<String> =
+	git.branchList()
 	.call()
 	.map { ref ->
 		Repository.shortenRefName(ref.getName())
 	}
 	
-internal fun Git.checkout(branch: String): Git = apply {
+fun Gitter.checkout(branch: String): Gitter = apply {
 	addProjectFiles()
 	runBlocking {
 		launch(Dispatchers.Default) {
-			checkout()
+			git.checkout()
 			.setName( branch )
 			.call()
 		}
 	}
 }
 
-internal fun Git.mergeBranch(branch: String): Git = apply {
+fun Gitter.mergeBranch(branch: String): Gitter = apply {
 	runBlocking {
 		launch(Dispatchers.Default) {
 			addProjectFiles()
@@ -129,27 +129,27 @@ internal fun Git.mergeBranch(branch: String): Git = apply {
 	}
 }
 
-fun Git.mergeWith(branch: String): MergeCommand = 
-	merge()
+fun Gitter.mergeWith(branch: String): MergeCommand = 
+	git.merge()
 	.include(resolve(branch))
 
-fun Git.resolve(branch: String): ObjectId = 
-	getRepository()
+fun Gitter.resolve(branch: String): ObjectId = 
+	git.getRepository()
 	.resolve(branch)
 
 
-internal fun Git.deleteBranch(branch: String): Git = apply {
+fun Gitter.deleteBranch(branch: String): Gitter = apply {
 	runBlocking {
 		launch(Dispatchers.Default) {
-			branchDelete()
+			git.branchDelete()
 			.setBranchNames(branch)
 			.call()
 		}
 	}
 }
 
-internal fun initRepo(filePath: String) = File("$filePath/.git").exists()
+fun initRepo(filePath: String) = File("$filePath/.git").exists()
 	
-internal fun Git.destroy() {
-	close()
+fun Gitter.destroy() {
+	git.close()
 }	
