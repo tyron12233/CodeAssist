@@ -79,6 +79,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
     private EditorViewModel mViewModel;
 
     private final Paint mDiagnosticPaint;
+    private CodeAssistCompletionWindow mCompletionWindow;
 
     public CodeEditorView(Context context) {
         this(DataContext.wrap(context), null);
@@ -129,9 +130,9 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     private void init() {
-        CodeAssistCompletionWindow window = new CodeAssistCompletionWindow(this);
-        window.setAdapter(new CodeAssistCompletionAdapter());
-        replaceComponent(EditorAutoCompletion.class, window);
+        mCompletionWindow = new CodeAssistCompletionWindow(this);
+        mCompletionWindow.setAdapter(new CodeAssistCompletionAdapter());
+        replaceComponent(EditorAutoCompletion.class, mCompletionWindow);
         replaceComponent(EditorTextActionWindow.class, new NoOpTextActionWindow(this));
     }
 
@@ -439,6 +440,11 @@ public class CodeEditorView extends CodeEditor implements Editor {
         if (mViewModel != null) {
             mViewModel.setAnalyzeState(analyzing);
         }
+    }
+
+    @Override
+    public void requireCompletion() {
+        mCompletionWindow.requireCompletion();
     }
 
     public void setViewModel(EditorViewModel editorViewModel) {

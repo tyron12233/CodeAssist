@@ -1,6 +1,7 @@
 package com.tyron.completion.xml.insert;
 
 import com.tyron.completion.model.CompletionItem;
+import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
 
@@ -52,6 +53,10 @@ public class AttributeInsertHandler extends DefaultXmlInsertHandler {
         if (mValueToInsert != null) {
             super.insert(mValueToInsert, editor, false);
             editor.setSelection(caret.getStartLine(), caret.getStartColumn() + 1);
+        } else {
+            // show completion window for enum/flag values.
+            // the delay must be greater than DirectAccessProps.cancelCompletionNs
+            ProgressManager.getInstance().runLater(editor::requireCompletion, 120);
         }
     }
 }
