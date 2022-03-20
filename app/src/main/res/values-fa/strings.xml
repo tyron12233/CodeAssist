@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources>
+  <string name="app_name">CodeAssist</string>
+  <string name="hello_world">Hello world!</string>
+  <item name="paste" type="string">الصاق</item>
+  <item name="copy" type="string">کپی</item>
+  <item name="selectAll" formatted="true" type="string">انتخاب همه</item>
+  <item name="saveToProject" type="string">پروژه</item>
+  <item name="cut" type="string">بریدن</item>
+  <item name="last" type="string">آخرین</item>
+  <item name="next" type="string">بعدی</item>
+  <item name="replace" type="string">جایگزین</item>
+  <item name="replaceAll" type="string">جایگزین همه</item>
+  <item name="replacement" type="string">جایگزینی</item>
+  <item name="cancel" type="string">لغو</item>
+  <item name="text_to_search" type="string">متن برای جستجو</item>
+  <item name="more" type="string">بیشتر</item>
+  <!-- Preference Titles -->
+  <string name="messages_header">پیام ها</string>
+  <string name="sync_header">همگام سازی</string>
+  <!-- Messages Preferences -->
+  <string name="signature_title">امضای شما</string>
+  <string name="reply_title">عملکرد پاسخ پیش فرض</string>
+  <!-- Sync Preferences -->
+  <string name="sync_title">ایمیل را به صورت دوره ای همگام سازی کنید</string>
+  <string name="attachment_title">بارگیری پیوست های دریافتی</string>
+  <string name="attachment_summary_on">بارگیری خودکار پیوست ها برای ایمیل های دریافتی
+    </string>
+  <string name="attachment_summary_off">فقط در صورت درخواست دستی پیوست ها را بارگیری کنید</string>
+  <!-- wizard -->
+  <string name="wizard_next">بعد</string>
+  <string name="wizard_finish">پایان</string>
+  <string name="wizard_cancel">لغو</string>
+  <string name="wizard_templates">قالب ها</string>
+  <string name="wizard_exit">خروج</string>
+  <string name="wizard_desc">از قالب های Activity انتخاب کنید</string>
+  <string name="wizard_empty_templates">قالب ها خالی هستند ):</string>
+  <string name="wizard_loading">بارگیری قالب ها</string>
+  <string name="wizard_app_name">نام برنامه</string>
+  <string name="wizard_package_name">com.my.myapplication</string>
+  <string name="wizard_save_location">ذخیره محل</string>
+  <string name="wizard_language">زبان</string>
+  <string name="wizard_minimum_sdk">حداقل SDK</string>
+  <string name="wizard_create">ایجاد</string>
+  <string name="wizard_previous">قبلی</string>
+  <string name="wizard_scoped_storage_info">با توجه به محدودیت‌های ذخیره‌سازی اندروید 11، فقط می‌توانید فایل‌ها را در حافظه داخلی برنامه ذخیره کنید.</string>
+  <string name="wizard_file_not_writable">دایرکتوری قابل نوشتن نیست، مکان دیگری را انتخاب کنید</string>
+  <string name="wizard_path_exceeds">مسیر مکان بیش از 240 کاراکتر است.</string>
+  <string name="wizard_package_illegal">نام بسته حاوی نویسه‌های غیرمجاز است.</string>
+  <string name="wizard_package_too_short">نام بسته خیلی کوتاه است.</string>
+  <string name="wizard_package_contains_spaces">نام بسته نمی تواند حاوی فاصله باشد.</string>
+  <string name="wizard_error_name_empty">نام نمی تواند خالی باشد.</string>
+  <string name="wizard_error_name_illegal">نام نمی تواند حاوی کاراکتر های غیرمجاز باشد.</string>
+  <string name="wizard_package_empty">نام بسته نمی تواند خالی باشد.</string>
+  <string name="wizard_select_min_sdk">حداقل نسخه SDK را انتخاب کنید.</string>
+  <string name="wizard_select_save_location">یک مکان ذخیره انتخاب کنید.</string>
+  <string name="menu_open_project">باز کردن ماژول</string>
+  <string name="menu_create_project">ایجاد ماژول</string>
+  <string name="menu_run">اجرا</string>
+  <string name="menu_refresh">تازه کردن ماژول</string>
+  <string name="menu_library_manager">مدیریت کتابخانه</string>
+  <string name="menu_format">فرمت</string>
+  <string name="menu_settings">تنظیمات</string>
+  <!-- preferences -->
+  <string name="settings_title_application">برنامه</string>
+  <string name="settings_desc_application">تنظیمات عمومی برنامه</string>
+  <string name="settings_title_editor">ویرایشگر</string>
+  <string name="settings_desc_editor">ویرایشگر را پیکربندی کنید</string>
+  <string name="title_activity_settings">تنظیمات</string>
+  <!-- Application settings -->
+  <string name="settings_theme_title">تم</string>
+  <string name="settings_theme_value_default">پیش فرض سیستم</string>
+  <string name="settings_theme_value_light">روشن</string>
+  <string name="settings_theme_value_dark">تاریک</string>
+  <string-array name="theme_values">
+    <item>default</item>
+    <item>light</item>
+    <item>dark</item>
+  </string-array>
+  <string-array name="theme_entries">
+    <item>@string/settings_theme_value_default</item>
+    <item>@string/settings_theme_value_light</item>
+    <item>@string/settings_theme_value_dark</item>
+  </string-array>
+  <!-- Editor settings -->
+  <string name="code_engine_title">موتور تکمیل</string>
+  <string name="settings_code_completions">تکمیل کننده خودکار کد را فعال کنید</string>
+  <string name="settings_kotlin_completions">تکمیل کننده کد را برای Kotlin فعال کنید</string>
+  <string name="settings_kotlin_completions_desc">این ویژگی هنوز آزمایشی است و ممکن است کند باشد.
+        به یک دستگاه قدرتمند نیاز دارد.
+    </string>
+  <string name="settings_case_insensitive_match_title">تطابق بدون حساسیت به حروف کوچک و بزرگ</string>
+  <string name="settings_case_insensitive_match_desc">نام کلاس ها را با پیشوند کوچک پیشنهاد کنید.</string>
+  <string name="code_editor_error_highlight">برجسته کردن خطا را فعال کنید</string>
+  <string name="editor_settings_title">تنظیمات ویرایشگر کد</string>
+  <string name="editor_settings_wordwrap">حالت بسته بندی کلمات</string>
+  <string name="editor_delete_whitespaces">حذف خودکار فضای سفید</string>
+  <string name="save">ذخیره</string>
+  <string name="defaultString">پیش فرض</string>
+  <string name="editor_scheme_title">طرح رنگ ویرایشگر</string>
+  <string name="editor_scheme_desc">رنگ طراح را تغییر دهید</string>
+  <string name="change_scheme_dialog_title">مسیر فایل تم را الصاق کنید</string>
+  <string name="font_size_title">اندازه فونت</string>
+  <string name="font_size_message">اندازه فونت ویرایشگر را تنظیم کنید</string>
+  <string name="font_size_summary">اندازه فونت پیش فرض ویرایشگر را مشخص کنید</string>
+  <string name="keyboard_settings_title">صفحه کلید</string>
+  <string name="keyboard_enable_suggestions_description">پیشنهادات صفحه کلید را فعال کنید</string>
+  <string name="settings_build_run_title">بسازید و اجرا کنید</string>
+  <string name="settings_build_run_desc">تنظیمات ساخت و اجرا را پیکربندی کنید</string>
+  <string name="run_title">اجرا</string>
+  <string name="settings_install_apk_title">درخواست نصب APK</string>
+  <string name="settings_install_desc">نمایش درخواست نصب APK پس از کامپایل موفقیت آمیز.</string>
+  <string-array name="java_versions" translatable="false">
+    <item>1</item>
+    <item>2</item>
+    <item>3</item>
+    <item>4</item>
+    <item>5</item>
+    <item>6</item>
+    <item>7</item>
+    <item>8</item>
+    <item>9</item>
+    <item>10</item>
+    <item>11</item>
+  </string-array>
+  <string name="completion_settings_kotlin_title">Kotlin</string>
+  <string name="completion_settings_java_title">Java</string>
+  <string name="completion_java_target_version_title">نسخه هدف</string>
+  <string name="completion_java_source_version_title">نسخه منبع</string>
+  <string name="editor_tabs_settings_title">زبانه های ویرایشگر</string>
+  <string name="editor_tab_unique_file_name">نمایش دایرکتوری برای نام فایل های غیر منحصر به فرد</string>
+  <string name="editor_tab_unique_file_name_summary">اگر فایل‌هایی با نام فایل‌های یکسان باز شوند، با نشان دادن پوشه‌های والد، نام فایل‌های نمایش داده شده را منحصر به فرد می‌کند.</string>
+  <!-- about page -->
+  <string name="settings_about_us_title">درباره ما</string>
+  <string name="settings_about_us_desc">اطلاعات بیشتر درباره توسعه دهندگان</string>
+  <string name="app_description">محیط توسعه قدرتمند و سبک برای توسعه برنامه اندروید ، درست در جیب شما.</string>
+  <string name="app_version">نسخه</string>
+  <string name="contact_group_title">تماس</string>
+  <string name="app_source_title">منبع کد</string>
+  <string name="sketchub_team">تیم Sketchub</string>
+  <string name="community">جامعه</string>
+  <string name="rate_us">به ما رای دهید</string>
+  <!-- file manager menu -->
+  <string name="error">خطا</string>
+  <string name="error_resource_name_restriction">نام منابع فقط باید شامل حروف کوچک (a-z)، ارقام (0-9)، و زیرخط باشد.</string>
+  <string name="item_project">پروژه</string>
+  <string name="dialog_create_class_title">یک کلاس ایجاد کنید</string>
+  <string name="create_class_dialog_class_name">نام کلاس</string>
+  <string name="create_class_dialog_positive">ایجاد</string>
+  <string name="create_class_dialog_class_type">نوع کلاس</string>
+  <string name="create_class_dialog_invalid_name">نام کلاس نامعتبر است</string>
+  <string name="success">موفقیت آمیز</string>
+  <string name="delete_success">با موفقیت حذف شد</string>
+  <string name="dialog_confirm_delete">آیا مطمئنید که می خواهید %1$s را حذف کنید؟</string>
+  <string name="dialog_delete">حذف</string>
+  <string name="menu_preview_layout">پیش نمایش layout</string>
+  <string name="action_menu_build_release">ساخت APK انتشار</string>
+  <string name="action_menu_build_debug">ساخت APK اشکال زدایی</string>
+  <string name="action_menu_build_aab">ساخت AAB</string>
+  <string name="project_manager_alpha_notice_title">اطلاعیه آلفا</string>
+  <string name="project_manager_alpha_notice">CodeAssist هنوز در آلفا است ممکن است با خرابی ها ، باگ ها و ویژگی های ناقض مواجه شوید\nشما می توانید مسائل را در https://github.com/tyron12233/CodeAssist/issues گزارش کنید</string>
+  <string name="project_manager_save_location_title">مکان ذخیره را انتخاب کنید</string>
+  <string name="project_manager_permission_denied">اجازه رد شد</string>
+  <string name="project_manager_button_request_again">دوباره درخواست کنید</string>
+  <string name="project_manager_button_continue">ادامه</string>
+  <string name="project_manager_rationale_title">مجوزهای ذخیره سازی</string>
+  <string name="project_manager_button_allow">اجازه</string>
+  <string name="project_manager_button_use_internal">از حافظه داخلی استفاده کنید</string>
+  <string name="project_manager_permission_rationale">برنامه نیاز به مجوزهای ذخیره سازی دارد
+        به منظور ذخیره فایل های ماژول که با حذف نصب پاک نمی شوند
+        برنامه یا می توانید انتخاب کنید که فایل های ماژول را در آن ذخیره کنید </string>
+  <string name="project_manager_android11_notice">پروژه ها در فهرست حافظه داخلی برنامه ذخیره می شوند.
+        قبل از حذف برنامه از ماژول های خود نسخه پشتیبان تهیه کنید.</string>
+  <string name="project_manager_projects">پروژه ها</string>
+  <string name="project_manager_empty">پروژه ها خالی هستند</string>`
+    <string name="project_manager_create_project">ایجاد ماژول</string>
+  <string name="project_path_menu_title">مسیر پروژه ها</string>
+  <string name="project_manager_null_projects">پروژه ای پیدا نشد</string>
+  <string name="project_manager_suggestions">پیشنهادات:\n\n  - ایجاد پروژه جدید\n  - تغییر مسیر پروژه</string>
+  <!-- Compiler Service -->
+  <string name="compilation_state_compiling">تدوین</string>
+  <string name="compilation_button_install">نصب</string>
+  <string name="compilation_result_success">تدوین موفقیت آمیز بود</string>
+  <string name="compilation_result_failed">تدوین نا موفق بود</string>
+  <!-- Library manager -->
+  <string name="library_manager_title">%1s کتابخانه ها</string>
+  <string name="group_id">شناسه گروه</string>
+  <string name="artifact_id">شناسه مصنوع</string>
+  <string name="version_name">نام نسخه</string>
+  <string name="menu_display_dependencies">وابستگی ها را فهرست کنید</string>
+  <string name="attributes_editor">ویرایشگر ویژگی ها</string>
+  <string name="attribute_value">ویژگی مقدار</string>
+  <string name="menu_add_libs_gradle">کتابخانه ها را از build.gradle اضافه کنید</string>
+  <!-- Layout Editor -->
+  <string name="error_no_project_opened">پروژه ای باز نشده</string>
+  <string name="dialog_confirm_save_title">ذخیره در XML</string>
+  <string name="dialog_confirm_save_msg">آیا می خواهید طرح بندی را ذخیره کنید؟</string>
+  <!-- File Editor Manager -->
+  <string name="file_editor_selection_title">کدام ویرایشگر را می خواهید باز کنید؟</string>
+  <!-- Editor tabs -->
+  <string name="menu_close_file">بستن</string>
+  <string name="menu_close_others">بستن بقیه</string>
+  <string name="menu_close_all">بستن همه</string>
+  <!-- Editor -->
+  <string name="editor_error_file">هنگام خواندن فایل خطایی رخ داده است. تغییرات ذخیره نمی شوند.</string>
+  <!-- Bottom Editor Fragment -->
+  <string name="tab_build_logs_title">سوابق ساخت</string>
+  <string name="tab_app_logs_title">سوابق برنامه</string>
+  <string name="tab_ide_logs_title">سوابق IDE</string>
+  <string name="tab_diagnostics_title">تشخیص</string>
+</resources>
