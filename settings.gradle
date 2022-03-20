@@ -37,3 +37,5 @@ include ':language-api'
 include ':build-tools:xml-repository'
 include ':build-tools:eclipse-standalone'
 include ':eclipse-formatter'
+
+include ':git-api'

@@ -96,6 +96,7 @@ dependencies {
     implementation project(path: ':actions-api')
     implementation project(path: ':editor-api')
     implementation project(path: ':fileeditor-api')
+    implementation project(path: ':git-api')
 
     // formatters
     implementation project(path: ':google-java-format')

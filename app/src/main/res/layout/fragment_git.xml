@@ -1,0 +1,80 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical" >
+
+    <Button
+        android:id="@+id/git_button_create"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginLeft="5dp"
+        android:layout_marginRight="5dp"
+        android:layout_marginTop="10dp"
+        android:hint="Git Init"
+        android:paddingHorizontal="30dp"
+        android:text="Git Init" />
+
+    <Button
+        android:id="@+id/git_button_commit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginLeft="5dp"
+        android:layout_marginRight="5dp"
+        android:hint="Commit"
+        android:paddingHorizontal="30dp"
+        android:text="Commit" />
+
+    <Button
+        android:id="@+id/git_button_create_branch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginLeft="5dp"
+        android:layout_marginRight="5dp"
+        android:hint="Create Branch"
+        android:paddingHorizontal="30dp"
+        android:text="Create Branch" />
+		
+	<Button
+        android:id="@+id/git_button_merge_branch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginLeft="5dp"
+        android:layout_marginRight="5dp"
+        android:hint="Merge Branch"
+        android:paddingHorizontal="30dp"
+        android:text="Merge Branch" />
+		
+	<Button
+        android:id="@+id/git_button_delete_branch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginLeft="5dp"
+        android:layout_marginRight="5dp"
+        android:hint="Delete Branch"
+        android:paddingHorizontal="30dp"
+        android:text="Delete Branch" />		
+
+    <Spinner
+        android:id="@+id/git_spinner_branch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:hint="Git Branch" />
+
+    <TextView
+        android:id="@+id/git_text_log"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:layout_marginTop="10dp"
+        android:hint="Git Log"
+        android:text="No Log available"
+        android:textAlignment="viewStart" />
+
+</LinearLayout>

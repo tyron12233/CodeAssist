@@ -53,5 +53,13 @@
         android:layout_height="match_parent"
         android:background="?android:attr/colorBackground"
         android:layout_gravity="start" />
+        
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/nav_root2"
+		android:name="com.tyron.code.ui.git.GitFragment"
+        android:layout_width="300dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:background="?android:attr/colorBackground" />
 
 </com.tyron.code.util.AllowChildInterceptDrawerLayout>
