@@ -15,6 +15,7 @@ import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.RevCommit
 
 import de.prinova.git.model.*
+import de.prinova.git.Model.Gitter
 
 typealias LogList = List<RevCommit>
 
