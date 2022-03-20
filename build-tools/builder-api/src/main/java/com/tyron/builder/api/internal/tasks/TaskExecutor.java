@@ -4,6 +4,8 @@ import com.tyron.builder.api.Task;
 import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.TaskResolver;
 
+import java.util.Set;
+
 public class TaskExecutor {
 
     private final TaskResolver resolver;
@@ -26,16 +28,17 @@ public class TaskExecutor {
     }
 
     public void execute(Task task) {
-        WorkDependencyResolver.TASK_AS_TASK
-                .resolve(task, task.getTaskDependencies(), dependency -> {
-                    if (task.equals(dependency)) {
-                        throw new CircularDependencyException();
-                    }
-                    execute(dependency);
-                });
-        task.getActions().forEach(action -> action.execute(task));
+        Set<? extends Task> dependencies = task.getTaskDependencies().getDependencies(task);
+        if (dependencies.contains(task)) {
+            throw new CircularDependencyException();
+        }
+        for (Task dependency : dependencies) {
+            if (dependency.getTaskDependencies().getDependencies(dependency).contains(task)) {
+                throw new CircularDependencyException();
+            }
+            execute(dependency);
+        }
 
-        WorkDependencyResolver.TASK_AS_TASK
-                .resolve(task, task.getMustRunAfter(), this::execute);
+        task.getActions().forEach(action -> action.execute(task));
     }
 }
