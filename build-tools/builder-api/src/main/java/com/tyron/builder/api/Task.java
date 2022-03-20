@@ -18,6 +18,8 @@ public interface Task {
      */
     String getName();
 
+    void setName(String name);
+
     /**
      * @return The sequence of {@link Action} objects which will be executed by this task, in the
      * order of execution

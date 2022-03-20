@@ -55,7 +55,7 @@ public class JavaBuilderTest {
         mJavaProject.addJavaFile(new File(mJavaProject.getJavaDirectory(),
                 "com/tyron/test/Test.java"));
 
-        JavaBuilder builder = new JavaBuilder(mJavaProject, ILogger.STD_OUT);
+        JavaBuilder builder = new JavaBuilder(null, mJavaProject, ILogger.STD_OUT);
         builder.build(BuildType.RELEASE);
 
         List<Task<? super JavaModule>> tasksRan = builder.getTasksRan();
