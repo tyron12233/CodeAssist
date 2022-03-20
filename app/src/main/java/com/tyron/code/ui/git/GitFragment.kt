@@ -23,7 +23,7 @@ import java.io.File
 
 import de.prinova.git.usecases.*
 import de.prinova.git.model.*
-//import de.prinova.testapp.R
+import de.prinova.gitapi.R
 
 lateinit var gitLogText : TextView
 lateinit var gitBranchSpinner : Spinner
@@ -137,13 +137,6 @@ fun switchButtons(hasRepo: Boolean)
 	gitDeleteBranchButton.setEnabled(hasRepo)
 }
 
-/*
-fun setUpRepo(isRepo: Boolean, filePath: String, commiter: Author): Git =
-	when(isRepo) {
-		true -> filePath.openGit()
-		else -> filePath.initializeRepo(commiter)
-	}
-*/
 fun commit(context: Context, commiter: Author) {	
 	val commitText = EditText(context).apply {
 			setHint("Commit Message")
