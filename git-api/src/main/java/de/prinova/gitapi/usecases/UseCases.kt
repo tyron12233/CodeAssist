@@ -15,7 +15,7 @@ import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.RevCommit
 
 import de.prinova.git.model.*
-import de.prinova.git.Model.Gitter
+import de.prinova.git.model.Gitter
 
 typealias LogList = List<RevCommit>
 
@@ -47,7 +47,7 @@ private fun String.createRepo (): Repository =
 	
 private fun Repository.createGit(): Gitter = Gitter(Git(this))
 
-fun Gitter.addProjectFiles(): Gitter = 
+private fun Gitter.addProjectFiles(): Gitter = 
 	apply {
 		git.add().addFilepattern(".").call()
 	}
