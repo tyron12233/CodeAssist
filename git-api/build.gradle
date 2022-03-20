@@ -1,0 +1,64 @@
+plugins {
+    id 'com.android.library'
+}
+
+apply plugin: 'kotlin-android'
+
+android {
+    
+	compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    
+    defaultConfig {
+        minSdk 26
+        targetSdk 31
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+configurations.implementation {
+    exclude group: "org.jetbrains", module: "annotations"
+}
+
+dependencies {
+
+	//implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.6.0'
+	implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.0'
+	implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0'
+	implementation 'org.eclipse.jgit:org.eclipse.jgit:6.1.0.202203080745-r'
+	
+    //implementation project(path: ':build-tools:kotlinc')
+    //implementation project(path: ':build-tools:javac')
+    //implementation project(path: ':build-tools:project')
+    //implementation project(path: ':build-tools:logging')
+    //implementation project(path: ':build-tools:build-logic')
+    //implementation project(path: ':completion-api')
+    //implementation project(path: ':actions-api')
+    //implementation project(path: ':editor-api')
+    //implementation project(path: ':common')
+
+    //implementation 'org.jetbrains.exposed:exposed-core:0.32.1'
+    //implementation 'org.jetbrains.exposed:exposed-dao:0.32.1'
+    //implementation 'org.jetbrains.exposed:exposed-jdbc:0.32.1'
+    //implementation 'com.h2database:h2:1.4.200'
+    implementation 'androidx.annotation:annotation:1.3.0'
+    
+	//testImplementation 'junit:junit:4.+'
+    //androidTestImplementation 'androidx.test.ext:junit:1.1.3'
+    //androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+}
