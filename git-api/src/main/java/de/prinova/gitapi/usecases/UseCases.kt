@@ -120,10 +120,10 @@ fun Gitter.checkout(branch: String): Gitter = apply {
 }
 
 fun Gitter.mergeBranch(branch: String): Gitter = apply {
+	addProjectFiles()
 	runBlocking {
 		launch(Dispatchers.Default) {
-			addProjectFiles()
-			.mergeWith(branch)
+			mergeWith(branch)
 			.setCommit(true)
 			.call()
 		}
