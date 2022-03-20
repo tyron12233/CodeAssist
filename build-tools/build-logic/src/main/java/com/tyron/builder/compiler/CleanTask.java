@@ -136,6 +136,7 @@ public class CleanTask extends Task<AndroidModule> {
             fqn = fqn.substring(0, fqn.indexOf('$'));
         }
         return getModule().getJavaFiles().get(fqn) != null ||
-                getModule().getKotlinFiles().get(fqn) != null;
+               getModule().getKotlinFiles().get(fqn) != null ||
+               getModule().getResourceClasses().containsKey(fqn);
     }
 }

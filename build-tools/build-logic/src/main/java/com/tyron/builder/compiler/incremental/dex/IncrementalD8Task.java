@@ -228,12 +228,13 @@ public class IncrementalD8Task extends Task<AndroidModule> {
                         message = "Dexing jar " + parentFile.getName();
                     }
                     getLogger().debug(message);
-                    D8Command command =
-                            D8Command.builder(diagnosticsHandler).addLibraryFiles(getLibraryFiles())
+                    D8Command command = D8Command.builder(diagnosticsHandler)
+                                    .addLibraryFiles(getLibraryFiles())
                                     .addClasspathFiles(libraries.stream().map(File::toPath)
                                                                .collect(Collectors.toList()))
+                                    .addProgramFiles(lib.toPath())
+                                    .setMode(CompilationMode.RELEASE)
                                     .setMinApiLevel(getModule().getMinSdk())
-                                    .addProgramFiles(lib.toPath()).setMode(CompilationMode.RELEASE)
                                     .setOutput(lib.getParentFile().toPath(), OutputMode.DexIndexed)
                                     .build();
                     D8.run(command);

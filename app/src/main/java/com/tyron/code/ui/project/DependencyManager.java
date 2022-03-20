@@ -38,6 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.zip.ZipFile;
 
 public class DependencyManager {
@@ -136,6 +137,7 @@ public class DependencyManager {
                 logger.error(message);
             }
         });
+
         List<Dependency> declaredDependencies = DependencyUtils.parseLibraries(project.getLibraryFile(), logger);
         List<Pom> resolvedPoms = mResolver.resolveDependencies(declaredDependencies);
 
@@ -240,7 +242,8 @@ public class DependencyManager {
                 .apply();
     }
 
-    public List<Library> getFiles(List<Pom> resolvedPoms, ILogger logger) {
+    public List<Library> getFiles(List<Pom> resolvedPoms,
+                                  ILogger logger) {
         List<Library> files = new ArrayList<>();
         for (Pom resolvedPom : resolvedPoms) {
             try {
