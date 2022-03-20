@@ -21,7 +21,8 @@ import java.io.File
 
 import de.prinova.git.usecases.*
 import de.prinova.git.model.*
-import de.prinova.gitapi.R
+
+import com.tyron.code.R
 
 lateinit var gitLogText : TextView
 lateinit var gitBranchSpinner : Spinner
