@@ -50,7 +50,16 @@ public class AllowChildInterceptDrawerLayout extends DrawerLayout {
      */
     private View findScrollingChild(ViewGroup parent, float x, float y) {
         int n = parent.getChildCount();
-        for (int i = 0; i < n; i++) {
+        if (parent == this && n <= 1) {
+            return null;
+        }
+
+        int start = 0;
+        if (parent == this) {
+            start = 1;
+        }
+
+        for (int i = start; i < n; i++) {
             View child = parent.getChildAt(i);
             if (child.getVisibility() != View.VISIBLE) {
                 continue;
