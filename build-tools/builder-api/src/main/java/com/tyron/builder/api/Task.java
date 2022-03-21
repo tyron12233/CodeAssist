@@ -1,7 +1,10 @@
 package com.tyron.builder.api;
 
+import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.TaskDependency;
+import com.tyron.builder.api.tasks.TaskDestroyables;
 import com.tyron.builder.api.tasks.TaskInputs;
+import com.tyron.builder.api.tasks.TaskLocalState;
 import com.tyron.builder.api.tasks.TaskOutputs;
 import com.tyron.builder.api.tasks.TaskState;
 
@@ -10,13 +13,15 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 
-public interface Task {
+public interface Task extends Comparable<Task> {
 
     /**
      * Returns the name of this task. This name uniquely identifies the task within its Project
      * @return The name of this task, never returns null.
      */
     String getName();
+
+    void setName(String name);
 
     /**
      * @return The sequence of {@link Action} objects which will be executed by this task, in the
@@ -215,6 +220,21 @@ public interface Task {
     TaskOutputs getOutputs();
 
     /**
+     * <p>Returns the destroyables of this task.</p>
+     * @return The destroyables.  Never returns null.
+     *
+     * @since 4.0
+     */
+    TaskDestroyables getDestroyables();
+
+    /**
+     * Returns the local state of this task.
+     *
+     * @since 4.3
+     */
+    TaskLocalState getLocalState();
+
+    /**
      * <p>Returns a directory which this task can use to write temporary files to. Each task instance is provided with a
      * separate temporary directory. There are no guarantees that the contents of this directory will be kept beyond the
      * execution of the task.</p>
@@ -359,4 +379,6 @@ public interface Task {
      * @return The tasks that this task should run after. Returns an empty set if this task has no tasks it must run after.
      */
     TaskDependency getShouldRunAfter();
+
+    BuildProject getProject();
 }
