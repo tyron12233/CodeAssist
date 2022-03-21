@@ -8,6 +8,10 @@ public class CircularDependencyException extends RuntimeException {
 
     }
 
+    public CircularDependencyException(String message) {
+        super(message);
+    }
+
     public CircularDependencyException(Task first, Task second) {
         super("Circular dependency detected: " + first + " <-> " + second);
     }

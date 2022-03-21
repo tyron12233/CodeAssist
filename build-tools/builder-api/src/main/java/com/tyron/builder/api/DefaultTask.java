@@ -1,13 +1,25 @@
 package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableSet;
+import com.tyron.builder.api.file.FileCollection;
+import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
+import com.tyron.builder.api.internal.tasks.TaskDestroyablesInternal;
+import com.tyron.builder.api.internal.tasks.TaskLocalStateInternal;
+import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
+import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.DefaultTaskDependency;
 import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.TaskDependency;
+import com.tyron.builder.api.tasks.TaskDestroyables;
 import com.tyron.builder.api.tasks.TaskInputs;
+import com.tyron.builder.api.tasks.TaskLocalState;
 import com.tyron.builder.api.tasks.TaskOutputs;
+import com.tyron.builder.api.tasks.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskState;
+
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -19,19 +31,6 @@ import java.util.function.Predicate;
 public class DefaultTask extends AbstractTask {
 
     private String name;
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        DefaultTask that = (DefaultTask) o;
-        return Objects.equals(name, that.name);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(description);
-    }
 
     public String toString() {
         return name;
@@ -49,6 +48,7 @@ public class DefaultTask extends AbstractTask {
 
     private final DefaultTaskDependency mustRunAfter;
     private final DefaultTaskDependency shouldRunAfter;
+    private TaskDependency finalizedBy;
 
 
     private boolean enabled = true;
@@ -57,15 +57,31 @@ public class DefaultTask extends AbstractTask {
 
     private String group;
 
-    public DefaultTask() {
-        this(null);
-    }
+    private final BuildProject project;
 
-    public DefaultTask(TaskContainerInternal tasks) {
+    public DefaultTask(ProjectInternal project) {
+        this.project = project;
+
+        TaskContainerInternal tasks = project.getTaskContainer();
         lifecycleDependencies = new DefaultTaskDependency(tasks);
         mustRunAfter = new DefaultTaskDependency(tasks);
         shouldRunAfter = new DefaultTaskDependency(tasks);
+        finalizedBy = new DefaultTaskDependency(tasks);
         dependencies = new DefaultTaskDependency(tasks, ImmutableSet.of(lifecycleDependencies));
+    }
+
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        DefaultTask that = (DefaultTask) o;
+        return Objects.equals(name, that.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(description);
     }
 
     @Override
@@ -209,8 +225,83 @@ public class DefaultTask extends AbstractTask {
     }
 
     @Override
-    public TaskOutputs getOutputs() {
-        return null;
+    public TaskOutputsInternal getOutputs() {
+        return new TaskOutputsInternal() {
+            @Override
+            public void visitRegisteredProperties(PropertyVisitor visitor) {
+
+            }
+
+            @Override
+            public void setPreviousOutputFiles(FileCollection previousOutputFiles) {
+
+            }
+
+            @Override
+            public Set<File> getPreviousOutputFiles() {
+                return null;
+            }
+
+            @Override
+            public void upToDateWhen(Predicate<? super Task> upToDateSpec) {
+
+            }
+
+            @Override
+            public void cacheIf(Predicate<? super Task> spec) {
+
+            }
+
+            @Override
+            public void cacheIf(String cachingEnabledReason, Predicate<? super Task> spec) {
+
+            }
+
+            @Override
+            public boolean getHasOutput() {
+                return false;
+            }
+        };
+    }
+
+    @Override
+    public TaskDestroyables getDestroyables() {
+        return new TaskDestroyablesInternal() {
+            @Override
+            public void visitRegisteredProperties(PropertyVisitor visitor) {
+
+            }
+
+            @Override
+            public FileCollection getRegisteredFiles() {
+                return null;
+            }
+
+            @Override
+            public void register(Object... paths) {
+
+            }
+        };
+    }
+
+    @Override
+    public TaskLocalState getLocalState() {
+        return new TaskLocalStateInternal() {
+            @Override
+            public void visitRegisteredProperties(PropertyVisitor visitor) {
+
+            }
+
+            @Override
+            public FileCollection getRegisteredFiles() {
+                return null;
+            }
+
+            @Override
+            public void register(Object... paths) {
+
+            }
+        };
     }
 
     @Override
@@ -246,7 +337,7 @@ public class DefaultTask extends AbstractTask {
 
     @Override
     public TaskDependency getFinalizedBy() {
-        return null;
+        return finalizedBy;
     }
 
     @Override
@@ -262,5 +353,25 @@ public class DefaultTask extends AbstractTask {
     @Override
     public TaskDependency getShouldRunAfter() {
         return shouldRunAfter;
+    }
+
+    @Override
+    public BuildProject getProject() {
+        return project;
+    }
+
+    @Override
+    public TaskDependency getLifecycleDependencies() {
+        return lifecycleDependencies;
+    }
+
+    @Override
+    public List<? extends ResourceLock> getSharedResources() {
+        return null;
+    }
+
+    @Override
+    public int compareTo(@NotNull Task task) {
+        return 0;
     }
 }
