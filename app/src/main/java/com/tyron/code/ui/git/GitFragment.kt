@@ -45,7 +45,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		container: ViewGroup?,
 		savedInstanceState: Bundle?,
 	): View {
-		val root = inflater.inflate(R.layout.fragment_git, container, false)
+		val root = inflater.inflate(R.layout.git_fragment, container, false)
 		root.initializeUI(requireContext(), this)
 		return root
 	}
@@ -54,8 +54,8 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		super.onViewCreated (view, savedInstanceState)		
 		//view.initializeUI(requireContext(), this)
 		
-		val perso = Author("step", "step@hdhdh.com")
-		val gitDir = "/storage/emulated/0/CodeAssist/TestApp"
+		val perso = Author("User", "user@localhost.com")
+		val gitDir = requireArguments().getString("project_path", "")
 		
 		val hasRepo = initRepo(gitDir)
 		switchButtons(hasRepo)
