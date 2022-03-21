@@ -55,7 +55,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		//view.initializeUI(requireContext(), this)
 		
 		val perso = Author("User", "user@localhost.com")
-		val gitDir = requireArguments().getString("project_path", "")
+		val gitDir = requireArguments().getString("project_path", "") //todo take from host
 		
 		val hasRepo = initRepo(gitDir)
 		switchButtons(hasRepo)
@@ -91,7 +91,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	}
 	
 	override fun onDestroy() {
-		git.destroy()
+		if(::git.isInitialized) git.destroy()
 		super.onDestroy()	
 	}
 	
