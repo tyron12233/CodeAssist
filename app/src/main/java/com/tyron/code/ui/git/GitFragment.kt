@@ -23,6 +23,11 @@ import de.prinova.git.usecases.*
 import de.prinova.git.model.*
 
 import com.tyron.code.R
+import com.tyron.common.logging.IdeLog
+import com.tyron.code.ui.project.ProjectManager
+import com.tyron.builder.project.Project
+
+import kotlinx.coroutines.*
 
 lateinit var gitLogText : TextView
 lateinit var gitBranchSpinner : Spinner
@@ -33,11 +38,14 @@ lateinit var gitMergeBranchButton : Button
 lateinit var gitDeleteBranchButton : Button
 lateinit var arrayAdapter: ArrayAdapter<String>
 lateinit var git: Gitter
+lateinit var perso: Author
 
-class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
+class GitFragment : Fragment(), AdapterView.OnItemSelectedListener, ProjectManager.OnProjectOpenListener {
 	
 	override fun onCreate (savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
+		ProjectManager.getInstance()
+        .addOnProjectOpenListener(this)
 	}
 	
 	override fun onCreateView (
@@ -51,11 +59,12 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	}
 	
 	override fun onViewCreated (view: View, savedInstanceState: Bundle?) {
-		super.onViewCreated (view, savedInstanceState)		
-		//view.initializeUI(requireContext(), this)
+		super.onViewCreated (view, savedInstanceState)
 		
-		val perso = Author("User", "user@localhost.com")
-		val gitDir = requireArguments().getString("project_path", "") //todo take from host
+		
+		perso = Author("User", "user@localhost.com")
+		/*
+		val gitDir = ""
 		
 		val hasRepo = initRepo(gitDir)
 		switchButtons(hasRepo)
@@ -72,7 +81,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 			arrayAdapter.listOf(git.getBranchList())
 			switchButtons(true)
 		}
-		
+		*/
 		gitCommitButton.setOnClickListener {
 			commit(requireContext(), perso)
 		}
@@ -90,9 +99,51 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		}	
 	}
 	
+	override fun onProjectOpen(project: Project) {
+		runBlocking {
+			launch (Dispatchers.Main) {
+				val gitDir = project.getRootFile().getAbsolutePath()
+				IdeLog.getLogger().info("Path: $gitDir")
+				val hasRepo = initRepo(gitDir)
+				switchButtons(hasRepo)
+				
+				if (hasRepo) {
+					git = gitDir.openGit()
+					gitLogText.text = git.getLog()
+					arrayAdapter.listOf(git.getBranchList())
+				}
+				
+				gitInitButton.setOnClickListener { _ ->
+					git = gitDir.initializeRepo(perso)
+					gitLogText.text = git.getLog()
+					arrayAdapter.listOf(git.getBranchList())
+					switchButtons(true)
+				}
+			}
+		}
+	}
+	
 	override fun onDestroy() {
+		super.onDestroy()
 		if(::git.isInitialized) git.destroy()
-		super.onDestroy()	
+		val pm = ProjectManager.getInstance()
+		pm.removeOnProjectOpenListener(this)
+	}
+	
+	override fun onDestroyView() {
+		super.onDestroyView()
+	}
+	
+	override fun onPause() {
+		super.onPause()
+	}
+	
+	override fun onResume() {
+		super.onResume()
+	}
+	
+	override fun onSaveInstanceState(outState: Bundle) {
+		super.onSaveInstanceState(outState)
 	}
 	
 	override fun onItemSelected(
