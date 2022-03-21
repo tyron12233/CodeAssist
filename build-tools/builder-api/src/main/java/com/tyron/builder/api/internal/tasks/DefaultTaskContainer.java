@@ -4,6 +4,7 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.DefaultTask;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.Transformer;
+import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.providers.Provider;
 import com.tyron.builder.api.tasks.DefaultTaskProvider;
 import com.tyron.builder.api.tasks.TaskProvider;
@@ -25,7 +26,10 @@ public class DefaultTaskContainer implements TaskContainerInternal {
 
     private final Map<String, Task> nameToTask;
     private final List<Task> tasks;
-    public DefaultTaskContainer() {
+
+    private final ProjectInternal project;
+    public DefaultTaskContainer(ProjectInternal project) {
+        this.project = project;
         nameToTask = new HashMap<>();
         tasks = new ArrayList<>();
     }
@@ -41,12 +45,12 @@ public class DefaultTaskContainer implements TaskContainerInternal {
     public <T extends Task> TaskProvider<T> register(String name,
                                                      Class<T> type,
                                                      Action<? super T> configurationAction) {
-        return registerTask(name, type, configurationAction, new Class[]{TaskContainerInternal.class}, this);
+        return registerTask(name, type, configurationAction, new Class[]{ProjectInternal.class}, project);
     }
 
     @Override
     public <T extends Task> TaskProvider<T> register(String name, Class<T> type) {
-        return registerTask(name, type, null, new Class[]{TaskContainerInternal.class}, this);
+        return registerTask(name, type, null, new Class[]{ProjectInternal.class}, project);
     }
 
     private <T extends Task> TaskProvider<T> registerTask(String name, Class<T> type, @Nullable final Action<? super T> configurationAction, Class<?>[] types, Object... constructorArgs) {

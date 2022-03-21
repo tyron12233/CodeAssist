@@ -34,7 +34,7 @@ public class TaskExecutor {
         }
         for (Task dependency : dependencies) {
             if (dependency.getTaskDependencies().getDependencies(dependency).contains(task)) {
-                throw new CircularDependencyException();
+                throw new CircularDependencyException(task, dependency);
             }
             execute(dependency);
         }

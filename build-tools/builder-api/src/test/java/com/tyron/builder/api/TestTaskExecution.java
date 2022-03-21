@@ -1,14 +1,38 @@
 package com.tyron.builder.api;
 
+import com.tyron.builder.api.execution.TaskExecutionGraph;
+import com.tyron.builder.api.execution.plan.DefaultExecutionPlan;
+import com.tyron.builder.api.execution.plan.DefaultNodeValidator;
+import com.tyron.builder.api.execution.plan.DependencyResolver;
+import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchy;
+import com.tyron.builder.api.execution.plan.ExecutionPlan;
+import com.tyron.builder.api.execution.plan.Node;
+import com.tyron.builder.api.execution.plan.NodeExecutor;
+import com.tyron.builder.api.execution.plan.PlanExecutor;
+import com.tyron.builder.api.execution.plan.TaskDependencyResolver;
+import com.tyron.builder.api.execution.plan.TaskNodeDependencyResolver;
+import com.tyron.builder.api.execution.plan.TaskNodeFactory;
+import com.tyron.builder.api.internal.execution.DefaultTaskExecutionGraph;
+import com.tyron.builder.api.internal.file.FileException;
+import com.tyron.builder.api.internal.file.FileMetadata;
+import com.tyron.builder.api.internal.file.FileType;
+import com.tyron.builder.api.internal.file.Stat;
+import com.tyron.builder.api.internal.project.AbstractProject;
+import com.tyron.builder.api.internal.snapshot.CaseSensitivity;
 import com.tyron.builder.api.internal.tasks.CircularDependencyException;
 import com.tyron.builder.api.internal.tasks.DefaultTaskContainer;
+import com.tyron.builder.api.internal.tasks.NodeExecutionContext;
 import com.tyron.builder.api.internal.tasks.TaskExecutor;
+import com.tyron.builder.api.internal.tasks.WorkDependencyResolver;
 
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -20,7 +44,9 @@ public class TestTaskExecution {
 
     @Before
     public void setup() {
-        container = new DefaultTaskContainer();
+        AbstractProject project = new AbstractProject() {
+        };
+        container = (DefaultTaskContainer) project.getTaskContainer();
     }
 
     @Test
@@ -41,11 +67,73 @@ public class TestTaskExecution {
             task.dependsOn("task1");
         });
 
-        TaskExecutor taskExecutor = new TaskExecutor(container);
-        taskExecutor.execute("task3");
+        TaskNodeFactory taskNodeFactory = new TaskNodeFactory(new DefaultNodeValidator());
+        TaskDependencyResolver resolver = new TaskDependencyResolver(Collections.singletonList(new TaskNodeDependencyResolver(taskNodeFactory)));
+        ExecutionNodeAccessHierarchy executionNodeAccessHierarchy = new ExecutionNodeAccessHierarchy(
+                CaseSensitivity.CASE_INSENSITIVE, new Stat() {
+            @Override
+            public int getUnixMode(File f) throws FileException {
+                return 0;
+            }
 
-        // task 3 -> task 1 -> task 2
-        assertExecutionOrder(executedTasks, "task2", "task1", "task3");
+            @Override
+            public FileMetadata stat(File f) throws FileException {
+                return new FileMetadata() {
+                    @Override
+                    public FileType getType() {
+                        if (!f.exists()) {
+                            return FileType.Missing;
+                        }
+                        if (f.isDirectory()) {
+                            return FileType.Directory;
+                        }
+                        return FileType.RegularFile;
+                    }
+
+                    @Override
+                    public long getLastModified() {
+                        return f.lastModified();
+                    }
+
+                    @Override
+                    public long getLength() {
+                        return f.length();
+                    }
+
+                    @Override
+                    public AccessType getAccessType() {
+                        if (f.isAbsolute()) {
+                            return AccessType.DIRECT;
+                        }
+                        return AccessType.VIA_SYMLINK;
+                    }
+                };
+            }
+        });
+        DefaultExecutionPlan executionPlan = new DefaultExecutionPlan("myPlan", taskNodeFactory, resolver, executionNodeAccessHierarchy,
+                                                                      executionNodeAccessHierarchy);
+        executionPlan.addEntryTasks(Collections.singletonList(container.resolveTask("task3")));
+        executionPlan.determineExecutionPlan();
+
+        DefaultTaskExecutionGraph graph = new DefaultTaskExecutionGraph(new PlanExecutor() {
+            @Override
+            public void process(ExecutionPlan executionPlan,
+                                Collection<? super Throwable> failures,
+                                Action<Node> nodeExecutor) {
+
+            }
+
+            @Override
+            public void assertHealthy() {
+
+            }
+        }, Collections.singletonList((node, context) -> false));
+        graph.populate(executionPlan);
+
+        List<Throwable> failures = new ArrayList<>();
+        graph.execute(executionPlan, failures);
+
+        assert failures.isEmpty();
     }
 
     @Test
