@@ -11,3 +11,27 @@ dependencies {
     implementation project(path: ':common')
     testImplementation 'junit:junit:4.13.2'
 }
+
+tasks.register("task1") {
+    doLast {
+        println("Task 1")
+    }
+
+    dependsOn("task2")
+}
+
+tasks.register("task2") {
+    doLast {
+        println("Task 2")
+    }
+
+    it.shouldRunAfter("task3")
+}
+
+tasks.register("task3") {
+    doLast {
+        println("Task 3")
+    }
+
+    it.dependsOn("task1")
+}

@@ -1,4 +1,4 @@
 package com.tyron.builder.api;
 
-public class AbstractTask {
+public abstract class AbstractTask implements Task {
 }

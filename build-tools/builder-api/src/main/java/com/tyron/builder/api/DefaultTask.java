@@ -1,7 +1,9 @@
 package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableSet;
+import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.tasks.DefaultTaskDependency;
+import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskInputs;
 import com.tyron.builder.api.tasks.TaskOutputs;
@@ -14,14 +16,16 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 
-public class DefaultTask implements Task {
+public class DefaultTask extends AbstractTask {
+
+    private String name;
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         DefaultTask that = (DefaultTask) o;
-        return Objects.equals(description, that.description);
+        return Objects.equals(name, that.name);
     }
 
     @Override
@@ -30,7 +34,7 @@ public class DefaultTask implements Task {
     }
 
     public String toString() {
-        return description;
+        return name;
     }
 
     private List<Action<? super Task>> actions;
@@ -54,15 +58,24 @@ public class DefaultTask implements Task {
     private String group;
 
     public DefaultTask() {
-        lifecycleDependencies = new DefaultTaskDependency();
-        mustRunAfter = new DefaultTaskDependency();
-        shouldRunAfter = new DefaultTaskDependency();
-        dependencies = new DefaultTaskDependency(null, ImmutableSet.of(lifecycleDependencies));
+        this(null);
+    }
+
+    public DefaultTask(TaskContainerInternal tasks) {
+        lifecycleDependencies = new DefaultTaskDependency(tasks);
+        mustRunAfter = new DefaultTaskDependency(tasks);
+        shouldRunAfter = new DefaultTaskDependency(tasks);
+        dependencies = new DefaultTaskDependency(tasks, ImmutableSet.of(lifecycleDependencies));
     }
 
     @Override
     public String getName() {
-        return null;
+        return name;
+    }
+
+    @Override
+    public void setName(String name) {
+        this.name = name;
     }
 
     @Override
