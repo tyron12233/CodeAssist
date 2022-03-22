@@ -1,3 +1,5 @@
+//@file:JvmName("GitFragment")
+
 package com.tyron.code.ui.git
 
 import android.os.Bundle
@@ -14,6 +16,7 @@ import android.widget.EditText
 import android.widget.Spinner
 
 import androidx.fragment.app.Fragment
+import androidx.core.os.*
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -24,7 +27,6 @@ import de.prinova.git.model.*
 
 import com.tyron.code.R
 import com.tyron.common.logging.IdeLog
-import com.tyron.code.ui.project.ProjectManager
 import com.tyron.builder.project.Project
 
 import kotlinx.coroutines.*
@@ -40,12 +42,19 @@ lateinit var arrayAdapter: ArrayAdapter<String>
 lateinit var git: Gitter
 lateinit var perso: Author
 
-class GitFragment : Fragment(), AdapterView.OnItemSelectedListener, ProjectManager.OnProjectOpenListener {
+const val ARG_PATH_ID = "pathId"
+
+class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	
+	companion object {
+		@JvmStatic
+		fun newInstance(path: String) = GitFragment().apply {
+			arguments = bundleOf(ARG_PATH_ID to path)
+		}
+	}
+			
 	override fun onCreate (savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
-		ProjectManager.getInstance()
-        .addOnProjectOpenListener(this)
 	}
 	
 	override fun onCreateView (
@@ -61,10 +70,10 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener, ProjectManag
 	override fun onViewCreated (view: View, savedInstanceState: Bundle?) {
 		super.onViewCreated (view, savedInstanceState)
 		
-		
 		perso = Author("User", "user@localhost.com")
-		/*
-		val gitDir = ""
+		
+		val gitDir = requireArguments().getString(ARG_PATH_ID, "")
+		IdeLog.getLogger().info("Path: $gitDir")
 		
 		val hasRepo = initRepo(gitDir)
 		switchButtons(hasRepo)
@@ -81,7 +90,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener, ProjectManag
 			arrayAdapter.listOf(git.getBranchList())
 			switchButtons(true)
 		}
-		*/
+		
 		gitCommitButton.setOnClickListener {
 			commit(requireContext(), perso)
 		}
@@ -99,7 +108,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener, ProjectManag
 		}	
 	}
 	
-	override fun onProjectOpen(project: Project) {
+	fun onProjectOpen(project: Project) {
 		runBlocking {
 			launch (Dispatchers.Main) {
 				val gitDir = project.getRootFile().getAbsolutePath()
@@ -126,8 +135,6 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener, ProjectManag
 	override fun onDestroy() {
 		super.onDestroy()
 		if(::git.isInitialized) git.destroy()
-		val pm = ProjectManager.getInstance()
-		pm.removeOnProjectOpenListener(this)
 	}
 	
 	override fun onDestroyView() {
@@ -144,6 +151,14 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener, ProjectManag
 	
 	override fun onSaveInstanceState(outState: Bundle) {
 		super.onSaveInstanceState(outState)
+	}
+	
+	override fun onStart() {
+		super.onStart()
+	}
+	
+	override fun onStop() {
+		super.onStop()
 	}
 	
 	override fun onItemSelected(

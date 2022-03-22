@@ -57,6 +57,7 @@ import com.tyron.code.service.IndexService;
 import com.tyron.code.service.IndexServiceConnection;
 import com.tyron.code.ui.editor.EditorContainerFragment;
 import com.tyron.code.ui.file.FileViewModel;
+import com.tyron.code.ui.git.*;
 import com.tyron.completion.java.provider.CompletionEngine;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
@@ -378,6 +379,13 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
 
         mProject = project;
+        
+        GitFragment fragment = GitFragment.newInstance(mProject.getRootFile().getAbsolutePath());
+        getParentFragmentManager().beginTransaction()
+                .add(R.id.nav_root2, fragment)
+                //.addToBackStack(null)
+                .commit();
+        //fragment.onProjectOpen(mProject);
         mIndexServiceConnection.setProject(project);
 
         mMainViewModel.setToolbarTitle(project.getRootFile()
@@ -391,6 +399,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         Intent intent = new Intent(requireContext(), IndexService.class);
         requireActivity().startService(intent);
         requireActivity().bindService(intent, mIndexServiceConnection, Context.BIND_IMPORTANT);
+        
     }
 
     private void saveAll() {
