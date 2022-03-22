@@ -5,4 +5,6 @@ import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 public interface BuildProject {
 
     TaskContainerInternal getTaskContainer();
+
+    String getPath();
 }

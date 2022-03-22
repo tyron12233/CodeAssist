@@ -1,6 +1,7 @@
 package com.tyron.builder.api.internal.tasks;
 
 import com.tyron.builder.api.Task;
+import com.tyron.builder.api.execution.TaskSelectionException;
 import com.tyron.builder.api.execution.plan.DefaultExecutionPlan;
 import com.tyron.builder.api.execution.plan.DefaultNodeValidator;
 import com.tyron.builder.api.execution.plan.DefaultPlanExecutor;
@@ -94,7 +95,12 @@ public class TaskExecutor {
     public void execute(String... paths) {
         Task[] tasks = new Task[paths.length];
         for (int i = 0; i < tasks.length; i++) {
-            tasks[i] = project.getTaskContainer().resolveTask(paths[i]);
+            Task task = project.getTaskContainer().resolveTask(paths[i]);
+
+            if (task == null) {
+                throw new TaskSelectionException("Task '" + paths[i] + "' not found in project '" + project.getPath() + "'");
+            }
+            tasks[i] = task;
         }
         execute(tasks);
     }
@@ -145,7 +151,6 @@ public class TaskExecutor {
                         localTaskNode.getTask().getActions().forEach(action -> {
                             action.execute(localTaskNode.getTask());
                         });
-                        System.out.println("    Executing node: " + node);
                     }
                     return true;
                 }));

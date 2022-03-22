@@ -34,18 +34,24 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.logging.Filter;
+import java.util.logging.LogManager;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 /**
  * WIP
  */
 public class TestTaskExecution {
 
-    AbstractProject project = new AbstractProject() {
+    AbstractProject project = new AbstractProject("TestProject") {
     };
     private DefaultTaskContainer container;
 
     @Before
     public void setup() {
+        project = new AbstractProject("TestProject") {
+        };
         container = (DefaultTaskContainer) project.getTaskContainer();
     }
 
@@ -116,4 +122,40 @@ public class TestTaskExecution {
         }
     }
 
+    @Test
+    public void mockAssembleTasks() {
+
+        container.register("AAPT2", task -> {
+            task.doLast(it -> {
+                System.out.println("> Task " + task.getPath());
+            });
+        });
+        container.register("JAVA", task -> {
+            task.doLast(it -> {
+                System.out.println("> Task " + task.getPath());
+            });
+            task.dependsOn("AAPT2");
+        });
+        container.register("D8", task -> {
+            task.doLast(it -> {
+                System.out.println("> Task " + task.getPath());
+            });
+            task.dependsOn("JAVA");
+        });
+        container.register("PACKAGE", task -> {
+            task.doLast(it -> {
+                System.out.println("> Task " + task.getPath());
+            });
+            task.dependsOn("D8");
+        });
+
+        container.register("assemble", task -> {
+            task.doLast(it -> {
+                System.out.println("> Task " + task.getPath());
+            });
+            task.dependsOn("PACKAGE");
+        });
+
+        new TaskExecutor(project).execute("assemble", "unknownTask");
+    }
 }

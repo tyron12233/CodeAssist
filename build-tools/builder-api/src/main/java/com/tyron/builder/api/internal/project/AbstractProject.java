@@ -44,8 +44,15 @@ public abstract class AbstractProject implements ProjectInternal {
     };
     private final DefaultServiceRegistry serviceRegistry;
     private final TaskContainerInternal taskContainer;
+    private final String name;
 
     public AbstractProject() {
+        this("");
+    }
+
+    public AbstractProject(String name) {
+        this.name = name;
+
         serviceRegistry = new DefaultServiceRegistry();
         serviceRegistry.addService(PropertyWalker.class, new PropertyWalker() {
             @Override
@@ -71,5 +78,10 @@ public abstract class AbstractProject implements ProjectInternal {
     @Override
     public TaskContainerInternal getTaskContainer() {
         return taskContainer;
+    }
+
+    @Override
+    public String getPath() {
+        return name;
     }
 }

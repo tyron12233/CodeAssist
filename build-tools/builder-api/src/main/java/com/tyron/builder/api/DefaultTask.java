@@ -2,6 +2,7 @@ package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.file.FileCollection;
+import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
@@ -19,6 +20,7 @@ import com.tyron.builder.api.tasks.TaskLocalState;
 import com.tyron.builder.api.tasks.TaskOutputs;
 import com.tyron.builder.api.tasks.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskState;
+import com.tyron.builder.api.util.Path;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -163,7 +165,7 @@ public class DefaultTask extends AbstractTask {
 
     @Override
     public String getPath() {
-        return null;
+        return Path.path(project.getPath() + ":" + getName()).getPath();
     }
 
     @Override
