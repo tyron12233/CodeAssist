@@ -11,6 +11,9 @@ import com.tyron.builder.api.execution.plan.Node;
 import com.tyron.builder.api.execution.plan.NodeExecutor;
 import com.tyron.builder.api.execution.plan.PlanExecutor;
 import com.tyron.builder.api.execution.plan.TaskNode;
+import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.service.ServiceRegistry;
+import com.tyron.builder.api.internal.tasks.NodeExecutionContext;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -125,6 +128,30 @@ public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
         if (!hasFiredWhenReady) {
             throw new IllegalStateException("Task graph should be populated before execution starts.");
         }
+
+        planExecutor.process(
+                plan,
+                taskFailures,
+                node -> {
+                    NodeExecutionContext context = new NodeExecutionContext() {
+                        @Override
+                        public <T> T getService(Class<T> type) {
+                            ProjectInternal owningProject = node.getOwningProject();
+                            if (owningProject == null) {
+                                return null;
+                            }
+                            ServiceRegistry services = owningProject.getServices();
+                            if (services == null) {
+                                return null;
+                            }
+                            return services.get(type);
+                        }
+                    };
+                    for (NodeExecutor executor : nodeExecutors) {
+                        executor.execute(node, context);
+                    }
+                }
+        );
     }
 
     private void assertIsThisGraphsPlan(ExecutionPlan plan) {

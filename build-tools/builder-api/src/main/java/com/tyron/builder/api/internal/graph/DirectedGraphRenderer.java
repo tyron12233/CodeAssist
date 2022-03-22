@@ -3,7 +3,10 @@ package com.tyron.builder.api.internal.graph;
 import static com.tyron.builder.api.internal.graph.StyledTextOutput.Style.Info;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.internal.logging.AbstractStyledTextOutput;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -21,7 +24,16 @@ public class DirectedGraphRenderer<N> {
     }
 
     public void renderTo(N root, Appendable output) {
-        renderTo(root, null);
+        renderTo(root, new GraphRenderer(new AbstractStyledTextOutput() {
+            @Override
+            protected void doAppend(String text) {
+                try {
+                    output.append(text);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+        }).getOutput());
     }
 
     public void renderTo(N root, StyledTextOutput output) {

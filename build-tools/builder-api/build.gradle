@@ -35,3 +35,10 @@ tasks.register("task3") {
 
     it.dependsOn("task1")
 }
+
+tasks.register("injectedTask") {
+    doLast {
+        println("Injected Task")
+    }
+    mustRunAfter("task1")
+}

@@ -7,6 +7,7 @@ import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.internal.tasks.TaskDestroyablesInternal;
 import com.tyron.builder.api.internal.tasks.TaskLocalStateInternal;
+import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.DefaultTaskDependency;
@@ -31,6 +32,7 @@ import java.util.function.Predicate;
 public class DefaultTask extends AbstractTask {
 
     private String name;
+    private TaskStateInternal state;
 
     public String toString() {
         return name;
@@ -50,6 +52,7 @@ public class DefaultTask extends AbstractTask {
     private final DefaultTaskDependency shouldRunAfter;
     private TaskDependency finalizedBy;
 
+    private final List<? extends ResourceLock> sharedResources = new ArrayList<>();
 
     private boolean enabled = true;
 
@@ -68,6 +71,8 @@ public class DefaultTask extends AbstractTask {
         shouldRunAfter = new DefaultTaskDependency(tasks);
         finalizedBy = new DefaultTaskDependency(tasks);
         dependencies = new DefaultTaskDependency(tasks, ImmutableSet.of(lifecycleDependencies));
+
+        state = new TaskStateInternal();
     }
 
 
@@ -142,8 +147,8 @@ public class DefaultTask extends AbstractTask {
     }
 
     @Override
-    public TaskState getState() {
-        return null;
+    public TaskStateInternal getState() {
+        return state;
     }
 
     @Override
@@ -367,7 +372,7 @@ public class DefaultTask extends AbstractTask {
 
     @Override
     public List<? extends ResourceLock> getSharedResources() {
-        return null;
+        return sharedResources;
     }
 
     @Override
