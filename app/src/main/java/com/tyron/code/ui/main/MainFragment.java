@@ -292,6 +292,24 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             }
             return ViewCompat.onApplyWindowInsets(v, insets);
         });
+        
+        View gitNav = view.findViewById(R.id.git_nav);
+
+        ViewCompat.setOnApplyWindowInsetsListener(mRoot, (v, insets) -> {
+            if (gitNav != null) {
+                ViewCompat.dispatchApplyWindowInsets(gitNav, insets);
+            }
+            ViewGroup viewGroup = (ViewGroup) mRoot;
+            for (int i = 0; i < viewGroup.getChildCount(); i++) {
+                View child = viewGroup.getChildAt(i);
+                if (child == gitNav) {
+                    continue;
+                }
+
+                ViewCompat.dispatchApplyWindowInsets(child, insets);
+            }
+            return ViewCompat.onApplyWindowInsets(v, insets);
+        });
     }
 
     @Override
@@ -382,10 +400,9 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         
         GitFragment fragment = GitFragment.newInstance(mProject.getRootFile().getAbsolutePath());
         getParentFragmentManager().beginTransaction()
-                .add(R.id.nav_root2, fragment)
-                //.addToBackStack(null)
+                .replace(R.id.git_nav, fragment)
                 .commit();
-        //fragment.onProjectOpen(mProject);
+                
         mIndexServiceConnection.setProject(project);
 
         mMainViewModel.setToolbarTitle(project.getRootFile()

@@ -7,7 +7,6 @@ import kotlinx.coroutines.*
 
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.MergeCommand
-import org.eclipse.jgit.internal.storage.file.FileRepository
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.lib.Constants
@@ -17,11 +16,14 @@ import org.eclipse.jgit.revwalk.RevCommit
 import de.prinova.git.model.*
 import de.prinova.git.model.Gitter
 
-typealias LogList = List<RevCommit>
 
-/*internal fun Git.init(filePath: String, commiter: Author): Git =
-	filePath.initializeRepo(commiter)
-*/
+//TODO: Add merge-conflict logic
+//TODO: Add logic for commit-reset, -revert and -restore (in this order)
+//TODO: Add commit amend
+//TODO: put author into log formating
+
+
+typealias LogList = List<RevCommit>
 
 fun String.initializeRepo (commiter: Author): Gitter =
 	createRepo()
@@ -47,8 +49,7 @@ private fun String.createRepo (): Repository =
 	
 private fun Repository.createGit(): Gitter = Gitter(Git(this))
 
-private fun Gitter.addProjectFiles(): Gitter = 
-	apply {
+private fun Gitter.addProjectFiles(): Gitter = apply {
 		git.add().addFilepattern(".").call()
 	}
 
@@ -60,7 +61,7 @@ fun Gitter.commiting(commiter: Author, msg: String): Gitter = apply {
 	}
 }
 
-private fun Gitter.commit(person: Author, msg: String): Gitter = apply { 
+private suspend fun Gitter.commit(person: Author, msg: String): Gitter = apply { 
 	git.commit()
 	.setCommitter(person.of())
 	.setAuthor(person.of())
@@ -130,11 +131,11 @@ fun Gitter.mergeBranch(branch: String): Gitter = apply {
 	}
 }
 
-fun Gitter.mergeWith(branch: String): MergeCommand = 
+suspend fun Gitter.mergeWith(branch: String): MergeCommand = 
 	git.merge()
 	.include(resolve(branch))
 
-fun Gitter.resolve(branch: String): ObjectId = 
+suspend fun Gitter.resolve(branch: String): ObjectId = 
 	git.getRepository()
 	.resolve(branch)
 

@@ -44,6 +44,16 @@ lateinit var perso: Author
 
 const val ARG_PATH_ID = "pathId"
 
+//TODO: Create ViewModel for git logic (commit, checkout, merge, etc)
+//TODO: Save all opened files before commiting
+//TODO: Refresh TreeView for checked-out working-tree or after merging
+
+//TODO: Respond to conflicting states after merging
+//TODO: fix wrong logtext, when fast switching between projects
+//TODO: Put Author into PreferenceSettings
+//TODO: Let select commits for reverting, restore and reset
+
+
 class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	
 	companion object {
@@ -53,7 +63,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		}
 	}
 			
-	override fun onCreate (savedInstanceState: Bundle?) {
+	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 	}
 	
@@ -72,23 +82,27 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		
 		perso = Author("User", "user@localhost.com")
 		
-		val gitDir = requireArguments().getString(ARG_PATH_ID, "")
-		IdeLog.getLogger().info("Path: $gitDir")
+		val gitDir = requireArguments().getString(ARG_PATH_ID, "").also {
+			IdeLog.getLogger().info("Path: $it")
+		}
 		
-		val hasRepo = initRepo(gitDir)
-		switchButtons(hasRepo)
+		val hasRepo = initRepo(gitDir).also {
+			switchButtons(it)
+		}
 		
 		if (hasRepo) {
-			git = gitDir.openGit()
-			gitLogText.text = git.getLog()
-			arrayAdapter.listOf(git.getBranchList())
+			git = gitDir.openGit().also {
+				gitLogText.text = it.getLog()
+				arrayAdapter.listOf(it.getBranchList())
+			}
 		}
 		
 		gitInitButton.setOnClickListener { _ ->
-			git = gitDir.initializeRepo(perso)
-			gitLogText.text = git.getLog()
-			arrayAdapter.listOf(git.getBranchList())
-			switchButtons(true)
+			git = gitDir.initializeRepo(perso).also {
+				gitLogText.text = it.getLog()
+				arrayAdapter.listOf(it.getBranchList())
+				switchButtons(true)
+			}
 		}
 		
 		gitCommitButton.setOnClickListener {
@@ -108,37 +122,13 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		}	
 	}
 	
-	fun onProjectOpen(project: Project) {
-		runBlocking {
-			launch (Dispatchers.Main) {
-				val gitDir = project.getRootFile().getAbsolutePath()
-				IdeLog.getLogger().info("Path: $gitDir")
-				val hasRepo = initRepo(gitDir)
-				switchButtons(hasRepo)
-				
-				if (hasRepo) {
-					git = gitDir.openGit()
-					gitLogText.text = git.getLog()
-					arrayAdapter.listOf(git.getBranchList())
-				}
-				
-				gitInitButton.setOnClickListener { _ ->
-					git = gitDir.initializeRepo(perso)
-					gitLogText.text = git.getLog()
-					arrayAdapter.listOf(git.getBranchList())
-					switchButtons(true)
-				}
-			}
-		}
-	}
-	
 	override fun onDestroy() {
 		super.onDestroy()
-		if(::git.isInitialized) git.destroy()
 	}
 	
 	override fun onDestroyView() {
 		super.onDestroyView()
+		if(::git.isInitialized) git.destroy()
 	}
 	
 	override fun onPause() {
