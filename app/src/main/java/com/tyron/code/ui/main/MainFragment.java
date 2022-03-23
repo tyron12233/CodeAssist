@@ -114,6 +114,10 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                         .getValue()) {
                     mMainViewModel.setDrawerState(false);
                 }
+                if (mMainViewModel.getGitDrawerState()
+                        .getValue()) {
+                    mMainViewModel.setGitDrawerState(false);
+                }
             }
         }
     };
@@ -178,7 +182,32 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     @Override
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+        
+		mHandler = new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                Level level = record.getLevel();
+                if (Level.WARNING.equals(level)) {
+                    mLogViewModel.w(LogViewModel.IDE, record.getMessage());
+                } else if (Level.SEVERE.equals(level)) {
+                    mLogViewModel.e(LogViewModel.IDE, record.getMessage());
+                } else {
+                    mLogViewModel.d(LogViewModel.IDE, record.getMessage());
+                }
+            }
 
+            @Override
+            public void flush() {
+                mLogViewModel.clear(LogViewModel.IDE);
+            }
+
+            @Override
+            public void close() throws SecurityException {
+                mLogViewModel.clear(LogViewModel.IDE);
+            }
+        };
+        IdeLog.getLogger().addHandler(mHandler);
+        
         if (mRoot instanceof DrawerLayout) {
             DrawerLayout drawerLayout = (DrawerLayout) mRoot;
             mToolbar.setNavigationOnClickListener(v -> {
@@ -191,15 +220,24 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                 }
             });
             drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
+            	View view = mRoot.findViewById(R.id.nav_root);
                 @Override
                 public void onDrawerOpened(@NonNull View p1) {
-                    mMainViewModel.setDrawerState(true);
-                    onBackPressedCallback.setEnabled(true);
+                	if(p1 == view) {
+                    	mMainViewModel.setDrawerState(true);
+                    } else {
+                    	mMainViewModel.setGitDrawerState(true);
+                    }
+                    onBackPressedCallback.setEnabled(true); 
                 }
 
                 @Override
                 public void onDrawerClosed(@NonNull View p1) {
-                    mMainViewModel.setDrawerState(false);
+                	if(p1 == view) {
+                    	mMainViewModel.setDrawerState(false);
+                    } else {
+                    	mMainViewModel.setGitDrawerState(false);
+                    }
                     onBackPressedCallback.setEnabled(false);
                 }
             });
@@ -242,37 +280,20 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             mMainViewModel.getDrawerState()
                     .observe(getViewLifecycleOwner(), isOpen -> {
                         if (isOpen) {
-                            ((DrawerLayout) mRoot).open();
+                            ((DrawerLayout) mRoot).openDrawer(GravityCompat.START);
                         } else {
-                            ((DrawerLayout) mRoot).close();
+                            ((DrawerLayout) mRoot).closeDrawer(GravityCompat.START);
+                        }
+                    });
+        	mMainViewModel.getGitDrawerState()
+                    .observe(getViewLifecycleOwner(), isOpen -> {
+                        if (isOpen) {
+                            ((DrawerLayout) mRoot).openDrawer(GravityCompat.END);
+                        } else {
+                            ((DrawerLayout) mRoot).closeDrawer(GravityCompat.END);
                         }
                     });
         }
-
-        mHandler = new Handler() {
-            @Override
-            public void publish(LogRecord record) {
-                Level level = record.getLevel();
-                if (Level.WARNING.equals(level)) {
-                    mLogViewModel.w(LogViewModel.IDE, record.getMessage());
-                } else if (Level.SEVERE.equals(level)) {
-                    mLogViewModel.e(LogViewModel.IDE, record.getMessage());
-                } else {
-                    mLogViewModel.d(LogViewModel.IDE, record.getMessage());
-                }
-            }
-
-            @Override
-            public void flush() {
-                mLogViewModel.clear(LogViewModel.IDE);
-            }
-
-            @Override
-            public void close() throws SecurityException {
-                mLogViewModel.clear(LogViewModel.IDE);
-            }
-        };
-        IdeLog.getLogger().addHandler(mHandler);
 
         // can be null on tablets
         View navRoot = view.findViewById(R.id.nav_root);

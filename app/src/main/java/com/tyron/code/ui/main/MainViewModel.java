@@ -44,6 +44,9 @@ public class MainViewModel extends ViewModel {
 
     private final MutableLiveData<Boolean> mDrawerState =
             new MutableLiveData<>(false);
+            
+    private final MutableLiveData<Boolean> mGitDrawerState =
+            new MutableLiveData<>(false);
 
     public MutableLiveData<String> getCurrentState() {
         if (mCurrentState == null) {
@@ -64,6 +67,14 @@ public class MainViewModel extends ViewModel {
         mDrawerState.setValue(isOpen);
     }
 
+	public LiveData<Boolean> getGitDrawerState() {
+        return mGitDrawerState;
+    }
+    
+    public void setGitDrawerState(boolean isOpen) {
+        mGitDrawerState.setValue(isOpen);
+    }
+    
     public LiveData<String> getToolbarTitle() {
         return mToolbarTitle;
     }

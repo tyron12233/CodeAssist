@@ -17,6 +17,7 @@ import android.widget.Spinner
 
 import androidx.fragment.app.Fragment
 import androidx.core.os.*
+import androidx.core.view.ViewCompat
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -26,8 +27,10 @@ import de.prinova.git.usecases.*
 import de.prinova.git.model.*
 
 import com.tyron.code.R
+import com.tyron.code.util.*
 import com.tyron.common.logging.IdeLog
 import com.tyron.builder.project.Project
+
 
 import kotlinx.coroutines.*
 
@@ -80,6 +83,9 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	override fun onViewCreated (view: View, savedInstanceState: Bundle?) {
 		super.onViewCreated (view, savedInstanceState)
 		
+		ViewCompat.requestApplyInsets(view)
+        view.addSystemWindowInsetToPadding(false, true, false, true)
+        
 		perso = Author("User", "user@localhost.com")
 		
 		val gitDir = requireArguments().getString(ARG_PATH_ID, "").also {

@@ -66,15 +66,20 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:hint="Git Branch" />
-
-    <TextView
-        android:id="@+id/git_text_log"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="center"
-        android:layout_marginTop="10dp"
-        android:hint="Git Log"
-        android:text="No Log available"
-        android:textAlignment="viewStart" />
+	<ScrollView
+		android:id="@+id/git_scrollview"
+		android:fillViewport="true"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent">
+	    <TextView
+	        android:id="@+id/git_text_log"
+	        android:layout_width="match_parent"
+	        android:layout_height="match_parent"
+	        android:layout_gravity="center"
+	        android:layout_marginTop="10dp"
+	        android:hint="Git Log"
+	        android:text="No Log available"
+	        android:textAlignment="viewStart" />
+	</ScrollView>
 
 </LinearLayout>
