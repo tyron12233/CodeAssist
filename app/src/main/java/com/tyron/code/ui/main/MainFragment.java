@@ -276,40 +276,10 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 
         // can be null on tablets
         View navRoot = view.findViewById(R.id.nav_root);
-
-        ViewCompat.setOnApplyWindowInsetsListener(mRoot, (v, insets) -> {
-            if (navRoot != null) {
-                ViewCompat.dispatchApplyWindowInsets(navRoot, insets);
-            }
-            ViewGroup viewGroup = (ViewGroup) mRoot;
-            for (int i = 0; i < viewGroup.getChildCount(); i++) {
-                View child = viewGroup.getChildAt(i);
-                if (child == navRoot) {
-                    continue;
-                }
-
-                ViewCompat.dispatchApplyWindowInsets(child, insets);
-            }
-            return ViewCompat.onApplyWindowInsets(v, insets);
-        });
-        
+		applyWindowInsets(navRoot);
+   
         View gitNav = view.findViewById(R.id.git_nav);
-
-        ViewCompat.setOnApplyWindowInsetsListener(mRoot, (v, insets) -> {
-            if (gitNav != null) {
-                ViewCompat.dispatchApplyWindowInsets(gitNav, insets);
-            }
-            ViewGroup viewGroup = (ViewGroup) mRoot;
-            for (int i = 0; i < viewGroup.getChildCount(); i++) {
-                View child = viewGroup.getChildAt(i);
-                if (child == gitNav) {
-                    continue;
-                }
-
-                ViewCompat.dispatchApplyWindowInsets(child, insets);
-            }
-            return ViewCompat.onApplyWindowInsets(v, insets);
-        });
+        applyWindowInsets(gitNav);
     }
 
     @Override
@@ -372,6 +342,24 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         }
     }
 
+	private void applyWindowInsets(View navView) {
+		ViewCompat.setOnApplyWindowInsetsListener(mRoot, (v, insets) -> {
+            if (navView != null) {
+                ViewCompat.dispatchApplyWindowInsets(navView, insets);
+            }
+            ViewGroup viewGroup = (ViewGroup) mRoot;
+            for (int i = 0; i < viewGroup.getChildCount(); i++) {
+                View child = viewGroup.getChildAt(i);
+                if (child == navView) {
+                    continue;
+                }
+
+                ViewCompat.dispatchApplyWindowInsets(child, insets);
+            }
+            return ViewCompat.onApplyWindowInsets(v, insets);
+        });
+     }
+     
     /**
      * Tries to open a file into the editor
      *
