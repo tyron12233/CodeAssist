@@ -266,6 +266,12 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             mMainViewModel.setFiles(new ArrayList<>());
             mLogViewModel.clear(LogViewModel.BUILD_LOG);
         }
+        
+        GitFragment fragment = GitFragment.newInstance(mProject.getRootFile().getAbsolutePath());
+        getParentFragmentManager().beginTransaction()
+                .add(R.id.git_nav, fragment)
+                .commit();
+
         mMainViewModel.isIndexing()
                 .observe(getViewLifecycleOwner(), indexing -> {
                     mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
@@ -398,19 +404,16 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             return;
         }
 
+		
+		
         if (project.equals(ProjectManager.getInstance().getCurrentProject())) {
             saveAll(false);
             project.getSettings().refresh();
         }
-
+        
         IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
 
         mProject = project;
-        
-        GitFragment fragment = GitFragment.newInstance(mProject.getRootFile().getAbsolutePath());
-        getParentFragmentManager().beginTransaction()
-                .replace(R.id.git_nav, fragment)
-                .commit();
                 
         mIndexServiceConnection.setProject(project);
 

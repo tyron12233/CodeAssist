@@ -44,6 +44,7 @@ lateinit var gitDeleteBranchButton : Button
 lateinit var arrayAdapter: ArrayAdapter<String>
 lateinit var git: Gitter
 lateinit var perso: Author
+lateinit var root: View
 
 const val ARG_PATH_ID = "pathId"
 
@@ -62,6 +63,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	companion object {
 		@JvmStatic
 		fun newInstance(path: String) = GitFragment().apply {
+			IdeLog.getCurrentLogger(GitFragment::class.java).info("$path")
 			arguments = bundleOf(ARG_PATH_ID to path)
 		}
 	}
@@ -75,7 +77,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		container: ViewGroup?,
 		savedInstanceState: Bundle?,
 	): View {
-		val root = inflater.inflate(R.layout.git_fragment, container, false)
+		root = inflater.inflate(R.layout.git_fragment, container, false)
 		root.initializeUI(requireContext(), this)
 		return root
 	}
@@ -133,6 +135,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	
 	override fun onResume() {
 		super.onResume()
+		root.initializeUI(requireContext(), this)
 	}
 	
 	override fun onSaveInstanceState(outState: Bundle) {
@@ -247,7 +250,7 @@ fun deleteBranch(context: Context) {
 	.setTitle("Delete Branch")
 	.setView( branchText )		
 	.setPositiveButton("Delete") {_, _ ->
-		val branchList = git.getBranch()
+		val branchList = git.getBranchList()
 		val text = branchText.getText().toString()
 		
 		if (text !in branchList) {
