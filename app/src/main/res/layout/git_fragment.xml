@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical" >
-
+	
     <Button
         android:id="@+id/git_button_create"
         android:layout_width="match_parent"
@@ -66,20 +66,25 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:hint="Git Branch" />
-	<ScrollView
-		android:id="@+id/git_scrollview"
-		android:fillViewport="true"
+
+	<LinearLayout
 		android:layout_width="match_parent"
-		android:layout_height="match_parent">
-	    <TextView
-	        android:id="@+id/git_text_log"
-	        android:layout_width="match_parent"
-	        android:layout_height="match_parent"
-	        android:layout_gravity="center"
-	        android:layout_marginTop="10dp"
-	        android:hint="Git Log"
-	        android:text="No Log available"
-	        android:textAlignment="viewStart" />
-	</ScrollView>
+    	android:layout_height="wrap_content">
+		<androidx.core.widget.NestedScrollView
+			xmlns:tools="http://schemas.android.com/tools"
+			android:id="@+id/git_scrollview"
+			android:fillViewport="false"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content">
+		    <TextView
+		        android:id="@+id/git_text_log"
+		        android:layout_width="match_parent"
+		        android:layout_height="wrap_content"
+		        android:layout_gravity="center"
+		        android:layout_marginTop="10dp"
+		        android:hint="Git Log"
+		        android:text="No Log available"/>
+		</androidx.core.widget.NestedScrollView>
+	</LinearLayout>
 
 </LinearLayout>

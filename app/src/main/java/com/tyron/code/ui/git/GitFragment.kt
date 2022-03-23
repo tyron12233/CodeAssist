@@ -88,9 +88,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
         
 		perso = Author("User", "user@localhost.com")
 		
-		val gitDir = requireArguments().getString(ARG_PATH_ID, "").also {
-			IdeLog.getLogger().info("Path: $it")
-		}
+		val gitDir = requireArguments().getString(ARG_PATH_ID, "")
 		
 		val hasRepo = initRepo(gitDir).also {
 			switchButtons(it)
@@ -128,17 +126,9 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		}	
 	}
 	
-	override fun onDestroy() {
-		super.onDestroy()
-	}
-	
 	override fun onDestroyView() {
 		super.onDestroyView()
 		if(::git.isInitialized) git.destroy()
-	}
-	
-	override fun onPause() {
-		super.onPause()
 	}
 	
 	override fun onResume() {
@@ -147,14 +137,6 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	
 	override fun onSaveInstanceState(outState: Bundle) {
 		super.onSaveInstanceState(outState)
-	}
-	
-	override fun onStart() {
-		super.onStart()
-	}
-	
-	override fun onStop() {
-		super.onStop()
 	}
 	
 	override fun onItemSelected(
@@ -207,7 +189,7 @@ fun commit(context: Context, commiter: Author) {
 	.setView( commitText )		
 	.setPositiveButton("Commit") {_, _ ->
 		git.commiting(commiter, commitText.getText().toString())
-		gitLogText.text = "${git.getLog()}"
+		gitLogText.text = git.getLog()
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
 	.show()
@@ -223,7 +205,7 @@ fun createBranch(context: Context) {
 	.setPositiveButton("Create") {_, _ ->
 		git.createBranch(branchText.getText().toString())
 		arrayAdapter.listOf(git.getBranchList())
-		gitLogText.text = "${git.getLog()}"
+		gitLogText.text = git.getLog()
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
 	.show()
@@ -244,7 +226,7 @@ fun mergeBranch(context: Context) {
 		if (text in branchList) {
 			git.mergeBranch(text)
 			arrayAdapter.listOf(branchList)
-			gitLogText.text = "${git.getLog()}"
+			gitLogText.text = git.getLog()
 		} else {
 			MaterialAlertDialogBuilder(context)
 			.setTitle("!! Alert !!")
@@ -271,7 +253,7 @@ fun deleteBranch(context: Context) {
 		if (text !in branchList) {
 			git.deleteBranch(text)
 			arrayAdapter.listOf(git.getBranchList())
-			gitLogText.text = "${git.getLog()}"
+			gitLogText.text = git.getLog()
 		} else {
 			MaterialAlertDialogBuilder(context)
 			.setTitle("!! Alert !!")

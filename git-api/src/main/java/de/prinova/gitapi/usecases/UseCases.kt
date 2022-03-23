@@ -21,6 +21,7 @@ import de.prinova.git.model.Gitter
 //TODO: Add logic for commit-reset, -revert and -restore (in this order)
 //TODO: Add commit amend
 //TODO: put author into log formating
+//TODO: fix -> resolve error with deleting an unmerged branch
 
 
 typealias LogList = List<RevCommit>
