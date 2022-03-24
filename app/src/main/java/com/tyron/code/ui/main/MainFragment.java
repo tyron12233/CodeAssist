@@ -58,6 +58,7 @@ import com.tyron.code.service.IndexServiceConnection;
 import com.tyron.code.ui.editor.EditorContainerFragment;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.git.*;
+import com.tyron.code.ui.git.GitFragmentUtils;
 import com.tyron.completion.java.provider.CompletionEngine;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
@@ -74,6 +75,8 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+
+import kotlin.Unit;
 
 public class MainFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
 
@@ -268,6 +271,10 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         }
         
         GitFragment fragment = GitFragment.newInstance(mProject.getRootFile().getAbsolutePath());
+        GitFragmentUtils.setOnCommit( () -> { 
+			saveAll(false);
+			return Unit.INSTANCE;
+		});
         getParentFragmentManager().beginTransaction()
                 .add(R.id.git_nav, fragment)
                 .commit();

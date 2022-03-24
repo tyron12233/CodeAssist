@@ -1,4 +1,4 @@
-//@file:JvmName("GitFragment")
+@file:JvmName("GitFragmentUtils")
 
 package com.tyron.code.ui.git
 
@@ -57,8 +57,11 @@ const val ARG_PATH_ID = "pathId"
 //TODO: Put Author into PreferenceSettings
 //TODO: Let select commits for reverting, restore and reset
 
+var onCommit: ()-> Unit = {}
+
 
 class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
+	
 	
 	companion object {
 		@JvmStatic
@@ -183,7 +186,8 @@ fun switchButtons(hasRepo: Boolean)
 	gitDeleteBranchButton.setEnabled(hasRepo)
 }
 
-fun commit(context: Context, commiter: Author) {	
+fun commit(context: Context, commiter: Author) {
+	onCommit()
 	val commitText = EditText(context).apply {
 			setHint("Commit Message")
 		}
