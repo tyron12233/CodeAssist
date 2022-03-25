@@ -21,8 +21,6 @@ import de.prinova.git.model.Gitter
 //TODO: Add logic for commit-reset, -revert and -restore (in this order)
 //TODO: Add commit amend
 //TODO: put author into log formating
-//TODO: fix -> resolve error with deleting an unmerged branch
-
 
 typealias LogList = List<RevCommit>
 
@@ -52,9 +50,11 @@ private fun Repository.createGit(): Gitter = Gitter(Git(this))
 
 private fun Gitter.addProjectFiles(): Gitter = apply {
 		git.add().addFilepattern(".").call()
+		git.add().addFilepattern(".").setUpdate(true).call()
 	}
 
 fun Gitter.commiting(commiter: Author, msg: String): Gitter = apply {
+	addProjectFiles()
 	runBlocking {
 		launch(Dispatchers.Default) {
 			commit(commiter, msg)
