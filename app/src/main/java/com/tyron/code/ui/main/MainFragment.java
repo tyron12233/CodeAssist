@@ -271,20 +271,25 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         }
         
         GitFragment fragment = GitFragment.newInstance(mProject.getRootFile().getAbsolutePath());
-        GitFragmentUtils.setOnCommit( () -> { 
-			saveAll(false);
+        GitFragmentUtils.setOnSave( () -> { 
+			saveAll();
 			return Unit.INSTANCE;
 		});
 		
 		GitFragmentUtils.setPostCheckout( () -> {
 			List<FileEditor> target = new ArrayList<FileEditor>( mMainViewModel.getFiles().getValue() );
 			for(FileEditor edit: target) {
-				File currentFile = edit.getFile();
-				mProject.getModule(currentFile)
-					.getFileManager()
-					.setSnapshotContent(currentFile, GitFragmentUtils.withText(currentFile));
+				if(edit.isValid()) {
+					File currentFile = edit.getFile();
+					mProject.getModule(currentFile)
+						.getFileManager()
+						.setSnapshotContent(currentFile, GitFragmentUtils.withText(currentFile));
+				} else {
+					mMainViewModel.removeFile(edit.getFile());
+				}
 			}
 			target.clear();
+			mFileViewModel.refreshNode(root);
 			return Unit.INSTANCE;
 		});
 		

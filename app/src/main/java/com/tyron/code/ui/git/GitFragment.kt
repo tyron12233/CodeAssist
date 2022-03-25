@@ -50,15 +50,13 @@ lateinit var root: View
 const val ARG_PATH_ID = "pathId"
 
 //TODO: Create ViewModel for git logic (commit, checkout, merge, etc)
-//TODO: Save all opened files before commiting
-//TODO: Refresh TreeView for checked-out working-tree or after merging
 
 //TODO: Respond to conflicting states after merging
 //TODO: fix wrong logtext, when fast switching between projects
 //TODO: Put Author into PreferenceSettings
 //TODO: Let select commits for reverting, restore and reset
 
-var onCommit: ()-> Unit = {}
+var onSave: ()-> Unit = {}
 var preCheckout: ()-> Unit = {}
 var postCheckout: ()-> Unit = {}
 
@@ -188,7 +186,7 @@ fun switchButtons(hasRepo: Boolean)
 }
 
 fun commit(context: Context, commiter: Author) {
-	onCommit()
+	onSave()
 	val commitText = EditText(context).apply {
 			setHint("Commit Message")
 		}
@@ -235,6 +233,7 @@ fun mergeBranch(context: Context) {
 			git.mergeBranch(text)
 			arrayAdapter.listOf(branchList)
 			postCheckout()
+			onSave()
 			gitLogText.text = git.getLog()
 		} else {
 			MaterialAlertDialogBuilder(context)
@@ -280,11 +279,12 @@ fun GitFragment.checkout(position: Int) {
 		val branch = git.getBranchList()[position]
 		git.checkout(branch)
 		postCheckout()
+		onSave()
 		gitLogText.setText(git.getLog())
 	}
 }
 
-fun withText(file: File) = file.readText()
+fun withText(file: File) = file?.readText() ?: ""
 
 fun <I> ArrayAdapter<I>.listOf(items: List<I>) {	
 	clear()
