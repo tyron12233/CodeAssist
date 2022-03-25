@@ -30,6 +30,7 @@ import com.tyron.code.R
 import com.tyron.code.util.*
 import com.tyron.common.logging.IdeLog
 import com.tyron.builder.project.Project
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl
 
 
 import kotlinx.coroutines.*
@@ -58,7 +59,8 @@ const val ARG_PATH_ID = "pathId"
 //TODO: Let select commits for reverting, restore and reset
 
 var onCommit: ()-> Unit = {}
-
+var preCheckout: ()-> Unit = {}
+var postCheckout: ()-> Unit = {}
 
 class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	
@@ -66,7 +68,6 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	companion object {
 		@JvmStatic
 		fun newInstance(path: String) = GitFragment().apply {
-			IdeLog.getCurrentLogger(GitFragment::class.java).info("$path")
 			arguments = bundleOf(ARG_PATH_ID to path)
 		}
 	}
@@ -138,7 +139,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	
 	override fun onResume() {
 		super.onResume()
-		root.initializeUI(requireContext(), this)
+		//root.initializeUI(requireContext(), this)
 	}
 	
 	override fun onSaveInstanceState(outState: Bundle) {
@@ -175,7 +176,7 @@ fun View.initializeUI(context: Context, listener: AdapterView.OnItemSelectedList
 	gitBranchSpinner.setAdapter(arrayAdapter)
 	gitBranchSpinner.setOnItemSelectedListener(listener)
 }		
-
+	
 fun switchButtons(hasRepo: Boolean)
 {
 	gitInitButton.setEnabled(!hasRepo)
@@ -233,6 +234,7 @@ fun mergeBranch(context: Context) {
 		if (text in branchList) {
 			git.mergeBranch(text)
 			arrayAdapter.listOf(branchList)
+			postCheckout()
 			gitLogText.text = git.getLog()
 		} else {
 			MaterialAlertDialogBuilder(context)
@@ -254,10 +256,10 @@ fun deleteBranch(context: Context) {
 	.setTitle("Delete Branch")
 	.setView( branchText )		
 	.setPositiveButton("Delete") {_, _ ->
-		val branchList = git.getBranchList()
+		val currentBranch = git.getBranch()
 		val text = branchText.getText().toString()
 		
-		if (text !in branchList) {
+		if (text !in currentBranch) {
 			git.deleteBranch(text)
 			arrayAdapter.listOf(git.getBranchList())
 			gitLogText.text = git.getLog()
@@ -273,13 +275,16 @@ fun deleteBranch(context: Context) {
 	.show()
 }
 
-fun checkout(position: Int) {
+fun GitFragment.checkout(position: Int) {
 	if(::git.isInitialized) {
 		val branch = git.getBranchList()[position]
 		git.checkout(branch)
+		postCheckout()
 		gitLogText.setText(git.getLog())
 	}
 }
+
+fun withText(file: File) = file.readText()
 
 fun <I> ArrayAdapter<I>.listOf(items: List<I>) {	
 	clear()

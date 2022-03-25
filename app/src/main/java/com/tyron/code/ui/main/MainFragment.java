@@ -275,8 +275,21 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 			saveAll(false);
 			return Unit.INSTANCE;
 		});
+		
+		GitFragmentUtils.setPostCheckout( () -> {
+			List<FileEditor> target = new ArrayList<FileEditor>( mMainViewModel.getFiles().getValue() );
+			for(FileEditor edit: target) {
+				File currentFile = edit.getFile();
+				mProject.getModule(currentFile)
+					.getFileManager()
+					.setSnapshotContent(currentFile, GitFragmentUtils.withText(currentFile));
+			}
+			target.clear();
+			return Unit.INSTANCE;
+		});
+		
         getParentFragmentManager().beginTransaction()
-                .add(R.id.git_nav, fragment)
+                .replace(R.id.git_nav, fragment)
                 .commit();
 
         mMainViewModel.isIndexing()
