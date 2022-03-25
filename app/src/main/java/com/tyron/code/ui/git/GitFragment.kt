@@ -51,7 +51,6 @@ const val ARG_PATH_ID = "pathId"
 
 //TODO: Create ViewModel for git logic (commit, checkout, merge, etc)
 
-//TODO: Respond to conflicting states after merging
 //TODO: fix wrong logtext, when fast switching between projects
 //TODO: Put Author into PreferenceSettings
 //TODO: Let select commits for reverting, restore and reset

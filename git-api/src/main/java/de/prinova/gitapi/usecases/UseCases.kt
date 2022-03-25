@@ -146,6 +146,7 @@ fun Gitter.deleteBranch(branch: String): Gitter = apply {
 		launch(Dispatchers.Default) {
 			git.branchDelete()
 			.setBranchNames(branch)
+			.setForce(true)
 			.call()
 		}
 	}
