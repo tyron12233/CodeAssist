@@ -1,6 +1,7 @@
 package com.tyron.builder.api.tasks;
 
 import com.tyron.builder.api.Task;
+import com.tyron.builder.api.file.FileCollection;
 
 import java.util.function.Predicate;
 
@@ -61,5 +62,66 @@ public interface TaskOutputs {
      * @return true if this task has declared any outputs, otherwise false.
      */
     boolean getHasOutput();
+
+    /**
+     * Returns the output files of this task.
+     *
+     * @return The output files. Returns an empty collection if this task has no output files.
+     */
+    FileCollection getFiles();
+
+    /**
+     * Registers some output files for this task.
+     *
+     * <p>When the given {@code paths} is a {@link java.util.Map}, then each output file
+     * will be associated with an identity.
+     * The keys of the map must be non-empty strings.
+     * The values of the map will be evaluated to individual files as per
+     * {@link org.gradle.api.Project#file(Object)}.</p>
+     *
+     * <p>Otherwise the given files will be evaluated as per
+     * {@link org.gradle.api.Project#files(Object...)}.</p>
+     *
+     * @param paths The output files.
+     *
+     * @see CacheableTask
+     */
+    TaskOutputFilePropertyBuilder files(Object... paths);
+
+    /**
+     * Registers some output directories for this task.
+     *
+     * <p>When the given {@code paths} is a {@link java.util.Map}, then each output directory
+     * will be associated with an identity.
+     * The keys of the map must be non-empty strings.
+     * The values of the map will be evaluated to individual directories as per
+     * {@link org.gradle.api.Project#file(Object)}.</p>
+     *
+     * <p>Otherwise the given directories will be evaluated as per
+     * {@link org.gradle.api.Project#files(Object...)}.</p>
+     *
+     * @param paths The output files.
+     *
+     * @see CacheableTask
+     *
+     * @since 3.3
+     */
+    TaskOutputFilePropertyBuilder dirs(Object... paths);
+
+    /**
+     * Registers some output file for this task.
+     *
+     * @param path The output file. The given path is evaluated as per {@link org.gradle.api.Project#file(Object)}.
+     * @return a property builder to further configure this property.
+     */
+    TaskOutputFilePropertyBuilder file(Object path);
+
+    /**
+     * Registers an output directory for this task.
+     *
+     * @param path The output directory. The given path is evaluated as per {@link org.gradle.api.Project#file(Object)}.
+     * @return a property builder to further configure this property.
+     */
+    TaskOutputFilePropertyBuilder dir(Object path);
 
 }

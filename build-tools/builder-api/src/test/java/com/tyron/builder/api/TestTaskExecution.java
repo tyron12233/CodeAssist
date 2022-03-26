@@ -24,6 +24,7 @@ import com.tyron.builder.api.internal.tasks.CircularDependencyException;
 import com.tyron.builder.api.internal.tasks.DefaultTaskContainer;
 import com.tyron.builder.api.internal.tasks.TaskExecutor;
 import com.tyron.builder.api.internal.work.DefaultWorkerLeaseService;
+import com.tyron.builder.api.tasks.TaskInputs;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -156,6 +157,6 @@ public class TestTaskExecution {
             task.dependsOn("PACKAGE");
         });
 
-        new TaskExecutor(project).execute("assemble", "unknownTask");
+        new TaskExecutor(project).execute("assemble");
     }
 }

@@ -7,6 +7,7 @@ import com.tyron.builder.api.execution.plan.DefaultNodeValidator;
 import com.tyron.builder.api.execution.plan.DefaultPlanExecutor;
 import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchy;
 import com.tyron.builder.api.execution.plan.LocalTaskNode;
+import com.tyron.builder.api.execution.plan.LocalTaskNodeExecutor;
 import com.tyron.builder.api.execution.plan.TaskDependencyResolver;
 import com.tyron.builder.api.execution.plan.TaskNodeDependencyResolver;
 import com.tyron.builder.api.execution.plan.TaskNodeFactory;
@@ -144,16 +145,9 @@ public class TaskExecutor {
                 cancellationToken,
                 resourceLockService
         );
+
         DefaultTaskExecutionGraph graph = new DefaultTaskExecutionGraph(executor, Collections
-                .singletonList((node, context) -> {
-                    if (node instanceof LocalTaskNode) {
-                        LocalTaskNode localTaskNode = (LocalTaskNode) node;
-                        localTaskNode.getTask().getActions().forEach(action -> {
-                            action.execute(localTaskNode.getTask());
-                        });
-                    }
-                    return true;
-                }));
+                .singletonList(new LocalTaskNodeExecutor(this.executionNodeAccessHierarchy)));
         graph.populate(executionPlan);
         List<Throwable> failures = new ArrayList<>();
         resourceLockService.withStateLock(() -> {
