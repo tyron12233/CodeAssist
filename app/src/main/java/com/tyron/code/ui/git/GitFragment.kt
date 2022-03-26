@@ -277,14 +277,14 @@ fun deleteBranch(context: Context) {
 fun GitFragment.checkout(position: Int) {
 	if(::git.isInitialized) {
 		val branch = git.getBranchList()[position]
+		//postCheckout()
 		git.checkout(branch)
 		postCheckout()
-		onSave()
 		gitLogText.setText(git.getLog())
 	}
 }
 
-fun withText(file: File) = file?.readText() ?: ""
+fun toContent(file: File?) = file?.readText() ?: ""
 
 fun <I> ArrayAdapter<I>.listOf(items: List<I>) {	
 	clear()

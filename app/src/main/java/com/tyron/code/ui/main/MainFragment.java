@@ -61,6 +61,8 @@ import com.tyron.code.ui.git.*;
 import com.tyron.code.ui.git.GitFragmentUtils;
 import com.tyron.completion.java.provider.CompletionEngine;
 
+import com.tyron.builder.project.api.FileManager;
+
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import javax.tools.Diagnostic;
 
@@ -272,28 +274,24 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         
         GitFragment fragment = GitFragment.newInstance(mProject.getRootFile().getAbsolutePath());
         GitFragmentUtils.setOnSave( () -> { 
-			saveAll();
+			saveAll(false);
 			return Unit.INSTANCE;
 		});
 		
 		GitFragmentUtils.setPostCheckout( () -> {
-			List<FileEditor> target = new ArrayList<FileEditor>( mMainViewModel.getFiles().getValue() );
+			List<FileEditor> target = mMainViewModel.getFiles().getValue();
 			for(FileEditor edit: target) {
 				if(edit.isValid()) {
 					File currentFile = edit.getFile();
-					mProject.getModule(currentFile)
-						.getFileManager()
-						.setSnapshotContent(currentFile, GitFragmentUtils.withText(currentFile));
-				} else {
-					mMainViewModel.removeFile(edit.getFile());
+					mProject.getModule(currentFile).getFileManager()
+					.setSnapshotContent(currentFile, GitFragmentUtils.toContent(currentFile));
 				}
 			}
-			target.clear();
 			mFileViewModel.refreshNode(root);
 			return Unit.INSTANCE;
 		});
 		
-        getParentFragmentManager().beginTransaction()
+        getChildFragmentManager().beginTransaction()
                 .replace(R.id.git_nav, fragment)
                 .commit();
 
@@ -330,8 +328,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         View navRoot = view.findViewById(R.id.nav_root);
 		applyWindowInsets(navRoot);
    
-        View gitNav = view.findViewById(R.id.git_nav);
-        applyWindowInsets(gitNav);
+        /*View gitNav = view.findViewById(R.id.git_nav);
+        applyWindowInsets(gitNav);*/
     }
 
     @Override
@@ -468,7 +466,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         if (CompletionEngine.isIndexing()) {
             return;
         }
-
         Collection<Module> modules = mProject.getModules();
         modules.forEach(it -> it.getFileManager().saveContents());
 
