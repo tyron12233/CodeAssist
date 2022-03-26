@@ -68,6 +68,7 @@ dependencies {
     // TODO: completion providers should not be included on the main module
     implementation project(path: ':code-editor')
     implementation project(path: ':xml-completion')
+    implementation project(path: ':build-tools:viewbinding-inject')
     implementation project(path: ':build-tools:xml-repository')
     implementation project(path: ':java-completion')
     // not used for compilation, but for analysis

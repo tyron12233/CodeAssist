@@ -106,7 +106,7 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
     @NonNull
     @Override
     public File getResourcesDir() {
-        return null;
+        return new File(mRootDir, "src/main/resources");
     }
 
     @NonNull

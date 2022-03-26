@@ -41,6 +41,7 @@ public class ModuleSettings implements SharedPreferences {
     public static final String JAVA_SOURCE_VERSION = "javaSourceVersion";
     public static final String MODULE_TYPE = "moduleType";
     public static final String ZIP_ALIGN_ENABLED = "zipAlignEnabled";
+    public static final String VIEW_BINDING_ENABLED = "viewBindingEnabled";
     public static final String PACKAGE_NAME = "packageName";
 
     private final File mConfigFile;
@@ -72,6 +73,7 @@ public class ModuleSettings implements SharedPreferences {
         map.put(VERSION_NAME, "1.0");
         map.put(VERSION_CODE, 1);
         map.put(ZIP_ALIGN_ENABLED, false);
+        map.put(VIEW_BINDING_ENABLED, false);
         return map;
     }
 
