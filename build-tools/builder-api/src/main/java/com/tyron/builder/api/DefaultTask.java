@@ -3,10 +3,12 @@ package com.tyron.builder.api;
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.RelativePath;
+import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.internal.tasks.TaskDestroyablesInternal;
+import com.tyron.builder.api.internal.tasks.TaskInputsInternal;
 import com.tyron.builder.api.internal.tasks.TaskLocalStateInternal;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
@@ -17,6 +19,7 @@ import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskDestroyables;
 import com.tyron.builder.api.tasks.TaskInputs;
 import com.tyron.builder.api.tasks.TaskLocalState;
+import com.tyron.builder.api.tasks.TaskOutputFilePropertyBuilder;
 import com.tyron.builder.api.tasks.TaskOutputs;
 import com.tyron.builder.api.tasks.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskState;
@@ -67,7 +70,7 @@ public class DefaultTask extends AbstractTask {
     public DefaultTask(ProjectInternal project) {
         this.project = project;
 
-        TaskContainerInternal tasks = project.getTaskContainer();
+        TaskContainerInternal tasks = project.getTasks();
         lifecycleDependencies = new DefaultTaskDependency(tasks);
         mustRunAfter = new DefaultTaskDependency(tasks);
         shouldRunAfter = new DefaultTaskDependency(tasks);
@@ -227,7 +230,7 @@ public class DefaultTask extends AbstractTask {
     }
 
     @Override
-    public TaskInputs getInputs() {
+    public TaskInputsInternal getInputs() {
         return null;
     }
 
@@ -267,6 +270,31 @@ public class DefaultTask extends AbstractTask {
             @Override
             public boolean getHasOutput() {
                 return false;
+            }
+
+            @Override
+            public FileCollection getFiles() {
+                return null;
+            }
+
+            @Override
+            public TaskOutputFilePropertyBuilder files(Object... paths) {
+                return null;
+            }
+
+            @Override
+            public TaskOutputFilePropertyBuilder dirs(Object... paths) {
+                return null;
+            }
+
+            @Override
+            public TaskOutputFilePropertyBuilder file(Object path) {
+                return null;
+            }
+
+            @Override
+            public TaskOutputFilePropertyBuilder dir(Object path) {
+                return null;
             }
         };
     }
@@ -370,6 +398,11 @@ public class DefaultTask extends AbstractTask {
     @Override
     public TaskDependency getLifecycleDependencies() {
         return lifecycleDependencies;
+    }
+
+    @Override
+    public Predicate<? super TaskInternal> getOnlyIf() {
+        return null;
     }
 
     @Override

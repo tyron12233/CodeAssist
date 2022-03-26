@@ -9,6 +9,7 @@ java {
 
 dependencies {
     implementation project(path: ':common')
+    implementation 'javax.inject:javax.inject:1'
     testImplementation 'junit:junit:4.13.2'
 }
 

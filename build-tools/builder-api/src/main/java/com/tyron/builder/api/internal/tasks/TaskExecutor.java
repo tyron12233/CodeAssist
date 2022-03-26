@@ -96,7 +96,7 @@ public class TaskExecutor {
     public void execute(String... paths) {
         Task[] tasks = new Task[paths.length];
         for (int i = 0; i < tasks.length; i++) {
-            Task task = project.getTaskContainer().resolveTask(paths[i]);
+            Task task = project.getTasks().resolveTask(paths[i]);
 
             if (task == null) {
                 throw new TaskSelectionException("Task '" + paths[i] + "' not found in project '" + project.getPath() + "'");

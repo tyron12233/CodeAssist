@@ -7,9 +7,11 @@ import java.util.Collections;
 import java.util.List;
 
 public class TaskExecutionException extends RuntimeException {
-    public TaskExecutionException(TaskInternal task, Exception e) {
+
+    public TaskExecutionException(TaskInternal task, Throwable e) {
         super(e);
     }
+
 
     public Collection<? extends Throwable> getCauses() {
         return Collections.emptyList();
