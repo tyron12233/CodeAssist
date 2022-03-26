@@ -34,7 +34,7 @@ public class CompilerContainer {
 
     private volatile boolean mIsWriting;
 
-    private Semaphore semaphore = new Semaphore(1);
+    private final Semaphore semaphore = new Semaphore(1);
 
     private CompileTask mCompileTask;
 
@@ -48,11 +48,7 @@ public class CompilerContainer {
      * are synchronized
      */
     public void run(Consumer<CompileTask> consumer) {
-        try {
-            semaphore.acquire();
-        } catch (InterruptedException e) {
-            throw new ProcessCanceledException(e);
-        }
+        semaphore.acquireUninterruptibly();
         try {
             consumer.accept(mCompileTask);
         } finally {
