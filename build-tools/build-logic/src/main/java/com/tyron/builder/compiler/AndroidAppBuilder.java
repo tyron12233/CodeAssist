@@ -13,6 +13,7 @@ import com.tyron.builder.compiler.java.CheckLibrariesTask;
 import com.tyron.builder.compiler.log.InjectLoggerTask;
 import com.tyron.builder.compiler.manifest.ManifestMergeTask;
 import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
+import com.tyron.builder.compiler.viewbinding.GenerateViewBindingTask;
 import com.tyron.builder.crashlytics.CrashlyticsTask;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.ModuleSettings;
@@ -44,6 +45,7 @@ public class AndroidAppBuilder extends BuilderImpl<AndroidModule> {
         }
         tasks.add(new CrashlyticsTask(getProject(), module, logger));
         tasks.add(new IncrementalAapt2Task(getProject(), module, logger, false));
+        tasks.add(new GenerateViewBindingTask(getProject(), module, logger, true));
         tasks.add(new MergeSymbolsTask(getProject(), module, logger));
         tasks.add(new IncrementalKotlinCompiler(getProject(), module, logger));
         tasks.add(new IncrementalJavaTask(getProject(), module, logger));
