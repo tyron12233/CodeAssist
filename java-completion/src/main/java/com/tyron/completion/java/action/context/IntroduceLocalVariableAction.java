@@ -119,7 +119,7 @@ public class IntroduceLocalVariableAction extends AnAction {
 
         TypeMirror typeMirror = trees.getTypeMirror(path);
 
-        if (typeMirror instanceof ErrorType) {
+        if (typeMirror == null || typeMirror.getKind() == TypeKind.ERROR) {
             // information is incomplete and type cannot be determined, default to Object
             typeMirror = task.task.getElements()
                     .getTypeElement("java.lang.Object")
