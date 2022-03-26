@@ -64,6 +64,7 @@ public class CompileBatch implements AutoCloseable {
             for (CompilationUnitTree t : borrow.task.parse()) {
                 roots.add(t);
             }
+
             // The results of borrow.task.analyze() are unreliable when errors are present
             // You can get at `Element` values using `Trees`
             task.analyze();

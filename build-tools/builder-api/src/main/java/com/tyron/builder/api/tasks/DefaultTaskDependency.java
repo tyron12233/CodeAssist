@@ -53,9 +53,9 @@ public class DefaultTaskDependency extends AbstractTaskDependency {
         queue.addAll(mutableValues);
         while (!queue.isEmpty()) {
             Object dependency = queue.removeFirst();
-//            if (dependency instanceof Buildable) {
-//                context.add(dependency);
-//            } else
+            if (dependency instanceof Buildable) {
+                context.add(dependency);
+            } else
             if (dependency instanceof Task) {
                 context.add(dependency);
             } else if (dependency instanceof TaskDependency) {
@@ -79,7 +79,7 @@ public class DefaultTaskDependency extends AbstractTaskDependency {
 //                    queue.addFirst(closureResult);
 //                }
             } else if (dependency instanceof List) {
-                List<?> list = (List) dependency;
+                List<?> list = (List<?>) dependency;
                 if (list instanceof RandomAccess) {
                     for (int i = list.size() - 1; i >= 0; i--) {
                         queue.addFirst(list.get(i));

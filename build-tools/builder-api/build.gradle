@@ -9,6 +9,7 @@ java {
 
 dependencies {
     implementation project(path: ':common')
+    implementation 'javax.inject:javax.inject:1'
     testImplementation 'junit:junit:4.13.2'
 }
 
@@ -34,4 +35,11 @@ tasks.register("task3") {
     }
 
     it.dependsOn("task1")
+}
+
+tasks.register("injectedTask") {
+    doLast {
+        println("Injected Task")
+    }
+    mustRunAfter("task1")
 }
