@@ -153,4 +153,6 @@ public interface Editor {
      * @param analyzing whether to show the progress bar.
      */
     void setAnalyzing(boolean analyzing);
+
+    void requireCompletion();
 }
