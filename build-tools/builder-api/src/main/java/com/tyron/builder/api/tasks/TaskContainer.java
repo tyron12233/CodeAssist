@@ -1,43 +1,15 @@
 package com.tyron.builder.api.tasks;
 
-import com.google.common.collect.ImmutableSet;
-import com.google.common.graph.ElementOrder;
-import com.google.common.graph.EndpointPair;
-import com.google.common.graph.Graph;
-import com.google.common.graph.GraphBuilder;
-import com.google.common.graph.Graphs;
-import com.google.common.graph.MutableGraph;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.internal.tasks.WorkDependencyResolver;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.Collection;
 
-@SuppressWarnings("UnstableApiUsage")
-public class TaskContainer {
+public interface TaskContainer extends Collection<Task> {
 
-    private final MutableGraph<Task> mTaskGraph;
-    private List<Task> mTasks;
+    TaskProvider<Task> register(String name, Action<? super Task> configurationAction);
 
-    public TaskContainer() {
-        mTaskGraph = GraphBuilder.undirected()
-                .allowsSelfLoops(false)
-                .nodeOrder(ElementOrder.stable())
-                .build();
-        mTasks = new ArrayList<>();
-    }
+    <T extends Task> TaskProvider<T> register(String name, Class<T> type, Action<? super T> configurationAction);
 
-    public  void registerTask(Task task) {
-        mTasks.add(task);
-    }
-
-    public Graph<Task> getTaskGraph() {
-        return mTaskGraph;
-    }
-
-    public List<Task> getTasks() {
-        return mTasks;
-    }
+    <T extends Task> TaskProvider<T> register(String name, Class<T> type);
 }
