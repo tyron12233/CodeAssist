@@ -20,8 +20,6 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
 //            for (PluginServiceRegistry pluginServiceRegistry : parent.getAll(PluginServiceRegistry.class)) {
 //                pluginServiceRegistry.registerProjectServices(registration);
 //            }
-
-            registration.add(TaskContainerInternal.class, new DefaultTaskContainer(project));
         });
         addProvider(new WorkerSharedProjectScopeServices(project.getProjectDir()));
     }

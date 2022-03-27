@@ -5,17 +5,21 @@ import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.Describables;
 import com.tyron.builder.api.internal.DisplayName;
 import com.tyron.builder.api.internal.GradleInternal;
+import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.build.BuildState;
+import com.tyron.builder.api.internal.execution.DefaultTaskExecutionGraph;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.initialization.DefaultProjectDescriptor;
 import com.tyron.builder.api.internal.project.DefaultProject;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.ProjectStateUnk;
+import com.tyron.builder.api.internal.reflect.DirectInstantiator;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.service.ServiceRegistration;
 import com.tyron.builder.api.internal.service.ServiceRegistry;
+import com.tyron.builder.api.internal.service.scopes.BuildScopeServiceRegistryFactory;
 import com.tyron.builder.api.internal.service.scopes.GradleScopeServices;
 import com.tyron.builder.api.internal.service.scopes.ProjectScopeServices;
 import com.tyron.builder.api.internal.service.scopes.ServiceRegistryFactory;
@@ -44,27 +48,65 @@ import javax.annotation.Nullable;
  */
 public class TestTaskExecution {
 
-//    ProjectInternal project;
-//
-//    private DefaultTaskContainer container;
-//
-//    @Before
-//    public void setup() {
-//
-//        ResourceLock lock = new DefaultLock();
-//        DefaultServiceRegistry defaultServiceRegistry = new DefaultServiceRegistry();
-//        defaultServiceRegistry.addProvider(new GradleScopeServices(defaultServiceRegistry));
-//        defaultServiceRegistry.register(registration -> {
-//            registration.add(DefaultGradle.class);
-//            registration.add(ProjectFactory.class);
-//        });
-//
-//        ProjectFactory projectFactory = defaultServiceRegistry.get(ProjectFactory.class);
-//        GradleInternal gradleInternal = defaultServiceRegistry.get(GradleInternal.class);
-//        project = projectFactory.createProject(null, new DefaultProjectDescriptor("test"),
-//                                               null, null);
-//        container = (DefaultTaskContainer) this.project.getTasks();
-//    }
+    private final ResourceLock lock = new DefaultLock();
+    ProjectInternal project;
+
+    private DefaultTaskContainer container;
+
+    @Before
+    public void setup() {
+        StartParameterInternal startParameter = new StartParameterInternal() {};
+
+
+        DefaultServiceRegistry defaultServiceRegistry = new DefaultServiceRegistry();
+        defaultServiceRegistry.register(registration -> {
+            registration.add(DefaultGradle.class);
+            registration.add(ProjectFactory.class);
+        });
+        BuildScopeServiceRegistryFactory registryFactory =
+                new BuildScopeServiceRegistryFactory(defaultServiceRegistry);
+
+        DefaultGradle gradle = new DefaultGradle(null, startParameter, registryFactory) {
+
+            private ServiceRegistry registry;
+            private ServiceRegistryFactory factory;
+            private TaskExecutionGraphInternal taskExecutionGraph;
+
+            @Override
+            public TaskExecutionGraphInternal getTaskGraph() {
+                if (taskExecutionGraph == null) {
+                    taskExecutionGraph = getServices().get(TaskExecutionGraphInternal.class);
+                }
+                return taskExecutionGraph;
+            }
+
+            @Override
+            public ServiceRegistry getServices() {
+                if (registry == null) {
+                    registry = registryFactory.createFor(this);
+                }
+                return registry;
+            }
+
+            @Override
+            public ServiceRegistryFactory getServiceRegistryFactory() {
+                if (factory == null) {
+                    factory = getServices().get(ServiceRegistryFactory.class);
+                }
+                return factory;
+            }
+        };
+
+        ProjectFactory projectFactory = defaultServiceRegistry.get(ProjectFactory.class);
+        project = projectFactory.createProject(gradle, new DefaultProjectDescriptor("test"),
+                                               null, null);
+        container = (DefaultTaskContainer) this.project.getTasks();
+    }
+
+    @Test
+    public void test() {
+
+    }
 //
 //    private void registerServices(ServiceRegistry services, ServiceRegistration registration, Object domainObject) {
 //        if (domainObject instanceof ProjectInternal) {
@@ -177,33 +219,33 @@ public class TestTaskExecution {
 //        new TaskExecutor(project).execute("assemble");
 //    }
 //
-//    private static class DefaultLock implements ResourceLock {
-//
-//        private final ReentrantLock lock = new ReentrantLock();
-//
-//        @Override
-//        public boolean isLocked() {
-//            return lock.isLocked();
-//        }
-//
-//        @Override
-//        public boolean isLockedByCurrentThread() {
-//            return lock.isHeldByCurrentThread();
-//        }
-//
-//        @Override
-//        public boolean tryLock() {
-//            return lock.tryLock();
-//        }
-//
-//        @Override
-//        public void unlock() {
-//            lock.unlock();
-//        }
-//
-//        @Override
-//        public String getDisplayName() {
-//            return lock.toString();
-//        }
-//    }
+    private static class DefaultLock implements ResourceLock {
+
+        private final ReentrantLock lock = new ReentrantLock();
+
+        @Override
+        public boolean isLocked() {
+            return lock.isLocked();
+        }
+
+        @Override
+        public boolean isLockedByCurrentThread() {
+            return lock.isHeldByCurrentThread();
+        }
+
+        @Override
+        public boolean tryLock() {
+            return lock.tryLock();
+        }
+
+        @Override
+        public void unlock() {
+            lock.unlock();
+        }
+
+        @Override
+        public String getDisplayName() {
+            return lock.toString();
+        }
+    }
 }
