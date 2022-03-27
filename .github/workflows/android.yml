@@ -1,6 +1,7 @@
 name: Android Tests CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [ javac-17 ]
   pull_request:

@@ -19,6 +19,7 @@
         android:largeHeap="true"
         android:requestLegacyExternalStorage="true"
         android:resizeableActivity="true"
+android:supportsRtl="true"
         tools:targetApi="q">
         <service
             android:name=".service.IndexService"
