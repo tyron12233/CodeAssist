@@ -32,20 +32,20 @@ import com.tyron.common.logging.IdeLog
 import com.tyron.builder.project.Project
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl
 
-
 import kotlinx.coroutines.*
 
-lateinit var gitLogText : TextView
-lateinit var gitBranchSpinner : Spinner
-lateinit var gitInitButton : Button
-lateinit var gitCommitButton : Button
-lateinit var gitCreateBranchButton : Button
-lateinit var gitMergeBranchButton : Button
-lateinit var gitDeleteBranchButton : Button
-lateinit var arrayAdapter: ArrayAdapter<String>
+var gitLogText : TextView? = null
+var gitBranchSpinner : Spinner? = null
+var gitInitButton : Button? = null
+var gitCommitButton : Button? = null
+var gitCreateBranchButton : Button? = null
+var gitMergeBranchButton : Button? = null
+var gitDeleteBranchButton : Button? = null
+
+var arrayAdapter: ArrayAdapter<String>? = null
 lateinit var git: Gitter
 lateinit var perso: Author
-lateinit var root: View
+//var root: View? = null
 
 const val ARG_PATH_ID = "pathId"
 
@@ -79,7 +79,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		container: ViewGroup?,
 		savedInstanceState: Bundle?,
 	): View {
-		root = inflater.inflate(R.layout.git_fragment, container, false)
+		val root = inflater.inflate(R.layout.git_fragment, container, false)
 		root.initializeUI(requireContext(), this)
 		return root
 	}
@@ -100,44 +100,49 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		
 		if (hasRepo) {
 			git = gitDir.openGit().also {
-				gitLogText.text = it.getLog()
-				arrayAdapter.listOf(it.getBranchList())
+				gitLogText?.text = it.getLog()
+				arrayAdapter?.listOf(it.getBranchList())
 			}
 		}
 		
-		gitInitButton.setOnClickListener { _ ->
+		gitInitButton?.setOnClickListener { _ ->
 			git = gitDir.initializeRepo(perso).also {
-				gitLogText.text = it.getLog()
-				arrayAdapter.listOf(it.getBranchList())
+				gitLogText?.text = it.getLog()
+				arrayAdapter?.listOf(it.getBranchList())
 				switchButtons(true)
 			}
 		}
 		
-		gitCommitButton.setOnClickListener {
+		gitCommitButton?.setOnClickListener {
 			commit(requireContext(), perso)
 		}
 		
-		gitCreateBranchButton.setOnClickListener {
+		gitCreateBranchButton?.setOnClickListener {
 			createBranch(requireContext())
 		}
 		
-		gitMergeBranchButton.setOnClickListener {
+		gitMergeBranchButton?.setOnClickListener {
 			mergeBranch(requireContext())
 		}
 		
-		gitDeleteBranchButton.setOnClickListener {
+		gitDeleteBranchButton?.setOnClickListener {
 			deleteBranch(requireContext())
 		}	
 	}
 	
 	override fun onDestroyView() {
 		super.onDestroyView()
+		dispose()
 		if(::git.isInitialized) git.destroy()
 	}
 	
 	override fun onResume() {
 		super.onResume()
 		//root.initializeUI(requireContext(), this)
+	}
+	
+	override fun onDestroy() {
+		super.onDestroy()
 	}
 	
 	override fun onSaveInstanceState(outState: Bundle) {
@@ -170,19 +175,19 @@ fun View.initializeUI(context: Context, listener: AdapterView.OnItemSelectedList
 		android.R.layout.simple_spinner_item,
 		mutableListOf("")
 	)
-	arrayAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-	gitBranchSpinner.setAdapter(arrayAdapter)
-	gitBranchSpinner.setOnItemSelectedListener(listener)
+	arrayAdapter?.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+	gitBranchSpinner?.setAdapter(arrayAdapter)
+	gitBranchSpinner?.setOnItemSelectedListener(listener)
 }		
 	
 fun switchButtons(hasRepo: Boolean)
 {
-	gitInitButton.setEnabled(!hasRepo)
-	gitCommitButton.setEnabled(hasRepo)
-	gitCreateBranchButton.setEnabled(hasRepo)
-	gitBranchSpinner.setEnabled(hasRepo)
-	gitMergeBranchButton.setEnabled(hasRepo)
-	gitDeleteBranchButton.setEnabled(hasRepo)
+	gitInitButton?.setEnabled(!hasRepo)
+	gitCommitButton?.setEnabled(hasRepo)
+	gitCreateBranchButton?.setEnabled(hasRepo)
+	gitBranchSpinner?.setEnabled(hasRepo)
+	gitMergeBranchButton?.setEnabled(hasRepo)
+	gitDeleteBranchButton?.setEnabled(hasRepo)
 }
 
 fun commit(context: Context, commiter: Author) {
@@ -195,7 +200,7 @@ fun commit(context: Context, commiter: Author) {
 	.setView( commitText )		
 	.setPositiveButton("Commit") {_, _ ->
 		git.commiting(commiter, commitText.getText().toString())
-		gitLogText.text = git.getLog()
+		gitLogText?.text = git.getLog()
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
 	.show()
@@ -210,8 +215,8 @@ fun createBranch(context: Context) {
 	.setView( branchText )		
 	.setPositiveButton("Create") {_, _ ->
 		git.createBranch(branchText.getText().toString())
-		arrayAdapter.listOf(git.getBranchList())
-		gitLogText.text = git.getLog()
+		arrayAdapter?.listOf(git.getBranchList())
+		gitLogText?.text = git.getLog()
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
 	.show()
@@ -231,10 +236,10 @@ fun mergeBranch(context: Context) {
 		
 		if (text in branchList) {
 			git.mergeBranch(text)
-			arrayAdapter.listOf(branchList)
+			arrayAdapter?.listOf(branchList)
 			postCheckout()
 			onSave()
-			gitLogText.text = git.getLog()
+			gitLogText?.text = git.getLog()
 		} else {
 			MaterialAlertDialogBuilder(context)
 			.setTitle("!! Alert !!")
@@ -260,8 +265,8 @@ fun deleteBranch(context: Context) {
 		
 		if (text !in currentBranch) {
 			git.deleteBranch(text)
-			arrayAdapter.listOf(git.getBranchList())
-			gitLogText.text = git.getLog()
+			arrayAdapter?.listOf(git.getBranchList())
+			gitLogText?.text = git.getLog()
 		} else {
 			MaterialAlertDialogBuilder(context)
 			.setTitle("!! Alert !!")
@@ -280,8 +285,22 @@ fun GitFragment.checkout(position: Int) {
 		//postCheckout()
 		git.checkout(branch)
 		postCheckout()
-		gitLogText.setText(git.getLog())
+		gitLogText?.setText(git.getLog())
 	}
+}
+
+fun dispose() {
+	onSave = {}
+	postCheckout = {}
+	gitBranchSpinner = null
+	gitCommitButton = null
+	gitCreateBranchButton = null
+	gitDeleteBranchButton = null
+	gitInitButton = null
+	gitMergeBranchButton = null
+	gitLogText = null
+	arrayAdapter?.clear()
+	arrayAdapter = null
 }
 
 fun toContent(file: File?) = file?.readText() ?: ""

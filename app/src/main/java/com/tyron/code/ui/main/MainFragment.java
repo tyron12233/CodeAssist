@@ -354,7 +354,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-
+		GitFragmentUtils.dispose();
+		
         if (mHandler != null) {
             IdeLog.getLogger().removeHandler(mHandler);
         }
