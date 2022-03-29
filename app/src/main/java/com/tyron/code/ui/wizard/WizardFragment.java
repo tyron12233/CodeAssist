@@ -221,11 +221,14 @@ public class WizardFragment extends Fragment {
 
     private void initDetailsView() {
         List<String> languages = new ArrayList<>();
-        if (mCurrentTemplate.isSupportsJava()) {
-            languages.add("Java");
-        }
-        if (mCurrentTemplate.isSupportsKotlin()) {
-            languages.add("Kotlin");
+
+        if (mCurrentTemplate != null) {
+            if (mCurrentTemplate.isSupportsJava()) {
+                languages.add("Java");
+            }
+            if (mCurrentTemplate.isSupportsKotlin()) {
+                languages.add("Kotlin");
+            }
         }
 
         mNameLayout = mWizardDetailsView.findViewById(R.id.til_app_name);
