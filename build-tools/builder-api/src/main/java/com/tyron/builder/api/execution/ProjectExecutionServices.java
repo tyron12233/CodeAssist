@@ -14,7 +14,9 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
     }
 
     public TaskExecuter createTaskExecuter() {
-        return new ExecuteActionsTaskExecuter();
+        TaskExecuter executer = new ExecuteActionsTaskExecuter();
+        executer = new SkipOnlyIfTaskExecuter(executer);
+        return executer;
     }
 
     ExecutionNodeAccessHierarchies.InputNodeAccessHierarchy createInputNodeAccessHierarchies(ExecutionNodeAccessHierarchies hierarchies) {

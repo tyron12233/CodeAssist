@@ -31,11 +31,14 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
             }
         } catch (Throwable t) {
             state.addFailure(new TaskExecutionException(task, t));
+            state.setExecuting(false);
+            state.setDidWork(false);
+            return TaskExecuterResult.WITHOUT_OUTPUTS;
         }
-
         state.setExecuting(false);
         state.setDidWork(true);
         state.setOutcome(TaskExecutionOutcome.EXECUTED);
+
         return TaskExecuterResult.WITHOUT_OUTPUTS;
     }
 }

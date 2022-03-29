@@ -2,17 +2,13 @@ package com.tyron.builder.api;
 
 import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.Describables;
-import com.tyron.builder.api.internal.GradleInternal;
+import com.tyron.builder.api.internal.MutableBoolean;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.initialization.DefaultProjectDescriptor;
 import com.tyron.builder.api.internal.project.DefaultProjectOwner;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
-import com.tyron.builder.api.internal.reflect.service.scopes.ExecutionGlobalServices;
-import com.tyron.builder.api.internal.reflect.service.scopes.GradleScopeServices;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
@@ -21,7 +17,6 @@ import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.tasks.DefaultTaskContainer;
 import com.tyron.builder.api.internal.tasks.TaskExecutor;
-import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.TaskContainer;
@@ -33,6 +28,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -130,6 +126,23 @@ public class TestTaskExecution {
         executeProject(project, "MyTask");
     }
 
+    @Test
+    public void testSkipOnlyIf() {
+        MutableBoolean executed = new MutableBoolean(false);
+        Action<BuildProject> evaluationAction = project -> {
+            TaskContainer tasks = project.getTasks();
+            tasks.register("SkipTask", task -> {
+                task.onlyIf(t -> false);
+                task.doLast(__ -> executed.set(true));
+            });
+        };
+
+        evaluateProject(project, evaluationAction);
+        executeProject(project, "SkipTask");
+
+        assert !executed.get();
+    }
+
     private void evaluateProject(ProjectInternal project, Action<BuildProject> evaluationAction) {
         project.getState().toBeforeEvaluate();
         project.getState().toEvaluate();
@@ -149,120 +162,10 @@ public class TestTaskExecution {
     private void executeProject(ProjectInternal project, String... taskNames) {
         TaskExecutor taskExecutor = new TaskExecutor(project);
         taskExecutor.execute(taskNames);
+        List<Throwable> failures = taskExecutor.getFailures();
+        assert  failures.isEmpty() : "Project execution failure: " + failures;
     }
 
-//
-//    private void registerServices(ServiceRegistry services, ServiceRegistration registration, Object domainObject) {
-//        if (domainObject instanceof ProjectInternal) {
-//            registration.addProvider(new ProjectScopeServices(services,
-//                                                              ((ProjectInternal) domainObject)));
-//        }
-//    }
-//
-//    @Test
-//    public void testTaskDependency() {
-//        List<Task> executedTasks = new ArrayList<>();
-//
-//        container.register("task1", task -> {
-//            task.doLast(executedTasks::add);
-//            task.dependsOn("task2");
-//        });
-//
-//        container.register("task2", task -> {
-//            task.doLast(executedTasks::add);
-//        });
-//
-//        container.register("task3", task -> {
-//            task.doLast(executedTasks::add);
-//            task.dependsOn("task1");
-//        });
-//
-//        container.register("injectedTask", task -> {
-//            task.doLast(executedTasks::add);
-//            task.mustRunAfter("task1");
-//        });
-//
-//        TaskExecutor executor = new TaskExecutor((ProjectInternal) project);
-//        executor.execute("task3", "injectedTask");
-//
-//        assertExecutionOrder(executedTasks, "task2", "task1", "task3", "injectedTask");
-//    }
-//
-//    @Test
-//    public void testNoCircularDependency() {
-//        container.register("task1", task -> {
-//            task.dependsOn("task2");
-//        });
-//        container.register("task2", task -> {
-//            task.dependsOn("task1");
-//        });
-//        try {
-//            TaskExecutor taskExecutor = new TaskExecutor((ProjectInternal) project);
-//            taskExecutor.execute("task1");
-//        } catch (CircularDependencyException expected) {
-//            return;
-//        }
-//
-//        throw new AssertionError("Circular dependency was not detected.");
-//    }
-//
-//    private void assertExecutionOrder(List<Task> tasks, String... executionOrder) {
-//        if (tasks.size() != executionOrder.length) {
-//            throw new AssertionError(
-//                    "Expected " + executionOrder.length + " but got " + tasks.size());
-//        }
-//
-//        for (int i = 0; i < executionOrder.length; i++) {
-//            Task task = tasks.get(i);
-//            String name = executionOrder[i];
-//
-//            if (!task.getName().equals(name)) {
-//                throw new AssertionError("Execution order not met. Tasks ran: " +
-//                                         tasks +
-//                                         "\n" +
-//                                         "Expected order: " +
-//                                         Arrays.toString(executionOrder));
-//            }
-//        }
-//    }
-//
-//    @Test
-//    public void mockAssembleTasks() {
-//
-//        container.register("AAPT2", task -> {
-//            task.doLast(it -> {
-//                System.out.println("> Task " + task.getPath());
-//            });
-//        });
-//        container.register("JAVA", task -> {
-//            task.doLast(it -> {
-//                System.out.println("> Task " + task.getPath());
-//            });
-//            task.dependsOn("AAPT2");
-//        });
-//        container.register("D8", task -> {
-//            task.doLast(it -> {
-//                System.out.println("> Task " + task.getPath());
-//            });
-//            task.dependsOn("JAVA");
-//        });
-//        container.register("PACKAGE", task -> {
-//            task.doLast(it -> {
-//                System.out.println("> Task " + task.getPath());
-//            });
-//            task.dependsOn("D8");
-//        });
-//
-//        container.register("assemble", task -> {
-//            task.doLast(it -> {
-//                System.out.println("> Task " + task.getPath());
-//            });
-//            task.dependsOn("PACKAGE");
-//        });
-//
-//        new TaskExecutor(project).execute("assemble");
-//    }
-//
     private static class DefaultLock implements ResourceLock {
 
         private final ReentrantLock lock = new ReentrantLock();

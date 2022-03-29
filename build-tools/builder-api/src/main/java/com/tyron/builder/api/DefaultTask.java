@@ -142,16 +142,6 @@ public class DefaultTask extends AbstractTask {
     }
 
     @Override
-    public void onlyIf(Predicate<? super Task> onlyIfSpec) {
-
-    }
-
-    @Override
-    public void setOnlyIf(Predicate<? super Task> onlyIfSpec) {
-
-    }
-
-    @Override
     public TaskStateInternal getState() {
         return state;
     }
@@ -398,11 +388,6 @@ public class DefaultTask extends AbstractTask {
     @Override
     public TaskDependency getLifecycleDependencies() {
         return lifecycleDependencies;
-    }
-
-    @Override
-    public Predicate<? super TaskInternal> getOnlyIf() {
-        return null;
     }
 
     @Override
