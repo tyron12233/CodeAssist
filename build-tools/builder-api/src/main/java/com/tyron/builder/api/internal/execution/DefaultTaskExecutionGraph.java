@@ -2,33 +2,40 @@ package com.tyron.builder.api.internal.execution;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.sun.org.slf4j.internal.Logger;
-import com.sun.org.slf4j.internal.LoggerFactory;
+import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.execution.TaskExecutionGraphListener;
+import com.tyron.builder.api.execution.ProjectExecutionServiceRegistry;
 import com.tyron.builder.api.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.execution.plan.Node;
 import com.tyron.builder.api.execution.plan.NodeExecutor;
 import com.tyron.builder.api.execution.plan.PlanExecutor;
+import com.tyron.builder.api.execution.plan.SelfExecutingNode;
 import com.tyron.builder.api.execution.plan.TaskNode;
+import com.tyron.builder.api.internal.GradleInternal;
+import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.service.ServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.NodeExecutionContext;
+import com.tyron.builder.api.internal.time.Time;
+import com.tyron.builder.api.internal.time.Timer;
 
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.logging.Logger;
 
 public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
 
+    private static final Logger LOGGER = Logger.getLogger("DefaultTaskExecutionGraph");
+
     private final PlanExecutor planExecutor;
     private final List<NodeExecutor> nodeExecutors;
-//    private final GradleInternal gradleInternal;
+    private final GradleInternal gradleInternal;
 //    private final ListenerBroadcast<TaskExecutionGraphListener> graphListeners;
 //    private final ListenerBroadcast<org.gradle.api.execution.TaskExecutionListener> taskListeners;
 //    private final BuildScopeListenerRegistrationListener buildScopeListenerRegistrationListener;
-//    private final ServiceRegistry globalServices;
+    private final ServiceRegistry globalServices;
 //    private final BuildOperationExecutor buildOperationExecutor;
 //    private final ListenerBuildOperationDecorator listenerBuildOperationDecorator;
     private ExecutionPlan executionPlan;
@@ -37,24 +44,24 @@ public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
 
     public DefaultTaskExecutionGraph(
             PlanExecutor planExecutor,
-            List<NodeExecutor> nodeExecutors
+            List<NodeExecutor> nodeExecutors,
 //            BuildOperationExecutor buildOperationExecutor,
 //            ListenerBuildOperationDecorator listenerBuildOperationDecorator,
-//            GradleInternal gradleInternal,
+            GradleInternal gradleInternal,
 //            ListenerBroadcast<TaskExecutionGraphListener> graphListeners,
 //            ListenerBroadcast<TaskExecutionListener> taskListeners,
 //            BuildScopeListenerRegistrationListener buildScopeListenerRegistrationListener,
-//            ServiceRegistry globalServices
+            ServiceRegistry globalServices
     ) {
         this.planExecutor = planExecutor;
         this.nodeExecutors = nodeExecutors;
 //        this.buildOperationExecutor = buildOperationExecutor;
 //        this.listenerBuildOperationDecorator = listenerBuildOperationDecorator;
-//        this.gradleInternal = gradleInternal;
+        this.gradleInternal = gradleInternal;
 //        this.graphListeners = graphListeners;
 //        this.taskListeners = taskListeners;
 //        this.buildScopeListenerRegistrationListener = buildScopeListenerRegistrationListener;
-//        this.globalServices = globalServices;
+        this.globalServices = globalServices;
         this.executionPlan = ExecutionPlan.EMPTY;
     }
 
@@ -129,6 +136,18 @@ public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
             throw new IllegalStateException("Task graph should be populated before execution starts.");
         }
 
+        try (ProjectExecutionServiceRegistry projectExecutionServices = new ProjectExecutionServiceRegistry(globalServices)) {
+            executeWithServices(projectExecutionServices, taskFailures);
+        } finally {
+            try {
+                executionPlan.close();
+            } catch (IOException e) {
+                //noinspection ThrowableNotThrown
+                UncheckedException.throwAsUncheckedException(e);
+            }
+            executionPlan = ExecutionPlan.EMPTY;
+        }
+
         planExecutor.process(
                 plan,
                 taskFailures,
@@ -161,10 +180,47 @@ public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
         }
     }
 
+    private void executeWithServices(ProjectExecutionServiceRegistry projectExecutionServices, Collection<? super Throwable> failures) {
+        Timer clock = Time.startTimer();
+        planExecutor.process(
+                executionPlan,
+                failures,
+                new InvokeNodeExecutorsAction(nodeExecutors, projectExecutionServices)
+        );
+        LOGGER.info("Timing: Executing the DAG took " + clock.getElapsed());
+    }
+
 
     @Override
     public void setContinueOnFailure(boolean continueOnFailure) {
 
+    }
+
+    private static class InvokeNodeExecutorsAction implements Action<Node> {
+        private final List<NodeExecutor> nodeExecutors;
+        private final ProjectExecutionServiceRegistry projectExecutionServices;
+
+        public InvokeNodeExecutorsAction(List<NodeExecutor> nodeExecutors, ProjectExecutionServiceRegistry projectExecutionServices) {
+            this.nodeExecutors = nodeExecutors;
+            this.projectExecutionServices = projectExecutionServices;
+        }
+
+        @Override
+        public void execute(Node node) {
+            NodeExecutionContext context = projectExecutionServices.forProject(node.getOwningProject());
+            for (NodeExecutor nodeExecutor : nodeExecutors) {
+                if (nodeExecutor.execute(node, context)) {
+                    return;
+                }
+            }
+
+            if (node instanceof SelfExecutingNode) {
+//                ((SelfExecutingNode) node).execute(context);
+                return;
+            }
+
+            throw new IllegalStateException("Unknown type of node: " + node);
+        }
     }
 
     @Override

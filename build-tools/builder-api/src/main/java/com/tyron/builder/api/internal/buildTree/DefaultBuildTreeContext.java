@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.buildTree;
 
 
 import com.tyron.builder.api.internal.invocation.BuildAction;
-import com.tyron.builder.api.internal.service.ServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 
 class DefaultBuildTreeContext implements BuildTreeContext {
     private final ServiceRegistry services;

@@ -59,6 +59,12 @@ public class KotlinLanguage implements Language {
                                     @NonNull CharPosition position,
                                     @NonNull CompletionPublisher publisher,
                                     @NonNull Bundle extraArguments) throws CompletionCancelledException {
+
+        // remove this when kotlin analysis is stable
+        if (true) {
+            return;
+        }
+
         char c = content.charAt(position.getIndex() - 1);
         if (!isAutoCompleteChar(c)) {
             return;

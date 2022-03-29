@@ -5,16 +5,16 @@ import com.google.common.primitives.Ints;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.PathValidation;
-import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.UnknownProjectException;
+import com.tyron.builder.api.configuration.project.ProjectEvaluator;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileTree;
+import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.DeleteSpec;
-import com.tyron.builder.api.internal.provider.PropertyFactory;
-import com.tyron.builder.api.internal.service.ServiceRegistry;
-import com.tyron.builder.api.internal.service.scopes.ServiceRegistryFactory;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.providers.Property;
@@ -45,19 +45,23 @@ public class DefaultProject implements ProjectInternal {
     private final int depth;
     private final ServiceRegistry services;
     private final TaskContainerInternal taskContainer;
+    private final GradleInternal gradle;
     private String description;
     private Object group;
     private Object version;
     private List<String> defaultTasks = new ArrayList<>();
     private Property<Object> status;
+    private File buildDir;
 
     public DefaultProject(String name,
                           @Nullable ProjectInternal parent,
                           File projectDir,
                           File buildFile,
+                          GradleInternal gradle,
                           ProjectStateUnk owner,
                           ServiceRegistryFactory serviceRegistryFactory) {
         this.owner = owner;
+        this.gradle = gradle;
 //        this.classLoaderScope = selfClassLoaderScope;
 //        this.baseClassLoaderScope = baseClassLoaderScope;
         this.rootProject = parent != null ? parent.getRootProject() : this;
@@ -96,7 +100,12 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public BuildProject evaluate() {
-        return null;
+        getProjectEvaluator().evaluate(this, state);
+        return this;
+    }
+
+    public ProjectEvaluator getProjectEvaluator() {
+        return getServices().get(ProjectEvaluator.class);
     }
 
     @Override
@@ -106,7 +115,7 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public TaskContainerInternal getTasks() {
-        return null;
+        return taskContainer;
     }
 
     @Override
@@ -183,7 +192,7 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public File getProjectDir() {
-        return null;
+        return owner.getProjectDir();
     }
 
     @Override
@@ -332,12 +341,12 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public File getBuildDir() {
-        return null;
+        return buildDir;
     }
 
     @Override
     public void setBuildDir(File path) {
-
+        this.buildDir = path;
     }
 
     @Override
@@ -514,11 +523,16 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public String relativeProjectPath(String path) {
-        return null;
+        return getProjectPath().relativePath(path);
     }
 
     @Override
     public Path getProjectPath() {
         return owner.getProjectPath();
+    }
+
+    @Override
+    public GradleInternal getGradle() {
+        return gradle;
     }
 }

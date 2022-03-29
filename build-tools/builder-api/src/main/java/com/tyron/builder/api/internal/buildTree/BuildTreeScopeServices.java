@@ -1,7 +1,6 @@
 package com.tyron.builder.api.internal.buildTree;
 
-import com.tyron.builder.api.internal.event.DefaultListenerManager;
-import com.tyron.builder.api.internal.service.ServiceRegistration;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
 
 public class BuildTreeScopeServices {
 

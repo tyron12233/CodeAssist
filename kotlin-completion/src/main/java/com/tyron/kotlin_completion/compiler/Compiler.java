@@ -59,18 +59,17 @@ public class Compiler implements Closeable {
         mClassPath = classPath;
         mDefaultCompileEnvironment = new CompilationEnvironment(module, mJavaSourcePath, mClassPath);
         mLocalFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL);
-
         UtilKt.setIdeaIoUseFallback();
     }
 
     public PsiFile createPsiFile(String content) {
         return createPsiFile(content, Paths.get("dummy.virtual.kt"), KotlinLanguage.INSTANCE, CompletionKind.DEFAULT);
     }
+
     public PsiFile createPsiFile(String content, Path file, Language language, CompletionKind kind) {
         assert !content.contains("\r");
         PsiFile newFile = psiFileFactoryFor(kind).createFileFromText(file.toString(), language, content, true, false);
         assert newFile.getVirtualFile() != null;
-
         return newFile;
     }
 
