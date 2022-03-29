@@ -281,7 +281,7 @@ fun deleteBranch(context: Context) {
 
 fun GitFragment.checkout(position: Int) {
 	if(::git.isInitialized) {
-		val branch = git.getBranchList()[position]
+		val branch = git.getBranchList()?.get(position) ?: ""
 		//postCheckout()
 		git.checkout(branch)
 		postCheckout()
