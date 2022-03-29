@@ -10,7 +10,15 @@ import com.tyron.builder.api.internal.tasks.TaskExecutionException;
 import com.tyron.builder.api.internal.tasks.TaskExecutionOutcome;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 
+/**
+ * A {@link TaskExecuter} which executes the actions of a task.
+ */
 public class ExecuteActionsTaskExecuter implements TaskExecuter {
+
+    public ExecuteActionsTaskExecuter() {
+
+    }
+
     @Override
     public TaskExecuterResult execute(TaskInternal task,
                                       TaskStateInternal state,
@@ -28,6 +36,6 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
         state.setExecuting(false);
         state.setDidWork(true);
         state.setOutcome(TaskExecutionOutcome.EXECUTED);
-        return new TaskExecuterResult();
+        return TaskExecuterResult.WITHOUT_OUTPUTS;
     }
 }
