@@ -9,8 +9,7 @@ import com.tyron.builder.api.internal.execution.WorkValidationContext;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.resources.ResourceLock;
-import com.tyron.builder.api.internal.service.ServiceRegistry;
-import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.TaskExecutionException;
 import com.tyron.builder.api.internal.tasks.properties.DefaultTaskProperties;
 import com.tyron.builder.api.internal.tasks.properties.OutputFilePropertySpec;
@@ -181,6 +180,13 @@ public class LocalTaskNode extends TaskNode  {
     }
 
     public void resolveMutations() {
+
+        //noinspection ConstantConditions
+        if (false) {
+            // TODO: implement this
+            return;
+        }
+
         final LocalTaskNode taskNode = this;
         final TaskInternal task = getTask();
         final MutationInfo mutations = getMutationInfo();

@@ -32,4 +32,6 @@ public interface TaskInternal extends Task {
     TaskInputsInternal getInputs();
 
     TaskStateInternal getState();
+
+    boolean getImpliesSubProjects();
 }

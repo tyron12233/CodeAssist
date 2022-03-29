@@ -1,47 +1,39 @@
 package com.tyron.builder.api;
 
-import com.tyron.builder.api.execution.ProjectExecutionServices;
 import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.Describables;
-import com.tyron.builder.api.internal.DisplayName;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.internal.build.BuildState;
-import com.tyron.builder.api.internal.execution.DefaultTaskExecutionGraph;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.initialization.DefaultProjectDescriptor;
-import com.tyron.builder.api.internal.project.DefaultProject;
+import com.tyron.builder.api.internal.project.DefaultProjectOwner;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.project.ProjectStateUnk;
-import com.tyron.builder.api.internal.reflect.DirectInstantiator;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
+import com.tyron.builder.api.internal.reflect.service.scopes.ExecutionGlobalServices;
+import com.tyron.builder.api.internal.reflect.service.scopes.GradleScopeServices;
+import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.resources.ResourceLock;
-import com.tyron.builder.api.internal.service.DefaultServiceRegistry;
-import com.tyron.builder.api.internal.service.ServiceRegistration;
-import com.tyron.builder.api.internal.service.ServiceRegistry;
-import com.tyron.builder.api.internal.service.scopes.BuildScopeServiceRegistryFactory;
-import com.tyron.builder.api.internal.service.scopes.GradleScopeServices;
-import com.tyron.builder.api.internal.service.scopes.ProjectScopeServices;
-import com.tyron.builder.api.internal.service.scopes.ServiceRegistryFactory;
-import com.tyron.builder.api.internal.tasks.CircularDependencyException;
+import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServiceRegistryFactory;
+import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
+import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.tasks.DefaultTaskContainer;
-import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.internal.tasks.TaskExecutor;
+import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
+import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.util.Path;
+import com.tyron.common.TestUtil;
 
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.io.IOException;
 import java.util.concurrent.locks.ReentrantLock;
-
-import javax.annotation.Nullable;
 
 /**
  * WIP
@@ -54,17 +46,19 @@ public class TestTaskExecution {
     private DefaultTaskContainer container;
 
     @Before
-    public void setup() {
+    public void setup() throws IOException {
+        File resourcesDirectory = TestUtil.getResourcesDirectory();
         StartParameterInternal startParameter = new StartParameterInternal() {};
 
+        DefaultServiceRegistry global = new DefaultServiceRegistry();
+        global.register(registration -> {
+            registration.add(PropertyWalker.class, (instance, validationContext, visitor) -> {
 
-        DefaultServiceRegistry defaultServiceRegistry = new DefaultServiceRegistry();
-        defaultServiceRegistry.register(registration -> {
-            registration.add(DefaultGradle.class);
-            registration.add(ProjectFactory.class);
+            });
         });
+        BuildScopeServices buildScopeServices = new BuildScopeServices(global);
         BuildScopeServiceRegistryFactory registryFactory =
-                new BuildScopeServiceRegistryFactory(defaultServiceRegistry);
+                new BuildScopeServiceRegistryFactory(buildScopeServices);
 
         DefaultGradle gradle = new DefaultGradle(null, startParameter, registryFactory) {
 
@@ -97,16 +91,66 @@ public class TestTaskExecution {
             }
         };
 
-        ProjectFactory projectFactory = defaultServiceRegistry.get(ProjectFactory.class);
-        project = projectFactory.createProject(gradle, new DefaultProjectDescriptor("test"),
-                                               null, null);
+        global.add(gradle);
+
+        ProjectFactory projectFactory = gradle.getServices().get(ProjectFactory.class);
+        DefaultProjectOwner owner = DefaultProjectOwner.builder()
+                .setProjectDir(resourcesDirectory)
+                .setProjectPath(Path.ROOT)
+                .setDisplayName(Describables.of("TestProject"))
+                .setTaskExecutionLock(lock)
+                .setAccessLock(lock)
+                .build();
+        project = projectFactory.createProject(
+                gradle,
+                new DefaultProjectDescriptor("TestProject"),
+                owner,
+                null
+        );
         container = (DefaultTaskContainer) this.project.getTasks();
     }
 
     @Test
-    public void test() {
-
+    public void testProjectCreation() {
+        assert project != null;
     }
+
+    @Test
+    public void testProject() {
+        Action<BuildProject> evaluationAction = project -> {
+            TaskContainer tasks = project.getTasks();
+            tasks.register("MyTask", task -> {
+                task.doLast(__ -> {
+                    System.out.println("Running " + task.getName());
+                });
+            });
+        };
+        evaluateProject(project, evaluationAction);
+
+        executeProject(project, "MyTask");
+    }
+
+    private void evaluateProject(ProjectInternal project, Action<BuildProject> evaluationAction) {
+        project.getState().toBeforeEvaluate();
+        project.getState().toEvaluate();
+        try {
+            evaluationAction.execute(project);
+        } catch (Throwable e) {
+            project.getState().failed(new ProjectConfigurationException("Failed to evaluate project.", e));
+        }
+
+        project.getState().toAfterEvaluate();
+
+        if (!project.getState().hasFailure()) {
+            project.getState().configured();
+        }
+    }
+
+    private void executeProject(ProjectInternal project, String... taskNames) {
+        TaskExecutor taskExecutor = new TaskExecutor(project);
+        taskExecutor.execute(taskNames);
+    }
+
 //
 //    private void registerServices(ServiceRegistry services, ServiceRegistration registration, Object domainObject) {
 //        if (domainObject instanceof ProjectInternal) {

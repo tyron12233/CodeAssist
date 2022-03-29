@@ -141,6 +141,16 @@ public class DefaultTaskContainer implements TaskContainerInternal {
 
     }
 
+    @Override
+    public void discoverTasks() {
+        // fire deferred configuration();
+    }
+
+    @Override
+    public void prepareForExecution(Task task) {
+
+    }
+
     public class TaskCreatingProvider<I extends Task> implements TaskProvider<I> {
         private final Object[] constructorArgs;
 

@@ -4,8 +4,8 @@ import com.tyron.builder.api.Gradle;
 import com.tyron.builder.api.internal.build.BuildState;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.service.ServiceRegistry;
-import com.tyron.builder.api.internal.service.scopes.ServiceRegistryFactory;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.util.Path;
 
 import org.jetbrains.annotations.Nullable;

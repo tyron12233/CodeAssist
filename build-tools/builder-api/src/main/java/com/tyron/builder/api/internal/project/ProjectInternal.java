@@ -3,7 +3,8 @@ package com.tyron.builder.api.internal.project;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.UnknownProjectException;
-import com.tyron.builder.api.internal.service.ServiceRegistry;
+import com.tyron.builder.api.internal.GradleInternal;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.project.BuildProject;
 
@@ -73,4 +74,6 @@ public interface ProjectInternal extends BuildProject {
     ServiceRegistry getServices();
 
     ProjectStateInternal getState();
+
+    GradleInternal getGradle();
 }
