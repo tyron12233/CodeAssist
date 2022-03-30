@@ -292,7 +292,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 		});
 		
         getChildFragmentManager().beginTransaction()
-                .replace(R.id.git_nav, fragment)
+                .add(R.id.git_nav, fragment)
                 .commit();
 
         mMainViewModel.isIndexing()
@@ -328,8 +328,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         View navRoot = view.findViewById(R.id.nav_root);
 		applyWindowInsets(navRoot);
    
-        /*View gitNav = view.findViewById(R.id.git_nav);
-        applyWindowInsets(gitNav);*/
+        View gitNav = view.findViewById(R.id.git_nav);
+        applyWindowInsets(gitNav);
     }
 
     @Override
