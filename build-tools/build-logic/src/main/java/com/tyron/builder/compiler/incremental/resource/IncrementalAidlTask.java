@@ -52,22 +52,21 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
 }
 	
     public void run() throws IOException, CompilationFailedException {
-	File AidlFile = new File(getModule().getAidlDirectory().getAbsolutePath());
-		List<String> allAidl= new ArrayList<>();
+			List<String> allAidl= new ArrayList<>();
         for (File f : allLibs) {
             File aidl = new File(f, ".aidl");
             if (aidl.exists()) {
                 allAidl.add(aidl.getAbsolutePath());
             }
         }
-		if (!AidlFile.exists()) {
+		if (!aidlLibs.exists()) {
             getLogger().debug("No Aidl Sources found.");
             return;
         }
 		  List<String> args = new ArrayList<>();
 		 args.add(getBinary().getAbsolutePath());
 		 args.add("-p");
-		args.add("/storage/emulated/0/Download/framework.aidl");
+		args.add(BuildModule.getFramework().getAbsolutePath());
         args.add("-o");
 		args.add(getModule().getBuildDirectory().getAbsolutePath() + "/gen");
 		args.add("-I");
@@ -141,4 +140,3 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
         }
     }
 	}
-
