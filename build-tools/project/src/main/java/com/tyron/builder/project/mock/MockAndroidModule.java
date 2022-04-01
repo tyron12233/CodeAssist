@@ -75,7 +75,10 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
     public File getAssetsDirectory() {
         return new File(getRootFile(), "src/main/assets");
     }
-
+    @Override
+    public File getAidlDirectory() {
+        return new File(getRootFile(), "src/main/aidl");
+    }
 
     public void setPackageName(@NonNull String name) {
         mPackageName = name;
