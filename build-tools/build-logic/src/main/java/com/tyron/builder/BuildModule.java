@@ -49,4 +49,14 @@ public class BuildModule {
         }
         return sLambdaStubs;
     }
+public static File getFramework() {
+        if (sFramework == null) {
+            sFramework = new File(BuildModule.getContext().getFilesDir(), "framework.aidl");
+
+            if (!sFramework.exists()) {
+                Decompress.unzipFromAssets(BuildModule.getContext(), "framework.zip", sFramework.getParentFile().getAbsolutePath());
+            }
+        }
+        return sFramework;
+    }
 }
