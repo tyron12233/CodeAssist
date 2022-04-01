@@ -11,7 +11,7 @@ public class BuildModule {
     private static Context sApplicationContext;
     private static File sAndroidJar;
     private static File sLambdaStubs;
-
+    private static File sFramework;
     public static void initialize(Context applicationContext) {
             sApplicationContext = applicationContext.getApplicationContext();
     }
