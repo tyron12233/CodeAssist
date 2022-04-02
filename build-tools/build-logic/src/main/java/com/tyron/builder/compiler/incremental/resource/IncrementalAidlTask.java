@@ -123,6 +123,7 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
                 if (x.getName().endsWith(s)) {
                     sb.append(" ");
                     sb.append(x.getAbsolutePath());
+                    sb.append('\n');
                 }
             }
         }
@@ -137,6 +138,7 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
                 if (x.getName().endsWith(s)) {
 					sb.add(getBinary().getAbsolutePath());
 					sb.add(x.getAbsolutePath());
+                                        sb.add('\n');
                 }
             }
         }
