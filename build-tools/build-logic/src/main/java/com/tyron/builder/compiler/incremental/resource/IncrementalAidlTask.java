@@ -51,6 +51,10 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
 }
 	
     public void run() throws IOException, CompilationFailedException {
+		if (!aidlLibs.exists()) {
+            getLogger().debug("No aidl sources found.");
+            return;
+        }
 		List<String> allAidl = new ArrayList<>();
         for (File f : allLibs) {
             File aidl = new File(f, ".aidl");
@@ -66,21 +70,12 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
         }
 		
 		List<String> args = new ArrayList<>();
-    	args.add(getBinary().getAbsolutePath());
-        args.add("-p");
-        args.add(BuildModule.getFramework().getAbsolutePath());
-        args.add("-o");
-        args.add(getModule().getBuildDirectory().getAbsolutePath() + "/gen");
-        args.add("-I");
-        args.add(aidlLibs.getAbsolutePath());
+    
         getAllFilesOfDir(".aidl", aidlLibs.getAbsolutePath(), args);
-		
-        //cmd.add(aidlLibs.getAbsolutePath());
-		/* for (String aidl : allAidl) {
-		 cmd.add(aidl);
-		 }*/
+		args.add("-o");
+		args.add(getModule().getBuildDirectory().getAbsolutePath() + "/gen");
 		 getLogger().debug(args.toString());
-     //   System.out.println(args.toString());
+     
 		BinaryExecutor executor = new BinaryExecutor();
 		 executor.setCommands(args);
 		 if (!executor.execute().isEmpty()) {
@@ -132,14 +127,14 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
         }
     }
 
-    private void getAllFilesOfDir(String s, String path, List<String> sb) {
+    private void getAllFilesOfDir(String s, String path, List<String> sb) throws IOException {
         File file = new File(path);
         for (File x : file.listFiles()) {
             if (x.isDirectory()) {
                 getAllFilesOfDir(s, x.getAbsolutePath(), sb);
             } else if (x.isFile()) {
                 if (x.getName().endsWith(s)) {
-					sb.add("-I");
+					sb.add(getBinary().getAbsolutePath());
 					sb.add(x.getAbsolutePath());
                 }
             }
