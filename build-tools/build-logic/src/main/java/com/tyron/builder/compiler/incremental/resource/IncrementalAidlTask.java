@@ -74,7 +74,8 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
         getAllFilesOfDir(".aidl", aidlLibs.getAbsolutePath(), args);
 		args.add("-o");
 		args.add(getModule().getBuildDirectory().getAbsolutePath() + "/gen");
-		 getLogger().debug(args.toString());
+		args.clear();
+                getLogger().debug(args.toString());
      
 		BinaryExecutor executor = new BinaryExecutor();
 		 executor.setCommands(args);
