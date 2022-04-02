@@ -66,8 +66,7 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
         }
 		
 		List<String> args = new ArrayList<>();
-    
-		args.add(getBinary().getAbsolutePath());
+    	args.add(getBinary().getAbsolutePath());
         args.add("-p");
         args.add(BuildModule.getFramework().getAbsolutePath());
         args.add("-o");
@@ -75,10 +74,7 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
         args.add("-I");
         args.add(aidlLibs.getAbsolutePath());
         getAllFilesOfDir(".aidl", aidlLibs.getAbsolutePath(), args);
-		// cmd.add(aidls.getAbsolutePath() + "/com/test/AidlTest.aidl");
-        args.add(BuildModule.getFramework().getAbsolutePath());
-		// getAllFilesOfDir(".aidl", aidls.getAbsolutePath(), cmd);
-
+		
         //cmd.add(aidlLibs.getAbsolutePath());
 		/* for (String aidl : allAidl) {
 		 cmd.add(aidl);
