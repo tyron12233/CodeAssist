@@ -72,8 +72,9 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
 		List<String> args = new ArrayList<>();
     
         getAllFilesOfDir(".aidl", aidlLibs.getAbsolutePath(), args);
-		
-		
+		args.add("-o");
+		args.add(getModule().getBuildDirectory().getAbsolutePath() + "/gen");
+	
                 getLogger().debug(args.toString());
      
 		BinaryExecutor executor = new BinaryExecutor();
@@ -137,10 +138,6 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
                 if (x.getName().endsWith(s)) {
 					sb.add(getBinary().getAbsolutePath());
 					sb.add(x.getAbsolutePath());
-                                        
-                                        sb.add("-o");
-		sb.add(getModule().getBuildDirectory().getAbsolutePath() + "/gen");
-sb.add("\n");
                 }
             }
         }
