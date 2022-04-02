@@ -13,6 +13,7 @@ import com.tyron.builder.log.ILogger;
 import com.tyron.builder.compiler.Task;
 import java.io.BufferedReader;
 import java.io.FileReader;
+import ando
 
 public class IncrementalAidlTask extends Task<AndroidModule> {
 
@@ -70,11 +71,11 @@ public class IncrementalAidlTask extends Task<AndroidModule> {
         }
 		
 		List<String> args = new ArrayList<>();
-    args.clear();
+    
         getAllFilesOfDir(".aidl", aidlLibs.getAbsolutePath(), args);
 		args.add("-o");
 		args.add(getModule().getBuildDirectory().getAbsolutePath() + "/gen");
-		
+		System.exit(0);
                 getLogger().debug(args.toString());
      
 		BinaryExecutor executor = new BinaryExecutor();
