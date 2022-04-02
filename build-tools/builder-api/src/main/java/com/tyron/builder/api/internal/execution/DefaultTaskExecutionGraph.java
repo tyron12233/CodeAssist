@@ -147,30 +147,6 @@ public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
             }
             executionPlan = ExecutionPlan.EMPTY;
         }
-
-        planExecutor.process(
-                plan,
-                taskFailures,
-                node -> {
-                    NodeExecutionContext context = new NodeExecutionContext() {
-                        @Override
-                        public <T> T getService(Class<T> type) {
-                            ProjectInternal owningProject = node.getOwningProject();
-                            if (owningProject == null) {
-                                return null;
-                            }
-                            ServiceRegistry services = owningProject.getServices();
-                            if (services == null) {
-                                return null;
-                            }
-                            return services.get(type);
-                        }
-                    };
-                    for (NodeExecutor executor : nodeExecutors) {
-                        executor.execute(node, context);
-                    }
-                }
-        );
     }
 
     private void assertIsThisGraphsPlan(ExecutionPlan plan) {
@@ -215,7 +191,7 @@ public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
             }
 
             if (node instanceof SelfExecutingNode) {
-//                ((SelfExecutingNode) node).execute(context);
+                ((SelfExecutingNode) node).execute(context);
                 return;
             }
 

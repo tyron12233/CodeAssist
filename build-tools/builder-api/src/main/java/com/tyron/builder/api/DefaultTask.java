@@ -8,6 +8,7 @@ import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.resources.ResourceLock;
+import com.tyron.builder.api.internal.tasks.DefaultTaskInputs;
 import com.tyron.builder.api.internal.tasks.DefaultTaskOutputs;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.internal.tasks.TaskDestroyablesInternal;
@@ -62,6 +63,7 @@ public class DefaultTask extends AbstractTask {
     private final DefaultTaskDependency shouldRunAfter;
     private TaskDependency finalizedBy;
 
+    private final TaskInputsInternal inputs;
     private final TaskOutputsInternal outputs;
 
     private final List<? extends ResourceLock> sharedResources = new ArrayList<>();
@@ -87,10 +89,13 @@ public class DefaultTask extends AbstractTask {
         state = new TaskStateInternal();
         taskMutator = new TaskMutator(this);
 
-        outputs = new DefaultTaskOutputs(this, taskMutator,
-                (instance, validationContext, visitor) -> {
+        PropertyWalker emptyWalker = (instance, validationContext, visitor) -> {
 
-                }, project.getServices().get(FileCollectionFactory.class));
+        };
+        FileCollectionFactory factory =
+                project.getServices().get(FileCollectionFactory.class);
+        outputs = new DefaultTaskOutputs(this, taskMutator, emptyWalker, factory);
+        inputs = new DefaultTaskInputs(this, taskMutator, emptyWalker, factory);
     }
 
 
@@ -234,7 +239,7 @@ public class DefaultTask extends AbstractTask {
 
     @Override
     public TaskInputsInternal getInputs() {
-        return null;
+        return inputs;
     }
 
     @Override

@@ -180,13 +180,6 @@ public class LocalTaskNode extends TaskNode  {
     }
 
     public void resolveMutations() {
-
-        //noinspection ConstantConditions
-        if (false) {
-            // TODO: implement this
-            return;
-        }
-
         final LocalTaskNode taskNode = this;
         final TaskInternal task = getTask();
         final MutationInfo mutations = getMutationInfo();

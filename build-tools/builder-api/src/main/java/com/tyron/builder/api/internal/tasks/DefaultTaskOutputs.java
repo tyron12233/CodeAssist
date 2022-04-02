@@ -134,7 +134,9 @@ public class DefaultTaskOutputs implements TaskOutputsInternal {
 
     @Override
     public void visitRegisteredProperties(PropertyVisitor visitor) {
-
+        for (TaskOutputFilePropertyRegistration registration : registeredFileProperties) {
+            visitor.visitOutputFileProperty(registration.getPropertyName(), registration.isOptional(), registration.getValue(), registration.getPropertyType());
+        }
     }
 
     @Override

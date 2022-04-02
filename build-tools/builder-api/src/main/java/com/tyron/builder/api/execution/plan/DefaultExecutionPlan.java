@@ -270,7 +270,6 @@ public class DefaultExecutionPlan implements ExecutionPlan {
                     private int index;
 
                     @Override
-                    @SuppressWarnings("NullableProblems")
                     public NodeInVisitingSegment apply(Node node) {
                         return new NodeInVisitingSegment(node, index++);
                     }

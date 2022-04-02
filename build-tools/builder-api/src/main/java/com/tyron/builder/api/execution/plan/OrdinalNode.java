@@ -7,6 +7,7 @@ import com.tyron.builder.api.internal.tasks.NodeExecutionContext;
 
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collections;
 import java.util.List;
 
 public class OrdinalNode extends Node implements SelfExecutingNode {
@@ -46,7 +47,7 @@ public class OrdinalNode extends Node implements SelfExecutingNode {
 
     @Override
     public List<? extends ResourceLock> getResourcesToLock() {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override

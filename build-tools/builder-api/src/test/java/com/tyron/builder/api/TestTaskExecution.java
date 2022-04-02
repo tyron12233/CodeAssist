@@ -29,6 +29,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -150,7 +151,8 @@ public class TestTaskExecution {
             TaskContainer tasks = project.getTasks();
             tasks.register("Task", task -> {
                 TaskOutputs outputs = task.getOutputs();
-                outputs.dir("classes");
+                outputs.dir(TestUtil.getResourcesDirectory().toURI().toString());
+                task.doLast(__ -> System.out.println("Executing"));
             });
         };
 
