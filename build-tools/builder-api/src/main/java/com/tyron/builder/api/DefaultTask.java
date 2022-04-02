@@ -4,14 +4,19 @@ import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.api.internal.TaskInternal;
+import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.resources.ResourceLock;
+import com.tyron.builder.api.internal.tasks.DefaultTaskOutputs;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.internal.tasks.TaskDestroyablesInternal;
 import com.tyron.builder.api.internal.tasks.TaskInputsInternal;
 import com.tyron.builder.api.internal.tasks.TaskLocalStateInternal;
+import com.tyron.builder.api.internal.tasks.TaskMutator;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
+import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.DefaultTaskDependency;
 import com.tyron.builder.api.tasks.TaskContainer;
@@ -38,13 +43,13 @@ public class DefaultTask extends AbstractTask {
 
     private String name;
     private TaskStateInternal state;
+    private final TaskMutator taskMutator;
 
     public String toString() {
         return name;
     }
 
     private List<Action<? super Task>> actions;
-
 
     private final DefaultTaskDependency dependencies;
 
@@ -56,6 +61,8 @@ public class DefaultTask extends AbstractTask {
     private final DefaultTaskDependency mustRunAfter;
     private final DefaultTaskDependency shouldRunAfter;
     private TaskDependency finalizedBy;
+
+    private final TaskOutputsInternal outputs;
 
     private final List<? extends ResourceLock> sharedResources = new ArrayList<>();
 
@@ -78,6 +85,12 @@ public class DefaultTask extends AbstractTask {
         dependencies = new DefaultTaskDependency(tasks, ImmutableSet.of(lifecycleDependencies));
 
         state = new TaskStateInternal();
+        taskMutator = new TaskMutator(this);
+
+        outputs = new DefaultTaskOutputs(this, taskMutator,
+                (instance, validationContext, visitor) -> {
+
+                }, project.getServices().get(FileCollectionFactory.class));
     }
 
 
@@ -226,67 +239,7 @@ public class DefaultTask extends AbstractTask {
 
     @Override
     public TaskOutputsInternal getOutputs() {
-        return new TaskOutputsInternal() {
-            @Override
-            public void visitRegisteredProperties(PropertyVisitor visitor) {
-
-            }
-
-            @Override
-            public void setPreviousOutputFiles(FileCollection previousOutputFiles) {
-
-            }
-
-            @Override
-            public Set<File> getPreviousOutputFiles() {
-                return null;
-            }
-
-            @Override
-            public void upToDateWhen(Predicate<? super Task> upToDateSpec) {
-
-            }
-
-            @Override
-            public void cacheIf(Predicate<? super Task> spec) {
-
-            }
-
-            @Override
-            public void cacheIf(String cachingEnabledReason, Predicate<? super Task> spec) {
-
-            }
-
-            @Override
-            public boolean getHasOutput() {
-                return false;
-            }
-
-            @Override
-            public FileCollection getFiles() {
-                return null;
-            }
-
-            @Override
-            public TaskOutputFilePropertyBuilder files(Object... paths) {
-                return null;
-            }
-
-            @Override
-            public TaskOutputFilePropertyBuilder dirs(Object... paths) {
-                return null;
-            }
-
-            @Override
-            public TaskOutputFilePropertyBuilder file(Object path) {
-                return null;
-            }
-
-            @Override
-            public TaskOutputFilePropertyBuilder dir(Object path) {
-                return null;
-            }
-        };
+        return outputs;
     }
 
     @Override

@@ -3,9 +3,11 @@ package com.tyron.builder.api.tasks;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.Transformer;
+import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.api.providers.Provider;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.function.BiFunction;
 
 import javax.annotation.Nullable;
@@ -38,6 +40,10 @@ public class DefaultTaskProvider<T extends Task> implements TaskProvider<T> {
             value = constructor.newInstance(constructorArgs);
         } catch (ReflectiveOperationException e) {
             value = null;
+
+            if (e instanceof InvocationTargetException) {
+                throw UncheckedException.throwAsUncheckedException(((InvocationTargetException) e).getTargetException());
+            }
         } finally {
             computed = true;
         }

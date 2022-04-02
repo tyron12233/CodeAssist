@@ -20,6 +20,7 @@ import com.tyron.builder.api.internal.tasks.TaskExecutor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.TaskContainer;
+import com.tyron.builder.api.tasks.TaskOutputs;
 import com.tyron.builder.api.util.Path;
 import com.tyron.common.TestUtil;
 
@@ -141,6 +142,20 @@ public class TestTaskExecution {
         executeProject(project, "SkipTask");
 
         assert !executed.get();
+    }
+
+    @Test
+    public void testTaskOutputs() {
+        Action<BuildProject> evaluationAction = project -> {
+            TaskContainer tasks = project.getTasks();
+            tasks.register("Task", task -> {
+                TaskOutputs outputs = task.getOutputs();
+                outputs.dir("classes");
+            });
+        };
+
+        evaluateProject(project, evaluationAction);
+        executeProject(project, "Task");
     }
 
     private void evaluateProject(ProjectInternal project, Action<BuildProject> evaluationAction) {
