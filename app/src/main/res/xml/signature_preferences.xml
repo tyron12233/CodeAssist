@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        android:title="Signature">
+
+		<SwitchPreference
+            android:defaultValue="true"
+            android:iconSpaceReserved="false"
+            android:key="sign_apk"
+            app:iconSpaceReserved="false"
+            android:title="Custom Signature"
+            android:summary="Sign APK with custom keysotre"/>
+		<EditTextPreference
+            app:iconSpaceReserved="false"
+            android:dialogTitle="Full path of keystore file:-"
+            android:defaultValue="/storage/emulated/0/Project"
+            android:inputType="text"        
+            android:title="Custom keystore file"
+            android:summary="Specify the keystore file used for signing APKs during build"
+            android:key="sign_key_path"
+			android:negativeButtonText="@android:string/cancel"
+            android:positiveButtonText="@android:string/ok"/>
+		<EditTextPreference
+            app:iconSpaceReserved="false"
+            android:dialogTitle="Alias"
+            android:defaultValue="alias"
+            android:inputType="text"
+            android:title="Alias"
+            android:summary="Specify the alias name"
+            android:key="sign_alias"
+            android:negativeButtonText="@android:string/cancel"
+            android:positiveButtonText="@android:string/ok"/>
+		<EditTextPreference
+            app:iconSpaceReserved="false"
+            android:dialogTitle="Keysore Password"
+            android:defaultValue="password"
+            android:inputType="text"        
+            android:title="Keystore password"
+            android:summary="Specify the keystore password"
+            android:key="sign_password"
+			android:negativeButtonText="@android:string/cancel"
+            android:positiveButtonText="@android:string/ok"/>
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:iconSpaceReserved="false"
+            android:key="sign_aab"
+            app:iconSpaceReserved="false"
+            android:title="Sign AAB"
+            android:summary="Sign AAB with custom keystore"/>
+
+    </PreferenceCategory>
+</PreferenceScreen>

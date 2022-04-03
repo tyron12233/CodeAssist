@@ -17,7 +17,12 @@
         app:iconSpaceReserved="false"
         app:summary="@string/settings_build_run_desc"
         app:title="@string/settings_build_run_title" />
-
+    <Preference
+        app:fragment="com.tyron.code.ui.settings.SignatureSettingsFragment"
+        app:iconSpaceReserved="false"
+        app:summary="Configure signature settings"
+        app:title="Signature" />
+	
     <Preference
         app:fragment="com.tyron.code.ui.settings.AboutUsFragment"
         app:iconSpaceReserved="false"
