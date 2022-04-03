@@ -7,6 +7,11 @@ import com.tyron.common.util.Decompress;
 
 import java.io.File;
 import java.util.ArrayList;
+import android.preference.Preference;
+import com.tyron.common.SharedPreferenceKeys;
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
+import android.widget.Toast;
 
 
 public class ApkSigner {
@@ -29,6 +34,11 @@ public class ApkSigner {
 
     //TODO: Adjust min and max sdk
     public void sign() throws Exception {
+		Preference sign_apk = findPreference(SharedPreferenceKeys.SIGN_APK);
+		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(BuildModule.getContext());
+        boolean isChecked = sharedPreferences.getBoolean("sign_apk", false);
+        Toast.makeText(BuildModule.getContext(), "isChecked : " + isChecked, Toast.LENGTH_LONG).show();
+		
         commands.add("sign");
         commands.add("--key");
         commands.add(getTestKeyFilePath());
