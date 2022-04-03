@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Text Actions -->
+    <string name="text_actions">Действия с текстом</string>
+    <string name="expand_selection">Расширить выделение</string>
+    <string name="copied_to_clipoard">Текст скопирован в буфер обмена.</string>
+
+    <!-- File Actions -->
+    <string name="menu_action_new_java_class">Класс Java</string>
+    <string name="menu_action_new_kotlin_class">Класс Kotlin</string>
+    <string name="menu_action_new_directory">Директория</string>
+    <string name="menu_action_new_file">Файл</string>
+    <string name="directory_name">Имя директории</string>
+    <string name="file_name">Имя файла</string>
+    <string name="menu_new">Новый...</string>
+    <string name="menu_import">Импорт</string>
+    <string name="menu_refactor">Рефакторинг</string>
+    <string name="menu_new_layout">Новый макет</string>
+
+    <string name="error_file_creation">Невозможно создать файл.</string>
+</resources>
