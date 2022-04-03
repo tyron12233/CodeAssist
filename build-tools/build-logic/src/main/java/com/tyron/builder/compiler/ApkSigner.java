@@ -34,7 +34,7 @@ public class ApkSigner {
 
     //TODO: Adjust min and max sdk
     public void sign() throws Exception {
-		Preference sign_apk = findPreference(SharedPreferenceKeys.SIGN_APK);
+		//Preference sign_apk = findPreference(SharedPreferenceKeys.SIGN_APK);
 		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(BuildModule.getContext());
         boolean isChecked = sharedPreferences.getBoolean("sign_apk", false);
         Toast.makeText(BuildModule.getContext(), "isChecked : " + isChecked, Toast.LENGTH_LONG).show();
