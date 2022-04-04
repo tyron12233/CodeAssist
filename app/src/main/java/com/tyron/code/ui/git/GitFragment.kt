@@ -50,6 +50,8 @@ lateinit var perso: Author
 
 const val ARG_PATH_ID = "pathId"
 
+//TODO: implement ListView for merging and deleting
+//TODO: implement Recyclerview for LogList
 //TODO: fix wrong filetreeview after deleting file in a topic branch and checking out
 //TODO: Put Author into PreferenceSettings
 //TODO: Let select commits for reverting, restore and reset
@@ -110,19 +112,19 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		}
 		
 		gitCommitButton?.setOnClickListener {
-			commit(requireContext(), perso)
+			commitWith(perso)
 		}
 		
 		gitCreateBranchButton?.setOnClickListener {
-			createBranch(requireContext())
+			createBranch()
 		}
 		
 		gitMergeBranchButton?.setOnClickListener {
-			mergeBranch(requireContext())
+			mergeBranch()
 		}
 		
 		gitDeleteBranchButton?.setOnClickListener {
-			deleteBranch(requireContext())
+			deleteBranch()
 		}	
 	}
 	
@@ -185,12 +187,12 @@ fun switchButtons(hasRepo: Boolean)
 	gitDeleteBranchButton?.setEnabled(hasRepo)
 }
 
-fun GitFragment.commit(context: Context, commiter: Author) {
+fun GitFragment.commitWith(commiter: Author) {
 	onSave()
-	val commitText = EditText(context).apply {
+	val commitText = EditText(requireContext()).apply {
 			setHint("Commit Message")
 		}
-	MaterialAlertDialogBuilder(context)
+	MaterialAlertDialogBuilder(requireContext())
 	.setTitle("Commiting")
 	.setView( commitText )		
 	.setPositiveButton("Commit") {_, _ ->
@@ -200,11 +202,11 @@ fun GitFragment.commit(context: Context, commiter: Author) {
 	.show()
 }
 
-fun GitFragment.createBranch(context: Context) {	
-	val branchText = EditText(context).apply {
+fun GitFragment.createBranch() {	
+	val branchText = EditText(requireContext()).apply {
 			setHint("Branch Name")
 		}
-	MaterialAlertDialogBuilder(context)
+	MaterialAlertDialogBuilder(requireContext())
 	.setTitle("New Branch")
 	.setView( branchText )		
 	.setPositiveButton("Create") {_, _ ->
@@ -215,11 +217,11 @@ fun GitFragment.createBranch(context: Context) {
 	
 }
 
-fun GitFragment.mergeBranch(context: Context) {
-	val branchText = EditText(context).apply {
+fun GitFragment.mergeBranch() {
+	val branchText = EditText(requireContext()).apply {
 		setHint("Type exact Branch to merge with")
 	}
-	MaterialAlertDialogBuilder(context)
+	MaterialAlertDialogBuilder(requireContext())
 	.setTitle("Merge Branch")
 	.setView( branchText )		
 	.setPositiveButton("Merge") {_, _ ->
@@ -231,7 +233,7 @@ fun GitFragment.mergeBranch(context: Context) {
 			postCheckout()
 			onSave()
 		} else {
-			MaterialAlertDialogBuilder(context)
+			MaterialAlertDialogBuilder(requireContext())
 			.setTitle("!! Alert !!")
 			.setMessage("Branch not in Repository")
 			.setPositiveButton("OK") {_, _ -> }
@@ -242,11 +244,11 @@ fun GitFragment.mergeBranch(context: Context) {
 	.show()
 }
 
-fun GitFragment.deleteBranch(context: Context) {
-	val branchText = EditText(context).apply {
+fun GitFragment.deleteBranch() {
+	val branchText = EditText(requireContext()).apply {
 		setHint("Type exact Branch to delete. Must not be the current branch")
 	}
-	MaterialAlertDialogBuilder(context)
+	MaterialAlertDialogBuilder(requireContext())
 	.setTitle("Delete Branch")
 	.setView( branchText )		
 	.setPositiveButton("Delete") {_, _ ->
@@ -256,7 +258,7 @@ fun GitFragment.deleteBranch(context: Context) {
 		if (text !in currentBranch) {
 			mGitViewModel.deleteBranch(text)
 		} else {
-			MaterialAlertDialogBuilder(context)
+			MaterialAlertDialogBuilder(requireContext())
 			.setTitle("!! Alert !!")
 			.setMessage("Current Branch must not be the branch to delete.")
 			.setPositiveButton("OK") {_, _ -> }

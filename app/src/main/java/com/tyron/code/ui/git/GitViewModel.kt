@@ -30,9 +30,9 @@ class GitViewModel : ViewModel() {
 	//fun getRepo(): LiveData<Boolean> = _hasRepo
 	
 	fun setPath(newPath: String) {
-		if(isGitRepoWith(newPath)) {
+		_projectPath.value = newPath
+		if(isGitRepoAt(newPath)) {
 			_hasRepo.value = true
-			_projectPath.value = newPath
 			git = openGitAt(newPath)
 			getLog()
 		}

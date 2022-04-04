@@ -20,9 +20,12 @@ import de.prinova.git.model.Gitter
 //TODO: Add merge-conflict logic
 //TODO: Add logic for commit-reset, -revert and -restore (in this order)
 //TODO: Add commit amend
+//TODO: rename branch
 //TODO: put author into log formating
 
 typealias LogList = List<RevCommit>
+
+const val GIT_SUFFIX = ".git"
 
 fun String.createGitRepoWith (commiter: Author): Gitter =
 	createRepo()
@@ -152,7 +155,7 @@ fun Gitter.deleteBranch(branch: String): Gitter = apply {
 	}
 }
 
-fun isGitRepoWith(filePath: String) = File("$filePath/.git").exists()
+fun isGitRepoAt(filePath: String) = File("$filePath/$GIT_SUFFIX").exists()
 	
 fun Gitter.dispose() {
 	git.close()
