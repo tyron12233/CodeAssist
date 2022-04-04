@@ -6,13 +6,6 @@
         app:iconSpaceReserved="false"
         android:title="Signature">
 
-		<SwitchPreference
-            android:defaultValue="true"
-            android:iconSpaceReserved="false"
-            android:key="sign_apk"
-            app:iconSpaceReserved="false"
-            android:title="Custom Signature"
-            android:summary="Sign APK with custom keysotre"/>
 		<EditTextPreference
             app:iconSpaceReserved="false"
             android:dialogTitle="Full path of keystore file:-"
@@ -44,13 +37,6 @@
 			android:negativeButtonText="@android:string/cancel"
             android:positiveButtonText="@android:string/ok"/>
 
-        <SwitchPreference
-            android:defaultValue="true"
-            android:iconSpaceReserved="false"
-            android:key="sign_aab"
-            app:iconSpaceReserved="false"
-            android:title="Sign AAB"
-            android:summary="Sign AAB with custom keystore"/>
-
+     
     </PreferenceCategory>
 </PreferenceScreen>
