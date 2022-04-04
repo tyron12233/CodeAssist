@@ -25,15 +25,15 @@ class GitViewModel : ViewModel() {
 	private val _branchList = MutableLiveData<List<String>>()
 	val branchList = _branchList
 	
-	fun getPath(): LiveData<String> = _projectPath
+	//fun getPath(): LiveData<String> = _projectPath
 	
-	fun getRepo(): LiveData<Boolean> = _hasRepo
+	//fun getRepo(): LiveData<Boolean> = _hasRepo
 	
 	fun setPath(newPath: String) {
-		_projectPath.value = newPath
-		_hasRepo.value = initRepo(newPath)
-		if (_hasRepo.value == true) {
-			git = newPath.openGit()
+		if(isGitRepoWith(newPath)) {
+			_hasRepo.value = true
+			_projectPath.value = newPath
+			git = openGitAt(newPath)
 			getLog()
 		}
 	}
@@ -46,9 +46,9 @@ class GitViewModel : ViewModel() {
 		_branchList.value = if(::git.isInitialized) git.getBranchList() else listOf("")
 	}
 	
-	fun initializeRepo (commiter: Author) {
-		_projectPath.value?.let {
-			git = it.initializeRepo(commiter)
+	fun createGitRepoWith (commiter: Author) {
+		_projectPath.value?.apply {
+			git = createGitRepoWith(commiter)
 			_hasRepo.value = true
 			_gitLog.value = git.getLog()
 			_branchList.value = git.getBranchList()

@@ -38,7 +38,7 @@ import kotlinx.coroutines.*
 
 var gitLogText : TextView? = null
 var gitBranchSpinner : Spinner? = null
-var gitInitButton : Button? = null
+var gitNewGitButton : Button? = null
 var gitCommitButton : Button? = null
 var gitCreateBranchButton : Button? = null
 var gitMergeBranchButton : Button? = null
@@ -101,10 +101,12 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
         
 		perso = Author("User", "user@localhost.com")
 		
-		gitInitButton?.setOnClickListener { _ ->
-			mGitViewModel.initializeRepo(perso)
-			mGitViewModel.getLog()
-			mGitViewModel.getBranchList()
+		gitNewGitButton?.setOnClickListener { _ ->
+			with(mGitViewModel) {
+				createGitRepoWith(perso)
+				getLog()
+				getBranchList()
+			}
 		}
 		
 		gitCommitButton?.setOnClickListener {
@@ -155,7 +157,7 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 
 fun View.initializeUI(context: Context, listener: AdapterView.OnItemSelectedListener) {
 	
-	gitInitButton = findViewById (R.id.git_button_create)
+	gitNewGitButton = findViewById (R.id.git_button_create)
 	gitCommitButton = findViewById(R.id.git_button_commit)
 	gitCreateBranchButton = findViewById(R.id.git_button_create_branch)
 	gitBranchSpinner = findViewById (R.id.git_spinner_branch)
@@ -175,7 +177,7 @@ fun View.initializeUI(context: Context, listener: AdapterView.OnItemSelectedList
 	
 fun switchButtons(hasRepo: Boolean)
 {
-	gitInitButton?.setEnabled(!hasRepo)
+	gitNewGitButton?.setEnabled(!hasRepo)
 	gitCommitButton?.setEnabled(hasRepo)
 	gitCreateBranchButton?.setEnabled(hasRepo)
 	gitBranchSpinner?.setEnabled(hasRepo)
@@ -272,7 +274,7 @@ fun dispose() {
 	gitCommitButton = null
 	gitCreateBranchButton = null
 	gitDeleteBranchButton = null
-	gitInitButton = null
+	gitNewGitButton = null
 	gitMergeBranchButton = null
 	gitLogText = null
 	arrayAdapter?.clear()

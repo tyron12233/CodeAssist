@@ -24,14 +24,14 @@ import de.prinova.git.model.Gitter
 
 typealias LogList = List<RevCommit>
 
-fun String.initializeRepo (commiter: Author): Gitter =
+fun String.createGitRepoWith (commiter: Author): Gitter =
 	createRepo()
 	.createGit()
 	.addProjectFiles()
 	.commiting(commiter, "Initial commit")
 
-fun String.openGit(): Gitter =
-	openRepo()
+fun openGitAt(path: String): Gitter =
+	path.openRepo()
 	.createGit()
 	
 private fun String.openRepo(): Repository =
@@ -152,7 +152,7 @@ fun Gitter.deleteBranch(branch: String): Gitter = apply {
 	}
 }
 
-fun initRepo(filePath: String) = File("$filePath/.git").exists()
+fun isGitRepoWith(filePath: String) = File("$filePath/.git").exists()
 	
 fun Gitter.dispose() {
 	git.close()
