@@ -35,6 +35,7 @@ class GitViewModel : ViewModel() {
 			_hasRepo.value = true
 			git = openGitAt(newPath)
 			getLog()
+			getBranchList()
 		}
 	}
 	
@@ -48,10 +49,10 @@ class GitViewModel : ViewModel() {
 	
 	fun createGitRepoWith (commiter: Author) {
 		_projectPath.value?.apply {
-			git = createGitRepoWith(commiter)
 			_hasRepo.value = true
-			_gitLog.value = git.getLog()
-			_branchList.value = git.getBranchList()
+			git = createGitRepoWith(commiter)
+			getLog()
+			getBranchList()
 		}
 		
 	}
@@ -67,18 +68,26 @@ class GitViewModel : ViewModel() {
 		getBranchList()
 	}
 	
-	fun mergeBranch(branch: String) {
-		git.mergeBranch(branch)
-		getLog()
-		getBranchList()
+	fun mergeBranch(branch: String, action: ()->Unit): Any? {
+		if (branch in git.getBranchList()) {
+			git.mergeBranch(branch)
+			getLog()
+			getBranchList()
+			return action()
+		}
+		return null
 	}
 	
 	fun getBranch(): String = git.getBranch()
 	
-	fun deleteBranch(branch: String) {
-		git.deleteBranch(branch)
-		getLog()
-		getBranchList()
+	fun deleteBranch(branch: String): Any? {
+		if(branch !in getBranch()) {
+			git.deleteBranch(branch)
+			getLog()
+			getBranchList()
+			return Unit
+		}
+		return null
 	}
 	
 	fun checkout(position: Int) {
@@ -101,4 +110,6 @@ class GitViewModel : ViewModel() {
 		_branchList.value = listOf("")
 		_gitLog.value = "No Log available"
 	}
-} 
+}
+
+fun Any?.or(action: () -> Unit) { if(this == null) action() }

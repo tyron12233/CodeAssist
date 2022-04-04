@@ -80,8 +80,6 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		
 		mGitViewModel.hasRepo.observe(getViewLifecycleOwner()) { isRepo -> 
 			switchButtons(isRepo)
-			mGitViewModel.getLog()
-			mGitViewModel.getBranchList()
 		}
 		
 		mGitViewModel.gitLog.observe(viewLifecycleOwner) { log ->
@@ -106,8 +104,6 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		gitNewGitButton?.setOnClickListener { _ ->
 			with(mGitViewModel) {
 				createGitRepoWith(perso)
-				getLog()
-				getBranchList()
 			}
 		}
 		
@@ -225,17 +221,15 @@ fun GitFragment.mergeBranch() {
 	.setTitle("Merge Branch")
 	.setView( branchText )		
 	.setPositiveButton("Merge") {_, _ ->
-		val branchList = mGitViewModel.branchList.value ?: listOf("")
 		val text = branchText.getText().toString()
-		
-		if (text in branchList) {
-			mGitViewModel.mergeBranch(text)
+		mGitViewModel.mergeBranch(text) {
 			postCheckout()
 			onSave()
-		} else {
+		}
+		.or {
 			MaterialAlertDialogBuilder(requireContext())
 			.setTitle("!! Alert !!")
-			.setMessage("Branch not in Repository")
+			.setMessage("$text not in Repository")
 			.setPositiveButton("OK") {_, _ -> }
 			.show()
 		}
@@ -252,15 +246,12 @@ fun GitFragment.deleteBranch() {
 	.setTitle("Delete Branch")
 	.setView( branchText )		
 	.setPositiveButton("Delete") {_, _ ->
-		val currentBranch = mGitViewModel.getBranch()
 		val text = branchText.getText().toString()
-		
-		if (text !in currentBranch) {
-			mGitViewModel.deleteBranch(text)
-		} else {
+		mGitViewModel.deleteBranch(text)
+		.or {
 			MaterialAlertDialogBuilder(requireContext())
 			.setTitle("!! Alert !!")
-			.setMessage("Current Branch must not be the branch to delete.")
+			.setMessage("$text must not be the current branch to delete.")
 			.setPositiveButton("OK") {_, _ -> }
 			.show()
 		}
