@@ -16,21 +16,23 @@ import android.widget.EditText
 import android.widget.Spinner
 
 import androidx.fragment.app.Fragment
+
 import androidx.core.os.*
 import androidx.core.view.ViewCompat
+import androidx.lifecycle.ViewModelProvider
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import java.io.File
 
-import de.prinova.git.usecases.*
-import de.prinova.git.model.*
+import de.prinova.git.model.Author
 
 import com.tyron.code.R
 import com.tyron.code.util.*
 import com.tyron.common.logging.IdeLog
 import com.tyron.builder.project.Project
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl
+import com.tyron.code.ui.git.GitViewModel
 
 import kotlinx.coroutines.*
 
@@ -43,9 +45,8 @@ var gitMergeBranchButton : Button? = null
 var gitDeleteBranchButton : Button? = null
 
 var arrayAdapter: ArrayAdapter<String>? = null
-lateinit var git: Gitter
+
 lateinit var perso: Author
-//var root: View? = null
 
 const val ARG_PATH_ID = "pathId"
 
@@ -62,14 +63,10 @@ var postCheckout: ()-> Unit = {}
 
 class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	
-	
-	companion object {
-		@JvmStatic
-		fun newInstance(path: String) = GitFragment().apply {
-			arguments = bundleOf(ARG_PATH_ID to path)
-		}
+	val mGitViewModel : GitViewModel by lazy {
+		ViewModelProvider(requireActivity()).get(GitViewModel::class.java)
 	}
-			
+	
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 	}
@@ -81,6 +78,12 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	): View {
 		val root = inflater.inflate(R.layout.git_fragment, container, false)
 		root.initializeUI(requireContext(), this)
+		
+		mGitViewModel.hasRepo.observe(getViewLifecycleOwner()) { isRepo -> 
+			switchButtons(isRepo)
+			gitLogText?.text = mGitViewModel.getLog()
+			arrayAdapter?.listOf(mGitViewModel.getBranchList())
+		}
 		return root
 	}
 	
@@ -92,23 +95,10 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
         
 		perso = Author("User", "user@localhost.com")
 		
-		val gitDir = requireArguments().getString(ARG_PATH_ID, "")
-		
-		val hasRepo = initRepo(gitDir).also {
-			switchButtons(it)
-		}
-		
-		if (hasRepo) {
-			git = gitDir.openGit().also {
-				gitLogText?.text = it.getLog()
-				arrayAdapter?.listOf(it.getBranchList())
-			}
-		}
-		
 		gitInitButton?.setOnClickListener { _ ->
-			git = gitDir.initializeRepo(perso).also {
-				gitLogText?.text = it.getLog()
-				arrayAdapter?.listOf(it.getBranchList())
+			mGitViewModel.initializeRepo(perso).also {
+				gitLogText?.text = mGitViewModel.getLog()
+				arrayAdapter?.listOf(mGitViewModel.getBranchList())
 				switchButtons(true)
 			}
 		}
@@ -132,13 +122,11 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	
 	override fun onDestroyView() {
 		super.onDestroyView()
-		dispose()
-		if(::git.isInitialized) git.destroy()
+		mGitViewModel.dispose()
 	}
 	
 	override fun onResume() {
 		super.onResume()
-		//root.initializeUI(requireContext(), this)
 	}
 	
 	override fun onDestroy() {
@@ -190,7 +178,7 @@ fun switchButtons(hasRepo: Boolean)
 	gitDeleteBranchButton?.setEnabled(hasRepo)
 }
 
-fun commit(context: Context, commiter: Author) {
+fun GitFragment.commit(context: Context, commiter: Author) {
 	onSave()
 	val commitText = EditText(context).apply {
 			setHint("Commit Message")
@@ -199,14 +187,14 @@ fun commit(context: Context, commiter: Author) {
 	.setTitle("Commiting")
 	.setView( commitText )		
 	.setPositiveButton("Commit") {_, _ ->
-		git.commiting(commiter, commitText.getText().toString())
-		gitLogText?.text = git.getLog()
+		mGitViewModel.commiting(commiter, commitText.getText().toString())
+		gitLogText?.text = mGitViewModel.getLog()
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
 	.show()
 }
 
-fun createBranch(context: Context) {	
+fun GitFragment.createBranch(context: Context) {	
 	val branchText = EditText(context).apply {
 			setHint("Branch Name")
 		}
@@ -214,16 +202,16 @@ fun createBranch(context: Context) {
 	.setTitle("New Branch")
 	.setView( branchText )		
 	.setPositiveButton("Create") {_, _ ->
-		git.createBranch(branchText.getText().toString())
-		arrayAdapter?.listOf(git.getBranchList())
-		gitLogText?.text = git.getLog()
+		mGitViewModel.createBranch(branchText.getText().toString())
+		arrayAdapter?.listOf(mGitViewModel.getBranchList())
+		gitLogText?.text = mGitViewModel.getLog()
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
 	.show()
 	
 }
 
-fun mergeBranch(context: Context) {
+fun GitFragment.mergeBranch(context: Context) {
 	val branchText = EditText(context).apply {
 		setHint("Type exact Branch to merge with")
 	}
@@ -231,15 +219,15 @@ fun mergeBranch(context: Context) {
 	.setTitle("Merge Branch")
 	.setView( branchText )		
 	.setPositiveButton("Merge") {_, _ ->
-		val branchList = git.getBranchList()
+		val branchList = mGitViewModel.getBranchList()
 		val text = branchText.getText().toString()
 		
 		if (text in branchList) {
-			git.mergeBranch(text)
+			mGitViewModel.mergeBranch(text)
 			arrayAdapter?.listOf(branchList)
 			postCheckout()
 			onSave()
-			gitLogText?.text = git.getLog()
+			gitLogText?.text = mGitViewModel.getLog()
 		} else {
 			MaterialAlertDialogBuilder(context)
 			.setTitle("!! Alert !!")
@@ -252,7 +240,7 @@ fun mergeBranch(context: Context) {
 	.show()
 }
 
-fun deleteBranch(context: Context) {
+fun GitFragment.deleteBranch(context: Context) {
 	val branchText = EditText(context).apply {
 		setHint("Type exact Branch to delete. Must not be the current branch")
 	}
@@ -260,13 +248,13 @@ fun deleteBranch(context: Context) {
 	.setTitle("Delete Branch")
 	.setView( branchText )		
 	.setPositiveButton("Delete") {_, _ ->
-		val currentBranch = git.getBranch()
+		val currentBranch = mGitViewModel.getBranch()
 		val text = branchText.getText().toString()
 		
 		if (text !in currentBranch) {
-			git.deleteBranch(text)
-			arrayAdapter?.listOf(git.getBranchList())
-			gitLogText?.text = git.getLog()
+			mGitViewModel.deleteBranch(text)
+			arrayAdapter?.listOf(mGitViewModel.getBranchList())
+			gitLogText?.text = mGitViewModel.getLog()
 		} else {
 			MaterialAlertDialogBuilder(context)
 			.setTitle("!! Alert !!")
@@ -280,15 +268,13 @@ fun deleteBranch(context: Context) {
 }
 
 fun GitFragment.checkout(position: Int) {
-	if(::git.isInitialized) {
-		val branch = git.getBranchList().let {
-			if(it.isNotEmpty()) it[position] else ""
-		}
-		//postCheckout()
-		git.checkout(branch)
-		postCheckout()
-		gitLogText?.setText(git.getLog())
+	val branch = mGitViewModel.getBranchList().let {
+		if(it.isNotEmpty()) it[position] else ""
 	}
+	//postCheckout()
+	mGitViewModel.checkout(branch)
+	postCheckout()
+	gitLogText?.setText(mGitViewModel.getLog())
 }
 
 fun dispose() {

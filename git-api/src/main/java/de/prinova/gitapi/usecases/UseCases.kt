@@ -154,6 +154,6 @@ fun Gitter.deleteBranch(branch: String): Gitter = apply {
 
 fun initRepo(filePath: String) = File("$filePath/.git").exists()
 	
-fun Gitter.destroy() {
+fun Gitter.dispose() {
 	git.close()
 }	

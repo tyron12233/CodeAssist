@@ -59,6 +59,7 @@ import com.tyron.code.ui.editor.EditorContainerFragment;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.git.*;
 import com.tyron.code.ui.git.GitFragmentUtils;
+import com.tyron.code.ui.git.GitViewModel;
 import com.tyron.completion.java.provider.CompletionEngine;
 
 import com.tyron.builder.project.api.FileManager;
@@ -96,13 +97,14 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 
         MainFragment fragment = new MainFragment();
         fragment.setArguments(bundle);
-
+		
         return fragment;
     }
 
     private LogViewModel mLogViewModel;
     private MainViewModel mMainViewModel;
     private FileViewModel mFileViewModel;
+    private GitViewModel mGitViewModel;
 
     private ProjectManager mProjectManager;
     private View mRoot;
@@ -154,8 +156,35 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         mLogViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
+        mGitViewModel = new ViewModelProvider(requireActivity()).get(GitViewModel.class);
         mIndexServiceConnection = new IndexServiceConnection(mMainViewModel, mLogViewModel);
         mServiceConnection = new CompilerServiceConnection(mMainViewModel, mLogViewModel);
+        
+        mHandler = new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                Level level = record.getLevel();
+                if (Level.WARNING.equals(level)) {
+                    mLogViewModel.w(LogViewModel.IDE, record.getMessage());
+                } else if (Level.SEVERE.equals(level)) {
+                    mLogViewModel.e(LogViewModel.IDE, record.getMessage());
+                } else {
+                    mLogViewModel.d(LogViewModel.IDE, record.getMessage());
+                }
+            }
+
+            @Override
+            public void flush() {
+                mLogViewModel.clear(LogViewModel.IDE);
+            }
+
+            @Override
+            public void close() throws SecurityException {
+                mLogViewModel.clear(LogViewModel.IDE);
+            }
+        };
+        IdeLog.getLogger().addHandler(mHandler);
+        
     }
 
     @Override
@@ -187,31 +216,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     @Override
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        
-		mHandler = new Handler() {
-            @Override
-            public void publish(LogRecord record) {
-                Level level = record.getLevel();
-                if (Level.WARNING.equals(level)) {
-                    mLogViewModel.w(LogViewModel.IDE, record.getMessage());
-                } else if (Level.SEVERE.equals(level)) {
-                    mLogViewModel.e(LogViewModel.IDE, record.getMessage());
-                } else {
-                    mLogViewModel.d(LogViewModel.IDE, record.getMessage());
-                }
-            }
-
-            @Override
-            public void flush() {
-                mLogViewModel.clear(LogViewModel.IDE);
-            }
-
-            @Override
-            public void close() throws SecurityException {
-                mLogViewModel.clear(LogViewModel.IDE);
-            }
-        };
-        IdeLog.getLogger().addHandler(mHandler);
         
         if (mRoot instanceof DrawerLayout) {
             DrawerLayout drawerLayout = (DrawerLayout) mRoot;
@@ -271,29 +275,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             mMainViewModel.setFiles(new ArrayList<>());
             mLogViewModel.clear(LogViewModel.BUILD_LOG);
         }
-        
-        GitFragment fragment = GitFragment.newInstance(mProject.getRootFile().getAbsolutePath());
-        GitFragmentUtils.setOnSave( () -> { 
-			saveAll(false);
-			return Unit.INSTANCE;
-		});
-		
-		GitFragmentUtils.setPostCheckout( () -> {
-			List<FileEditor> target = mMainViewModel.getFiles().getValue();
-			for(FileEditor edit: target) {
-				if(edit.isValid()) {
-					File currentFile = edit.getFile();
-					mProject.getModule(currentFile).getFileManager()
-					.setSnapshotContent(currentFile, GitFragmentUtils.toContent(currentFile));
-				}
-			}
-			mFileViewModel.refreshNode(root);
-			return Unit.INSTANCE;
-		});
-		
-        getChildFragmentManager().beginTransaction()
-                .add(R.id.git_nav, fragment)
-                .commit();
 
         mMainViewModel.isIndexing()
                 .observe(getViewLifecycleOwner(), indexing -> {
@@ -323,7 +304,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                         }
                     });
         }
-
+		
         // can be null on tablets
         View navRoot = view.findViewById(R.id.nav_root);
 		applyWindowInsets(navRoot);
@@ -354,7 +335,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-		GitFragmentUtils.dispose();
 		
         if (mHandler != null) {
             IdeLog.getLogger().removeHandler(mHandler);
@@ -438,7 +418,9 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
 
         mProject = project;
-                
+
+		mGitViewModel.setPath(mProject.getRootFile().getAbsolutePath());
+        
         mIndexServiceConnection.setProject(project);
 
         mMainViewModel.setToolbarTitle(project.getRootFile()
