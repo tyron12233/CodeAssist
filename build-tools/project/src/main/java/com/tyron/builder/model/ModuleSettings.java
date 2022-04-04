@@ -43,7 +43,8 @@ public class ModuleSettings implements SharedPreferences {
     public static final String ZIP_ALIGN_ENABLED = "zipAlignEnabled";
     public static final String VIEW_BINDING_ENABLED = "viewBindingEnabled";
     public static final String PACKAGE_NAME = "packageName";
-
+    public static final String CUSTOM_SIGN = "customSignEnabled";
+    public static final String SIGN_AAB = "signAabEnabled";
     private final File mConfigFile;
     private final Map<String, Object> mConfigMap;
 
@@ -74,6 +75,8 @@ public class ModuleSettings implements SharedPreferences {
         map.put(VERSION_CODE, 1);
         map.put(ZIP_ALIGN_ENABLED, false);
         map.put(VIEW_BINDING_ENABLED, false);
+        map.put(CUSTOM_SIGN, false);
+	map.put(SIGN_AAB, false);
         return map;
     }
 
