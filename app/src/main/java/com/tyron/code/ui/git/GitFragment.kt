@@ -50,10 +50,7 @@ lateinit var perso: Author
 
 const val ARG_PATH_ID = "pathId"
 
-//TODO: Create ViewModel for git logic (commit, checkout, merge, etc)
-
 //TODO: fix wrong filetreeview after deleting file in a topic branch and checking out
-//TODO: fix wrong logtext, when fast switching between projects
 //TODO: Put Author into PreferenceSettings
 //TODO: Let select commits for reverting, restore and reset
 
@@ -81,9 +78,18 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		
 		mGitViewModel.hasRepo.observe(getViewLifecycleOwner()) { isRepo -> 
 			switchButtons(isRepo)
-			gitLogText?.text = mGitViewModel.getLog()
-			arrayAdapter?.listOf(mGitViewModel.getBranchList())
+			mGitViewModel.getLog()
+			mGitViewModel.getBranchList()
 		}
+		
+		mGitViewModel.gitLog.observe(viewLifecycleOwner) { log ->
+			gitLogText?.text = log
+		}
+		
+		mGitViewModel.branchList.observe(viewLifecycleOwner) {
+			arrayAdapter?.listOf(it)
+		}
+		
 		return root
 	}
 	
@@ -96,11 +102,9 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		perso = Author("User", "user@localhost.com")
 		
 		gitInitButton?.setOnClickListener { _ ->
-			mGitViewModel.initializeRepo(perso).also {
-				gitLogText?.text = mGitViewModel.getLog()
-				arrayAdapter?.listOf(mGitViewModel.getBranchList())
-				switchButtons(true)
-			}
+			mGitViewModel.initializeRepo(perso)
+			mGitViewModel.getLog()
+			mGitViewModel.getBranchList()
 		}
 		
 		gitCommitButton?.setOnClickListener {
@@ -143,7 +147,8 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		position: Int,
 		id: Long
 	) {
-		checkout(position)	
+		mGitViewModel.checkout(position)
+		postCheckout()	
 	}
 	override fun onNothingSelected(parent: AdapterView<*>) {}		
 }
@@ -188,7 +193,6 @@ fun GitFragment.commit(context: Context, commiter: Author) {
 	.setView( commitText )		
 	.setPositiveButton("Commit") {_, _ ->
 		mGitViewModel.commiting(commiter, commitText.getText().toString())
-		gitLogText?.text = mGitViewModel.getLog()
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
 	.show()
@@ -203,8 +207,6 @@ fun GitFragment.createBranch(context: Context) {
 	.setView( branchText )		
 	.setPositiveButton("Create") {_, _ ->
 		mGitViewModel.createBranch(branchText.getText().toString())
-		arrayAdapter?.listOf(mGitViewModel.getBranchList())
-		gitLogText?.text = mGitViewModel.getLog()
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
 	.show()
@@ -219,15 +221,13 @@ fun GitFragment.mergeBranch(context: Context) {
 	.setTitle("Merge Branch")
 	.setView( branchText )		
 	.setPositiveButton("Merge") {_, _ ->
-		val branchList = mGitViewModel.getBranchList()
+		val branchList = mGitViewModel.branchList.value ?: listOf("")
 		val text = branchText.getText().toString()
 		
 		if (text in branchList) {
 			mGitViewModel.mergeBranch(text)
-			arrayAdapter?.listOf(branchList)
 			postCheckout()
 			onSave()
-			gitLogText?.text = mGitViewModel.getLog()
 		} else {
 			MaterialAlertDialogBuilder(context)
 			.setTitle("!! Alert !!")
@@ -253,8 +253,6 @@ fun GitFragment.deleteBranch(context: Context) {
 		
 		if (text !in currentBranch) {
 			mGitViewModel.deleteBranch(text)
-			arrayAdapter?.listOf(mGitViewModel.getBranchList())
-			gitLogText?.text = mGitViewModel.getLog()
 		} else {
 			MaterialAlertDialogBuilder(context)
 			.setTitle("!! Alert !!")
@@ -265,16 +263,6 @@ fun GitFragment.deleteBranch(context: Context) {
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
 	.show()
-}
-
-fun GitFragment.checkout(position: Int) {
-	val branch = mGitViewModel.getBranchList().let {
-		if(it.isNotEmpty()) it[position] else ""
-	}
-	//postCheckout()
-	mGitViewModel.checkout(branch)
-	postCheckout()
-	gitLogText?.setText(mGitViewModel.getLog())
 }
 
 fun dispose() {

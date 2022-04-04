@@ -19,6 +19,12 @@ class GitViewModel : ViewModel() {
 	private val _hasRepo = MutableLiveData<Boolean>()
 	val hasRepo: LiveData<Boolean> = _hasRepo
 	
+	private val _gitLog = MutableLiveData<String>()
+	val gitLog : LiveData<String> = _gitLog
+	
+	private val _branchList = MutableLiveData<List<String>>()
+	val branchList = _branchList
+	
 	fun getPath(): LiveData<String> = _projectPath
 	
 	fun getRepo(): LiveData<Boolean> = _hasRepo
@@ -28,30 +34,71 @@ class GitViewModel : ViewModel() {
 		_hasRepo.value = initRepo(newPath)
 		if (_hasRepo.value == true) {
 			git = newPath.openGit()
+			getLog()
 		}
 	}
 	
-	fun getLog(): String = if(::git.isInitialized) git.getLog() else ""
-	
-	fun getBranchList(): List<String> = if(::git.isInitialized) git.getBranchList() else listOf("")
-	
-	fun initializeRepo (commiter: Author) {
-		_projectPath.value?.initializeRepo(commiter)
+	fun getLog() {
+		_gitLog.value = if(::git.isInitialized) git.getLog() else ""
 	}
 	
-	fun commiting(commiter: Author, msg: String): Gitter = git.commiting(commiter, msg)
+	fun getBranchList() {
+		_branchList.value = if(::git.isInitialized) git.getBranchList() else listOf("")
+	}
 	
-	fun createBranch(branch: String): Gitter = git.createBranch(branch)
+	fun initializeRepo (commiter: Author) {
+		_projectPath.value?.let {
+			git = it.initializeRepo(commiter)
+			_hasRepo.value = true
+			_gitLog.value = git.getLog()
+			_branchList.value = git.getBranchList()
+		}
+		
+	}
 	
-	fun mergeBranch(branch: String): Gitter = git.mergeBranch(branch)
+	fun commiting(commiter: Author, msg: String) {
+		git.commiting(commiter, msg)
+		getLog()
+	}
+	
+	fun createBranch(branch: String) {
+		git.createBranch(branch)
+		getLog()
+		getBranchList()
+	}
+	
+	fun mergeBranch(branch: String) {
+		git.mergeBranch(branch)
+		getLog()
+		getBranchList()
+	}
 	
 	fun getBranch(): String = git.getBranch()
 	
-	fun deleteBranch(branch: String): Gitter = git.deleteBranch(branch)
+	fun deleteBranch(branch: String) {
+		git.deleteBranch(branch)
+		getLog()
+		getBranchList()
+	}
 	
-	fun checkout(branch: String) = if(::git.isInitialized) git.checkout(branch) else {}
+	fun checkout(position: Int) {
+		if(::git.isInitialized) {
+			_branchList.value?.let {
+				if(it.isNotEmpty()) {
+					val branch = it[position]
+					if(branch.isNotBlank()) {
+						git.checkout(branch)
+					}
+					getLog()
+					getBranchList()
+				}
+			}
+		}
+	}
 	
 	fun dispose() {
 		if(::git.isInitialized) git.dispose()
+		_branchList.value = listOf("")
+		_gitLog.value = "No Log available"
 	}
 } 
