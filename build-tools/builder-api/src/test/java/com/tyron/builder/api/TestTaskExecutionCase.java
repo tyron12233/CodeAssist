@@ -68,32 +68,9 @@ public abstract class TestTaskExecutionCase {
         };
 
         DefaultServiceRegistry global = new GlobalServices();
-        global.register(registration -> {
-            registration.add(PropertyWalker.class, (instance, validationContext, visitor) -> {
-                Method[] methods = instance.getClass().getMethods();
-                for (Method method : methods) {
-                    if (method.getAnnotation(InputFiles.class) != null) {
-                        visitor.visitInputFileProperty(
-                                method.getName(),
-                                false,
-                                true,
-                                DirectorySensitivity.DEFAULT,
-                                LineEndingSensitivity.DEFAULT,
-                                true,
-                                null,
-                                new StaticValue(GUtil.uncheckedCall(() -> method.invoke(instance))),
-                                InputFilePropertyType.FILES
-                        );
-                    }
-                }
-            });
-        });
-
-        GradleUserHomeScopeServices gradleUserHomeScopeServices =
-                new GradleUserHomeScopeServices(global);
+        GradleUserHomeScopeServices gradleUserHomeScopeServices = new GradleUserHomeScopeServices(global);
         BuildScopeServices buildScopeServices = new BuildScopeServices(gradleUserHomeScopeServices);
-        BuildScopeServiceRegistryFactory registryFactory =
-                new BuildScopeServiceRegistryFactory(buildScopeServices);
+        BuildScopeServiceRegistryFactory registryFactory = new BuildScopeServiceRegistryFactory(buildScopeServices);
 
         DefaultGradle gradle = new DefaultGradle(null, startParameter, registryFactory) {
 

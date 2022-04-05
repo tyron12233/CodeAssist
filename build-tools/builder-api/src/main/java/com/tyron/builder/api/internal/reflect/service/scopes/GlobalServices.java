@@ -67,6 +67,8 @@ public class GlobalServices extends DefaultServiceRegistry {
         register(registration -> {
             registration.add(DefaultListenerManager.class, new DefaultListenerManager(Scope.Global.class));
             registration.add(DocumentationRegistry.class);
+
+            registration.addProvider(new ExecutionGlobalServices());
         });
     }
 
