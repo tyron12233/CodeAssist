@@ -15,22 +15,20 @@ public class RuntimeBeanNodeFactory {
     }
 
     public RuntimeBeanNode<?> createRoot(Object bean) {
-        return null;
-//        return new RootRuntimeBeanNode(bean, metadataStore.getTypeMetadata(bean.getClass()));
+        return new RootRuntimeBeanNode(bean, metadataStore.getTypeMetadata(bean.getClass()));
     }
 
     public RuntimeBeanNode<?> create(RuntimeBeanNode parentNode, String propertyName, Object bean) {
         parentNode.checkCycles(propertyName, bean);
         TypeMetadata typeMetadata = metadataStore.getTypeMetadata(bean.getClass());
-//        if (!typeMetadata.hasAnnotatedProperties()) {
-//            if (bean instanceof Map<?, ?>) {
-//                return new MapRuntimeBeanNode(parentNode, propertyName, (Map<?, ?>) bean, typeMetadata);
-//            }
-//            if (bean instanceof Iterable<?>) {
-//                return new IterableRuntimeBeanNode(parentNode, propertyName, (Iterable<?>) bean, typeMetadata);
-//            }
-//        }
-//        return new NestedRuntimeBeanNode(parentNode, propertyName, bean, typeMetadata);
-        return null;
+        if (!typeMetadata.hasAnnotatedProperties()) {
+            if (bean instanceof Map<?, ?>) {
+                return new MapRuntimeBeanNode(parentNode, propertyName, (Map<?, ?>) bean, typeMetadata);
+            }
+            if (bean instanceof Iterable<?>) {
+                return new IterableRuntimeBeanNode(parentNode, propertyName, (Iterable<?>) bean, typeMetadata);
+            }
+        }
+        return new NestedRuntimeBeanNode(parentNode, propertyName, bean, typeMetadata);
     }
 }

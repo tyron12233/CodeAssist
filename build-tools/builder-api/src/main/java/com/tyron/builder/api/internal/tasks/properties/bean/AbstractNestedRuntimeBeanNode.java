@@ -1,10 +1,13 @@
 package com.tyron.builder.api.internal.tasks.properties.bean;
 
 import com.google.common.base.Suppliers;
+import com.tyron.builder.api.BuildException;
+import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.api.internal.provider.HasConfigurableValueInternal;
 import com.tyron.builder.api.internal.reflect.PropertyMetadata;
 import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.tasks.TaskDependencyContainer;
+import com.tyron.builder.api.internal.tasks.properties.BeanPropertyContext;
 import com.tyron.builder.api.internal.tasks.properties.PropertyValue;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.TypeMetadata;
@@ -15,6 +18,7 @@ import com.tyron.builder.api.tasks.Buildable;
 
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Queue;
 import java.util.function.Supplier;
@@ -29,33 +33,33 @@ public abstract class AbstractNestedRuntimeBeanNode extends RuntimeBeanNode<Obje
         typeMetadata.visitValidationFailures(getPropertyName(), validationContext);
         for (PropertyMetadata propertyMetadata : typeMetadata.getPropertiesMetadata()) {
             PropertyAnnotationHandler annotationHandler = typeMetadata.getAnnotationHandlerFor(propertyMetadata);
-//            if (annotationHandler.shouldVisit(visitor)) {
-//                String propertyName = getQualifiedPropertyName(propertyMetadata.getPropertyName());
-//                PropertyValue value = new BeanPropertyValue(getBean(), propertyMetadata.getGetterMethod());
-//                annotationHandler.visitPropertyValue(propertyName, value, propertyMetadata, visitor, new BeanPropertyContext() {
-//                    @Override
-//                    public void addNested(String propertyName, Object bean) {
-//                        queue.add(nodeFactory.create(AbstractNestedRuntimeBeanNode.this, propertyName, bean));
-//                    }
-//                });
-//            }
+            if (annotationHandler.shouldVisit(visitor)) {
+                String propertyName = getQualifiedPropertyName(propertyMetadata.getPropertyName());
+                PropertyValue value = new BeanPropertyValue(getBean(), propertyMetadata.getGetterMethod());
+                annotationHandler.visitPropertyValue(propertyName, value, propertyMetadata, visitor, new BeanPropertyContext() {
+                    @Override
+                    public void addNested(String propertyName, Object bean) {
+                        queue.add(nodeFactory.create(AbstractNestedRuntimeBeanNode.this, propertyName, bean));
+                    }
+                });
+            }
         }
     }
 
     private static class BeanPropertyValue implements PropertyValue {
-        private final Method method;
-        private final Object bean;
+        private Method method;
+        private Object bean;
         private final Supplier<Object> valueSupplier = Suppliers.memoize(() -> {
 //            return DeprecationLogger.whileDisabled((Factory<Object>) () -> {
-//                    try {
-//                        return method.invoke(bean);
-//                    } catch (InvocationTargetException e) {
-//                        throw UncheckedException.throwAsUncheckedException(e.getCause());
-//                    } catch (Exception e) {
-//                        throw new BuildException(String.format("Could not call %s.%s() on %s", method.getDeclaringClass().getSimpleName(), method.getName(), bean), e);
-//                    }
+                    try {
+                        return method.invoke(bean);
+                    } catch (InvocationTargetException e) {
+                        throw UncheckedException.throwAsUncheckedException(e.getCause());
+                    } catch (Exception e) {
+                        throw new BuildException(String.format("Could not call %s.%s() on %s", method.getDeclaringClass().getSimpleName(), method.getName(), bean), e);
+                    }
 //                });
-            return null;
+//            return null;
         });
 
         public BeanPropertyValue(Object bean, Method method) {
