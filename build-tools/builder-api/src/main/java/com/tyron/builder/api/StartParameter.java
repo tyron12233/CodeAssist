@@ -8,4 +8,5 @@ package com.tyron.builder.api;
  */
 public interface StartParameter {
 
+    boolean isRerunTasks();
 }

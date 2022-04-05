@@ -1,5 +1,6 @@
 package com.tyron.builder.api.internal;
 
+import com.tyron.builder.api.GradleEnterprisePluginManager;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.resources.ResourceLock;
@@ -11,6 +12,7 @@ import com.tyron.builder.api.tasks.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskState;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 public interface TaskInternal extends Task {
@@ -45,4 +47,17 @@ public interface TaskInternal extends Task {
     boolean getImpliesSubProjects();
 
     StandardOutputCapture getStandardOutputCapture();
+
+    /**
+     * Return the reason for not to track state.
+     *
+     * Gradle considers the task as untracked if the reason is present.
+     * When not tracking state, a reason must be present. Hence the {@code Optional} represents the state of enablement, too.
+     *
+     * @see org.gradle.api.tasks.UntrackedTask
+     */
+//    @Internal
+    default Optional<String> getReasonNotToTrackState() {
+        return Optional.empty();
+    }
 }

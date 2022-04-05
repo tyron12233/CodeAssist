@@ -183,7 +183,7 @@ public class GlobalServices extends DefaultServiceRegistry {
             @Override
             public File mkdir(Object path) {
                 File file = file(path);
-                if (!file.mkdir()) {
+                if (!file.exists() && !file.mkdir()) {
                     throw new UncheckedIOException("Unable to create " + path);
                 }
                 return file;

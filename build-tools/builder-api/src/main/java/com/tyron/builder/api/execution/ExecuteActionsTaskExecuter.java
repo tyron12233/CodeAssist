@@ -35,6 +35,9 @@ import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.operations.BuildOperationRef;
 import com.tyron.builder.api.internal.operations.RunnableBuildOperation;
+import com.tyron.builder.api.internal.project.taskfactory.IncrementalInputsTaskAction;
+import com.tyron.builder.api.internal.project.taskfactory.IncrementalTaskAction;
+import com.tyron.builder.api.internal.project.taskfactory.IncrementalTaskInputsTaskAction;
 import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.api.internal.snapshot.SnapshotUtil;
@@ -384,6 +387,7 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
             }
         }
 
+
         private void executeAction(String actionDisplayName,
                                    TaskInternal task,
                                    InputChangesAwareTaskAction action,
@@ -467,14 +471,14 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
         @SuppressWarnings("deprecation")
         @Override
         public InputChangeTrackingStrategy getInputChangeTrackingStrategy() {
-//            for (InputChangesAwareTaskAction taskAction : task.getTaskActions()) {
-//                if (taskAction instanceof IncrementalInputsTaskAction) {
-//                    return InputChangeTrackingStrategy.INCREMENTAL_PARAMETERS;
-//                }
-//                if (taskAction instanceof IncrementalTaskInputsTaskAction) {
-//                    return InputChangeTrackingStrategy.ALL_PARAMETERS;
-//                }
-//            }
+            for (InputChangesAwareTaskAction taskAction : task.getTaskActions()) {
+                if (taskAction instanceof IncrementalInputsTaskAction) {
+                    return InputChangeTrackingStrategy.INCREMENTAL_PARAMETERS;
+                }
+                if (taskAction instanceof IncrementalTaskInputsTaskAction || taskAction instanceof IncrementalTaskAction) {
+                    return InputChangeTrackingStrategy.ALL_PARAMETERS;
+                }
+            }
             return InputChangeTrackingStrategy.NONE;
         }
     }

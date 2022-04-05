@@ -280,7 +280,7 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public File mkdir(Object path) {
-        return null;
+        return getFileOperations().mkdir(path);
     }
 
     @Override

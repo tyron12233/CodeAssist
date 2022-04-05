@@ -149,6 +149,11 @@ public class DefaultTaskOutputs implements TaskOutputsInternal {
     }
 
     @Override
+    public Predicate<? super TaskInternal> getUpToDateSpec() {
+        return upToDateSpec;
+    }
+
+    @Override
     public Set<File> getPreviousOutputFiles() {
         if (this.previousOutputFiles == null) {
             throw new IllegalStateException("Task history is currently not available for this task.");

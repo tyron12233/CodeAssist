@@ -14,7 +14,7 @@ import java.util.Optional;
 
 public class DefaultExecutionEngine implements ExecutionEngine {
 
-    private DocumentationRegistry documentationRegistry;
+    private final DocumentationRegistry documentationRegistry;
     private final DeferredExecutionAwareStep<? super ExecutionRequestContext, ? extends Result> executeStep;
 
     public DefaultExecutionEngine(DocumentationRegistry documentationRegistry, DeferredExecutionAwareStep<? super ExecutionRequestContext, ?

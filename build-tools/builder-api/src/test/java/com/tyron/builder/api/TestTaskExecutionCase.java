@@ -61,6 +61,10 @@ public abstract class TestTaskExecutionCase {
     public void setup() throws IOException {
         File resourcesDirectory = TestUtil.getResourcesDirectory();
         StartParameterInternal startParameter = new StartParameterInternal() {
+            @Override
+            public boolean isRerunTasks() {
+                return false;
+            }
         };
 
         DefaultServiceRegistry global = new GlobalServices();
@@ -187,6 +191,8 @@ public abstract class TestTaskExecutionCase {
         }
 
         throwFailures(failures);
+
+        throw new AssertionError(failures);
     }
 
     private void throwFailures(List<Throwable> throwables) {

@@ -1,12 +1,20 @@
 package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import com.tyron.builder.api.file.ConfigurableFileTree;
+import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
+import com.tyron.builder.api.internal.project.taskfactory.IncrementalTaskAction;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.SourceTask;
 import com.tyron.builder.api.tasks.TaskAction;
 import com.tyron.builder.api.tasks.TaskContainer;
+import com.tyron.builder.api.tasks.incremental.IncrementalTaskInputs;
+import com.tyron.builder.api.work.FileChange;
+import com.tyron.builder.api.work.InputChanges;
 
+import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 @SuppressWarnings("Convert2Lambda")
@@ -48,10 +56,14 @@ public class MockTasks extends TestTaskExecutionCase {
                 );
                 task.setSource(sources);
 
-                task.doLast(new Action<Task>() {
+                task.getOutputs().dir(project.mkdir(project.getBuildDir() + "/classes"));
+
+                task.doLast(new IncrementalTaskAction() {
                     @Override
-                    public void execute(Task task) {
-                        System.out.println("Input files: " + task.getInputs().getFiles().getFiles());
+                    public void execute(IncrementalTaskInputs inputs) {
+                        if (inputs == null)
+
+                        System.out.println("Changed files: " + inputs);
                     }
                 });
             }
