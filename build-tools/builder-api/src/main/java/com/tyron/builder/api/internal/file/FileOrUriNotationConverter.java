@@ -3,6 +3,7 @@ package com.tyron.builder.api.internal.file;
 import com.tyron.builder.api.file.FileSystemLocation;
 import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.api.internal.exceptions.DiagnosticsVisitor;
+import com.tyron.builder.api.internal.os.OperatingSystem;
 import com.tyron.builder.api.internal.typeconversion.NotationConvertResult;
 import com.tyron.builder.api.internal.typeconversion.NotationConverter;
 import com.tyron.builder.api.internal.typeconversion.NotationParser;
@@ -105,8 +106,8 @@ public class FileOrUriNotationConverter implements NotationConverter<Object, Obj
     }
 
     private boolean isWindowsRootDirectory(String scheme) {
-        return false;
-//        return scheme.length() == 2 && Character.isLetter(scheme.charAt(0)) && scheme.charAt(1) == ':' && OperatingSystem.current().isWindows();
+        return scheme.length() == 2 && Character.isLetter(scheme.charAt(0)) && scheme.charAt(1) == ':' && OperatingSystem
+                .current().isWindows();
     }
 
     private void convertToUrl(String notationString, NotationConvertResult<? super Object> result) {
