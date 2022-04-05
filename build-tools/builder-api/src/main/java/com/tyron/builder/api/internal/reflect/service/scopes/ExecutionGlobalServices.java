@@ -1,21 +1,38 @@
 package com.tyron.builder.api.internal.reflect.service.scopes;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.Generated;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
+import com.tyron.builder.api.internal.instantiation.DeserializationInstantiator;
+import com.tyron.builder.api.internal.instantiation.InstanceFactory;
+import com.tyron.builder.api.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.api.internal.instantiation.InstantiationScheme;
 import com.tyron.builder.api.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.api.internal.reflect.annotations.TypeAnnotationMetadataStore;
 import com.tyron.builder.api.internal.reflect.annotations.impl.DefaultTypeAnnotationMetadataStore;
+import com.tyron.builder.api.internal.reflect.service.ServiceLookup;
 import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.api.internal.state.ManagedFactory;
 import com.tyron.builder.api.internal.tasks.properties.InspectionScheme;
 import com.tyron.builder.api.internal.tasks.properties.InspectionSchemeFactory;
 import com.tyron.builder.api.internal.tasks.properties.ModifierAnnotationCategory;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.internal.tasks.properties.TaskScheme;
+import com.tyron.builder.api.internal.tasks.properties.annotations.InputDirectoryPropertyAnnotationHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.InputFilePropertyAnnotationHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.InputFilesPropertyAnnotationHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.InputPropertyAnnotationHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.LocalStatePropertyAnnotationHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.NestedBeanAnnotationHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.NoOpPropertyAnnotationHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.OutputDirectoriesPropertyAnnotationHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.OutputDirectoryPropertyAnnotationHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.OutputFilePropertyAnnotationHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.OutputFilesPropertyAnnotationHandler;
 import com.tyron.builder.api.internal.tasks.properties.annotations.PropertyAnnotationHandler;
 import com.tyron.builder.api.internal.tasks.properties.annotations.TypeAnnotationHandler;
 import com.tyron.builder.api.model.ReplacedBy;
@@ -43,10 +60,13 @@ import com.tyron.builder.api.tasks.options.OptionValues;
 import com.tyron.builder.api.work.Incremental;
 import com.tyron.builder.api.work.NormalizeLineEndings;
 import com.tyron.builder.cache.internal.CrossBuildInMemoryCacheFactory;
+import com.tyron.builder.internal.instantiation.generator.DefaultInstantiationScheme;
 
 import java.lang.annotation.Annotation;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 public class ExecutionGlobalServices {
 
@@ -128,6 +148,70 @@ public class ExecutionGlobalServices {
         return new InspectionSchemeFactory(typeHandlers, propertyHandlers, typeAnnotationMetadataStore, cacheFactory);
     }
 
+    InstantiatorFactory createInstantiatorFactory() {
+        return new InstantiatorFactory() {
+            @Override
+            public InstanceGenerator inject(ServiceLookup services) {
+                return null;
+            }
+
+            @Override
+            public InstanceGenerator inject() {
+                return null;
+            }
+
+            @Override
+            public InstantiationScheme injectScheme() {
+                return null;
+            }
+
+            @Override
+            public InstantiationScheme injectScheme(Collection<Class<? extends Annotation>> injectAnnotations) {
+                return null;
+            }
+
+            @Override
+            public InstanceGenerator injectLenient(ServiceLookup services) {
+                return null;
+            }
+
+            @Override
+            public InstanceGenerator injectLenient() {
+                return null;
+            }
+
+            @Override
+            public InstanceGenerator decorate(ServiceLookup services) {
+                return null;
+            }
+
+            @Override
+            public InstantiationScheme decorateScheme() {
+                return null;
+            }
+
+            @Override
+            public InstanceGenerator decorateLenient() {
+                return null;
+            }
+
+            @Override
+            public InstanceGenerator decorateLenient(ServiceLookup services) {
+                return null;
+            }
+
+            @Override
+            public InstantiationScheme decorateLenientScheme() {
+                return null;
+            }
+
+            @Override
+            public ManagedFactory getManagedFactory() {
+                return null;
+            }
+        };
+    }
+
     TaskScheme createTaskScheme(InspectionSchemeFactory inspectionSchemeFactory, InstantiatorFactory instantiatorFactory, AnnotationHandlerRegistar annotationRegistry) {
         InstantiationScheme instantiationScheme = instantiatorFactory.decorateScheme();
         ImmutableSet.Builder<Class<? extends Annotation>> allPropertyTypes = ImmutableSet.builder();
@@ -165,9 +249,122 @@ public class ExecutionGlobalServices {
         return new TaskScheme(instantiationScheme, inspectionScheme);
     }
 
-    PropertyWalker createPropertyWalker(TaskScheme taskScheme) {
-        return taskScheme.getInspectionScheme().getPropertyWalker();
+    InspectionScheme createInspectionScheme(InspectionSchemeFactory schemeFactory) {
+        ImmutableSet.Builder<Class<? extends Annotation>> allPropertyTypes = ImmutableSet.builder();
+        allPropertyTypes.addAll(ImmutableSet.of(
+                Input.class,
+                InputFile.class,
+                InputFiles.class,
+                InputDirectory.class,
+                OutputFile.class,
+                OutputFiles.class,
+                OutputDirectory.class,
+                OutputDirectories.class,
+                Destroys.class,
+                LocalState.class,
+                Nested.class,
+                Console.class,
+                ReplacedBy.class,
+                Internal.class,
+                OptionValues.class
+        ));
+        return schemeFactory.inspectionScheme(allPropertyTypes.build(),
+                ImmutableSet.of(Classpath.class, CompileClasspath.class, Incremental.class, Optional.class,
+                        PathSensitive.class, SkipWhenEmpty.class, IgnoreEmptyDirectories.class,
+                        NormalizeLineEndings.class), new InstantiationScheme() {
+                    @Override
+                    public Set<Class<? extends Annotation>> getInjectionAnnotations() {
+                        return Collections.emptySet();
+                    }
+
+                    @Override
+                    public <T> InstanceFactory<T> forType(Class<T> type) {
+                        return null;
+                    }
+
+                    @Override
+                    public InstantiationScheme withServices(ServiceLookup services) {
+                        return null;
+                    }
+
+                    @Override
+                    public InstanceGenerator instantiator() {
+                        return null;
+                    }
+
+                    @Override
+                    public DeserializationInstantiator deserializationInstantiator() {
+                        return null;
+                    }
+                });
     }
+
+    PropertyWalker createPropertyWalker(InspectionScheme taskScheme) {
+        return taskScheme.getPropertyWalker();
+    }
+
+
+    PropertyAnnotationHandler createConsoleAnnotationHandler() {
+        return new NoOpPropertyAnnotationHandler(Console.class);
+    }
+
+    PropertyAnnotationHandler createInternalAnnotationHandler() {
+        return new NoOpPropertyAnnotationHandler(Internal.class);
+    }
+
+    PropertyAnnotationHandler createReplacedByAnnotationHandler() {
+        return new NoOpPropertyAnnotationHandler(ReplacedBy.class);
+    }
+
+    PropertyAnnotationHandler createOptionValuesAnnotationHandler() {
+        return new NoOpPropertyAnnotationHandler(OptionValues.class);
+    }
+
+    PropertyAnnotationHandler createInputPropertyAnnotationHandler() {
+        return new InputPropertyAnnotationHandler();
+    }
+
+    PropertyAnnotationHandler createInputFilePropertyAnnotationHandler() {
+        return new InputFilePropertyAnnotationHandler();
+    }
+
+    PropertyAnnotationHandler createInputFilesPropertyAnnotationHandler() {
+        return new InputFilesPropertyAnnotationHandler();
+    }
+
+    PropertyAnnotationHandler createInputDirectoryPropertyAnnotationHandler() {
+        return new InputDirectoryPropertyAnnotationHandler();
+    }
+
+    OutputFilePropertyAnnotationHandler createOutputFilePropertyAnnotationHandler() {
+        return new OutputFilePropertyAnnotationHandler();
+    }
+
+    OutputFilesPropertyAnnotationHandler createOutputFilesPropertyAnnotationHandler() {
+        return new OutputFilesPropertyAnnotationHandler();
+    }
+
+    OutputDirectoryPropertyAnnotationHandler createOutputDirectoryPropertyAnnotationHandler() {
+        return new OutputDirectoryPropertyAnnotationHandler();
+    }
+
+    OutputDirectoriesPropertyAnnotationHandler createOutputDirectoriesPropertyAnnotationHandler() {
+        return new OutputDirectoriesPropertyAnnotationHandler();
+    }
+
+    PropertyAnnotationHandler createDestroysPropertyAnnotationHandler() {
+        return new DestroysPropertyAnnotationHandler();
+    }
+
+    PropertyAnnotationHandler createLocalStatePropertyAnnotationHandler() {
+        return new LocalStatePropertyAnnotationHandler();
+    }
+
+    PropertyAnnotationHandler createNestedBeanPropertyAnnotationHandler() {
+        return new NestedBeanAnnotationHandler();
+    }
+
+
 
     public interface AnnotationHandlerRegistration {
         Collection<Class<? extends Annotation>> getAnnotations();

@@ -44,6 +44,10 @@ public class GradleUserHomeScopeServices extends DefaultServiceRegistry {
 
     public GradleUserHomeScopeServices(ServiceRegistry parent) {
         super(parent);
+
+        register(registration -> {
+            registration.addProvider(new ExecutionGlobalServices());
+        });
     }
 
     HashingClassLoaderFactory createHashingClassLoaderFactory() {

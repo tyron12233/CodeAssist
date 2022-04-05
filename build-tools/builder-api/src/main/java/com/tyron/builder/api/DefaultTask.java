@@ -28,6 +28,7 @@ import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.DefaultTaskDependency;
+import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskDestroyables;
