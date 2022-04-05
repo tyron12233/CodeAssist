@@ -418,7 +418,15 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
 
         mProject = project;
-
+		mGitViewModel.setPostCheckout( () -> {
+			mFileViewModel.refreshNode(mProject.getRootFile());
+			return Unit.INSTANCE;
+		});
+		
+		mGitViewModel.setOnSave( () -> {
+			mMainViewModel.clear();
+			return Unit.INSTANCE;
+		});
 		mGitViewModel.setPath(mProject.getRootFile().getAbsolutePath());
         
         mIndexServiceConnection.setProject(project);

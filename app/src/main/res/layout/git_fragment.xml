@@ -12,9 +12,9 @@
         android:layout_marginLeft="5dp"
         android:layout_marginRight="5dp"
         android:layout_marginTop="10dp"
-        android:hint="Git Init"
+        android:hint="New Git Repository"
         android:paddingHorizontal="30dp"
-        android:text="Git Init" />
+        android:text="New Git Repository" />
 
     <Button
         android:id="@+id/git_button_commit"
@@ -34,9 +34,9 @@
         android:layout_gravity="center"
         android:layout_marginLeft="5dp"
         android:layout_marginRight="5dp"
-        android:hint="Create Branch"
+        android:hint="New Branch"
         android:paddingHorizontal="30dp"
-        android:text="Create Branch" />
+        android:text="New Branch" />
 		
 	<Button
         android:id="@+id/git_button_merge_branch"

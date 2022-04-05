@@ -13,6 +13,9 @@ lateinit var git: Gitter
 
 class GitViewModel : ViewModel() {
 	
+	var postCheckout: ()-> Unit = {}
+	var onSave: ()-> Unit = {}
+	
 	private val _projectPath = MutableLiveData<String>()
 	val projectPath: LiveData<String> = _projectPath
 	
@@ -25,10 +28,6 @@ class GitViewModel : ViewModel() {
 	private val _branchList = MutableLiveData<List<String>>()
 	val branchList = _branchList
 	
-	//fun getPath(): LiveData<String> = _projectPath
-	
-	//fun getRepo(): LiveData<Boolean> = _hasRepo
-	
 	fun setPath(newPath: String) {
 		_projectPath.value = newPath
 		if(isGitRepoAt(newPath)) {
@@ -36,15 +35,17 @@ class GitViewModel : ViewModel() {
 			git = openGitAt(newPath)
 			getLog()
 			getBranchList()
+		} else {
+			_hasRepo.value = false
 		}
 	}
 	
 	fun getLog() {
-		_gitLog.value = if(::git.isInitialized) git.getLog() else ""
+		_gitLog.value = /*if(::git.isInitialized)*/ git.getLog() /*else ""*/
 	}
 	
 	fun getBranchList() {
-		_branchList.value = if(::git.isInitialized) git.getBranchList() else listOf("")
+		_branchList.value = /*if(::git.isInitialized)*/ git.getBranchList() /*else listOf("")*/
 	}
 	
 	fun createGitRepoWith (commiter: Author) {
@@ -53,6 +54,7 @@ class GitViewModel : ViewModel() {
 			git = createGitRepoWith(commiter)
 			getLog()
 			getBranchList()
+			postCheckout()
 		}
 		
 	}
@@ -62,32 +64,35 @@ class GitViewModel : ViewModel() {
 		getLog()
 	}
 	
-	fun createBranch(branch: String) {
+	fun createBranch(branch: String): Result {
 		git.createBranch(branch)
 		getLog()
 		getBranchList()
+		return Success
 	}
 	
-	fun mergeBranch(branch: String, action: ()->Unit): Any? {
+	fun mergeBranch(branch: String): Result {
 		if (branch in git.getBranchList()) {
+			onSave()
 			git.mergeBranch(branch)
 			getLog()
 			getBranchList()
-			return action()
+			postCheckout()
+			return Success
 		}
-		return null
+		return Failure
 	}
 	
 	fun getBranch(): String = git.getBranch()
 	
-	fun deleteBranch(branch: String): Any? {
+	fun deleteBranch(branch: String): Result {
 		if(branch !in getBranch()) {
 			git.deleteBranch(branch)
 			getLog()
 			getBranchList()
-			return Unit
+			return Success
 		}
-		return null
+		return Failure
 	}
 	
 	fun checkout(position: Int) {
@@ -96,20 +101,22 @@ class GitViewModel : ViewModel() {
 				if(it.isNotEmpty()) {
 					val branch = it[position]
 					if(branch.isNotBlank()) {
+						onSave()
 						git.checkout(branch)
+						postCheckout()
+						getLog()
+						getBranchList()
 					}
-					getLog()
-					getBranchList()
 				}
 			}
 		}
 	}
 	
 	fun dispose() {
+		postCheckout = {}
+		onSave = {}
 		if(::git.isInitialized) git.dispose()
 		_branchList.value = listOf("")
 		_gitLog.value = "No Log available"
 	}
 }
-
-fun Any?.or(action: () -> Unit) { if(this == null) action() }

@@ -22,10 +22,14 @@ import androidx.core.view.ViewCompat
 import androidx.lifecycle.ViewModelProvider
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 
 import java.io.File
 
 import de.prinova.git.model.Author
+import de.prinova.git.model.Result
+import de.prinova.git.model.Success
+import de.prinova.git.model.Failure
 
 import com.tyron.code.R
 import com.tyron.code.util.*
@@ -56,9 +60,7 @@ const val ARG_PATH_ID = "pathId"
 //TODO: Put Author into PreferenceSettings
 //TODO: Let select commits for reverting, restore and reset
 
-var onSave: ()-> Unit = {}
 var preCheckout: ()-> Unit = {}
-var postCheckout: ()-> Unit = {}
 
 class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 	
@@ -148,7 +150,6 @@ class GitFragment : Fragment(), AdapterView.OnItemSelectedListener {
 		id: Long
 	) {
 		mGitViewModel.checkout(position)
-		postCheckout()	
 	}
 	override fun onNothingSelected(parent: AdapterView<*>) {}		
 }
@@ -184,7 +185,7 @@ fun switchButtons(hasRepo: Boolean)
 }
 
 fun GitFragment.commitWith(commiter: Author) {
-	onSave()
+	//onSave()
 	val commitText = EditText(requireContext()).apply {
 			setHint("Commit Message")
 		}
@@ -206,7 +207,12 @@ fun GitFragment.createBranch() {
 	.setTitle("New Branch")
 	.setView( branchText )		
 	.setPositiveButton("Create") {_, _ ->
-		mGitViewModel.createBranch(branchText.getText().toString())
+		val text = branchText.getText().toString()
+		val result = mGitViewModel.createBranch(text)
+		when (result) {
+			is Success -> showSnackbar("Branch '$text' created")
+			is Failure -> showSnackbar("Branch '$text' could not created")
+		}
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
 	.show()
@@ -222,16 +228,16 @@ fun GitFragment.mergeBranch() {
 	.setView( branchText )		
 	.setPositiveButton("Merge") {_, _ ->
 		val text = branchText.getText().toString()
-		mGitViewModel.mergeBranch(text) {
-			postCheckout()
-			onSave()
-		}
-		.or {
-			MaterialAlertDialogBuilder(requireContext())
-			.setTitle("!! Alert !!")
-			.setMessage("$text not in Repository")
-			.setPositiveButton("OK") {_, _ -> }
-			.show()
+		val result = mGitViewModel.mergeBranch(text)
+		when(result) {
+			is Success -> showSnackbar("Branch '$text' merged")
+			is Failure -> {
+				MaterialAlertDialogBuilder(requireContext())
+				.setTitle("!! Alert !!")
+				.setMessage("Branch '$text' not in Repository")
+				.setPositiveButton("OK") {_, _ -> }
+				.show()
+			}
 		}
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
@@ -247,13 +253,16 @@ fun GitFragment.deleteBranch() {
 	.setView( branchText )		
 	.setPositiveButton("Delete") {_, _ ->
 		val text = branchText.getText().toString()
-		mGitViewModel.deleteBranch(text)
-		.or {
-			MaterialAlertDialogBuilder(requireContext())
-			.setTitle("!! Alert !!")
-			.setMessage("$text must not be the current branch to delete.")
-			.setPositiveButton("OK") {_, _ -> }
-			.show()
+		val result = mGitViewModel.deleteBranch(text)
+		when (result) {
+			is Success -> showSnackbar("Branch '$text' deleted")
+			is Failure -> {
+				MaterialAlertDialogBuilder(requireContext())
+				.setTitle("!! Alert !!")
+				.setMessage("Branch '$text' must not be the current branch to delete.")
+				.setPositiveButton("OK") {_, _ -> }
+				.show()
+			}
 		}
 	}
 	.setNegativeButton("Cancel") {_,_ ->}	
@@ -261,8 +270,6 @@ fun GitFragment.deleteBranch() {
 }
 
 fun dispose() {
-	onSave = {}
-	postCheckout = {}
 	gitBranchSpinner = null
 	gitCommitButton = null
 	gitCreateBranchButton = null
@@ -279,4 +286,10 @@ fun toContent(file: File?) = file?.readText() ?: ""
 fun <I> ArrayAdapter<I>.listOf(items: List<I>) {	
 	clear()
 	addAll(items)
+}
+
+fun GitFragment.showSnackbar(message: String) {
+	Snackbar.make(getView()!!, message, Snackbar.LENGTH_SHORT)
+	.setAnimationMode(Snackbar.ANIMATION_MODE_FADE)
+	.show()
 }
