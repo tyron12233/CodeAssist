@@ -446,20 +446,6 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
                             .details(ExecuteTaskActionBuildOperationType.DETAILS_INSTANCE);
                 }
             });
-
-            Throwable actionFailure = null;
-
-            try {
-                action.execute(task);
-            } catch (Throwable t) {
-                actionFailure = t;
-            } finally {
-                action.clearInputChanges();
-            }
-
-            if (actionFailure != null) {
-                throw UncheckedException.throwAsUncheckedException(actionFailure);
-            }
         }
 
         @Override

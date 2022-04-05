@@ -10,6 +10,7 @@ import java.io.File;
 public class TestTaskInputOutputs extends TestTaskExecutionCase {
     // Lambdas are not supported for gradle caching since java uses invokedynamic on them,
     // making it impossible for gradle to track the class and its tasks
+    // see https://docs.gradle.org/current/userguide/validation_problems.html#implementation_unknown
     @SuppressWarnings("Convert2Lambda")
     @Test
     public void testTaskOutputs() {
