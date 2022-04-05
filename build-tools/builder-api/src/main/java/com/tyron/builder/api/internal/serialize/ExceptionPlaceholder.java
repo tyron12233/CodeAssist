@@ -1,7 +1,5 @@
 package com.tyron.builder.api.internal.serialize;
 
-import com.sun.org.slf4j.internal.Logger;
-import com.sun.org.slf4j.internal.LoggerFactory;
 import com.tyron.builder.api.Transformer;
 import com.tyron.builder.api.internal.Cast;
 import com.tyron.builder.api.internal.UncheckedException;
@@ -9,6 +7,9 @@ import com.tyron.builder.api.internal.exceptions.Contextual;
 import com.tyron.builder.api.internal.exceptions.DefaultMultiCauseException;
 import com.tyron.builder.api.internal.exceptions.MultiCauseException;
 import com.tyron.builder.api.internal.io.StreamByteBuffer;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;

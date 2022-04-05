@@ -17,20 +17,21 @@ import com.tyron.builder.api.internal.tasks.properties.TreeType;
 import com.tyron.builder.caching.BuildCacheKey;
 import com.tyron.builder.caching.internal.BuildCacheController;
 import com.tyron.builder.caching.internal.CacheableEntity;
-import com.tyron.builder.caching.internal.CacheableEntity.CacheableTreeVisitor;
 import com.tyron.builder.caching.internal.controller.service.BuildCacheLoadResult;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.Optional;
-import java.util.logging.Logger;
 
 public class BuildCacheStep implements Step<IncrementalChangesContext, AfterExecutionResult> {
 
-    private static final Logger LOGGER = Logger.getLogger(BuildCacheStep.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(BuildCacheStep.class);
 
     private final BuildCacheController buildCache;
     private final Deleter deleter;
@@ -65,9 +66,9 @@ public class BuildCacheStep implements Step<IncrementalChangesContext, AfterExec
         )
                 .map(successfulLoad -> successfulLoad
                         .map(cacheHit -> {
-//                            if (LOGGER.isInfoEnabled()) {
+                            if (LOGGER.isInfoEnabled()) {
                                 LOGGER.info("Loaded cache entry for " +  work.getDisplayName() + " with cache key " + cacheKey.getHashCode());
-//                            }
+                            }
                             cleanLocalState(context.getWorkspace(), work);
                             OriginMetadata originMetadata = cacheHit.getOriginMetadata();
                             AfterExecutionState afterExecutionState = new DefaultAfterExecutionState(
@@ -131,14 +132,14 @@ public class BuildCacheStep implements Step<IncrementalChangesContext, AfterExec
     }
 
     private AfterExecutionResult executeAndStoreInCache(CacheableWork cacheableWork, BuildCacheKey cacheKey, IncrementalChangesContext context) {
-//        if (LOGGER.isDebugEnabled()) {
-            LOGGER.info("Did not find cache entry for " + cacheableWork.getDisplayName() + " with cache key " + cacheKey.getHashCode() + ", executing instead");
-//        }
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Did not find cache entry for " + cacheableWork.getDisplayName() + " with cache key " + cacheKey.getHashCode() + ", executing instead");
+        }
         AfterExecutionResult result = executeWithoutCache(cacheableWork.work, context);
         result.getExecutionResult().ifSuccessfulOrElse(
                 executionResult -> result.getAfterExecutionState()
                         .ifPresent(afterExecutionState -> store(cacheableWork, cacheKey, afterExecutionState.getOutputFilesProducedByWork(), afterExecutionState.getOriginMetadata().getExecutionTime())),
-                failure -> LOGGER.info("Not storing result of " + cacheableWork.getDisplayName() + " in cache because the execution failed")
+                failure -> LOGGER.debug("Not storing result of " + cacheableWork.getDisplayName() + " in cache because the execution failed")
         );
         return result;
     }
@@ -146,9 +147,9 @@ public class BuildCacheStep implements Step<IncrementalChangesContext, AfterExec
     private void store(CacheableWork work, BuildCacheKey cacheKey, ImmutableSortedMap<String, FileSystemSnapshot> outputFilesProducedByWork, Duration executionTime) {
         try {
             buildCache.store(cacheKey, work, outputFilesProducedByWork, executionTime);
-//            if (LOGGER.isInfoEnabled()) {
+            if (LOGGER.isInfoEnabled()) {
                 LOGGER.info("Stored cache entry for " + work.getDisplayName() + " with cache key " + cacheKey.getHashCode());
-//            }
+            }
         } catch (Exception e) {
             throw new RuntimeException(
                     String.format("Failed to store cache entry %s for %s: %s",

@@ -29,6 +29,9 @@ import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.internal.work.WorkerLeaseRegistry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.StringWriter;
 import java.util.AbstractCollection;
 import java.util.ArrayDeque;
@@ -46,14 +49,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
-import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 import kotlin.Pair;
 
 public class DefaultExecutionPlan implements ExecutionPlan {
 
-    private static final java.util.logging.Logger LOGGER = Logger.getLogger("DefaultExecutionPlan");
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultExecutionPlan.class);
 
     private final Set<Node> entryNodes = new LinkedHashSet<>();
     private final NodeMapping nodeMapping = new NodeMapping();
@@ -701,7 +703,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
             }
         }
 
-        LOGGER.info("No node could be selected, nodes ready: " + foundReadyNode);
+        LOGGER.debug("No node could be selected, nodes ready: {}", foundReadyNode);
         maybeNodesReady = foundReadyNode;
         maybeNodesSelectable = false;
         if (executionQueue.isEmpty()) {
@@ -749,10 +751,10 @@ public class DefaultExecutionPlan implements ExecutionPlan {
 
     private boolean tryAcquireLocksForNode(Node node, List<ResourceLock> resources) {
         if (!tryLockProjectFor(node, resources)) {
-            LOGGER.info("Cannot acquire project lock for node " + node);
+            LOGGER.debug("Cannot acquire project lock for node {}", node);
             return false;
         } else if (!tryLockSharedResourceFor(node, resources)) {
-            LOGGER.info("Cannot acquire shared resource lock for node " + node);
+            LOGGER.debug("Cannot acquire shared resource lock for node {}", node);
             return false;
         }
         return true;
@@ -760,10 +762,10 @@ public class DefaultExecutionPlan implements ExecutionPlan {
 
     private boolean conflictsWithOtherNodes(Node node, MutationInfo mutations) {
         if (!canRunWithCurrentlyExecutedNodes(mutations)) {
-            LOGGER.info("Node " + node + " cannot run with currently running nodes " + runningNodes);
+            LOGGER.debug("Node {} cannot run with currently running nodes {}", node, runningNodes);
             return true;
         } else if (destroysNotYetConsumedOutputOfAnotherNode(node, mutations.destroyablePaths)) {
-            LOGGER.info("Node " + node + " destroys not yet consumed output of another node");
+            LOGGER.debug("Node {} destroys not yet consumed output of another node", node);
             return true;
         }
         return false;
@@ -871,7 +873,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
                         // then we accept that as the will of the user
                         continue;
                     }
-                    LOGGER.info("Node " + destroyer + " destroys output of consumer " + consumer);
+                    LOGGER.debug("Node {} destroys output of consumer {}", destroyer, consumer);
                     return true;
                 }
             }
@@ -906,7 +908,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
     }
 
     private void recordNodeCompleted(Node node) {
-        LOGGER.info("Node " + node + " completed, executed: " + node.isExecuted());
+        LOGGER.debug("Node {} completed, executed: {}", node, node.isExecuted());
         MutationInfo mutations = node.getMutationInfo();
         for (Node producer : node.getDependencySuccessors()) {
             MutationInfo producerMutations = producer.getMutationInfo();
@@ -945,10 +947,10 @@ public class DefaultExecutionPlan implements ExecutionPlan {
             runningNodes.remove(node);
             node.finishExecution(this::recordNodeCompleted);
             if (node.isFailed()) {
-                LOGGER.info("Node " + node + " failed");
+                LOGGER.debug("Node " + node + " failed");
                 handleFailure(node);
             } else {
-                LOGGER.info("Node " + node + " finished executing");
+                LOGGER.debug("Node " + node + " finished executing");
             }
         } finally {
             unlockProjectFor(node);

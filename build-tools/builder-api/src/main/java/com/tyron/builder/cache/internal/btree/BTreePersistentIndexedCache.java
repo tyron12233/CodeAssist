@@ -9,6 +9,9 @@ import com.tyron.builder.api.internal.serialize.Serializer;
 import com.tyron.builder.api.internal.serialize.kryo.KryoBackedDecoder;
 import com.tyron.builder.api.internal.serialize.kryo.KryoBackedEncoder;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -18,7 +21,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.logging.Logger;
 
 // todo - stream serialised value to file
 // todo - handle hash collisions (properly, this time)
@@ -33,7 +35,7 @@ import java.util.logging.Logger;
 // todo - use more efficient lookup for free block with nearest size
 @SuppressWarnings("unchecked")
 public class BTreePersistentIndexedCache<K, V> {
-    private static final Logger LOGGER = Logger .getLogger(BTreePersistentIndexedCache.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(BTreePersistentIndexedCache.class.getSimpleName());
     private final File cacheFile;
     private final KeyHasher<K> keyHasher;
     private final Serializer<V> serializer;
@@ -69,7 +71,7 @@ public class BTreePersistentIndexedCache<K, V> {
     }
 
     private void open() throws Exception {
-        LOGGER.info("Opening " + this);
+        LOGGER.debug("Opening " + this);
         try {
             doOpen();
         } catch (CorruptedCacheException e) {
@@ -182,7 +184,7 @@ public class BTreePersistentIndexedCache<K, V> {
     }
 
     public void close() {
-        LOGGER.info("Closing " + this);
+        LOGGER.debug("Closing " + this);
         try {
             store.close();
         } catch (Exception e) {
@@ -195,11 +197,11 @@ public class BTreePersistentIndexedCache<K, V> {
     }
 
     private void rebuild() {
-        LOGGER.warning(this + " is corrupt. Discarding.");
+        LOGGER.warn(this + " is corrupt. Discarding.");
         try {
             clear();
         } catch (Exception e) {
-            LOGGER.warning(this + " couldn't be rebuilt. Closing.");
+            LOGGER.warn(this + " couldn't be rebuilt. Closing.");
             close();
         }
     }

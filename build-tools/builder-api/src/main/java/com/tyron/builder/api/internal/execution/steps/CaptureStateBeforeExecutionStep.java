@@ -23,12 +23,14 @@ import com.tyron.builder.api.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.api.internal.snapshot.ValueSnapshot;
 import com.tyron.builder.api.internal.snapshot.impl.ImplementationSnapshot;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.util.Optional;
-import java.util.logging.Logger;
 
 public class CaptureStateBeforeExecutionStep<C extends PreviousExecutionContext, R extends CachingResult> extends BuildOperationStep<C, R> {
-    private static final Logger LOGGER = Logger.getLogger(CaptureStateBeforeExecutionStep.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(CaptureStateBeforeExecutionStep.class);
 
     private final ClassLoaderHierarchyHasher classLoaderHierarchyHasher;
     private final OutputSnapshotter outputSnapshotter;
@@ -142,10 +144,10 @@ public class CaptureStateBeforeExecutionStep<C extends PreviousExecutionContext,
         ImplementationSnapshot implementation = implementationsBuilder.getImplementation();
         ImmutableList<ImplementationSnapshot> additionalImplementations = implementationsBuilder.getAdditionalImplementations();
 
-//        if (LOGGER.isDebugEnabled()) {
-            LOGGER.info("Implementation for " + work.getDisplayName() + " : " + implementation);
-            LOGGER.info("Additional implementations for " + work.getDisplayName() + ": " + additionalImplementations);
-//        }
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Implementation for " + work.getDisplayName() + " : " + implementation);
+            LOGGER.debug("Additional implementations for " + work.getDisplayName() + ": " + additionalImplementations);
+        }
 
         ImmutableSortedMap<String, ValueSnapshot> previousInputProperties = previousExecutionState
                 .map(InputExecutionState::getInputProperties)

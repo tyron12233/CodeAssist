@@ -2,6 +2,7 @@ package com.tyron.builder.caching.internal;
 
 import com.tyron.builder.api.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.caching.BuildCacheKey;
+import com.tyron.builder.caching.BuildCacheService;
 import com.tyron.builder.caching.internal.controller.service.BuildCacheLoadResult;
 
 import java.io.Closeable;

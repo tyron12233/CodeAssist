@@ -8,15 +8,14 @@ import com.tyron.builder.cache.FileLockManager;
 import com.tyron.builder.cache.FileLockReleasedSignal;
 import com.tyron.builder.cache.LockOptions;
 
-import java.io.File;
-import java.util.concurrent.locks.Lock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.concurrent.locks.Lock;
-import java.util.logging.Logger;
 
 class LockOnDemandCrossProcessCacheAccess extends AbstractCrossProcessCacheAccess {
-    private static final Logger LOGGER = Logger.getLogger(LockOnDemandCrossProcessCacheAccess.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(LockOnDemandCrossProcessCacheAccess.class);
     private final String cacheDisplayName;
     private final File lockTarget;
     private final LockOptions lockOptions;
@@ -86,9 +85,9 @@ class LockOnDemandCrossProcessCacheAccess extends AbstractCrossProcessCacheAcces
                 if (lockCount != 0) {
                     throw new IllegalStateException("Mismatched lock count.");
                 }
-//                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.info("Acquiring file lock for " + cacheDisplayName);
-//                }
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Acquiring file lock for " + cacheDisplayName);
+                }
                 fileLock = lockManager.lock(lockTarget, lockOptions, cacheDisplayName, "", whenContended);
                 try {
                     if (initAction.requiresInitialization(fileLock)) {
@@ -131,9 +130,9 @@ class LockOnDemandCrossProcessCacheAccess extends AbstractCrossProcessCacheAcces
         if (fileLock == null) {
             return;
         }
-//        if (LOGGER.isDebugEnabled()) {
-            LOGGER.info("Releasing file lock for " + cacheDisplayName);
-//        }
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Releasing file lock for " + cacheDisplayName);
+        }
         try {
             onClose.execute(fileLock);
         } finally {
@@ -161,12 +160,12 @@ class LockOnDemandCrossProcessCacheAccess extends AbstractCrossProcessCacheAcces
             stateLock.lock();
             try {
                 if (lockCount == 0) {
-                    LOGGER.info("Lock on " + cacheDisplayName + " requested by another process - releasing lock.");
+                    LOGGER.debug("Lock on " + cacheDisplayName + " requested by another process - releasing lock.");
                     releaseLockIfHeld();
                     signal.trigger();
                 } else {
                     // Lock is in use - mark as contended
-                    LOGGER.info("Lock on " + cacheDisplayName + " requested by another process - lock is in use and will be released when operation completed.");
+                    LOGGER.debug("Lock on " + cacheDisplayName + " requested by another process - lock is in use and will be released when operation completed.");
                     lockReleaseSignal = signal;
                 }
             } finally {

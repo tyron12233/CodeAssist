@@ -1,11 +1,11 @@
 package com.tyron.builder.api.internal.operations;
 
 import org.jetbrains.annotations.Nullable;
-
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DefaultBuildOperationRunner implements BuildOperationRunner {
-    private static final Logger LOGGER = Logger.getLogger(DefaultBuildOperationRunner.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultBuildOperationRunner.class);
     private static final BuildOperationWorker<RunnableBuildOperation> RUNNABLE_BUILD_OPERATION_WORKER = new BuildOperationWorker<RunnableBuildOperation>() {
         @Override
         public void execute(RunnableBuildOperation buildOperation, BuildOperationContext context) throws Exception {
@@ -207,7 +207,7 @@ public class DefaultBuildOperationRunner implements BuildOperationRunner {
             originalCurrentBuildOperation = (BuildOperationState) currentBuildOperationRef.get();
             currentBuildOperationRef.set(operationState);
             operationState.setRunning(true);
-            LOGGER.info("Build operation " + descriptor.getDisplayName() + " started.");
+            LOGGER.debug("Build operation " + descriptor.getDisplayName() + " started.");
             delegate.start(descriptor, operationState);
         }
 
@@ -224,7 +224,7 @@ public class DefaultBuildOperationRunner implements BuildOperationRunner {
         @Override
         public void stop(BuildOperationDescriptor descriptor, BuildOperationState operationState, @Nullable BuildOperationState parent, ReadableBuildOperationContext context) {
             delegate.stop(descriptor, operationState, parent, context);
-            LOGGER.info("Completing Build operation '" + descriptor.getDisplayName() + "'");
+            LOGGER.debug("Completing Build operation '" + descriptor.getDisplayName() + "'");
             assertParentRunning("Parent operation (%2$s) completed before this operation (%1$s).", descriptor, parent);
         }
 
@@ -233,7 +233,7 @@ public class DefaultBuildOperationRunner implements BuildOperationRunner {
             delegate.close(descriptor, operationState);
             currentBuildOperationRef.set(originalCurrentBuildOperation);
             operationState.setRunning(false);
-            LOGGER.info("Build operation " + descriptor.getDisplayName() + " completed.");
+            LOGGER.debug("Build operation " + descriptor.getDisplayName() + " completed.");
         }
     }
 

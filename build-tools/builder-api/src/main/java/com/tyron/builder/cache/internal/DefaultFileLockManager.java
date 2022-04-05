@@ -36,15 +36,17 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.logging.Logger;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Uses file system locks on a lock file per target file.
  */
 public class DefaultFileLockManager implements FileLockManager {
-    private static final Logger LOGGER = Logger.getLogger(DefaultFileLockManager.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultFileLockManager.class);
     public static final int DEFAULT_LOCK_TIMEOUT = 60000;
 
     private final Set<File> lockedFiles = new CopyOnWriteArraySet<>();
@@ -135,7 +137,7 @@ public class DefaultFileLockManager implements FileLockManager {
             try {
                 lockFile.createNewFile();
             } catch (IOException e) {
-                LOGGER.info("Couldn't create lock file for " + lockFile);
+                LOGGER.debug("Couldn't create lock file for " + lockFile);
                 throw e;
             }
 
@@ -227,7 +229,7 @@ public class DefaultFileLockManager implements FileLockManager {
                         return;
                     }
                     try {
-                        LOGGER.info("Releasing lock on " + displayName);
+                        LOGGER.debug("Releasing lock on " + displayName);
                         try {
                             if (lock != null && !lock.isShared()) {
                                 // Discard information region
@@ -280,7 +282,7 @@ public class DefaultFileLockManager implements FileLockManager {
         }
 
         private LockState lock(LockMode lockMode) throws Throwable {
-            LOGGER.info("Waiting to acquire " + lockMode.toString().toLowerCase() + " lock on " + displayName);
+            LOGGER.debug("Waiting to acquire " + lockMode.toString().toLowerCase() + " lock on " + displayName);
 
             // Lock the state region, with the requested mode
             FileLockOutcome lockOutcome = lockStateRegion(lockMode);
@@ -313,7 +315,7 @@ public class DefaultFileLockManager implements FileLockManager {
                     // Just read the state region
                     lockState = lockFileAccess.readLockState();
                 }
-                LOGGER.info("Lock acquired on " + displayName);
+                LOGGER.debug("Lock acquired on " + displayName);
                 lock = stateRegionLock;
                 return lockState;
             } catch (Throwable t) {
@@ -339,7 +341,7 @@ public class DefaultFileLockManager implements FileLockManager {
             LockInfo out = new LockInfo();
             FileLockOutcome lockOutcome = lockInformationRegion(LockMode.Shared, backoff);
             if (!lockOutcome.isLockWasAcquired()) {
-                LOGGER.info("Could not lock information region for " + displayName + ". Ignoring.");
+                LOGGER.debug("Could not lock information region for " + displayName + ". Ignoring.");
             } else {
                 try {
                     out = lockFileAccess.readLockInfo();
@@ -372,10 +374,10 @@ public class DefaultFileLockManager implements FileLockManager {
                             }
                             if (fileLockContentionHandler.maybePingOwner(lockInfo.port, lockInfo.lockId, displayName, backoff.getTimer().getElapsedMillis() - lastPingTime, backoff.getSignal())) {
                                 lastPingTime = backoff.getTimer().getElapsedMillis();
-                                LOGGER.info("The file lock for " + displayName + " is held by a different Gradle process (pid: " + lockInfo.pid + ", lockId: " + lockInfo.lockId + "). Pinged owner at port " + lockInfo.port);
+                                LOGGER.debug("The file lock for " + displayName + " is held by a different Gradle process (pid: " + lockInfo.pid + ", lockId: " + lockInfo.lockId + "). Pinged owner at port " + lockInfo.port);
                             }
                         } else {
-                            LOGGER.info("The file lock for " + displayName + " is held by a different Gradle process. I was unable to read on which port the owner listens for lock access requests.");
+                            LOGGER.debug("The file lock for " + displayName + " is held by a different Gradle process. I was unable to read on which port the owner listens for lock access requests.");
                         }
                     }
                     return IOQuery.Result.notSuccessful(lockOutcome);

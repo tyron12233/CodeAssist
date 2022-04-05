@@ -12,15 +12,17 @@ import com.tyron.builder.api.internal.execution.history.PreviousExecutionState;
 import com.tyron.builder.api.internal.execution.history.impl.DefaultAfterExecutionState;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.Duration;
 import java.util.Formatter;
 import java.util.List;
 import java.util.Optional;
-import java.util.logging.Logger;
 
 public class SkipUpToDateStep<C extends IncrementalChangesContext> implements Step<C, UpToDateResult> {
 
-    private static final Logger LOGGER = Logger.getLogger(SkipUpToDateStep.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(SkipUpToDateStep.class);
 
     private final Step<? super C, ? extends AfterExecutionResult> delegate;
 
@@ -30,9 +32,9 @@ public class SkipUpToDateStep<C extends IncrementalChangesContext> implements St
 
     @Override
     public UpToDateResult execute(UnitOfWork work, C context) {
-//        if (LOGGER.isDebugEnabled()) {
-            LOGGER.info("Determining if " + work.getDisplayName() + " is up-to-date");
-//        }
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Determining if " + work.getDisplayName() + " is up-to-date");
+        }
         ImmutableList<String> reasons = context.getRebuildReasons();
         return context.getChanges()
                 .filter(__ -> reasons.isEmpty())
@@ -41,9 +43,9 @@ public class SkipUpToDateStep<C extends IncrementalChangesContext> implements St
     }
 
     private UpToDateResult skipExecution(UnitOfWork work, BeforeExecutionState beforeExecutionState, C context) {
-//        if (LOGGER.isInfoEnabled()) {
+        if (LOGGER.isInfoEnabled()) {
             LOGGER.info("Skipping " + work.getDisplayName() + "  as it is up-to-date.");
-//        }
+        }
         @SuppressWarnings("OptionalGetWithoutIsPresent") PreviousExecutionState
                 previousExecutionState = context.getPreviousExecutionState().get();
         AfterExecutionState afterExecutionState = new DefaultAfterExecutionState(
@@ -123,13 +125,13 @@ public class SkipUpToDateStep<C extends IncrementalChangesContext> implements St
     }
 
     private void logExecutionReasons(List<String> reasons, UnitOfWork work) {
-//        if (LOGGER.isInfoEnabled()) {
+        if (LOGGER.isInfoEnabled()) {
             Formatter formatter = new Formatter();
             formatter.format("%s is not up-to-date because:", Strings.nullToEmpty(work.getDisplayName()).toUpperCase());
             for (String message : reasons) {
                 formatter.format("%n  %s", message);
             }
             LOGGER.info(formatter.toString());
-//        }
+        }
     }
 }

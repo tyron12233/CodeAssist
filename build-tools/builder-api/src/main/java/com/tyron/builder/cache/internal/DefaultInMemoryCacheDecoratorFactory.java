@@ -8,8 +8,10 @@ import com.tyron.builder.cache.CrossProcessCacheAccess;
 import com.tyron.builder.cache.FileLock;
 import com.tyron.builder.cache.MultiProcessSafePersistentIndexedCache;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Logger;
 
 /**
  * A {@link CacheDecorator} that wraps each cache with an in-memory cache that is used to short-circuit reads from the backing cache.
@@ -18,7 +20,7 @@ import java.util.logging.Logger;
  * Also decorates each cache so that updates to the backing cache are made asynchronously.
  */
 public class DefaultInMemoryCacheDecoratorFactory implements InMemoryCacheDecoratorFactory {
-    private final static Logger LOG = Logger.getLogger(DefaultInMemoryCacheDecoratorFactory.class.getSimpleName());
+    private final static Logger LOG = LoggerFactory.getLogger(DefaultInMemoryCacheDecoratorFactory.class);
     private final boolean longLivingProcess;
     private final HeapProportionalCacheSizer cacheSizer = new HeapProportionalCacheSizer();
     private final CrossBuildInMemoryCache<String, CacheDetails> caches;
@@ -36,7 +38,7 @@ public class DefaultInMemoryCacheDecoratorFactory implements InMemoryCacheDecora
     protected <K, V> MultiProcessSafeAsyncPersistentIndexedCache<K, V> applyInMemoryCaching(String cacheId, MultiProcessSafeAsyncPersistentIndexedCache<K, V> backingCache, int maxEntriesToKeepInMemory, boolean cacheInMemoryForShortLivedProcesses) {
         if (!longLivingProcess && !cacheInMemoryForShortLivedProcesses) {
             // Short lived process, don't cache in memory
-            LOG.info("Creating cache " + cacheId + " without in-memory store.");
+            LOG.debug("Creating cache " + cacheId + " without in-memory store.");
             return backingCache;
         }
         int targetSize = cacheSizer.scaleCacheSize(maxEntriesToKeepInMemory);
@@ -48,7 +50,7 @@ public class DefaultInMemoryCacheDecoratorFactory implements InMemoryCacheDecora
         CacheDetails cacheDetails = caches.get(cacheId, () -> {
             Cache<Object, Object> entries = createInMemoryCache(cacheId, maxSize);
             CacheDetails details = new CacheDetails(cacheId, maxSize, entries, new AtomicReference<>(null));
-            LOG.info("Creating in-memory store for cache " + cacheId + " (max size: "  + maxSize + ")");
+            LOG.debug("Creating in-memory store for cache " + cacheId + " (max size: "  + maxSize + ")");
             return details;
         });
         if (cacheDetails.maxEntries != maxSize) {

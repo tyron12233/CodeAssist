@@ -28,9 +28,11 @@ import com.tyron.builder.cache.PersistentIndexedCacheParameters;
 import com.tyron.builder.cache.internal.btree.BTreePersistentIndexedCache;
 import com.tyron.builder.cache.internal.cacheops.CacheAccessOperationsStack;
 
-import java.io.File;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -40,13 +42,12 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.logging.Logger;
 
 import javax.annotation.concurrent.ThreadSafe;
 
 @ThreadSafe
 public class DefaultCacheAccess implements CacheCoordinator {
-    private final static Logger LOG = Logger.getLogger(DefaultCacheAccess.class.getSimpleName());
+    private final static Logger LOG = LoggerFactory.getLogger(DefaultCacheAccess.class);
     private final static Runnable NO_OP = () -> {
         // Empty initial operation to trigger onStartWork calls
     };
@@ -159,11 +160,11 @@ public class DefaultCacheAccess implements CacheCoordinator {
                         cleanupAction.cleanup();
                     }
                 } catch (Exception e) {
-                    LOG.info("Cache " + cacheDisplayName + " could not run cleanup action " + cleanupAction);
+                    LOG.debug("Cache " + cacheDisplayName + " could not run cleanup action " + cleanupAction);
                 }
             }
             if (cacheClosedCount != 1) {
-                LOG.info("Cache " + cacheDisplayName + " was closed " + cacheClosedCount + " times.");
+                LOG.debug("Cache " + cacheDisplayName + " was closed " + cacheClosedCount + " times.");
             }
         } finally {
             owner = null;
@@ -267,7 +268,7 @@ public class DefaultCacheAccess implements CacheCoordinator {
         try {
             if (entry == null) {
                 File cacheFile = findCacheFile(parameters);
-                LOG.info("Creating new cache for " + parameters.getCacheName() + ", path " + cacheFile + ", access " + this);
+                LOG.debug("Creating new cache for " + parameters.getCacheName() + ", path " + cacheFile + ", access " + this);
                 Factory<BTreePersistentIndexedCache<K, V>> indexedCacheFactory = () -> doCreateCache(cacheFile, parameters.getKeySerializer(), parameters.getValueSerializer());
 
                 MultiProcessSafePersistentIndexedCache<K, V> indexedCache = new DefaultMultiProcessSafePersistentIndexedCache<K, V>(indexedCacheFactory, fileAccess);

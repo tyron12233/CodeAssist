@@ -22,15 +22,18 @@ import com.tyron.builder.caching.BuildCacheKey;
 import com.tyron.builder.caching.internal.BuildCacheController;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.helpers.NOPLogger;
+
 import java.io.File;
 import java.time.Duration;
 import java.util.Formatter;
 import java.util.List;
 import java.util.Optional;
-import java.util.logging.Logger;
 
 public class ResolveCachingStateStep<C extends ValidationFinishedContext> implements Step<C, CachingResult> {
-    private static final Logger LOGGER = Logger.getLogger(ResolveCachingStateStep.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(ResolveCachingStateStep.class);
     private static final CachingDisabledReason BUILD_CACHE_DISABLED_REASON = new CachingDisabledReason(
             CachingDisabledReasonCategory.BUILD_CACHE_DISABLED, "Build cache is disabled");
     private static final CachingState BUILD_CACHE_DISABLED_STATE = CachingState.disabledWithoutInputs(BUILD_CACHE_DISABLED_REASON);
@@ -159,7 +162,9 @@ public class ResolveCachingStateStep<C extends ValidationFinishedContext> implem
     }
 
     private CachingState calculateCachingState(UnitOfWork work, BeforeExecutionState beforeExecutionState) {
-        Logger logger = LOGGER;
+        Logger logger = buildCache.isEmitDebugLogging()
+                ? LOGGER
+                : NOPLogger.NOP_LOGGER;
         CachingStateFactory cachingStateFactory = new DefaultCachingStateFactory(logger);
 
         ImmutableList.Builder<CachingDisabledReason> cachingDisabledReasonsBuilder = ImmutableList.builder();
@@ -185,9 +190,9 @@ public class ResolveCachingStateStep<C extends ValidationFinishedContext> implem
 
     private void logCacheKey(BuildCacheKey cacheKey, UnitOfWork work) {
         if (buildCache.isEmitDebugLogging()) {
-            LOGGER.warning("Build cache key for " + work.getDisplayName() + " is " + cacheKey.getDisplayName());
+            LOGGER.warn("Build cache key for {} is {}", work.getDisplayName(), cacheKey.getDisplayName());
         } else {
-            LOGGER.info("Build cache key for " + work.getDisplayName() + " is " + cacheKey.getDisplayName());
+            LOGGER.info("Build cache key for {} is {}", work.getDisplayName(), cacheKey.getDisplayName());
         }
     }
 

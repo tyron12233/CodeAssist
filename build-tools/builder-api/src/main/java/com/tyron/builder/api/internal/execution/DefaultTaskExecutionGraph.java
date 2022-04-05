@@ -13,21 +13,22 @@ import com.tyron.builder.api.execution.plan.SelfExecutingNode;
 import com.tyron.builder.api.execution.plan.TaskNode;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.UncheckedException;
-import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.NodeExecutionContext;
 import com.tyron.builder.api.internal.time.Time;
 import com.tyron.builder.api.internal.time.Timer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
-import java.util.logging.Logger;
 
 public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
 
-    private static final Logger LOGGER = Logger.getLogger("DefaultTaskExecutionGraph");
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultTaskExecutionGraph.class);
 
     private final PlanExecutor planExecutor;
     private final List<NodeExecutor> nodeExecutors;
@@ -163,7 +164,7 @@ public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
                 failures,
                 new InvokeNodeExecutorsAction(nodeExecutors, projectExecutionServices)
         );
-        LOGGER.info("Timing: Executing the DAG took " + clock.getElapsed());
+        LOGGER.debug("Timing: Executing the DAG took " + clock.getElapsed());
     }
 
 
