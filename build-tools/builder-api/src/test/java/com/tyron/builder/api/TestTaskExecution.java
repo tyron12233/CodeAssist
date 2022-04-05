@@ -1,44 +1,41 @@
 package com.tyron.builder.api;
 
-import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.Describables;
 import com.tyron.builder.api.internal.MutableBoolean;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.internal.TaskInternal;
-import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.initialization.DefaultProjectDescriptor;
-import com.tyron.builder.api.internal.logging.TreeFormatter;
+import com.tyron.builder.api.internal.logging.services.DefaultStyledTextOutputFactory;
 import com.tyron.builder.api.internal.operations.MultipleBuildOperationFailures;
 import com.tyron.builder.api.internal.project.DefaultProjectOwner;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.reflect.service.scopes.GlobalServices;
-import com.tyron.builder.api.internal.reflect.service.scopes.GradleUserHomeScopeServices;
-import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServiceRegistryFactory;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
+import com.tyron.builder.api.internal.reflect.service.scopes.GlobalServices;
+import com.tyron.builder.api.internal.reflect.service.scopes.GradleUserHomeScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
-import com.tyron.builder.api.internal.service.scopes.ExecutionGradleServices;
+import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.tasks.DefaultTaskContainer;
 import com.tyron.builder.api.internal.tasks.TaskExecutor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
+import com.tyron.builder.api.internal.time.Time;
+import com.tyron.builder.api.logging.LogLevel;
+import com.tyron.builder.api.logging.configuration.ConsoleOutput;
+import com.tyron.builder.api.logging.configuration.LoggingConfiguration;
+import com.tyron.builder.api.logging.configuration.ShowStacktrace;
+import com.tyron.builder.api.logging.configuration.WarningMode;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.TaskContainer;
-import com.tyron.builder.api.tasks.TaskInputs;
-import com.tyron.builder.api.tasks.TaskOutputs;
-import com.tyron.builder.api.util.GFileUtils;
 import com.tyron.builder.api.util.Path;
+import com.tyron.builder.internal.buildevents.BuildExceptionReporter;
 import com.tyron.common.TestUtil;
 
-import org.apache.commons.io.FileUtils;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.io.IOException;
@@ -59,7 +56,8 @@ public class TestTaskExecution {
     @Before
     public void setup() throws IOException {
         File resourcesDirectory = TestUtil.getResourcesDirectory();
-        StartParameterInternal startParameter = new StartParameterInternal() {};
+        StartParameterInternal startParameter = new StartParameterInternal() {
+        };
 
         DefaultServiceRegistry global = new GlobalServices();
         global.register(registration -> {
@@ -68,7 +66,8 @@ public class TestTaskExecution {
             });
         });
 
-        GradleUserHomeScopeServices gradleUserHomeScopeServices = new GradleUserHomeScopeServices(global);
+        GradleUserHomeScopeServices gradleUserHomeScopeServices =
+                new GradleUserHomeScopeServices(global);
         BuildScopeServices buildScopeServices = new BuildScopeServices(gradleUserHomeScopeServices);
         BuildScopeServiceRegistryFactory registryFactory =
                 new BuildScopeServiceRegistryFactory(buildScopeServices);
@@ -109,19 +108,11 @@ public class TestTaskExecution {
         File testProjectDir = TestUtil.getResourcesDirectory();
 
         ProjectFactory projectFactory = gradle.getServices().get(ProjectFactory.class);
-        DefaultProjectOwner owner = DefaultProjectOwner.builder()
-                .setProjectDir(testProjectDir)
-                .setProjectPath(Path.ROOT)
-                .setDisplayName(Describables.of("TestProject"))
-                .setTaskExecutionLock(lock)
-                .setAccessLock(lock)
-                .build();
-        project = projectFactory.createProject(
-                gradle,
-                new DefaultProjectDescriptor("TestProject"),
-                owner,
-                null
-        );
+        DefaultProjectOwner owner = DefaultProjectOwner.builder().setProjectDir(testProjectDir)
+                .setProjectPath(Path.ROOT).setDisplayName(Describables.of("TestProject"))
+                .setTaskExecutionLock(lock).setAccessLock(lock).build();
+        project = projectFactory
+                .createProject(gradle, new DefaultProjectDescriptor("TestProject"), owner, null);
         project.setBuildDir(new File(testProjectDir, "build"));
 
         container = (DefaultTaskContainer) this.project.getTasks();
@@ -214,7 +205,8 @@ public class TestTaskExecution {
         try {
             evaluationAction.execute(project);
         } catch (Throwable e) {
-            project.getState().failed(new ProjectConfigurationException("Failed to evaluate project.", e));
+            project.getState()
+                    .failed(new ProjectConfigurationException("Failed to evaluate project.", e));
         }
 
         project.getState().toAfterEvaluate();
@@ -237,22 +229,56 @@ public class TestTaskExecution {
     }
 
     private void throwFailures(List<Throwable> throwables) {
-        TreeFormatter formatter = new TreeFormatter();
-        for (Throwable t : throwables) {
-            formatter.node(t.toString());
+        BuildExceptionReporter buildExceptionReporter =
+                new BuildExceptionReporter(new DefaultStyledTextOutputFactory(event -> {
 
-            formatter.startChildren();
+                }, Time.clock()), new LoggingConfiguration() {
+                    @Override
+                    public LogLevel getLogLevel() {
+                        return LogLevel.DEBUG;
+                    }
 
-            StackTraceElement[] stackTrace = t.getStackTrace();
-            for (StackTraceElement e : stackTrace) {
-                formatter.node(e.toString());
-                formatter.append("\n");
-            }
+                    @Override
+                    public void setLogLevel(LogLevel logLevel) {
 
-            formatter.endChildren();
-        }
+                    }
 
-        throw new BuildException(formatter.toString());
+                    @Override
+                    public ConsoleOutput getConsoleOutput() {
+                        return ConsoleOutput.Rich;
+                    }
+
+                    @Override
+                    public void setConsoleOutput(ConsoleOutput consoleOutput) {
+
+                    }
+
+                    @Override
+                    public WarningMode getWarningMode() {
+                        return WarningMode.All;
+                    }
+
+                    @Override
+                    public void setWarningMode(WarningMode warningMode) {
+
+                    }
+
+                    @Override
+                    public ShowStacktrace getShowStacktrace() {
+                        return ShowStacktrace.ALWAYS_FULL;
+                    }
+
+                    @Override
+                    public void setShowStacktrace(ShowStacktrace showStacktrace) {
+
+                    }
+                }, (output, args) -> {
+
+                });
+        buildExceptionReporter.buildFinished(new BuildResult(
+                project.getGradle(),
+                new MultipleBuildOperationFailures(throwables, null)
+        ));
     }
 
     private static class DefaultLock implements ResourceLock {

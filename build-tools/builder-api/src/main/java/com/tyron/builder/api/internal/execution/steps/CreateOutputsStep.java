@@ -6,15 +6,13 @@ import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.execution.UnitOfWork;
 import com.tyron.builder.api.internal.tasks.properties.TreeType;
 
-import org.apache.commons.io.FileUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.logging.Logger;
 
 public class CreateOutputsStep<C extends WorkspaceContext, R extends Result> implements Step<C, R> {
-    private static final Logger LOGGER = Logger.getLogger(CreateOutputsStep.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(CreateOutputsStep.class);
 
     private final Step<? super C, ? extends R> delegate;
 
@@ -41,11 +39,11 @@ public class CreateOutputsStep<C extends WorkspaceContext, R extends Result> imp
     private static void ensureOutput(String name, File outputRoot, TreeType type) {
         switch (type) {
             case DIRECTORY:
-                LOGGER.info("Ensuring directory exists for property " + name + " at " + outputRoot);
+                LOGGER.debug("Ensuring directory exists for property " + name + " at " + outputRoot);
                 mkdirs(outputRoot);
                 break;
             case FILE:
-                LOGGER.info("Ensuring parent directory exists for property " + name + " at " + outputRoot);
+                LOGGER.debug("Ensuring parent directory exists for property " + name + " at " + outputRoot);
                 mkdirs(outputRoot.getParentFile());
                 break;
             default:

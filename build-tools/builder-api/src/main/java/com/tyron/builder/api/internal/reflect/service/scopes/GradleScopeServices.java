@@ -1,6 +1,8 @@
 package com.tyron.builder.api.internal.reflect.service.scopes;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.execution.TaskExecutionGraphListener;
+import com.tyron.builder.api.execution.TaskExecutionListener;
 import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchies;
 import com.tyron.builder.api.execution.plan.LocalTaskNodeExecutor;
 import com.tyron.builder.api.execution.plan.NodeExecutor;
@@ -10,6 +12,8 @@ import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.api.internal.concurrent.DefaultExecutorFactory;
 import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
+import com.tyron.builder.api.internal.event.ListenerBroadcast;
+import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.execution.DefaultTaskExecutionGraph;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.file.FileException;
@@ -17,6 +21,7 @@ import com.tyron.builder.api.internal.file.FileMetadata;
 import com.tyron.builder.api.internal.file.Stat;
 import com.tyron.builder.api.internal.logging.progress.ProgressLoggerFactory;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
+import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
@@ -75,16 +80,34 @@ public class GradleScopeServices extends DefaultServiceRegistry {
 //        return new WorkNodeExecutor();
 //    }
 
+    ListenerBroadcast<TaskExecutionGraphListener> createTaskExecutionGraphListenerBroadcast(
+            ListenerManager listenerManager
+    ) {
+        return listenerManager.createAnonymousBroadcaster(TaskExecutionGraphListener.class);
+    }
+
+    ListenerBroadcast<TaskExecutionListener> createTaskExecutionListenerBroadcast(
+            ListenerManager listenerManager
+    ) {
+        return listenerManager.createAnonymousBroadcaster(TaskExecutionListener.class);
+    }
+
     TaskExecutionGraphInternal createTaskExecutionGraph(
             PlanExecutor planExecutor,
             List<NodeExecutor> nodeExecutors,
+            BuildOperationExecutor buildOperationExecutor,
             GradleInternal gradle,
+            ListenerBroadcast<TaskExecutionGraphListener> taskExecutionGraphListenerListeners,
+            ListenerBroadcast<TaskExecutionListener> taskExecutionListeners,
             ServiceRegistry gradleScopedServices
     ) {
         return new DefaultTaskExecutionGraph(
                 planExecutor,
                 nodeExecutors,
+                buildOperationExecutor,
                 gradle,
+                taskExecutionGraphListenerListeners,
+                taskExecutionListeners,
                 gradleScopedServices
         );
     }

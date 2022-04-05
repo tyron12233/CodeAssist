@@ -30,11 +30,9 @@ import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.collections.LazilyInitializedFileCollection;
 import com.tyron.builder.api.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.api.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.api.internal.operations.BuildOperation;
 import com.tyron.builder.api.internal.operations.BuildOperationContext;
 import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.BuildOperationQueue;
 import com.tyron.builder.api.internal.operations.BuildOperationRef;
 import com.tyron.builder.api.internal.operations.RunnableBuildOperation;
 import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
@@ -58,6 +56,9 @@ import com.tyron.builder.api.tasks.execution.ExecuteTaskActionBuildOperationType
 import com.tyron.builder.api.work.AsyncWorkTracker;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.time.Duration;
 import java.util.Collection;
@@ -65,7 +66,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
@@ -76,7 +76,7 @@ import javax.annotation.Nullable;
 public class ExecuteActionsTaskExecuter implements TaskExecuter {
 
     private static final Logger LOGGER =
-            Logger.getLogger(ExecuteActionsTaskExecuter.class.getSimpleName());
+            LoggerFactory.getLogger(ExecuteActionsTaskExecuter.class);
 
     private final BuildCacheState buildCacheState;
 //    private final ScanPluginState scanPluginState;
@@ -299,7 +299,7 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
             this.task.getState().setExecuting(true);
 
             try {
-                LOGGER.info("Executing actions for " + this.task);
+                LOGGER.debug("Executing actions for " + this.task);
                 executeActions(this.task, inputChanges);
                 return this.task.getState()
                         .getDidWork() ? WorkResult.DID_WORK : WorkResult.DID_NO_WORK;

@@ -7,6 +7,8 @@ import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchies;
 import com.tyron.builder.api.execution.plan.TaskDependencyResolver;
 import com.tyron.builder.api.execution.plan.TaskNodeFactory;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
+import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.resources.ResourceLockCoordinationService;
@@ -68,7 +70,15 @@ public class TaskExecutor {
         TaskExecutionGraphInternal taskGraph = project.getGradle().getTaskGraph();
         taskGraph.populate(executionPlan);
 
+
         resourceLockService.withStateLock(() -> {
+
+            BuildOperationExecutor buildOperationExecutor =
+                    project.getServices().get(BuildOperationExecutor.class);
+            BuildOperationDescriptor.Builder builder =
+                    BuildOperationDescriptor.displayName("Running tasks " + Arrays.toString(tasks));
+            buildOperationExecutor.start(builder);
+
             WorkerLeaseRegistry.WorkerLease lease = defaultWorkerLeaseService.getWorkerLease();
             lease.tryLock();
             taskGraph.execute(executionPlan, failures);

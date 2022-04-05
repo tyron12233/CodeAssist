@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.net.URLConnection;
+import java.util.Collection;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 
@@ -91,5 +92,17 @@ public class GUtil {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    public static boolean isTrue(@Nullable Object object) {
+        if (object == null) {
+            return false;
+        }
+        if (object instanceof Collection) {
+            return ((Collection) object).size() > 0;
+        } else if (object instanceof String) {
+            return ((String) object).length() > 0;
+        }
+        return true;
     }
 }
