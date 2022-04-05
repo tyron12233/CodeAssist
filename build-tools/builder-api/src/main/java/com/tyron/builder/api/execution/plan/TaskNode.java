@@ -2,18 +2,19 @@ package com.tyron.builder.api.execution.plan;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
-import com.sun.org.slf4j.internal.LoggerFactory;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.TaskInternal;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.NavigableSet;
 import java.util.Set;
-import java.util.logging.Logger;
 
 public abstract class TaskNode extends Node {
 
-    private static final Logger LOGGER = Logger.getLogger("TaskNode");
+    private static final Logger LOGGER = LoggerFactory.getLogger(TaskNode.class);
 
     public static final int UNKNOWN_ORDINAL = -1;
 
@@ -29,21 +30,21 @@ public abstract class TaskNode extends Node {
         if (!super.doCheckDependenciesComplete()) {
             return false;
         }
-        LOGGER.info("Checking if all must successors are complete for " + this);
+        LOGGER.debug("Checking if all must successors are complete for " + this);
         for (Node dependency : mustSuccessors) {
             if (!dependency.isComplete()) {
                 return false;
             }
         }
 
-        LOGGER.info("Checking if all finalizing successors are complete for " + this);
+        LOGGER.debug("Checking if all finalizing successors are complete for " + this);
         for (Node dependency : finalizingSuccessors) {
             if (!dependency.isComplete()) {
                 return false;
             }
         }
 
-        LOGGER.info("All task dependencies are complete for " + this);
+        LOGGER.debug("All task dependencies are complete for " + this);
         return true;
     }
 

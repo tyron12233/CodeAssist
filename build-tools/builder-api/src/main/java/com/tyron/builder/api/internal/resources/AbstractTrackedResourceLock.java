@@ -1,9 +1,10 @@
 package com.tyron.builder.api.internal.resources;
 
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public abstract class AbstractTrackedResourceLock implements ResourceLock {
-    private static final Logger LOGGER = Logger.getLogger("TrackedResourceLock");
+    private static final Logger LOGGER = LoggerFactory.getLogger(AbstractTrackedResourceLock.class);
 
     private final String displayName;
 
@@ -25,7 +26,7 @@ public abstract class AbstractTrackedResourceLock implements ResourceLock {
     public boolean tryLock() {
         if (!isLockedByCurrentThread()) {
             if (acquireLock()) {
-                LOGGER.info(Thread.currentThread().getName() + ": acquired lock on " + displayName);
+                LOGGER.debug(Thread.currentThread().getName() + ": acquired lock on " + displayName);
                 try {
                     owner.lockAcquired(this);
                 } catch (RuntimeException e) {
@@ -46,7 +47,7 @@ public abstract class AbstractTrackedResourceLock implements ResourceLock {
     public void unlock() {
         if (isLockedByCurrentThread()) {
             releaseLock();
-            LOGGER.info(Thread.currentThread() + ": released lock on " + displayName);
+            LOGGER.debug(Thread.currentThread() + ": released lock on " + displayName);
             try {
                 owner.lockReleased(this);
             } finally {

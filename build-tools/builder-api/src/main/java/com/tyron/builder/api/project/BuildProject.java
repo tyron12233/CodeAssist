@@ -9,6 +9,7 @@ import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.DeleteSpec;
+import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.providers.Provider;
 import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.WorkResult;
@@ -626,14 +627,14 @@ public interface BuildProject extends Comparable<BuildProject> {
 //     *
 //     * @since 4.0
 //     */
-//    ObjectFactory getObjects();
+    ObjectFactory getObjects();
 
     /**
      * Creates a directory and returns a file pointing to it.
      *
      * @param path The path for the directory to be created. Evaluated as per {@link #file(Object)}.
      * @return the created directory
-     * @throws org.gradle.api.InvalidUserDataException If the path points to an existing file.
+     * @throws InvalidUserDataException If the path points to an existing file.
      */
     File mkdir(Object path);
 
@@ -642,7 +643,7 @@ public interface BuildProject extends Comparable<BuildProject> {
      * <p>
      * This will not follow symlinks. If you need to follow symlinks too use {@link #delete(Action)}.
      *
-     * @param paths Any type of object accepted by {@link org.gradle.api.Project#files(Object...)}
+     * @param paths Any type of object accepted by {@link BuildProject#files(Object...)}
      * @return true if anything got deleted, false otherwise
      */
     boolean delete(Object... paths);
@@ -832,4 +833,6 @@ public interface BuildProject extends Comparable<BuildProject> {
     <T> Iterable<T> configure(Iterable<T> objects, Action<? super T> configureAction);
 
     Path getProjectPath();
+
+    Path getIdentityPath();
 }

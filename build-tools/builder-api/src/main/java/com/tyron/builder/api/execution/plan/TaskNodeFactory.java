@@ -2,9 +2,12 @@ package com.tyron.builder.api.execution.plan;
 
 import com.google.common.collect.Maps;
 import com.tyron.builder.api.Task;
+import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.execution.WorkValidationContext;
 import com.tyron.builder.api.internal.execution.impl.DefaultWorkValidationContext;
+import com.tyron.builder.api.plugin.PluginId;
 import com.tyron.builder.api.project.BuildProject;
 
 import org.jetbrains.annotations.Nullable;
@@ -14,7 +17,6 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -22,29 +24,30 @@ public class TaskNodeFactory {
     private final Map<Task, TaskNode> nodes = new HashMap<>();
 //    private final BuildTreeWorkGraphController workGraphController;
     private final NodeValidator nodeValidator;
-//    private final GradleInternal thisBuild;
-//    private final DocumentationRegistry documentationRegistry;
+    private final GradleInternal thisBuild;
+    private final DocumentationRegistry documentationRegistry;
     private final DefaultTypeOriginInspectorFactory typeOriginInspectorFactory;
-//
-//    public TaskNodeFactory(
-//            GradleInternal thisBuild,
-//            DocumentationRegistry documentationRegistry,
-//            BuildTreeWorkGraphController workGraphController,
-//            NodeValidator nodeValidator
-//    ) {
-//        this.thisBuild = thisBuild;
-//        this.documentationRegistry = documentationRegistry;
-//        this.workGraphController = workGraphController;
-//        this.nodeValidator = nodeValidator;
-//        this.typeOriginInspectorFactory = new DefaultTypeOriginInspectorFactory();
-//    }
 
     public TaskNodeFactory(
-            NodeValidator validator
+            GradleInternal thisBuild,
+            DocumentationRegistry documentationRegistry,
+//            BuildTreeWorkGraphController workGraphController,
+            NodeValidator nodeValidator
     ) {
-        nodeValidator = validator;
-        typeOriginInspectorFactory = new DefaultTypeOriginInspectorFactory();
+        this.thisBuild = thisBuild;
+        this.documentationRegistry = documentationRegistry;
+//        this.workGraphController = workGraphController;
+        this.nodeValidator = nodeValidator;
+        this.typeOriginInspectorFactory = new DefaultTypeOriginInspectorFactory();
     }
+
+//    public TaskNodeFactory(
+//            DocumentationRegistry documentationRegistry,
+//            NodeValidator validator
+//    ) {
+//        nodeValidator = validator;
+//        typeOriginInspectorFactory = new DefaultTypeOriginInspectorFactory();
+//    }
 
     public Set<Task> getTasks() {
         return nodes.keySet();
@@ -59,7 +62,7 @@ public class TaskNodeFactory {
         TaskNode node = nodes.get(task);
         if (node == null) {
 //            if (task.getProject().getGradle() == thisBuild) {
-                node = new LocalTaskNode((TaskInternal) task, nodeValidator, new DefaultWorkValidationContext(typeOriginInspectorFactory.forTask(task)));
+                node = new LocalTaskNode((TaskInternal) task, nodeValidator, new DefaultWorkValidationContext(documentationRegistry, typeOriginInspectorFactory.forTask(task)));
 //            } else {
 //                node = TaskInAnotherBuild.of((TaskInternal) task, workGraphController);
 //            }
@@ -108,7 +111,7 @@ public class TaskNodeFactory {
             }
 
             @Override
-            public Optional<String> findPluginDefining(Class<?> type) {
+            public Optional<PluginId> findPluginDefining(Class<?> type) {
                 return Optional.empty();
 //                return classToPlugin.computeIfAbsent(type, clazz -> {
 //                    File taskJar = jarFileFor(type);

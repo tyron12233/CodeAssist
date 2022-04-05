@@ -1,5 +1,7 @@
 package com.tyron.builder.api.internal.snapshot;
 
+import com.tyron.builder.api.internal.RelativePathSupplier;
+
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Deque;
@@ -8,7 +10,7 @@ import java.util.Iterator;
 /**
  * Tracks the relative path. Useful when visiting {@link FileSystemLocationSnapshot}s.
  */
-public class RelativePathTracker  {
+public class RelativePathTracker implements RelativePathSupplier {
     private final Deque<String> segments = new ArrayDeque<>();
     private String rootName;
 

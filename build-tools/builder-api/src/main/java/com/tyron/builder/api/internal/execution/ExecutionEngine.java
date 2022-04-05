@@ -1,11 +1,11 @@
 package com.tyron.builder.api.internal.execution;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.cache.Cache;
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.internal.Try;
 import com.tyron.builder.api.internal.execution.history.AfterExecutionState;
-import com.tyron.builder.api.internal.origin.OriginMetadata;
+import com.tyron.builder.cache.Cache;
+import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -51,7 +51,7 @@ public interface ExecutionEngine {
     interface Result {
         Try<ExecutionResult> getExecutionResult();
 
-//        CachingState getCachingState();
+        Object getCachingState();
 
         /**
          * A list of messages describing the first few reasons encountered that caused the work to be executed.

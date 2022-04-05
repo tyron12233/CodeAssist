@@ -15,11 +15,12 @@ import com.tyron.builder.api.internal.resources.ResourceLockCoordinationService;
 import com.tyron.builder.api.internal.time.Time;
 import com.tyron.builder.api.internal.time.TimeFormatting;
 import com.tyron.builder.api.internal.time.Timer;
-import com.tyron.builder.api.internal.work.WorkerLeaseRegistry;
 import com.tyron.builder.api.internal.work.WorkerLeaseRegistry.WorkerLease;
 import com.tyron.builder.api.internal.work.WorkerLeaseService;
 
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -32,11 +33,10 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class DefaultPlanExecutor implements PlanExecutor, Stoppable {
 
-    private static final Logger LOGGER = Logger.getLogger("DefaultPlanExecutor");
+    private static final Logger LOGGER = LoggerFactory.getLogger("DefaultPlanExecutor");
 
     private final int executorCount;
     private final WorkerLeaseService workerLeaseService;
@@ -114,7 +114,7 @@ public class DefaultPlanExecutor implements PlanExecutor, Stoppable {
         if (workersStarted.compareAndSet(false, true)) {
             LOGGER.info("Using " + executorCount + " parallel executor threads");
             for (int i = 1; i < executorCount; i++) {
-//                executor.execute(new ExecutorWorker(queue, null, cancellationToken, coordinationService, workerLeaseService));
+                executor.execute(new ExecutorWorker(queue, null, cancellationToken, coordinationService, workerLeaseService));
             }
         }
     }
@@ -315,14 +315,13 @@ public class DefaultPlanExecutor implements PlanExecutor, Stoppable {
                     break;
                 }
                 Node node = workItem.selection.getNode();
-                LOGGER.info(node + " (" + Thread.currentThread() +") started.");
+                LOGGER.info("{} ({}) started.", node, Thread.currentThread());
                 executionTimer.reset();
                 execute(node, workItem.plan, workItem.executor);
                 long duration = executionTimer.getElapsedMillis();
                 busy.addAndGet(duration);
-                if (LOGGER.isLoggable(Level.INFO)) {
-                    LOGGER.info(node + " (" +  Thread.currentThread() + ") completed. Took " + TimeFormatting
-                            .formatDurationVerbose(duration));
+                if (LOGGER.isInfoEnabled()) {
+                    LOGGER.info("{} ({}) completed. Took {}.", node, Thread.currentThread(), TimeFormatting.formatDurationVerbose(duration));
                 }
             }
 
@@ -332,8 +331,8 @@ public class DefaultPlanExecutor implements PlanExecutor, Stoppable {
 
             long total = totalTimer.getElapsedMillis();
 
-            if (LOGGER.isLoggable(Level.INFO)) {
-                LOGGER.info("Execution worker [" + Thread.currentThread() + "] finished, busy: " + TimeFormatting.formatDurationVerbose(busy.get()) + ", idle: " + TimeFormatting.formatDurationVerbose(total - busy.get()));
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Execution worker [{}] finished, busy: {}, idle: {}", Thread.currentThread(), TimeFormatting.formatDurationVerbose(busy.get()), TimeFormatting.formatDurationVerbose(total - busy.get()));
             }
         }
 

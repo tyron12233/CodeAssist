@@ -22,6 +22,7 @@ public class DefaultProjectOwner implements ProjectStateUnk {
     private DisplayName displayName;
     private File projectDir;
     private Path projectPath;
+    private Path identityPath;
     private ResourceLock accessLock;
     private ResourceLock taskExecutionLock;
 
@@ -63,7 +64,7 @@ public class DefaultProjectOwner implements ProjectStateUnk {
 
     @Override
     public Path getIdentityPath() {
-        return null;
+        return identityPath;
     }
 
     @Override
@@ -122,6 +123,7 @@ public class DefaultProjectOwner implements ProjectStateUnk {
         private DisplayName displayName;
         private File projectDir;
         private Path projectPath;
+        private Path identityPath;
         private ResourceLock accessLock;
         private ResourceLock taskExecutionLock;
 
@@ -150,6 +152,11 @@ public class DefaultProjectOwner implements ProjectStateUnk {
             return this;
         }
 
+        public Builder setIdentityPath(Path path) {
+            this.identityPath = path;
+            return this;
+        }
+
         public DefaultProjectOwner build() {
             DefaultProjectOwner owner = new DefaultProjectOwner();
             owner.setProjectDir(projectDir);
@@ -157,6 +164,7 @@ public class DefaultProjectOwner implements ProjectStateUnk {
             owner.setDisplayName(displayName);
             owner.setAccessLock(accessLock);
             owner.setTaskExecutionLock(taskExecutionLock);
+            owner.identityPath = identityPath;
             return owner;
         }
     }

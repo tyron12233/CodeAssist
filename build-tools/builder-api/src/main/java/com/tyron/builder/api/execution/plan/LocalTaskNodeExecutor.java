@@ -1,11 +1,15 @@
 package com.tyron.builder.api.execution.plan;
 
+import com.tyron.builder.api.StartParameter;
 import com.tyron.builder.api.file.FileTreeElement;
 import com.tyron.builder.api.internal.TaskInternal;
+import com.tyron.builder.api.internal.changedetection.TaskExecutionMode;
+import com.tyron.builder.api.internal.changedetection.changes.DefaultTaskExecutionModeResolver;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
 import com.tyron.builder.api.internal.file.FileCollectionStructureVisitor;
 import com.tyron.builder.api.internal.file.FileTreeInternal;
 import com.tyron.builder.api.internal.file.collections.FileSystemMirroringFileTree;
+import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.problems.ValidationProblemId;
 import com.tyron.builder.api.internal.reflect.validation.Severity;
 import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
@@ -48,6 +52,13 @@ public class LocalTaskNodeExecutor implements NodeExecutor {
                     localTaskNode.getValidationContext(),
                     (historyMaintained, typeValidationContext) -> detectMissingDependencies(localTaskNode, historyMaintained, inputHierarchy, typeValidationContext)
             );
+
+            DefaultTaskExecutionModeResolver taskExecutionModeResolver =
+                    new DefaultTaskExecutionModeResolver(() -> false);
+            TaskExecutionMode executionMode =
+                    taskExecutionModeResolver.getExecutionMode(task, ctx.getTaskProperties());
+            ctx.setTaskExecutionMode(executionMode);
+
             TaskExecuter taskExecuter = context.getService(TaskExecuter.class);
             taskExecuter.execute(task, state, ctx);
             localTaskNode.getPostAction().execute(task);

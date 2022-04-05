@@ -1,5 +1,8 @@
 package com.tyron.builder.api.internal.reflect.service.scopes;
 
+import com.tyron.builder.api.Action;
+import com.tyron.builder.api.execution.TaskExecutionGraphListener;
+import com.tyron.builder.api.execution.TaskExecutionListener;
 import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchies;
 import com.tyron.builder.api.execution.plan.LocalTaskNodeExecutor;
 import com.tyron.builder.api.execution.plan.NodeExecutor;
@@ -7,16 +10,42 @@ import com.tyron.builder.api.execution.plan.PlanExecutor;
 import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.concurrent.CompositeStoppable;
+import com.tyron.builder.api.internal.concurrent.DefaultExecutorFactory;
+import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
+import com.tyron.builder.api.internal.event.ListenerBroadcast;
+import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.execution.DefaultTaskExecutionGraph;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.file.FileException;
 import com.tyron.builder.api.internal.file.FileMetadata;
 import com.tyron.builder.api.internal.file.Stat;
+import com.tyron.builder.api.internal.logging.progress.ProgressLoggerFactory;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
+import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.api.internal.service.scopes.ExecutionGradleServices;
+import com.tyron.builder.api.internal.work.WorkerLeaseService;
+import com.tyron.builder.api.work.AsyncWorkTracker;
+import com.tyron.builder.api.work.DefaultAsyncWorkTracker;
+import com.tyron.builder.cache.CacheBuilder;
+import com.tyron.builder.cache.CacheRepository;
+import com.tyron.builder.cache.FileLockManager;
+import com.tyron.builder.cache.FileLockReleasedSignal;
+import com.tyron.builder.cache.internal.CacheFactory;
+import com.tyron.builder.cache.internal.CacheScopeMapping;
+import com.tyron.builder.cache.internal.DefaultCacheFactory;
+import com.tyron.builder.cache.internal.DefaultCacheRepository;
+import com.tyron.builder.cache.internal.DefaultFileLockManager;
+import com.tyron.builder.cache.internal.ProcessMetaDataProvider;
+import com.tyron.builder.cache.internal.locklistener.FileLockContentionHandler;
+import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
+import com.tyron.builder.cache.scopes.BuildScopedCache;
+import com.tyron.common.TestUtil;
+
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.List;
@@ -35,6 +64,12 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         });
     }
 
+    AsyncWorkTracker createAsyncWorkTracker(
+            WorkerLeaseService workerLeaseService
+    ) {
+        return new DefaultAsyncWorkTracker(workerLeaseService);
+    }
+
     LocalTaskNodeExecutor createLocalTaskNodeExecutor(ExecutionNodeAccessHierarchies executionNodeAccessHierarchies) {
         return new LocalTaskNodeExecutor(
                 executionNodeAccessHierarchies.getOutputHierarchy()
@@ -45,16 +80,34 @@ public class GradleScopeServices extends DefaultServiceRegistry {
 //        return new WorkNodeExecutor();
 //    }
 
+    ListenerBroadcast<TaskExecutionGraphListener> createTaskExecutionGraphListenerBroadcast(
+            ListenerManager listenerManager
+    ) {
+        return listenerManager.createAnonymousBroadcaster(TaskExecutionGraphListener.class);
+    }
+
+    ListenerBroadcast<TaskExecutionListener> createTaskExecutionListenerBroadcast(
+            ListenerManager listenerManager
+    ) {
+        return listenerManager.createAnonymousBroadcaster(TaskExecutionListener.class);
+    }
+
     TaskExecutionGraphInternal createTaskExecutionGraph(
             PlanExecutor planExecutor,
             List<NodeExecutor> nodeExecutors,
+            BuildOperationExecutor buildOperationExecutor,
             GradleInternal gradle,
+            ListenerBroadcast<TaskExecutionGraphListener> taskExecutionGraphListenerListeners,
+            ListenerBroadcast<TaskExecutionListener> taskExecutionListeners,
             ServiceRegistry gradleScopedServices
     ) {
         return new DefaultTaskExecutionGraph(
                 planExecutor,
                 nodeExecutors,
+                buildOperationExecutor,
                 gradle,
+                taskExecutionGraphListenerListeners,
+                taskExecutionListeners,
                 gradleScopedServices
         );
     }
@@ -70,45 +123,6 @@ public class GradleScopeServices extends DefaultServiceRegistry {
                     return projectScopeServices;
                 }
                 throw new UnsupportedOperationException();
-            }
-        };
-    }
-
-    FileSystem createFileSystem() {
-        return new FileSystem() {
-            @Override
-            public boolean isCaseSensitive() {
-                return true;
-            }
-
-            @Override
-            public boolean canCreateSymbolicLink() {
-                return false;
-            }
-
-            @Override
-            public void createSymbolicLink(File link, File target) throws FileException {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public boolean isSymlink(File suspect) {
-                return false;
-            }
-
-            @Override
-            public void chmod(File file, int mode) throws FileException {
-
-            }
-
-            @Override
-            public int getUnixMode(File f) throws FileException {
-                return 0;
-            }
-
-            @Override
-            public FileMetadata stat(File f) throws FileException {
-                return null;
             }
         };
     }

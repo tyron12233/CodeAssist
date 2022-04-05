@@ -11,5 +11,12 @@ public interface TaskContainer extends Collection<Task> {
 
     <T extends Task> TaskProvider<T> register(String name, Class<T> type, Action<? super T> configurationAction);
 
+    <T extends Task> TaskProvider<T> register(String name, Class<T> type, Object... constructorArgs);
+
+
     <T extends Task> TaskProvider<T> register(String name, Class<T> type);
+
+    <T extends Task> TaskProvider<T> register(String name);
+
+    Task findByName(String name);
 }

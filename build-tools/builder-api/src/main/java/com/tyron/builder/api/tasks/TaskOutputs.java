@@ -111,7 +111,7 @@ public interface TaskOutputs {
     /**
      * Registers some output file for this task.
      *
-     * @param path The output file. The given path is evaluated as per {@link org.gradle.api.Project#file(Object)}.
+     * @param path The output file. The given path is evaluated as per {@link com.tyron.builder.api.project.BuildProject#file(Object)}.
      * @return a property builder to further configure this property.
      */
     TaskOutputFilePropertyBuilder file(Object path);

@@ -1,6 +1,7 @@
 package com.tyron.builder.api.work;
 
-import com.tyron.builder.api.internal.file.FileType;
+import com.tyron.builder.api.file.FileType;
+import com.tyron.builder.api.tasks.PathSensitivity;
 
 import java.io.File;
 
@@ -35,7 +36,7 @@ public interface FileChange {
      * The normalized path of the file, as specified by the path normalization strategy.
      *
      * <p>
-     *    See {@link org.gradle.api.tasks.PathSensitivity}, {@link org.gradle.api.tasks.Classpath} and {@link org.gradle.api.tasks.CompileClasspath} for the different path normalization strategies.
+     *    See {@link PathSensitivity}, {@link .Classpath} and {@link CompileClasspath} for the different path normalization strategies.
      * </p>
      */
     String getNormalizedPath();
