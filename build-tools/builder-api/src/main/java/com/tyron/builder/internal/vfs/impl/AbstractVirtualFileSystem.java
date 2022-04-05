@@ -6,11 +6,13 @@ import com.tyron.builder.api.internal.snapshot.MetadataSnapshot;
 import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Optional;
-import java.util.logging.Logger;
 
 public abstract class AbstractVirtualFileSystem implements VirtualFileSystem {
-    private static final Logger LOGGER = Logger.getLogger(AbstractVirtualFileSystem.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(AbstractVirtualFileSystem.class);
 
     protected final VfsRootReference rootReference;
 
@@ -35,7 +37,7 @@ public abstract class AbstractVirtualFileSystem implements VirtualFileSystem {
 
     @Override
     public void invalidate(Iterable<String> locations) {
-        LOGGER.info("Invalidating VFS paths: " + locations);
+        LOGGER.debug("Invalidating VFS paths: " + locations);
         rootReference.update(root -> {
             SnapshotHierarchy result = root;
             for (String location : locations) {
@@ -48,7 +50,7 @@ public abstract class AbstractVirtualFileSystem implements VirtualFileSystem {
 
     @Override
     public void invalidateAll() {
-        LOGGER.info("Invalidating the whole VFS");
+        LOGGER.debug("Invalidating the whole VFS");
         rootReference.update(root -> updateNotifyingListeners(diffListener -> {
             root.rootSnapshots()
                     .forEach(diffListener::nodeRemoved);

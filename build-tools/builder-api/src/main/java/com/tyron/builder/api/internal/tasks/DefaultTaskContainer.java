@@ -176,7 +176,11 @@ public class DefaultTaskContainer implements TaskContainerInternal {
         });
 
         if (eagerlyCreateLazyTasks) {
-            provider.get();
+            T t = provider.get();
+
+            if (configurationAction != null) {
+                configurationAction.execute(t);
+            }
         }
 
         return provider;

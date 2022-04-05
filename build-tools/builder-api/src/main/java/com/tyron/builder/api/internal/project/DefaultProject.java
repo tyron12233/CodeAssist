@@ -13,10 +13,13 @@ import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.DeleteSpec;
+import com.tyron.builder.api.internal.file.FileLookup;
 import com.tyron.builder.api.internal.file.FileOperations;
+import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
+import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.providers.Property;
 import com.tyron.builder.api.providers.Provider;
@@ -200,24 +203,30 @@ public class DefaultProject implements ProjectInternal {
         return getServices().get(FileOperations.class);
     }
 
-    @Override
-    public File file(Object path) {
-        return getFileOperations().file(path);
+    private FileResolver getProjectFileResolver() {
+        FileLookup fileLookup = getServices().get(FileLookup.class);
+        return fileLookup.getFileResolver(getProjectDir());
     }
 
     @Override
+    public File file(Object path) {
+        return file(path, PathValidation.NONE);
+    }
+
+
+    @Override
     public File file(Object path, PathValidation validation) throws InvalidUserDataException {
-        return null;
+        return getProjectFileResolver().resolve(path, validation);
     }
 
     @Override
     public URI uri(Object path) {
-        return null;
+        return getProjectFileResolver().resolveUri(path);
     }
 
     @Override
     public String relativePath(Object path) {
-        return null;
+        return getProjectFileResolver().resolveAsRelativePath(path);
     }
 
     @Override
@@ -233,13 +242,15 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public ConfigurableFileTree fileTree(Object baseDir) {
-        return null;
+        return getObjects().fileTree().from(baseDir);
     }
 
     @Override
     public ConfigurableFileTree fileTree(Object baseDir,
                                          Action<? super ConfigurableFileTree> configureAction) {
-        return null;
+        ConfigurableFileTree files = fileTree(baseDir);
+        configureAction.execute(files);
+        return files;
     }
 
     @Override
@@ -260,6 +271,11 @@ public class DefaultProject implements ProjectInternal {
     @Override
     public <T> Provider<T> provider(Callable<T> value) {
         return null;
+    }
+
+    @Override
+    public ObjectFactory getObjects() {
+        return getServices().get(ObjectFactory.class);
     }
 
     @Override

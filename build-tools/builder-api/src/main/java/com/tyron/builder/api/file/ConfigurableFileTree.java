@@ -14,7 +14,7 @@ import java.util.Set;
 public interface ConfigurableFileTree extends FileTree, DirectoryTree, PatternFilterable, Buildable {
     /**
      * Specifies base directory for this file tree using the given path. The path is evaluated as per {@link
-     * org.gradle.api.Project#file(Object)}.
+     * com.tyron.builder.api.project.BuildProject#file(Object)}.
      *
      * @param dir The base directory.
      * @return this
