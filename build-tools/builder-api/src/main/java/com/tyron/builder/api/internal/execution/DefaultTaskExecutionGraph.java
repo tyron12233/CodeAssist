@@ -5,6 +5,9 @@ import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.execution.ProjectExecutionServiceRegistry;
+import com.tyron.builder.api.execution.TaskExecutionGraph;
+import com.tyron.builder.api.execution.TaskExecutionGraphListener;
+import com.tyron.builder.api.execution.TaskExecutionListener;
 import com.tyron.builder.api.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.execution.plan.Node;
 import com.tyron.builder.api.execution.plan.NodeExecutor;
@@ -13,6 +16,8 @@ import com.tyron.builder.api.execution.plan.SelfExecutingNode;
 import com.tyron.builder.api.execution.plan.TaskNode;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.UncheckedException;
+import com.tyron.builder.api.internal.event.ListenerBroadcast;
+import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.NodeExecutionContext;
 import com.tyron.builder.api.internal.time.Time;
@@ -33,11 +38,11 @@ public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
     private final PlanExecutor planExecutor;
     private final List<NodeExecutor> nodeExecutors;
     private final GradleInternal gradleInternal;
-//    private final ListenerBroadcast<TaskExecutionGraphListener> graphListeners;
+    private final ListenerBroadcast<TaskExecutionGraphListener> graphListeners;
 //    private final ListenerBroadcast<org.gradle.api.execution.TaskExecutionListener> taskListeners;
 //    private final BuildScopeListenerRegistrationListener buildScopeListenerRegistrationListener;
     private final ServiceRegistry globalServices;
-//    private final BuildOperationExecutor buildOperationExecutor;
+    private final BuildOperationExecutor buildOperationExecutor;
 //    private final ListenerBuildOperationDecorator listenerBuildOperationDecorator;
     private ExecutionPlan executionPlan;
     private List<Task> allTasks;
@@ -46,20 +51,20 @@ public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
     public DefaultTaskExecutionGraph(
             PlanExecutor planExecutor,
             List<NodeExecutor> nodeExecutors,
-//            BuildOperationExecutor buildOperationExecutor,
+            BuildOperationExecutor buildOperationExecutor,
 //            ListenerBuildOperationDecorator listenerBuildOperationDecorator,
             GradleInternal gradleInternal,
-//            ListenerBroadcast<TaskExecutionGraphListener> graphListeners,
+            ListenerBroadcast<TaskExecutionGraphListener> graphListeners,
 //            ListenerBroadcast<TaskExecutionListener> taskListeners,
 //            BuildScopeListenerRegistrationListener buildScopeListenerRegistrationListener,
             ServiceRegistry globalServices
     ) {
         this.planExecutor = planExecutor;
         this.nodeExecutors = nodeExecutors;
-//        this.buildOperationExecutor = buildOperationExecutor;
+        this.buildOperationExecutor = buildOperationExecutor;
 //        this.listenerBuildOperationDecorator = listenerBuildOperationDecorator;
         this.gradleInternal = gradleInternal;
-//        this.graphListeners = graphListeners;
+        this.graphListeners = graphListeners;
 //        this.taskListeners = taskListeners;
 //        this.buildScopeListenerRegistrationListener = buildScopeListenerRegistrationListener;
         this.globalServices = globalServices;
@@ -69,6 +74,21 @@ public class DefaultTaskExecutionGraph implements TaskExecutionGraphInternal {
     @Override
     public boolean hasTask(Task task) {
         return executionPlan.getTasks().contains(task);
+    }
+
+    @Override
+    public void addTaskExecutionGraphListener(TaskExecutionGraphListener listener) {
+        graphListeners.add(listener);
+    }
+
+    @Override
+    public void removeTaskExecutionGraphListener(TaskExecutionGraphListener listener) {
+        graphListeners.remove(listener);
+    }
+
+    @Override
+    public void whenReady(Action<TaskExecutionGraph> action) {
+        graphListeners.add("TaskExecutionGraph.whenReady", action);
     }
 
     @Override
