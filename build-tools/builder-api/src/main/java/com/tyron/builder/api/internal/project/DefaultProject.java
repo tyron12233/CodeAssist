@@ -537,6 +537,11 @@ public class DefaultProject implements ProjectInternal {
     }
 
     @Override
+    public Path getIdentityPath() {
+        return owner.getIdentityPath();
+    }
+
+    @Override
     public GradleInternal getGradle() {
         return gradle;
     }

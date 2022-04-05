@@ -832,4 +832,6 @@ public interface BuildProject extends Comparable<BuildProject> {
     <T> Iterable<T> configure(Iterable<T> objects, Action<? super T> configureAction);
 
     Path getProjectPath();
+
+    Path getIdentityPath();
 }

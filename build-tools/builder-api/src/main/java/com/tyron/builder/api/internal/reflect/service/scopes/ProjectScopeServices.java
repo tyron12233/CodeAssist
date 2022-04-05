@@ -17,6 +17,7 @@ import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
 import com.tyron.builder.api.internal.file.collections.MinimalFileSet;
 import com.tyron.builder.api.internal.file.collections.MinimalFileTree;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
+import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.provider.PropertyHost;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
@@ -52,8 +53,10 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
         addProvider(new WorkerSharedProjectScopeServices(project.getProjectDir()));
     }
 
-    protected TaskContainerInternal createTaskContainerInternal() {
-        return new DefaultTaskContainer(project);
+    protected TaskContainerInternal createTaskContainerInternal(
+            BuildOperationExecutor buildOperationExecutor
+    ) {
+        return new DefaultTaskContainer(project, buildOperationExecutor);
     }
 
     FileLookup createFileLookup() {

@@ -11,6 +11,7 @@ import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.api.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
 import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.snapshot.impl.ImplementationSnapshot;
@@ -50,12 +51,12 @@ import java.util.function.Predicate;
 
 public class DefaultTask extends AbstractTask {
 
-    private String name;
     private final TaskStateInternal state;
     private final TaskMutator taskMutator;
+    private String name;
 
     public String toString() {
-        return name;
+        return taskIdentity.name;
     }
 
     private List<InputChangesAwareTaskAction> actions;
@@ -82,12 +83,23 @@ public class DefaultTask extends AbstractTask {
 
     private String group;
 
-    private final BuildProject project;
+    private final TaskIdentity<?> taskIdentity;
+    private final ProjectInternal project;
+    
+    public DefaultTask() {
+        this(taskInfo());
+    }
 
-    public DefaultTask(ProjectInternal project) {
-        this.project = project;
+    protected DefaultTask(TaskInfo taskInfo) {
+        super(taskInfo);
 
-        TaskContainerInternal tasks = project.getTasks();
+        this.taskIdentity = taskInfo.identity;
+        this.name = taskIdentity.name;
+
+        this.project = taskInfo.project;
+
+        TaskContainerInternal tasks = (TaskContainerInternal) project.getTasks();
+
         lifecycleDependencies = new DefaultTaskDependency(tasks);
         mustRunAfter = new DefaultTaskDependency(tasks);
         shouldRunAfter = new DefaultTaskDependency(tasks);
@@ -107,17 +119,18 @@ public class DefaultTask extends AbstractTask {
     }
 
 
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         DefaultTask that = (DefaultTask) o;
-        return Objects.equals(name, that.name);
+        return this.taskIdentity.equals(that.taskIdentity);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(description);
+        return taskIdentity.hashCode();
     }
 
     @Override

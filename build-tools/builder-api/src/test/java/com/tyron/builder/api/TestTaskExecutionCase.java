@@ -101,8 +101,11 @@ public class TestTaskExecutionCase {
         File testProjectDir = TestUtil.getResourcesDirectory();
 
         ProjectFactory projectFactory = gradle.getServices().get(ProjectFactory.class);
-        DefaultProjectOwner owner = DefaultProjectOwner.builder().setProjectDir(testProjectDir)
-                .setProjectPath(Path.ROOT).setDisplayName(Describables.of("TestProject"))
+        DefaultProjectOwner owner = DefaultProjectOwner.builder()
+                .setProjectDir(testProjectDir)
+                .setProjectPath(Path.ROOT)
+                .setIdentityPath(Path.ROOT)
+                .setDisplayName(Describables.of("TestProject"))
                 .setTaskExecutionLock(lock).setAccessLock(lock).build();
         project = projectFactory
                 .createProject(gradle, new DefaultProjectDescriptor("TestProject"), owner, null);

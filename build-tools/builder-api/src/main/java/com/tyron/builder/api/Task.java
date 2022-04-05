@@ -15,6 +15,27 @@ import java.util.function.Predicate;
 
 public interface Task extends Comparable<Task> {
 
+    String TASK_NAME = "name";
+
+    String TASK_DESCRIPTION = "description";
+
+    String TASK_GROUP = "group";
+
+    String TASK_TYPE = "type";
+
+    String TASK_DEPENDS_ON = "dependsOn";
+
+    String TASK_OVERWRITE = "overwrite";
+
+    String TASK_ACTION = "action";
+
+    /**
+     * Constructor arguments for the Task
+     *
+     * @since 4.7
+     */
+    String TASK_CONSTRUCTOR_ARGS = "constructorArgs";
+
     /**
      * Returns the name of this task. This name uniquely identifies the task within its Project
      * @return The name of this task, never returns null.
