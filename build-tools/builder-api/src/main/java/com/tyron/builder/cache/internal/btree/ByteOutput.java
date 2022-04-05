@@ -11,7 +11,7 @@ import java.io.RandomAccessFile;
 /**
  * Allows a stream of bytes to be written to a particular location of some backing byte stream.
  */
-class ByteOutput {
+public class ByteOutput {
     private final RandomAccessFile file;
     private final ResettableBufferedOutputStream bufferedOutputStream;
     private CountingOutputStream countingOutputStream;

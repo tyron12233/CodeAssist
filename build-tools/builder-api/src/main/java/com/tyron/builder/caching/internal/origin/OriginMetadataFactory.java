@@ -1,15 +1,14 @@
 package com.tyron.builder.caching.internal.origin;
 
-import com.sun.org.slf4j.internal.Logger;
-import com.sun.org.slf4j.internal.LoggerFactory;
 import com.tyron.builder.caching.internal.CacheableEntity;
 
 import java.time.Duration;
 import java.util.Properties;
+import java.util.logging.Logger;
 
 public class OriginMetadataFactory {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(OriginMetadataFactory.class);
+    private static final Logger LOGGER = Logger.getLogger(OriginMetadataFactory.class.getSimpleName());
 
     private static final String BUILD_INVOCATION_ID_KEY = "buildInvocationId";
     private static final String TYPE_KEY = "type";
@@ -60,9 +59,9 @@ public class OriginMetadataFactory {
         return inputStream -> {
             Properties properties = new Properties();
             properties.load(inputStream);
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("Origin for {}: {}", entry.getDisplayName(), properties);
-            }
+//            if (LOGGER.isDebugEnabled()) {
+                LOGGER.info("Origin for " + entry.getDisplayName() + ": " + properties);
+//            }
 
             String originBuildInvocationId = properties.getProperty(BUILD_INVOCATION_ID_KEY);
             String executionTimeAsString = properties.getProperty(EXECUTION_TIME_KEY);

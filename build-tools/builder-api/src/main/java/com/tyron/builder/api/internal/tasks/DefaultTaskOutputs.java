@@ -11,6 +11,8 @@ import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
 import com.tyron.builder.api.internal.tasks.properties.OutputFilePropertySpec;
 import com.tyron.builder.api.internal.tasks.properties.OutputFilePropertyType;
+import com.tyron.builder.api.internal.tasks.properties.OutputFilesCollector;
+import com.tyron.builder.api.internal.tasks.properties.OutputUnpacker;
 import com.tyron.builder.api.internal.tasks.properties.PropertyValue;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
@@ -84,10 +86,12 @@ public class DefaultTaskOutputs implements TaskOutputsInternal {
     }
 
     public ImmutableSortedSet<OutputFilePropertySpec> getFileProperties() {
+        OutputFilesCollector collector = new OutputFilesCollector();
+        TaskPropertyUtils.visitProperties(propertyWalker, task, new OutputUnpacker(task.toString(), fileCollectionFactory, false, false, collector));
+        return collector.getFileProperties();
 //        GetOutputFilesVisitor visitor = new GetOutputFilesVisitor(this.task.toString(), this.fileCollectionFactory, false);
 //        TaskPropertyUtils.visitProperties(this.propertyWalker, this.task, visitor);
 //        return visitor.getFileProperties();
-        return ImmutableSortedSet.of();
     }
 
     @Override
@@ -173,7 +177,9 @@ public class DefaultTaskOutputs implements TaskOutputsInternal {
 
         @Override
         protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
-            DefaultTaskOutputs.this.getFileProperties();
+            for (OutputFilePropertySpec propertySpec : getFileProperties()) {
+                visitor.accept(propertySpec.getPropertyFiles());
+            }
         }
 
         @Override

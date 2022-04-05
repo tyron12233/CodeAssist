@@ -4,9 +4,12 @@ import com.google.common.collect.Lists;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -105,5 +108,58 @@ public class CollectionUtils {
             }
         }
         return destination;
+    }
+
+    private static <T> List<T> toMutableList(Iterable<? extends T> things) {
+        if (things == null) {
+            return new ArrayList<T>(0);
+        }
+        List<T> list = new ArrayList<T>();
+        for (T thing : things) {
+            list.add(thing);
+        }
+        return list;
+    }
+
+
+    public static <T> List<T> intersection(Collection<? extends Collection<T>> availableValuesByDescriptor) {
+        List<T> result = new ArrayList<T>();
+        Iterator<? extends Collection<T>> iterator = availableValuesByDescriptor.iterator();
+        if (iterator.hasNext()) {
+            Collection<T> firstSet = iterator.next();
+            result.addAll(firstSet);
+            while (iterator.hasNext()) {
+                Collection<T> next = iterator.next();
+                result.retainAll(next);
+            }
+        }
+        return result;
+
+    }
+
+    public static <T> List<T> toList(T[] things) {
+        if (things == null || things.length == 0) {
+            return new ArrayList<T>(0);
+        }
+
+        List<T> list = new ArrayList<T>(things.length);
+        Collections.addAll(list, things);
+        return list;
+    }
+
+    public static <T> Set<T> toSet(Iterable<? extends T> things) {
+        if (things == null) {
+            return new HashSet<T>(0);
+        }
+        if (things instanceof Set) {
+            @SuppressWarnings("unchecked") Set<T> castThings = (Set<T>) things;
+            return castThings;
+        }
+
+        Set<T> set = new LinkedHashSet<T>();
+        for (T thing : things) {
+            set.add(thing);
+        }
+        return set;
     }
 }

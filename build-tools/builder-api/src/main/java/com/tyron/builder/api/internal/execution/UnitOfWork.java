@@ -1,12 +1,20 @@
 package com.tyron.builder.api.internal.execution;
 
+import static com.tyron.builder.api.internal.execution.fingerprint.InputFingerprinter.*;
+
 import com.google.common.collect.ImmutableSortedMap;
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.file.FileCollection;
+import com.tyron.builder.api.internal.execution.caching.CachingDisabledReason;
+import com.tyron.builder.api.internal.execution.caching.CachingState;
+import com.tyron.builder.api.internal.execution.fingerprint.InputFingerprinter;
 import com.tyron.builder.api.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.api.internal.execution.history.OverlappingOutputs;
+import com.tyron.builder.api.internal.execution.workspace.WorkspaceProvider;
 import com.tyron.builder.api.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.api.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.api.internal.snapshot.ValueSnapshot;
+import com.tyron.builder.api.internal.snapshot.impl.ImplementationSnapshot;
 import com.tyron.builder.api.internal.tasks.properties.TreeType;
 
 import javax.annotation.Nullable;
@@ -59,10 +67,10 @@ public interface UnitOfWork extends Describable {
         throw new UnsupportedOperationException();
     }
 
-//    /**
-//     * Returns the {@link WorkspaceProvider} to allocate a workspace to execution this work in.
-//     */
-//    WorkspaceProvider getWorkspaceProvider();
+    /**
+     * Returns the {@link WorkspaceProvider} to allocate a workspace to execution this work in.
+     */
+    WorkspaceProvider getWorkspaceProvider();
 
     default Optional<Duration> getTimeout() {
         return Optional.empty();
@@ -83,32 +91,32 @@ public interface UnitOfWork extends Describable {
     // TODO Move this to {@link InputVisitor}
     interface ImplementationVisitor {
         void visitImplementation(Class<?> implementation);
-//        void visitImplementation(ImplementationSnapshot implementation);
+        void visitImplementation(ImplementationSnapshot implementation);
     }
 
-//    /**
-//     * Returns the fingerprinter used to fingerprint inputs.
-//     */
-//    InputFingerprinter getInputFingerprinter();
-//
-//    /**
-//     * Visit identity inputs of the work.
-//     *
-//     * These are inputs that are passed to {@link #identify(Map, Map)} to calculate the identity of the work.
-//     * These are more expensive to calculate than regular inputs as they need to be calculated even if the execution of the work is short circuited by an identity cache.
-//     * They also cannot reuse snapshots taken during previous executions.
-//     * Because of these reasons only capture inputs as identity if they are actually used to calculate the identity of the work.
-//     * Any non-identity inputs should be visited when calling {@link #visitRegularInputs(InputVisitor)}.
-//     */
-//    default void visitIdentityInputs(InputVisitor visitor) {}
-//
-//    /**
-//     * Visit regular inputs of the work.
-//     *
-//     * Regular inputs are inputs that are not used to calculate the identity of the work, but used to check up-to-dateness or to calculate the cache key.
-//     * To visit all inputs one must call both {@link #visitIdentityInputs(InputVisitor)} and {@link #visitRegularInputs(InputVisitor)}.
-//     */
-//    default void visitRegularInputs(InputVisitor visitor) {}
+    /**
+     * Returns the fingerprinter used to fingerprint inputs.
+     */
+    InputFingerprinter getInputFingerprinter();
+
+    /**
+     * Visit identity inputs of the work.
+     *
+     * These are inputs that are passed to {@link #identify(Map, Map)} to calculate the identity of the work.
+     * These are more expensive to calculate than regular inputs as they need to be calculated even if the execution of the work is short circuited by an identity cache.
+     * They also cannot reuse snapshots taken during previous executions.
+     * Because of these reasons only capture inputs as identity if they are actually used to calculate the identity of the work.
+     * Any non-identity inputs should be visited when calling {@link #visitRegularInputs(InputVisitor)}.
+     */
+    default void visitIdentityInputs(InputVisitor visitor) {}
+
+    /**
+     * Visit regular inputs of the work.
+     *
+     * Regular inputs are inputs that are not used to calculate the identity of the work, but used to check up-to-dateness or to calculate the cache key.
+     * To visit all inputs one must call both {@link #visitIdentityInputs(InputVisitor)} and {@link #visitRegularInputs(InputVisitor)}.
+     */
+    default void visitRegularInputs(InputVisitor visitor) {}
 
     void visitOutputs(File workspace, OutputVisitor visitor);
 
@@ -125,32 +133,32 @@ public interface UnitOfWork extends Describable {
         default void visitDestroyable(File destroyableRoot) {}
     }
 
-//    /**
-//     * Handles when an input cannot be read while fingerprinting.
-//     */
-//    default void handleUnreadableInputs(InputFileFingerprintingException ex) {
-//        throw ex;
-//    }
-//
-//    /**
-//     * Handles when an output cannot be read while snapshotting.
-//     */
-//    default void handleUnreadableOutputs(OutputFileSnapshottingException ex) {
-//        throw ex;
-//    }
-//
-//    /**
-//     * Validate the work definition and configuration.
-//     */
-//    default void validate(WorkValidationContext validationContext) {}
-//
-//    /**
-//     * Return a reason to disable caching for this work.
-//     * When returning {@link Optional#empty()} if caching can still be disabled further down the pipeline.
-//     */
-//    default Optional<CachingDisabledReason> shouldDisableCaching(@Nullable OverlappingOutputs detectedOverlappingOutputs) {
-//        return Optional.empty();
-//    }
+    /**
+     * Handles when an input cannot be read while fingerprinting.
+     */
+    default void handleUnreadableInputs(InputFileFingerprintingException ex) {
+        throw ex;
+    }
+
+    /**
+     * Handles when an output cannot be read while snapshotting.
+     */
+    default void handleUnreadableOutputs(OutputSnapshotter.OutputFileSnapshottingException ex) {
+        throw ex;
+    }
+
+    /**
+     * Validate the work definition and configuration.
+     */
+    default void validate(WorkValidationContext validationContext) {}
+
+    /**
+     * Return a reason to disable caching for this work.
+     * When returning {@link Optional#empty()} if caching can still be disabled further down the pipeline.
+     */
+    default Optional<CachingDisabledReason> shouldDisableCaching(@Nullable OverlappingOutputs detectedOverlappingOutputs) {
+        return Optional.empty();
+    }
 
     /**
      * Is this work item allowed to load from the cache, or if we only allow it to be stored.
@@ -223,7 +231,7 @@ public interface UnitOfWork extends Describable {
     /**
      * This is a temporary measure for Gradle tasks to track a legacy measurement of all input snapshotting together.
      */
-//    default void markLegacySnapshottingInputsFinished(CachingState cachingState) {}
+    default void markLegacySnapshottingInputsFinished(CachingState cachingState) {}
 
     /**
      * This is a temporary measure for Gradle tasks to track a legacy measurement of all input snapshotting together.

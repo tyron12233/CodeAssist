@@ -1,6 +1,7 @@
 package com.tyron.builder.api.internal.tasks;
 
 import com.google.common.collect.ImmutableList;
+import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,8 +20,7 @@ public interface TaskExecuterResult {
     /**
      * If the execution resulted in some previous output being reused, this returns its origin metadata.
      */
-    // Optional<OriginMetadata>
-    Optional<Object> getReusedOutputOriginMetadata();
+    Optional<OriginMetadata> getReusedOutputOriginMetadata();
 
     /**
      * The caching state of the task, including all its captured inputs and the cache key if calculated.
@@ -40,7 +40,7 @@ public interface TaskExecuterResult {
         }
 
         @Override
-        public Optional<Object> getReusedOutputOriginMetadata() {
+        public Optional<OriginMetadata> getReusedOutputOriginMetadata() {
             return Optional.empty();
         }
 

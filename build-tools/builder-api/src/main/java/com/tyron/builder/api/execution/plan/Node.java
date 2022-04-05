@@ -2,10 +2,12 @@ package com.tyron.builder.api.execution.plan;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
-import com.sun.org.slf4j.internal.LoggerFactory;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.resources.ResourceLock;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import javax.annotation.OverridingMethodsMustInvokeSuper;
@@ -14,13 +16,12 @@ import java.util.List;
 import java.util.NavigableSet;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.logging.Logger;
 
 /**
  * A node in the execution graph that represents some executable code with potential dependencies on other nodes.
  */
 public abstract class Node implements Comparable<Node> {
-    private static final Logger LOGGER = Logger.getLogger("Node");
+    private static final Logger LOGGER = LoggerFactory.getLogger(Node.class);
 
     @VisibleForTesting
     enum ExecutionState {
@@ -221,15 +222,15 @@ public abstract class Node implements Comparable<Node> {
 
     @OverridingMethodsMustInvokeSuper
     protected boolean doCheckDependenciesComplete() {
-        LOGGER.info("Checking if all dependencies are complete for " + this);
+        LOGGER.debug("Checking if all dependencies are complete for {}", this);
         for (Node dependency : dependencySuccessors) {
             if (!dependency.isComplete()) {
-                LOGGER.info("Dependency " + dependency + " for " + this + " not yet completed");
+                LOGGER.debug("Dependency {} for {} not yet completed", dependency, this);
                 return false;
             }
         }
 
-        LOGGER.info("All dependencies are complete for " + this);
+        LOGGER.debug("All dependencies are complete for {}", this);
         return true;
     }
 

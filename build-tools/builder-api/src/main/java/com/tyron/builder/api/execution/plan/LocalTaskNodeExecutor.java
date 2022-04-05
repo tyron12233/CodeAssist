@@ -2,6 +2,7 @@ package com.tyron.builder.api.execution.plan;
 
 import com.tyron.builder.api.file.FileTreeElement;
 import com.tyron.builder.api.internal.TaskInternal;
+import com.tyron.builder.api.internal.changedetection.TaskExecutionMode;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
 import com.tyron.builder.api.internal.file.FileCollectionStructureVisitor;
 import com.tyron.builder.api.internal.file.FileTreeInternal;
@@ -48,6 +49,8 @@ public class LocalTaskNodeExecutor implements NodeExecutor {
                     localTaskNode.getValidationContext(),
                     (historyMaintained, typeValidationContext) -> detectMissingDependencies(localTaskNode, historyMaintained, inputHierarchy, typeValidationContext)
             );
+            ctx.setTaskExecutionMode(TaskExecutionMode.INCREMENTAL);
+
             TaskExecuter taskExecuter = context.getService(TaskExecuter.class);
             taskExecuter.execute(task, state, ctx);
             localTaskNode.getPostAction().execute(task);

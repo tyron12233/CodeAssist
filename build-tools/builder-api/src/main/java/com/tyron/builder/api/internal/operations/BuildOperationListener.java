@@ -1,5 +1,8 @@
 package com.tyron.builder.api.internal.operations;
 
+import com.tyron.builder.api.internal.service.scopes.EventScope;
+import com.tyron.builder.api.internal.service.scopes.Scope;
+
 /**
  * A listener that is notified as build operations are executed.
  *
@@ -13,6 +16,7 @@ package com.tyron.builder.api.internal.operations;
  *
  * @since 3.5
  */
+@EventScope(Scope.Global.class)
 public interface BuildOperationListener {
 
     void started(BuildOperationDescriptor buildOperation, OperationStartEvent startEvent);

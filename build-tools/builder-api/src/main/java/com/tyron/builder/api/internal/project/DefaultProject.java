@@ -13,6 +13,7 @@ import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.DeleteSpec;
+import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
@@ -195,9 +196,13 @@ public class DefaultProject implements ProjectInternal {
         return owner.getProjectDir();
     }
 
+    private FileOperations getFileOperations() {
+        return getServices().get(FileOperations.class);
+    }
+
     @Override
     public File file(Object path) {
-        return null;
+        return getFileOperations().file(path);
     }
 
     @Override

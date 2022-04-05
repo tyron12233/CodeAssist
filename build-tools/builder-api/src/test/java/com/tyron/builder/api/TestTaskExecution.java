@@ -1,37 +1,50 @@
 package com.tyron.builder.api;
 
+import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.Describables;
 import com.tyron.builder.api.internal.MutableBoolean;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.api.internal.TaskInternal;
+import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.initialization.DefaultProjectDescriptor;
+import com.tyron.builder.api.internal.logging.TreeFormatter;
+import com.tyron.builder.api.internal.operations.MultipleBuildOperationFailures;
 import com.tyron.builder.api.internal.project.DefaultProjectOwner;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.reflect.service.scopes.GlobalServices;
+import com.tyron.builder.api.internal.reflect.service.scopes.GradleUserHomeScopeServices;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServiceRegistryFactory;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
+import com.tyron.builder.api.internal.service.scopes.ExecutionGradleServices;
 import com.tyron.builder.api.internal.tasks.DefaultTaskContainer;
 import com.tyron.builder.api.internal.tasks.TaskExecutor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.TaskContainer;
+import com.tyron.builder.api.tasks.TaskInputs;
 import com.tyron.builder.api.tasks.TaskOutputs;
+import com.tyron.builder.api.util.GFileUtils;
 import com.tyron.builder.api.util.Path;
 import com.tyron.common.TestUtil;
 
+import org.apache.commons.io.FileUtils;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 
 /**
  * WIP
@@ -48,13 +61,15 @@ public class TestTaskExecution {
         File resourcesDirectory = TestUtil.getResourcesDirectory();
         StartParameterInternal startParameter = new StartParameterInternal() {};
 
-        DefaultServiceRegistry global = new DefaultServiceRegistry();
+        DefaultServiceRegistry global = new GlobalServices();
         global.register(registration -> {
             registration.add(PropertyWalker.class, (instance, validationContext, visitor) -> {
 
             });
         });
-        BuildScopeServices buildScopeServices = new BuildScopeServices(global);
+
+        GradleUserHomeScopeServices gradleUserHomeScopeServices = new GradleUserHomeScopeServices(global);
+        BuildScopeServices buildScopeServices = new BuildScopeServices(gradleUserHomeScopeServices);
         BuildScopeServiceRegistryFactory registryFactory =
                 new BuildScopeServiceRegistryFactory(buildScopeServices);
 
@@ -91,9 +106,11 @@ public class TestTaskExecution {
 
         global.add(gradle);
 
+        File testProjectDir = TestUtil.getResourcesDirectory();
+
         ProjectFactory projectFactory = gradle.getServices().get(ProjectFactory.class);
         DefaultProjectOwner owner = DefaultProjectOwner.builder()
-                .setProjectDir(resourcesDirectory)
+                .setProjectDir(testProjectDir)
                 .setProjectPath(Path.ROOT)
                 .setDisplayName(Describables.of("TestProject"))
                 .setTaskExecutionLock(lock)
@@ -105,6 +122,8 @@ public class TestTaskExecution {
                 owner,
                 null
         );
+        project.setBuildDir(new File(testProjectDir, "build"));
+
         container = (DefaultTaskContainer) this.project.getTasks();
     }
 
@@ -131,12 +150,28 @@ public class TestTaskExecution {
     @Test
     public void testSkipOnlyIf() {
         MutableBoolean executed = new MutableBoolean(false);
-        Action<BuildProject> evaluationAction = project -> {
-            TaskContainer tasks = project.getTasks();
-            tasks.register("SkipTask", task -> {
-                task.onlyIf(t -> false);
-                task.doLast(__ -> executed.set(true));
-            });
+        Action<BuildProject> evaluationAction = new Action<BuildProject>() {
+            @Override
+            public void execute(BuildProject project) {
+                TaskContainer tasks = project.getTasks();
+                tasks.register("SkipTask", new Action<Task>() {
+                    @Override
+                    public void execute(Task task) {
+                        task.onlyIf(new Predicate<Task>() {
+                            @Override
+                            public boolean test(Task t) {
+                                return false;
+                            }
+                        });
+                        task.doLast(new Action<Task>() {
+                            @Override
+                            public void execute(Task t) {
+                                executed.set(true);
+                            }
+                        });
+                    }
+                });
+            }
         };
 
         evaluateProject(project, evaluationAction);
@@ -148,11 +183,24 @@ public class TestTaskExecution {
     @Test
     public void testTaskOutputs() {
         Action<BuildProject> evaluationAction = project -> {
+
+            File outputDir = new File(project.getBuildDir(), "output");
+            File input = new File(project.getBuildDir().getParent(), "Test.java");
+
             TaskContainer tasks = project.getTasks();
-            tasks.register("Task", task -> {
-                TaskOutputs outputs = task.getOutputs();
-                outputs.dir(TestUtil.getResourcesDirectory().toURI().toString());
-                task.doLast(__ -> System.out.println("Executing"));
+            tasks.register("Task", new Action<Task>() {
+                @Override
+                public void execute(Task task) {
+                    task.getOutputs().dir(outputDir);
+                    task.getInputs().file(input);
+
+                    task.doLast(new Action<Task>() {
+                        @Override
+                        public void execute(Task task) {
+                            System.out.println("RUNNING");
+                        }
+                    });
+                }
             });
         };
 
@@ -180,7 +228,31 @@ public class TestTaskExecution {
         TaskExecutor taskExecutor = new TaskExecutor(project);
         taskExecutor.execute(taskNames);
         List<Throwable> failures = taskExecutor.getFailures();
-        assert  failures.isEmpty() : "Project execution failure: " + failures;
+
+        if (failures.isEmpty()) {
+            return;
+        }
+
+        throwFailures(failures);
+    }
+
+    private void throwFailures(List<Throwable> throwables) {
+        TreeFormatter formatter = new TreeFormatter();
+        for (Throwable t : throwables) {
+            formatter.node(t.toString());
+
+            formatter.startChildren();
+
+            StackTraceElement[] stackTrace = t.getStackTrace();
+            for (StackTraceElement e : stackTrace) {
+                formatter.node(e.toString());
+                formatter.append("\n");
+            }
+
+            formatter.endChildren();
+        }
+
+        throw new BuildException(formatter.toString());
     }
 
     private static class DefaultLock implements ResourceLock {

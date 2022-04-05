@@ -3,13 +3,20 @@ package com.tyron.builder.api;
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.RelativePath;
+import com.tyron.builder.api.internal.Cast;
+import com.tyron.builder.api.internal.MutableReference;
 import com.tyron.builder.api.internal.TaskInternal;
+import com.tyron.builder.api.internal.execution.history.InputChangesInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
+import com.tyron.builder.api.internal.hash.ClassLoaderHierarchyHasher;
+import com.tyron.builder.api.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.resources.ResourceLock;
+import com.tyron.builder.api.internal.snapshot.impl.ImplementationSnapshot;
 import com.tyron.builder.api.internal.tasks.DefaultTaskInputs;
 import com.tyron.builder.api.internal.tasks.DefaultTaskOutputs;
+import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.internal.tasks.TaskDestroyablesInternal;
 import com.tyron.builder.api.internal.tasks.TaskInputsInternal;
@@ -34,6 +41,7 @@ import com.tyron.builder.api.util.Path;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -43,14 +51,14 @@ import java.util.function.Predicate;
 public class DefaultTask extends AbstractTask {
 
     private String name;
-    private TaskStateInternal state;
+    private final TaskStateInternal state;
     private final TaskMutator taskMutator;
 
     public String toString() {
         return name;
     }
 
-    private List<Action<? super Task>> actions;
+    private List<InputChangesAwareTaskAction> actions;
 
     private final DefaultTaskDependency dependencies;
 
@@ -127,15 +135,20 @@ public class DefaultTask extends AbstractTask {
         if (actions == null) {
             actions = new ArrayList<>();
         }
-        return actions;
+        return Cast.uncheckedNonnullCast(actions);
     }
 
     @Override
-    public void setActions(List<Action<? super Task>> actions) {
-        getActions().clear();
-        for (Action<? super Task> action : actions) {
-            doLast(action);
-        }
+    public void setActions(List<Action<? super Task>> replacements) {
+        taskMutator.mutate("Task.setActions(List<Action>)", new Runnable() {
+            @Override
+            public void run() {
+                getTaskActions().clear();
+                for (Action<? super Task> action : replacements) {
+                    doLast(action);
+                }
+            }
+        });
     }
 
     @Override
@@ -165,6 +178,26 @@ public class DefaultTask extends AbstractTask {
     }
 
     @Override
+    public StandardOutputCapture getStandardOutputCapture() {
+        MutableReference<PrintStream> previousOutput = MutableReference.of(null);
+
+        return new StandardOutputCapture() {
+            @Override
+            public StandardOutputCapture start() {
+                previousOutput.set(System.out);
+                return this;
+            }
+
+            @Override
+            public StandardOutputCapture stop() {
+                System.setOut(previousOutput.get());
+                previousOutput.set(null);
+                return this;
+            }
+        };
+    }
+
+    @Override
     public void setDidWork(boolean didWork) {
 
     }
@@ -181,30 +214,45 @@ public class DefaultTask extends AbstractTask {
 
     @Override
     public Task doFirst(Action<? super Task> action) {
-        List<Action<? super Task>> actions = getActions();
-        actions.add(0, action);
-        return this;
+        return doFirst("doFirst {} action", action);
     }
 
     @Override
     public Task doFirst(String actionName, Action<? super Task> action) {
-        List<Action<? super Task>> actions = getActions();
-        actions.add(0, action);
+        if (action == null) {
+            throw new InvalidUserDataException("Action must not be null!");
+        }
+        taskMutator.mutate("Task.doFirst(Action)", new Runnable() {
+            @Override
+            public void run() {
+                getTaskActions().add(0, wrap(action, actionName));
+            }
+        });
         return this;
     }
 
     @Override
     public Task doLast(Action<? super Task> action) {
-        List<Action<? super Task>> actions = getActions();
-        actions.add(action);
-        return this;
+        return doLast("doLast {} action", action);
     }
 
     @Override
     public Task doLast(String actionName, Action<? super Task> action) {
-        List<Action<? super Task>> actions = getActions();
-        actions.add(action);
+        if (action == null) {
+            throw new InvalidUserDataException("Action must not be null!");
+        }
+        taskMutator.mutate("Task.doLast(Action)", () -> {
+            getTaskActions().add(wrap(action, actionName));
+        });
         return this;
+    }
+
+    @Override
+    public List<InputChangesAwareTaskAction> getTaskActions() {
+        if (actions == null) {
+            actions = new ArrayList<>(3);
+        }
+        return actions;
     }
 
     @Override
@@ -356,5 +404,90 @@ public class DefaultTask extends AbstractTask {
     @Override
     public int compareTo(@NotNull Task task) {
         return 0;
+    }
+
+    private InputChangesAwareTaskAction wrap(final Action<? super Task> action) {
+        return wrap(action, "unnamed action");
+    }
+
+    private InputChangesAwareTaskAction wrap(final Action<? super Task> action, String actionName) {
+        if (action instanceof InputChangesAwareTaskAction) {
+            return (InputChangesAwareTaskAction) action;
+        }
+        return new TaskActionWrapper(action, actionName);
+    }
+
+    private static class TaskActionWrapper implements InputChangesAwareTaskAction {
+        private final Action<? super Task> action;
+        private final String maybeActionName;
+
+        /**
+         * The <i>action name</i> is used to construct a human readable name for
+         * the actions to be used in progress logging. It is only used if
+         * the wrapped action does not already implement {@link Describable}.
+         */
+        public TaskActionWrapper(Action<? super Task> action, String maybeActionName) {
+            this.action = action;
+            this.maybeActionName = maybeActionName;
+        }
+
+        @Override
+        public void setInputChanges(InputChangesInternal inputChanges) {
+        }
+
+        @Override
+        public void clearInputChanges() {
+        }
+
+        @Override
+        public void execute(Task task) {
+            ClassLoader original = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(action.getClass().getClassLoader());
+            try {
+                action.execute(task);
+            } finally {
+                Thread.currentThread().setContextClassLoader(original);
+            }
+        }
+        public ImplementationSnapshot getActionImplementation(ClassLoaderHierarchyHasher hasher) {
+            return ImplementationSnapshot.of(getActionClassName(action), hasher.getClassLoaderHash(action.getClass().getClassLoader()));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof TaskActionWrapper)) {
+                return false;
+            }
+
+            TaskActionWrapper that = (TaskActionWrapper) o;
+            return action.equals(that.action);
+        }
+
+        @Override
+        public int hashCode() {
+            return action.hashCode();
+        }
+
+        @Override
+        public String getDisplayName() {
+            if (action instanceof Describable) {
+                return ((Describable) action).getDisplayName();
+            }
+            return "Execute " + maybeActionName;
+        }
+    }
+
+    private static String getActionClassName(Object action) {
+//        if (action instanceof ScriptOrigin) {
+//            ScriptOrigin origin = (ScriptOrigin) action;
+//            return origin.getOriginalClassName() + "_" + origin.getContentHash();
+//        } else {
+//
+//        }
+
+        return action.getClass().getName();
     }
 }

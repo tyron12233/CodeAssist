@@ -62,7 +62,7 @@ public class DeferredUtil {
         Object current = deferred;
         while (isNestableDeferred(current)) {
             if (current instanceof Callable) {
-                current = (Callable<?>) current;
+                current = GUtil.uncheckedCall((Callable<?>) current);
             } else {
                 current = unpackKotlinFunction0(current);
             }

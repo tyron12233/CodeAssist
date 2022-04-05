@@ -5,6 +5,8 @@ import static com.google.common.collect.Iterables.toArray;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.tyron.builder.api.Task;
+import com.tyron.builder.api.internal.provider.ProviderInternal;
+import com.tyron.builder.api.internal.provider.ValueSupplier;
 import com.tyron.builder.api.internal.tasks.AbstractTaskDependency;
 import com.tyron.builder.api.internal.tasks.TaskDependencyContainer;
 import com.tyron.builder.api.internal.tasks.TaskDependencyResolveContext;
@@ -60,16 +62,16 @@ public class DefaultTaskDependency extends AbstractTaskDependency {
                 context.add(dependency);
             } else if (dependency instanceof TaskDependency) {
                 context.add(dependency);
-//            } else if (dependency instanceof ProviderInternal) {
-//                // When a Provider is used as a task dependency (rather than as a task input), need to unpack the value
-//                ProviderInternal<?> provider = (ProviderInternal<?>) dependency;
-//                ValueSupplier.ValueProducer producer = provider.getProducer();
-//                if (producer.isKnown()) {
-//                    producer.visitProducerTasks(context);
-//                } else {
-//                    // The provider does not know how to produce the value, so use the value instead
-//                    queue.addFirst(provider.get());
-//                }
+            } else if (dependency instanceof ProviderInternal) {
+                // When a Provider is used as a task dependency (rather than as a task input), need to unpack the value
+                ProviderInternal<?> provider = (ProviderInternal<?>) dependency;
+                ValueSupplier.ValueProducer producer = provider.getProducer();
+                if (producer.isKnown()) {
+                    producer.visitProducerTasks(context);
+                } else {
+                    // The provider does not know how to produce the value, so use the value instead
+                    queue.addFirst(provider.get());
+                }
             } else if (dependency instanceof TaskDependencyContainer) {
                 ((TaskDependencyContainer) dependency).visitDependencies(context);
 //            } else if (dependency instanceof Closure) {

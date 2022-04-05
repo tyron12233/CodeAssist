@@ -1,6 +1,7 @@
 package com.tyron.builder.api.internal.execution.history;
 
 import com.google.common.collect.Ordering;
+import com.tyron.builder.api.internal.file.Deleter;
 import com.tyron.builder.api.internal.file.FileType;
 import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
 import com.tyron.builder.api.internal.snapshot.FileSystemSnapshot;
@@ -33,10 +34,6 @@ public class OutputsCleaner {
     private final Predicate<File> dirSafeToDelete;
 
     private boolean didWork;
-
-    interface Deleter {
-        void delete(File file);
-    }
 
     public OutputsCleaner(Deleter deleter, Predicate<File> fileSafeToDelete, Predicate<File> dirSafeToDelete) {
         this.deleter = deleter;

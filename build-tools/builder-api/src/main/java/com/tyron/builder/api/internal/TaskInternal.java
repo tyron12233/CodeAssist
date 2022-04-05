@@ -1,7 +1,9 @@
 package com.tyron.builder.api.internal;
 
 import com.tyron.builder.api.Task;
+import com.tyron.builder.api.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.resources.ResourceLock;
+import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
 import com.tyron.builder.api.internal.tasks.TaskInputsInternal;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 import com.tyron.builder.api.tasks.TaskDependency;
@@ -12,6 +14,13 @@ import java.util.List;
 import java.util.function.Predicate;
 
 public interface TaskInternal extends Task {
+
+    /**
+     * A more efficient version of {@link #getActions()}, which circumvents the
+     * validating change listener that normally prevents users from changing tasks
+     * once they start executing.
+     */
+    List<InputChangesAwareTaskAction> getTaskActions();
 
     /**
      * "Lifecycle dependencies" are dependencies of this task declared via an explicit {@link Task#dependsOn(Object...)} call,
@@ -34,4 +43,6 @@ public interface TaskInternal extends Task {
     TaskStateInternal getState();
 
     boolean getImpliesSubProjects();
+
+    StandardOutputCapture getStandardOutputCapture();
 }

@@ -24,22 +24,21 @@ import com.tyron.builder.api.internal.time.Time;
 import com.tyron.builder.api.internal.time.Timer;
 import com.tyron.builder.api.util.Path;
 
-import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
-import java.util.logging.Logger;
 
 public class DefaultWorkerLeaseService implements WorkerLeaseService, Stoppable {
 
     public static final String PROJECT_LOCK_STATS_PROPERTY = "org.gradle.internal.project.lock.stats";
 
-    private static final Logger LOGGER = Logger.getLogger("WorkerLeaseService");
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultWorkerLeaseService.class);
 
     private final int maxWorkerCount;
     private final ResourceLockCoordinationService coordinationService;
@@ -54,7 +53,7 @@ public class DefaultWorkerLeaseService implements WorkerLeaseService, Stoppable 
         this.projectLockRegistry = new ProjectLockRegistry(coordinationService, false);
         this.taskLockRegistry = new TaskExecutionLockRegistry(coordinationService, projectLockRegistry);
         this.workerLeaseLockRegistry = new WorkerLeaseLockRegistry(coordinationService);
-        LOGGER.info("Using " + maxWorkerCount + " worker leases.");
+        LOGGER.info("Using {} worker leases.", maxWorkerCount);
     }
 
     @Override
@@ -342,7 +341,7 @@ public class DefaultWorkerLeaseService implements WorkerLeaseService, Stoppable 
         });
 
         if (projectLockStatistics.isEnabled()) {
-            LOGGER.warning("Time spent waiting on project locks: " + projectLockStatistics.getTotalWaitTimeMillis() + "ms");
+            LOGGER.warn("Time spent waiting on project locks: " + projectLockStatistics.getTotalWaitTimeMillis() + "ms");
         }
     }
 

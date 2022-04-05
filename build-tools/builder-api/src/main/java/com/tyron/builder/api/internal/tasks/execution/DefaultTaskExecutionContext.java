@@ -1,10 +1,10 @@
 package com.tyron.builder.api.internal.tasks.execution;
 
 import com.tyron.builder.api.execution.plan.LocalTaskNode;
+import com.tyron.builder.api.internal.changedetection.TaskExecutionMode;
 import com.tyron.builder.api.internal.execution.WorkValidationContext;
-import com.tyron.builder.api.internal.tasks.BuildOperationContext;
+import com.tyron.builder.api.internal.operations.BuildOperationContext;
 import com.tyron.builder.api.internal.tasks.TaskExecutionContext;
-import com.tyron.builder.api.internal.tasks.TaskExecutionMode;
 import com.tyron.builder.api.internal.tasks.properties.TaskProperties;
 
 import java.util.Optional;

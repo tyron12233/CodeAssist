@@ -1,17 +1,22 @@
 package com.tyron.builder.api.internal.snapshot;
 
-public class RelativePathTrackingFileSystemSnapshotHierarchyVisitor {
-    public SnapshotVisitResult visitEntry(FileSystemSnapshot fileSystemLeafSnapshot,
-                                          RelativePathTracker pathTracker) {
-        return null;
-    }
+import com.tyron.builder.api.internal.RelativePathSupplier;
 
-    public void enterDirectory(DirectorySnapshot directorySnapshot,
-                               RelativePathTracker pathTracker) {
-    }
+public interface RelativePathTrackingFileSystemSnapshotHierarchyVisitor {
+    /**
+     * Called before visiting the contents of a directory.
+     */
+    default void enterDirectory(DirectorySnapshot directorySnapshot, RelativePathSupplier relativePath) {}
 
-    public void leaveDirectory(DirectorySnapshot directorySnapshot,
-                               RelativePathTracker pathTracker) {
+    /**
+     * Called for each regular file/directory/missing/unavailable file.
+     *
+     * @return how to continue visiting the rest of the snapshot hierarchy.
+     */
+    SnapshotVisitResult visitEntry(FileSystemLocationSnapshot snapshot, RelativePathSupplier relativePath);
 
-    }
+    /**
+     * Called after all entries in the directory has been visited.
+     */
+    default void leaveDirectory(DirectorySnapshot directorySnapshot, RelativePathSupplier relativePath) {}
 }
