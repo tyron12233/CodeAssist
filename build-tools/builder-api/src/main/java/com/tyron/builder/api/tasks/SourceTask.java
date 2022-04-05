@@ -22,11 +22,15 @@ public class SourceTask extends DefaultTask implements PatternFilterable {
         patternSet = getPatternSetFactory().create();
     }
 
+    @Internal
     protected Factory<PatternSet> getPatternSetFactory() {
-        return ((ProjectInternal) getProject()).getServices().getFactory(PatternSet.class);
+        return getServices().getFactory(PatternSet.class);
     }
 
     @InputFiles
+    @SkipWhenEmpty
+    @IgnoreEmptyDirectories
+    @PathSensitive(PathSensitivity.ABSOLUTE)
     public FileTree getSource() {
         return sourceFiles.getAsFileTree().matching(patternSet);
     }
@@ -119,6 +123,7 @@ public class SourceTask extends DefaultTask implements PatternFilterable {
     /**
      * {@inheritDoc}
      */
+    @Internal
     @Override
     public Set<String> getIncludes() {
         return patternSet.getIncludes();
@@ -136,6 +141,7 @@ public class SourceTask extends DefaultTask implements PatternFilterable {
     /**
      * {@inheritDoc}
      */
+    @Internal
     @Override
     public Set<String> getExcludes() {
         return patternSet.getExcludes();

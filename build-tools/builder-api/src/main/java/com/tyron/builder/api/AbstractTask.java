@@ -5,6 +5,7 @@ import static com.tyron.builder.api.internal.GUtil.uncheckedCall;
 import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
+import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.util.Predicates;
 
 import java.util.concurrent.Callable;
@@ -28,11 +29,13 @@ public abstract class AbstractTask implements TaskInternal {
         return NEXT_INSTANCE.get();
     }
 
+    @Internal
     @Override
     public boolean getImpliesSubProjects() {
         return false;
     }
 
+    @Internal
     @Override
     public Predicate<? super TaskInternal> getOnlyIf() {
         return onlyIf;

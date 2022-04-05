@@ -8,10 +8,12 @@ import com.tyron.builder.api.internal.MutableReference;
 import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.execution.history.InputChangesInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
+import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.api.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.snapshot.impl.ImplementationSnapshot;
@@ -38,6 +40,7 @@ import com.tyron.builder.api.tasks.TaskOutputFilePropertyBuilder;
 import com.tyron.builder.api.tasks.TaskOutputs;
 import com.tyron.builder.api.tasks.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskState;
+import com.tyron.builder.api.util.GFileUtils;
 import com.tyron.builder.api.util.Path;
 
 import org.jetbrains.annotations.NotNull;
@@ -55,6 +58,7 @@ public class DefaultTask extends AbstractTask {
     private final TaskStateInternal state;
     private final TaskMutator taskMutator;
     private String name;
+    private ServiceRegistry servcices;
 
     public String toString() {
         return taskIdentity.name;
@@ -98,6 +102,7 @@ public class DefaultTask extends AbstractTask {
         this.name = taskIdentity.name;
 
         this.project = taskInfo.project;
+        this.servcices = project.getServices();
 
         TaskContainerInternal tasks = (TaskContainerInternal) project.getTasks();
 
@@ -129,11 +134,17 @@ public class DefaultTask extends AbstractTask {
         return this.taskIdentity.equals(that.taskIdentity);
     }
 
+    @Internal
+    protected ServiceRegistry getServices() {
+        return servcices;
+    }
+
     @Override
     public int hashCode() {
         return taskIdentity.hashCode();
     }
 
+    @Internal
     @Override
     public String getName() {
         return name;
@@ -144,6 +155,7 @@ public class DefaultTask extends AbstractTask {
         this.name = name;
     }
 
+    @Internal
     @Override
     public List<Action<? super Task>> getActions() {
         if (actions == null) {
@@ -165,6 +177,7 @@ public class DefaultTask extends AbstractTask {
         });
     }
 
+    @Internal
     @Override
     public TaskDependency getTaskDependencies() {
         return dependencies;
@@ -176,6 +189,7 @@ public class DefaultTask extends AbstractTask {
         return this;
     }
 
+    @Internal
     @Override
     public Set<Object> getDependsOn() {
         return lifecycleDependencies.getMutableValues();
@@ -186,11 +200,13 @@ public class DefaultTask extends AbstractTask {
         lifecycleDependencies.setValues(dependsOnTasks);
     }
 
+    @Internal
     @Override
     public TaskStateInternal getState() {
         return state;
     }
 
+    @Internal
     @Override
     public StandardOutputCapture getStandardOutputCapture() {
         MutableReference<PrintStream> previousOutput = MutableReference.of(null);
@@ -216,11 +232,13 @@ public class DefaultTask extends AbstractTask {
 
     }
 
+    @Internal
     @Override
     public boolean getDidWork() {
         return false;
     }
 
+    @Internal
     @Override
     public String getPath() {
         return Path.path(project.getPath() + ":" + getName()).getPath();
@@ -261,6 +279,7 @@ public class DefaultTask extends AbstractTask {
         return this;
     }
 
+    @Internal
     @Override
     public List<InputChangesAwareTaskAction> getTaskActions() {
         if (actions == null) {
@@ -269,6 +288,7 @@ public class DefaultTask extends AbstractTask {
         return actions;
     }
 
+    @Internal
     @Override
     public boolean getEnabled() {
         return enabled;
@@ -279,6 +299,7 @@ public class DefaultTask extends AbstractTask {
         this.enabled = enabled;
     }
 
+    @Internal
     @Override
     public String getDescription() {
         return description;
@@ -289,6 +310,7 @@ public class DefaultTask extends AbstractTask {
         this.description = description;
     }
 
+    @Internal
     @Override
     public String getGroup() {
         return this.group;
@@ -299,16 +321,19 @@ public class DefaultTask extends AbstractTask {
         this.group = group;
     }
 
+    @Internal
     @Override
     public TaskInputsInternal getInputs() {
         return inputs;
     }
 
+    @Internal
     @Override
     public TaskOutputsInternal getOutputs() {
         return outputs;
     }
 
+    @Internal
     @Override
     public TaskDestroyables getDestroyables() {
         return new TaskDestroyablesInternal() {
@@ -329,6 +354,7 @@ public class DefaultTask extends AbstractTask {
         };
     }
 
+    @Internal
     @Override
     public TaskLocalState getLocalState() {
         return new TaskLocalStateInternal() {
@@ -349,9 +375,12 @@ public class DefaultTask extends AbstractTask {
         };
     }
 
+    @Internal
     @Override
     public File getTemporaryDir() {
-        return null;
+        File dir = getServices().get(TemporaryFileProvider.class).newTemporaryFile(getName());
+        GFileUtils.mkdirs(dir);
+        return dir;
     }
 
     @Override
@@ -365,6 +394,7 @@ public class DefaultTask extends AbstractTask {
         this.mustRunAfter.setValues(mustRunAfter);
     }
 
+    @Internal
     @Override
     public TaskDependency getMustRunAfter() {
         return mustRunAfter;
@@ -380,6 +410,7 @@ public class DefaultTask extends AbstractTask {
 
     }
 
+    @Internal
     @Override
     public TaskDependency getFinalizedBy() {
         return finalizedBy;
@@ -395,16 +426,19 @@ public class DefaultTask extends AbstractTask {
         this.shouldRunAfter.setValues(shouldRunAfter);
     }
 
+    @Internal
     @Override
     public TaskDependency getShouldRunAfter() {
         return shouldRunAfter;
     }
 
+    @Internal
     @Override
     public BuildProject getProject() {
         return project;
     }
 
+    @Internal
     @Override
     public TaskDependency getLifecycleDependencies() {
         return lifecycleDependencies;
