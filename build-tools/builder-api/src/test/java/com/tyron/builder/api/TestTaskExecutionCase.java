@@ -2,9 +2,13 @@ package com.tyron.builder.api;
 
 import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.Describables;
+import com.tyron.builder.api.internal.GUtil;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
+import com.tyron.builder.api.internal.fingerprint.DirectorySensitivity;
+import com.tyron.builder.api.internal.fingerprint.LineEndingSensitivity;
 import com.tyron.builder.api.internal.initialization.DefaultProjectDescriptor;
+import com.tyron.builder.api.internal.logging.events.StyledTextOutputEvent;
 import com.tyron.builder.api.internal.logging.services.DefaultStyledTextOutputFactory;
 import com.tyron.builder.api.internal.operations.MultipleBuildOperationFailures;
 import com.tyron.builder.api.internal.project.DefaultProjectOwner;
@@ -19,27 +23,34 @@ import com.tyron.builder.api.internal.reflect.service.scopes.GradleUserHomeScope
 import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.tasks.DefaultTaskContainer;
+import com.tyron.builder.api.internal.tasks.StaticValue;
 import com.tyron.builder.api.internal.tasks.TaskExecutor;
+import com.tyron.builder.api.internal.tasks.properties.InputFilePropertyType;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.internal.time.Time;
 import com.tyron.builder.api.logging.LogLevel;
+import com.tyron.builder.api.logging.Logger;
+import com.tyron.builder.api.logging.Logging;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
 import com.tyron.builder.api.logging.configuration.LoggingConfiguration;
 import com.tyron.builder.api.logging.configuration.ShowStacktrace;
 import com.tyron.builder.api.logging.configuration.WarningMode;
 import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.tasks.InputFiles;
 import com.tyron.builder.api.util.Path;
 import com.tyron.builder.internal.buildevents.BuildExceptionReporter;
 import com.tyron.common.TestUtil;
 
 import org.junit.Before;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class TestTaskExecutionCase {
+public abstract class TestTaskExecutionCase {
 
     private final ResourceLock lock = new DefaultLock();
     protected ProjectInternal project;
@@ -55,7 +66,22 @@ public class TestTaskExecutionCase {
         DefaultServiceRegistry global = new GlobalServices();
         global.register(registration -> {
             registration.add(PropertyWalker.class, (instance, validationContext, visitor) -> {
-
+                Method[] methods = instance.getClass().getMethods();
+                for (Method method : methods) {
+                    if (method.getAnnotation(InputFiles.class) != null) {
+                        visitor.visitInputFileProperty(
+                                method.getName(),
+                                false,
+                                true,
+                                DirectorySensitivity.DEFAULT,
+                                LineEndingSensitivity.DEFAULT,
+                                true,
+                                null,
+                                new StaticValue(GUtil.uncheckedCall(() -> method.invoke(instance))),
+                                InputFilePropertyType.FILES
+                        );
+                    }
+                }
             });
         });
 
@@ -114,12 +140,22 @@ public class TestTaskExecutionCase {
         container = (DefaultTaskContainer) this.project.getTasks();
     }
 
+    @Test
+    public void test() {
+        evaluateProject(project, this::evaluateProject);
+        executeProject(project, getTasksToExecute().toArray(new String[0]));
+    }
+
+    public abstract void evaluateProject(BuildProject project);
+
+    public abstract List<String> getTasksToExecute();
+
     /**
      * Used to evaluate the project and mutate its state
      * @param project the project to evaluate
      * @param evaluationAction the action to run that will evaluate the project
      */
-    protected void evaluateProject(ProjectInternal project, Action<BuildProject> evaluationAction) {
+    private void evaluateProject(ProjectInternal project, Action<BuildProject> evaluationAction) {
         project.getState().toBeforeEvaluate();
         project.getState().toEvaluate();
         try {
@@ -141,7 +177,7 @@ public class TestTaskExecutionCase {
      * @param project The project
      * @param taskNames The names of the tasks to run
      */
-    protected void executeProject(ProjectInternal project, String... taskNames) {
+    private void executeProject(ProjectInternal project, String... taskNames) {
         TaskExecutor taskExecutor = new TaskExecutor(project);
         taskExecutor.execute(taskNames);
         List<Throwable> failures = taskExecutor.getFailures();
