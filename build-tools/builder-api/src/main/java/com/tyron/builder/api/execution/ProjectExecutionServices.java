@@ -223,6 +223,15 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
                         fileSystemLocationSnapshotHasher
                 ))
         );
+        list.add(FingerprinterRegistration.registration(
+                DirectorySensitivity.IGNORE_DIRECTORIES,
+                LineEndingSensitivity.DEFAULT,
+                new AbsolutePathFileCollectionFingerprinter(
+                        DirectorySensitivity.IGNORE_DIRECTORIES,
+                        fileCollectionSnapshotter,
+                        fileSystemLocationSnapshotHasher
+                ))
+        );
         return new DefaultFileCollectionFingerprinterRegistry(list);
     }
 
