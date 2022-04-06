@@ -9,6 +9,7 @@ import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.SourceTask;
 import com.tyron.builder.api.tasks.TaskAction;
 import com.tyron.builder.api.tasks.TaskContainer;
+import com.tyron.builder.api.tasks.compile.AbstractCompile;
 import com.tyron.builder.api.tasks.incremental.IncrementalTaskInputs;
 import com.tyron.builder.api.work.FileChange;
 import com.tyron.builder.api.work.InputChanges;
@@ -24,7 +25,7 @@ public class MockTasks extends TestTaskExecutionCase {
 
     }
 
-    public static class JavaTask extends SourceTask {
+    public static class JavaTask extends AbstractCompile {
 
     }
 
@@ -49,20 +50,18 @@ public class MockTasks extends TestTaskExecutionCase {
             public void execute(JavaTask task) {
                 task.dependsOn("Aapt2Task");
 
+                File srcDir = project.mkdir(project.file("src"));;
+
                 // represents all the java file under the src directory
-                ConfigurableFileTree sources = project.fileTree(
-                        project.file("src"),
+                ConfigurableFileTree sources = project.fileTree(srcDir,
                         files -> files.include("**/*.java")
                 );
-                task.setSource(sources);
-
-                task.getOutputs().dir(project.mkdir(project.getBuildDir() + "/classes"));
+                task.setClasspath(sources);
+                task.getDestinationDirectory().dir(project.getBuildDir() + "/classes");
 
                 task.doLast(new IncrementalTaskAction() {
                     @Override
                     public void execute(IncrementalTaskInputs inputs) {
-                        if (inputs == null)
-
                         System.out.println("Changed files: " + inputs);
                     }
                 });

@@ -2,6 +2,10 @@ package com.tyron.builder.api.model;
 
 import com.tyron.builder.api.Named;
 import com.tyron.builder.api.file.ConfigurableFileTree;
+import com.tyron.builder.api.file.Directory;
+import com.tyron.builder.api.file.DirectoryProperty;
+import com.tyron.builder.api.file.RegularFile;
+import com.tyron.builder.api.file.RegularFileProperty;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.service.scopes.Scope;
 import com.tyron.builder.api.internal.service.scopes.ServiceScope;
@@ -175,8 +179,8 @@ public interface ObjectFactory {
      * <li>For {@link List} properties, you should use {@link #listProperty(Class)}.</li>
      * <li>For {@link Set} properties, you should use {@link #setProperty(Class)}.</li>
      * <li>For {@link Map} properties, you should use {@link #mapProperty(Class, Class)}.</li>
-     * <li>For {@link org.gradle.api.file.Directory} properties, you should use {@link #directoryProperty()}.</li>
-     * <li>For {@link org.gradle.api.file.RegularFile} properties, you should use {@link #fileProperty()}.</li>
+     * <li>For {@link Directory} properties, you should use {@link #directoryProperty()}.</li>
+     * <li>For {@link RegularFile} properties, you should use {@link #fileProperty()}.</li>
      * </ul>
      *
      * @param valueType The type of the property.
@@ -228,12 +232,12 @@ public interface ObjectFactory {
      *
      * @since 5.0
      */
-//    DirectoryProperty directoryProperty();
+    DirectoryProperty directoryProperty();
 
     /**
      * Creates a new {@link RegularFileProperty} that uses the project directory to resolve relative paths, if required. The property has no initial value.
      *
      * @since 5.0
      */
-//    RegularFileProperty fileProperty();
+    RegularFileProperty fileProperty();
 }

@@ -6,9 +6,11 @@ import com.tyron.builder.api.internal.Factory;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.DefaultFileCollectionFactory;
 import com.tyron.builder.api.internal.file.DefaultFileLookup;
+import com.tyron.builder.api.internal.file.DefaultFilePropertyFactory;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
 import com.tyron.builder.api.internal.file.FileLookup;
+import com.tyron.builder.api.internal.file.FilePropertyFactory;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.file.FileTreeInternal;
 import com.tyron.builder.api.internal.file.PathToFileResolver;
@@ -77,8 +79,19 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
         return new DefaultFileCollectionFactory(fileResolver.getFileResolver(), DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory, patternSetFactory, propertyHost, fileSystem);
     }
 
-    ObjectFactory createObjectFactory(FileCollectionFactory fileCollectionFactory) {
-        return new DefaultObjectFactory(fileCollectionFactory);
+    FilePropertyFactory createFilePropertyFactory(
+            PropertyHost propertyHost,
+            FileResolver fileResolver,
+            FileCollectionFactory fileCollectionFactory
+    ) {
+        return new DefaultFilePropertyFactory(propertyHost, fileResolver, fileCollectionFactory);
+    }
+
+    ObjectFactory createObjectFactory(
+            FileCollectionFactory fileCollectionFactory,
+            FilePropertyFactory filePropertyFactory
+    ) {
+        return new DefaultObjectFactory(fileCollectionFactory, filePropertyFactory);
     }
 
     PatternSpecFactory createPatternSpecFactory() {
