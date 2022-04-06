@@ -4,6 +4,7 @@ import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.classpath.ClassPath;
 import com.tyron.builder.api.internal.concurrent.DefaultExecutorFactory;
 import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
@@ -150,7 +151,8 @@ public class GradleUserHomeScopeServices extends DefaultServiceRegistry {
         return new DefaultCacheFactory(fileLockManager, executorFactory, progressLoggerFactory);
     }
 
-    CacheScopeMapping createCacheScopeMapping() {
+    CacheScopeMapping createCacheScopeMapping(
+    ) {
         File resourcesDirectory = TestUtil.getResourcesDirectory();
         return new DefaultCacheScopeMapping(resourcesDirectory, DocumentationRegistry.GradleVersion.current());
     }
@@ -162,10 +164,7 @@ public class GradleUserHomeScopeServices extends DefaultServiceRegistry {
         return new DefaultCacheRepository(scopeMapping, cacheFactory);
     }
 
-    protected BuildScopedCache createBuildScopedCache(
-            CacheRepository cacheRepository
-    ) {
-        File test = TestUtil.getResourcesDirectory();
-        return new DefaultBuildScopedCache(test, cacheRepository);
+    private interface CacheDirectoryProvider {
+        File getCacheDirectory();
     }
 }

@@ -105,20 +105,27 @@ public abstract class TestTaskExecutionCase {
 
         global.add(gradle);
 
-        File testProjectDir = TestUtil.getResourcesDirectory();
+        String projectName = getProjectName();
+
+        File resourcesDir = TestUtil.getResourcesDirectory();
+        File testProjectDir = new File(resourcesDir, projectName);
 
         ProjectFactory projectFactory = gradle.getServices().get(ProjectFactory.class);
         DefaultProjectOwner owner = DefaultProjectOwner.builder()
                 .setProjectDir(testProjectDir)
                 .setProjectPath(Path.ROOT)
                 .setIdentityPath(Path.ROOT)
-                .setDisplayName(Describables.of("TestProject"))
+                .setDisplayName(Describables.of(projectName))
                 .setTaskExecutionLock(lock).setAccessLock(lock).build();
         project = projectFactory
-                .createProject(gradle, new DefaultProjectDescriptor("TestProject"), owner, null);
+                .createProject(gradle, new DefaultProjectDescriptor(projectName), owner, null);
         project.setBuildDir(new File(testProjectDir, "build"));
 
         container = (DefaultTaskContainer) this.project.getTasks();
+    }
+
+    protected String getProjectName() {
+        return "TestProject";
     }
 
     @Test
