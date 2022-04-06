@@ -16,6 +16,8 @@ import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
+import com.tyron.builder.api.internal.reflect.service.scopes.BasicGlobalScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServiceRegistryFactory;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.GlobalServices;
@@ -43,6 +45,10 @@ import com.tyron.common.TestUtil;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.slf4j.ILoggerFactory;
+import org.slf4j.LoggerFactory;
+import org.slf4j.helpers.NOPLoggerFactory;
+import org.slf4j.impl.SimpleLoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -59,7 +65,8 @@ public abstract class TestTaskExecutionCase {
 
     @Before
     public void setup() throws IOException {
-        File resourcesDirectory = TestUtil.getResourcesDirectory();
+        System.setProperty(org.slf4j.impl.SimpleLogger.DEFAULT_LOG_LEVEL_KEY, "Info");
+
         StartParameterInternal startParameter = new StartParameterInternal() {
             @Override
             public boolean isRerunTasks() {
@@ -67,39 +74,23 @@ public abstract class TestTaskExecutionCase {
             }
         };
 
-        DefaultServiceRegistry global = new GlobalServices();
-        global.register(registration -> {
-            registration.add(PropertyWalker.class, (instance, validationContext, visitor) -> {
-                Method[] methods = instance.getClass().getMethods();
-                for (Method method : methods) {
-                    if (method.getAnnotation(InputFiles.class) != null) {
-                        visitor.visitInputFileProperty(
-                                method.getName(),
-                                false,
-                                true,
-                                DirectorySensitivity.DEFAULT,
-                                LineEndingSensitivity.DEFAULT,
-                                true,
-                                null,
-                                new StaticValue(GUtil.uncheckedCall(() -> method.invoke(instance))),
-                                InputFilePropertyType.FILES
-                        );
-                    }
-                }
-            });
-        });
 
-        GradleUserHomeScopeServices gradleUserHomeScopeServices =
-                new GradleUserHomeScopeServices(global);
+        DefaultServiceRegistry global = new GlobalServices();
+        GradleUserHomeScopeServices gradleUserHomeScopeServices = new GradleUserHomeScopeServices(global);
         BuildScopeServices buildScopeServices = new BuildScopeServices(gradleUserHomeScopeServices);
-        BuildScopeServiceRegistryFactory registryFactory =
-                new BuildScopeServiceRegistryFactory(buildScopeServices);
+
+        BuildScopeServiceRegistryFactory registryFactory = new BuildScopeServiceRegistryFactory(buildScopeServices);
 
         DefaultGradle gradle = new DefaultGradle(null, startParameter, registryFactory) {
 
             private ServiceRegistry registry;
             private ServiceRegistryFactory factory;
             private TaskExecutionGraphInternal taskExecutionGraph;
+
+            @Override
+            public File getGradleUserHomeDir() {
+                return new File(TestUtil.getResourcesDirectory(), ".gradle");
+            }
 
             @Override
             public TaskExecutionGraphInternal getTaskGraph() {
@@ -128,25 +119,37 @@ public abstract class TestTaskExecutionCase {
 
         global.add(gradle);
 
-        File testProjectDir = TestUtil.getResourcesDirectory();
+        String projectName = getProjectName();
+
+        File resourcesDir = TestUtil.getResourcesDirectory();
+        File testProjectDir = new File(resourcesDir, projectName);
 
         ProjectFactory projectFactory = gradle.getServices().get(ProjectFactory.class);
         DefaultProjectOwner owner = DefaultProjectOwner.builder()
                 .setProjectDir(testProjectDir)
                 .setProjectPath(Path.ROOT)
                 .setIdentityPath(Path.ROOT)
-                .setDisplayName(Describables.of("TestProject"))
+                .setDisplayName(Describables.of(projectName))
                 .setTaskExecutionLock(lock).setAccessLock(lock).build();
         project = projectFactory
-                .createProject(gradle, new DefaultProjectDescriptor("TestProject"), owner, null);
+                .createProject(gradle, new DefaultProjectDescriptor(projectName), owner, null);
         project.setBuildDir(new File(testProjectDir, "build"));
 
         container = (DefaultTaskContainer) this.project.getTasks();
     }
 
+    protected String getProjectName() {
+        return "TestProject";
+    }
+
     @Test
     public void test() {
         evaluateProject(project, this::evaluateProject);
+
+        if (project.getState().hasFailure()) {
+            project.getState().rethrowFailure();
+        }
+
         executeProject(project, getTasksToExecute().toArray(new String[0]));
     }
 

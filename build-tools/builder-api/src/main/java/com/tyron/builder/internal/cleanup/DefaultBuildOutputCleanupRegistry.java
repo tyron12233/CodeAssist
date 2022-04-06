@@ -6,13 +6,15 @@ import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.execution.BuildOutputCleanupRegistry;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.util.LinkedHashSet;
 import java.util.Set;
-import java.util.logging.Logger;
 
 public class DefaultBuildOutputCleanupRegistry implements BuildOutputCleanupRegistry {
-    private static final Logger LOGGER = Logger.getLogger(DefaultBuildOutputCleanupRegistry.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultBuildOutputCleanupRegistry.class);
 
     private final Object lock = new Object();
 
@@ -32,7 +34,7 @@ public class DefaultBuildOutputCleanupRegistry implements BuildOutputCleanupRegi
                 // When configure on demand is enabled, those other projects are realized at execution time, long after the BuildOutputRegistry
                 // has been finalized. We ignore those problems for now, until the dependencies can be declared properly.
                 // See https://github.com/gradle/gradle/issues/18460.
-                LOGGER.info("More outputs are being registered even though the build output cleanup registry has already been finalized. New outputs: " + files);
+                LOGGER.debug("More outputs are being registered even though the build output cleanup registry has already been finalized. New outputs: " + files);
             } else {
                 this.outputs.add(fileCollectionFactory.resolving(files));
             }

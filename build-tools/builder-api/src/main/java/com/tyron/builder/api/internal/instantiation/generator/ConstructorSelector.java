@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.instantiation.generator;
 /**
  * Encapsulates the differences, due to backwards compatibility, in instantiation for several different types.
  */
-interface ConstructorSelector {
+public interface ConstructorSelector {
     /**
      * Allows this selector to veto the parameters to use with the given constructor.
      */

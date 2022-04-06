@@ -14,11 +14,14 @@ import com.tyron.builder.api.internal.concurrent.DefaultExecutorFactory;
 import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
 import com.tyron.builder.api.internal.event.ListenerBroadcast;
 import com.tyron.builder.api.internal.event.ListenerManager;
+import com.tyron.builder.api.internal.execution.BuildOutputCleanupRegistry;
 import com.tyron.builder.api.internal.execution.DefaultTaskExecutionGraph;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
+import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileException;
 import com.tyron.builder.api.internal.file.FileMetadata;
 import com.tyron.builder.api.internal.file.Stat;
+import com.tyron.builder.api.internal.id.UniqueId;
 import com.tyron.builder.api.internal.logging.progress.ProgressLoggerFactory;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
@@ -26,6 +29,7 @@ import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.api.internal.scopeids.id.BuildInvocationScopeId;
 import com.tyron.builder.api.internal.service.scopes.ExecutionGradleServices;
 import com.tyron.builder.api.internal.work.WorkerLeaseService;
 import com.tyron.builder.api.work.AsyncWorkTracker;
@@ -43,6 +47,7 @@ import com.tyron.builder.cache.internal.ProcessMetaDataProvider;
 import com.tyron.builder.cache.internal.locklistener.FileLockContentionHandler;
 import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
 import com.tyron.builder.cache.scopes.BuildScopedCache;
+import com.tyron.builder.internal.cleanup.DefaultBuildOutputCleanupRegistry;
 import com.tyron.common.TestUtil;
 
 import org.jetbrains.annotations.Nullable;
@@ -62,6 +67,12 @@ public class GradleScopeServices extends DefaultServiceRegistry {
 //            }
             registration.add(ProjectFactory.class);
         });
+    }
+
+    BuildOutputCleanupRegistry createBuildOutputCleanupRegistry(
+            FileCollectionFactory factory
+    ) {
+        return new DefaultBuildOutputCleanupRegistry(factory);
     }
 
     AsyncWorkTracker createAsyncWorkTracker(

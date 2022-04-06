@@ -1,9 +1,11 @@
 package com.tyron.builder.api.internal.concurrent;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.lang.reflect.UndeclaredThrowableException;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Logger;
 
 /**
  * Controls the behavior of an executor when a task is executed and an executor is stopped.
@@ -36,7 +38,7 @@ public interface ExecutorPolicy {
      * The first exception caught during onExecute(), will be rethrown in onStop().
      */
     class CatchAndRecordFailures implements ExecutorPolicy {
-        private static final Logger LOGGER = Logger.getLogger("CatchAndRecordFailures");
+        private static final Logger LOGGER = LoggerFactory.getLogger(CatchAndRecordFailures.class);
         private final AtomicReference<Throwable> failure = new AtomicReference<Throwable>();
 
         @Override
@@ -64,7 +66,7 @@ public interface ExecutorPolicy {
         public void onFailure(String message, Throwable throwable) {
             // Capture or log all failures
             if (!failure.compareAndSet(null, throwable)) {
-                LOGGER.severe(message + " " + throwable);
+                LOGGER.error(message + " " + throwable);
             }
         }
 

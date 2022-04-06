@@ -472,10 +472,10 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
         @Override
         public InputChangeTrackingStrategy getInputChangeTrackingStrategy() {
             for (InputChangesAwareTaskAction taskAction : task.getTaskActions()) {
-                if (taskAction instanceof IncrementalInputsTaskAction) {
+                if (taskAction instanceof IncrementalInputsTaskAction || taskAction instanceof IncrementalTaskAction) {
                     return InputChangeTrackingStrategy.INCREMENTAL_PARAMETERS;
                 }
-                if (taskAction instanceof IncrementalTaskInputsTaskAction || taskAction instanceof IncrementalTaskAction) {
+                if (taskAction instanceof IncrementalTaskInputsTaskAction) {
                     return InputChangeTrackingStrategy.ALL_PARAMETERS;
                 }
             }

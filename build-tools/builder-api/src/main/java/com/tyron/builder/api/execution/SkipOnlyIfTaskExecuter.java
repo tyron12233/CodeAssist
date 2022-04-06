@@ -8,7 +8,8 @@ import com.tyron.builder.api.internal.tasks.TaskExecutionContext;
 import com.tyron.builder.api.internal.tasks.TaskExecutionOutcome;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A {@link com.tyron.builder.api.internal.tasks.TaskExecuter} which skips tasks whose
@@ -16,7 +17,7 @@ import java.util.logging.Logger;
  */
 public class SkipOnlyIfTaskExecuter implements TaskExecuter {
 
-    private static final Logger LOGGER = Logger.getLogger("SkipOnlyIfTaskExecuter");
+    private static final Logger LOGGER = LoggerFactory.getLogger(SkipOnlyIfTaskExecuter.class);
 
     private final TaskExecuter executer;
 

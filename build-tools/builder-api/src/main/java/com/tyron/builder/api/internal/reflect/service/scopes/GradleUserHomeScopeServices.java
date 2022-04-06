@@ -4,6 +4,8 @@ import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.api.internal.GradleInternal;
+import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
 import com.tyron.builder.api.internal.classpath.ClassPath;
 import com.tyron.builder.api.internal.concurrent.DefaultExecutorFactory;
 import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
@@ -32,7 +34,9 @@ import com.tyron.builder.cache.internal.ProcessMetaDataProvider;
 import com.tyron.builder.cache.internal.locklistener.FileLockContentionHandler;
 import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
 import com.tyron.builder.cache.internal.scopes.DefaultCacheScopeMapping;
+import com.tyron.builder.cache.internal.scopes.DefaultGlobalScopedCache;
 import com.tyron.builder.cache.scopes.BuildScopedCache;
+import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.common.TestUtil;
 
 import org.jetbrains.annotations.Nullable;
@@ -44,6 +48,10 @@ public class GradleUserHomeScopeServices extends DefaultServiceRegistry {
 
     public GradleUserHomeScopeServices(ServiceRegistry parent) {
         super(parent);
+
+        register(registration -> {
+            registration.addProvider(new ExecutionGlobalServices());
+        });
     }
 
     HashingClassLoaderFactory createHashingClassLoaderFactory() {
@@ -80,6 +88,13 @@ public class GradleUserHomeScopeServices extends DefaultServiceRegistry {
         return new ConfigurableClassLoaderHierarchyHasher(Collections.emptyMap(), hashingClassLoaderFactory);
     }
 
+    GlobalScopedCache createGlobalScopedCache(
+            GradleInternal gradle,
+            CacheRepository cache
+    ) {
+        return new DefaultGlobalScopedCache(gradle.getGradleUserHomeDir(), cache);
+    }
+
     CrossBuildInMemoryCacheFactory createCrossBuildInMemoryFactory(
             ListenerManager listenerManager
     ) {
@@ -92,47 +107,14 @@ public class GradleUserHomeScopeServices extends DefaultServiceRegistry {
         return new DefaultInMemoryCacheDecoratorFactory(true, crossBuildInMemoryCacheFactory);
     }
 
-    FileLockManager createFileLockManager() {
-        return new DefaultFileLockManager(new ProcessMetaDataProvider() {
-            @Override
-            public String getProcessIdentifier() {
-                return "TEST";
-            }
-
-            @Override
-            public String getProcessDisplayName() {
-                return "TEST";
-            }
-        }, new FileLockContentionHandler() {
-            @Override
-            public void start(long lockId, Action<FileLockReleasedSignal> whenContended) {
-
-            }
-
-            @Override
-            public void stop(long lockId) {
-
-            }
-
-            @Override
-            public int reservePort() {
-                return 0;
-            }
-
-            @Override
-            public boolean maybePingOwner(int port,
-                                          long lockId,
-                                          String displayName,
-                                          long timeElapsed,
-                                          @Nullable FileLockReleasedSignal signal) {
-                return false;
-            }
-        });
+    CrossBuildFileHashCache createCrossBuildFileHashCache(
+            GlobalScopedCache scopedCache,
+            InMemoryCacheDecoratorFactory factory
+    ) {
+        return new CrossBuildFileHashCache(scopedCache, factory, CrossBuildFileHashCache.Kind.FILE_HASHES);
     }
 
-    ExecutorFactory createExecutorFactory() {
-        return new DefaultExecutorFactory();
-    }
+
 
     ProgressLoggerFactory createProgressLoggerFactory() {
         return ProgressLoggerFactory.EMPTY;
@@ -146,7 +128,8 @@ public class GradleUserHomeScopeServices extends DefaultServiceRegistry {
         return new DefaultCacheFactory(fileLockManager, executorFactory, progressLoggerFactory);
     }
 
-    CacheScopeMapping createCacheScopeMapping() {
+    CacheScopeMapping createCacheScopeMapping(
+    ) {
         File resourcesDirectory = TestUtil.getResourcesDirectory();
         return new DefaultCacheScopeMapping(resourcesDirectory, DocumentationRegistry.GradleVersion.current());
     }
@@ -158,10 +141,7 @@ public class GradleUserHomeScopeServices extends DefaultServiceRegistry {
         return new DefaultCacheRepository(scopeMapping, cacheFactory);
     }
 
-    protected BuildScopedCache createBuildScopedCache(
-            CacheRepository cacheRepository
-    ) {
-        File test = TestUtil.getResourcesDirectory();
-        return new DefaultBuildScopedCache(test, cacheRepository);
+    private interface CacheDirectoryProvider {
+        File getCacheDirectory();
     }
 }

@@ -7,6 +7,7 @@ import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
 import com.tyron.builder.api.internal.tasks.TaskInputsInternal;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
+import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskState;
@@ -31,11 +32,13 @@ public interface TaskInternal extends Task {
      */
     TaskDependency getLifecycleDependencies();
 
+    @Internal
     Predicate<? super TaskInternal> getOnlyIf();
 
     /**
      * <p>Gets the shared resources required by this task.</p>
      */
+    @Internal
     List<? extends ResourceLock> getSharedResources();
 
     TaskOutputsInternal getOutputs();
@@ -46,6 +49,7 @@ public interface TaskInternal extends Task {
 
     boolean getImpliesSubProjects();
 
+    @Internal
     StandardOutputCapture getStandardOutputCapture();
 
     /**
@@ -56,7 +60,7 @@ public interface TaskInternal extends Task {
      *
      * @see org.gradle.api.tasks.UntrackedTask
      */
-//    @Internal
+    @Internal
     default Optional<String> getReasonNotToTrackState() {
         return Optional.empty();
     }

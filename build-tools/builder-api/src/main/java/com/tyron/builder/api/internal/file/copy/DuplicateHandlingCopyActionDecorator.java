@@ -8,13 +8,15 @@ import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.file.Copy;
 import com.tyron.builder.api.tasks.WorkResult;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.HashSet;
 import java.util.Set;
-import java.util.logging.Logger;
 
 public class DuplicateHandlingCopyActionDecorator implements CopyAction {
 
-    private final static Logger LOGGER = Logger.getLogger(DuplicateHandlingCopyActionDecorator.class.getSimpleName());
+    private final static Logger LOGGER = LoggerFactory.getLogger(DuplicateHandlingCopyActionDecorator.class);
     private final CopyAction delegate;
     private final DocumentationRegistry documentationRegistry;
 
@@ -40,7 +42,7 @@ public class DuplicateHandlingCopyActionDecorator implements CopyAction {
                     } else if (strategy == DuplicatesStrategy.FAIL) {
                         throw new BuildException(String.format("Encountered duplicate path \"%s\" during copy operation configured with DuplicatesStrategy.FAIL", details.getRelativePath()));
                     } else if (strategy == DuplicatesStrategy.WARN) {
-                        LOGGER.warning("Encountered duplicate path \"" +  details.getRelativePath() + "\" during copy operation configured with DuplicatesStrategy.WARN");
+                        LOGGER.warn("Encountered duplicate path \"" +  details.getRelativePath() + "\" during copy operation configured with DuplicatesStrategy.WARN");
                     }
                 }
             }

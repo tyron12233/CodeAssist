@@ -12,12 +12,14 @@ import com.tyron.builder.api.internal.fingerprint.CurrentFileCollectionFingerpri
 import com.tyron.builder.api.internal.snapshot.ValueSnapshot;
 import com.tyron.builder.api.work.InputChanges;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.util.Optional;
-import java.util.logging.Logger;
 
 public class ResolveInputChangesStep<C extends IncrementalChangesContext, R extends Result> implements Step<C, R> {
-    private static final Logger LOGGER = Logger.getLogger(ResolveInputChangesStep.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(ResolveInputChangesStep.class);
 
     private final Step<? super InputChangesContext, ? extends R> delegate;
 
@@ -99,7 +101,7 @@ public class ResolveInputChangesStep<C extends IncrementalChangesContext, R exte
                 .orElseThrow(() -> new IllegalStateException("Changes are not tracked, unable determine incremental changes."));
         InputChangesInternal inputChanges = changes.createInputChanges();
         if (!inputChanges.isIncremental()) {
-            LOGGER.info("The input changes require a full rebuild for incremental " + work.getDisplayName());
+            LOGGER.debug("The input changes require a full rebuild for incremental " + work.getDisplayName());
         }
         return Optional.of(inputChanges);
     }

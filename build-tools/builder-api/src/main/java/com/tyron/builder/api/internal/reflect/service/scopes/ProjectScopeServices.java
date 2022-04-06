@@ -6,9 +6,11 @@ import com.tyron.builder.api.internal.Factory;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.DefaultFileCollectionFactory;
 import com.tyron.builder.api.internal.file.DefaultFileLookup;
+import com.tyron.builder.api.internal.file.DefaultFilePropertyFactory;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
 import com.tyron.builder.api.internal.file.FileLookup;
+import com.tyron.builder.api.internal.file.FilePropertyFactory;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.file.FileTreeInternal;
 import com.tyron.builder.api.internal.file.PathToFileResolver;
@@ -59,48 +61,6 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
             BuildOperationExecutor buildOperationExecutor
     ) {
         return new DefaultTaskContainer(project, buildOperationExecutor);
-    }
-
-    FileLookup createFileLookup() {
-        return new DefaultFileLookup();
-    }
-
-    FileResolver createFileResolver(FileLookup lookup) {
-        return lookup.getFileResolver();
-    }
-
-    PropertyHost createPropertyHost() {
-        return PropertyHost.NO_OP;
-    }
-
-    FileCollectionFactory createFileCollectionFactory(FileLookup fileResolver, Factory<PatternSet> patternSetFactory, DirectoryFileTreeFactory directoryFileTreeFactory, PropertyHost propertyHost, FileSystem fileSystem) {
-        return new DefaultFileCollectionFactory(fileResolver.getFileResolver(), DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory, patternSetFactory, propertyHost, fileSystem);
-    }
-
-    ObjectFactory createObjectFactory(FileCollectionFactory fileCollectionFactory) {
-        return new DefaultObjectFactory(fileCollectionFactory);
-    }
-
-    PatternSpecFactory createPatternSpecFactory() {
-        return PatternSpecFactory.INSTANCE;
-    }
-
-    DirectoryFileTreeFactory createDirectoryTreeFileFactory(FileSystem fileSystem) {
-        return new DirectoryFileTreeFactory() {
-            @Override
-            public DirectoryFileTree create(File directory) {
-                return new DirectoryFileTree(directory, null, fileSystem);
-            }
-
-            @Override
-            public DirectoryFileTree create(File directory, PatternSet patternSet) {
-                return new DirectoryFileTree(directory, patternSet, fileSystem);
-            }
-        };
-    }
-
-    protected Factory<PatternSet> createPatternSetFactory(final PatternSpecFactory patternSpecFactory) {
-        return PatternSets.getPatternSetFactory(patternSpecFactory);
     }
 
 }

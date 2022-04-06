@@ -5,6 +5,9 @@ import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 public class Hashes {
@@ -98,5 +101,16 @@ public class Hashes {
 
     public static Hasher newHasher() {
         return DEFAULT.newHasher();
+    }
+
+    /**
+     * Hash the contents of the given {@link java.io.InputStream} with the default hash function.
+     */
+    public static HashCode hashStream(InputStream stream) throws IOException {
+        return new DefaultStreamHasher().hash(stream);
+    }
+
+    public static HashCode hashBytes(byte[] bytes) {
+        return DEFAULT.hashBytes(bytes);
     }
 }

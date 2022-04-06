@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.logging.Logger;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
@@ -18,6 +17,9 @@ import com.tyron.builder.api.internal.concurrent.ManagedExecutor;
 import com.tyron.builder.api.internal.concurrent.Stoppable;
 import com.tyron.builder.api.internal.remote.inet.InetAddressFactory;
 import com.tyron.builder.cache.FileLockReleasedSignal;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The contention handler is responsible for negotiating the transfer of a lock from one process to another.
@@ -57,7 +59,7 @@ import com.tyron.builder.cache.FileLockReleasedSignal;
  * for a lock might change without acquiring the lock if several Lock Requester compete for the same lock.
  */
 public class DefaultFileLockContentionHandler implements FileLockContentionHandler, Stoppable {
-    private static final Logger LOGGER = Logger.getLogger(DefaultFileLockContentionHandler.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultFileLockContentionHandler.class);
     private static final int PING_DELAY = 1000;
     private final Lock lock = new ReentrantLock();
 
@@ -84,13 +86,13 @@ public class DefaultFileLockContentionHandler implements FileLockContentionHandl
             @Override
             public void run() {
                 try {
-                    LOGGER.info("Starting file lock listener thread.");
+                    LOGGER.debug("Starting file lock listener thread.");
                     doRun();
                 } catch (Throwable t) {
                     //Logging exception here is only needed because by default Gradle does not show the stack trace
-                    LOGGER.severe("Problems handling incoming cache access requests. " + t);
+                    LOGGER.warn("Problems handling incoming cache access requests. " + t);
                 } finally {
-                    LOGGER.info("File lock listener thread completed.");
+                    LOGGER.debug("File lock listener thread completed.");
                 }
             }
 
@@ -133,14 +135,14 @@ public class DefaultFileLockContentionHandler implements FileLockContentionHandl
     private void acceptConfirmationAsLockRequester(FileLockPacketPayload payload, Integer port) {
         long lockId = payload.getLockId();
         if (payload.getType() == LOCK_RELEASE_CONFIRMATION) {
-            LOGGER.info("Gradle process at port " + port + " confirmed lock release for lock with id " + lockId);
+            LOGGER.debug("Gradle process at port " + port + " confirmed lock release for lock with id " + lockId);
             FileLockReleasedSignal signal = lockReleasedSignals.get(lockId);
             if (signal != null) {
-                LOGGER.info("Triggering lock release signal for lock with id " + lockId);
+                LOGGER.debug("Triggering lock release signal for lock with id " + lockId);
                 signal.trigger();
             }
         } else {
-            LOGGER.info("Gradle process at port " + port + " confirmed unlock request for lock with id " + lockId);
+            LOGGER.debug("Gradle process at port " + port + " confirmed unlock request for lock with id " + lockId);
             unlocksConfirmedFrom.put(lockId, port);
         }
     }

@@ -18,16 +18,17 @@ import com.tyron.builder.cache.PersistentIndexedCache;
 import com.tyron.builder.cache.PersistentIndexedCacheParameters;
 
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 
 public class DefaultPersistentDirectoryStore implements ReferencablePersistentCache {
 
-    private static final Logger LOGGER = Logger.getLogger(DefaultPersistentDirectoryStore.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultPersistentDirectoryStore.class);
 
     public static final int CLEANUP_INTERVAL_IN_HOURS = 24;
 
@@ -197,7 +198,7 @@ public class DefaultPersistentDirectoryStore implements ReferencablePersistentCa
                 } else {
                     long duration = System.currentTimeMillis() - gcFile.lastModified();
                     long timeInHours = TimeUnit.MILLISECONDS.toHours(duration);
-                    LOGGER.info(DefaultPersistentDirectoryStore.this + " has last been fully cleaned up " + timeInHours + " hours ago");
+                    LOGGER.debug(DefaultPersistentDirectoryStore.this + " has last been fully cleaned up " + timeInHours + " hours ago");
                     return timeInHours >= CLEANUP_INTERVAL_IN_HOURS;
                 }
             }
@@ -214,7 +215,7 @@ public class DefaultPersistentDirectoryStore implements ReferencablePersistentCa
                     cleanupAction.clean(DefaultPersistentDirectoryStore.this, new DefaultCleanupProgressMonitor(progressLogger));
                     GFileUtils.touch(gcFile);
                 } finally {
-                    LOGGER.info(DefaultPersistentDirectoryStore.this + " cleaned up in " + timer.getElapsed());
+                    LOGGER.debug(DefaultPersistentDirectoryStore.this + " cleaned up in " + timer.getElapsed());
                     progressLogger.completed();
                 }
             }

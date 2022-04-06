@@ -21,6 +21,9 @@ import com.tyron.builder.api.internal.snapshot.impl.FileSystemSnapshotFilter;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -28,10 +31,9 @@ import java.util.concurrent.locks.Lock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.logging.Logger;
 
 public class DefaultFileSystemAccess implements FileSystemAccess {
-    private static final Logger LOGGER = Logger.getLogger(DefaultFileSystemAccess.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultFileSystemAccess.class);
 
     private final VirtualFileSystem virtualFileSystem;
     private final Stat stat;
@@ -216,7 +218,7 @@ public class DefaultFileSystemAccess implements FileSystemAccess {
     public void updateDefaultExcludes(String... newDefaultExcludesArgs) {
         ImmutableList<String> newDefaultExcludes = ImmutableList.copyOf(newDefaultExcludesArgs);
         if (!defaultExcludes.equals(newDefaultExcludes)) {
-            LOGGER.info("Default excludes changes from " + defaultExcludes + " to " + newDefaultExcludes);
+            LOGGER.debug("Default excludes changes from " + defaultExcludes + " to " + newDefaultExcludes);
             defaultExcludes = newDefaultExcludes;
             directorySnapshotter = new DirectorySnapshotter(hasher, stringInterner, newDefaultExcludes, statisticsCollector);
             virtualFileSystem.invalidateAll();
