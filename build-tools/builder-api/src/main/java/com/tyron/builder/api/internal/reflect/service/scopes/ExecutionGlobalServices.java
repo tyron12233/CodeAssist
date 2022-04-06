@@ -22,6 +22,7 @@ import com.tyron.builder.api.internal.tasks.properties.ModifierAnnotationCategor
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.internal.tasks.properties.TaskScheme;
+import com.tyron.builder.api.internal.tasks.properties.annotations.CacheableTaskTypeAnnotationHandler;
 import com.tyron.builder.api.internal.tasks.properties.annotations.InputDirectoryPropertyAnnotationHandler;
 import com.tyron.builder.api.internal.tasks.properties.annotations.InputFilePropertyAnnotationHandler;
 import com.tyron.builder.api.internal.tasks.properties.annotations.InputFilesPropertyAnnotationHandler;
@@ -301,6 +302,10 @@ public class ExecutionGlobalServices {
 
     PropertyWalker createPropertyWalker(InspectionScheme taskScheme) {
         return taskScheme.getPropertyWalker();
+    }
+
+    TypeAnnotationHandler createCacheableTaskPropertyAnnotationHandler() {
+        return new CacheableTaskTypeAnnotationHandler();
     }
 
 
