@@ -16,6 +16,8 @@ import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
+import com.tyron.builder.api.internal.reflect.service.scopes.BasicGlobalScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServiceRegistryFactory;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.GlobalServices;
@@ -67,9 +69,11 @@ public abstract class TestTaskExecutionCase {
             }
         };
 
+
         DefaultServiceRegistry global = new GlobalServices();
         GradleUserHomeScopeServices gradleUserHomeScopeServices = new GradleUserHomeScopeServices(global);
         BuildScopeServices buildScopeServices = new BuildScopeServices(gradleUserHomeScopeServices);
+
         BuildScopeServiceRegistryFactory registryFactory = new BuildScopeServiceRegistryFactory(buildScopeServices);
 
         DefaultGradle gradle = new DefaultGradle(null, startParameter, registryFactory) {
@@ -131,6 +135,11 @@ public abstract class TestTaskExecutionCase {
     @Test
     public void test() {
         evaluateProject(project, this::evaluateProject);
+
+        if (project.getState().isUnconfigured() && project.getState().hasFailure()) {
+            project.getState().rethrowFailure();
+        }
+
         executeProject(project, getTasksToExecute().toArray(new String[0]));
     }
 

@@ -70,24 +70,21 @@ public class BuildScopeServices extends DefaultServiceRegistry {
     public BuildScopeServices(ServiceRegistry parent) {
         super(parent);
 
-        register(registration -> {
-            registration.add(ProjectFactory.class);
-            registration.add(DefaultNodeValidator.class);
-            registration.add(TaskNodeFactory.class);
-            registration.add(TaskNodeDependencyResolver.class);
-//            registration.add(WorkNodeDependencyResolver.class);
-            registration.add(TaskDependencyResolver.class);
-
-            registration.add(DefaultResourceLockCoordinationService.class);
-            registration.add(DefaultWorkerLeaseService.class);
-        });
 
         addProvider(new Object() {
 
             private static final String GRADLE_VERSION_KEY = "gradleVersion";
 
-            BuildInvocationScopeId createBuildInvocationScopeId() {
-                return new BuildInvocationScopeId(UniqueId.generate());
+            // This needs to go here instead of being “build tree” scoped due to the GradleBuild task.
+            // Builds launched by that task are part of the same build tree, but should have their own invocation ID.
+            // Such builds also have their own root Gradle object.
+            BuildInvocationScopeId createBuildInvocationScopeId(GradleInternal gradle) {
+                GradleInternal rootGradle = gradle.getRoot();
+                if (gradle == rootGradle) {
+                    return new BuildInvocationScopeId(UniqueId.generate());
+                } else {
+                    return rootGradle.getServices().get(BuildInvocationScopeId.class);
+                }
             }
 
             OriginMetadataFactory.HostnameLookup createHostNameLookup() {
@@ -179,7 +176,17 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             }
         });
 
+        register(registration -> {
+            registration.add(ProjectFactory.class);
+            registration.add(DefaultNodeValidator.class);
+            registration.add(TaskNodeFactory.class);
+            registration.add(TaskNodeDependencyResolver.class);
+//            registration.add(WorkNodeDependencyResolver.class);
+            registration.add(TaskDependencyResolver.class);
 
+            registration.add(DefaultResourceLockCoordinationService.class);
+            registration.add(DefaultWorkerLeaseService.class);
+        });
     }
 
     protected DefaultListenerManager createListenerManager(DefaultListenerManager listenerManager) {
@@ -259,10 +266,6 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             },
             resourceLockService
         );
-    }
-
-    ExecutorFactory createExecutorFactory() {
-        return new DefaultExecutorFactory();
     }
 
     ExecutionNodeAccessHierarchies createExecutionNodeAccessHierarchies() {

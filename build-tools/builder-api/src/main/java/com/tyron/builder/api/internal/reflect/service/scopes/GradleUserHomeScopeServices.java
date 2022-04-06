@@ -97,47 +97,6 @@ public class GradleUserHomeScopeServices extends DefaultServiceRegistry {
         return new DefaultInMemoryCacheDecoratorFactory(true, crossBuildInMemoryCacheFactory);
     }
 
-    FileLockManager createFileLockManager() {
-        return new DefaultFileLockManager(new ProcessMetaDataProvider() {
-            @Override
-            public String getProcessIdentifier() {
-                return "TEST";
-            }
-
-            @Override
-            public String getProcessDisplayName() {
-                return "TEST";
-            }
-        }, new FileLockContentionHandler() {
-            @Override
-            public void start(long lockId, Action<FileLockReleasedSignal> whenContended) {
-
-            }
-
-            @Override
-            public void stop(long lockId) {
-
-            }
-
-            @Override
-            public int reservePort() {
-                return 0;
-            }
-
-            @Override
-            public boolean maybePingOwner(int port,
-                                          long lockId,
-                                          String displayName,
-                                          long timeElapsed,
-                                          @Nullable FileLockReleasedSignal signal) {
-                return false;
-            }
-        });
-    }
-
-    ExecutorFactory createExecutorFactory() {
-        return new DefaultExecutorFactory();
-    }
 
     ProgressLoggerFactory createProgressLoggerFactory() {
         return ProgressLoggerFactory.EMPTY;

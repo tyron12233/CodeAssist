@@ -6,11 +6,14 @@ import com.tyron.builder.api.execution.plan.DefaultExecutionPlan;
 import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchies;
 import com.tyron.builder.api.execution.plan.TaskDependencyResolver;
 import com.tyron.builder.api.execution.plan.TaskNodeFactory;
+import com.tyron.builder.api.internal.execution.BuildOutputCleanupRegistry;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
 import com.tyron.builder.api.internal.resources.ResourceLockCoordinationService;
 import com.tyron.builder.api.internal.work.WorkerLeaseRegistry;
 import com.tyron.builder.api.internal.work.WorkerLeaseService;
@@ -70,6 +73,10 @@ public class TaskExecutor {
         TaskExecutionGraphInternal taskGraph = project.getGradle().getTaskGraph();
         taskGraph.populate(executionPlan);
 
+        BuildOutputCleanupRegistry buildOutputCleanupRegistry = project.getServices().get(BuildOutputCleanupRegistry.class);
+        buildOutputCleanupRegistry.resolveOutputs();
+
+        DefaultServiceRegistry services = (DefaultServiceRegistry) project.getServices();
 
         resourceLockService.withStateLock(() -> {
 

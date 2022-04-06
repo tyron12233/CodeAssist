@@ -5,6 +5,8 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.Transformer;
 import com.tyron.builder.api.internal.DisplayName;
+import com.tyron.builder.api.internal.Try;
+import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
 import com.tyron.builder.api.internal.provider.ProviderInternal;
@@ -41,13 +43,14 @@ public class DefaultTaskProvider<T extends Task> implements TaskProvider<T>, Pro
             return value;
         }
 
-
         try {
             value = AbstractTask.injectIntoNewInstance(project, taskIdentity, () -> {
                 Constructor<T> declaredConstructor = type.getDeclaredConstructor();
                 return declaredConstructor.newInstance();
             });
 
+        } catch (Throwable e) {
+            throw UncheckedException.throwAsUncheckedException(e);
         } finally {
             computed = true;
         }

@@ -95,10 +95,7 @@ import java.util.function.Supplier;
 
 public class ExecutionGradleServices {
 
-    private final ProjectInternal projectInternal;
-
-    public ExecutionGradleServices(ProjectInternal projectInternal) {
-        this.projectInternal = projectInternal;
+    public ExecutionGradleServices() {
     }
 
     ExecutionHistoryCacheAccess createCacheAccess(BuildScopedCache cacheRepository) {
@@ -161,12 +158,6 @@ public class ExecutionGradleServices {
                 originMetadataFactory,
                 stringInterner
         );
-    }
-
-    BuildOutputCleanupRegistry createBuildOutputCleanupRegistry(
-            FileCollectionFactory factory
-    ) {
-        return new DefaultBuildOutputCleanupRegistry(factory);
     }
 
     ExecutionStateChangeDetector createExecutionStateChangeDetector() {

@@ -80,7 +80,7 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
         add(BuildCancellationToken.class, token);
         add(CurrentBuildOperationRef.class, CurrentBuildOperationRef.instance());
 
-        addProvider(new ExecutionGradleServices(projectInternal));
+        addProvider(new ExecutionGradleServices());
     }
 
     protected BuildScopedCache createBuildScopedCache(
@@ -257,7 +257,7 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
         );
     }
 
-    public TaskExecuter createTaskExecuter(
+    protected TaskExecuter createTaskExecuter(
             ExecutionHistoryStore executionHistoryStore,
             BuildOperationExecutor buildOperationExecutor,
             AsyncWorkTracker asyncWorkTracker,
