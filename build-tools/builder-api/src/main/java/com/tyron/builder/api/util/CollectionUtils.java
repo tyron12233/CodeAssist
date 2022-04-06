@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
 
 import java.io.File;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -14,6 +15,7 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -161,5 +163,34 @@ public class CollectionUtils {
             set.add(thing);
         }
         return set;
+    }
+
+
+    /**
+     * Utility for adding an iterable to a collection.
+     *
+     * @param t1 The collection to add to
+     * @param t2 The iterable to add each item of to the collection
+     * @param <T> The element type of t1
+     * @return t1
+     */
+    public static <T, C extends Collection<? super T>> C addAll(C t1, Iterable<? extends T> t2) {
+        for (T t : t2) {
+            t1.add(t);
+        }
+        return t1;
+    }
+
+    /**
+     * Utility for adding an array to a collection.
+     *
+     * @param t1 The collection to add to
+     * @param t2 The iterable to add each item of to the collection
+     * @param <T> The element type of t1
+     * @return t1
+     */
+    public static <T, C extends Collection<? super T>> C addAll(C t1, T... t2) {
+        Collections.addAll(t1, t2);
+        return t1;
     }
 }
