@@ -67,7 +67,6 @@ public abstract class TestTaskExecutionCase {
     public void setup() throws IOException {
         System.setProperty(org.slf4j.impl.SimpleLogger.DEFAULT_LOG_LEVEL_KEY, "Info");
 
-        File resourcesDirectory = TestUtil.getResourcesDirectory();
         StartParameterInternal startParameter = new StartParameterInternal() {
             @Override
             public boolean isRerunTasks() {
@@ -147,7 +146,7 @@ public abstract class TestTaskExecutionCase {
     public void test() {
         evaluateProject(project, this::evaluateProject);
 
-        if (project.getState().isUnconfigured() && project.getState().hasFailure()) {
+        if (project.getState().hasFailure()) {
             project.getState().rethrowFailure();
         }
 

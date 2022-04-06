@@ -14,7 +14,6 @@ import com.tyron.builder.api.internal.changedetection.state.LineEndingNormalizin
 import com.tyron.builder.api.internal.changedetection.state.ResourceSnapshotterCacheService;
 import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.execution.ExecutionEngine;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinter;
 import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinterRegistry;
 import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionSnapshotter;
 import com.tyron.builder.api.internal.execution.fingerprint.InputFingerprinter;
@@ -27,23 +26,19 @@ import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.api.internal.fingerprint.LineEndingSensitivity;
-import com.tyron.builder.api.internal.fingerprint.classpath.CompileClasspathFingerprinter;
 import com.tyron.builder.api.internal.fingerprint.classpath.impl.DefaultCompileClasspathFingerprinter;
 import com.tyron.builder.api.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
 import com.tyron.builder.api.internal.fingerprint.impl.AbsolutePathFileCollectionFingerprinter;
 import com.tyron.builder.api.internal.fingerprint.impl.DefaultInputFingerprinter;
-import com.tyron.builder.api.internal.fingerprint.impl.FileCollectionFingerprinterRegistrations;
+import com.tyron.builder.api.internal.fingerprint.impl.RelativePathFileCollectionFingerprinter;
 import com.tyron.builder.api.internal.hash.ChecksumService;
 import com.tyron.builder.api.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.api.internal.id.UniqueId;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
-import com.tyron.builder.api.internal.reflect.service.scopes.GradleUserHomeScopeServices;
 import com.tyron.builder.api.internal.resources.local.DefaultPathKeyFileStore;
 import com.tyron.builder.api.internal.resources.local.PathKeyFileStore;
-import com.tyron.builder.api.internal.scopeids.id.BuildInvocationScopeId;
 import com.tyron.builder.api.internal.serialize.HashCodeSerializer;
 import com.tyron.builder.api.internal.service.scopes.ExecutionGradleServices;
 import com.tyron.builder.api.internal.snapshot.ValueSnapshotter;
@@ -53,18 +48,12 @@ import com.tyron.builder.api.internal.tasks.TaskExecuter;
 import com.tyron.builder.api.work.AsyncWorkTracker;
 import com.tyron.builder.cache.CacheBuilder;
 import com.tyron.builder.cache.CacheRepository;
-import com.tyron.builder.cache.MultiProcessSafePersistentIndexedCache;
 import com.tyron.builder.cache.PersistentCache;
 import com.tyron.builder.cache.PersistentIndexedCache;
 import com.tyron.builder.cache.PersistentIndexedCacheParameters;
 import com.tyron.builder.cache.StringInterner;
-import com.tyron.builder.cache.internal.CacheFactory;
-import com.tyron.builder.cache.internal.CrossBuildInMemoryCacheFactory;
-import com.tyron.builder.cache.internal.DefaultCacheAccess;
-import com.tyron.builder.cache.internal.DefaultMultiProcessSafePersistentIndexedCache;
 import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
 import com.tyron.builder.cache.scopes.BuildScopedCache;
-import com.tyron.builder.caching.internal.origin.OriginMetadataFactory;
 import com.tyron.builder.caching.local.internal.BuildCacheTempFileStore;
 import com.tyron.builder.caching.local.internal.DefaultBuildCacheTempFileStore;
 import com.tyron.builder.caching.local.internal.DirectoryBuildCacheService;
@@ -76,9 +65,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 
 public class ProjectExecutionServices extends DefaultServiceRegistry {
@@ -279,6 +265,23 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
                         DirectorySensitivity.IGNORE_DIRECTORIES,
                         fileCollectionSnapshotter,
                         fileSystemLocationSnapshotHasher
+                )
+        );
+    }
+
+    FingerprinterRegistration createIgnoreDirectoryNormalizeLineEndingsRelativePathInputFingerprinter(
+            FileSystemLocationSnapshotHasher hasher,
+            FileCollectionSnapshotter fileCollectionSnapshotter,
+            StringInterner interner
+    ) {
+        return FingerprinterRegistration.registration(
+                DirectorySensitivity.IGNORE_DIRECTORIES,
+                LineEndingSensitivity.NORMALIZE_LINE_ENDINGS,
+                new RelativePathFileCollectionFingerprinter(
+                        interner,
+                        DirectorySensitivity.IGNORE_DIRECTORIES,
+                        fileCollectionSnapshotter,
+                        hasher
                 )
         );
     }

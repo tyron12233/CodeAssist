@@ -15,9 +15,11 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 public class CollectionUtils {
     /**
@@ -192,5 +194,9 @@ public class CollectionUtils {
     public static <T, C extends Collection<? super T>> C addAll(C t1, T... t2) {
         Collections.addAll(t1, t2);
         return t1;
+    }
+
+    public static Iterable<String> stringize(Collection<?> compilerArgs) {
+        return compilerArgs.stream().map(Objects::toString).collect(Collectors.toList());
     }
 }

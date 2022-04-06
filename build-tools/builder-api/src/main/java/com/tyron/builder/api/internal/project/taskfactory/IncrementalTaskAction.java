@@ -12,6 +12,8 @@ import com.tyron.builder.api.tasks.incremental.IncrementalTaskInputs;
 import com.tyron.builder.api.tasks.incremental.InputFileDetails;
 import com.tyron.builder.api.work.InputChanges;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.lang.reflect.Method;
 
 @SuppressWarnings("deprecation")
@@ -21,17 +23,10 @@ public abstract class IncrementalTaskAction implements InputChangesAwareTaskActi
 
     @Override
     public void execute(Task task) {
-        InputChangesInternal inputChanges = getInputChanges();
-
-        Iterable<InputFileDetails> allFileChanges = inputChanges.getAllFileChanges();
-        IncrementalTaskInputs incrementalTaskInputs = inputChanges.isIncremental()
-                ? createIncrementalInputs(allFileChanges)
-                : createRebuildInputs(allFileChanges);
-
-        execute(incrementalTaskInputs);
+        execute(getInputChanges());
     }
 
-    public abstract void execute(IncrementalTaskInputs inputs);
+    public abstract void execute(@Nullable InputChanges inputs);
 
     @Override
     public String getDisplayName() {

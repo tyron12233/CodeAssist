@@ -131,12 +131,12 @@ public class SkipEmptyWorkStep implements Step<PreviousExecutionContext, Caching
         ExecutionOutcome skipOutcome;
         Timer timer = Time.startTimer();
         if (outputFilesAfterPreviousExecution.isEmpty()) {
-            LOGGER.debug("Skipping " + work.getDisplayName() + " as it has no source files and no previous output files.");
+            LOGGER.info("Skipping " + work.getDisplayName() + " as it has no source files and no previous output files.");
             skipOutcome = ExecutionOutcome.SHORT_CIRCUITED;
         } else {
             boolean didWork = cleanPreviousTaskOutputs(outputFilesAfterPreviousExecution);
             if (didWork) {
-                LOGGER.debug("Cleaned previous output of " + work.getDisplayName() + " as it has no source files.");
+                LOGGER.info("Cleaned previous output of " + work.getDisplayName() + " as it has no source files.");
                 skipOutcome = ExecutionOutcome.EXECUTED_NON_INCREMENTALLY;
             } else {
                 skipOutcome = ExecutionOutcome.SHORT_CIRCUITED;

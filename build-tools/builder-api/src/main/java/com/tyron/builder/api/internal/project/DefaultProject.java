@@ -231,13 +231,15 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public ConfigurableFileCollection files(Object... paths) {
-        return null;
+        return getObjects().fileCollection().from(paths);
     }
 
     @Override
     public ConfigurableFileCollection files(Object paths,
                                             Action<? super ConfigurableFileCollection> configureAction) {
-        return null;
+        ConfigurableFileCollection files = files(paths);
+        configureAction.execute(files);
+        return files;
     }
 
     @Override
