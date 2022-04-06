@@ -8,7 +8,10 @@ import com.google.common.hash.Hashing;
 import com.tyron.builder.api.UncheckedIOException;
 import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchies;
 import com.tyron.builder.api.initialization.BuildCancellationToken;
+import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
+import com.tyron.builder.api.internal.changedetection.state.DefaultResourceSnapshotterCacheService;
 import com.tyron.builder.api.internal.changedetection.state.LineEndingNormalizingFileSystemLocationSnapshotHasher;
+import com.tyron.builder.api.internal.changedetection.state.ResourceSnapshotterCacheService;
 import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.execution.ExecutionEngine;
 import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinter;
@@ -24,6 +27,8 @@ import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.api.internal.fingerprint.LineEndingSensitivity;
+import com.tyron.builder.api.internal.fingerprint.classpath.CompileClasspathFingerprinter;
+import com.tyron.builder.api.internal.fingerprint.classpath.impl.DefaultCompileClasspathFingerprinter;
 import com.tyron.builder.api.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
 import com.tyron.builder.api.internal.fingerprint.impl.AbsolutePathFileCollectionFingerprinter;
 import com.tyron.builder.api.internal.fingerprint.impl.DefaultInputFingerprinter;
@@ -39,6 +44,7 @@ import com.tyron.builder.api.internal.reflect.service.scopes.GradleUserHomeScope
 import com.tyron.builder.api.internal.resources.local.DefaultPathKeyFileStore;
 import com.tyron.builder.api.internal.resources.local.PathKeyFileStore;
 import com.tyron.builder.api.internal.scopeids.id.BuildInvocationScopeId;
+import com.tyron.builder.api.internal.serialize.HashCodeSerializer;
 import com.tyron.builder.api.internal.service.scopes.ExecutionGradleServices;
 import com.tyron.builder.api.internal.snapshot.ValueSnapshotter;
 import com.tyron.builder.api.internal.snapshot.impl.DefaultValueSnapshotter;
@@ -47,7 +53,15 @@ import com.tyron.builder.api.internal.tasks.TaskExecuter;
 import com.tyron.builder.api.work.AsyncWorkTracker;
 import com.tyron.builder.cache.CacheBuilder;
 import com.tyron.builder.cache.CacheRepository;
+import com.tyron.builder.cache.MultiProcessSafePersistentIndexedCache;
 import com.tyron.builder.cache.PersistentCache;
+import com.tyron.builder.cache.PersistentIndexedCache;
+import com.tyron.builder.cache.PersistentIndexedCacheParameters;
+import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.cache.internal.CacheFactory;
+import com.tyron.builder.cache.internal.CrossBuildInMemoryCacheFactory;
+import com.tyron.builder.cache.internal.DefaultCacheAccess;
+import com.tyron.builder.cache.internal.DefaultMultiProcessSafePersistentIndexedCache;
 import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
 import com.tyron.builder.cache.scopes.BuildScopedCache;
 import com.tyron.builder.caching.internal.origin.OriginMetadataFactory;
@@ -220,29 +234,69 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
     }
 
     FileCollectionFingerprinterRegistry createFileCollectionFingerprinterRegistry(
+            List<FingerprinterRegistration> registrations,
             FileCollectionSnapshotter fileCollectionSnapshotter,
             FileSystemLocationSnapshotHasher fileSystemLocationSnapshotHasher
     ){
-        List<FingerprinterRegistration> list = new ArrayList<>();
-        list.add(FingerprinterRegistration.registration(
+        return new DefaultFileCollectionFingerprinterRegistry(registrations);
+    }
+
+
+
+    ResourceSnapshotterCacheService createResourceSnapshotterCacheService(
+            CrossBuildFileHashCache store
+    ) {
+        PersistentIndexedCache<HashCode, HashCode> resourceHashesCache = store.createCache(
+                PersistentIndexedCacheParameters.of("resourceHashesCache", HashCode.class, new HashCodeSerializer()),
+                400000,
+                true);
+        return new DefaultResourceSnapshotterCacheService(resourceHashesCache);
+    }
+
+    FingerprinterRegistration createAbsolutePathDefaultFingerprinter(
+            FileCollectionSnapshotter fileCollectionSnapshotter,
+            FileSystemLocationSnapshotHasher fileSystemLocationSnapshotHasher
+    ) {
+        return FingerprinterRegistration.registration(
                 DirectorySensitivity.DEFAULT,
                 LineEndingSensitivity.DEFAULT,
                 new AbsolutePathFileCollectionFingerprinter(
                         DirectorySensitivity.DEFAULT,
                         fileCollectionSnapshotter,
                         fileSystemLocationSnapshotHasher
-                ))
+                )
         );
-        list.add(FingerprinterRegistration.registration(
+    }
+
+    FingerprinterRegistration createAbsolutePathIgnoreDirectoryFingerprinter(
+            FileCollectionSnapshotter fileCollectionSnapshotter,
+            FileSystemLocationSnapshotHasher fileSystemLocationSnapshotHasher
+    ) {
+        return FingerprinterRegistration.registration(
                 DirectorySensitivity.IGNORE_DIRECTORIES,
                 LineEndingSensitivity.DEFAULT,
                 new AbsolutePathFileCollectionFingerprinter(
                         DirectorySensitivity.IGNORE_DIRECTORIES,
                         fileCollectionSnapshotter,
                         fileSystemLocationSnapshotHasher
-                ))
+                )
         );
-        return new DefaultFileCollectionFingerprinterRegistry(list);
+    }
+
+    FingerprinterRegistration createCompileClassPathFingerprinter(
+            ResourceSnapshotterCacheService resourceSnapshotterCacheService,
+            FileCollectionSnapshotter fileCollectionSnapshotter,
+            StringInterner interner
+    ) {
+        return FingerprinterRegistration.registration(
+                DirectorySensitivity.DEFAULT,
+                LineEndingSensitivity.DEFAULT,
+                new DefaultCompileClasspathFingerprinter(
+                        resourceSnapshotterCacheService,
+                        fileCollectionSnapshotter,
+                        interner
+                )
+        );
     }
 
     InputFingerprinter createInputFingerprinter(

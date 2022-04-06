@@ -10,6 +10,7 @@ import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.Factory;
+import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
 import com.tyron.builder.api.internal.concurrent.DefaultExecutorFactory;
 import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
 import com.tyron.builder.api.internal.concurrent.ManagedScheduledExecutor;
@@ -68,9 +69,13 @@ import com.tyron.builder.cache.FileLockManager;
 import com.tyron.builder.cache.FileLockReleasedSignal;
 import com.tyron.builder.cache.StringInterner;
 import com.tyron.builder.cache.internal.DefaultFileLockManager;
+import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 import com.tyron.builder.cache.internal.ProcessMetaDataProvider;
 import com.tyron.builder.cache.internal.locklistener.DefaultFileLockContentionHandler;
 import com.tyron.builder.cache.internal.locklistener.FileLockContentionHandler;
+import com.tyron.builder.cache.scopes.BuildScopedCache;
+import com.tyron.builder.cache.scopes.GlobalScopedCache;
+import com.tyron.builder.cache.scopes.ScopedCache;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 import com.tyron.builder.internal.vfs.impl.AbstractVirtualFileSystem;
@@ -97,7 +102,6 @@ public class GlobalServices extends DefaultServiceRegistry {
     public GlobalServices(ServiceRegistry parent) {
         super(parent);
     }
-
 
     WorkInputListeners createWorkInputListeners(
             ListenerManager listenerManager

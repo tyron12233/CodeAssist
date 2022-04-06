@@ -5,6 +5,7 @@ import com.google.common.hash.Hashing;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.GradleInternal;
+import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
 import com.tyron.builder.api.internal.classpath.ClassPath;
 import com.tyron.builder.api.internal.concurrent.DefaultExecutorFactory;
 import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
@@ -33,7 +34,9 @@ import com.tyron.builder.cache.internal.ProcessMetaDataProvider;
 import com.tyron.builder.cache.internal.locklistener.FileLockContentionHandler;
 import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
 import com.tyron.builder.cache.internal.scopes.DefaultCacheScopeMapping;
+import com.tyron.builder.cache.internal.scopes.DefaultGlobalScopedCache;
 import com.tyron.builder.cache.scopes.BuildScopedCache;
+import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.common.TestUtil;
 
 import org.jetbrains.annotations.Nullable;
@@ -85,6 +88,13 @@ public class GradleUserHomeScopeServices extends DefaultServiceRegistry {
         return new ConfigurableClassLoaderHierarchyHasher(Collections.emptyMap(), hashingClassLoaderFactory);
     }
 
+    GlobalScopedCache createGlobalScopedCache(
+            GradleInternal gradle,
+            CacheRepository cache
+    ) {
+        return new DefaultGlobalScopedCache(gradle.getGradleUserHomeDir(), cache);
+    }
+
     CrossBuildInMemoryCacheFactory createCrossBuildInMemoryFactory(
             ListenerManager listenerManager
     ) {
@@ -96,6 +106,14 @@ public class GradleUserHomeScopeServices extends DefaultServiceRegistry {
     ) {
         return new DefaultInMemoryCacheDecoratorFactory(true, crossBuildInMemoryCacheFactory);
     }
+
+    CrossBuildFileHashCache createCrossBuildFileHashCache(
+            GlobalScopedCache scopedCache,
+            InMemoryCacheDecoratorFactory factory
+    ) {
+        return new CrossBuildFileHashCache(scopedCache, factory, CrossBuildFileHashCache.Kind.FILE_HASHES);
+    }
+
 
 
     ProgressLoggerFactory createProgressLoggerFactory() {

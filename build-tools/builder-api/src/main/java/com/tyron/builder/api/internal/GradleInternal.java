@@ -10,6 +10,8 @@ import com.tyron.builder.api.util.Path;
 
 import org.jetbrains.annotations.Nullable;
 
+import java.io.File;
+
 public interface GradleInternal extends Gradle {
 
     @Override
@@ -21,6 +23,15 @@ public interface GradleInternal extends Gradle {
     GradleInternal getRoot();
 
     boolean isRootBuild();
+
+    /**
+     * Returns the Gradle user home directory.
+     *
+     * This directory is used to cache downloaded resources, compiled build scripts and so on.
+     *
+     * @return The user home directory. Never returns null.
+     */
+    File getGradleUserHomeDir();
 
     /**
      * Returns the {@link BuildState} that manages the state of this instance.

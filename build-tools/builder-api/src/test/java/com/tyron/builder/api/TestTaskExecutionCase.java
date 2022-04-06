@@ -45,6 +45,10 @@ import com.tyron.common.TestUtil;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.slf4j.ILoggerFactory;
+import org.slf4j.LoggerFactory;
+import org.slf4j.helpers.NOPLoggerFactory;
+import org.slf4j.impl.SimpleLoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -61,6 +65,8 @@ public abstract class TestTaskExecutionCase {
 
     @Before
     public void setup() throws IOException {
+        System.setProperty(org.slf4j.impl.SimpleLogger.DEFAULT_LOG_LEVEL_KEY, "Info");
+
         File resourcesDirectory = TestUtil.getResourcesDirectory();
         StartParameterInternal startParameter = new StartParameterInternal() {
             @Override
@@ -81,6 +87,11 @@ public abstract class TestTaskExecutionCase {
             private ServiceRegistry registry;
             private ServiceRegistryFactory factory;
             private TaskExecutionGraphInternal taskExecutionGraph;
+
+            @Override
+            public File getGradleUserHomeDir() {
+                return new File(TestUtil.getResourcesDirectory(), ".gradle");
+            }
 
             @Override
             public TaskExecutionGraphInternal getTaskGraph() {
