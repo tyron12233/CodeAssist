@@ -1,19 +1,20 @@
 package com.tyron.builder.api.internal.remote.inet;
 
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Logger;
 
 /**
  * Provides information on how two processes on this machine can communicate via IP addresses
  */
 public class InetAddressFactory {
-    private final Logger logger = Logger.getLogger(getClass().getSimpleName());
+    private final Logger logger = LoggerFactory.getLogger(getClass());
     private final Object lock = new Object();
     private List<InetAddress> communicationAddresses;
     private InetAddress localBindingAddress;
@@ -97,7 +98,7 @@ public class InetAddressFactory {
      */
     private void findLocalBindingAddress() {
         if (inetAddresses.getLoopback().isEmpty()) {
-            logger.info("No loopback address for local binding, using fallback " + wildcardBindingAddress);
+            logger.debug("No loopback address for local binding, using fallback " + wildcardBindingAddress);
             localBindingAddress = wildcardBindingAddress;
         } else {
             localBindingAddress = InetAddress.getLoopbackAddress();
@@ -117,7 +118,7 @@ public class InetAddressFactory {
         for (String key : System.getenv().keySet()) {
             if (key.startsWith("OPENSHIFT_") && key.endsWith("_IP")) {
                 String ipAddress = System.getenv(key);
-                logger.info("OPENSHIFT IP environment variable " + key + " detected. Using IP address " + ipAddress);
+                logger.debug("OPENSHIFT IP environment variable " + key + " detected. Using IP address " + ipAddress);
                 try {
                     return InetAddress.getByName(ipAddress);
                 } catch (UnknownHostException e) {
@@ -133,10 +134,10 @@ public class InetAddressFactory {
         if (inetAddresses.getLoopback().isEmpty()) {
             if (inetAddresses.getRemote().isEmpty()) {
                 InetAddress fallback = InetAddress.getByName(null);
-                logger.info("No loopback addresses for communication, using fallback " + fallback);
+                logger.debug("No loopback addresses for communication, using fallback " + fallback);
                 communicationAddresses.add(fallback);
             } else {
-                logger.info("No loopback addresses for communication, using remote addresses instead.");
+                logger.debug("No loopback addresses for communication, using remote addresses instead.");
                 communicationAddresses.addAll(inetAddresses.getRemote());
             }
         } else {

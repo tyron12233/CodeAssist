@@ -23,6 +23,9 @@ import com.tyron.builder.api.internal.time.Time;
 import com.tyron.builder.api.internal.time.Timer;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -32,11 +35,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.logging.Logger;
 
 public class SkipEmptyWorkStep implements Step<PreviousExecutionContext, CachingResult> {
 
-    private static final Logger LOGGER = Logger.getLogger(SkipEmptyWorkStep.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(SkipEmptyWorkStep.class);
 
     private final OutputChangeListener outputChangeListener;
     private final WorkInputListeners workInputListeners;
@@ -129,12 +131,12 @@ public class SkipEmptyWorkStep implements Step<PreviousExecutionContext, Caching
         ExecutionOutcome skipOutcome;
         Timer timer = Time.startTimer();
         if (outputFilesAfterPreviousExecution.isEmpty()) {
-            LOGGER.info("Skipping " + work.getDisplayName() + " as it has no source files and no previous output files.");
+            LOGGER.debug("Skipping " + work.getDisplayName() + " as it has no source files and no previous output files.");
             skipOutcome = ExecutionOutcome.SHORT_CIRCUITED;
         } else {
             boolean didWork = cleanPreviousTaskOutputs(outputFilesAfterPreviousExecution);
             if (didWork) {
-                LOGGER.info("Cleaned previous output of " + work.getDisplayName() + " as it has no source files.");
+                LOGGER.debug("Cleaned previous output of " + work.getDisplayName() + " as it has no source files.");
                 skipOutcome = ExecutionOutcome.EXECUTED_NON_INCREMENTALLY;
             } else {
                 skipOutcome = ExecutionOutcome.SHORT_CIRCUITED;

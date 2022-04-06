@@ -14,10 +14,12 @@ import com.tyron.builder.api.internal.nativeintegration.services.FileSystems;
 import com.tyron.builder.api.tasks.util.PatternFilterable;
 import com.tyron.builder.api.tasks.util.PatternSet;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
-import java.util.logging.Logger;
 
 /**
  * Directory walker supporting {@link Spec}s for includes and excludes.
@@ -28,7 +30,7 @@ import java.util.logging.Logger;
  * excludes.
  */
 public class DirectoryFileTree implements MinimalFileTree, PatternFilterableFileTree, RandomAccessFileCollection, LocalFileTree, DirectoryTree {
-    private static final Logger LOGGER = Logger.getLogger("DirectoryFileTree");
+    private static final Logger LOGGER = LoggerFactory.getLogger(DirectoryFileTree.class);
     private static final DirectoryWalker DEFAULT_DIRECTORY_WALKER = new DefaultDirectoryWalker(
             FileSystems.getDefault());
     private static final DirectoryWalker REPRODUCIBLE_DIRECTORY_WALKER = new ReproducibleDirectoryWalker(FileSystems.getDefault());
@@ -109,7 +111,7 @@ public class DirectoryFileTree implements MinimalFileTree, PatternFilterableFile
                 walkDir(fileOrDirectory, path, visitor, spec, stopFlag);
             }
         } else {
-            LOGGER.info("file or directory '" + fileOrDirectory + "', not found");
+            LOGGER.debug("file or directory '" + fileOrDirectory + "', not found");
         }
     }
 

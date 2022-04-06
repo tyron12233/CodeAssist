@@ -7,15 +7,16 @@ import com.tyron.builder.api.internal.Cast;
 import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.cache.FileLock;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.concurrent.atomic.AtomicReference;
 
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
-import java.util.logging.Logger;
 
 class InMemoryDecoratedCache<K, V> implements MultiProcessSafeAsyncPersistentIndexedCache<K, V>, InMemoryCacheController {
-    private final static Logger LOG = Logger.getLogger(InMemoryDecoratedCache.class.getSimpleName());
+    private final static Logger LOG = LoggerFactory.getLogger(InMemoryDecoratedCache.class);
     private final static Object NULL = new Object();
     private final MultiProcessSafeAsyncPersistentIndexedCache<K, V> delegate;
     private final Cache<Object, Object> inMemoryCache;
@@ -107,7 +108,7 @@ class InMemoryDecoratedCache<K, V> implements MultiProcessSafeAsyncPersistentInd
         if (previousState == null) {
             outOfDate = true;
         } else if (currentCacheState.hasBeenUpdatedSince(previousState)) {
-            LOG.info("Invalidating in-memory cache of " + cacheId);
+            LOG.debug("Invalidating in-memory cache of " + cacheId);
             outOfDate = true;
         }
         if (outOfDate) {

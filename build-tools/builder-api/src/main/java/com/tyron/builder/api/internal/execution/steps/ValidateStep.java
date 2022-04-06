@@ -8,7 +8,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.groupingBy;
@@ -39,9 +38,12 @@ import com.tyron.builder.api.model.internal.type.ModelType;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 import com.tyron.builder.problems.BaseProblem;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class ValidateStep<C extends BeforeExecutionContext, R extends Result> implements Step<C, R> {
 
-    private static final Logger LOGGER = Logger.getLogger(ValidateStep.class.getSimpleName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(ValidateStep.class);
     private static final String MAX_NB_OF_ERRORS = "org.gradle.internal.max.validation.errors";
 
     private final VirtualFileSystem virtualFileSystem;
@@ -94,7 +96,7 @@ public class ValidateStep<C extends BeforeExecutionContext, R extends Result> im
         }
 
         if (!warnings.isEmpty()) {
-            LOGGER.info("Invalidating VFS because " + work.getDisplayName() + " failed validation");
+            LOGGER.debug("Invalidating VFS because " + work.getDisplayName() + " failed validation");
             virtualFileSystem.invalidateAll();
         }
 

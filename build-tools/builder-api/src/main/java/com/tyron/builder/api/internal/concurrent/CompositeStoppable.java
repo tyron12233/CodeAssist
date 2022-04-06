@@ -1,10 +1,12 @@
 package com.tyron.builder.api.internal.concurrent;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Logger;
 
 /**
  * A {@link Stoppable} that stops a collection of things. If an element implements
@@ -15,7 +17,7 @@ import java.util.logging.Logger;
  * <p>Attempts to stop as many elements as possible in the presence of failures.</p>
  */
 public class CompositeStoppable implements Stoppable {
-    private static final Logger LOGGER = Logger.getLogger("CompositeStoppable");
+    private static final Logger LOGGER = LoggerFactory.getLogger(CompositeStoppable.class);
     public static final Stoppable NO_OP_STOPPABLE = new Stoppable() {
         @Override
         public void stop() {
@@ -89,7 +91,7 @@ public class CompositeStoppable implements Stoppable {
                     if (failure == null) {
                         failure = throwable;
                     } else if (!Thread.currentThread().isInterrupted()) {
-                        LOGGER.severe(String.format("Could not stop %s.", element) + "\n" + throwable);
+                        LOGGER.error(String.format("Could not stop %s.", element) + "\n" + throwable);
                     }
                 }
             }

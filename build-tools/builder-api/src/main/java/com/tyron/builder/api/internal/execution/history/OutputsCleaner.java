@@ -8,6 +8,8 @@ import com.tyron.builder.api.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.api.internal.snapshot.SnapshotUtil;
 
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -15,7 +17,6 @@ import java.nio.file.Files;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.function.Predicate;
-import java.util.logging.Logger;
 
 /**
  * Cleans outputs, removing empty directories.
@@ -26,7 +27,7 @@ import java.util.logging.Logger;
  * IMPORTANT: This class is stateful, so it can't be used as a service.
  */
 public class OutputsCleaner {
-    private static final Logger LOGGER = Logger.getLogger("OutputsCleaner");
+    private static final Logger LOGGER = LoggerFactory.getLogger(OutputsCleaner.class);
 
     private final Deleter deleter;
     private final PriorityQueue<File> directoriesToDelete;
@@ -69,7 +70,7 @@ public class OutputsCleaner {
             case RegularFile:
                 if (fileSafeToDelete.test(file)) {
                     if (file.exists()) {
-                        LOGGER.info("Deleting stale output file '" + file + " '.");
+                        LOGGER.debug("Deleting stale output file '" + file + " '.");
                         deleter.delete(file);
                         didWork = true;
                     }
@@ -111,7 +112,7 @@ public class OutputsCleaner {
                 break;
             }
             if (isEmpty(directory)) {
-                LOGGER.info("Deleting stale empty output directory '" + directory + "'.");
+                LOGGER.debug("Deleting stale empty output directory '" + directory + "'.");
                 Files.delete(directory.toPath());
                 didWork = true;
                 markParentDirForDeletion(directory);
