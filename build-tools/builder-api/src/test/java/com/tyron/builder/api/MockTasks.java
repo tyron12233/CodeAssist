@@ -2,6 +2,7 @@ package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Iterators;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileTree;
@@ -35,6 +36,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 
+/**
+ * Mocks the execution of building an APK which test tasks of their ability to compile
+ * only changed inputs
+ */
 @SuppressWarnings("Convert2Lambda")
 public class MockTasks extends TestTaskExecutionCase {
 
@@ -80,8 +85,8 @@ public class MockTasks extends TestTaskExecutionCase {
         }
 
         public void compile(InputChanges inputs) {
-            ConfigurableFileCollection files = getProject().getObjects().fileCollection();
-            System.out.println("Input changes: " + inputs);
+            ImmutableList<FileChange> changedFiles = ImmutableList.copyOf(inputs.getFileChanges(getStableSources()));
+            System.out.println("Compiling changed files: " + changedFiles);
         }
 
         /**
@@ -95,7 +100,6 @@ public class MockTasks extends TestTaskExecutionCase {
 
         @Override
         @CompileClasspath
-        @Incremental
         public FileCollection getClasspath() {
             return super.getClasspath();
         }
@@ -125,7 +129,6 @@ public class MockTasks extends TestTaskExecutionCase {
                 File resDir = project.mkdir(project.file("src/main/res"));
                 ConfigurableFileTree resFiles = project.fileTree(resDir);
                 aapt2Task.setSource(resFiles);
-
             }
         });
 
@@ -136,21 +139,28 @@ public class MockTasks extends TestTaskExecutionCase {
 
                 File javaDir = project.mkdir(project.file("src/main/java"));;
 
-                // represents all the java file under the src directory
+                // represents all the java file under the javaDir
                 ConfigurableFileTree sources = project.fileTree(javaDir,
                         files -> files.include("**/*.java")
                 );
                 task.setSource(sources);
+
                 task.getDestinationDirectory().dir(project.getBuildDir() + "/classes");
 
                 task.setSourceCompatibility("1.8");
                 task.setTargetCompatibility("1.8");
             }
         });
+
+        tasks.register("assembleTask").configure(assembly -> {
+            // ideally this would depend on the last task that will assemble the APK,
+            // for this test the last task is JavaTask
+            assembly.dependsOn("JavaTask");
+        });
     }
 
     @Override
     public List<String> getTasksToExecute() {
-        return ImmutableList.of("JavaTask");
+        return ImmutableList.of("assembleTask");
     }
 }
