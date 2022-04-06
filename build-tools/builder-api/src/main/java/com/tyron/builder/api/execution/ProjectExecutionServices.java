@@ -35,6 +35,7 @@ import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.scopes.GradleUserHomeScopeServices;
 import com.tyron.builder.api.internal.resources.local.DefaultPathKeyFileStore;
 import com.tyron.builder.api.internal.resources.local.PathKeyFileStore;
 import com.tyron.builder.api.internal.scopeids.id.BuildInvocationScopeId;
@@ -47,6 +48,8 @@ import com.tyron.builder.api.work.AsyncWorkTracker;
 import com.tyron.builder.cache.CacheBuilder;
 import com.tyron.builder.cache.CacheRepository;
 import com.tyron.builder.cache.PersistentCache;
+import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
+import com.tyron.builder.cache.scopes.BuildScopedCache;
 import com.tyron.builder.caching.internal.origin.OriginMetadataFactory;
 import com.tyron.builder.caching.local.internal.BuildCacheTempFileStore;
 import com.tyron.builder.caching.local.internal.DefaultBuildCacheTempFileStore;
@@ -78,6 +81,13 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
         add(CurrentBuildOperationRef.class, CurrentBuildOperationRef.instance());
 
         addProvider(new ExecutionGradleServices(projectInternal));
+    }
+
+    protected BuildScopedCache createBuildScopedCache(
+            CacheRepository cacheRepository
+    ) {
+        File gradle = new File(projectInternal.getBuildDir(), ".gradle");
+        return new DefaultBuildScopedCache(gradle, cacheRepository);
     }
 
     ChecksumService createChecksumService() {
