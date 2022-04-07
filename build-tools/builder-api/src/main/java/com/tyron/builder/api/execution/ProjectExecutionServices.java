@@ -13,13 +13,17 @@ import com.tyron.builder.api.internal.changedetection.state.DefaultResourceSnaps
 import com.tyron.builder.api.internal.changedetection.state.LineEndingNormalizingFileSystemLocationSnapshotHasher;
 import com.tyron.builder.api.internal.changedetection.state.ResourceSnapshotterCacheService;
 import com.tyron.builder.api.internal.event.ListenerManager;
+import com.tyron.builder.api.internal.execution.BuildOutputCleanupRegistry;
 import com.tyron.builder.api.internal.execution.ExecutionEngine;
+import com.tyron.builder.api.internal.execution.OutputChangeListener;
 import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinterRegistry;
 import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionSnapshotter;
 import com.tyron.builder.api.internal.execution.fingerprint.InputFingerprinter;
 import com.tyron.builder.api.internal.execution.fingerprint.impl.DefaultFileCollectionFingerprinterRegistry;
 import com.tyron.builder.api.internal.execution.fingerprint.impl.FingerprinterRegistration;
 import com.tyron.builder.api.internal.execution.history.ExecutionHistoryStore;
+import com.tyron.builder.api.internal.execution.history.OutputFilesRepository;
+import com.tyron.builder.api.internal.file.Deleter;
 import com.tyron.builder.api.internal.file.FileAccessTracker;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileOperations;
@@ -34,7 +38,6 @@ import com.tyron.builder.api.internal.fingerprint.impl.RelativePathFileCollectio
 import com.tyron.builder.api.internal.hash.ChecksumService;
 import com.tyron.builder.api.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.resources.local.DefaultPathKeyFileStore;
@@ -45,6 +48,11 @@ import com.tyron.builder.api.internal.snapshot.ValueSnapshotter;
 import com.tyron.builder.api.internal.snapshot.impl.DefaultValueSnapshotter;
 import com.tyron.builder.api.internal.snapshot.impl.ValueSnapshotterSerializerRegistry;
 import com.tyron.builder.api.internal.tasks.TaskExecuter;
+import com.tyron.builder.api.internal.tasks.execution.CatchExceptionTaskExecuter;
+import com.tyron.builder.api.internal.tasks.execution.CleanupStaleOutputsExecuter;
+import com.tyron.builder.api.internal.tasks.execution.FinalizePropertiesTaskExecuter;
+import com.tyron.builder.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter;
+import com.tyron.builder.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter;
 import com.tyron.builder.api.work.AsyncWorkTracker;
 import com.tyron.builder.cache.CacheBuilder;
 import com.tyron.builder.cache.CacheRepository;
@@ -78,7 +86,6 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
 
         BuildCancellationToken token = new DefaultBuildCancellationToken();
         add(BuildCancellationToken.class, token);
-        add(CurrentBuildOperationRef.class, CurrentBuildOperationRef.instance());
 
         addProvider(new ExecutionGradleServices());
     }
@@ -171,6 +178,7 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
 
     FileAccessTracker createFileAccessTracker() {
         return file -> {
+
         };
     }
 
@@ -188,7 +196,7 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
     ) {
         File buildDir = projectInternal.getBuildDir();
 
-        PathKeyFileStore pathKeyFileStore = new DefaultPathKeyFileStore(checksumService, buildDir);
+        PathKeyFileStore pathKeyFileStore = new DefaultPathKeyFileStore(checksumService, new File(buildDir, ".gradle"));
         PersistentCache cache = cacheRepository.cache(buildDir)
                 .withDisplayName("Build cache")
                 .withLockOptions(mode(OnDemand))
@@ -315,8 +323,13 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
     }
 
     protected TaskExecuter createTaskExecuter(
+            TaskExecutionGraph taskExecutionGraph,
             ExecutionHistoryStore executionHistoryStore,
             BuildOperationExecutor buildOperationExecutor,
+            BuildOutputCleanupRegistry cleanupRegistry,
+            Deleter deleter,
+            OutputChangeListener outputChangeListener,
+            OutputFilesRepository outputFilesRepository,
             AsyncWorkTracker asyncWorkTracker,
             ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
             ExecutionEngine executionEngine,
@@ -337,7 +350,19 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
                 factory,
                 fileOperations
         );
+        executer = new CleanupStaleOutputsExecuter(
+                buildOperationExecutor,
+                cleanupRegistry,
+                deleter,
+                outputChangeListener,
+                outputFilesRepository,
+                executer
+        );
+        executer = new FinalizePropertiesTaskExecuter(executer);
+        executer = new ResolveTaskExecutionModeExecuter(executer);
+        executer = new SkipTaskWithNoActionsExecuter(executer, taskExecutionGraph);
         executer = new SkipOnlyIfTaskExecuter(executer);
+        executer = new CatchExceptionTaskExecuter(executer);
         return executer;
     }
 

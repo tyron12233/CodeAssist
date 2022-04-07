@@ -248,8 +248,8 @@ public class ExecutionGradleServices {
                 new CancelExecutionStep<>(cancellationToken,
                 new ResolveInputChangesStep<>(
                 new RemovePreviousOutputsStep<>(deleter, outputChangeListener,
-                new ExecuteStep<>(buildOperationExecutor
-        )))))))))))))))))))))))));
+                new ExecuteStep<>(buildOperationExecutor)
+        ))))))))))))))))))))))));
         // @formatter:off
     }
 }

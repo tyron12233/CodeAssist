@@ -2,22 +2,17 @@ package com.tyron.builder.api;
 
 import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.Describables;
-import com.tyron.builder.api.internal.GUtil;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
-import com.tyron.builder.api.internal.fingerprint.DirectorySensitivity;
-import com.tyron.builder.api.internal.fingerprint.LineEndingSensitivity;
 import com.tyron.builder.api.internal.initialization.DefaultProjectDescriptor;
-import com.tyron.builder.api.internal.logging.events.StyledTextOutputEvent;
 import com.tyron.builder.api.internal.logging.services.DefaultStyledTextOutputFactory;
 import com.tyron.builder.api.internal.operations.MultipleBuildOperationFailures;
 import com.tyron.builder.api.internal.project.DefaultProjectOwner;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
-import com.tyron.builder.api.internal.reflect.service.scopes.BasicGlobalScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServiceRegistryFactory;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.GlobalServices;
@@ -25,34 +20,30 @@ import com.tyron.builder.api.internal.reflect.service.scopes.GradleUserHomeScope
 import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.tasks.DefaultTaskContainer;
-import com.tyron.builder.api.internal.tasks.StaticValue;
 import com.tyron.builder.api.internal.tasks.TaskExecutor;
-import com.tyron.builder.api.internal.tasks.properties.InputFilePropertyType;
-import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.internal.time.Time;
 import com.tyron.builder.api.logging.LogLevel;
-import com.tyron.builder.api.logging.Logger;
-import com.tyron.builder.api.logging.Logging;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
 import com.tyron.builder.api.logging.configuration.LoggingConfiguration;
 import com.tyron.builder.api.logging.configuration.ShowStacktrace;
 import com.tyron.builder.api.logging.configuration.WarningMode;
 import com.tyron.builder.api.project.BuildProject;
-import com.tyron.builder.api.tasks.InputFiles;
 import com.tyron.builder.api.util.Path;
 import com.tyron.builder.internal.buildevents.BuildExceptionReporter;
+import com.tyron.builder.internal.vfs.VirtualFileSystem;
 import com.tyron.common.TestUtil;
 
+import org.apache.commons.io.monitor.FileAlterationListener;
+import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
+import org.apache.commons.io.monitor.FileAlterationMonitor;
+import org.apache.commons.io.monitor.FileAlterationObserver;
 import org.junit.Before;
 import org.junit.Test;
-import org.slf4j.ILoggerFactory;
-import org.slf4j.LoggerFactory;
-import org.slf4j.helpers.NOPLoggerFactory;
-import org.slf4j.impl.SimpleLoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Method;
+import java.nio.file.WatchService;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -64,7 +55,7 @@ public abstract class TestTaskExecutionCase {
     private DefaultTaskContainer container;
 
     @Before
-    public void setup() throws IOException {
+    public void setup() throws Exception {
         System.setProperty(org.slf4j.impl.SimpleLogger.DEFAULT_LOG_LEVEL_KEY, "Info");
 
         StartParameterInternal startParameter = new StartParameterInternal() {
@@ -76,6 +67,8 @@ public abstract class TestTaskExecutionCase {
 
 
         DefaultServiceRegistry global = new GlobalServices();
+        global.register(this::registerGlobalServices);
+
         GradleUserHomeScopeServices gradleUserHomeScopeServices = new GradleUserHomeScopeServices(global);
         BuildScopeServices buildScopeServices = new BuildScopeServices(gradleUserHomeScopeServices);
 
@@ -140,6 +133,10 @@ public abstract class TestTaskExecutionCase {
 
     protected String getProjectName() {
         return "TestProject";
+    }
+
+    protected void registerGlobalServices(ServiceRegistration serviceRegistration) {
+
     }
 
     @Test
