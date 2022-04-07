@@ -112,7 +112,14 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         }
         return new File(getRootFile(), "src/main/assets");
     }
-
+	@Override
+    public File getAidlDirectory() {
+        File custom = getPathSetting("aidl_directory");
+        if (custom.exists()) {
+            return custom;
+        }
+        return new File(getRootFile(), "src/main/aidl");
+    }
     @Override
     public String getPackageName() {
         if (mManifestData == null) {

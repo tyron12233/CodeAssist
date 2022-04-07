@@ -7,6 +7,12 @@ import com.tyron.common.util.Decompress;
 
 import java.io.File;
 import java.util.ArrayList;
+import android.preference.Preference;
+import com.tyron.common.SharedPreferenceKeys;
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
+import android.widget.Toast;
+import android.os.Looper;
 
 
 public class ApkSigner {
@@ -29,8 +35,13 @@ public class ApkSigner {
 
     //TODO: Adjust min and max sdk
     public void sign() throws Exception {
+		  Looper.prepare();    
         commands.add("sign");
-        commands.add("--key");
+		
+        commands.add("--key");		
+		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(BuildModule.getContext());
+        boolean isChecked = sharedPreferences.getBoolean("sign_apk", false);
+        Toast.makeText(BuildModule.getContext(), "isChecked : " + isChecked, Toast.LENGTH_LONG).show();
         commands.add(getTestKeyFilePath());
         commands.add("--cert");
         commands.add(getTestCertFilePath());
@@ -43,6 +54,7 @@ public class ApkSigner {
         commands.add("--in");
         commands.add(mApkInputPath);
         com.android.apksigner.ApkSignerTool.main(commands.toArray(new String[0]));
+		Looper.loop();
     }
 
 
@@ -61,6 +73,7 @@ public class ApkSigner {
                 check.getParentFile().getAbsolutePath());
 
         return check.getAbsolutePath();
+		
     }
 
     private String getTestCertFilePath() {

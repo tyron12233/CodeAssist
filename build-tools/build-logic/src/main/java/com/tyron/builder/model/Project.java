@@ -303,7 +303,9 @@ public class Project {
     public File getAssetsDirectory() {
         return mAssetsDir;
     }
-
+public File getAidlDirectory() {
+        return new File(mRoot, "app/src/main/aidl");
+    }
     public File getNativeLibsDirectory() {
         return mNativeLibsDir;
     }

@@ -19,4 +19,7 @@ public class SharedPreferenceKeys {
     public static final String SCHEME = "scheme";
     public static final String THEME = "theme";
     public static final String EDITOR_TAB_UNIQUE_FILE_NAME = "editor_tab_unique_file_name";
+	public static final String SIGN_APK= "sign_apk";
+	public static final String SIGN_AAB = "sign_aab";
+	
 }

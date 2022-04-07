@@ -22,6 +22,8 @@ import com.tyron.builder.project.api.AndroidModule;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.tyron.builder.compiler.incremental.resource.IncrementalAidlTask;
+import com.tyron.builder.compiler.incremental.resource.BuildConfigTask;
 
 public class AndroidAppBuilder extends BuilderImpl<AndroidModule> {
 
@@ -44,6 +46,9 @@ public class AndroidAppBuilder extends BuilderImpl<AndroidModule> {
             tasks.add(new InjectLoggerTask(getProject(), module, logger));
         }
         tasks.add(new CrashlyticsTask(getProject(), module, logger));
+        tasks.add(new BuildConfigTask(getProject(), module, logger));
+	tasks.add(new IncrementalAidlTask(getProject(), module, logger));
+
         tasks.add(new IncrementalAapt2Task(getProject(), module, logger, false));
         tasks.add(new GenerateViewBindingTask(getProject(), module, logger, true));
         tasks.add(new MergeSymbolsTask(getProject(), module, logger));
