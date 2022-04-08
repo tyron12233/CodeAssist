@@ -23,6 +23,7 @@ import com.tyron.builder.api.internal.file.DefaultDeleter;
 import com.tyron.builder.api.internal.file.DefaultFileCollectionFactory;
 import com.tyron.builder.api.internal.file.DefaultFileLookup;
 import com.tyron.builder.api.internal.file.DefaultFilePropertyFactory;
+import com.tyron.builder.api.internal.file.DefaultFileSystemLocation;
 import com.tyron.builder.api.internal.file.DeleteSpec;
 import com.tyron.builder.api.internal.file.Deleter;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
@@ -44,6 +45,10 @@ import com.tyron.builder.api.internal.hash.FileHasher;
 import com.tyron.builder.api.internal.hash.StreamHasher;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
 import com.tyron.builder.api.internal.operations.BuildOperationListener;
+import com.tyron.builder.api.internal.operations.BuildOperationListenerManager;
+import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
+import com.tyron.builder.api.internal.operations.DefaultBuildOperationListenerManager;
+import com.tyron.builder.api.internal.os.OperatingSystem;
 import com.tyron.builder.api.internal.provider.PropertyHost;
 import com.tyron.builder.api.internal.reflect.service.AnnotatedServiceLifecycleHandler;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
@@ -76,12 +81,25 @@ import com.tyron.builder.cache.internal.locklistener.FileLockContentionHandler;
 import com.tyron.builder.cache.scopes.BuildScopedCache;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.builder.cache.scopes.ScopedCache;
+import com.tyron.builder.internal.service.scopes.DefaultGradleUserHomeScopeServiceRegistry;
+import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 import com.tyron.builder.internal.vfs.impl.AbstractVirtualFileSystem;
 import com.tyron.builder.internal.vfs.impl.DefaultFileSystemAccess;
 import com.tyron.builder.internal.vfs.impl.DefaultSnapshotHierarchy;
 import com.tyron.builder.internal.vfs.impl.VfsRootReference;
+import com.tyron.builder.internal.watch.registry.FileWatcherRegistryFactory;
+import com.tyron.builder.internal.watch.vfs.BuildLifecycleAwareVirtualFileSystem;
+import com.tyron.builder.internal.watch.vfs.FileChangeListeners;
+import com.tyron.builder.internal.watch.vfs.WatchableFileSystemDetector;
+import com.tyron.builder.internal.watch.vfs.impl.DefaultWatchableFileSystemDetector;
+import com.tyron.builder.internal.watch.vfs.impl.LocationsWrittenByCurrentBuild;
+import com.tyron.builder.internal.watch.vfs.impl.WatchingNotSupportedVirtualFileSystem;
+import com.tyron.builder.internal.watch.vfs.impl.WatchingVirtualFileSystem;
+
+import net.rubygrapefruit.platform.file.FileSystems;
+import net.rubygrapefruit.platform.internal.PosixFileSystems;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -92,6 +110,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 public class GlobalServices extends DefaultServiceRegistry {
 
@@ -101,6 +120,14 @@ public class GlobalServices extends DefaultServiceRegistry {
 
     public GlobalServices(ServiceRegistry parent) {
         super(parent);
+    }
+
+    CurrentBuildOperationRef createCurrentBuildOperationRef() {
+        return CurrentBuildOperationRef.instance();
+    }
+
+    BuildOperationListenerManager createBuildOperationListenerManager() {
+        return new DefaultBuildOperationListenerManager();
     }
 
     WorkInputListeners createWorkInputListeners(
@@ -236,14 +263,66 @@ public class GlobalServices extends DefaultServiceRegistry {
         };
     }
 
-    VirtualFileSystem createVirtualFileSystem() {
+    FileChangeListeners createFileChangeListeners(ListenerManager listenerManager) {
+        return new DefaultFileChangeListeners(listenerManager);
+    }
+
+    LocationsWrittenByCurrentBuild createLocationsUpdatedByCurrentBuild(ListenerManager listenerManager) {
+        LocationsWrittenByCurrentBuild locationsWrittenByCurrentBuild = new LocationsWrittenByCurrentBuild();
+//        listenerManager.addListener(new RootBuildLifecycleListener() {
+//            @Override
+//            public void afterStart() {
+//                locationsWrittenByCurrentBuild.buildStarted();
+//            }
+//
+//            @Override
+//            public void beforeComplete() {
+//                locationsWrittenByCurrentBuild.buildFinished();
+//            }
+//        });
+        return locationsWrittenByCurrentBuild;
+    }
+
+    FileSystems createFileSystems() {
+        return new PosixFileSystems();
+    }
+
+    WatchableFileSystemDetector createWatchableFileSystemDetector(FileSystems fileSystems) {
+        return new DefaultWatchableFileSystemDetector(fileSystems);
+    }
+
+    VirtualFileSystem createVirtualFileSystem(
+            LocationsWrittenByCurrentBuild locationsWrittenByCurrentBuild,
+            ListenerManager listenerManager,
+            FileChangeListeners fileChangeListeners,
+            FileSystem fileSystem,
+            WatchableFileSystemDetector watchableFileSystemDetector
+    ) {
         VfsRootReference reference = new VfsRootReference(DefaultSnapshotHierarchy.empty(CaseSensitivity.CASE_SENSITIVE));
-        return new AbstractVirtualFileSystem(reference) {
-            @Override
-            protected SnapshotHierarchy updateNotifyingListeners(UpdateFunction updateFunction) {
-                return updateFunction.update(SnapshotHierarchy.NodeDiffListener.NOOP);
-            }
-        };
+        BuildLifecycleAwareVirtualFileSystem virtualFileSystem = determineWatcherRegistryFactory(
+                OperatingSystem.current(),
+                path -> false)
+                .<BuildLifecycleAwareVirtualFileSystem>map(watcherRegistryFactory -> new WatchingVirtualFileSystem(
+                        watcherRegistryFactory,
+                        reference,
+                        sectionId -> null,
+                        locationsWrittenByCurrentBuild,
+                        watchableFileSystemDetector,
+                        fileChangeListeners
+                ))
+                .orElse(new WatchingNotSupportedVirtualFileSystem(reference));
+//        listenerManager.addListener);
+        return virtualFileSystem;
+    }
+
+    private Optional<FileWatcherRegistryFactory> determineWatcherRegistryFactory(
+            OperatingSystem operatingSystem,
+            Predicate<String> watchingFilter
+    ) {
+        if (operatingSystem.isWindows()) {
+
+        }
+        return Optional.empty();
     }
 
     FileSystem createFileSystem() {
@@ -280,6 +359,9 @@ public class GlobalServices extends DefaultServiceRegistry {
 
             @Override
             public FileMetadata stat(File f) throws FileException {
+                if (!f.exists()) {
+                    return DefaultFileMetadata.missing(FileMetadata.AccessType.DIRECT);
+                }
                 if (f.isDirectory()) {
                     return DefaultFileMetadata.directory(FileMetadata.AccessType.DIRECT);
                 }

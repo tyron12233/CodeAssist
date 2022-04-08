@@ -44,3 +44,4 @@ include ':eclipse-formatter'
 
 include ':git-api'
 include ':build-tools:builder-java'
+include ':build-tools:android-builder'

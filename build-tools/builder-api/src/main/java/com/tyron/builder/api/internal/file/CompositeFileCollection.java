@@ -14,7 +14,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
- * A {@link org.gradle.api.file.FileCollection} that contains the union of zero or more file collections. Maintains file ordering.
+ * A {@link FileCollection} that contains the union of zero or more file collections. Maintains file ordering.
  *
  * <p>The source file collections are calculated from the result of calling {@link #visitChildren(Consumer)}, and may be lazily created.
  * </p>

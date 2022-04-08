@@ -53,12 +53,6 @@ public class LocalTaskNodeExecutor implements NodeExecutor {
                     (historyMaintained, typeValidationContext) -> detectMissingDependencies(localTaskNode, historyMaintained, inputHierarchy, typeValidationContext)
             );
 
-            DefaultTaskExecutionModeResolver taskExecutionModeResolver =
-                    new DefaultTaskExecutionModeResolver(() -> false);
-            TaskExecutionMode executionMode =
-                    taskExecutionModeResolver.getExecutionMode(task, ctx.getTaskProperties());
-            ctx.setTaskExecutionMode(executionMode);
-
             TaskExecuter taskExecuter = context.getService(TaskExecuter.class);
             taskExecuter.execute(task, state, ctx);
             localTaskNode.getPostAction().execute(task);

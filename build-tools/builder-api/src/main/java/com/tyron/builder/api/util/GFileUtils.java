@@ -194,4 +194,12 @@ public class GFileUtils {
         mkdirs(parent);
         return parent;
     }
+
+    public static void deleteIfExists(File file) {
+        if (!file.exists()) {
+            return;
+        }
+
+        forceDelete(file);
+    }
 }

@@ -12,7 +12,10 @@ import com.tyron.builder.api.internal.execution.history.AfterExecutionState;
 import com.tyron.builder.api.internal.execution.history.BeforeExecutionState;
 import com.tyron.builder.api.internal.execution.history.impl.DefaultAfterExecutionState;
 import com.tyron.builder.api.internal.file.Deleter;
+import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
 import com.tyron.builder.api.internal.snapshot.FileSystemSnapshot;
+import com.tyron.builder.api.internal.snapshot.FileSystemSnapshotHierarchyVisitor;
+import com.tyron.builder.api.internal.snapshot.SnapshotVisitResult;
 import com.tyron.builder.api.internal.tasks.properties.TreeType;
 import com.tyron.builder.caching.BuildCacheKey;
 import com.tyron.builder.caching.internal.BuildCacheController;
@@ -28,6 +31,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 
 public class BuildCacheStep implements Step<IncrementalChangesContext, AfterExecutionResult> {
 

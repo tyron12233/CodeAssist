@@ -18,6 +18,23 @@ import java.util.concurrent.Callable;
 
 public class GUtil {
 
+    public interface RunnableThrowable{
+        void run() throws Exception;
+    }
+
+    /**
+     * Runs the given runnable converting any thrown exception to an unchecked exception via {@link UncheckedException#throwAsUncheckedException(Throwable)}
+     *
+     * @param runnable The runnable to run
+     */
+    public static void unchecked(RunnableThrowable runnable) {
+        try {
+            runnable.run();
+        } catch (Exception e) {
+            throw UncheckedException.throwAsUncheckedException(e);
+        }
+    }
+
     /**
      * Calls the given callable converting any thrown exception to an unchecked exception via {@link UncheckedException#throwAsUncheckedException(Throwable)}
      *
