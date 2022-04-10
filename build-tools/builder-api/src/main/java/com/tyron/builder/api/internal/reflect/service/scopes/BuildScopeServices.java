@@ -60,6 +60,9 @@ import com.tyron.builder.caching.internal.packaging.impl.GZipBuildCacheEntryPack
 import com.tyron.builder.caching.internal.packaging.impl.TarBuildCacheEntryPacker;
 import com.tyron.builder.caching.internal.packaging.impl.TarPackerFileSystemSupport;
 import com.tyron.builder.concurrent.ParallelismConfiguration;
+import com.tyron.builder.initialization.DefaultProjectDescriptorRegistry;
+import com.tyron.builder.initialization.ProjectDescriptorRegistry;
+import com.tyron.builder.internal.build.BuildModelControllerServices;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.common.TestUtil;
 
@@ -67,7 +70,7 @@ import java.io.File;
 
 public class BuildScopeServices extends DefaultServiceRegistry {
 
-    public BuildScopeServices(ServiceRegistry parent) {
+    public BuildScopeServices(ServiceRegistry parent, BuildModelControllerServices.Supplier supplier) {
         super(parent);
 
 
@@ -185,7 +188,8 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             registration.add(TaskDependencyResolver.class);
 
             registration.add(DefaultResourceLockCoordinationService.class);
-            registration.add(DefaultWorkerLeaseService.class);
+
+            supplier.applyServicesTo(registration, this);
         });
     }
 
@@ -199,40 +203,40 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return new DefaultBuildOperationQueueFactory(workerLeaseService);
     }
 
-    BuildOperationIdFactory createBuildOperationFactory() {
-        return new DefaultBuildOperationIdFactory();
+    protected ProjectDescriptorRegistry createProjectDescriptorRegistry() {
+        return new DefaultProjectDescriptorRegistry();
     }
 
-    BuildOperationExecutor createBuildOperationExecutor(
-            BuildOperationListener buildOperationListener,
-            ProgressLoggerFactory progressLoggerFactory,
-            BuildOperationQueueFactory buildOperationQueueFactory,
-            ExecutorFactory executorFactory,
-            BuildOperationIdFactory buildOperationIdFactory
-    ) {
-        return new DefaultBuildOperationExecutor(buildOperationListener, Time.clock(),
-                progressLoggerFactory, buildOperationQueueFactory, executorFactory, new ParallelismConfiguration() {
-            @Override
-            public boolean isParallelProjectExecutionEnabled() {
-                return false;
-            }
-
-            @Override
-            public void setParallelProjectExecutionEnabled(boolean parallelProjectExecution) {
-
-            }
-
-            @Override
-            public int getMaxWorkerCount() {
-                return 1;
-            }
-
-            @Override
-            public void setMaxWorkerCount(int maxWorkerCount) {
-
-            }
-        }, buildOperationIdFactory);
-    }
+//    BuildOperationExecutor createBuildOperationExecutor(
+//            BuildOperationListener buildOperationListener,
+//            ProgressLoggerFactory progressLoggerFactory,
+//            BuildOperationQueueFactory buildOperationQueueFactory,
+//            ExecutorFactory executorFactory,
+//            BuildOperationIdFactory buildOperationIdFactory
+//    ) {
+//        return new DefaultBuildOperationExecutor(buildOperationListener, Time.clock(),
+//                progressLoggerFactory, buildOperationQueueFactory, executorFactory, new ParallelismConfiguration() {
+//            @Override
+//            public boolean isParallelProjectExecutionEnabled() {
+//                return false;
+//            }
+//
+//            @Override
+//            public void setParallelProjectExecutionEnabled(boolean parallelProjectExecution) {
+//
+//            }
+//
+//            @Override
+//            public int getMaxWorkerCount() {
+//                return 1;
+//            }
+//
+//            @Override
+//            public void setMaxWorkerCount(int maxWorkerCount) {
+//
+//            }
+//        }, buildOperationIdFactory);
+//    }
 
     PlanExecutor createPlanExecutor(
             ExecutorFactory factory,
@@ -275,6 +279,10 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 //    protected TaskStatistics createTaskStatistics() {
 //        return new TaskStatistics();
 //    }
+
+    protected BuildScopeServiceRegistryFactory createServiceRegistryFactory(final ServiceRegistry services) {
+        return new BuildScopeServiceRegistryFactory(services);
+    }
 
     private static final class FilePermissionsAccessAdapter implements FilePermissionAccess {
 

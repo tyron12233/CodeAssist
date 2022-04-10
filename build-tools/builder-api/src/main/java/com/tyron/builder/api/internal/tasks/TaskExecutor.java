@@ -62,10 +62,10 @@ public class TaskExecutor {
         DefaultExecutionPlan executionPlan = new DefaultExecutionPlan(
                 "myPlan",
                 taskNodeFactory,
-                resourceLockService,
                 taskDependencyResolver,
                 executionNodeAccessHierarchy.getOutputHierarchy(),
-                executionNodeAccessHierarchy.getDestroyableHierarchy()
+                executionNodeAccessHierarchy.getDestroyableHierarchy(),
+                resourceLockService
         );
         executionPlan.addEntryTasks(Arrays.asList(tasks));
         executionPlan.determineExecutionPlan();

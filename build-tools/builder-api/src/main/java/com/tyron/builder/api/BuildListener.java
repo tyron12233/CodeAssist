@@ -1,5 +1,6 @@
 package com.tyron.builder.api;
 
+import com.tyron.builder.api.initialization.Settings;
 import com.tyron.builder.api.internal.service.scopes.EventScope;
 import com.tyron.builder.api.internal.service.scopes.Scopes;
 
@@ -17,7 +18,7 @@ public interface BuildListener {
      * @param settings The settings. Never null.
      * @since 6.0
      */
-    default void beforeSettings(Object settings) {}
+    default void beforeSettings(Settings settings) {}
 
     /**
      * <p>Called when the build settings have been loaded and evaluated. The settings object is fully configured and is
@@ -25,7 +26,7 @@ public interface BuildListener {
      *
      * @param settings The settings. Never null.
      */
-    void settingsEvaluated(Object settings);
+    void settingsEvaluated(Settings settings);
 
     /**
      * <p>Called when the projects for the build have been created from the settings. None of the projects have been

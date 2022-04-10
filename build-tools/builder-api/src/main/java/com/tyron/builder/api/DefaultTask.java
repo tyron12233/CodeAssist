@@ -75,7 +75,7 @@ public class DefaultTask extends AbstractTask {
 
     private final DefaultTaskDependency mustRunAfter;
     private final DefaultTaskDependency shouldRunAfter;
-    private TaskDependency finalizedBy;
+    private final TaskDependency finalizedBy;
 
     private final TaskInputsInternal inputs;
     private final TaskOutputsInternal outputs;
@@ -83,7 +83,7 @@ public class DefaultTask extends AbstractTask {
     private final List<? extends ResourceLock> sharedResources = new ArrayList<>();
 
     private boolean enabled = true;
-
+    private boolean didWork;
     private String description;
 
     private String group;
@@ -228,20 +228,30 @@ public class DefaultTask extends AbstractTask {
     }
 
     @Override
-    public void setDidWork(boolean didWork) {
+    public TaskIdentity<?> getTaskIdentity() {
+        return this.taskIdentity;
+    }
 
+    @Override
+    public Path getIdentityPath() {
+        return getTaskIdentity().identityPath;
+    }
+
+    @Override
+    public void setDidWork(boolean didWork) {
+        state.setDidWork(didWork);
     }
 
     @Internal
     @Override
     public boolean getDidWork() {
-        return false;
+        return state.getDidWork();
     }
 
     @Internal
     @Override
     public String getPath() {
-        return Path.path(project.getPath() + ":" + getName()).getPath();
+        return taskIdentity.getTaskPath();
     }
 
     @Override

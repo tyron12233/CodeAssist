@@ -116,10 +116,25 @@ public class GUtil {
             return false;
         }
         if (object instanceof Collection) {
-            return ((Collection) object).size() > 0;
+            return ((Collection<?>) object).size() > 0;
         } else if (object instanceof String) {
             return ((String) object).length() > 0;
         }
         return true;
     }
+
+    /**
+     * Prefer {@link #getOrDefault(Object, Factory)} if the value is expensive to compute or
+     * would trigger early configuration.
+     */
+    @Nullable
+    public static <T> T elvis(@Nullable T object, @Nullable T defaultValue) {
+        return isTrue(object) ? object : defaultValue;
+    }
+
+    @Nullable
+    public static <T> T getOrDefault(@Nullable T object, Factory<T> defaultValueSupplier) {
+        return isTrue(object) ? object : defaultValueSupplier.create();
+    }
+
 }

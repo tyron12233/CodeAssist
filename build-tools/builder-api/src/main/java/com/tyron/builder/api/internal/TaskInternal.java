@@ -3,6 +3,7 @@ package com.tyron.builder.api.internal;
 import com.tyron.builder.api.GradleEnterprisePluginManager;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.logging.StandardOutputCapture;
+import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
 import com.tyron.builder.api.internal.tasks.TaskInputsInternal;
@@ -11,6 +12,7 @@ import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskState;
+import com.tyron.builder.api.util.Path;
 
 import java.util.List;
 import java.util.Optional;
@@ -64,4 +66,10 @@ public interface TaskInternal extends Task {
     default Optional<String> getReasonNotToTrackState() {
         return Optional.empty();
     }
+
+    @Internal
+    TaskIdentity<?> getTaskIdentity();
+
+    @Internal
+    Path getIdentityPath();
 }

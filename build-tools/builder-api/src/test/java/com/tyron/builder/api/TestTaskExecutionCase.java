@@ -1,10 +1,13 @@
 package com.tyron.builder.api;
 
+import com.tyron.builder.api.initialization.IncludedBuild;
 import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.Describables;
+import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
-import com.tyron.builder.api.internal.initialization.DefaultProjectDescriptor;
+import com.tyron.builder.api.internal.file.PathToFileResolver;
+import com.tyron.builder.initialization.DefaultProjectDescriptor;
 import com.tyron.builder.api.internal.logging.services.DefaultStyledTextOutputFactory;
 import com.tyron.builder.api.internal.operations.MultipleBuildOperationFailures;
 import com.tyron.builder.api.internal.project.DefaultProjectOwner;
@@ -30,19 +33,14 @@ import com.tyron.builder.api.logging.configuration.WarningMode;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.util.Path;
 import com.tyron.builder.internal.buildevents.BuildExceptionReporter;
-import com.tyron.builder.internal.vfs.VirtualFileSystem;
+import com.tyron.builder.internal.composite.IncludedBuildInternal;
 import com.tyron.common.TestUtil;
 
-import org.apache.commons.io.monitor.FileAlterationListener;
-import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
-import org.apache.commons.io.monitor.FileAlterationMonitor;
-import org.apache.commons.io.monitor.FileAlterationObserver;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.WatchService;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
@@ -56,79 +54,21 @@ public abstract class TestTaskExecutionCase {
 
     @Before
     public void setup() throws Exception {
-        System.setProperty(org.slf4j.impl.SimpleLogger.DEFAULT_LOG_LEVEL_KEY, "Info");
 
-        StartParameterInternal startParameter = new StartParameterInternal() {
-            @Override
-            public boolean isRerunTasks() {
-                return false;
-            }
-        };
+    }
 
+    private static DefaultProjectDescriptor projectDescriptorFrom(
+            DefaultProjectOwner projectOwner,
+            PathToFileResolver resolver
 
-        DefaultServiceRegistry global = new GlobalServices();
-        global.register(this::registerGlobalServices);
-
-        GradleUserHomeScopeServices gradleUserHomeScopeServices = new GradleUserHomeScopeServices(global);
-        BuildScopeServices buildScopeServices = new BuildScopeServices(gradleUserHomeScopeServices);
-
-        BuildScopeServiceRegistryFactory registryFactory = new BuildScopeServiceRegistryFactory(buildScopeServices);
-
-        DefaultGradle gradle = new DefaultGradle(null, startParameter, registryFactory) {
-
-            private ServiceRegistry registry;
-            private ServiceRegistryFactory factory;
-            private TaskExecutionGraphInternal taskExecutionGraph;
-
-            @Override
-            public File getGradleUserHomeDir() {
-                return new File(TestUtil.getResourcesDirectory(), ".gradle");
-            }
-
-            @Override
-            public TaskExecutionGraphInternal getTaskGraph() {
-                if (taskExecutionGraph == null) {
-                    taskExecutionGraph = getServices().get(TaskExecutionGraphInternal.class);
-                }
-                return taskExecutionGraph;
-            }
-
-            @Override
-            public ServiceRegistry getServices() {
-                if (registry == null) {
-                    registry = registryFactory.createFor(this);
-                }
-                return registry;
-            }
-
-            @Override
-            public ServiceRegistryFactory getServiceRegistryFactory() {
-                if (factory == null) {
-                    factory = getServices().get(ServiceRegistryFactory.class);
-                }
-                return factory;
-            }
-        };
-
-        global.add(gradle);
-
-        String projectName = getProjectName();
-
-        File resourcesDir = TestUtil.getResourcesDirectory();
-        File testProjectDir = new File(resourcesDir, projectName);
-
-        ProjectFactory projectFactory = gradle.getServices().get(ProjectFactory.class);
-        DefaultProjectOwner owner = DefaultProjectOwner.builder()
-                .setProjectDir(testProjectDir)
-                .setProjectPath(Path.ROOT)
-                .setIdentityPath(Path.ROOT)
-                .setDisplayName(Describables.of(projectName))
-                .setTaskExecutionLock(lock).setAccessLock(lock).build();
-        project = projectFactory
-                .createProject(gradle, new DefaultProjectDescriptor(projectName), owner, null);
-        project.setBuildDir(new File(testProjectDir, "build"));
-
-        container = (DefaultTaskContainer) this.project.getTasks();
+    ) {
+        return new DefaultProjectDescriptor(
+                null,
+                projectOwner.getName(),
+                projectOwner.getProjectDir(),
+                null,
+                resolver
+        );
     }
 
     protected String getProjectName() {

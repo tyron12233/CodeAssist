@@ -1,33 +1,45 @@
 package com.tyron.builder.api.internal;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.BuildListener;
 import com.tyron.builder.api.Gradle;
 import com.tyron.builder.api.StartParameter;
-import com.tyron.builder.api.internal.build.BuildState;
+import com.tyron.builder.api.execution.TaskExecutionGraph;
+import com.tyron.builder.api.initialization.IncludedBuild;
+import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.util.Path;
+import com.tyron.builder.internal.composite.IncludedBuildInternal;
 
 import org.jetbrains.annotations.Nullable;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
 import javax.inject.Inject;
 
-public abstract class DefaultGradle implements GradleInternal {
+public class DefaultGradle implements GradleInternal {
 
     private final BuildState parent;
     private final ServiceRegistry services;
+    private final ServiceRegistryFactory serviceRegistryFactory;
     private final StartParameter startParameter;
     private ProjectInternal rootProject;
     private Path identityPath;
     private ProjectInternal defaultProject;
     private boolean projectsLoaded;
+    private ArrayList<IncludedBuild> includedBuilds;
 
     public DefaultGradle(@Nullable BuildState parent, StartParameter startParameter, ServiceRegistryFactory parentRegistry) {
         this.parent = parent;
         this.startParameter = startParameter;
+        this.serviceRegistryFactory = parentRegistry;
         this.services = parentRegistry.createFor(this);
 //        this.crossProjectConfigurator = services.get(CrossProjectConfigurator.class);
 //        buildListenerBroadcast = getListenerManager().createAnonymousBroadcaster(BuildListener.class);
@@ -42,7 +54,6 @@ public abstract class DefaultGradle implements GradleInternal {
 //                projectsLoaded = true;
 //            }
 //        });
-
         projectsLoaded = true;
 
 //        if (parent == null) {
@@ -74,11 +85,15 @@ public abstract class DefaultGradle implements GradleInternal {
         }
     }
 
+    @Override
+    public List<? extends IncludedBuildInternal> includedBuilds() {
+        return null;
+    }
+
 
     @Override
     public GradleInternal getParent() {
-//        return parent == null ? null :  parent.getMutableModel();
-        return ((GradleInternal) parent);
+        return parent == null ? null :  parent.getMutableModel();
     }
 
     @Override
@@ -97,6 +112,11 @@ public abstract class DefaultGradle implements GradleInternal {
     }
 
     @Override
+    public File getGradleUserHomeDir() {
+        return startParameter.getGradleUserHomeDir();
+    }
+
+    @Override
     public BuildState getOwner() {
         return getServices().get(BuildState.class);
     }
@@ -112,6 +132,31 @@ public abstract class DefaultGradle implements GradleInternal {
     @Override
     public void setRootProject(ProjectInternal rootProject) {
         this.rootProject = rootProject;
+    }
+
+    @Override
+    public BuildListener getBuildListenerBroadcaster() {
+        return null;
+    }
+
+    @Override
+    public StartParameterInternal getStartParameter() {
+        return (StartParameterInternal) startParameter;
+    }
+
+    @Override
+    public ServiceRegistry getServices() {
+        return services;
+    }
+
+    @Override
+    public SettingsInternal getSettings() {
+        return null;
+    }
+
+    @Override
+    public ServiceRegistryFactory getServiceRegistryFactory() {
+        return services.get(ServiceRegistryFactory.class);
     }
 
     @Override
@@ -147,9 +192,10 @@ public abstract class DefaultGradle implements GradleInternal {
         this.defaultProject = defaultProject;
     }
 
-    @Inject
     @Override
-    public abstract TaskExecutionGraphInternal getTaskGraph();
+    public TaskExecutionGraphInternal getTaskGraph() {
+        return getServices().get(TaskExecutionGraphInternal.class);
+    }
 
     @Override
     public void beforeProject(Action<? super BuildProject> action) {
@@ -174,6 +220,37 @@ public abstract class DefaultGradle implements GradleInternal {
     @Override
     public Gradle getGradle() {
         return this;
+    }
+
+    @Override
+    public void addBuildListener(BuildListener buildListener) {
+
+    }
+
+    @Override
+    public void addListener(Object listener) {
+
+    }
+
+    @Override
+    public void removeListener(Object listener) {
+
+    }
+
+    @Override
+    public Collection<IncludedBuild> getIncludedBuilds() {
+        if (includedBuilds == null) {
+            includedBuilds = new ArrayList<>();
+        }
+        return includedBuilds;
+    }
+
+    @Override
+    public IncludedBuild includedBuild(String name) throws Exception {
+        if (includedBuilds == null) {
+            includedBuilds = new ArrayList<>();
+        }
+        return null;
     }
 
 }

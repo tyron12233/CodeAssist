@@ -2,20 +2,27 @@ package com.tyron.builder.api;
 
 import static java.util.Collections.emptyList;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.tyron.builder.TaskExecutionRequest;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
 import com.tyron.builder.api.logging.configuration.LoggingConfiguration;
 import com.tyron.builder.api.logging.configuration.ShowStacktrace;
 import com.tyron.builder.api.logging.configuration.WarningMode;
+import com.tyron.builder.api.util.GFileUtils;
 import com.tyron.builder.concurrent.ParallelismConfiguration;
 import com.tyron.builder.initialization.BuildLayoutParameters;
 import com.tyron.builder.internal.concurrent.DefaultParallelismConfiguration;
 import com.tyron.builder.internal.logging.DefaultLoggingConfiguration;
 
+import org.apache.commons.io.FileUtils;
+import org.jetbrains.annotations.Nullable;
+
 import java.io.File;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -90,6 +97,90 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
         gradleUserHomeDir = layoutParameters.getGradleUserHomeDir();
     }
 
+    /**
+     * Duplicates this {@code StartParameter} instance.
+     *
+     * @return the new parameters.
+     */
+    public StartParameter newInstance() {
+        return prepareNewInstance(new StartParameter());
+    }
+
+    protected StartParameter prepareNewInstance(StartParameter p) {
+        prepareNewBuild(p);
+        p.setWarningMode(getWarningMode());
+        p.buildFile = buildFile;
+        p.projectDir = projectDir;
+        p.settingsFile = settingsFile;
+        p.taskRequests = new ArrayList<>(taskRequests);
+        p.excludedTaskNames = new LinkedHashSet<>(excludedTaskNames);
+        p.buildProjectDependencies = buildProjectDependencies;
+        p.currentDir = currentDir;
+        p.projectProperties = new HashMap<>(projectProperties);
+        p.systemPropertiesArgs = new HashMap<>(systemPropertiesArgs);
+        p.initScripts = new ArrayList<>(initScripts);
+        p.includedBuilds = new ArrayList<>(includedBuilds);
+        p.dryRun = dryRun;
+        p.projectCacheDir = projectCacheDir;
+        return p;
+    }
+
+    /**
+     * <p>Creates the parameters for a new build, using these parameters as a template. Copies the environmental properties from this parameter (eg Gradle user home dir, etc), but does not copy the
+     * build specific properties (eg task names).</p>
+     *
+     * @return The new parameters.
+     */
+    public StartParameter newBuild() {
+        return prepareNewBuild(new StartParameter());
+    }
+
+    protected StartParameter prepareNewBuild(StartParameter p) {
+        p.gradleUserHomeDir = gradleUserHomeDir;
+        p.gradleHomeDir = gradleHomeDir;
+        p.setLogLevel(getLogLevel());
+        p.setConsoleOutput(getConsoleOutput());
+        p.setShowStacktrace(getShowStacktrace());
+        p.setWarningMode(getWarningMode());
+        p.profile = profile;
+        p.continueOnFailure = continueOnFailure;
+        p.offline = offline;
+        p.rerunTasks = rerunTasks;
+        p.refreshDependencies = refreshDependencies;
+        p.setParallelProjectExecutionEnabled(isParallelProjectExecutionEnabled());
+        p.buildCacheEnabled = buildCacheEnabled;
+        p.configureOnDemand = configureOnDemand;
+        p.setMaxWorkerCount(getMaxWorkerCount());
+        p.systemPropertiesArgs = new HashMap<>(systemPropertiesArgs);
+        p.writeDependencyLocks = writeDependencyLocks;
+        p.writeDependencyVerifications = writeDependencyVerifications;
+        p.lockedDependenciesToUpdate = new ArrayList<>(lockedDependenciesToUpdate);
+//        p.verificationMode = verificationMode;
+        p.isRefreshKeys = isRefreshKeys;
+        p.isExportKeys = isExportKeys;
+        return p;
+    }
+
+    /**
+     * Returns the names of the tasks to be excluded from this build. When empty, no tasks are excluded from the build.
+     *
+     * @return The names of the excluded tasks. Returns an empty set if there are no such tasks.
+     */
+    public Set<String> getExcludedTaskNames() {
+        return excludedTaskNames;
+    }
+
+    /**
+     * Sets the tasks to exclude from this build.
+     *
+     * @param excludedTaskNames The task names.
+     */
+    public void setExcludedTaskNames(Iterable<String> excludedTaskNames) {
+        this.excludedTaskNames = Sets.newLinkedHashSet(excludedTaskNames);
+    }
+
+
+
     @Override
     public LogLevel getLogLevel() {
         return loggingConfiguration.getLogLevel();
@@ -160,5 +251,136 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
 
     public boolean isRerunTasks() {
         return false;
+    }
+
+    /**
+     * Sets the directory to use to select the default project, and to search for the settings file. Set to null to use the default current directory.
+     *
+     * @param currentDir The directory. Set to null to use the default.
+     */
+    public void setCurrentDir(@Nullable File currentDir) {
+        if (currentDir != null) {
+            this.currentDir = GFileUtils.canonicalize(currentDir);
+        } else {
+            this.currentDir = new BuildLayoutParameters().getCurrentDir();
+        }
+    }
+
+    public Map<String, String> getProjectProperties() {
+        return projectProperties;
+    }
+
+    public void setProjectProperties(Map<String, String> projectProperties) {
+        this.projectProperties = projectProperties;
+    }
+
+    public Map<String, String> getSystemPropertiesArgs() {
+        return systemPropertiesArgs;
+    }
+
+    public void setSystemPropertiesArgs(Map<String, String> systemPropertiesArgs) {
+        this.systemPropertiesArgs = systemPropertiesArgs;
+    }
+
+    /**
+     * Adds the given file to the list of init scripts that are run before the build starts.  This list is in addition to the default init scripts.
+     *
+     * @param initScriptFile The init scripts.
+     */
+    public void addInitScript(File initScriptFile) {
+        initScripts.add(initScriptFile);
+    }
+
+    /**
+     * Sets the list of init scripts to be run before the build starts. This list is in addition to the default init scripts.
+     *
+     * @param initScripts The init scripts.
+     */
+    public void setInitScripts(List<File> initScripts) {
+        this.initScripts = initScripts;
+    }
+
+    /**
+     * Returns all explicitly added init scripts that will be run before the build starts.  This list does not contain the user init script located in ${user.home}/.gradle/init.gradle, even though
+     * that init script will also be run.
+     *
+     * @return list of all explicitly added init scripts.
+     */
+    public List<File> getInitScripts() {
+        return Collections.unmodifiableList(initScripts);
+    }
+
+    /**
+     * Returns all init scripts, including explicit init scripts and implicit init scripts.
+     *
+     * @return All init scripts, including explicit init scripts and implicit init scripts.
+     */
+    public List<File> getAllInitScripts() {
+//        CompositeInitScriptFinder initScriptFinder = new CompositeInitScriptFinder(
+//                new UserHomeInitScriptFinder(getGradleUserHomeDir()),
+//                new DistributionInitScriptFinder(gradleHomeDir)
+//        );
+
+        List<File> scripts = new ArrayList<>(getInitScripts());
+//        initScriptFinder.findScripts(scripts);
+        return Collections.unmodifiableList(scripts);
+    }
+
+    /**
+     * Sets the project directory to use to select the default project. Use null to use the default criteria for selecting the default project.
+     *
+     * @param projectDir The project directory. May be null.
+     */
+    public void setProjectDir(@Nullable File projectDir) {
+        if (projectDir == null) {
+            setCurrentDir(null);
+            this.projectDir = null;
+        } else {
+            File canonicalFile = GFileUtils.canonicalize(projectDir);
+            currentDir = canonicalFile;
+            this.projectDir = canonicalFile;
+        }
+    }
+
+    /**
+     * Returns the names of the tasks to execute in this build. When empty, the default tasks for the project will be executed. If {@link TaskExecutionRequest}s are set for this build then names from these task parameters are returned.
+     *
+     * @return the names of the tasks to execute in this build. Never returns null.
+     */
+    public List<String> getTaskNames() {
+        List<String> taskNames = Lists.newArrayList();
+        for (TaskExecutionRequest taskRequest : taskRequests) {
+            taskNames.addAll(taskRequest.getArgs());
+        }
+        return taskNames;
+    }
+
+    /**
+     * Returns the directory to use to select the default project, and to search for the settings file.
+     *
+     * @return The current directory. Never returns null.
+     */
+    public File getCurrentDir() {
+        return currentDir;
+    }
+
+    /**
+     * Returns the explicit settings file to use for the build, or null.
+     *
+     * Will return null if the default settings file is to be used.
+     *
+     * @return The settings file. May be null.
+     *
+     * @deprecated Setting custom build file to select the default project has been deprecated.
+     * This method will be removed in Gradle 8.0.
+     */
+    @Deprecated
+    @Nullable
+    public File getSettingsFile() {
+        return settingsFile;
+    }
+
+    public File getProjectCacheDir() {
+        return projectCacheDir;
     }
 }

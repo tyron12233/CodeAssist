@@ -18,6 +18,7 @@ import com.tyron.builder.api.internal.file.collections.DirectoryFileTree;
 import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
 import com.tyron.builder.api.internal.provider.PropertyHost;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.api.internal.remote.inet.InetAddressFactory;
 import com.tyron.builder.api.internal.service.scopes.Scope;
 import com.tyron.builder.api.internal.tasks.DefaultTaskDependencyFactory;
@@ -39,4 +40,76 @@ import java.io.File;
 
 public class BasicGlobalScopeServices {
 
+    void configure(ServiceRegistration serviceRegistration) {
+        serviceRegistration.add(DefaultFileLookup.class);
+//        serviceRegistration.addProvider(new MessagingServices());
+    }
+
+    FileLockManager createFileLockManager(
+            FileLockContentionHandler fileLockContentionHandler
+    ) {
+        return new DefaultFileLockManager(new ProcessMetaDataProvider() {
+            @Override
+            public String getProcessIdentifier() {
+                return "TEST";
+            }
+
+            @Override
+            public String getProcessDisplayName() {
+                return "TEST";
+            }
+        }, fileLockContentionHandler);
+    }
+
+    DefaultFileLockContentionHandler createFileLockContentionHandler(ExecutorFactory executorFactory, InetAddressFactory inetAddressFactory) {
+        return new DefaultFileLockContentionHandler(
+                executorFactory,
+                inetAddressFactory);
+    }
+
+    ExecutorFactory createExecutorFactory() {
+        return new DefaultExecutorFactory();
+    }
+
+    DocumentationRegistry createDocumentationRegistry() {
+        return new DocumentationRegistry();
+    }
+
+    PropertyHost createPropertyHost() {
+        return PropertyHost.NO_OP;
+    }
+
+    FileResolver createFileResolver(FileLookup lookup) {
+        return lookup.getFileResolver();
+    }
+
+    DirectoryFileTreeFactory createDirectoryTreeFileFactory(FileSystem fileSystem) {
+        return new DirectoryFileTreeFactory() {
+            @Override
+            public DirectoryFileTree create(File directory) {
+                return new DirectoryFileTree(directory, null, fileSystem);
+            }
+
+            @Override
+            public DirectoryFileTree create(File directory, PatternSet patternSet) {
+                return new DirectoryFileTree(directory, patternSet, fileSystem);
+            }
+        };
+    }
+
+    FileCollectionFactory createFileCollectionFactory(PathToFileResolver fileResolver, Factory<PatternSet> patternSetFactory, DirectoryFileTreeFactory directoryFileTreeFactory, PropertyHost propertyHost, FileSystem fileSystem) {
+        return new DefaultFileCollectionFactory(fileResolver, DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory, patternSetFactory, propertyHost, fileSystem);
+    }
+
+    PatternSpecFactory createPatternSpecFactory() {
+        return PatternSpecFactory.INSTANCE;
+    }
+
+    protected Factory<PatternSet> createPatternSetFactory(final PatternSpecFactory patternSpecFactory) {
+        return PatternSets.getPatternSetFactory(patternSpecFactory);
+    }
+
+    DefaultListenerManager createListenerManager() {
+        return new DefaultListenerManager(Scope.Global.class);
+    }
 }

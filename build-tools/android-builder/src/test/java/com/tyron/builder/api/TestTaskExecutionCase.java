@@ -4,13 +4,14 @@ import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.Describables;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
-import com.tyron.builder.api.internal.initialization.DefaultProjectDescriptor;
+import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
+import com.tyron.builder.initialization.DefaultProjectDescriptor;
 import com.tyron.builder.api.internal.logging.services.DefaultStyledTextOutputFactory;
 import com.tyron.builder.api.internal.operations.MultipleBuildOperationFailures;
 import com.tyron.builder.api.internal.project.DefaultProjectOwner;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServiceRegistryFactory;
@@ -30,20 +31,13 @@ import com.tyron.builder.api.logging.configuration.WarningMode;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.util.Path;
 import com.tyron.builder.internal.buildevents.BuildExceptionReporter;
-import com.tyron.builder.internal.vfs.VirtualFileSystem;
 import com.tyron.common.TestUtil;
 
-import org.apache.commons.io.monitor.FileAlterationListener;
-import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
-import org.apache.commons.io.monitor.FileAlterationMonitor;
-import org.apache.commons.io.monitor.FileAlterationObserver;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.impl.SimpleLogger;
 
 import java.io.File;
-import java.io.IOException;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -65,11 +59,12 @@ public abstract class TestTaskExecutionCase {
         };
 
 
-        DefaultServiceRegistry global = new GlobalServices();
-        global.register(this::registerGlobalServices);
+
+        ServiceRegistry global = ServiceRegistryBuilder.builder().provider(new GlobalServices()).build();
+//        global.register(this::registerGlobalServices);
 
         GradleUserHomeScopeServices gradleUserHomeScopeServices = new GradleUserHomeScopeServices(global);
-        BuildScopeServices buildScopeServices = new BuildScopeServices(gradleUserHomeScopeServices);
+        BuildScopeServices buildScopeServices = new BuildScopeServices(global, null);
 
         BuildScopeServiceRegistryFactory registryFactory = new BuildScopeServiceRegistryFactory(buildScopeServices);
 
@@ -109,7 +104,7 @@ public abstract class TestTaskExecutionCase {
             }
         };
 
-        global.add(gradle);
+//        global.add(gradle);
 
         String projectName = getProjectName();
 
@@ -123,30 +118,11 @@ public abstract class TestTaskExecutionCase {
                 .setIdentityPath(Path.ROOT)
                 .setDisplayName(Describables.of(projectName))
                 .setTaskExecutionLock(lock).setAccessLock(lock).build();
-        project = projectFactory
-                .createProject(gradle, new DefaultProjectDescriptor(projectName), owner, null);
-        project.setBuildDir(new File(testProjectDir, "build"));
+//        project = projectFactory
+//                .createProject(gradle, new DefaultProjectDescriptor(projectName), owner, null);
+//        project.setBuildDir(new File(testProjectDir, "build"));
 
-        container = (DefaultTaskContainer) this.project.getTasks(); FileAlterationObserver observer = new FileAlterationObserver(project.getRootDir());
-        FileAlterationMonitor monitor = new FileAlterationMonitor(1);
-        FileAlterationListener listener = new FileAlterationListenerAdaptor() {
-
-            private final VirtualFileSystem vfs = project.getServices().get(VirtualFileSystem.class);
-
-            @Override
-            public void onFileDelete(File file) {
-                vfs.invalidate(Collections.singletonList(file.getAbsolutePath()));
-            }
-
-            @Override
-            public void onDirectoryChange(File directory) {
-                vfs.invalidate(Collections.singletonList(directory.getAbsolutePath()));
-            }
-        };
-
-        observer.addListener(listener);
-        monitor.addObserver(observer);
-        monitor.start();
+        container = (DefaultTaskContainer) this.project.getTasks();
     }
 
     protected String getProjectName() {

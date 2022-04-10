@@ -11,6 +11,8 @@ import com.tyron.builder.api.configuration.project.ProjectEvaluator;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.internal.GradleInternal;
+import com.tyron.builder.api.internal.artifacts.DependencyMetaDataProvider;
+import com.tyron.builder.api.internal.artifacts.Module;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.DeleteSpec;
 import com.tyron.builder.api.internal.file.FileLookup;
@@ -557,6 +559,16 @@ public class DefaultProject implements ProjectInternal {
     @Override
     public Path getIdentityPath() {
         return owner.getIdentityPath();
+    }
+
+    @Override
+    public DependencyMetaDataProvider getDependencyMetaDataProvider() {
+        return new DependencyMetaDataProvider() {
+            @Override
+            public Module getModule() {
+                throw new UnsupportedOperationException();
+            }
+        };
     }
 
     @Override
