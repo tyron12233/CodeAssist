@@ -221,6 +221,7 @@ public class CompilerService extends Service {
     private void compileNew(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
         startParameter.setProjectDir(project.getRootFile());
+        startParameter.setGradleUserHomeDir(new File(project.getRootFile(), ".gradle"));
 
         ProjectLauncher projectLauncher = new ProjectLauncher(startParameter) {
             @Override
