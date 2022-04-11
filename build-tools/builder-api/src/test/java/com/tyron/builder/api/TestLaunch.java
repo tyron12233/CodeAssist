@@ -39,6 +39,7 @@ import com.tyron.builder.initialization.BuildClientMetaData;
 import com.tyron.builder.initialization.BuildEventConsumer;
 import com.tyron.builder.initialization.BuildRequestContext;
 import com.tyron.builder.initialization.DefaultBuildCancellationToken;
+import com.tyron.builder.initialization.DefaultBuildRequestContext;
 import com.tyron.builder.initialization.layout.BuildLayoutFactory;
 import com.tyron.builder.internal.BuildType;
 import com.tyron.builder.internal.build.BuildLayoutValidator;
@@ -58,6 +59,7 @@ import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegis
 import com.tyron.builder.internal.session.BuildSessionContext;
 import com.tyron.builder.internal.session.BuildSessionState;
 import com.tyron.builder.internal.session.state.CrossBuildSessionState;
+import com.tyron.builder.launcher.ProjectLauncher;
 import com.tyron.builder.launcher.exec.BuildTreeLifecycleBuildActionExecutor;
 import com.tyron.common.TestUtil;
 
@@ -75,105 +77,29 @@ public class TestLaunch {
         File gradleUserHomeDir = new File(resourcesDirectory, ".gradle");
         File testProjectDir = new File(resourcesDirectory, "TestProject");
 
-        ServiceRegistry globalServices = ProjectBuilderImpl.getGlobalServices();
-
         StartParameterInternal startParameter = new StartParameterInternal();
         startParameter.setGradleUserHomeDir(gradleUserHomeDir);
         startParameter.setProjectDir(testProjectDir);
         startParameter.setTaskNames(ImmutableList.of("testTask"));
 
-
-        BuildAction buildAction = new BuildAction() {
+        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter) {
             @Override
-            public StartParameterInternal getStartParameter() {
-                return startParameter;
-            }
+            public void configure(BuildProject project) {
+                project.getTasks().register("testTask", new Action<Task>() {
+                    @Override
+                    public void execute(Task task) {
+                        task.getLogger().info("Configuring");
 
-            @Override
-            public boolean isRunTasks() {
-                return true;
-            }
-
-            @Override
-            public boolean isCreateModel() {
-                return false;
-            }
-        };
-
-        BuildCancellationToken cancellationToken = new DefaultBuildCancellationToken();
-        BuildEventConsumer consumer = System.out::println;
-        BuildClientMetaData clientMetaData = new GradleLauncherMetaData();
-
-        BuildRequestContext requestContext = new BuildRequestContext() {
-            @Override
-            public BuildCancellationToken getCancellationToken() {
-                return cancellationToken;
-            }
-
-            @Override
-            public BuildEventConsumer getEventConsumer() {
-                return consumer;
-            }
-
-            @Override
-            public BuildClientMetaData getClient() {
-                return clientMetaData;
-            }
-
-            @Override
-            public long getStartTime() {
-                return System.currentTimeMillis();
-            }
-
-            @Override
-            public boolean isInteractive() {
-                return false;
-            }
-        };
-
-        Factory<LoggingManagerInternal> factory =
-                globalServices.getFactory(LoggingManagerInternal.class);
-        LoggingManagerInternal loggingManagerInternal = factory.create();
-        assert loggingManagerInternal != null;
-
-        loggingManagerInternal.start()
-                .setLevelInternal(LogLevel.INFO);
-
-        ListenerManager listenerManager = globalServices.get(ListenerManager.class);
-        listenerManager.addListener(new ProjectEvaluationListener() {
-            @Override
-            public void beforeEvaluate(BuildProject project) {
-
-            }
-
-            @Override
-            public void afterEvaluate(BuildProject project, ProjectState state) {
-
-            }
-        });
-        try (CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(
-                globalServices, startParameter)) {
-            try (BuildSessionState buildSessionState = new BuildSessionState(globalServices.get(
-                    GradleUserHomeScopeServiceRegistry.class), crossBuildSessionState, startParameter, requestContext, ClassPath.EMPTY, requestContext.getCancellationToken(), requestContext.getClient(), requestContext.getEventConsumer())) {
-                BuildActionRunner.Result result = buildSessionState.run(buildSessionContext -> {
-                    return buildSessionContext.execute(buildAction);
+                        task.doLast(new Action<Task>() {
+                            @Override
+                            public void execute(Task task) {
+                                task.getLogger().info("Executing");
+                            }
+                        });
+                    }
                 });
-
-                if (result.getClientFailure() != null) {
-                    throw UncheckedException.throwAsUncheckedException(result.getClientFailure());
-                }
-
-                if (result.getBuildFailure() != null) {
-                    throw UncheckedException.throwAsUncheckedException(result.getBuildFailure());
-                }
             }
-        }
-
+        };
+        projectLauncher.execute();
     }
-
-    @Test
-    public void test() {
-
-    }
-
 }
