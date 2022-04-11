@@ -233,8 +233,3 @@
     <string name="tab_app_logs_title">App Logs</string>
     <string name="tab_ide_logs_title">IDE Logs</string>
     <string name="tab_diagnostics_title">Diagnostics</string>
-git fetch origin
-
-git checkout -b MoonKnight18-Added-Odia-language origin/MoonKnight18-Added-Odia-language
-
-git merge main
