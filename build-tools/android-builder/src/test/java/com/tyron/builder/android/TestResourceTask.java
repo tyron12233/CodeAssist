@@ -11,17 +11,10 @@ import java.io.File;
 import java.util.List;
 
 @SuppressWarnings("Convert2Lambda")
-public class TestResourceTask extends TestTaskExecutionCase {
+public class TestResourceTask extends BaseProjectTestCase {
 
     @Override
-    protected void registerGlobalServices(ServiceRegistration serviceRegistration) {
-        super.registerGlobalServices(serviceRegistration);
-
-        serviceRegistration.addProvider(new AndroidGlobalServices());
-    }
-
-    @Override
-    public void evaluateProject(BuildProject project) {
+    public void configure(BuildProject project) {
         project.getTasks().register("Aapt2Task", Aapt2Task.class, new Action<Aapt2Task>() {
             @Override
             public void execute(Aapt2Task aapt2Task) {
@@ -34,7 +27,7 @@ public class TestResourceTask extends TestTaskExecutionCase {
     }
 
     @Override
-    public List<String> getTasksToExecute() {
+    public List<String> getTasks() {
         return ImmutableList.of("Aapt2Task");
     }
 }
