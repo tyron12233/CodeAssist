@@ -6,10 +6,10 @@ import com.tyron.builder.api.tasks.TaskContainer;
 
 import java.util.List;
 
-public class TestTaskExecution extends TestTaskExecutionCase {
+public class TestTaskExecution extends BaseProjectTestCase {
 
     @Override
-    public void evaluateProject(BuildProject project) {
+    public void configure(BuildProject project) {
         TaskContainer tasks = project.getTasks();
         tasks.register("MyTask", task -> {
             task.doLast(__ -> {
@@ -19,41 +19,8 @@ public class TestTaskExecution extends TestTaskExecutionCase {
     }
 
     @Override
-    public List<String> getTasksToExecute() {
+    public List<String> getTasks() {
         return ImmutableList.of("MyTask");
     }
-
-//    @Test
-//    public void testSkipOnlyIf() {
-//        MutableBoolean executed = new MutableBoolean(false);
-//        Action<BuildProject> evaluationAction = new Action<BuildProject>() {
-//            @Override
-//            public void execute(BuildProject project) {
-//                TaskContainer tasks = project.getTasks();
-//                tasks.register("SkipTask", new Action<Task>() {
-//                    @Override
-//                    public void execute(Task task) {
-//                        task.onlyIf(new Predicate<Task>() {
-//                            @Override
-//                            public boolean test(Task t) {
-//                                return false;
-//                            }
-//                        });
-//                        task.doLast(new Action<Task>() {
-//                            @Override
-//                            public void execute(Task t) {
-//                                executed.set(true);
-//                            }
-//                        });
-//                    }
-//                });
-//            }
-//        };
-//
-//        evaluateProject(project, evaluationAction);
-//        executeProject(project, "SkipTask");
-//
-//        assert !executed.get();
-//    }
 
 }

@@ -3,19 +3,21 @@ package com.tyron.builder.api;
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.TaskContainer;
+import com.tyron.builder.launcher.ProjectLaunchCase;
+import com.tyron.builder.launcher.ProjectLauncher;
 
 import org.junit.Test;
 
 import java.io.File;
 import java.util.List;
 
-public class TestTaskInputOutputs extends TestTaskExecutionCase {
+public class TestTaskInputOutputs extends BaseProjectTestCase {
     // Lambdas are not supported for gradle caching since java uses invokedynamic on them,
     // making it impossible for gradle to track the class and its tasks
     // see https://docs.gradle.org/current/userguide/validation_problems.html#implementation_unknown
     @SuppressWarnings("Convert2Lambda")
     @Override
-    public void evaluateProject(BuildProject project) {
+    public void configure(BuildProject project) {
         File outputDir = new File(project.getBuildDir(), "output");
         File input = new File(project.getBuildDir().getParent(), "Test.java");
 
@@ -37,7 +39,7 @@ public class TestTaskInputOutputs extends TestTaskExecutionCase {
     }
 
     @Override
-    public List<String> getTasksToExecute() {
+    public List<String> getTasks() {
         return ImmutableList.of("Task");
     }
 }
