@@ -108,6 +108,8 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
+import bsh.Interpreter;
+
 @SuppressWarnings({"unused"})
 public class BuildScopeServices extends DefaultServiceRegistry {
 
@@ -265,12 +267,20 @@ public class BuildScopeServices extends DefaultServiceRegistry {
                                             SettingsLocation settingsLocation,
                                             ClassLoaderScope buildRootClassLoaderScope,
                                             StartParameter startParameter) {
-                return new DefaultSettings(
+                SettingsInternal settings = new DefaultSettings(
                         get(ServiceRegistryFactory.class),
                         gradle,
                         settingsLocation.getSettingsDir(),
                         startParameter
                 );
+
+                return GUtil.uncheckedCall(() -> {
+                    Interpreter interpreter = new Interpreter();
+                    interpreter.set("settings", settings);
+                    String contents = GFileUtils.readFileToString(settingsLocation.getSettingsFile());
+                    interpreter.eval(contents);
+                    return settings;
+                });
             }
         };
     }

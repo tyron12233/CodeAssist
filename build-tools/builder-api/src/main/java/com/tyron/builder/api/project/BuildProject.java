@@ -33,7 +33,7 @@ public interface BuildProject extends Comparable<BuildProject> {
     /**
      * The default project build file name.
      */
-    String DEFAULT_BUILD_FILE = "build.gradle";
+    String DEFAULT_BUILD_FILE = "build.bsh";
 
     /**
      * The hierarchy separator for project and task path names.

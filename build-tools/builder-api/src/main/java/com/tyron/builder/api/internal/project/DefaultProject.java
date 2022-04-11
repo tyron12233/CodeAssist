@@ -37,6 +37,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -539,7 +540,10 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public void defaultTasks(String... defaultTasks) {
-
+        if (this.defaultTasks == null) {
+            this.defaultTasks = new ArrayList<>();
+        }
+        this.defaultTasks.addAll(Arrays.asList(defaultTasks));
     }
 
     @Override

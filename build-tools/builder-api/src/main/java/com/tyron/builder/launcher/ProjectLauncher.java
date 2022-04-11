@@ -38,6 +38,10 @@ public abstract class ProjectLauncher {
         globalServices = ProjectBuilderImpl.getGlobalServices();
     }
 
+    public ServiceRegistry getGlobalServices() {
+        return globalServices;
+    }
+
     private void prepare() {
         // enable info logging
         Factory<LoggingManagerInternal> factory = globalServices.getFactory(LoggingManagerInternal.class);

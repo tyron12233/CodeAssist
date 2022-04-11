@@ -81,7 +81,7 @@ public class DefaultSettings implements SettingsInternal {
 
     @Override
     public void include(Iterable<String> projectPaths) {
-
+        throw new UnsupportedOperationException("include() is not yet supported.");
     }
 
     @Override
@@ -168,7 +168,7 @@ public class DefaultSettings implements SettingsInternal {
 
     @Override
     public StartParameter getStartParameter() {
-        return null;
+        return startParameter;
     }
 
     @Override

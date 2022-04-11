@@ -1,0 +1,11 @@
+project.tasks.register("testTask", new Action() {
+    execute(task) {
+        print("Configuring task");
+
+        task.doLast(new Action() {
+            execute(task) {
+                print("Executing task");
+            }
+        });
+    }
+});
