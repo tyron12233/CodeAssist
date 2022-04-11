@@ -19,6 +19,7 @@ import com.tyron.builder.api.internal.scopeids.id.UserScopeId;
 import com.tyron.builder.api.internal.scopeids.id.WorkspaceScopeId;
 import com.tyron.builder.api.internal.service.scopes.Scopes;
 import com.tyron.builder.api.internal.time.Clock;
+import com.tyron.builder.api.internal.work.WorkerLeaseService;
 import com.tyron.builder.api.work.DefaultAsyncWorkTracker;
 import com.tyron.builder.cache.CacheRepository;
 import com.tyron.builder.cache.StringInterner;
@@ -36,10 +37,13 @@ import com.tyron.builder.initialization.layout.BuildLayoutConfiguration;
 import com.tyron.builder.initialization.layout.BuildLayoutFactory;
 import com.tyron.builder.initialization.layout.ProjectCacheDir;
 import com.tyron.builder.internal.build.BuildLayoutValidator;
+import com.tyron.builder.internal.buildTree.BuildTreeModelControllerServices;
 import com.tyron.builder.internal.buildevents.BuildStartedTime;
 import com.tyron.builder.internal.model.StateTransitionControllerFactory;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.builder.internal.service.scopes.WorkerSharedBuildSessionScopeServices;
+import com.tyron.builder.launcher.exec.BuildTreeLifecycleBuildActionExecutor;
+import com.tyron.builder.launcher.exec.RunAsWorkerThreadBuildActionExecutor;
 
 import java.io.Closeable;
 import java.util.List;
@@ -78,6 +82,20 @@ public class BuildSessionScopeServices extends WorkerSharedBuildSessionScopeServ
         registration.add(DefaultBuildTreeControllerServices.class);
         // Must be no higher than this scope as needs cache repository services.
 //        registration.addProvider(new ScopeIdsServices());
+
+        // from ToolingBuildScopeServices
+        registration.addProvider(new Object() {
+            BuildSessionActionExecutor createActionExecutor(
+                    BuildTreeModelControllerServices buildModelServices,
+                    BuildLayoutValidator buildLayoutValidator,
+                    WorkerLeaseService workerLeaseService
+            ) {
+                return new RunAsWorkerThreadBuildActionExecutor(
+                        workerLeaseService,
+                        new BuildTreeLifecycleBuildActionExecutor(buildModelServices, buildLayoutValidator)
+                );
+            }
+        });
     }
 
 //    PendingChangesManager createPendingChangesManager(ListenerManager listenerManager) {

@@ -45,6 +45,10 @@ public class BasicGlobalScopeServices {
 //        serviceRegistration.addProvider(new MessagingServices());
     }
 
+    InetAddressFactory createInetAddressFactory() {
+        return new InetAddressFactory();
+    }
+
     FileLockManager createFileLockManager(
             FileLockContentionHandler fileLockContentionHandler
     ) {

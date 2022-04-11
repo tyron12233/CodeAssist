@@ -1,6 +1,9 @@
 package com.tyron.builder.api;
 
+import com.tyron.builder.api.logging.Logger;
+import com.tyron.builder.api.logging.LoggingManager;
 import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskDestroyables;
 import com.tyron.builder.api.tasks.TaskInputs;
@@ -402,4 +405,22 @@ public interface Task extends Comparable<Task> {
     TaskDependency getShouldRunAfter();
 
     BuildProject getProject();
+
+    /**
+     * <p>Returns the logger for this task. You can use this in your build file to write log messages.</p>
+     *
+     * @return The logger. Never returns null.
+     */
+    @Internal
+    Logger getLogger();
+
+    /**
+     * Returns the {@link LoggingManager} which can be used to receive logging and to control the
+     * standard output/error capture for this task. By default, System.out is redirected to the Gradle logging system at
+     * the QUIET log level, and System.err is redirected at the ERROR log level.
+     *
+     * @return the LoggingManager. Never returns null.
+     */
+    @Internal
+    LoggingManager getLogging();
 }

@@ -38,6 +38,7 @@ public class DefaultBuildTreeControllerServices implements BuildTreeModelControl
         if (modelParameters.isConfigurationCache()) {
 
         }
+        registration.add(VintageBuildTreeLifecycleControllerFactory.class);
     }
 
     @Override

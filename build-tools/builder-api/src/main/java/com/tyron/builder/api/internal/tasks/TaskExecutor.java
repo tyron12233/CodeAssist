@@ -86,8 +86,6 @@ public class TaskExecutor {
                     BuildOperationDescriptor.displayName("Running tasks " + Arrays.toString(tasks));
             buildOperationExecutor.start(builder);
 
-            WorkerLeaseRegistry.WorkerLease lease = defaultWorkerLeaseService.getWorkerLease();
-            lease.tryLock();
             taskGraph.execute(executionPlan, failures);
         });
     }

@@ -1,6 +1,7 @@
 package com.tyron.builder.api.internal.project;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.internal.GradleInternal;
@@ -43,8 +44,13 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier {
 
 //    ScriptSource getBuildScriptSource();
 
+    ProjectEvaluationListener getProjectEvaluationBroadcaster();
+
     @Override
     ProjectInternal project(String path) throws UnknownProjectException;
+
+    ProjectEvaluationListener stepEvaluationListener(ProjectEvaluationListener listener,
+                                                     Action<ProjectEvaluationListener> step);
 
     ProjectInternal project(ProjectInternal referrer, String path) throws UnknownProjectException;
 

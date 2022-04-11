@@ -25,6 +25,8 @@ import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 import com.tyron.builder.cache.internal.scopes.DefaultCacheScopeMapping;
 import com.tyron.builder.cache.internal.scopes.DefaultGlobalScopedCache;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
+import com.tyron.builder.initialization.GradleUserHomeDirProvider;
+import com.tyron.builder.initialization.layout.GlobalCacheDir;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.builder.internal.service.scopes.WorkerSharedGlobalScopeServices;
 import com.tyron.builder.internal.service.scopes.WorkerSharedUserHomeScopeServices;
@@ -44,7 +46,7 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
     }
 
     public void configure(ServiceRegistration registration) {
-//        registration.add(GlobalCacheDir.class);
+        registration.add(GlobalCacheDir.class);
 //        registration.addProvider(new GradleUserHomeCleanupServices());
 //        registration.add(ClasspathWalker.class);
 //        registration.add(ClasspathBuilder.class);
@@ -92,10 +94,10 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
     }
 
     GlobalScopedCache createGlobalScopedCache(
-            GradleInternal gradle,
+            GlobalCacheDir globalCacheDir,
             CacheRepository cache
     ) {
-        return new DefaultGlobalScopedCache(gradle.getGradleUserHomeDir(), cache);
+        return new DefaultGlobalScopedCache(globalCacheDir.getDir(), cache);
     }
 
     InMemoryCacheDecoratorFactory createInMemoryCacheDecoratorFactory(

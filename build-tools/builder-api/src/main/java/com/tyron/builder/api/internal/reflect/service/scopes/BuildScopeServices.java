@@ -1,38 +1,37 @@
 package com.tyron.builder.api.internal.reflect.service.scopes;
 
+import static com.tyron.builder.api.internal.Cast.uncheckedCast;
+
+import com.tyron.builder.api.StartParameter;
+import com.tyron.builder.api.configuration.TaskNameResolver;
+import com.tyron.builder.api.execution.ProjectConfigurer;
+import com.tyron.builder.api.execution.TaskSelector;
 import com.tyron.builder.api.execution.plan.DefaultNodeValidator;
-import com.tyron.builder.api.execution.plan.DefaultPlanExecutor;
 import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchies;
-import com.tyron.builder.api.execution.plan.PlanExecutor;
 import com.tyron.builder.api.execution.plan.TaskDependencyResolver;
 import com.tyron.builder.api.execution.plan.TaskNodeDependencyResolver;
 import com.tyron.builder.api.execution.plan.TaskNodeFactory;
-import com.tyron.builder.api.initialization.BuildCancellationToken;
-import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.api.internal.GUtil;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.concurrent.DefaultExecutorFactory;
-import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
+import com.tyron.builder.api.internal.SettingsInternal;
+import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.event.DefaultListenerManager;
 import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.file.Deleter;
 import com.tyron.builder.api.internal.file.FileException;
-import com.tyron.builder.api.internal.file.Stat;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.hash.StreamHasher;
 import com.tyron.builder.api.internal.id.UniqueId;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.instantiation.InstantiatorFactory;
-import com.tyron.builder.api.internal.logging.progress.ProgressLoggerFactory;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
 import com.tyron.builder.api.internal.nativeintegration.services.FileSystems;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.BuildOperationIdFactory;
-import com.tyron.builder.api.internal.operations.BuildOperationListener;
 import com.tyron.builder.api.internal.operations.BuildOperationQueueFactory;
-import com.tyron.builder.api.internal.operations.DefaultBuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.DefaultBuildOperationIdFactory;
 import com.tyron.builder.api.internal.operations.DefaultBuildOperationQueueFactory;
 import com.tyron.builder.api.internal.project.ProjectFactory;
+import com.tyron.builder.api.internal.properties.GradleProperties;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.resources.DefaultResourceLockCoordinationService;
@@ -40,14 +39,9 @@ import com.tyron.builder.api.internal.resources.ResourceLockCoordinationService;
 import com.tyron.builder.api.internal.scopeids.id.BuildInvocationScopeId;
 import com.tyron.builder.api.internal.service.scopes.Scopes;
 import com.tyron.builder.api.internal.snapshot.CaseSensitivity;
-import com.tyron.builder.api.internal.time.Clock;
-import com.tyron.builder.api.internal.time.Time;
-import com.tyron.builder.api.internal.work.DefaultWorkerLeaseService;
 import com.tyron.builder.api.internal.work.WorkerLeaseService;
-import com.tyron.builder.cache.CacheRepository;
+import com.tyron.builder.api.util.GFileUtils;
 import com.tyron.builder.cache.StringInterner;
-import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
-import com.tyron.builder.cache.scopes.BuildScopedCache;
 import com.tyron.builder.caching.configuration.internal.BuildCacheConfigurationInternal;
 import com.tyron.builder.caching.internal.BuildCacheController;
 import com.tyron.builder.caching.internal.controller.RootBuildCacheControllerRef;
@@ -59,15 +53,62 @@ import com.tyron.builder.caching.internal.packaging.impl.FilePermissionAccess;
 import com.tyron.builder.caching.internal.packaging.impl.GZipBuildCacheEntryPacker;
 import com.tyron.builder.caching.internal.packaging.impl.TarBuildCacheEntryPacker;
 import com.tyron.builder.caching.internal.packaging.impl.TarPackerFileSystemSupport;
-import com.tyron.builder.concurrent.ParallelismConfiguration;
+import com.tyron.builder.configuration.BuildOperationFiringProjectsPreparer;
+import com.tyron.builder.configuration.BuildTreePreparingProjectsPreparer;
+import com.tyron.builder.configuration.DefaultProjectsPreparer;
+import com.tyron.builder.configuration.InitScriptProcessor;
+import com.tyron.builder.configuration.ProjectsPreparer;
+import com.tyron.builder.execution.CompositeAwareTaskSelector;
+import com.tyron.builder.execution.TaskPathProjectEvaluator;
+import com.tyron.builder.execution.plan.ExecutionPlanFactory;
+import com.tyron.builder.initialization.BuildLoader;
+import com.tyron.builder.initialization.DefaultGradlePropertiesController;
+import com.tyron.builder.initialization.DefaultGradlePropertiesLoader;
 import com.tyron.builder.initialization.DefaultProjectDescriptorRegistry;
+import com.tyron.builder.initialization.DefaultSettings;
+import com.tyron.builder.initialization.DefaultSettingsLoaderFactory;
+import com.tyron.builder.initialization.DefaultSettingsPreparer;
+import com.tyron.builder.initialization.Environment;
+import com.tyron.builder.initialization.GradlePropertiesController;
+import com.tyron.builder.initialization.IGradlePropertiesLoader;
+import com.tyron.builder.initialization.InitScriptHandler;
+import com.tyron.builder.initialization.InstantiatingBuildLoader;
+import com.tyron.builder.initialization.ModelConfigurationListener;
+import com.tyron.builder.initialization.NotifyingBuildLoader;
 import com.tyron.builder.initialization.ProjectDescriptorRegistry;
+import com.tyron.builder.initialization.ProjectPropertySettingBuildLoader;
+import com.tyron.builder.initialization.SettingsLoaderFactory;
+import com.tyron.builder.initialization.SettingsLocation;
+import com.tyron.builder.initialization.SettingsPreparer;
+import com.tyron.builder.initialization.SettingsProcessor;
+import com.tyron.builder.initialization.layout.ResolvedBuildLayout;
 import com.tyron.builder.internal.build.BuildModelControllerServices;
+import com.tyron.builder.internal.build.BuildOperationFiringBuildWorkPreparer;
+import com.tyron.builder.internal.build.BuildState;
+import com.tyron.builder.internal.build.BuildStateRegistry;
+import com.tyron.builder.internal.build.BuildWorkPreparer;
+import com.tyron.builder.internal.build.DefaultBuildWorkGraphController;
+import com.tyron.builder.internal.build.DefaultBuildWorkPreparer;
+import com.tyron.builder.internal.build.DefaultPublicBuildPath;
+import com.tyron.builder.internal.build.PublicBuildPath;
+import com.tyron.builder.internal.buildTree.BuildInclusionCoordinator;
+import com.tyron.builder.internal.buildTree.BuildModelParameters;
+import com.tyron.builder.internal.composite.DefaultBuildIncluder;
+import com.tyron.builder.internal.resource.StringTextResource;
+import com.tyron.builder.internal.resource.TextFileResourceLoader;
+import com.tyron.builder.internal.resource.TextResource;
+import com.tyron.builder.internal.resource.local.FileResourceListener;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
-import com.tyron.common.TestUtil;
 
 import java.io.File;
+import java.util.Collections;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
+import javax.annotation.Nullable;
+
+@SuppressWarnings({"unused"})
 public class BuildScopeServices extends DefaultServiceRegistry {
 
     public BuildScopeServices(ServiceRegistry parent, BuildModelControllerServices.Supplier supplier) {
@@ -186,11 +227,56 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             registration.add(TaskNodeDependencyResolver.class);
 //            registration.add(WorkNodeDependencyResolver.class);
             registration.add(TaskDependencyResolver.class);
+            registration.add(DefaultBuildWorkGraphController.class);
+            registration.add(TaskPathProjectEvaluator.class);
 
-            registration.add(DefaultResourceLockCoordinationService.class);
+//            registration.add(DefaultResourceLockCoordinationService.class);
+            registration.add(DefaultSettingsLoaderFactory.class);
+            registration.add(ResolvedBuildLayout.class);
+            registration.add(DefaultBuildIncluder.class);
 
             supplier.applyServicesTo(registration, this);
         });
+    }
+
+
+    TextFileResourceLoader createTextFileResourceLoader() {
+        return new TextFileResourceLoader() {
+            @Override
+            public TextResource loadFile(String description, @Nullable File sourceFile) {
+                return new StringTextResource(description, GFileUtils.readFileToString(sourceFile));
+            }
+        };
+    }
+
+    InitScriptHandler createInitScriptHandler(BuildOperationExecutor buildOperationExecutor, TextFileResourceLoader resourceLoader) {
+        return new InitScriptHandler(new InitScriptProcessor() {
+            @Override
+            public void process(Object initScript, GradleInternal gradle) {
+
+            }
+        }, buildOperationExecutor, resourceLoader);
+    }
+
+    SettingsProcessor createSettingsProcessor() {
+        return new SettingsProcessor() {
+            @Override
+            public SettingsInternal process(GradleInternal gradle,
+                                            SettingsLocation settingsLocation,
+                                            ClassLoaderScope buildRootClassLoaderScope,
+                                            StartParameter startParameter) {
+                return new DefaultSettings(
+                        get(ServiceRegistryFactory.class),
+                        gradle,
+                        settingsLocation.getSettingsDir(),
+                        startParameter
+                );
+            }
+        };
+    }
+
+    SettingsPreparer createSettingsPreparer(SettingsLoaderFactory factory) {
+        return new DefaultSettingsPreparer(factory);
     }
 
     protected DefaultListenerManager createListenerManager(DefaultListenerManager listenerManager) {
@@ -205,6 +291,116 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
     protected ProjectDescriptorRegistry createProjectDescriptorRegistry() {
         return new DefaultProjectDescriptorRegistry();
+    }
+
+    protected BuildWorkPreparer createWorkPreparer(BuildOperationExecutor buildOperationExecutor, ExecutionPlanFactory executionPlanFactory) {
+        return new BuildOperationFiringBuildWorkPreparer(
+                buildOperationExecutor,
+                new DefaultBuildWorkPreparer(
+                        executionPlanFactory
+                ));
+    }
+
+    protected TaskSelector createTaskSelector(GradleInternal gradle, BuildStateRegistry buildStateRegistry, ProjectConfigurer projectConfigurer) {
+        return new CompositeAwareTaskSelector(gradle, buildStateRegistry, projectConfigurer, new TaskNameResolver());
+    }
+
+    protected ProjectsPreparer createBuildConfigurer(
+            ProjectConfigurer projectConfigurer,
+//            BuildSourceBuilder buildSourceBuilder,
+            BuildStateRegistry buildStateRegistry,
+            BuildInclusionCoordinator inclusionCoordinator,
+            BuildLoader buildLoader,
+            ListenerManager listenerManager,
+            BuildOperationExecutor buildOperationExecutor,
+            BuildModelParameters buildModelParameters
+    ) {
+        ModelConfigurationListener modelConfigurationListener = listenerManager.getBroadcaster(
+                ModelConfigurationListener.class);
+        return new BuildOperationFiringProjectsPreparer(
+                new BuildTreePreparingProjectsPreparer(
+                        new DefaultProjectsPreparer(
+                                projectConfigurer,
+                                buildModelParameters,
+                                modelConfigurationListener,
+                                buildOperationExecutor,
+                                buildStateRegistry),
+                        buildLoader,
+                        inclusionCoordinator),
+                buildOperationExecutor);
+    }
+
+    protected BuildLoader createBuildLoader(
+            GradleProperties gradleProperties,
+            BuildOperationExecutor buildOperationExecutor,
+            ListenerManager listenerManager
+    ) {
+        return new NotifyingBuildLoader(
+                new ProjectPropertySettingBuildLoader(
+                        gradleProperties,
+                        new InstantiatingBuildLoader(),
+                        listenerManager.getBroadcaster(FileResourceListener.class)
+                ),
+                buildOperationExecutor
+        );
+    }
+
+    Environment createEnvironment() {
+        return new Environment() {
+            @Nullable
+            @Override
+            public Map<String, String> propertiesFile(File propertiesFile) {
+                if (propertiesFile.isFile()) {
+                    return uncheckedCast(GUtil.loadProperties(propertiesFile));
+                }
+                return null;
+            }
+
+            @Override
+            public Properties getSystemProperties() {
+                return new DefaultProperties(System.getenv());
+            }
+
+            @Override
+            public Properties getVariables() {
+                return new DefaultProperties(System.getenv());
+            }
+        };
+    }
+
+    private static class DefaultProperties implements Environment.Properties {
+        private final Map<String, String> map;
+
+        private DefaultProperties(Map<String, String> map) {
+            this.map = map;
+        }
+
+        @Override
+        public Map<String, String> byNamePrefix(String prefix) {
+            return map.entrySet().stream().filter(it -> it.getKey().equals(prefix))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
+    }
+
+    protected GradlePropertiesController createGradlePropertiesController(
+            IGradlePropertiesLoader propertiesLoader
+    ) {
+        return new DefaultGradlePropertiesController(propertiesLoader);
+    }
+
+    protected IGradlePropertiesLoader createGradlePropertiesLoader(
+            Environment environment
+    ) {
+        return new DefaultGradlePropertiesLoader(
+                (StartParameterInternal) get(StartParameter.class),
+                environment
+        );
+    }
+
+    protected GradleProperties createGradleProperties(
+            GradlePropertiesController gradlePropertiesController
+    ) {
+        return gradlePropertiesController.getGradleProperties();
     }
 
 //    BuildOperationExecutor createBuildOperationExecutor(
@@ -238,42 +434,29 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 //        }, buildOperationIdFactory);
 //    }
 
-    PlanExecutor createPlanExecutor(
-            ExecutorFactory factory,
-            WorkerLeaseService service,
-            ResourceLockCoordinationService resourceLockService
+    ExecutionPlanFactory createExecutionPlanFactory(
+            GradleInternal gradleInternal,
+            TaskNodeFactory taskNodeFactory,
+            TaskDependencyResolver dependencyResolver,
+            ExecutionNodeAccessHierarchies executionNodeAccessHierarchies,
+            ResourceLockCoordinationService lockCoordinationService
     ) {
-        return new DefaultPlanExecutor(
-            factory,
-            service,
-            new BuildCancellationToken() {
-
-                @Override
-                public boolean isCancellationRequested() {
-                    return false;
-                }
-
-                @Override
-                public void cancel() {
-
-                }
-
-                @Override
-                public boolean addCallback(Runnable cancellationHandler) {
-                    return false;
-                }
-
-                @Override
-                public void removeCallback(Runnable cancellationHandler) {
-
-                }
-            },
-            resourceLockService
+        return new ExecutionPlanFactory(
+                gradleInternal.getIdentityPath().toString(),
+                taskNodeFactory,
+                dependencyResolver,
+                executionNodeAccessHierarchies.getOutputHierarchy(),
+                executionNodeAccessHierarchies.getDestroyableHierarchy(),
+                lockCoordinationService
         );
     }
 
     ExecutionNodeAccessHierarchies createExecutionNodeAccessHierarchies() {
         return new ExecutionNodeAccessHierarchies(CaseSensitivity.CASE_INSENSITIVE, FileSystems.getDefault());
+    }
+
+    protected PublicBuildPath createPublicBuildPath(BuildState buildState) {
+        return new DefaultPublicBuildPath(buildState.getIdentityPath());
     }
 
 //    protected TaskStatistics createTaskStatistics() {

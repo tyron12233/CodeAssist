@@ -1,34 +1,30 @@
-package com.tyron.builder.api.project;
+package com.tyron.builder.api.internal.project;
 
-import com.tyron.builder.api.ProjectState;
-import com.tyron.builder.api.StartParameter;
+import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.artifacts.ModuleVersionIdentifier;
 import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.MutableReference;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.artifacts.DefaultBuildIdentifier;
 import com.tyron.builder.api.internal.classpath.ClassPath;
 import com.tyron.builder.api.internal.file.FileResolver;
-import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.project.ProjectStateRegistry;
-import com.tyron.builder.api.internal.project.ProjectStateUnk;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.api.internal.operations.BuildOperationContext;
+import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.api.internal.operations.RunnableBuildOperation;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
-import com.tyron.builder.api.internal.reflect.service.scopes.BasicGlobalScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.GlobalServices;
-import com.tyron.builder.api.internal.resources.DefaultResourceLockCoordinationService;
 import com.tyron.builder.api.internal.resources.ResourceLockCoordinationService;
 import com.tyron.builder.api.internal.time.Time;
 import com.tyron.builder.api.internal.work.WorkerLeaseRegistry;
 import com.tyron.builder.api.internal.work.WorkerLeaseService;
+import com.tyron.builder.api.project.TestBuildScopeServices;
 import com.tyron.builder.api.util.GFileUtils;
 import com.tyron.builder.api.util.Path;
-import com.tyron.builder.configurationcache.DefaultBuildTreeControllerServices;
 import com.tyron.builder.initialization.BuildRequestMetaData;
 import com.tyron.builder.initialization.DefaultBuildCancellationToken;
 import com.tyron.builder.initialization.DefaultBuildRequestMetaData;
@@ -36,6 +32,7 @@ import com.tyron.builder.initialization.DefaultProjectDescriptor;
 import com.tyron.builder.initialization.NoOpBuildEventConsumer;
 import com.tyron.builder.initialization.ProjectDescriptorRegistry;
 import com.tyron.builder.internal.Pair;
+import com.tyron.builder.internal.SystemProperties;
 import com.tyron.builder.internal.build.AbstractBuildState;
 import com.tyron.builder.internal.build.BuildModelControllerServices;
 import com.tyron.builder.internal.build.BuildStateRegistry;
@@ -45,6 +42,8 @@ import com.tyron.builder.internal.buildTree.BuildTreeModelControllerServices;
 import com.tyron.builder.internal.buildTree.BuildTreeState;
 import com.tyron.builder.internal.buildTree.RunTasksRequirements;
 import com.tyron.builder.internal.composite.IncludedBuildInternal;
+import com.tyron.builder.internal.logging.services.DefaultLoggingManagerFactory;
+import com.tyron.builder.internal.logging.services.LoggingServiceRegistry;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import com.tyron.builder.internal.session.BuildSessionState;
 import com.tyron.builder.internal.session.state.CrossBuildSessionState;
@@ -52,19 +51,26 @@ import com.tyron.builder.internal.session.state.CrossBuildSessionState;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.util.Collections;
 import java.util.Set;
 import java.util.function.Function;
 
+/**
+ * Do not use this for executing tasks
+ */
 public class ProjectBuilderImpl {
 
     private static ServiceRegistry globalServices;
 
     public ProjectInternal createProject(String name, File inputProjectDir, File gradleUserHomeDir) {
+        System.setProperty("user.dir", inputProjectDir.getAbsolutePath());
+
         final File projectDir = prepareProjectDir(inputProjectDir);
         File userHomeDir = gradleUserHomeDir == null ? new File(projectDir, "userHome") : GFileUtils.canonicalize(gradleUserHomeDir);
         StartParameterInternal startParameter = new StartParameterInternal();
         startParameter.setGradleUserHomeDir(userHomeDir);
+        startParameter.setProjectDir(inputProjectDir);
+        startParameter.setTaskNames(ImmutableList.of("testTask"));
+        startParameter.setMaxWorkerCount(5);
 
         final ServiceRegistry globalServices = getGlobalServices();
 
@@ -79,29 +85,37 @@ public class ProjectBuilderImpl {
         BuildScopeServices buildServices = build.getBuildServices();
         buildServices.get(BuildStateRegistry.class).attachRootBuild(build);
 
-        // Take a root worker lease; this won't ever be released as ProjectBuilder has no lifecycle
+//        // Take a root worker lease; this won't ever be released as ProjectBuilder has no lifecycle
         ResourceLockCoordinationService coordinationService = buildServices.get(ResourceLockCoordinationService.class);
         WorkerLeaseService workerLeaseService = buildServices.get(WorkerLeaseService.class);
-        WorkerLeaseRegistry.WorkerLeaseCompletion workerLease = workerLeaseService.maybeStartWorker();
+//        WorkerLeaseRegistry.WorkerLeaseCompletion workerLease = workerLeaseService.maybeStartWorker();
 
         GradleInternal gradle = build.getMutableModel();
 //        gradle.setIncludedBuilds(Collections.emptyList());
 
-        ProjectDescriptorRegistry projectDescriptorRegistry = buildServices.get(ProjectDescriptorRegistry.class);
-        DefaultProjectDescriptor projectDescriptor = new DefaultProjectDescriptor(null, name, projectDir, projectDescriptorRegistry, buildServices.get(FileResolver.class));
-        projectDescriptorRegistry.addProject(projectDescriptor);
+        WorkerLeaseRegistry.WorkerLeaseCompletion lease =
+                workerLeaseService.startWorker();
 
-        ProjectStateRegistry projectStateRegistry = buildServices.get(ProjectStateRegistry.class);
-        ProjectStateUnk projectState = projectStateRegistry.registerProject(build, projectDescriptor);
-        projectState.createMutableModel();
-        ProjectInternal project = projectState.getMutableModel();
+        try {
 
-        gradle.setRootProject(project);
-        gradle.setDefaultProject(project);
+            ProjectDescriptorRegistry projectDescriptorRegistry = buildServices.get(ProjectDescriptorRegistry.class);
+            DefaultProjectDescriptor projectDescriptor =
+                    new DefaultProjectDescriptor(null, name, projectDir, projectDescriptorRegistry,
+                            buildServices.get(FileResolver.class));
+            projectDescriptorRegistry.addProject(projectDescriptor);
 
+            ProjectStateRegistry projectStateRegistry = buildServices.get(ProjectStateRegistry.class);
+            ProjectStateUnk projectState = projectStateRegistry.registerProject(build,
+                    projectDescriptor);
+            projectState.createMutableModel();
+            ProjectInternal project = projectState.getMutableModel();
 
-        return project;
-
+            gradle.setRootProject(project);
+            gradle.setDefaultProject(project);
+            return project;
+        } finally {
+            lease.leaseFinish();
+        }
         // Lock root project; this won't ever be released as ProjectBuilder has no lifecycle
 //        coordinationService.withStateLock(DefaultResourceLockCoordinationService.lock(project.getOwner().getAccessLock()));
     }
@@ -117,9 +131,12 @@ public class ProjectBuilderImpl {
         return globalServices;
     }
 
-    private static ServiceRegistry createGlobalServices() {
+    public static ServiceRegistry createGlobalServices() {
+        LoggingServiceRegistry serviceRegistry =
+                LoggingServiceRegistry.newCommandLineProcessLogging();
         return ServiceRegistryBuilder
                 .builder()
+                .parent(serviceRegistry)
                 .displayName("global services")
                 .provider(new GlobalServices())
                 .build();

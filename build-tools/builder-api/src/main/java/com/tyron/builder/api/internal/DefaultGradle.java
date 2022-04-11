@@ -4,8 +4,21 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.BuildListener;
 import com.tyron.builder.api.Gradle;
 import com.tyron.builder.api.StartParameter;
-import com.tyron.builder.api.execution.TaskExecutionGraph;
+import com.tyron.builder.api.UnknownProjectException;
+import com.tyron.builder.api.initialization.ConfigurableIncludedBuild;
 import com.tyron.builder.api.initialization.IncludedBuild;
+import com.tyron.builder.api.initialization.ProjectDescriptor;
+import com.tyron.builder.api.initialization.Settings;
+import com.tyron.builder.api.internal.dispatch.ProxyDispatchAdapter;
+import com.tyron.builder.api.internal.event.ListenerBroadcast;
+import com.tyron.builder.api.internal.event.ListenerManager;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
+import com.tyron.builder.api.internal.project.ProjectRegistry;
+import com.tyron.builder.api.providers.ProviderFactory;
+import com.tyron.builder.caching.configuration.BuildCacheConfiguration;
+import com.tyron.builder.initialization.DefaultProjectDescriptor;
+import com.tyron.builder.initialization.DefaultSettings;
+import com.tyron.builder.initialization.ProjectDescriptorRegistry;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
@@ -22,19 +35,19 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import javax.inject.Inject;
-
 public class DefaultGradle implements GradleInternal {
 
+    private SettingsInternal settings;
     private final BuildState parent;
     private final ServiceRegistry services;
     private final ServiceRegistryFactory serviceRegistryFactory;
     private final StartParameter startParameter;
     private ProjectInternal rootProject;
-    private Path identityPath;
     private ProjectInternal defaultProject;
+    private Path identityPath;
     private boolean projectsLoaded;
     private ArrayList<IncludedBuild> includedBuilds;
+    private ListenerBroadcast<BuildListener> buildListenerBroadcast;
 
     public DefaultGradle(@Nullable BuildState parent, StartParameter startParameter, ServiceRegistryFactory parentRegistry) {
         this.parent = parent;
@@ -42,7 +55,7 @@ public class DefaultGradle implements GradleInternal {
         this.serviceRegistryFactory = parentRegistry;
         this.services = parentRegistry.createFor(this);
 //        this.crossProjectConfigurator = services.get(CrossProjectConfigurator.class);
-//        buildListenerBroadcast = getListenerManager().createAnonymousBroadcaster(BuildListener.class);
+        buildListenerBroadcast = getListenerManager().createAnonymousBroadcaster(BuildListener.class);
 //        projectEvaluationListenerBroadcast = getListenerManager().createAnonymousBroadcaster(ProjectEvaluationListener.class);
 
 //        buildListenerBroadcast.add(new InternalBuildAdapter() {
@@ -61,9 +74,14 @@ public class DefaultGradle implements GradleInternal {
 //        }
     }
 
+    private ListenerManager getListenerManager() {
+        return services.get(ListenerManager.class);
+    }
+
     @Override
     public String toString() {
-        return rootProject == null ? "build" : ("build '" + rootProject.getName() + "'");
+        return rootProject == null ? "build" : ("build '" + rootProject
+                .getName() + "'");
     }
 
     @Override
@@ -88,6 +106,27 @@ public class DefaultGradle implements GradleInternal {
     @Override
     public List<? extends IncludedBuildInternal> includedBuilds() {
         return null;
+    }
+
+    @Override
+    public ProjectRegistry<ProjectInternal> getProjectRegistry() {
+        //noinspection unchecked
+        return services.get(ProjectRegistry.class);
+    }
+
+    @Override
+    public ClassLoaderScope getClassLoaderScope() {
+        return null;
+    }
+
+    @Override
+    public void setSettings(SettingsInternal settings) {
+        this.settings = settings;
+    }
+
+    @Override
+    public void setIncludedBuilds(Collection<IncludedBuildInternal> children) {
+        includedBuilds = new ArrayList<>(children);
     }
 
 
@@ -136,7 +175,7 @@ public class DefaultGradle implements GradleInternal {
 
     @Override
     public BuildListener getBuildListenerBroadcaster() {
-        return null;
+        return buildListenerBroadcast.getSource();
     }
 
     @Override
@@ -151,7 +190,7 @@ public class DefaultGradle implements GradleInternal {
 
     @Override
     public SettingsInternal getSettings() {
-        return null;
+        return settings;
     }
 
     @Override
@@ -231,6 +270,20 @@ public class DefaultGradle implements GradleInternal {
     public void addListener(Object listener) {
 
     }
+
+//    private void addListener(String registrationPoint, Object listener) {
+//        notifyListenerRegistration(registrationPoint, listener);
+//        getListenerManager().addListener(getListenerBuildOperationDecorator().decorateUnknownListener(registrationPoint, listener));
+//    }
+//
+//    private void notifyListenerRegistration(String registrationPoint, Object listener) {
+//        if (listener instanceof InternalListener) {// || listener instanceof ProjectEvaluationListener) {
+//            return;
+//        }
+//        getListenerManager().getBroadcaster(BuildScopeListenerRegistrationListener.class)
+//                .onBuildScopeListenerRegistration(listener, registrationPoint, this);
+//    }
+
 
     @Override
     public void removeListener(Object listener) {

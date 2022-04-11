@@ -5,6 +5,7 @@ import static java.util.Collections.emptyList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.tyron.builder.TaskExecutionRequest;
+import com.tyron.builder.api.initialization.IncludedBuild;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
 import com.tyron.builder.api.logging.configuration.LoggingConfiguration;
@@ -13,6 +14,7 @@ import com.tyron.builder.api.logging.configuration.WarningMode;
 import com.tyron.builder.api.util.GFileUtils;
 import com.tyron.builder.concurrent.ParallelismConfiguration;
 import com.tyron.builder.initialization.BuildLayoutParameters;
+import com.tyron.builder.internal.DefaultTaskExecutionRequest;
 import com.tyron.builder.internal.concurrent.DefaultParallelismConfiguration;
 import com.tyron.builder.internal.logging.DefaultLoggingConfiguration;
 
@@ -22,6 +24,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -382,5 +385,47 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
 
     public File getProjectCacheDir() {
         return projectCacheDir;
+    }
+
+    public File getBuildFile() {
+        return buildFile;
+    }
+
+    public List<TaskExecutionRequest> getTaskRequests() {
+        return taskRequests;
+    }
+
+    /**
+     * <p>Sets the tasks to execute in this build. Set to an empty list, or null, to execute the default tasks for the project. The tasks are executed in the order provided, subject to dependency
+     * between the tasks.</p>
+     *
+     * @param taskNames the names of the tasks to execute in this build.
+     */
+    public void setTaskNames(@Nullable Iterable<String> taskNames) {
+        if (taskNames == null) {
+            this.taskRequests = emptyList();
+        } else {
+            this.taskRequests = Arrays.asList(new DefaultTaskExecutionRequest(taskNames));
+        }
+    }
+
+    public boolean isDryRun() {
+        return dryRun;
+    }
+
+    public boolean isContinueOnFailure() {
+        return continueOnFailure;
+    }
+
+    public File getProjectDir() {
+        return projectDir;
+    }
+
+    public void setSettingsFile(File o) {
+        this.settingsFile = o;
+    }
+
+    public List<File> getIncludedBuilds() {
+        return includedBuilds;
     }
 }

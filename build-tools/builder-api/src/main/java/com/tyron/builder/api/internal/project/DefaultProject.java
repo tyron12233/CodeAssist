@@ -5,6 +5,7 @@ import com.google.common.primitives.Ints;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.PathValidation;
+import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.configuration.project.ProjectEvaluator;
@@ -13,6 +14,8 @@ import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.artifacts.DependencyMetaDataProvider;
 import com.tyron.builder.api.internal.artifacts.Module;
+import com.tyron.builder.api.internal.dispatch.ProxyDispatchAdapter;
+import com.tyron.builder.api.internal.event.ListenerBroadcast;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.DeleteSpec;
 import com.tyron.builder.api.internal.file.FileLookup;
@@ -28,11 +31,13 @@ import com.tyron.builder.api.providers.Provider;
 import com.tyron.builder.api.tasks.WorkResult;
 import com.tyron.builder.api.util.Path;
 
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,6 +63,7 @@ public class DefaultProject implements ProjectInternal {
     private List<String> defaultTasks = new ArrayList<>();
     private Property<Object> status;
     private File buildDir;
+    private ListenerBroadcast<ProjectEvaluationListener> evaluationListener = newProjectEvaluationListenerBroadcast();
 
     public DefaultProject(String name,
                           @Nullable ProjectInternal parent,
@@ -87,6 +93,12 @@ public class DefaultProject implements ProjectInternal {
 
         services = serviceRegistryFactory.createFor(this);
         taskContainer = services.get(TaskContainerInternal.class);
+
+        setBuildDir(new File(projectDir, "build"));
+    }
+
+    private ListenerBroadcast<ProjectEvaluationListener> newProjectEvaluationListenerBroadcast() {
+        return new ListenerBroadcast<>(ProjectEvaluationListener.class);
     }
 
     private String instanceDescriptorFor(String path) {
@@ -132,6 +144,11 @@ public class DefaultProject implements ProjectInternal {
     @Override
     public void allprojects(Action<? super BuildProject> action) {
 
+    }
+
+    @Override
+    public ProjectEvaluationListener getProjectEvaluationBroadcaster() {
+        return evaluationListener.getSource();
     }
 
     @Override
@@ -184,6 +201,21 @@ public class DefaultProject implements ProjectInternal {
     @Override
     public BuildProject project(String path, Action<? super BuildProject> configureAction) {
         return null;
+    }
+
+    @Override
+    public ProjectEvaluationListener stepEvaluationListener(ProjectEvaluationListener listener, Action<ProjectEvaluationListener> step) {
+        ListenerBroadcast<ProjectEvaluationListener> original = this.evaluationListener;
+        ListenerBroadcast<ProjectEvaluationListener> nextBatch = newProjectEvaluationListenerBroadcast();
+        this.evaluationListener = nextBatch;
+        try {
+            step.execute(listener);
+        } finally {
+            this.evaluationListener = original;
+        }
+        return nextBatch.isEmpty()
+                ? null
+                : nextBatch.getSource();
     }
 
     @Override
@@ -324,7 +356,7 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public Set<? extends ProjectInternal> getSubprojects(ProjectInternal referrer) {
-        return null;
+        return Collections.emptySet();
     }
 
     @Override
@@ -402,7 +434,17 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public String getDisplayName() {
-        return null;
+        StringBuilder builder = new StringBuilder();
+        if (parent == null && gradle.isRootBuild()) {
+            builder.append("root project '");
+            builder.append(name);
+            builder.append('\'');
+        } else {
+            builder.append("project '");
+            builder.append(getIdentityPath());
+            builder.append("'");
+        }
+        return builder.toString();
     }
 
     @Override
@@ -482,7 +524,7 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public Set<BuildProject> getSubprojects() {
-        return null;
+        return Collections.emptySet();
     }
 
     @Override
@@ -520,9 +562,21 @@ public class DefaultProject implements ProjectInternal {
         return owner.getProjectPath().toString();
     }
 
+    @javax.annotation.Nullable
+    @Override
+    public ProjectIdentifier getParentIdentifier() {
+        return parent;
+    }
+
     @Override
     public int getDepth() {
         return depth;
+    }
+
+    @NotNull
+    @Override
+    public String toString() {
+        return getDisplayName();
     }
 
 

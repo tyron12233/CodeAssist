@@ -26,6 +26,7 @@ import com.tyron.builder.api.internal.hash.StreamHasher;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
 import com.tyron.builder.api.internal.operations.BuildOperationListener;
 import com.tyron.builder.api.internal.operations.BuildOperationListenerManager;
+import com.tyron.builder.api.internal.operations.BuildOperationProgressEventEmitter;
 import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
 import com.tyron.builder.api.internal.operations.DefaultBuildOperationListenerManager;
 import com.tyron.builder.api.internal.os.OperatingSystem;
@@ -35,6 +36,7 @@ import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.service.scopes.DefaultWorkInputListeners;
 import com.tyron.builder.api.internal.snapshot.CaseSensitivity;
 import com.tyron.builder.api.internal.snapshot.impl.DirectorySnapshotterStatistics;
+import com.tyron.builder.api.internal.time.Clock;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.model.internal.DefaultObjectFactory;
 import com.tyron.builder.api.tasks.WorkResult;
@@ -76,6 +78,20 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
 
     void configure(ServiceRegistration registration, List<String> emptyList) {
         registration.add(BuildLayoutFactory.class);
+
+        registration.addProvider(new ExecutionGlobalServices());
+    }
+
+    BuildOperationProgressEventEmitter createBuildOperationProgressEventEmitter(
+            Clock clock,
+            CurrentBuildOperationRef currentBuildOperationRef,
+            BuildOperationListenerManager listenerManager
+    ) {
+        return new BuildOperationProgressEventEmitter(
+                clock,
+                currentBuildOperationRef,
+                listenerManager.getBroadcaster()
+        );
     }
 
     GradleUserHomeScopeServiceRegistry createGradleUserHomeScopeServiceRegistry(ServiceRegistry globalServices) {

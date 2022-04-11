@@ -2,7 +2,9 @@ package com.tyron.builder.api.internal;
 
 import com.tyron.builder.api.BuildListener;
 import com.tyron.builder.api.Gradle;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.project.ProjectRegistry;
+import com.tyron.builder.initialization.DefaultProjectDescriptor;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
@@ -14,7 +16,9 @@ import com.tyron.builder.internal.composite.IncludedBuildInternal;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 public interface GradleInternal extends Gradle {
 
@@ -50,6 +54,7 @@ public interface GradleInternal extends Gradle {
 
     /**
      * Returns the default project. This is used to resolve relative names and paths provided on the UI.
+     * @return
      */
     ProjectInternal getDefaultProject();
 
@@ -94,4 +99,10 @@ public interface GradleInternal extends Gradle {
     List<? extends IncludedBuildInternal> includedBuilds();
 
     ProjectRegistry<ProjectInternal> getProjectRegistry();
+
+    ClassLoaderScope getClassLoaderScope();
+
+    void setSettings(SettingsInternal settings);
+
+    void setIncludedBuilds(Collection<IncludedBuildInternal> children);
 }

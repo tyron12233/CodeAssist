@@ -1,8 +1,10 @@
 package com.tyron.builder.api.internal.reflect.service.scopes;
 
 import com.tyron.builder.api.internal.GradleInternal;
+import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.scopes.SettingsScopeServices;
 
 import java.io.Closeable;
 
@@ -22,11 +24,11 @@ public class BuildScopeServiceRegistryFactory implements ServiceRegistryFactory,
             registries.add(gradleServices);
             return gradleServices;
         }
-//        if (domainObject instanceof SettingsInternal) {
-//            SettingsScopeServices settingsServices = new SettingsScopeServices(services, (SettingsInternal) domainObject);
-//            registries.add(settingsServices);
-//            return settingsServices;
-//        }
+        if (domainObject instanceof SettingsInternal) {
+            SettingsScopeServices settingsServices = new SettingsScopeServices(services, (SettingsInternal) domainObject);
+            registries.add(settingsServices);
+            return settingsServices;
+        }
         throw new IllegalArgumentException(String.format("Cannot create services for unknown domain object of type %s.", domainObject.getClass().getSimpleName()));
     }
 

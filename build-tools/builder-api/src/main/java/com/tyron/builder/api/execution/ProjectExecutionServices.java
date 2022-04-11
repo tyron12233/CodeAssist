@@ -50,6 +50,7 @@ import com.tyron.builder.api.internal.snapshot.impl.ValueSnapshotterSerializerRe
 import com.tyron.builder.api.internal.tasks.TaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.CatchExceptionTaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.CleanupStaleOutputsExecuter;
+import com.tyron.builder.api.internal.tasks.execution.EventFiringTaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.FinalizePropertiesTaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter;
 import com.tyron.builder.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter;
@@ -67,6 +68,7 @@ import com.tyron.builder.caching.local.internal.DefaultBuildCacheTempFileStore;
 import com.tyron.builder.caching.local.internal.DirectoryBuildCacheService;
 import com.tyron.builder.caching.local.internal.LocalBuildCacheService;
 import com.tyron.builder.initialization.DefaultBuildCancellationToken;
+import com.tyron.builder.internal.execution.taskgraph.TaskListenerInternal;
 
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.Nullable;
@@ -336,6 +338,8 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
             InputFingerprinter inputFingerprinter,
             ListenerManager listenerManager,
             FileCollectionFactory factory,
+            TaskExecutionListener taskExecutionListener,
+            TaskListenerInternal taskListenerInternal,
             FileOperations fileOperations
     ) {
         TaskExecuter executer = new ExecuteActionsTaskExecuter(
@@ -363,6 +367,7 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
         executer = new SkipTaskWithNoActionsExecuter(executer, taskExecutionGraph);
         executer = new SkipOnlyIfTaskExecuter(executer);
         executer = new CatchExceptionTaskExecuter(executer);
+        executer = new EventFiringTaskExecuter(buildOperationExecutor, taskExecutionListener, taskListenerInternal, executer);
         return executer;
     }
 

@@ -1,102 +1,73 @@
 package com.tyron.builder.api;
 
+import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.initialization.BuildCancellationToken;
-import com.tyron.builder.api.internal.BuildDefinition;
+import com.tyron.builder.api.initialization.Settings;
 import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.api.internal.Factory;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.UncheckedException;
-import com.tyron.builder.api.internal.event.DefaultListenerManager;
+import com.tyron.builder.api.internal.classpath.ClassPath;
 import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.invocation.BuildAction;
+import com.tyron.builder.api.internal.logging.events.CategorisedOutputEvent;
+import com.tyron.builder.api.internal.logging.events.OutputEvent;
+import com.tyron.builder.api.internal.logging.events.OutputEventListener;
+import com.tyron.builder.api.internal.logging.events.RenderableOutputEvent;
+import com.tyron.builder.api.internal.logging.events.StyledTextOutputEvent;
+import com.tyron.builder.api.internal.operations.BuildOperation;
+import com.tyron.builder.api.internal.operations.BuildOperationContext;
+import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.api.internal.operations.BuildOperationProgressEventEmitter;
+import com.tyron.builder.api.internal.operations.BuildOperationQueue;
+import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
+import com.tyron.builder.api.internal.operations.OperationIdentifier;
+import com.tyron.builder.api.internal.operations.RunnableBuildOperation;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.reflect.DirectInstantiator;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.api.internal.project.ProjectBuilderImpl;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
-import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
-import com.tyron.builder.api.internal.reflect.service.scopes.GlobalServices;
-import com.tyron.builder.api.internal.reflect.service.scopes.GradleUserHomeScopeServices;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
-import com.tyron.builder.api.project.ProjectBuilderImpl;
-import com.tyron.builder.composite.internal.BuildStateFactory;
-import com.tyron.builder.composite.internal.DefaultIncludedBuildFactory;
-import com.tyron.builder.composite.internal.DefaultIncludedBuildRegistry;
-import com.tyron.builder.composite.internal.IncludedBuildDependencySubstitutionsBuilder;
+import com.tyron.builder.api.internal.resources.ResourceLockCoordinationService;
+import com.tyron.builder.api.internal.time.Time;
+import com.tyron.builder.api.internal.work.WorkerLeaseRegistry;
+import com.tyron.builder.api.internal.work.WorkerLeaseService;
+import com.tyron.builder.api.logging.LogLevel;
+import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.configuration.GradleLauncherMetaData;
+import com.tyron.builder.initialization.BuildClientMetaData;
+import com.tyron.builder.initialization.BuildEventConsumer;
+import com.tyron.builder.initialization.BuildRequestContext;
 import com.tyron.builder.initialization.DefaultBuildCancellationToken;
 import com.tyron.builder.initialization.layout.BuildLayoutFactory;
 import com.tyron.builder.internal.BuildType;
 import com.tyron.builder.internal.build.BuildLayoutValidator;
-import com.tyron.builder.internal.build.BuildModelControllerServices;
-import com.tyron.builder.internal.build.BuildState;
-import com.tyron.builder.internal.build.BuildStateRegistry;
-import com.tyron.builder.internal.build.IncludedBuildFactory;
 import com.tyron.builder.internal.buildTree.BuildActionModelRequirements;
 import com.tyron.builder.internal.buildTree.BuildActionRunner;
 import com.tyron.builder.internal.buildTree.BuildModelParameters;
 import com.tyron.builder.internal.buildTree.BuildTreeActionExecutor;
-import com.tyron.builder.internal.buildTree.BuildTreeContext;
 import com.tyron.builder.internal.buildTree.BuildTreeLifecycleController;
 import com.tyron.builder.internal.buildTree.BuildTreeModelControllerServices;
 import com.tyron.builder.internal.buildTree.BuildTreeState;
 import com.tyron.builder.internal.buildTree.RunTasksRequirements;
+import com.tyron.builder.internal.logging.LoggingManagerInternal;
+import com.tyron.builder.internal.logging.events.LogEvent;
+import com.tyron.builder.internal.logging.events.ProgressStartEvent;
+import com.tyron.builder.internal.logging.sink.OutputEventListenerManager;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import com.tyron.builder.internal.session.BuildSessionContext;
+import com.tyron.builder.internal.session.BuildSessionState;
 import com.tyron.builder.internal.session.state.CrossBuildSessionState;
-import com.tyron.builder.launcher.exec.RootBuildLifecycleBuildActionExecutor;
+import com.tyron.builder.launcher.exec.BuildTreeLifecycleBuildActionExecutor;
 import com.tyron.common.TestUtil;
 
-import org.jetbrains.annotations.Nullable;
 import org.junit.Test;
 
 import java.io.File;
 import java.util.Collections;
+import java.util.function.Function;
 
 public class TestLaunch {
-
-    private final BuildTreeModelControllerServices buildTreeModelControllerServices;
-    private final  BuildLayoutValidator validator;
-
-    public TestLaunch() {
-        validator = new BuildLayoutValidator(
-                new BuildLayoutFactory(),
-                new DocumentationRegistry(),
-                new GradleLauncherMetaData(),
-                Collections.emptyList()
-        );
-        buildTreeModelControllerServices = new BuildTreeModelControllerServices() {
-            @Override
-            public Supplier servicesForBuildTree(BuildActionModelRequirements requirements) {
-
-                BuildModelParameters modelParameters = new BuildModelParameters(
-                        true,
-                        true,
-                        false,
-                        true,
-                        true,
-                        false,
-                        true
-                );
-                return registration -> {
-                    registration.add(BuildType.class, BuildType.TASKS);
-                    registerServices(registration, modelParameters, requirements);
-                };
-            }
-
-            private void registerServices(ServiceRegistration registration,
-                                          BuildModelParameters modelParameters,
-                                          BuildActionModelRequirements requirements) {
-                registration.add(BuildModelParameters.class, modelParameters);
-                registration.add(BuildActionModelRequirements.class, requirements);
-            }
-
-            @Override
-            public Supplier servicesForNestedBuildTree(StartParameterInternal startParameter) {
-                return null;
-            }
-        };
-    }
 
     @Test
     public void testProjectBuilder() {
@@ -104,16 +75,14 @@ public class TestLaunch {
         File gradleUserHomeDir = new File(resourcesDirectory, ".gradle");
         File testProjectDir = new File(resourcesDirectory, "TestProject");
 
-        ProjectBuilderImpl projectBuilder = new ProjectBuilderImpl();
-        ProjectInternal testProject =
-                projectBuilder.createProject("TestProject", testProjectDir, gradleUserHomeDir);
+        ServiceRegistry globalServices = ProjectBuilderImpl.getGlobalServices();
 
-        System.out.println(testProject);
-    }
-
-    @Test
-    public void test() {
         StartParameterInternal startParameter = new StartParameterInternal();
+        startParameter.setGradleUserHomeDir(gradleUserHomeDir);
+        startParameter.setProjectDir(testProjectDir);
+        startParameter.setTaskNames(ImmutableList.of("testTask"));
+
+
         BuildAction buildAction = new BuildAction() {
             @Override
             public StartParameterInternal getStartParameter() {
@@ -122,157 +91,89 @@ public class TestLaunch {
 
             @Override
             public boolean isRunTasks() {
-                return false;
+                return true;
             }
 
             @Override
             public boolean isCreateModel() {
-                return true;
+                return false;
             }
         };
 
-//        build(buildAction, new BuildSessionContext() {
-//            @Override
-//            public ServiceRegistry getServices() {
-//                GlobalServices global = new GlobalServices();
-//                GradleUserHomeScopeServices userHomeScopeServices = new GradleUserHomeScopeServices(global);
-//                BuildScopeServices buildScopeServices = new BuildScopeServices(userHomeScopeServices, null);
-//                BuildTreeState buildTreeState = new BuildTreeState(buildScopeServices, registration -> {
-//
-//                        });
-//                CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(buildScopeServices, startParameter);
-//                return ServiceRegistryBuilder.builder()
-//                        .parent(buildScopeServices)
-//                        .provider(new Object() {
-//
-//                            BuildModelControllerServices createBuildModelControllerServices() {
-//                                return new BuildModelControllerServices() {
-//                                    @Override
-//                                    public Supplier servicesForBuild(BuildDefinition buildDefinition,
-//                                                                     BuildState owner,
-//                                                                     @Nullable BuildState parentBuild) {
-//                                        return new Supplier() {
-//                                            @Override
-//                                            public void applyServicesTo(ServiceRegistration registration,
-//                                                                        BuildScopeServices services) {
-//
-//                                            }
-//                                        };
-//                                    }
-//                                };
-//                            }
-//
-//                            DefaultListenerManager createListenerManager(DefaultListenerManager listenerManager) {
-//                                return listenerManager.createChild(Scopes.BuildTree.class);
-//                            }
-//
-//                            BuildCancellationToken createCancellationToken() {
-//                                return new DefaultBuildCancellationToken();
-//                            }
-//
-//                            BuildTreeState createBuildTreeState() {
-//                                return buildTreeState;
-//                            }
-//
-//                            CrossBuildSessionState createCrossBuildSessionState() {
-//                                return crossBuildSessionState;
-//                            }
-//
-//                            BuildActionRunner createBuildActionRunner() {
-//                                return new ActionRunner();
-//                            }
-//
-//                            IncludedBuildDependencySubstitutionsBuilder createIncludedBuildDependencySubstitutionsBuilder() {
-//                                return new IncludedBuildDependencySubstitutionsBuilder();
-//                            }
-//
-//                            BuildStateFactory createBuildStateFactory(
-//                                    BuildTreeState buildTreeState,
-//                                    ListenerManager listenerManager,
-//                                    GradleUserHomeScopeServiceRegistry userHomeScopeServiceRegistry,
-//                                    CrossBuildSessionState crossBuildSessionState,
-//                                    BuildCancellationToken cancellationToken
-//                            ) {
-//                                return new BuildStateFactory(
-//                                        buildTreeState,
-//                                        listenerManager,
-//                                        userHomeScopeServiceRegistry,
-//                                        crossBuildSessionState,
-//                                        cancellationToken
-//                                );
-//                            }
-//
-//                            IncludedBuildFactory createIncludedBuildFactory(
-//                                    BuildTreeState buildTreeState
-//                            ) {
-//                                return new DefaultIncludedBuildFactory(buildTreeState,
-//                                        DirectInstantiator.INSTANCE);
-//                            }
-//
-//                            BuildStateRegistry createBuildStateRegistry(
-//                                    IncludedBuildFactory includedBuildFactory,
-//                                    IncludedBuildDependencySubstitutionsBuilder dependencySubstitutionsBuilder,
-//                                    ListenerManager listenerManager,
-//                                    BuildStateFactory buildStateFactory
-//
-//                            ) {
-//                                return new DefaultIncludedBuildRegistry(
-//                                        includedBuildFactory,
-//                                        dependencySubstitutionsBuilder,
-//                                        listenerManager,
-//                                        buildStateFactory
-//                                );
-//                            }
-//
-//                            RootBuildLifecycleBuildActionExecutor createRootBuildActionExecutor(
-//                                    BuildStateRegistry buildStateRegistry,
-//                                    BuildActionRunner actionRunner
-//                            ) {
-//                                return new RootBuildLifecycleBuildActionExecutor(buildStateRegistry, actionRunner);
-//                            }
-//                        })
-//                        .displayName("Global services")
-//                        .build();
-//            }
-//
-//            @Override
-//            public BuildActionRunner.Result execute(BuildAction action) {
-//                BuildActionRunner actionRunner = getServices().get(BuildActionRunner.class);
-//                return actionRunner.run(action, getServices().get(BuildTreeLifecycleController.class));
-//            }
-//        });
-    }
+        BuildCancellationToken cancellationToken = new DefaultBuildCancellationToken();
+        BuildEventConsumer consumer = System.out::println;
+        BuildClientMetaData clientMetaData = new GradleLauncherMetaData();
 
-    private void build(BuildAction action, BuildSessionContext buildSession) {
-        validator.validate(action.getStartParameter());
+        BuildRequestContext requestContext = new BuildRequestContext() {
+            @Override
+            public BuildCancellationToken getCancellationToken() {
+                return cancellationToken;
+            }
 
-        BuildActionModelRequirements actionModelRequirements = new RunTasksRequirements(action.getStartParameter());
-        BuildTreeModelControllerServices.Supplier modelServices = buildTreeModelControllerServices.servicesForBuildTree(actionModelRequirements);
+            @Override
+            public BuildEventConsumer getEventConsumer() {
+                return consumer;
+            }
 
-        BuildActionRunner.Result result = null;
-        try (BuildTreeState buildTree = new BuildTreeState(buildSession.getServices(), modelServices)) {
-            result = buildTree.run((context -> context.execute(action)));
-        } catch (Throwable t) {
-            if (result == null) {
-                // Did not create a result
-                // Note: throw the failure rather than returning a result object containing the failure, as console failure logging based on the _result_ happens down in the root build scope
-                // whereas console failure logging based on the _thrown exception_ happens up outside session scope. It would be better to refactor so that a result can be returned from here
-                throw UncheckedException.throwAsUncheckedException(t);
-            } else {
-                // Cleanup has failed, combine the cleanup failure with other failures that may be packed in the result
-                // Note: throw the failure rather than returning a result object containing the failure, as console failure logging based on the _result_ happens down in the root build scope
-                // whereas console failure logging based on the _thrown exception_ happens up outside session scope. It would be better to refactor so that a result can be returned from here
-                throw UncheckedException.throwAsUncheckedException(result.addFailure(t).getBuildFailure());
+            @Override
+            public BuildClientMetaData getClient() {
+                return clientMetaData;
+            }
+
+            @Override
+            public long getStartTime() {
+                return System.currentTimeMillis();
+            }
+
+            @Override
+            public boolean isInteractive() {
+                return false;
+            }
+        };
+
+        Factory<LoggingManagerInternal> factory =
+                globalServices.getFactory(LoggingManagerInternal.class);
+        LoggingManagerInternal loggingManagerInternal = factory.create();
+        assert loggingManagerInternal != null;
+
+        loggingManagerInternal.start()
+                .setLevelInternal(LogLevel.INFO);
+
+        ListenerManager listenerManager = globalServices.get(ListenerManager.class);
+        listenerManager.addListener(new ProjectEvaluationListener() {
+            @Override
+            public void beforeEvaluate(BuildProject project) {
+
+            }
+
+            @Override
+            public void afterEvaluate(BuildProject project, ProjectState state) {
+
+            }
+        });
+        try (CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(
+                globalServices, startParameter)) {
+            try (BuildSessionState buildSessionState = new BuildSessionState(globalServices.get(
+                    GradleUserHomeScopeServiceRegistry.class), crossBuildSessionState, startParameter, requestContext, ClassPath.EMPTY, requestContext.getCancellationToken(), requestContext.getClient(), requestContext.getEventConsumer())) {
+                BuildActionRunner.Result result = buildSessionState.run(buildSessionContext -> {
+                    return buildSessionContext.execute(buildAction);
+                });
+
+                if (result.getClientFailure() != null) {
+                    throw UncheckedException.throwAsUncheckedException(result.getClientFailure());
+                }
+
+                if (result.getBuildFailure() != null) {
+                    throw UncheckedException.throwAsUncheckedException(result.getBuildFailure());
+                }
             }
         }
+
     }
 
-    class ActionRunner implements BuildActionRunner {
+    @Test
+    public void test() {
 
-        @Override
-        public Result run(BuildAction action, BuildTreeLifecycleController buildController) {
-            buildController.scheduleAndRunTasks();
-            return Result.of(null);
-        }
     }
+
 }

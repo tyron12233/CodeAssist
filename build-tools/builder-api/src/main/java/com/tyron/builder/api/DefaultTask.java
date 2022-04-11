@@ -28,6 +28,9 @@ import com.tyron.builder.api.internal.tasks.TaskMutator;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
+import com.tyron.builder.api.logging.Logger;
+import com.tyron.builder.api.logging.Logging;
+import com.tyron.builder.api.logging.LoggingManager;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.DefaultTaskDependency;
 import com.tyron.builder.api.tasks.Internal;
@@ -42,6 +45,9 @@ import com.tyron.builder.api.tasks.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskState;
 import com.tyron.builder.api.util.GFileUtils;
 import com.tyron.builder.api.util.Path;
+import com.tyron.builder.internal.logging.LoggingManagerInternal;
+import com.tyron.builder.internal.logging.slf4j.ContextAwareTaskLogger;
+import com.tyron.builder.internal.logging.slf4j.DefaultContextAwareTaskLogger;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -55,10 +61,14 @@ import java.util.function.Predicate;
 
 public class DefaultTask extends AbstractTask {
 
+    private static final Logger BUILD_LOGGER = Logging.getLogger(Task.class);
+
     private final TaskStateInternal state;
     private final TaskMutator taskMutator;
     private String name;
     private ServiceRegistry servcices;
+    private LoggingManagerInternal loggingManager;
+    private final ContextAwareTaskLogger logger = new DefaultContextAwareTaskLogger(BUILD_LOGGER);
 
     public String toString() {
         return taskIdentity.name;
@@ -209,22 +219,7 @@ public class DefaultTask extends AbstractTask {
     @Internal
     @Override
     public StandardOutputCapture getStandardOutputCapture() {
-        MutableReference<PrintStream> previousOutput = MutableReference.of(null);
-
-        return new StandardOutputCapture() {
-            @Override
-            public StandardOutputCapture start() {
-                previousOutput.set(System.out);
-                return this;
-            }
-
-            @Override
-            public StandardOutputCapture stop() {
-                System.setOut(previousOutput.get());
-                previousOutput.set(null);
-                return this;
-            }
-        };
+        return loggingManager();
     }
 
     @Override
@@ -547,5 +542,22 @@ public class DefaultTask extends AbstractTask {
 //        }
 
         return action.getClass().getName();
+    }
+
+    @Override
+    public Logger getLogger() {
+        return logger;
+    }
+
+    @Override
+    public LoggingManager getLogging() {
+        return loggingManager;
+    }
+
+    private LoggingManagerInternal loggingManager() {
+        if (loggingManager == null) {
+            loggingManager = servcices.getFactory(LoggingManagerInternal.class).create();
+        }
+        return loggingManager;
     }
 }

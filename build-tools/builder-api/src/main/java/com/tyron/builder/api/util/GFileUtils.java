@@ -1,6 +1,7 @@
 package com.tyron.builder.api.util;
 
 import com.tyron.builder.api.UncheckedIOException;
+import com.tyron.builder.api.internal.GUtil;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -8,6 +9,7 @@ import org.apache.commons.io.FilenameUtils;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.attribute.FileTime;
 import java.util.Collections;
@@ -221,5 +223,9 @@ public class GFileUtils {
             parent = root.getParentFile();
         }
         return root;
+    }
+
+    public static String readFileToString(File sourceFile) {
+        return GUtil.uncheckedCall(() -> FileUtils.readFileToString(sourceFile, StandardCharsets.UTF_8));
     }
 }

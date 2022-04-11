@@ -1,6 +1,9 @@
 package com.tyron.builder.api.internal;
 
+import com.google.common.collect.Collections2;
+import com.tyron.builder.api.Transformer;
 import com.tyron.builder.api.UncheckedIOException;
+import com.tyron.builder.api.util.CollectionUtils;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -12,11 +15,99 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.net.URLConnection;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
+import java.util.SortedSet;
 import java.util.concurrent.Callable;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class GUtil {
+
+    private static final Pattern UPPER_LOWER_PATTERN = Pattern.compile("(?m)([A-Z]*)([a-z0-9]*)");
+
+    public static String toString(Collection<?> matches) {
+        return matches.toString();
+    }
+
+    public static <T extends Enum<T>> T toEnum(Class<? extends T> enumType, Object value) {
+        if (enumType.isInstance(value)) {
+            return enumType.cast(value);
+        }
+        if (value instanceof CharSequence) {
+            final String literal = value.toString();
+            T match = findEnumValue(enumType, literal);
+            if (match != null) {
+                return match;
+            }
+
+            final String alternativeLiteral = toWords(literal, '_');
+            match = findEnumValue(enumType, alternativeLiteral);
+            if (match != null) {
+                return match;
+            }
+
+            throw new IllegalArgumentException(
+                    String.format("Cannot convert string value '%s' to an enum value of type '%s' (valid case insensitive values: %s)",
+                            literal, enumType.getName(), CollectionUtils.join(", ", CollectionUtils.collect(Arrays.asList(enumType.getEnumConstants()), new Transformer<String, T>() {
+                                @Override
+                                public String transform(T t) {
+                                    return t.name();
+                                }
+                            }))
+                    )
+            );
+        }
+        throw new IllegalArgumentException(String.format("Cannot convert value '%s' of type '%s' to enum type '%s'",
+                value, value.getClass().getName(), enumType.getName()));
+    }
+
+    private static <T extends Enum<T>> T findEnumValue(Class<? extends T> enumType, final String literal) {
+        for (T ec : enumType.getEnumConstants()) {
+            if (ec.name().equalsIgnoreCase(literal)) {
+                return ec;
+            }
+        }
+        return null;
+    }
+
+    public static String toWords(CharSequence string, char separator) {
+        if (string == null) {
+            return null;
+        }
+        StringBuilder builder = new StringBuilder();
+        int pos = 0;
+        Matcher matcher = UPPER_LOWER_PATTERN.matcher(string);
+        while (pos < string.length()) {
+            matcher.find(pos);
+            if (matcher.end() == pos) {
+                // Not looking at a match
+                pos++;
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(separator);
+            }
+            String group1 = matcher.group(1).toLowerCase();
+            String group2 = matcher.group(2);
+            if (group2.length() == 0) {
+                builder.append(group1);
+            } else {
+                if (group1.length() > 1) {
+                    builder.append(group1.substring(0, group1.length() - 1));
+                    builder.append(separator);
+                    builder.append(group1.substring(group1.length() - 1));
+                } else {
+                    builder.append(group1);
+                }
+                builder.append(group2);
+            }
+            pos = matcher.end();
+        }
+
+        return builder.toString();
+    }
 
     public interface RunnableThrowable{
         void run() throws Exception;
