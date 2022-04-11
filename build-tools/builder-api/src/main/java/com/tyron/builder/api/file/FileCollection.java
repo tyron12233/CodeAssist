@@ -1,6 +1,7 @@
 package com.tyron.builder.api.file;
 
 import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.tasks.Buildable;
 
 import java.io.File;
 import java.util.Set;
@@ -18,7 +19,7 @@ import java.util.function.Predicate;
  *
  * <p>You can obtain a {@code FileCollection} instance using {@link org.gradle.api.Project#files}.</p>
  */
-public interface FileCollection extends Iterable<File> {
+public interface FileCollection extends Iterable<File>, Buildable {
     /**
      * Returns the content of this collection, asserting it contains exactly one file.
      *

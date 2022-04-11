@@ -10,6 +10,7 @@ import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.compiler.java.CheckLibrariesTask;
 import com.tyron.builder.compiler.manifest.ManifestMergeTask;
 import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
+import com.tyron.builder.compiler.viewbinding.GenerateViewBindingTask;
 import com.tyron.builder.crashlytics.CrashlyticsTask;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.ModuleSettings;
@@ -34,6 +35,7 @@ public class AndroidAppBundleBuilder extends BuilderImpl<AndroidModule> {
         tasks.add(new GenerateFirebaseConfigTask(getProject(), getModule(), getLogger()));
         tasks.add(new CrashlyticsTask(getProject(), getModule(), getLogger()));
         tasks.add(new IncrementalAapt2Task(getProject(), getModule(), getLogger(), true));
+        tasks.add(new GenerateViewBindingTask(getProject(), getModule(), getLogger(), true));
         tasks.add(new MergeSymbolsTask(getProject(), getModule(), getLogger()));
         tasks.add(new IncrementalKotlinCompiler(getProject(), getModule(), getLogger()));
         tasks.add(new IncrementalJavaTask(getProject(), getModule(), getLogger()));

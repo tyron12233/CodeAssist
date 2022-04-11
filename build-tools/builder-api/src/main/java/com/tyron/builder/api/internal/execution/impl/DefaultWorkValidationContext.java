@@ -2,9 +2,13 @@ package com.tyron.builder.api.internal.execution.impl;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
+import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.execution.WorkValidationContext;
 import com.tyron.builder.api.internal.execution.WorkValidationContext.TypeOriginInspector;
+import com.tyron.builder.api.internal.reflect.ProblemRecordingTypeValidationContext;
 import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.api.internal.reflect.validation.TypeValidationProblem;
+import com.tyron.builder.api.plugin.PluginId;
 
 import java.util.Comparator;
 import java.util.HashSet;
@@ -15,21 +19,34 @@ import java.util.function.Supplier;
 
 public class DefaultWorkValidationContext implements WorkValidationContext {
     private final Set<Class<?>> types = new HashSet<>();
-    private final ImmutableList.Builder<String> problems = ImmutableList.builder();
+    private final ImmutableList.Builder<TypeValidationProblem> problems = ImmutableList.builder();
+    private DocumentationRegistry documentationRegistry;
     private final TypeOriginInspector typeOriginInspector;
 
-    public DefaultWorkValidationContext(TypeOriginInspector typeOriginInspector) {
+    public DefaultWorkValidationContext(DocumentationRegistry documentationRegistry, TypeOriginInspector typeOriginInspector) {
+        this.documentationRegistry = documentationRegistry;
         this.typeOriginInspector = typeOriginInspector;
     }
 
     @Override
     public TypeValidationContext forType(Class<?> type, boolean cacheable) {
         types.add(type);
-        return null;
+        Supplier<Optional<PluginId>> pluginId = () -> typeOriginInspector.findPluginDefining(type);
+        return new ProblemRecordingTypeValidationContext(documentationRegistry, type, pluginId) {
+
+            @Override
+            protected void recordProblem(TypeValidationProblem problem) {
+                boolean onlyAffectsCacheableWork = problem.isOnlyAffectsCacheableWork();
+                if (onlyAffectsCacheableWork && !cacheable) {
+                    return;
+                }
+                problems.add(problem);
+            }
+        };
     }
 
     @Override
-    public List<String> getProblems() {
+    public List<TypeValidationProblem> getProblems() {
         return problems.build();
     }
 

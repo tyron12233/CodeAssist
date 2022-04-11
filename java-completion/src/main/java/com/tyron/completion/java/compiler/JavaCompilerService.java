@@ -108,7 +108,7 @@ public class JavaCompilerService implements CompilerProvider {
         return false;
     }
 
-    private void loadCompile(Collection<? extends JavaFileObject> sources) {
+    private synchronized void loadCompile(Collection<? extends JavaFileObject> sources) {
         if (cachedCompile != null) {
             if (!cachedCompile.closed) {
                 throw new RuntimeException("Compiler is still in-use!");
@@ -486,16 +486,18 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
     public void destroy() {
-        close();
-        if (cachedCompile != null) {
-            final ReusableCompiler.Borrow borrow = cachedCompile.borrow;
-            if (borrow != null) {
-                borrow.close();
+        mContainer.initialize(() -> {
+            close();
+            if (cachedCompile != null) {
+                final ReusableCompiler.Borrow borrow = cachedCompile.borrow;
+                if (borrow != null) {
+                    borrow.close();
+                }
             }
-        }
-        cachedCompile = null;
-        cachedModified.clear();
-        compiler = new ReusableCompiler();
+            cachedCompile = null;
+            cachedModified.clear();
+            compiler = new ReusableCompiler();
+        });
     }
 
     @NonNull

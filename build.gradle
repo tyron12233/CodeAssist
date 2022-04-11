@@ -21,6 +21,9 @@ allprojects {
     repositories {
         google()
         maven { url 'https://jitpack.io' }
+        maven {
+            url 'https://repo.gradle.org/gradle/libs-releases/'
+        }
         mavenCentral()
     }
 }
@@ -36,6 +39,6 @@ ext {
     minSdkVersion = 26
 
     applicationId = "com.tyron.code"
-    versionCode = 19
-    versionName = "0.2.8.3 ALPHA"
+    versionCode = 20
+    versionName = "0.2.9 ALPHA"
 }

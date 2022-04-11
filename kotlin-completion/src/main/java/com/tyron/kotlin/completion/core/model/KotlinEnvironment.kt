@@ -121,9 +121,6 @@ class KotlinEnvironment private constructor(val module: KotlinModule, disposable
             )
 
             (environment.projectEnvironment.environment as CoreApplicationEnvironment)
-                .registerApplicationService(CoreLocalFileSystem::class.java, CoreLocalFileSystem())
-
-            (environment.projectEnvironment.environment as CoreApplicationEnvironment)
                 .registerApplicationService(AsyncExecutionService::class.java, object : AsyncExecutionService() {
 
                     val executor = Executors.newSingleThreadExecutor()

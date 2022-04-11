@@ -1,18 +1,20 @@
 package com.android.tools.aapt2;
 
-import android.text.TextUtils;
+import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.common.util.BinaryExecutor;
 
-import javax.tools.Diagnostic;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.tools.Diagnostic;
 
 public class Aapt2Jni {
 
@@ -140,7 +142,17 @@ public class Aapt2Jni {
         return executeBinary(args, instance);
     }
 
+    private static File sAapt2Binary;
+
+    @VisibleForTesting
+    public static void setAapt2Binary(File file) {
+        sAapt2Binary = file;
+    }
+
     private static String getBinary() {
+        if (sAapt2Binary != null) {
+            return sAapt2Binary.getAbsolutePath();
+        }
         return BuildModule.getContext().getApplicationInfo().nativeLibraryDir + "/libaapt2.so";
     }
 
@@ -150,7 +162,7 @@ public class Aapt2Jni {
         String execute = binaryExecutor.execute();
         String[] lines = execute.split("\n");
         for (String line : lines) {
-            if (TextUtils.isEmpty(line)) {
+            if (StringUtils.isEmpty(line)) {
                 continue;
             }
 

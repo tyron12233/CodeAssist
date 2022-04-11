@@ -1,11 +1,36 @@
 package com.tyron.builder.api.execution;
 
+import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 
 import java.util.List;
 import java.util.Set;
 
 public interface TaskExecutionGraph {
+
+    /**
+     * <p>Adds a listener to this graph, to be notified when this graph is ready.</p>
+     *
+     * @param listener The listener to add. Does nothing if this listener has already been added.
+     */
+    void addTaskExecutionGraphListener(TaskExecutionGraphListener listener);
+
+    /**
+     * <p>Remove a listener from this graph.</p>
+     *
+     * @param listener The listener to remove. Does nothing if this listener was never added to this graph.
+     */
+    void removeTaskExecutionGraphListener(TaskExecutionGraphListener listener);
+
+    /**
+     * <p>Adds an action to be called when this graph has been populated. This graph is passed to the action as a
+     * parameter.</p>
+     *
+     * @param action The action to execute when this graph has been populated.
+     *
+     * @since 3.1
+     */
+    void whenReady(Action<TaskExecutionGraph> action);
 
     /**
      * <p>Determines whether the given task is included in the execution plan.</p>

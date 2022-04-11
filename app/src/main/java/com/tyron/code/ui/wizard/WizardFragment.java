@@ -220,8 +220,6 @@ public class WizardFragment extends Fragment {
     private AutoCompleteTextView mMinSdkText;
 
     private void initDetailsView() {
-        List<String> languages = Arrays.asList("Java", "Kotlin");
-
         mNameLayout = mWizardDetailsView.findViewById(R.id.til_app_name);
         mNameLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
             @Override
@@ -254,8 +252,6 @@ public class WizardFragment extends Fragment {
 
         mLanguageLayout = mWizardDetailsView.findViewById(R.id.til_language);
         mLanguageText = mWizardDetailsView.findViewById(R.id.et_language);
-        mLanguageText.setAdapter(new ArrayAdapter<>(requireContext(),
-                android.R.layout.simple_list_item_1, languages));
 
         mMinSdkLayout = mWizardDetailsView.findViewById(R.id.til_min_sdk);
         mMinSdkText = mWizardDetailsView.findViewById(R.id.et_min_sdk);
@@ -610,6 +606,18 @@ public class WizardFragment extends Fragment {
     }
 
     private void showDetailsView() {
+        List<String> languages = new ArrayList<>();
+        if (mCurrentTemplate != null) {
+            if (mCurrentTemplate.isSupportsJava()) {
+                languages.add("Java");
+            }
+            if (mCurrentTemplate.isSupportsKotlin()) {
+                languages.add("Kotlin");
+            }
+        }
+        mLanguageText.setAdapter(new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_list_item_1, languages));
+
         mLoadingLayout.setVisibility(View.GONE);
         mWizardDetailsView.setVisibility(View.GONE);
 

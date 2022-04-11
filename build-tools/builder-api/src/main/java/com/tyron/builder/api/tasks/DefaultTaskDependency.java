@@ -5,6 +5,8 @@ import static com.google.common.collect.Iterables.toArray;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.tyron.builder.api.Task;
+import com.tyron.builder.api.internal.provider.ProviderInternal;
+import com.tyron.builder.api.internal.provider.ValueSupplier;
 import com.tyron.builder.api.internal.tasks.AbstractTaskDependency;
 import com.tyron.builder.api.internal.tasks.TaskDependencyContainer;
 import com.tyron.builder.api.internal.tasks.TaskDependencyResolveContext;
@@ -53,23 +55,23 @@ public class DefaultTaskDependency extends AbstractTaskDependency {
         queue.addAll(mutableValues);
         while (!queue.isEmpty()) {
             Object dependency = queue.removeFirst();
-//            if (dependency instanceof Buildable) {
-//                context.add(dependency);
-//            } else
+            if (dependency instanceof Buildable) {
+                context.add(dependency);
+            } else
             if (dependency instanceof Task) {
                 context.add(dependency);
             } else if (dependency instanceof TaskDependency) {
                 context.add(dependency);
-//            } else if (dependency instanceof ProviderInternal) {
-//                // When a Provider is used as a task dependency (rather than as a task input), need to unpack the value
-//                ProviderInternal<?> provider = (ProviderInternal<?>) dependency;
-//                ValueSupplier.ValueProducer producer = provider.getProducer();
-//                if (producer.isKnown()) {
-//                    producer.visitProducerTasks(context);
-//                } else {
-//                    // The provider does not know how to produce the value, so use the value instead
-//                    queue.addFirst(provider.get());
-//                }
+            } else if (dependency instanceof ProviderInternal) {
+                // When a Provider is used as a task dependency (rather than as a task input), need to unpack the value
+                ProviderInternal<?> provider = (ProviderInternal<?>) dependency;
+                ValueSupplier.ValueProducer producer = provider.getProducer();
+                if (producer.isKnown()) {
+                    producer.visitProducerTasks(context);
+                } else {
+                    // The provider does not know how to produce the value, so use the value instead
+                    queue.addFirst(provider.get());
+                }
             } else if (dependency instanceof TaskDependencyContainer) {
                 ((TaskDependencyContainer) dependency).visitDependencies(context);
 //            } else if (dependency instanceof Closure) {
@@ -79,7 +81,7 @@ public class DefaultTaskDependency extends AbstractTaskDependency {
 //                    queue.addFirst(closureResult);
 //                }
             } else if (dependency instanceof List) {
-                List<?> list = (List) dependency;
+                List<?> list = (List<?>) dependency;
                 if (list instanceof RandomAccess) {
                     for (int i = list.size() - 1; i >= 0; i--) {
                         queue.addFirst(list.get(i));

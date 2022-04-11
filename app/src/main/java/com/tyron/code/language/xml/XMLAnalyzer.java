@@ -24,6 +24,7 @@ import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.editor.Editor;
+import com.tyron.viewbinding.task.InjectViewBindingTask;
 
 import org.apache.commons.io.FileUtils;
 
@@ -89,6 +90,7 @@ public class XMLAnalyzer extends DiagnosticTextmateAnalyzer {
                 AndroidModule mainModule = (AndroidModule) project.getMainModule();
                 try {
                     InjectResourcesTask.inject(project, mainModule);
+                    InjectViewBindingTask.inject(project, mainModule);
                     ProgressManager.getInstance().runLater(() -> editor.setAnalyzing(false), 300);
                 } catch (IOException e) {
                     e.printStackTrace();

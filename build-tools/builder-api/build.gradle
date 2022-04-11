@@ -9,29 +9,29 @@ java {
 
 dependencies {
     implementation project(path: ':common')
+    implementation 'javax.inject:javax.inject:1'
+    implementation 'com.esotericsoftware:kryo:5.3.0'
+    implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
+    implementation("net.rubygrapefruit:file-events:0.22-milestone-23")
+    implementation 'org.apache.commons:commons-compress:1.8.1'
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
+    implementation 'org.ow2.asm:asm:9.3'
+
+
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+
+    testImplementation 'org.slf4j:slf4j-simple:1.7.36'
     testImplementation 'junit:junit:4.13.2'
 }
 
-tasks.register("task1") {
+def inputFiles = file("src/TEst.java")
+def outputDir = "${project.buildDir}/test_output"
+
+tasks.register("TestInputs") {
+    inputs.file(inputFiles)
+    outputs.dir(outputDir)
+
     doLast {
-        println("Task 1")
+        println ("Type: " + it.getClass().getSuperclass())
     }
-
-    dependsOn("task2")
-}
-
-tasks.register("task2") {
-    doLast {
-        println("Task 2")
-    }
-
-    it.shouldRunAfter("task3")
-}
-
-tasks.register("task3") {
-    doLast {
-        println("Task 3")
-    }
-
-    it.dependsOn("task1")
 }

@@ -97,9 +97,20 @@ public class DependencyResolver {
             }
 
             boolean excluded = excludes.stream().filter(Objects::nonNull).anyMatch(ex -> {
+                if (ex == null) {
+                    return false;
+                }
+                if (ex.getGroupId() == null) {
+                    return false;
+                }
                 if (!ex.getGroupId().equals(dependency.getGroupId())) {
                     return false;
                 }
+
+                if (ex.getArtifactId() == null) {
+                    return false;
+                }
+
                 if (!ex.getArtifactId().equals(dependency.getArtifactId())) {
                     return false;
                 }

@@ -10,7 +10,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.sun.org.slf4j.internal.LoggerFactory;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.graph.CachingDirectedGraphWalker;
@@ -19,7 +18,8 @@ import com.tyron.builder.api.internal.graph.StyledTextOutput;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.resources.ResourceLock;
-import com.tyron.builder.api.internal.service.ServiceRegistry;
+import com.tyron.builder.api.internal.resources.ResourceLockCoordinationService;
+import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.CircularDependencyException;
 import com.tyron.builder.api.internal.tasks.TaskDestroyablesInternal;
 import com.tyron.builder.api.internal.tasks.TaskLocalStateInternal;
@@ -29,13 +29,15 @@ import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.internal.work.WorkerLeaseRegistry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.StringWriter;
 import java.util.AbstractCollection;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -47,14 +49,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
-import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 import kotlin.Pair;
 
 public class DefaultExecutionPlan implements ExecutionPlan {
 
-    private static final java.util.logging.Logger LOGGER = Logger.getLogger("DefaultExecutionPlan");
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultExecutionPlan.class);
 
     private final Set<Node> entryNodes = new LinkedHashSet<>();
     private final NodeMapping nodeMapping = new NodeMapping();
@@ -65,7 +66,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
     private final TaskDependencyResolver dependencyResolver;
     private final ExecutionNodeAccessHierarchy  outputHierarchy;
     private final ExecutionNodeAccessHierarchy destroyableHierarchy;
-//    private final ResourceLockCoordinationService lockCoordinator;
+    private final ResourceLockCoordinationService lockCoordinator;
     private final Action<ResourceLock> resourceUnlockListener = this::resourceUnlocked;
     private Predicate<? super Task> filter = __ -> true;
     private int order = 0;
@@ -94,12 +95,14 @@ public class DefaultExecutionPlan implements ExecutionPlan {
     public DefaultExecutionPlan(
             String displayName,
             TaskNodeFactory taskNodeFactory,
+            ResourceLockCoordinationService lockCoordinator,
             TaskDependencyResolver dependencyResolver,
             ExecutionNodeAccessHierarchy outputHierarchy,
             ExecutionNodeAccessHierarchy destroyableHierarchy
     ) {
         this.displayName = displayName;
         this.taskNodeFactory = taskNodeFactory;
+        this.lockCoordinator = lockCoordinator;
         this.dependencyResolver = dependencyResolver;
         this.outputHierarchy = outputHierarchy;
         this.destroyableHierarchy = destroyableHierarchy;
@@ -269,7 +272,6 @@ public class DefaultExecutionPlan implements ExecutionPlan {
                     private int index;
 
                     @Override
-                    @SuppressWarnings("NullableProblems")
                     public NodeInVisitingSegment apply(Node node) {
                         return new NodeInVisitingSegment(node, index++);
                     }
@@ -359,12 +361,12 @@ public class DefaultExecutionPlan implements ExecutionPlan {
         }
 
         maybeNodesSelectable = true;
-//        lockCoordinator.addLockReleaseListener(resourceUnlockListener);
+        lockCoordinator.addLockReleaseListener(resourceUnlockListener);
     }
 
     @Override
     public void close() {
-//        lockCoordinator.removeLockReleaseListener(resourceUnlockListener);
+        lockCoordinator.removeLockReleaseListener(resourceUnlockListener);
         completionHandler = localTaskNode -> {
         };
         entryNodes.clear();
@@ -612,7 +614,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
 
     @Override
     public State executionState() {
-//        lockCoordinator.assertHasStateLock();
+        lockCoordinator.assertHasStateLock();
         if (executionQueue.isEmpty()) {
             return State.NoMoreNodesToStart;
         } else if (maybeNodesSelectable) {
@@ -624,7 +626,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
 
     @Override
     public Diagnostics healthDiagnostics() {
-//        lockCoordinator.assertHasStateLock();
+        lockCoordinator.assertHasStateLock();
         State state = executionState();
         // If no nodes are ready and nothing is running, then cannot make progress
         boolean cannotMakeProgress = state == State.NoNodesReadyToStart && runningNodes.isEmpty();
@@ -647,7 +649,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
 
     @Override
     public NodeSelection selectNext() {
-//        lockCoordinator.assertHasStateLock();
+        lockCoordinator.assertHasStateLock();
         if (executionQueue.isEmpty()) {
             return NO_MORE_NODES_TO_START;
         }
@@ -701,7 +703,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
             }
         }
 
-        LOGGER.info("No node could be selected, nodes ready: " + foundReadyNode);
+        LOGGER.debug("No node could be selected, nodes ready: {}", foundReadyNode);
         maybeNodesReady = foundReadyNode;
         maybeNodesSelectable = false;
         if (executionQueue.isEmpty()) {
@@ -749,10 +751,10 @@ public class DefaultExecutionPlan implements ExecutionPlan {
 
     private boolean tryAcquireLocksForNode(Node node, List<ResourceLock> resources) {
         if (!tryLockProjectFor(node, resources)) {
-            LOGGER.info("Cannot acquire project lock for node " + node);
+            LOGGER.debug("Cannot acquire project lock for node {}", node);
             return false;
         } else if (!tryLockSharedResourceFor(node, resources)) {
-            LOGGER.info("Cannot acquire shared resource lock for node " + node);
+            LOGGER.debug("Cannot acquire shared resource lock for node {}", node);
             return false;
         }
         return true;
@@ -760,10 +762,10 @@ public class DefaultExecutionPlan implements ExecutionPlan {
 
     private boolean conflictsWithOtherNodes(Node node, MutationInfo mutations) {
         if (!canRunWithCurrentlyExecutedNodes(mutations)) {
-            LOGGER.info("Node " + node + " cannot run with currently running nodes " + runningNodes);
+            LOGGER.debug("Node {} cannot run with currently running nodes {}", node, runningNodes);
             return true;
         } else if (destroysNotYetConsumedOutputOfAnotherNode(node, mutations.destroyablePaths)) {
-            LOGGER.info("Node " + node + " destroys not yet consumed output of another node");
+            LOGGER.debug("Node {} destroys not yet consumed output of another node", node);
             return true;
         }
         return false;
@@ -871,7 +873,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
                         // then we accept that as the will of the user
                         continue;
                     }
-                    LOGGER.info("Node " + destroyer + " destroys output of consumer " + consumer);
+                    LOGGER.debug("Node {} destroys output of consumer {}", destroyer, consumer);
                     return true;
                 }
             }
@@ -906,7 +908,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
     }
 
     private void recordNodeCompleted(Node node) {
-        LOGGER.info("Node " + node + " completed, executed: " + node.isExecuted());
+        LOGGER.debug("Node {} completed, executed: {}", node, node.isExecuted());
         MutationInfo mutations = node.getMutationInfo();
         for (Node producer : node.getDependencySuccessors()) {
             MutationInfo producerMutations = producer.getMutationInfo();
@@ -927,13 +929,13 @@ public class DefaultExecutionPlan implements ExecutionPlan {
     }
 
     private void monitoredNodeReady(Node node) {
-//        lockCoordinator.assertHasStateLock();
+        lockCoordinator.assertHasStateLock();
         maybeNodesReady(true);
     }
 
     @Override
     public void finishedExecuting(Node node) {
-//        lockCoordinator.assertHasStateLock();
+        lockCoordinator.assertHasStateLock();
         if (!node.isExecuting()) {
             throw new IllegalStateException(String.format("Cannot finish executing %s as it is in an unexpected state.", node));
         }
@@ -945,10 +947,10 @@ public class DefaultExecutionPlan implements ExecutionPlan {
             runningNodes.remove(node);
             node.finishExecution(this::recordNodeCompleted);
             if (node.isFailed()) {
-                LOGGER.info("Node " + node + " failed");
+                LOGGER.debug("Node " + node + " failed");
                 handleFailure(node);
             } else {
-                LOGGER.info("Node " + node + " finished executing");
+                LOGGER.debug("Node " + node + " finished executing");
             }
         } finally {
             unlockProjectFor(node);
@@ -1000,7 +1002,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
 
     @Override
     public void abortAllAndFail(Throwable t) {
-//        lockCoordinator.assertHasStateLock();
+        lockCoordinator.assertHasStateLock();
         abortExecution(true);
         this.failureCollector.addFailure(t);
     }
@@ -1033,7 +1035,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
 
     @Override
     public void cancelExecution() {
-//        lockCoordinator.assertHasStateLock();
+        lockCoordinator.assertHasStateLock();
         buildCancelled = abortExecution() || buildCancelled;
     }
 

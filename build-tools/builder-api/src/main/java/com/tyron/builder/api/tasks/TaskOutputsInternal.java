@@ -1,10 +1,12 @@
 package com.tyron.builder.api.tasks;
 
 import com.tyron.builder.api.file.FileCollection;
+import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 
 import java.io.File;
 import java.util.Set;
+import java.util.function.Predicate;
 
 public interface TaskOutputsInternal extends TaskOutputs {
 
@@ -19,4 +21,6 @@ public interface TaskOutputsInternal extends TaskOutputs {
      * Returns the output files and directories recorded during the previous execution of the task.
      */
     Set<File> getPreviousOutputFiles();
+
+    Predicate<? super TaskInternal> getUpToDateSpec();
 }
