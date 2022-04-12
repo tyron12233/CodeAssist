@@ -62,10 +62,10 @@ public class TaskExecutor {
         DefaultExecutionPlan executionPlan = new DefaultExecutionPlan(
                 "myPlan",
                 taskNodeFactory,
-                resourceLockService,
                 taskDependencyResolver,
                 executionNodeAccessHierarchy.getOutputHierarchy(),
-                executionNodeAccessHierarchy.getDestroyableHierarchy()
+                executionNodeAccessHierarchy.getDestroyableHierarchy(),
+                resourceLockService
         );
         executionPlan.addEntryTasks(Arrays.asList(tasks));
         executionPlan.determineExecutionPlan();
@@ -86,8 +86,6 @@ public class TaskExecutor {
                     BuildOperationDescriptor.displayName("Running tasks " + Arrays.toString(tasks));
             buildOperationExecutor.start(builder);
 
-            WorkerLeaseRegistry.WorkerLease lease = defaultWorkerLeaseService.getWorkerLease();
-            lease.tryLock();
             taskGraph.execute(executionPlan, failures);
         });
     }

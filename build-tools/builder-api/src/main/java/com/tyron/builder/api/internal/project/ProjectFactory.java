@@ -5,6 +5,8 @@ import com.tyron.builder.api.initialization.ProjectDescriptor;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.reflect.DirectInstantiator;
 import com.tyron.builder.api.internal.reflect.Instantiator;
+import com.tyron.builder.initialization.DefaultProjectDescriptor;
+import com.tyron.builder.util.internal.NameValidator;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -26,8 +28,9 @@ public class ProjectFactory implements IProjectFactory {
                 gradle.getServiceRegistryFactory()
         );
         project.beforeEvaluate(p -> {
-
+            NameValidator.validate(project.getName(), "project name", DefaultProjectDescriptor.INVALID_NAME_IN_INCLUDE_HINT);
         });
+        gradle.getProjectRegistry().addProject(project);
         return project;
     }
 }

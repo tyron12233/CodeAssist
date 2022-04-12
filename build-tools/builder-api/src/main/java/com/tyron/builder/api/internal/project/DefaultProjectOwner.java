@@ -1,14 +1,20 @@
 package com.tyron.builder.api.internal.project;
 
+import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
 import com.tyron.builder.api.internal.DisplayName;
-import com.tyron.builder.api.internal.build.BuildState;
+import com.tyron.builder.api.internal.artifacts.DefaultBuildIdentifier;
+import com.tyron.builder.api.internal.artifacts.DefaultProjectComponentIdentifier;
+import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.util.Path;
+import com.tyron.builder.internal.model.CalculatedModelValue;
 
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * For debugging
@@ -81,6 +87,16 @@ public class DefaultProjectOwner implements ProjectStateUnk {
         return projectDir;
     }
 
+    @Override
+    public ProjectComponentIdentifier getComponentIdentifier() {
+        return new DefaultProjectComponentIdentifier(
+                new DefaultBuildIdentifier(getName()),
+                getIdentityPath(),
+                getProjectPath(),
+                getName()
+        );
+    }
+
     public void setProjectDir(File projectDir) {
         this.projectDir = projectDir;
     }
@@ -101,6 +117,11 @@ public class DefaultProjectOwner implements ProjectStateUnk {
     }
 
     @Override
+    public void createMutableModel() {
+
+    }
+
+    @Override
     public ResourceLock getAccessLock() {
         return accessLock;
     }
@@ -116,6 +137,31 @@ public class DefaultProjectOwner implements ProjectStateUnk {
 
     public void setTaskExecutionLock(ResourceLock taskExecutionLock) {
         this.taskExecutionLock = taskExecutionLock;
+    }
+
+    @Override
+    public <S> S fromMutableState(Function<? super ProjectInternal, ? extends S> factory) {
+        return null;
+    }
+
+    @Override
+    public <S> S forceAccessToMutableState(Function<? super ProjectInternal, ? extends S> factory) {
+        return null;
+    }
+
+    @Override
+    public void applyToMutableState(Consumer<? super ProjectInternal> action) {
+
+    }
+
+    @Override
+    public boolean hasMutableState() {
+        return false;
+    }
+
+    @Override
+    public <S> CalculatedModelValue<S> newCalculatedValue(@Nullable S initialValue) {
+        return null;
     }
 
     public static class Builder {

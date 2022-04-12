@@ -20,6 +20,7 @@ import com.tyron.builder.api.internal.execution.ExecutionOutcome;
 import com.tyron.builder.api.internal.execution.UnitOfWork;
 import com.tyron.builder.api.internal.execution.WorkValidationContext;
 import com.tyron.builder.api.internal.execution.WorkValidationException;
+import com.tyron.builder.api.internal.execution.caching.CachingState;
 import com.tyron.builder.api.internal.execution.fingerprint.InputFingerprinter;
 import com.tyron.builder.api.internal.execution.history.ExecutionHistoryStore;
 import com.tyron.builder.api.internal.execution.history.InputChangesInternal;
@@ -154,7 +155,9 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
         ExecutionEngine.Result result = request.execute();
         result.getExecutionResult().ifSuccessfulOrElse(executionResult -> state
                         .setOutcome(TaskExecutionOutcome.valueOf(executionResult.getOutcome())),
-                failure -> state.setOutcome(new TaskExecutionException(task, failure)));
+                failure -> {
+                    state.setOutcome(new TaskExecutionException(task, failure));
+                });
 
         return new TaskExecuterResult() {
             @Override
@@ -176,7 +179,7 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
             }
 
             @Override
-            public Object getCachingState() {
+            public CachingState getCachingState() {
                 return result.getCachingState();
             }
         };

@@ -47,6 +47,7 @@ android {
         exclude ".api_description"
         exclude "about_files/*"
         exclude "META-INF/eclipse.inf"
+        exclude "META-INF/INDEX.LIST"
     }
 }
 
@@ -76,6 +77,7 @@ dependencies {
 
     implementation project(path: ':language-api')
 
+    implementation project(path: ':build-tools:builder-api')
     implementation project(path: ':build-tools:build-logic')
     implementation project(path: ':build-tools:manifmerger')
     implementation project(path: ':build-tools:project')

@@ -19,4 +19,6 @@ public interface TaskContainer extends Collection<Task> {
     <T extends Task> TaskProvider<T> register(String name);
 
     Task findByName(String name);
+
+    Task getByPath(String path);
 }

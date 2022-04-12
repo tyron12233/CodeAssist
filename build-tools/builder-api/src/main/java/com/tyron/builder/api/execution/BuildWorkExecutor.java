@@ -3,7 +3,7 @@ package com.tyron.builder.api.execution;
 
 import com.tyron.builder.api.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.build.ExecutionResult;
+import com.tyron.builder.internal.build.ExecutionResult;
 
 /**
  * Executes the work scheduled for a build. Prior to execution, the work will be prepared by a {@link org.gradle.initialization.TaskExecutionPreparer}.

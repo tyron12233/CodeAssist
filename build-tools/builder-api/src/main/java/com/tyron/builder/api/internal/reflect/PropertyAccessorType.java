@@ -2,7 +2,6 @@ package com.tyron.builder.api.internal.reflect;
 
 import org.jetbrains.annotations.Nullable;
 
-import java.beans.Introspector;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
@@ -72,8 +71,37 @@ public enum PropertyAccessorType {
 
     public String propertyNameFor(String methodName) {
         String methodNamePrefixRemoved = methodName.substring(prefixLength);
-        return Introspector.decapitalize(methodNamePrefixRemoved);
+        return decapitalize(methodNamePrefixRemoved);
     }
+
+    /**
+     * Decapitalizes a given string according to the rule:
+     * <ul>
+     * <li>If the first or only character is Upper Case, it is made Lower Case
+     * <li>UNLESS the second character is also Upper Case, when the String is
+     * returned unchanged <eul>
+     *
+     * @param name -
+     *            the String to decapitalize
+     * @return the decapitalized version of the String
+     */
+    public static String decapitalize(String name) {
+
+        if (name == null)
+            return null;
+        // The rule for decapitalize is that:
+        // If the first letter of the string is Upper Case, make it lower case
+        // UNLESS the second letter of the string is also Upper Case, in which case no
+        // changes are made.
+        if (name.length() == 0 || (name.length() > 1 && Character.isUpperCase(name.charAt(1)))) {
+            return name;
+        }
+
+        char[] chars = name.toCharArray();
+        chars[0] = Character.toLowerCase(chars[0]);
+        return new String(chars);
+    }
+
 
     public abstract Class<?> propertyTypeFor(Method method);
 

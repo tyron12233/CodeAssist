@@ -41,7 +41,7 @@ import java.util.concurrent.Callable;
  * only changed inputs
  */
 @SuppressWarnings("Convert2Lambda")
-public class MockTasks extends TestTaskExecutionCase {
+public class MockTasks extends BaseProjectTestCase {
 
     public static class Aapt2Task extends SourceTask {
 
@@ -120,7 +120,7 @@ public class MockTasks extends TestTaskExecutionCase {
     }
 
     @Override
-    public void evaluateProject(BuildProject project) {
+    public void configure(BuildProject project) {
         TaskContainer tasks = project.getTasks();
         tasks.register("Aapt2Task", Aapt2Task.class, new Action<Aapt2Task>() {
             @Override
@@ -160,7 +160,7 @@ public class MockTasks extends TestTaskExecutionCase {
     }
 
     @Override
-    public List<String> getTasksToExecute() {
+    public List<String> getTasks() {
         return ImmutableList.of("assembleTask");
     }
 }
