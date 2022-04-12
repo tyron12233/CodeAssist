@@ -6,6 +6,7 @@ import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.initialization.ConfigurableIncludedBuild;
 import com.tyron.builder.api.initialization.ProjectDescriptor;
 import com.tyron.builder.api.initialization.Settings;
+import com.tyron.builder.api.internal.Actions;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.file.FileResolver;
@@ -81,12 +82,35 @@ public class DefaultSettings implements SettingsInternal {
 
     @Override
     public void include(Iterable<String> projectPaths) {
-        throw new UnsupportedOperationException("include() is not yet supported.");
+        for (String projectPath : projectPaths) {
+            String subPath = "";
+            String[] pathElements = removeTrailingColon(projectPath).split(":");
+            DefaultProjectDescriptor parentProjectDescriptor = rootProjectDescriptor;
+            for (String pathElement : pathElements) {
+                subPath = subPath + ":" + pathElement;
+                DefaultProjectDescriptor projectDescriptor = getProjectDescriptorRegistry().getProject(subPath);
+                if (projectDescriptor == null) {
+                    parentProjectDescriptor = createProjectDescriptor(parentProjectDescriptor, pathElement, new File(parentProjectDescriptor.getProjectDir(), pathElement));
+                } else {
+                    parentProjectDescriptor = projectDescriptor;
+                }
+            }
+        }
     }
 
     @Override
     public void includeFlat(Iterable<String> projectNames) {
+        for (String projectName : projectNames) {
+            createProjectDescriptor(rootProjectDescriptor, projectName,
+                    new File(rootProjectDescriptor.getProjectDir().getParentFile(), projectName));
+        }
+    }
 
+    private String removeTrailingColon(String projectPath) {
+        if (projectPath.startsWith(":")) {
+            return projectPath.substring(1);
+        }
+        return projectPath;
     }
 
     @Override
@@ -111,29 +135,37 @@ public class DefaultSettings implements SettingsInternal {
 
     @Override
     public ProjectDescriptor project(String path) throws UnknownProjectException {
-        return null;
+        DefaultProjectDescriptor projectDescriptor = getProjectDescriptorRegistry().getProject(path);
+        if (projectDescriptor == null) {
+            throw new UnknownProjectException(String.format("Project with path '%s' could not be found.", path));
+        }
+        return projectDescriptor;
     }
 
     @Nullable
     @Override
     public ProjectDescriptor findProject(String path) {
-        return null;
+        return getProjectDescriptorRegistry().getProject(path);
     }
 
     @Override
     public ProjectDescriptor project(File projectDir) throws UnknownProjectException {
-        return null;
+        DefaultProjectDescriptor projectDescriptor = getProjectDescriptorRegistry().getProject(projectDir);
+        if (projectDescriptor == null) {
+            throw new UnknownProjectException(String.format("Project with path '%s' could not be found.", projectDir));
+        }
+        return projectDescriptor;
     }
 
     @Nullable
     @Override
     public ProjectDescriptor findProject(File projectDir) {
-        return null;
+        return getProjectDescriptorRegistry().getProject(projectDir);
     }
 
     @Override
     public ProviderFactory getProviders() {
-        return null;
+        return services.get(ProviderFactory.class);
     }
 
     @Override
@@ -143,22 +175,23 @@ public class DefaultSettings implements SettingsInternal {
 
     @Override
     public void includeBuild(Object rootProject) {
-
+        includeBuild(rootProject, Actions.doNothing());
     }
 
     @Override
     public void includeBuild(Object rootProject, Action<ConfigurableIncludedBuild> configuration) {
-
+        File projectDir = getFileResolver().resolve(rootProject);
+        includedBuildSpecs.add(IncludedBuildSpec.includedBuild(projectDir, configuration));
     }
 
     @Override
     public BuildCacheConfiguration getBuildCache() {
-        return null;
+        return services.get(BuildCacheConfiguration.class);
     }
 
     @Override
     public void buildCache(Action<? super BuildCacheConfiguration> action) {
-
+        action.execute(getBuildCache());
     }
 
     @Override
@@ -193,6 +226,6 @@ public class DefaultSettings implements SettingsInternal {
 
     @Override
     public List<IncludedBuildSpec> getIncludedBuilds() {
-        return Collections.emptyList();
+        return includedBuildSpecs;
     }
 }

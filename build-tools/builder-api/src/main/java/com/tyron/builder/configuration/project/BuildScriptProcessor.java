@@ -13,6 +13,7 @@ import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.util.GFileUtils;
+import com.tyron.builder.internal.exceptions.LocationAwareException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,15 +39,26 @@ public class BuildScriptProcessor implements ProjectConfigureAction {
 
         File buildScript = project.getBuildFile();
         if (LOGGER.isInfoEnabled()) {
+
             LOGGER.info("Evaluating {} using {}.", project, buildScript.getName());
         }
-        unchecked(() -> {
-            Interpreter interpreter = new Interpreter();
+
+        Interpreter interpreter = new Interpreter();
+
+        try {
             for (Class<?> clazz : DEFAULT_IMPORTED_CLASSES) {
                 interpreter.eval("import " + clazz.getName());
             }
             interpreter.set("project", project);
+        } catch (EvalError e) {
+            // this should not happen, if it does just log it
+            LOGGER.error("Failed to inject variables and classes.", e);
+        }
+
+        try {
             interpreter.eval(GFileUtils.readFileToString(buildScript));
-        });
+        } catch (EvalError error) {
+            throw new LocationAwareException(error, error.getErrorSourceFile(), error.getErrorLineNumber());
+        }
     }
 }
