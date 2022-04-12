@@ -1,6 +1,9 @@
 package com.tyron.builder.api;
 
+import com.tyron.builder.api.logging.Logger;
+import com.tyron.builder.api.logging.LoggingManager;
 import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskDestroyables;
 import com.tyron.builder.api.tasks.TaskInputs;
@@ -66,6 +69,10 @@ public interface Task extends Comparable<Task> {
     TaskDependency getTaskDependencies();
 
     Task dependsOn(Object... paths);
+
+    default Task dependsOn(Object paths) {
+        return this.dependsOn(new Object[]{paths});
+    }
 
     /**
      * <p>Returns the dependencies of this task.</p>
@@ -286,6 +293,10 @@ public interface Task extends Comparable<Task> {
      */
     Task mustRunAfter(Object... paths);
 
+    default Task mustRunAfter(Object path) {
+        return mustRunAfter(new Object[]{path});
+    }
+
     /**
      * <p>Specifies the set of tasks that this task must run after.</p>
      *
@@ -329,6 +340,10 @@ public interface Task extends Comparable<Task> {
      * @return the task object this method is applied to
      */
     Task finalizedBy(Object... paths);
+
+    default Task finalizedBy(Object path) {
+        return finalizedBy(new Object[]{path});
+    }
 
     /**
      * <p>Specifies the set of finalizer tasks for this task.</p>
@@ -402,4 +417,22 @@ public interface Task extends Comparable<Task> {
     TaskDependency getShouldRunAfter();
 
     BuildProject getProject();
+
+    /**
+     * <p>Returns the logger for this task. You can use this in your build file to write log messages.</p>
+     *
+     * @return The logger. Never returns null.
+     */
+    @Internal
+    Logger getLogger();
+
+    /**
+     * Returns the {@link LoggingManager} which can be used to receive logging and to control the
+     * standard output/error capture for this task. By default, System.out is redirected to the Gradle logging system at
+     * the QUIET log level, and System.err is redirected at the ERROR log level.
+     *
+     * @return the LoggingManager. Never returns null.
+     */
+    @Internal
+    LoggingManager getLogging();
 }

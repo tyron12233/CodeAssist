@@ -1,12 +1,15 @@
 package com.tyron.builder.api.util;
 
 import com.tyron.builder.api.UncheckedIOException;
+import com.tyron.builder.api.internal.GUtil;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.attribute.FileTime;
 import java.util.Collections;
@@ -201,5 +204,28 @@ public class GFileUtils {
         }
 
         forceDelete(file);
+    }
+
+    /**
+     * Normalizes the given file, removing redundant segments like /../. If normalization
+     * tries to step beyond the file system root, the root is returned.
+     */
+    public static File normalize(File src) {
+        String path = src.getAbsolutePath();
+        String normalizedPath = FilenameUtils.normalizeNoEndSeparator(path);
+        if (normalizedPath != null) {
+            return new File(normalizedPath);
+        }
+        File root = src;
+        File parent = root.getParentFile();
+        while (parent != null) {
+            root = root.getParentFile();
+            parent = root.getParentFile();
+        }
+        return root;
+    }
+
+    public static String readFileToString(File sourceFile) {
+        return GUtil.uncheckedCall(() -> FileUtils.readFileToString(sourceFile, StandardCharsets.UTF_8));
     }
 }

@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.snapshot.impl;
 
 import com.google.common.hash.Hasher;
-import com.tyron.builder.api.attribute.Attribute;
+import com.tyron.builder.api.attributes.Attribute;
 import com.tyron.builder.api.internal.hash.ClassLoaderHierarchyHasher;
 
 import java.nio.charset.StandardCharsets;

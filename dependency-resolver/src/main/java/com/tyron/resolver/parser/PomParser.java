@@ -182,6 +182,12 @@ public class PomParser {
             Element dependencyElement = (Element) dependencyList.item(i);
 
             Dependency dependency = new Dependency();
+
+            NodeList scopeList = dependencyElement.getElementsByTagName("scope");
+            if (scopeList.getLength() >= 1) {
+                dependency.setScope(getTextContent(scopeList.item(0)));
+            }
+
             NodeList groupIdList = dependencyElement.getElementsByTagName("groupId");
             if (groupIdList.getLength() < 1) {
                 continue;
@@ -193,11 +199,6 @@ public class PomParser {
                 continue;
             }
             dependency.setArtifactId(artifactIdList.item(0).getTextContent());
-
-            NodeList scopeList = dependencyElement.getElementsByTagName("scope");
-            if (scopeList.getLength() > 0) {
-                dependency.setScope(getTextContent(scopeList.item(0)));
-            }
 
             NodeList versionList = dependencyElement.getElementsByTagName("version");
             if (versionList.getLength() < 1) {

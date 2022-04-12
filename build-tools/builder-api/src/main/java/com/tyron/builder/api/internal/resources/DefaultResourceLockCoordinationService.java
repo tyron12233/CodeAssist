@@ -14,9 +14,13 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 public class DefaultResourceLockCoordinationService implements ResourceLockCoordinationService, Closeable {
+
+//    final Lock lock = new ReentrantLock();
     private final Object lock = new Object();
     private final Set<Action<ResourceLock>> releaseHandlers = new LinkedHashSet<>();
     private final ThreadLocal<List<ResourceLockState>> currentState = new ThreadLocal<List<ResourceLockState>>() {
@@ -81,6 +85,7 @@ public class DefaultResourceLockCoordinationService implements ResourceLockCoord
         while (true) {
             DefaultResourceLockState resourceLockState = new DefaultResourceLockState();
             ResourceLockState.Disposition disposition;
+
             synchronized (lock) {
                 try {
                     currentState.get().add(resourceLockState);

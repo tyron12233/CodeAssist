@@ -6,6 +6,7 @@ import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
 import com.tyron.builder.api.internal.file.FileMetadata;
 import com.tyron.builder.api.internal.file.FileType;
+import com.tyron.builder.api.internal.hash.Hashes;
 
 import java.util.Optional;
 
@@ -13,7 +14,7 @@ import java.util.Optional;
  * A snapshot of a missing file or a broken symbolic link or a named pipe.
  */
 public class MissingFileSnapshot extends AbstractFileSystemLocationSnapshot implements FileSystemLeafSnapshot {
-    private static final HashCode SIGNATURE = HashCode.fromString(MissingFileSnapshot.class.getName());
+    private static final HashCode SIGNATURE = Hashes.signature(MissingFileSnapshot.class);
 
     public MissingFileSnapshot(String absolutePath, String name, AccessType accessType) {
         super(absolutePath, name, accessType);

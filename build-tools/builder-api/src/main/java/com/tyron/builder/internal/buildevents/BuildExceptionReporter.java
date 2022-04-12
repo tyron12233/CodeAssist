@@ -139,13 +139,13 @@ public class BuildExceptionReporter implements Action<Throwable> {
         }
 
         @Override
-        protected void visitCause(Throwable cause) {
+        public void visitCause(Throwable cause) {
             failureDetails.failure = cause;
             failureDetails.appendDetails();
         }
 
         @Override
-        protected void visitLocation(String location) {
+        public void visitLocation(String location) {
             failureDetails.location.text(location);
         }
 

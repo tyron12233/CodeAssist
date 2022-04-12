@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.snapshot.impl;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.HashCode;
-import com.tyron.builder.api.attribute.Attribute;
+import com.tyron.builder.api.attributes.Attribute;
 import com.tyron.builder.api.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.api.internal.isolation.Isolatable;
 import com.tyron.builder.api.internal.snapshot.ValueSnapshot;

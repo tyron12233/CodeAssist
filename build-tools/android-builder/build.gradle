@@ -18,7 +18,6 @@ dependencies {
     implementation project(path: ':common')
     implementation project(path: ':build-tools:builder-api')
 
-    testImplementation 'org.slf4j:slf4j-simple:1.7.36'
     testImplementation 'junit:junit:4.13.2'
 }
 

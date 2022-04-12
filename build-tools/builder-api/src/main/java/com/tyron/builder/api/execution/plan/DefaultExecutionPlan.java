@@ -95,10 +95,10 @@ public class DefaultExecutionPlan implements ExecutionPlan {
     public DefaultExecutionPlan(
             String displayName,
             TaskNodeFactory taskNodeFactory,
-            ResourceLockCoordinationService lockCoordinator,
             TaskDependencyResolver dependencyResolver,
             ExecutionNodeAccessHierarchy outputHierarchy,
-            ExecutionNodeAccessHierarchy destroyableHierarchy
+            ExecutionNodeAccessHierarchy destroyableHierarchy,
+            ResourceLockCoordinationService lockCoordinator
     ) {
         this.displayName = displayName;
         this.taskNodeFactory = taskNodeFactory;

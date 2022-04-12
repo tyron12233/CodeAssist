@@ -44,19 +44,16 @@ class DefaultSynchronizer implements Synchronizer {
                 return currentThread;
             }
         }
-        workerLeaseService.blocking(new Runnable() {
-            @Override
-            public void run() {
-                synchronized (DefaultSynchronizer.this) {
-                    while (owner != null) {
-                        try {
-                            DefaultSynchronizer.this.wait();
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
+        workerLeaseService.blocking(() -> {
+            synchronized (DefaultSynchronizer.this) {
+                while (owner != null) {
+                    try {
+                        DefaultSynchronizer.this.wait();
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
                     }
-                    owner = currentThread;
                 }
+                owner = currentThread;
             }
         });
         return null;

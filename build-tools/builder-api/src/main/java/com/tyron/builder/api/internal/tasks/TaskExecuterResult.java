@@ -1,6 +1,7 @@
 package com.tyron.builder.api.internal.tasks;
 
 import com.google.common.collect.ImmutableList;
+import com.tyron.builder.api.internal.execution.caching.CachingState;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
 import java.util.List;
@@ -26,7 +27,7 @@ public interface TaskExecuterResult {
      * The caching state of the task, including all its captured inputs and the cache key if calculated.
      */
     // CachingState
-    Object getCachingState();
+    CachingState getCachingState();
 
     TaskExecuterResult WITHOUT_OUTPUTS = new TaskExecuterResult() {
         @Override
@@ -45,7 +46,7 @@ public interface TaskExecuterResult {
         }
 
         @Override
-        public Object getCachingState() {
+        public CachingState getCachingState() {
             return null;
         }
     };

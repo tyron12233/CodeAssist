@@ -1,16 +1,19 @@
 package com.tyron.builder.api.internal.project;
 
+import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
 import com.tyron.builder.api.internal.DisplayName;
-import com.tyron.builder.api.internal.build.BuildState;
+import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.api.internal.resources.ResourceLock;
 import com.tyron.builder.api.util.Path;
+import com.tyron.builder.internal.model.ModelContainer;
 
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.Set;
 
-public interface ProjectStateUnk {
+public interface ProjectStateUnk extends ModelContainer<ProjectInternal> {
 
     DisplayName getDisplayName();
 
@@ -20,13 +23,13 @@ public interface ProjectStateUnk {
     BuildState getOwner();
 
     /**
-     * Returns the parent of this project in the project tree. Note that this is not the same as {@link Project#getParent()}, use {@link #getBuildParent()} for that.
+     * Returns the parent of this project in the project tree. Note that this is not the same as {@link BuildProject#getParent()}, use {@link #getBuildParent()} for that.
      */
     @Nullable
     ProjectStateUnk getParent();
 
     /**
-     * Returns the parent of this project, as per {@link Project#getParent()}. This will be null for the root project of a build in the tree, even if the project is not
+     * Returns the parent of this project, as per {@link BuildProject#getParent()}. This will be null for the root project of a build in the tree, even if the project is not
      * at the root of the project tree.
      */
     @Nullable
@@ -58,6 +61,11 @@ public interface ProjectStateUnk {
     File getProjectDir();
 
     /**
+     * Returns the identifier of the default component produced by this project.
+     */
+    ProjectComponentIdentifier getComponentIdentifier();
+
+    /**
      * Configures the mutable model for this project, if not already.
      *
      * May also configure the parent of this project.
@@ -73,6 +81,11 @@ public interface ProjectStateUnk {
      * Returns the mutable model for this project. This should not be used directly. This property is here to help with migration away from direct usage.
      */
     ProjectInternal getMutableModel();
+
+    /**
+     * Creates the mutable model for this project.
+     */
+    void createMutableModel();
 
     /**
      * Returns the lock that will be acquired when accessing the mutable state of this project via {@link #applyToMutableState(Consumer)} and {@link #fromMutableState(Function)}.

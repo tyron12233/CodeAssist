@@ -13,4 +13,8 @@ public interface Action<T> {
      * @param t The object to perform the action on.
      */
     void execute(T t);
+
+    default void invoke(String name, Object[] args) {
+        throw new UnsupportedOperationException();
+    }
 }

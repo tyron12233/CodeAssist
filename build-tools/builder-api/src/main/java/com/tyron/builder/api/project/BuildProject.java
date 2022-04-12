@@ -1,12 +1,15 @@
 package com.tyron.builder.api.project;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.Gradle;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.PathValidation;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.UnknownProjectException;
+import com.tyron.builder.api.artifacts.ModuleVersionIdentifier;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileTree;
+import com.tyron.builder.api.internal.artifacts.DependencyMetaDataProvider;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.DeleteSpec;
 import com.tyron.builder.api.model.ObjectFactory;
@@ -30,7 +33,7 @@ public interface BuildProject extends Comparable<BuildProject> {
     /**
      * The default project build file name.
      */
-    String DEFAULT_BUILD_FILE = "build.gradle";
+    String DEFAULT_BUILD_FILE = "build.bsh";
 
     /**
      * The hierarchy separator for project and task path names.
@@ -703,6 +706,8 @@ public interface BuildProject extends Comparable<BuildProject> {
      */
     TaskContainer getTasks();
 
+    Gradle getGradle();
+
     /**
      * <p>Configures the sub-projects of this project</p>
      *
@@ -835,4 +840,6 @@ public interface BuildProject extends Comparable<BuildProject> {
     Path getProjectPath();
 
     Path getIdentityPath();
+
+    DependencyMetaDataProvider getDependencyMetaDataProvider();
 }
