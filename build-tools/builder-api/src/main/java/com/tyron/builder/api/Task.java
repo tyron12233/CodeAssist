@@ -70,6 +70,10 @@ public interface Task extends Comparable<Task> {
 
     Task dependsOn(Object... paths);
 
+    default Task dependsOn(Object paths) {
+        return this.dependsOn(new Object[]{paths});
+    }
+
     /**
      * <p>Returns the dependencies of this task.</p>
      *
@@ -289,6 +293,10 @@ public interface Task extends Comparable<Task> {
      */
     Task mustRunAfter(Object... paths);
 
+    default Task mustRunAfter(Object path) {
+        return mustRunAfter(new Object[]{path});
+    }
+
     /**
      * <p>Specifies the set of tasks that this task must run after.</p>
      *
@@ -332,6 +340,10 @@ public interface Task extends Comparable<Task> {
      * @return the task object this method is applied to
      */
     Task finalizedBy(Object... paths);
+
+    default Task finalizedBy(Object path) {
+        return finalizedBy(new Object[]{path});
+    }
 
     /**
      * <p>Specifies the set of finalizer tasks for this task.</p>
