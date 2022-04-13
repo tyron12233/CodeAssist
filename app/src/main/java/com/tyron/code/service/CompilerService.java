@@ -217,8 +217,7 @@ public class CompilerService extends Service {
         startParameter.setProjectDir(project.getRootFile());
         startParameter.setGradleUserHomeDir(new File(project.getRootFile(), ".gradle"));
 
-        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter,
-                getPluginServiceRegistries()) {
+        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter) {
             @Override
             public void configure(BuildProject project) {
 

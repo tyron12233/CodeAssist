@@ -26,12 +26,17 @@ import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.builder.internal.session.BuildSessionState;
 import com.tyron.builder.internal.session.state.CrossBuildSessionState;
 
+import java.util.Collections;
 import java.util.List;
 
 public abstract class ProjectLauncher {
 
     private final StartParameterInternal startParameter;
     private final ServiceRegistry globalServices;
+
+    public ProjectLauncher(StartParameterInternal startParameter) {
+        this(startParameter, Collections.emptyList());
+    }
 
     public ProjectLauncher(StartParameterInternal startParameter,
                            List<PluginServiceRegistry> pluginServiceRegistries) {
