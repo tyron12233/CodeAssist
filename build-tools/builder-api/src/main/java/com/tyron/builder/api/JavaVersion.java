@@ -1,6 +1,7 @@
 package com.tyron.builder.api;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.tyron.common.TestUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -144,6 +145,9 @@ public enum JavaVersion {
      * @return The version of the current JVM.
      */
     public static JavaVersion current() {
+        if (TestUtil.isDalvik()) {
+            currentJavaVersion = toVersion("1.8");
+        }
         if (currentJavaVersion == null) {
             currentJavaVersion = toVersion(System.getProperty("java.version"));
         }
