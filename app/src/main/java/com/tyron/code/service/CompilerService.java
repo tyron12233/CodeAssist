@@ -20,7 +20,6 @@ import com.tyron.builder.api.internal.Factory;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.logging.events.OutputEvent;
 import com.tyron.builder.api.internal.logging.events.OutputEventListener;
-import com.tyron.builder.api.internal.logging.events.RenderableOutputEvent;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.compiler.AndroidAppBuilder;
 import com.tyron.builder.compiler.AndroidAppBundleBuilder;
@@ -30,9 +29,6 @@ import com.tyron.builder.compiler.Builder;
 import com.tyron.builder.compiler.ProjectBuilder;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.logging.events.LogEvent;
-import com.tyron.builder.internal.logging.events.LogLevelChangeEvent;
-import com.tyron.builder.internal.logging.events.ProgressCompleteEvent;
-import com.tyron.builder.internal.logging.events.ProgressStartEvent;
 import com.tyron.builder.launcher.ProjectLauncher;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -46,9 +42,7 @@ import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.ref.WeakReference;
-import java.util.concurrent.Executors;
 
 public class CompilerService extends Service {
 
@@ -223,7 +217,8 @@ public class CompilerService extends Service {
         startParameter.setProjectDir(project.getRootFile());
         startParameter.setGradleUserHomeDir(new File(project.getRootFile(), ".gradle"));
 
-        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter) {
+        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter,
+                getPluginServiceRegistries()) {
             @Override
             public void configure(BuildProject project) {
 

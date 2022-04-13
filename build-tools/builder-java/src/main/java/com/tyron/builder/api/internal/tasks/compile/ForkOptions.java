@@ -3,6 +3,7 @@ package com.tyron.builder.api.internal.tasks.compile;
 import com.tyron.builder.api.tasks.Input;
 import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.Optional;
+import com.tyron.builder.api.tasks.compile.ProviderAwareCompilerDaemonForkOptions;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -11,7 +12,7 @@ import java.util.Map;
 /**
  * Fork options for Java compilation. Only take effect if {@code CompileOptions.fork} is {@code true}.
  */
-public class ForkOptions {
+public class ForkOptions extends ProviderAwareCompilerDaemonForkOptions {
     private static final long serialVersionUID = 0;
 
     private String executable;

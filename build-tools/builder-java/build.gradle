@@ -10,4 +10,10 @@ java {
 dependencies {
     implementation project(path: ':common')
     implementation project(path: ':build-tools:builder-api')
+
+    implementation 'org.ow2.asm:asm:9.3'
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.apache.commons:commons-lang3:3.12.0'
 }

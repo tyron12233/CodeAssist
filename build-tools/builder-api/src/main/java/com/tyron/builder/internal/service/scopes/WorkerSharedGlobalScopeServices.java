@@ -14,6 +14,8 @@ import com.tyron.builder.api.internal.provider.DefaultPropertyFactory;
 import com.tyron.builder.api.internal.provider.PropertyFactory;
 import com.tyron.builder.api.internal.provider.PropertyHost;
 import com.tyron.builder.api.internal.reflect.service.scopes.BasicGlobalScopeServices;
+import com.tyron.builder.api.internal.tasks.DefaultTaskDependencyFactory;
+import com.tyron.builder.api.internal.tasks.TaskDependencyFactory;
 import com.tyron.builder.api.internal.time.Clock;
 import com.tyron.builder.api.internal.time.Time;
 import com.tyron.builder.cache.internal.CrossBuildInMemoryCacheFactory;
@@ -55,5 +57,10 @@ public class WorkerSharedGlobalScopeServices extends BasicGlobalScopeServices {
 
     BuildOperationIdFactory createBuildOperationFactory() {
         return new DefaultBuildOperationIdFactory();
+    }
+
+
+    TaskDependencyFactory createTaskDependencyFactory() {
+        return DefaultTaskDependencyFactory.withNoAssociatedProject();
     }
 }

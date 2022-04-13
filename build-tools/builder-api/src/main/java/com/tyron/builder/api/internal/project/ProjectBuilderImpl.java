@@ -10,10 +10,6 @@ import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.artifacts.DefaultBuildIdentifier;
 import com.tyron.builder.api.internal.classpath.ClassPath;
 import com.tyron.builder.api.internal.file.FileResolver;
-import com.tyron.builder.api.internal.operations.BuildOperationContext;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.RunnableBuildOperation;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
@@ -32,7 +28,6 @@ import com.tyron.builder.initialization.DefaultProjectDescriptor;
 import com.tyron.builder.initialization.NoOpBuildEventConsumer;
 import com.tyron.builder.initialization.ProjectDescriptorRegistry;
 import com.tyron.builder.internal.Pair;
-import com.tyron.builder.internal.SystemProperties;
 import com.tyron.builder.internal.build.AbstractBuildState;
 import com.tyron.builder.internal.build.BuildModelControllerServices;
 import com.tyron.builder.internal.build.BuildStateRegistry;
@@ -42,15 +37,17 @@ import com.tyron.builder.internal.buildTree.BuildTreeModelControllerServices;
 import com.tyron.builder.internal.buildTree.BuildTreeState;
 import com.tyron.builder.internal.buildTree.RunTasksRequirements;
 import com.tyron.builder.internal.composite.IncludedBuildInternal;
-import com.tyron.builder.internal.logging.services.DefaultLoggingManagerFactory;
 import com.tyron.builder.internal.logging.services.LoggingServiceRegistry;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
+import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.builder.internal.session.BuildSessionState;
 import com.tyron.builder.internal.session.state.CrossBuildSessionState;
 
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -72,7 +69,7 @@ public class ProjectBuilderImpl {
         startParameter.setTaskNames(ImmutableList.of("testTask"));
         startParameter.setMaxWorkerCount(5);
 
-        final ServiceRegistry globalServices = getGlobalServices();
+        final ServiceRegistry globalServices = getGlobalServices(Collections.emptyList());
 
         BuildRequestMetaData buildRequestMetaData = new DefaultBuildRequestMetaData(Time.currentTimeMillis());
         CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(globalServices, startParameter);
@@ -124,14 +121,14 @@ public class ProjectBuilderImpl {
         return globalServices.get(GradleUserHomeScopeServiceRegistry.class);
     }
 
-    public synchronized static ServiceRegistry getGlobalServices() {
+    public synchronized static ServiceRegistry getGlobalServices(List<PluginServiceRegistry> pluginServiceRegistries) {
         if (globalServices == null) {
-            globalServices = createGlobalServices();
+            globalServices = createGlobalServices(pluginServiceRegistries);
         }
         return globalServices;
     }
 
-    public static ServiceRegistry createGlobalServices() {
+    public static ServiceRegistry createGlobalServices(List<PluginServiceRegistry> pluginServiceRegistries) {
         LoggingServiceRegistry serviceRegistry =
                 LoggingServiceRegistry.newCommandLineProcessLogging();
         return ServiceRegistryBuilder

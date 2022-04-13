@@ -23,6 +23,7 @@ dependencies {
 
 
     implementation 'org.apache-extras.beanshell:bsh:2.0b6'
+    api 'it.unimi.dsi:fastutil:8.5.8'
     implementation 'org.slf4j:slf4j-api:1.7.36'
 
     testImplementation 'junit:junit:4.13.2'

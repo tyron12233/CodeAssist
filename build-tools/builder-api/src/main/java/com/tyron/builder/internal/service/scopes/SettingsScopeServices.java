@@ -15,12 +15,9 @@ public class SettingsScopeServices extends DefaultServiceRegistry {
     public SettingsScopeServices(final ServiceRegistry parent, final SettingsInternal settings) {
         super(parent);
         this.settings = settings;
-        register(new Action<ServiceRegistration>() {
-            @Override
-            public void execute(ServiceRegistration registration) {
-                for (PluginServiceRegistry pluginServiceRegistry : parent.getAll(PluginServiceRegistry.class)) {
-                    pluginServiceRegistry.registerSettingsServices(registration);
-                }
+        register(registration -> {
+            for (PluginServiceRegistry pluginServiceRegistry : parent.getAll(PluginServiceRegistry.class)) {
+                pluginServiceRegistry.registerSettingsServices(registration);
             }
         });
     }
