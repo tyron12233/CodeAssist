@@ -1,5 +1,8 @@
 package com.tyron.builder.api.internal.project;
 
+import static com.tyron.builder.api.internal.Cast.uncheckedCast;
+
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Ints;
 import com.tyron.builder.api.Action;
@@ -11,10 +14,10 @@ import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.configuration.project.ProjectEvaluator;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileTree;
+import com.tyron.builder.api.internal.Cast;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.artifacts.DependencyMetaDataProvider;
 import com.tyron.builder.api.internal.artifacts.Module;
-import com.tyron.builder.api.internal.dispatch.ProxyDispatchAdapter;
 import com.tyron.builder.api.internal.event.ListenerBroadcast;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.DeleteSpec;
@@ -39,9 +42,12 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.Callable;
 import java.util.logging.Logger;
 
@@ -138,16 +144,6 @@ public class DefaultProject implements ProjectInternal {
     }
 
     @Override
-    public void subprojects(Action<? super BuildProject> action) {
-
-    }
-
-    @Override
-    public void allprojects(Action<? super BuildProject> action) {
-
-    }
-
-    @Override
     public ProjectEvaluationListener getProjectEvaluationBroadcaster() {
         return evaluationListener.getSource();
     }
@@ -221,12 +217,42 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public Map<BuildProject, Set<Task>> getAllTasks(boolean recursive) {
-        return null;
+        final Map<BuildProject, Set<Task>> foundTargets = new TreeMap<>();
+        Action<BuildProject> action = project -> {
+            // Don't force evaluation of rules here, let the task container do what it needs to
+            ((ProjectInternal) project).getOwner().ensureTasksDiscovered();
+
+            foundTargets.put(project, new TreeSet<>(project.getTasks()));
+        };
+        if (recursive) {
+            allprojects(action);
+        } else {
+            action.execute(this);
+        }
+        return foundTargets;
     }
 
     @Override
-    public Set<Task> getTasksByName(String name, boolean recursive) {
-        return null;
+    public Set<Task> getTasksByName(final String name, boolean recursive) {
+        if (Strings.isNullOrEmpty(name)) {
+            throw new InvalidUserDataException("Name is not specified!");
+        }
+        final Set<Task> foundTasks = new HashSet<>();
+        Action<BuildProject> action = project -> {
+            // Don't force evaluation of rules here, let the task container do what it needs to
+            ((ProjectInternal) project).getOwner().ensureTasksDiscovered();
+
+            Task task = project.getTasks().findByName(name);
+            if (task != null) {
+                foundTasks.add(task);
+            }
+        };
+        if (recursive) {
+            allprojects(action);
+        } else {
+            action.execute(this);
+        }
+        return foundTasks;
     }
 
     @Override
@@ -322,59 +348,78 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public boolean delete(Object... paths) {
-        return false;
+        return getFileOperations().delete(paths);
     }
 
     @Override
     public WorkResult delete(Action<? super DeleteSpec> action) {
-        return null;
+        throw new UnsupportedOperationException("This method is not yet supported.");
     }
 
     @Override
     public ProjectInternal project(ProjectInternal referrer,
                                    String path) throws UnknownProjectException {
-        return null;
+        ProjectInternal project = getCrossProjectModelAccess().findProject(referrer, this, path);
+        if (project == null) {
+            throw new UnknownProjectException(String.format("Project with path '%s' could not be found in %s.", path, this));
+        }
+        return project;
     }
 
     @Override
-    public ProjectInternal project(ProjectInternal referrer,
-                                   String path,
-                                   Action<? super BuildProject> configureAction) {
-        return null;
+    public ProjectInternal project(ProjectInternal referrer, String path, Action<? super BuildProject> configureAction) {
+        ProjectInternal project = project(referrer, path);
+        getProjectConfigurator().project(project, configureAction);
+        return project;
     }
 
     @Nullable
     @Override
     public ProjectInternal findProject(String path) {
-        return null;
+        return findProject(this, path);
     }
 
     @Nullable
     @Override
     public ProjectInternal findProject(ProjectInternal referrer, String path) {
-        return null;
+        return getCrossProjectModelAccess().findProject(referrer, this, path);
+    }
+
+
+    @Override
+    public void subprojects(Action<? super BuildProject> action) {
+        subprojects(this, action);
+    }
+
+    @Override
+    public void subprojects(ProjectInternal referrer, Action<? super BuildProject> configureAction) {
+        getProjectConfigurator().subprojects(getCrossProjectModelAccess().getSubprojects(referrer, this), configureAction);
     }
 
     @Override
     public Set<? extends ProjectInternal> getSubprojects(ProjectInternal referrer) {
-        return Collections.emptySet();
+        return getCrossProjectModelAccess().getSubprojects(referrer, this);
     }
 
     @Override
-    public void subprojects(ProjectInternal referrer,
-                            Action<? super BuildProject> configureAction) {
-
+    public Set<BuildProject> getSubprojects() {
+        return uncheckedCast(getSubprojects(this));
     }
 
     @Override
     public Set<? extends ProjectInternal> getAllprojects(ProjectInternal referrer) {
-        return null;
+        return getCrossProjectModelAccess().getAllprojects(referrer, this);
+    }
+
+    @Override
+    public void allprojects(Action<? super BuildProject> action) {
+        allprojects(this, action);
     }
 
     @Override
     public void allprojects(ProjectInternal referrer,
                             Action<? super BuildProject> configureAction) {
-
+        getProjectConfigurator().allprojects(getCrossProjectModelAccess().getAllprojects(referrer, this), configureAction);
     }
 
     @Override
@@ -424,8 +469,7 @@ public class DefaultProject implements ProjectInternal {
         if (parent == null) {
             return null;
         }
-        return parent;
-//        return getCrossProjectModelAccess().access(referrer, parent);
+        return getCrossProjectModelAccess().access(referrer, parent);
     }
 
     @Override
@@ -520,12 +564,15 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public Set<BuildProject> getAllprojects() {
-        return null;
+        return uncheckedCast(getAllprojects(this));
     }
 
-    @Override
-    public Set<BuildProject> getSubprojects() {
-        return Collections.emptySet();
+    protected CrossProjectModelAccess getCrossProjectModelAccess() {
+        return services.get(CrossProjectModelAccess.class);
+    }
+
+    protected CrossProjectConfigurator getProjectConfigurator() {
+        return services.get(CrossProjectConfigurator.class);
     }
 
     @Override

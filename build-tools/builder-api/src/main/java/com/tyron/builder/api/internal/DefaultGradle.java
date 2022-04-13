@@ -13,6 +13,7 @@ import com.tyron.builder.api.internal.dispatch.ProxyDispatchAdapter;
 import com.tyron.builder.api.internal.event.ListenerBroadcast;
 import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
+import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
 import com.tyron.builder.api.internal.project.ProjectRegistry;
 import com.tyron.builder.api.providers.ProviderFactory;
 import com.tyron.builder.caching.configuration.BuildCacheConfiguration;
@@ -111,7 +112,7 @@ public class DefaultGradle implements GradleInternal {
     @Override
     public ProjectRegistry<ProjectInternal> getProjectRegistry() {
         //noinspection unchecked
-        return services.get(ProjectRegistry.class);
+        return services.get(DefaultProjectRegistry.class);
     }
 
     @Override

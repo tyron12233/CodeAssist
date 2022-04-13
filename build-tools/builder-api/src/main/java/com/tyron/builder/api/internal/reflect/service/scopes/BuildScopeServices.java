@@ -30,7 +30,10 @@ import com.tyron.builder.api.internal.nativeintegration.services.FileSystems;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.operations.BuildOperationQueueFactory;
 import com.tyron.builder.api.internal.operations.DefaultBuildOperationQueueFactory;
+import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
 import com.tyron.builder.api.internal.project.ProjectFactory;
+import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.project.ProjectRegistry;
 import com.tyron.builder.api.internal.properties.GradleProperties;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
@@ -64,6 +67,7 @@ import com.tyron.builder.execution.plan.ExecutionPlanFactory;
 import com.tyron.builder.initialization.BuildLoader;
 import com.tyron.builder.initialization.DefaultGradlePropertiesController;
 import com.tyron.builder.initialization.DefaultGradlePropertiesLoader;
+import com.tyron.builder.initialization.DefaultProjectDescriptor;
 import com.tyron.builder.initialization.DefaultProjectDescriptorRegistry;
 import com.tyron.builder.initialization.DefaultSettings;
 import com.tyron.builder.initialization.DefaultSettingsLoaderFactory;
@@ -297,6 +301,10 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             WorkerLeaseService workerLeaseService
     ) {
         return new DefaultBuildOperationQueueFactory(workerLeaseService);
+    }
+
+    protected DefaultProjectRegistry<ProjectInternal> createProjectRegistry() {
+            return new DefaultProjectRegistry<>();
     }
 
     protected ProjectDescriptorRegistry createProjectDescriptorRegistry() {

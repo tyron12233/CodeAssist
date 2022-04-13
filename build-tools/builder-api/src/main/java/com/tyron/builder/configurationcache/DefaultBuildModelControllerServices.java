@@ -10,6 +10,11 @@ import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.api.internal.exceptions.Contextual;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.api.internal.project.CrossProjectModelAccess;
+import com.tyron.builder.api.internal.project.DefaultCrossProjectModelAccess;
+import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
+import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.project.ProjectRegistry;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.tasks.TaskExecutionException;
@@ -38,6 +43,7 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+@SuppressWarnings("unused")
 public class DefaultBuildModelControllerServices implements BuildModelControllerServices {
 
     @Override
@@ -50,6 +56,8 @@ public class DefaultBuildModelControllerServices implements BuildModelController
             registration.addProvider(new ServicesProvider(buildDefinition, parentBuild, services));
             registration.addProvider(new VintageBuildControllerProvider());
             registration.addProvider(new VintageModelProvider());
+
+            registration.addProvider(new VintageIsolatedProjectsProvider());
 
             registration.addProvider(new Object() {
                 ExceptionAnalyser createExceptionAnalyser() {
@@ -117,6 +125,14 @@ public class DefaultBuildModelControllerServices implements BuildModelController
                             new BuildScriptProcessor()
                     );
             return new LifecycleProjectEvaluator(buildOperationExecutor, configure, buildCancellationToken);
+        }
+    }
+
+    private static class VintageIsolatedProjectsProvider {
+        protected CrossProjectModelAccess createCrossProjectModelAccess(
+                ProjectRegistry<ProjectInternal> registry
+        ) {
+            return new DefaultCrossProjectModelAccess(registry);
         }
     }
 }
