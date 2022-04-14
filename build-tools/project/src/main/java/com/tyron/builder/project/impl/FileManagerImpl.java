@@ -149,17 +149,16 @@ public class FileManagerImpl implements FileManager {
 
     @Override
     public void closeFileForSnapshot(@NonNull File file) {
-        if (!file.exists()) {
-            return;
-        }
         if (mSnapshots.containsKey(file)) {
-            try {
-                FileState state = mSnapshots.get(file);
-                FileUtils.writeStringToFile(file,
-                        state.getContents(),
-                        StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                Log.d(TAG, "Failed to save file " + file.getName(), e);
+            if (file.exists()) {
+                try {
+                    FileState state = mSnapshots.get(file);
+                    FileUtils.writeStringToFile(file,
+                            state.getContents(),
+                            StandardCharsets.UTF_8);
+                } catch (IOException e) {
+                    Log.d(TAG, "Failed to save file " + file.getName(), e);
+                }
             }
             mSnapshots.remove(file);
         }
