@@ -23,8 +23,7 @@ public class TestLaunch {
         startParameter.setProjectDir(testProjectDir);
         startParameter.setTaskNames(ImmutableList.of("testTask"));
 
-        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter,
-                getPluginServiceRegistries()) {
+        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter) {
             @Override
             public void configure(BuildProject project) {
                 project.getTasks().register("testTask", new Action<Task>() {

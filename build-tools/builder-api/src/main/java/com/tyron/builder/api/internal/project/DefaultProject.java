@@ -6,6 +6,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Ints;
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.PathValidation;
 import com.tyron.builder.api.ProjectEvaluationListener;
@@ -24,15 +25,22 @@ import com.tyron.builder.api.internal.file.DeleteSpec;
 import com.tyron.builder.api.internal.file.FileLookup;
 import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.FileResolver;
+import com.tyron.builder.api.internal.instantiation.InstanceGenerator;
+import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
+import com.tyron.builder.api.internal.reflect.DirectInstantiator;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.model.ObjectFactory;
+import com.tyron.builder.api.plugins.Convention;
+import com.tyron.builder.api.plugins.ExtensionContainer;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.providers.Property;
 import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.reflect.ObjectInstantiationException;
 import com.tyron.builder.api.tasks.WorkResult;
 import com.tyron.builder.api.util.Path;
+import com.tyron.builder.internal.extensibility.DefaultConvention;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -69,6 +77,7 @@ public class DefaultProject implements ProjectInternal {
     private Object version;
     private List<String> defaultTasks = new ArrayList<>();
     private Property<Object> status;
+    private final Convention convention;
     private File buildDir;
     private ListenerBroadcast<ProjectEvaluationListener> evaluationListener = newProjectEvaluationListenerBroadcast();
 
@@ -99,6 +108,20 @@ public class DefaultProject implements ProjectInternal {
         }
 
         services = serviceRegistryFactory.createFor(this);
+        this.convention = new DefaultConvention(new InstanceGenerator() {
+            @Override
+            public <T> T newInstanceWithDisplayName(Class<? extends T> type,
+                                                    Describable displayName,
+                                                    Object... parameters) throws ObjectInstantiationException {
+                return newInstance(type, parameters);
+            }
+
+            @Override
+            public <T> T newInstance(Class<? extends T> type,
+                                     Object... parameters) throws ObjectInstantiationException {
+                return DirectInstantiator.instantiate(type, parameters);
+            }
+        });
         taskContainer = services.get(TaskContainerInternal.class);
 
         setBuildDir(new File(projectDir, "build"));
@@ -121,6 +144,11 @@ public class DefaultProject implements ProjectInternal {
     public ProjectInternal getRootProject(ProjectInternal referrer) {
         return rootProject;
 //        return getCrossProjectModelAccess().access(referrer, rootProject);
+    }
+
+    @Override
+    public Convention getConvention() {
+        return convention;
     }
 
     @Override
@@ -679,5 +707,10 @@ public class DefaultProject implements ProjectInternal {
     @Override
     public GradleInternal getGradle() {
         return gradle;
+    }
+
+    @Override
+    public ExtensionContainerInternal getExtensions() {
+        return ((ExtensionContainerInternal) getConvention());
     }
 }

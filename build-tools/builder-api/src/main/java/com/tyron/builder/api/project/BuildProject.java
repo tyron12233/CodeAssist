@@ -13,6 +13,8 @@ import com.tyron.builder.api.internal.artifacts.DependencyMetaDataProvider;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.DeleteSpec;
 import com.tyron.builder.api.model.ObjectFactory;
+import com.tyron.builder.api.plugins.Convention;
+import com.tyron.builder.api.plugins.ExtensionAware;
 import com.tyron.builder.api.providers.Provider;
 import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.WorkResult;
@@ -28,7 +30,7 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.logging.Logger;
 
-public interface BuildProject extends Comparable<BuildProject> {
+public interface BuildProject extends Comparable<BuildProject>, ExtensionAware {
 
     /**
      * The default project build file name.
@@ -124,6 +126,8 @@ public interface BuildProject extends Comparable<BuildProject> {
      * Returns a human-consumable display name for this project.
      */
     String getDisplayName();
+
+    Convention getConvention();
 
     /**
      * Returns the description of this project, if any.

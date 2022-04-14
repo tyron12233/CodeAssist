@@ -5,6 +5,7 @@ import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.internal.GradleInternal;
+import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.project.BuildProject;
@@ -82,4 +83,7 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier {
     ProjectStateInternal getState();
 
     GradleInternal getGradle();
+
+    @Override
+    ExtensionContainerInternal getExtensions();
 }

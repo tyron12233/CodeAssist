@@ -12,9 +12,12 @@ import com.tyron.builder.api.internal.GUtil;
 import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.plugins.ExtensionAware;
+import com.tyron.builder.api.plugins.ExtensionContainer;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.util.GFileUtils;
 import com.tyron.builder.internal.exceptions.LocationAwareException;
+import com.tyron.builder.internal.reflect.JavaPropertyReflectionUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +58,7 @@ public class BuildScriptProcessor implements ProjectConfigureAction {
                 interpreter.eval("import " + clazz.getName());
             }
             interpreter.set("project", project);
+
 
             Method[] declaredMethods = BuildProject.class.getDeclaredMethods();
             for (Method method : declaredMethods) {
