@@ -5,21 +5,24 @@ import com.tyron.builder.api.execution.plan.DefaultPlanExecutor;
 import com.tyron.builder.api.internal.UncheckedException;
 import com.tyron.builder.api.internal.event.DefaultListenerManager;
 import com.tyron.builder.api.internal.invocation.BuildAction;
+import com.tyron.builder.api.internal.operations.BuildOperationRunner;
 import com.tyron.builder.api.internal.project.DefaultProjectStateRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.api.internal.service.scopes.Scopes;
 import com.tyron.builder.api.internal.work.WorkerLeaseService;
-import com.tyron.builder.composite.internal.CompositeBuildServices;
 import com.tyron.builder.configurationcache.DefaultBuildModelControllerServices;
 import com.tyron.builder.configurationcache.DefaultBuildToolingModelControllerFactory;
 import com.tyron.builder.initialization.exception.ExceptionAnalyser;
 import com.tyron.builder.internal.build.BuildStateRegistry;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
+import com.tyron.builder.internal.vfs.VirtualFileSystem;
+import com.tyron.builder.internal.watch.registry.WatchMode;
+import com.tyron.builder.internal.watch.vfs.BuildLifecycleAwareVirtualFileSystem;
+import com.tyron.builder.internal.watch.vfs.VfsLogging;
+import com.tyron.builder.internal.watch.vfs.WatchLogging;
 import com.tyron.builder.launcher.exec.ChainingBuildActionRunner;
 import com.tyron.builder.launcher.exec.RootBuildLifecycleBuildActionExecutor;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -107,21 +110,51 @@ public class BuildTreeScopeServices {
         );
     }
 
-    ExecuteBuildActionRunner createExecuteBuildActionRunner() {
-        return new ExecuteBuildActionRunner();
+    ExecuteBuildActionRunner createExecuteBuildActionRunner(
+            VirtualFileSystem vfs,
+            BuildOperationRunner buildOperationRunner
+    ) {
+        return new ExecuteBuildActionRunner(vfs, buildOperationRunner);
     }
 
-    public class ExecuteBuildActionRunner implements BuildActionRunner {
+    public static class ExecuteBuildActionRunner implements BuildActionRunner {
+
+        private final VirtualFileSystem vfs;
+        private final BuildOperationRunner buildOperationRunner;
+
+        public ExecuteBuildActionRunner(VirtualFileSystem vfs,
+                                        BuildOperationRunner buildOperationRunner) {
+            this.vfs = vfs;
+            this.buildOperationRunner = buildOperationRunner;
+        }
+
         @Override
         public Result run(BuildAction action, BuildTreeLifecycleController buildController) {
 //            if (!(action instanceof ExecuteBuildAction)) {
 //                return Result.nothing();
 //            }
+            if (vfs instanceof BuildLifecycleAwareVirtualFileSystem) {
+                ((BuildLifecycleAwareVirtualFileSystem) vfs).afterBuildStarted(
+                        WatchMode.ENABLED,
+                        VfsLogging.VERBOSE, WatchLogging.DEBUG,
+                        buildOperationRunner
+                );
+            }
             try {
                 buildController.scheduleAndRunTasks();
                 return Result.of(null);
             } catch (RuntimeException e) {
                 return Result.failed(e);
+            } finally {
+                if (vfs instanceof BuildLifecycleAwareVirtualFileSystem) {
+                    ((BuildLifecycleAwareVirtualFileSystem) vfs).beforeBuildFinished(
+                            WatchMode.ENABLED,
+                            VfsLogging.VERBOSE,
+                            WatchLogging.DEBUG,
+                            buildOperationRunner,
+                            Integer.MAX_VALUE
+                    );
+                }
             }
         }
     }

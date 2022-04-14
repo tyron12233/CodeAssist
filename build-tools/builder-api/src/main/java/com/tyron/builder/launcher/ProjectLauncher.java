@@ -41,7 +41,7 @@ public abstract class ProjectLauncher {
     public ProjectLauncher(StartParameterInternal startParameter,
                            List<PluginServiceRegistry> pluginServiceRegistries) {
         this.startParameter = startParameter;
-        globalServices = ProjectBuilderImpl.getGlobalServices(pluginServiceRegistries);
+        globalServices = ProjectBuilderImpl.getGlobalServices(startParameter);
     }
 
     public ServiceRegistry getGlobalServices() {
@@ -53,7 +53,7 @@ public abstract class ProjectLauncher {
         Factory<LoggingManagerInternal> factory = globalServices.getFactory(LoggingManagerInternal.class);
         LoggingManagerInternal loggingManagerInternal = factory.create();
         assert loggingManagerInternal != null;
-        loggingManagerInternal.start().setLevelInternal(LogLevel.INFO);
+        loggingManagerInternal.start().setLevelInternal(LogLevel.DEBUG);
     }
 
     public void execute() {

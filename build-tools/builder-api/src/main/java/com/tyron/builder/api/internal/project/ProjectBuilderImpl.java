@@ -38,6 +38,7 @@ import com.tyron.builder.internal.buildTree.BuildTreeState;
 import com.tyron.builder.internal.buildTree.RunTasksRequirements;
 import com.tyron.builder.internal.composite.IncludedBuildInternal;
 import com.tyron.builder.internal.logging.services.LoggingServiceRegistry;
+import com.tyron.builder.internal.nativeintegration.services.NativeServices;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.builder.internal.session.BuildSessionState;
@@ -69,7 +70,7 @@ public class ProjectBuilderImpl {
         startParameter.setTaskNames(ImmutableList.of("testTask"));
         startParameter.setMaxWorkerCount(5);
 
-        final ServiceRegistry globalServices = getGlobalServices(Collections.emptyList());
+        final ServiceRegistry globalServices = getGlobalServices(startParameter);
 
         BuildRequestMetaData buildRequestMetaData = new DefaultBuildRequestMetaData(Time.currentTimeMillis());
         CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(globalServices, startParameter);
@@ -121,19 +122,21 @@ public class ProjectBuilderImpl {
         return globalServices.get(GradleUserHomeScopeServiceRegistry.class);
     }
 
-    public synchronized static ServiceRegistry getGlobalServices(List<PluginServiceRegistry> pluginServiceRegistries) {
+    public synchronized static ServiceRegistry getGlobalServices(StartParameterInternal startParameterInternal) {
         if (globalServices == null) {
-            globalServices = createGlobalServices(pluginServiceRegistries);
+            globalServices = createGlobalServices(startParameterInternal);
         }
         return globalServices;
     }
 
-    public static ServiceRegistry createGlobalServices(List<PluginServiceRegistry> pluginServiceRegistries) {
+    public static ServiceRegistry createGlobalServices(StartParameterInternal startParameterInternal) {
         LoggingServiceRegistry serviceRegistry =
                 LoggingServiceRegistry.newCommandLineProcessLogging();
+        NativeServices.initializeOnWorker(startParameterInternal.getGradleUserHomeDir());
         return ServiceRegistryBuilder
                 .builder()
                 .parent(serviceRegistry)
+                .parent(NativeServices.getInstance())
                 .displayName("global services")
                 .provider(new GlobalServices())
                 .build();

@@ -53,6 +53,7 @@ import com.tyron.builder.api.tasks.options.Option;
 import com.tyron.builder.api.tasks.util.PatternSet;
 import com.tyron.builder.cache.StringInterner;
 import com.tyron.builder.initialization.layout.BuildLayoutFactory;
+import com.tyron.builder.internal.build.BuildAddedListener;
 import com.tyron.builder.internal.service.DefaultServiceLocator;
 import com.tyron.builder.internal.service.scopes.DefaultGradleUserHomeScopeServiceRegistry;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
@@ -64,9 +65,13 @@ import com.tyron.builder.internal.vfs.impl.DefaultFileSystemAccess;
 import com.tyron.builder.internal.vfs.impl.DefaultSnapshotHierarchy;
 import com.tyron.builder.internal.vfs.impl.VfsRootReference;
 import com.tyron.builder.internal.watch.registry.FileWatcherRegistryFactory;
+import com.tyron.builder.internal.watch.registry.WatchMode;
+import com.tyron.builder.internal.watch.registry.impl.LinuxFileWatcherRegistryFactory;
 import com.tyron.builder.internal.watch.registry.impl.WindowsFileWatcherRegistryFactory;
 import com.tyron.builder.internal.watch.vfs.BuildLifecycleAwareVirtualFileSystem;
 import com.tyron.builder.internal.watch.vfs.FileChangeListeners;
+import com.tyron.builder.internal.watch.vfs.VfsLogging;
+import com.tyron.builder.internal.watch.vfs.WatchLogging;
 import com.tyron.builder.internal.watch.vfs.WatchableFileSystemDetector;
 import com.tyron.builder.internal.watch.vfs.impl.DefaultWatchableFileSystemDetector;
 import com.tyron.builder.internal.watch.vfs.impl.LocationsWrittenByCurrentBuild;
@@ -216,7 +221,7 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
         VfsRootReference reference = new VfsRootReference(DefaultSnapshotHierarchy.empty(CaseSensitivity.CASE_SENSITIVE));
         BuildLifecycleAwareVirtualFileSystem virtualFileSystem = determineWatcherRegistryFactory(
                 OperatingSystem.current(),
-                path -> false)
+                path -> true)
                 .<BuildLifecycleAwareVirtualFileSystem>map(watcherRegistryFactory -> new WatchingVirtualFileSystem(
                         watcherRegistryFactory,
                         reference,
@@ -226,7 +231,11 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
                         fileChangeListeners
                 ))
                 .orElse(new WatchingNotSupportedVirtualFileSystem(reference));
-//        listenerManager.addListener);
+        listenerManager.addListener((BuildAddedListener) buildState -> {
+            File buildRootDir = buildState.getBuildRootDir();
+            virtualFileSystem.registerWatchableHierarchy(buildRootDir);
+        });
+        
         return virtualFileSystem;
     }
 
@@ -236,8 +245,10 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
     ) {
         if (operatingSystem.isWindows()) {
             return Optional.of(new WindowsFileWatcherRegistryFactory(watchingFilter));
+        } else {
+            // TODO: MacOS?
+            return Optional.of(new LinuxFileWatcherRegistryFactory(watchingFilter));
         }
-        return Optional.empty();
     }
 
     FileSystem createFileSystem() {

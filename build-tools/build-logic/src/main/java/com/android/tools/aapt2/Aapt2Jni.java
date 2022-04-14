@@ -1,12 +1,12 @@
 package com.android.tools.aapt2;
 
+import android.text.TextUtils;
+
 import androidx.annotation.VisibleForTesting;
 
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.common.util.BinaryExecutor;
-
-import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -162,7 +162,7 @@ public class Aapt2Jni {
         String execute = binaryExecutor.execute();
         String[] lines = execute.split("\n");
         for (String line : lines) {
-            if (StringUtils.isEmpty(line)) {
+            if (TextUtils.isEmpty(line)) {
                 continue;
             }
 
